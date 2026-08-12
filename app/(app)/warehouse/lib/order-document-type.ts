@@ -80,7 +80,7 @@ export function formatWarehouseOrderAmount(
   type: WarehouseOrderDocType,
   amount: number | undefined,
 ): string {
-  if (type === "sample_order") return "₹0.00";
+  void type;
   return `₹${(amount ?? 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 

@@ -352,22 +352,6 @@ export function StockTransferQcListing() {
       ),
     },
     {
-      key: "products",
-      header: "Products",
-      sortable: false,
-      width: "160px",
-      render: (_val, row) => {
-        const productNames = row.items.map((it) => it.productName).filter(Boolean);
-        const productsLabel =
-          productNames.length === 0
-            ? "—"
-            : productNames.length <= 2
-              ? productNames.join(", ")
-              : `${productNames.slice(0, 2).join(", ")} +${productNames.length - 2}`;
-        return <span className="text-xs text-foreground">{productsLabel}</span>;
-      },
-    },
-    {
       key: "receivedQty",
       header: "Received Qty",
       sortable: true,
@@ -480,7 +464,7 @@ export function StockTransferQcListing() {
         currentSort={qcSort}
         onSortChange={handleSortChange}
         onOpenFilter={handleOpenFilter}
-        searchPlaceholder="Search QC, GRN, Transfer No or Product..."
+        searchPlaceholder="Search QC, GRN or Transfer No..."
         loading={isLoading}
       />
     </div>

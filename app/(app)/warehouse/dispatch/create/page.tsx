@@ -15,17 +15,80 @@ import {
   type PackedOrderDropdownItem,
 } from "../services";
 import { invalidatePurchaseOrderModuleListingQueries } from "@/lib/procurement/invalidate-po-listing-queries";
+import {
+  formatDateOnly,
+  formatDisplayQty,
+  getLatestPackingDate,
+  getSnapshotField,
+  resolveProductSku,
+  toDateInputValue,
+  validateDispatchDateAgainstPacking,
+} from "../dispatch-display-utils";
+import { showToast } from "@/lib/toast";
+
+type PackingDoneProductRow = NonNullable<
+  PackedOrderDropdownItem["packing_list"]["packing_dones"][number]["products"]
+>[number];
 
 type PackingOption = {
   packing_done_id: string;
   packing_done_no: string;
+  packing_date: string | null;
   packing_list_id: string;
   packing_number: string;
   packing_list_status: string;
   customer_name: string;
   warehouse_name: string;
   packing_list: PackedOrderDropdownItem["packing_list"];
+  products: PackingDoneProductRow[];
 };
+
+type DispatchSourceType =
+  | "normal_sales"
+  | "sample"
+  | "stock_transfer"
+  | "purchase_return";
+
+const SOURCE_FIELD_LABELS: Record<
+  DispatchSourceType,
+  { field: string; placeholder: string; search: string; noun: string }
+> = {
+  normal_sales: {
+    field: "Sales Order",
+    placeholder: "Select sales order...",
+    search: "Search sales order...",
+    noun: "Sales Order",
+  },
+  sample: {
+    field: "Sample Order",
+    placeholder: "Select sample order...",
+    search: "Search sample order...",
+    noun: "Sample Order",
+  },
+  stock_transfer: {
+    field: "Stock Transfer",
+    placeholder: "Select stock transfer...",
+    search: "Search stock transfer...",
+    noun: "Stock Transfer",
+  },
+  purchase_return: {
+    field: "Purchase Return",
+    placeholder: "Select purchase return...",
+    search: "Search purchase return...",
+    noun: "Purchase Return",
+  },
+};
+
+function normalizeSourceType(value: string | null | undefined): DispatchSourceType {
+  const raw = String(value || "").toLowerCase().trim();
+  if (raw === "sample") return "sample";
+  if (raw === "stock_transfer") return "stock_transfer";
+  if (raw === "purchase_return") return "purchase_return";
+  if (raw === "sales" || raw === "sales_order" || raw === "normal_sales") {
+    return "normal_sales";
+  }
+  return "normal_sales";
+}
 
 function sameIdList(a: string[], b: string[]) {
   if (a.length !== b.length) return false;
@@ -37,6 +100,18 @@ export default function CreateDispatchPage() {
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const packingIdFromUrl = searchParams ? searchParams.get("packingId") : null;
+  const sourceTypeFromUrl = searchParams ? searchParams.get("sourceType") : null;
+  const sourceType = normalizeSourceType(sourceTypeFromUrl);
+  const orderField = SOURCE_FIELD_LABELS[sourceType];
+  const listTab =
+    sourceType === "normal_sales"
+      ? "sales_order"
+      : sourceType === "sample"
+        ? "sample"
+        : sourceType === "stock_transfer"
+          ? "stock_transfer"
+          : "purchase_return";
+  const listHref = `/warehouse/dispatch?tab=${listTab}`;
 
   const [dispatchNumber, setDispatchNumber] = useState("");
   const [dispatchDate, setDispatchDate] = useState(new Date().toISOString().split("T")[0]);
@@ -46,10 +121,10 @@ export default function CreateDispatchPage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    getPackedOrdersDropdown()
+    getPackedOrdersDropdown({ source_type: sourceType })
       .then((rows) => setOrderRows(rows))
       .catch(console.error);
-  }, []);
+  }, [sourceType]);
 
   const orderOptions = useMemo(() => {
     const seen = new Set<string>();
@@ -63,7 +138,7 @@ export default function CreateDispatchPage() {
       options.push({
         value: row.order_id,
         label: row.order_number || row.label || row.order_id,
-        sublabel: `${packingCount} ready packing${packingCount === 1 ? "" : "s"} · ${row.source_type}`,
+        sublabel: `${packingCount} ready packing${packingCount === 1 ? "" : "s"}`,
       });
     }
     return options;
@@ -78,12 +153,14 @@ export default function CreateDispatchPage() {
         options.push({
           packing_done_id: pd.packing_done_id,
           packing_done_no: pd.packing_done_no,
+          packing_date: pd.packing_date || null,
           packing_list_id: row.packing_list.packing_list_id,
           packing_number: row.packing_list.packing_number,
           packing_list_status: row.packing_list.status,
           customer_name: row.packing_list.customer_name,
           warehouse_name: row.packing_list.warehouse_name,
           packing_list: row.packing_list,
+          products: Array.isArray(pd.products) ? pd.products : [],
         });
       }
     }
@@ -109,6 +186,11 @@ export default function CreateDispatchPage() {
       ),
     [packingOptionsForOrder, selectedPackingDoneIds],
   );
+
+  const minDispatchDate = useMemo(() => {
+    const latest = getLatestPackingDate(selectedPackings);
+    return latest ? toDateInputValue(latest) : "";
+  }, [selectedPackings]);
 
   const previewWarehouseId = useMemo(() => {
     const first = selectedPackings[0];
@@ -178,37 +260,37 @@ export default function CreateDispatchPage() {
 
   const handleSubmit = async () => {
     if (!selectedOrderId) {
-      alert("Please select an Order.");
+      showToast(`Please select a ${orderField.noun}.`, "error");
       return;
     }
     if (selectedPackingDoneIds.length === 0) {
-      alert("Please select at least one Packing Listing to dispatch.");
+      showToast("Please select at least one Packing Listing to dispatch.", "error");
       return;
     }
     if (!dispatchDate) {
-      alert("Dispatch Date is required.");
+      showToast("Dispatch Date is required.", "error");
+      return;
+    }
+
+    const dateError = validateDispatchDateAgainstPacking(dispatchDate, selectedPackings);
+    if (dateError) {
+      showToast(dateError, "error");
       return;
     }
 
     setLoading(true);
     try {
       const dispatchDateIso = new Date(dispatchDate).toISOString();
-      for (const packingDoneId of selectedPackingDoneIds) {
-        await createDispatch({
-          packing_done_id: packingDoneId,
-          status: "Ready for Dispatch",
-          dispatch_date: dispatchDateIso,
-        });
-      }
+      await createDispatch({
+        packing_done_ids: selectedPackingDoneIds,
+        status: "Ready for Dispatch",
+        dispatch_date: dispatchDateIso,
+      });
       await invalidatePurchaseOrderModuleListingQueries(queryClient);
-      alert(
-        selectedPackingDoneIds.length === 1
-          ? "Dispatch created successfully"
-          : `${selectedPackingDoneIds.length} dispatches created successfully`,
-      );
-      router.push("/warehouse/dispatch");
+      showToast("Dispatch created successfully", "success");
+      router.push(listHref);
     } catch (err: any) {
-      alert(err?.response?.data?.message || "Failed to create Dispatch");
+      showToast(err?.response?.data?.message || "Failed to create Dispatch", "error");
     } finally {
       setLoading(false);
     }
@@ -217,9 +299,9 @@ export default function CreateDispatchPage() {
   return (
     <FormContainer
       title="Create Dispatch"
-      description="Select an order, then choose one or more packings to dispatch"
-      onBack={() => router.push("/warehouse/dispatch")}
-      onCancel={() => router.push("/warehouse/dispatch")}
+      description={`Select a ${orderField.noun.toLowerCase()}, then choose one or more packings for a single dispatch`}
+      onBack={() => router.push(listHref)}
+      onCancel={() => router.push(listHref)}
       cancelLabel="Cancel"
       actions={
         <Button
@@ -237,7 +319,7 @@ export default function CreateDispatchPage() {
           {loading
             ? "Dispatching..."
             : selectedPackingDoneIds.length > 1
-              ? `Dispatch (${selectedPackingDoneIds.length})`
+              ? `Create Dispatch (${selectedPackingDoneIds.length} packings)`
               : "Dispatch"}
         </Button>
       }
@@ -263,14 +345,14 @@ export default function CreateDispatchPage() {
 
             <div className="shrink-0 w-[220px]">
               <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider whitespace-nowrap">
-                Order *
+                {orderField.field} *
               </p>
               <AutocompleteSelect
                 options={orderOptions}
                 value={selectedOrderId}
                 onChange={handleOrderChange}
-                placeholder="Select order..."
-                searchPlaceholder="Search order number..."
+                placeholder={orderField.placeholder}
+                searchPlaceholder={orderField.search}
                 className="h-8 w-full text-xs mt-1.5 rounded-lg border-border bg-white"
               />
             </div>
@@ -289,7 +371,7 @@ export default function CreateDispatchPage() {
                     ? packingSelectOptions.length
                       ? "Select packing(s)..."
                       : "No ready packing"
-                    : "Select order first"
+                    : `Select ${orderField.noun.toLowerCase()} first`
                 }
                 searchPlaceholder="Search packing..."
                 className="h-8 w-full text-xs mt-1.5 rounded-lg border-border bg-white"
@@ -304,6 +386,7 @@ export default function CreateDispatchPage() {
               <Input
                 type="date"
                 value={dispatchDate}
+                min={minDispatchDate || undefined}
                 onChange={(e) => setDispatchDate(e.target.value)}
                 className="h-8 w-full text-xs mt-1.5"
               />
@@ -321,91 +404,119 @@ export default function CreateDispatchPage() {
             {selectedPackings.map((selectedPacking) => (
               <div
                 key={selectedPacking.packing_done_id}
-                className="space-y-3 rounded-lg border border-border bg-slate-50/60 p-4"
+                className="w-full bg-white rounded-xl border border-border p-5 shadow-sm space-y-5"
               >
-                <div className="flex flex-wrap gap-x-6 gap-y-2">
-                  <div className="w-fit">
-                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                  <div>
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
                       Packing Done No
                     </p>
-                    <p className="text-sm font-bold text-foreground font-mono">
+                    <p className="text-sm font-bold text-foreground font-mono mt-1">
                       {selectedPacking.packing_done_no}
                     </p>
                   </div>
-                  <div className="w-fit">
-                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
-                      Packing List
+                  <div>
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                      Packing Done Date
                     </p>
-                    <p className="text-sm font-bold text-foreground font-mono">
-                      {selectedPacking.packing_number}
-                    </p>
-                  </div>
-                  <div className="w-fit">
-                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
-                      Status
-                    </p>
-                    <p className="text-sm font-bold text-foreground">
-                      {selectedPacking.packing_list_status}
+                    <p className="text-sm font-bold text-foreground mt-1">
+                      {formatDateOnly(selectedPacking.packing_date)}
                     </p>
                   </div>
-                  <div className="w-fit">
-                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+                  <div>
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
                       Customer
                     </p>
-                    <p className="text-sm font-bold text-foreground">
+                    <p className="text-sm font-bold text-foreground mt-1">
                       {selectedPacking.customer_name || "—"}
                     </p>
                   </div>
                 </div>
 
-                {selectedPacking.packing_list.products?.length > 0 && (
-                  <div>
-                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                {selectedPacking.products.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
                       Products
                     </p>
-                    <div className="border border-border rounded-lg overflow-hidden bg-white w-fit max-w-full">
-                      <table className="text-left text-xs">
-                        <thead className="bg-slate-50 border-b border-border">
-                          <tr>
-                            <th className="px-3 py-2 font-semibold text-muted-foreground whitespace-nowrap">
+                    <div className="w-full overflow-x-auto rounded-lg border border-border">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="border-b border-border bg-slate-50/50">
+                            <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
                               Product
                             </th>
-                            <th className="px-3 py-2 font-semibold text-muted-foreground whitespace-nowrap">
+                            <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                              SKU
+                            </th>
+                            <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
                               Batch
                             </th>
-                            <th className="px-3 py-2 font-semibold text-muted-foreground text-right whitespace-nowrap">
+                            <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                              Mfg Date
+                            </th>
+                            <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                              Expiry Date
+                            </th>
+                            <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider text-center">
                               Order Qty
                             </th>
-                            <th className="px-3 py-2 font-semibold text-muted-foreground text-right whitespace-nowrap">
+                            <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider text-center">
                               Packed Qty
                             </th>
-                            <th className="px-3 py-2 font-semibold text-muted-foreground text-right whitespace-nowrap">
+                            <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider text-center">
                               Pending Qty
                             </th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-border">
-                          {selectedPacking.packing_list.products.map((product) => (
-                            <tr key={product.packing_list_product_id}>
-                              <td className="px-3 py-2 font-medium whitespace-nowrap">
-                                {product.product_name ||
-                                  product.product_code ||
-                                  product.product_id}
-                              </td>
-                              <td className="px-3 py-2 font-mono text-[10px] whitespace-nowrap">
-                                {product.batch_code || "—"}
-                              </td>
-                              <td className="px-3 py-2 tabular-nums text-right font-mono whitespace-nowrap">
-                                {product.order_base_qty}
-                              </td>
-                              <td className="px-3 py-2 tabular-nums text-right font-mono font-bold whitespace-nowrap">
-                                {product.packed_base_qty}
-                              </td>
-                              <td className="px-3 py-2 tabular-nums text-right font-mono whitespace-nowrap">
-                                {product.pending_base_qty}
-                              </td>
-                            </tr>
-                          ))}
+                        <tbody>
+                          {selectedPacking.products.map((product) => {
+                            const sku = resolveProductSku(product);
+                            const mfgDate = getSnapshotField(
+                              product.batch_snapshot,
+                              "manufacturing_date",
+                              "mfg_date",
+                              "mfgDate",
+                            );
+                            const expiryDate = getSnapshotField(
+                              product.batch_snapshot,
+                              "expiry_date",
+                              "exp_date",
+                              "expDate",
+                            );
+                            return (
+                              <tr
+                                key={`${selectedPacking.packing_done_id}-${product.packing_done_product_id}`}
+                                className="border-b border-border/60 hover:bg-slate-50/40"
+                              >
+                                <td className="py-3 px-3 text-xs font-bold text-foreground">
+                                  {product.product_name ||
+                                    getSnapshotField(product.product_snapshot, "product_name") ||
+                                    product.product_id}
+                                </td>
+                                <td className="py-3 px-3 text-xs font-mono font-bold text-brand-700">
+                                  {sku}
+                                </td>
+                                <td className="py-3 px-3 text-xs font-mono text-foreground">
+                                  {product.batch_code || "—"}
+                                </td>
+                                <td className="py-3 px-3 text-xs text-muted-foreground">
+                                  {formatDateOnly(mfgDate)}
+                                </td>
+                                <td className="py-3 px-3 text-xs text-muted-foreground">
+                                  {formatDateOnly(expiryDate)}
+                                </td>
+                                <td className="py-3 px-3 text-xs font-semibold text-center tabular-nums">
+                                  {formatDisplayQty(Number(product.order_base_qty || 0), product)}
+                                </td>
+                                <td className="py-3 px-3 text-xs font-bold text-center text-emerald-600 tabular-nums">
+                                  {formatDisplayQty(Number(product.base_qty || 0), product)}
+                                </td>
+                                <td className="py-3 px-3 text-xs font-bold text-center text-amber-600 tabular-nums">
+                                  {formatDisplayQty(Number(product.pending_base_qty || 0), product)}
+                                </td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>

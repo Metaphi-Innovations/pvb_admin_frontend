@@ -4,11 +4,19 @@ import React, { useCallback, useMemo, useState, useEffect, useRef } from "react"
 import { MasterListing } from "@/components/listing/MasterListing";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
 import { Eye, Truck, RotateCcw, Pencil } from "lucide-react";
-import { toast } from "sonner";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { PackingRecord } from "../types";
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { showToast } from "@/lib/toast";
 import { STATUS_BADGE_CONFIG } from "../constants";
 import {
   resolveWarehouseOrderType,
@@ -17,6 +25,12 @@ import {
   type OrderTypeFilterTab,
 } from "@/app/(app)/warehouse/lib/order-document-type";
 import { getPackingListOrderNoHeader } from "../lib/packing-document-labels";
+import {
+  buildPackingEditHref,
+  buildPackingListHref,
+  buildPackingViewHref,
+  packingListPathForSource,
+} from "../lib/packing-list-nav";
 import {
   PackingDoneService,
   buildPackingDoneApiFilters,
@@ -57,6 +71,16 @@ export function DonePackingListing({ sourceFilter }: DonePackingListingProps) {
   const searchParams = useSearchParams();
   const selectedWarehouse = searchParams.get("warehouse") || "All";
 
+  const listReturnTo = useMemo(
+    () =>
+      buildPackingListHref(packingListPathForSource(sourceFilter), {
+        tab: "packing-done",
+        warehouse: selectedWarehouse,
+        searchParams,
+      }),
+    [sourceFilter, selectedWarehouse, searchParams],
+  );
+
   // API parameters state
   const [filters, setFilters] = useState<FilterState>({});
   const [sort, setSort] = useState<SortState>({ key: "", direction: "none" });
@@ -67,6 +91,7 @@ export function DonePackingListing({ sourceFilter }: DonePackingListingProps) {
   // Dynamic filter options state
   const [packingNoOptions, setPackingNoOptions] = useState<{ label: string; value: string }[]>([]);
   const [salesOrderNoOptions, setSalesOrderNoOptions] = useState<{ label: string; value: string }[]>([]);
+  const [poNumberOptions, setPoNumberOptions] = useState<{ label: string; value: string }[]>([]);
   const [customerOptions, setCustomerOptions] = useState<{ label: string; value: string }[]>([]);
   const [warehouseOptions, setWarehouseOptions] = useState<{ label: string; value: string }[]>([]);
   const [packedByOptions, setPackedByOptions] = useState<{ label: string; value: string }[]>([]);
@@ -75,22 +100,37 @@ export function DonePackingListing({ sourceFilter }: DonePackingListingProps) {
   // List data state
   const [items, setItems] = useState<PackingRecord[]>([]);
   const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(false);
-
-  // Reset page when source tab changes
-  useEffect(() => {
-    setPage(1);
-  }, [sourceFilter]);
+  const [loading, setLoading] = useState(true);
+  const [revertTarget, setRevertTarget] = useState<PackingRecord | null>(null);
 
   // Track which filter columns have already been loaded
   const loadedFiltersRef = useRef<Set<string>>(new Set());
 
+  // Reset page / filter caches when source tab or warehouse changes
+  useEffect(() => {
+    setPage(1);
+    setFilters({});
+    setSort({ key: "", direction: "none" });
+    setItems([]);
+    setTotal(0);
+    setLoading(true);
+    loadedFiltersRef.current.clear();
+    setPackingNoOptions([]);
+    setSalesOrderNoOptions([]);
+    setPoNumberOptions([]);
+    setCustomerOptions([]);
+    setWarehouseOptions([]);
+    setPackedByOptions([]);
+    setStatusOptions([]);
+  }, [sourceFilter, selectedWarehouse]);
+
   // Lazy-load filter options only when the user opens a specific filter popover
   const FILTER_FIELD_MAP: Record<string, { field: PackingDoneFilterField; setter: (opts: { label: string; value: string }[]) => void }> = useMemo(() => ({
-    packingDoneNo: { field: "packing_done_no", setter: setPackingNoOptions },
-    salesOrderNo: { field: "packing_list__packing_number", setter: setSalesOrderNoOptions },
+    packingNo: { field: "packing_done_no", setter: setPackingNoOptions },
+    salesOrderNo: { field: "source_document_no", setter: setSalesOrderNoOptions },
+    poNumber: { field: "po_number", setter: setPoNumberOptions },
     customer: { field: "packing_list__customer_name", setter: setCustomerOptions },
-    warehouse: { field: "warehouse__warehouse_name", setter: setWarehouseOptions },
+    warehouse: { field: "packing_list__warehouse__warehouse_name", setter: setWarehouseOptions },
     packedBy: { field: "packed_by_user__username", setter: setPackedByOptions },
     status: { field: "status", setter: setStatusOptions },
   }), []);
@@ -110,13 +150,23 @@ export function DonePackingListing({ sourceFilter }: DonePackingListingProps) {
     }
   }, [FILTER_FIELD_MAP, sourceFilter, selectedWarehouse]);
 
+  const handleFilterChange = useCallback((next: FilterState) => {
+    setFilters(next);
+    setPage(1);
+  }, []);
+
+  const handleSortChange = useCallback((next: SortState) => {
+    setSort(next);
+    setPage(1);
+  }, []);
+
   // Fetch list data from backend
   useEffect(() => {
     let active = true;
     const controller = new AbortController();
+    setLoading(true);
 
     async function loadData() {
-      setLoading(true);
       try {
         const apiFilters = buildPackingDoneApiFilters(filters, selectedWarehouse);
         // Force the source_type based on the active tab
@@ -138,7 +188,16 @@ export function DonePackingListing({ sourceFilter }: DonePackingListingProps) {
           setTotal(result.total);
         }
       } catch (err) {
+        if ((err as { name?: string } | null)?.name === "CanceledError" ||
+            (err as { name?: string } | null)?.name === "AbortError" ||
+            (err as { code?: string } | null)?.code === "ERR_CANCELED") {
+          return;
+        }
         console.error("Error loading packing done data:", err);
+        if (active) {
+          setItems([]);
+          setTotal(0);
+        }
       } finally {
         if (active) {
           setLoading(false);
@@ -176,7 +235,7 @@ export function DonePackingListing({ sourceFilter }: DonePackingListingProps) {
         width: "140px",
         render: (_: unknown, row: PackingRecord) => (
           <Link
-            href={`/warehouse/packing/view/${row.id}`}
+            href={buildPackingViewHref(row.id, listReturnTo)}
             className="font-mono text-xs font-semibold text-brand-700 hover:underline"
           >
             {row.packingNo}
@@ -203,10 +262,11 @@ export function DonePackingListing({ sourceFilter }: DonePackingListingProps) {
         header: "PO No",
         sortable: true,
         filterable: true,
-        filterType: "text",
+        filterType: "dropdown",
+        filterOptions: poNumberOptions,
         width: "130px",
         render: (_: unknown, row: PackingRecord) => (
-          <span className="font-mono text-xs font-semibold text-navy-700">{row.poNumber ?? "—"}</span>
+          <span className="font-mono text-xs text-foreground font-semibold">{row.poNumber || "—"}</span>
         ),
       });
     }
@@ -274,24 +334,15 @@ export function DonePackingListing({ sourceFilter }: DonePackingListingProps) {
         key: "orderAmount",
         header: "Amount",
         align: "right",
-        width: "90px",
+        width: "130px",
+        truncate: false,
         render: (_: unknown, row: PackingRecord) => {
           const type = resolveWarehouseOrderType(row);
-          if (type === "sample_order") {
-            return (
-              <span className="font-mono text-xs tabular-nums">
-                {formatWarehouseOrderAmount(type, 0)}
-              </span>
-            );
-          }
-          if (type === "purchase_return" && row.orderAmount != null) {
-            return (
-              <span className="font-mono text-xs tabular-nums">
-                {formatWarehouseOrderAmount(type, row.orderAmount)}
-              </span>
-            );
-          }
-          return <span className="text-xs text-muted-foreground">—</span>;
+          return (
+            <span className="font-mono text-xs tabular-nums">
+              {formatWarehouseOrderAmount(type, row.orderAmount)}
+            </span>
+          );
         },
       },
       {
@@ -319,7 +370,8 @@ export function DonePackingListing({ sourceFilter }: DonePackingListingProps) {
         filterable: true,
         filterType: "dropdown",
         filterOptions: statusOptions,
-        width: "110px",
+        width: "180px",
+        truncate: false,
         render: (_: unknown, row: PackingRecord) => {
           const label = doneStatusLabel(row);
           const cfg = STATUS_BADGE_CONFIG[label] || {
@@ -328,7 +380,7 @@ export function DonePackingListing({ sourceFilter }: DonePackingListingProps) {
           };
           return (
             <span
-              className={`inline-flex items-center text-[11px] px-2.5 py-0.5 rounded-full font-medium border ${cfg.bg}`}
+              className={`inline-flex items-center whitespace-nowrap text-[11px] px-2.5 py-0.5 rounded-full font-medium border ${cfg.bg}`}
             >
               {cfg.label}
             </span>
@@ -343,10 +395,12 @@ export function DonePackingListing({ sourceFilter }: DonePackingListingProps) {
     sourceFilter,
     packingNoOptions,
     salesOrderNoOptions,
+    poNumberOptions,
     customerOptions,
     warehouseOptions,
     packedByOptions,
     statusOptions,
+    listReturnTo,
   ]);
 
   const actions: ActionItemConfig<PackingRecord>[] = [
@@ -354,61 +408,109 @@ export function DonePackingListing({ sourceFilter }: DonePackingListingProps) {
       label: "View Details",
       action: "view",
       icon: Eye,
-      onClick: (row) => router.push(`/warehouse/packing/view/${row.id}`),
+      onClick: (row) => router.push(buildPackingViewHref(row.id, listReturnTo)),
     },
     {
       label: "Edit",
       action: "edit",
       icon: Pencil,
       hide: (row) => row.status !== "Available for Dispatch" && row.status !== "Ready For Dispatch",
-      onClick: (row) => router.push(`/warehouse/packing/edit/${row.id}`),
+      onClick: (row) => router.push(buildPackingEditHref(row.id, listReturnTo)),
     },
     {
       label: "Create Dispatch",
       action: "dispatch",
       icon: Truck,
       hide: (row) => row.status !== "Available for Dispatch" && row.status !== "Ready For Dispatch",
-      onClick: (row) => router.push(`/warehouse/dispatch/create?packingId=${row.id}`),
+      onClick: (row) => {
+        const sourceType =
+          sourceFilter === "sales" ? "normal_sales" : sourceFilter;
+        const params = new URLSearchParams();
+        params.set("packingId", row.id);
+        params.set("sourceType", sourceType);
+        router.push(`/warehouse/dispatch/create?${params.toString()}`);
+      },
     },
     {
       label: "Revert",
       action: "revert",
       icon: RotateCcw,
-      onClick: async (row) => {
-        if (!window.confirm("Are you sure you want to revert this Packing Done? This will release the items back to Packing List.")) {
-          return;
-        }
-        try {
-          await PackingDoneService.revert(row.id);
-          await invalidatePurchaseOrderModuleListingQueries(queryClient);
-          toast.success("Packing Done reverted successfully.");
-          setRefreshKey(k => k + 1);
-        } catch (err: any) {
-          console.error("Error reverting packing done:", err);
-          toast.error(err?.response?.data?.error || err?.response?.data?.message || "Failed to revert Packing Done");
-        }
-      },
+      onClick: (row) => setRevertTarget(row),
       disabled: (row) => row.status !== "Available for Dispatch" && row.status !== "Ready For Dispatch",
       variant: "destructive",
     },
   ];
 
+  const handleRevertConfirm = async () => {
+    if (!revertTarget) return;
+    try {
+      await PackingDoneService.revert(revertTarget.id);
+      await invalidatePurchaseOrderModuleListingQueries(queryClient);
+      showToast("Packing Done reverted successfully.", "success");
+      setRefreshKey((k) => k + 1);
+    } catch (err: any) {
+      console.error("Error reverting packing done:", err);
+      showToast(
+        err?.response?.data?.error || err?.response?.data?.message || "Failed to revert Packing Done",
+        "error",
+      );
+    } finally {
+      setRevertTarget(null);
+    }
+  };
+
   return (
-    <MasterListing<PackingRecord>
-      columns={columns}
-      data={items}
-      loading={loading}
-      totalRecords={total}
-      page={page}
-      pageSize={pageSize}
-      onPageChange={setPage}
-      onPageSizeChange={setPageSize}
-      onSortChange={setSort}
-      onFilterChange={setFilters}
-      actions={actions}
-      emptyMessage="packing done records"
-      searchPlaceholder="Search packing done..."
-      onOpenFilter={handleOpenFilter}
-    />
+    <>
+      <MasterListing<PackingRecord>
+        columns={columns}
+        data={items}
+        loading={loading}
+        totalRecords={total}
+        page={page}
+        pageSize={pageSize}
+        onPageChange={setPage}
+        onPageSizeChange={setPageSize}
+        onSortChange={handleSortChange}
+        onFilterChange={handleFilterChange}
+        currentFilters={filters}
+        currentSort={sort}
+        actions={actions}
+        emptyMessage="packing done records"
+        searchPlaceholder="Search packing done..."
+        onOpenFilter={handleOpenFilter}
+      />
+
+      <Dialog open={!!revertTarget} onOpenChange={() => setRevertTarget(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <div className="w-8 h-8 rounded-lg bg-amber-50 border border-amber-200 flex items-center justify-center">
+                <RotateCcw className="w-4 h-4 text-amber-500" />
+              </div>
+              Revert Packing Done?
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Are you sure you want to revert{" "}
+            <span className="font-semibold text-foreground">
+              {revertTarget?.packingNo || revertTarget?.salesOrderNo}
+            </span>
+            ? This will release the items back to Packing List.
+          </p>
+          <DialogFooter className="flex gap-2 justify-end pt-2">
+            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setRevertTarget(null)}>
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              className="h-8 text-xs bg-amber-600 hover:bg-amber-700 text-white"
+              onClick={handleRevertConfirm}
+            >
+              Confirm Revert
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
