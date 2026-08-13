@@ -1,7 +1,7 @@
 "use client";
 
 import type { PurchaseOrder } from "../po-data";
-import { buildPurchaseOrderPdfHtml, type POPdfTemplateData } from "./poPdfTemplate";
+import { buildPurchaseOrderPdfHtml, type POPdfLineRow, type POPdfTemplateData } from "./poPdfTemplate";
 import {
   asText,
   formatDate,
@@ -14,6 +14,11 @@ import {
   openPdfPrintWindow,
   sanitizePdfFileName,
 } from "@/lib/pdf/paramverse";
+import {
+  calcAdditionalChargeTax,
+  sumAdditionalChargeTaxes,
+} from "@/lib/procurement/procurement-line-utils";
+import { round2 } from "@/lib/procurement/utils";
 
 const COMPANY_HEADER = {
   ...PARAMVERSE_COMPANY,
@@ -83,19 +88,69 @@ function buildPaymentTerms(po: PurchaseOrder): string {
   return payment;
 }
 
-function buildTransactionType(raw: Record<string, unknown>): string {
-  const explicit = pick(raw, ["transaction_type", "tax_supply_type"]);
-  if (explicit) return asText(explicit);
-  const supplier = readRecord(raw.supplier);
-  const supplierSnapshot = readRecord(raw.supplier_snapshot);
-  const supplierState =
-    asText(pick(supplier, ["state", "state_name"]), "") ||
-    asText(pick(supplierSnapshot, ["state", "state_name"]), "");
-  const poState = asText(raw.state, "");
-  if (!supplierState || !poState) return "-";
-  return supplierState.toLowerCase() === poState.toLowerCase()
-    ? "Intra-State (CGST+SGST)"
-    : "Inter-State (IGST)";
+function textOrEmpty(value: unknown): string {
+  const text = asText(value, "");
+  return text === "-" || text === "—" ? "" : text;
+}
+
+function joinNonEmpty(parts: unknown[], sep = ", "): string {
+  return parts
+    .map((part) => textOrEmpty(part))
+    .filter(Boolean)
+    .join(sep);
+}
+
+function firstWarehouseContact(snapshot: Record<string, unknown>): {
+  name: string;
+  mobile: string;
+  email: string;
+} {
+  const contacts = Array.isArray(snapshot.contacts) ? snapshot.contacts : [];
+  const primary =
+    contacts.find((item) => Boolean(readRecord(item).is_primary)) ?? contacts[0];
+  const rec = readRecord(primary);
+  return {
+    name: textOrEmpty(pick(rec, ["contact_person", "name"])),
+    mobile: textOrEmpty(pick(rec, ["mobile_number", "mobile"])),
+    email: textOrEmpty(pick(rec, ["email_address", "email"])),
+  };
+}
+
+function buildAddressPartyLines(params: {
+  name: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  pincode?: string;
+  gstin?: string;
+  stateCode?: string;
+  contact?: string;
+  mobile?: string;
+  email?: string;
+}): string[] {
+  const cityStatePin = joinNonEmpty([params.city, params.state, params.pincode]);
+  const gstLine = joinNonEmpty(
+    [
+      params.gstin ? `GSTIN ${params.gstin}` : "",
+      params.stateCode ? `State Code ${params.stateCode}` : "",
+    ],
+    "  ",
+  );
+  const contactLine = joinNonEmpty(
+    [
+      params.contact ? `Contact ${params.contact}` : "",
+      params.mobile ? `Mobile ${params.mobile}` : "",
+    ],
+    "  ",
+  );
+  return [
+    params.name || "—",
+    params.address || "",
+    cityStatePin,
+    gstLine,
+    contactLine,
+    params.email ? `Email ${params.email}` : "",
+  ].filter((line) => String(line).trim());
 }
 
 function buildTemplateData(
@@ -126,22 +181,81 @@ function buildTemplateData(
     `Email ${asText(po.supplierEmail)}`,
   ];
 
-  const deliveryLocation = asText(
-    pick(warehouse, ["warehouse_name"]) ?? po.warehouseName ?? po.shipping.shipToLocation,
+  const billingSnapshot = readRecord(raw.billing_address);
+  const shippingSnapshot = readRecord(raw.shipping_address);
+  const billContact = firstWarehouseContact(billingSnapshot);
+  const shipContact = firstWarehouseContact(
+    Object.keys(shippingSnapshot).length ? shippingSnapshot : warehouse,
   );
-  const deliveryLines = [
-    deliveryLocation,
-    `Branch: ${asText(po.shipping.branch || po.state)}`,
-    asText(po.deliveryAddress || po.shipping.address),
-    `GSTIN ${asText(pick(company, ["gstin", "gst_number"]) ?? po.billing.gstNumber)}  State Code ${asText(pick(company, ["state_code"]) ?? po.state)}`,
-    `Contact ${asText(po.shipping.contactPerson)}  Mobile ${asText(po.shipping.contactNumber)}`,
-    asText(po.shipping.contactPerson) !== "-" || asText(po.shipping.contactNumber) !== "-"
-      ? `Email ${asText(pick(warehouse, ["email"]) ?? pick(company, ["email"]))}`
-      : `Email ${asText(pick(company, ["email"]))}`,
-  ];
+
+  const billToLines = buildAddressPartyLines({
+    name:
+      textOrEmpty(
+        pick(billingSnapshot, ["registered_legal_name", "warehouse_name", "company_name", "name"]) ??
+          po.billing.companyName ??
+          companyName,
+      ) || companyName,
+    address:
+      textOrEmpty(
+        pick(billingSnapshot, ["registered_gst_address", "address", "billingAddress"]) ??
+          po.billing.billingAddress,
+      ) ||
+      joinNonEmpty([
+        pick(billingSnapshot, ["address"]),
+        pick(billingSnapshot, ["address_1"]),
+      ]),
+    city: textOrEmpty(pick(billingSnapshot, ["city"]) ?? po.billing.city),
+    state: textOrEmpty(pick(billingSnapshot, ["state"]) ?? po.billing.state ?? po.state),
+    pincode: textOrEmpty(pick(billingSnapshot, ["pincode"]) ?? po.billing.pincode),
+    gstin: textOrEmpty(
+      pick(billingSnapshot, ["gst_number", "gstin", "gstNumber"]) ??
+        pick(company, ["gstin", "gst_number"]) ??
+        po.billing.gstNumber,
+    ),
+    stateCode: textOrEmpty(pick(billingSnapshot, ["state_code"]) ?? pick(company, ["state_code"])),
+    contact: billContact.name || textOrEmpty(po.shipping.contactPerson),
+    mobile: billContact.mobile || textOrEmpty(po.shipping.contactNumber),
+    email: billContact.email || textOrEmpty(pick(company, ["email"])),
+  });
+
+  const shipSnapshot = Object.keys(shippingSnapshot).length ? shippingSnapshot : warehouse;
+  const shipToLines = buildAddressPartyLines({
+    name:
+      textOrEmpty(
+        pick(shipSnapshot, ["warehouse_name", "registered_legal_name", "name"]) ??
+          po.warehouseName ??
+          po.shipping.shipToLocation,
+      ) || "—",
+    address:
+      textOrEmpty(
+        po.deliveryAddress ||
+          po.shipping.address ||
+          pick(shipSnapshot, ["address", "registered_gst_address"]),
+      ) ||
+      joinNonEmpty([
+        pick(shipSnapshot, ["address"]),
+        pick(shipSnapshot, ["address_1"]),
+      ]),
+    city: textOrEmpty(pick(shipSnapshot, ["city"])),
+    state: textOrEmpty(
+      pick(shipSnapshot, ["state"]) ?? po.shipping.branch ?? po.state,
+    ),
+    pincode: textOrEmpty(pick(shipSnapshot, ["pincode"])),
+    gstin: textOrEmpty(
+      pick(shipSnapshot, ["gst_number", "gstin", "gstNumber"]) ??
+        pick(company, ["gstin", "gst_number"]) ??
+        po.billing.gstNumber,
+    ),
+    stateCode: textOrEmpty(pick(shipSnapshot, ["state_code"]) ?? pick(company, ["state_code"])),
+    contact: shipContact.name || textOrEmpty(po.shipping.contactPerson),
+    mobile: shipContact.mobile || textOrEmpty(po.shipping.contactNumber),
+    email:
+      shipContact.email ||
+      textOrEmpty(pick(shipSnapshot, ["email"]) ?? pick(company, ["email"])),
+  });
 
   const products = Array.isArray(raw.products) ? raw.products : [];
-  const lineRows = po.lines.map((line, index) => {
+  const lineRows: POPdfLineRow[] = po.lines.map((line, index) => {
     const gross = toNumber(line.grossAmount);
     const discountAmount = toNumber(line.discountAmount);
     const taxable =
@@ -171,12 +285,53 @@ function buildTemplateData(
       taxableValue: taxable,
       gstPercent:
         toNumber(line.cgstPct) + toNumber(line.sgstPct) + toNumber(line.igstPct),
-      gstAmount: toNumber(line.taxAmount),
+      cgstAmount: round2(taxable * (toNumber(line.cgstPct) / 100)),
+      sgstAmount: round2(taxable * (toNumber(line.sgstPct) / 100)),
+      igstAmount: round2(taxable * (toNumber(line.igstPct) / 100)),
       total: toNumber(line.netAmount),
     };
   });
 
+  const additionalCharges = (po.additionalCharges ?? []).filter(
+    (charge) => textOrEmpty(charge.chargeName) || toNumber(charge.amount) > 0,
+  );
+  if (
+    !additionalCharges.length &&
+    toNumber(po.summary.additionalChargesTotal || po.otherCharges) > 0
+  ) {
+    additionalCharges.push({
+      uid: "other-charges",
+      chargeName: "Other Charges",
+      amount: toNumber(po.summary.additionalChargesTotal || po.otherCharges),
+      cgstPct: 0,
+      sgstPct: 0,
+      igstPct: 0,
+    });
+  }
+  additionalCharges.forEach((charge) => {
+    const tax = calcAdditionalChargeTax(charge);
+    lineRows.push({
+      sr: lineRows.length + 1,
+      itemCode: "",
+      itemName: asText(charge.chargeName, "Additional Charge"),
+      itemSubName: textOrEmpty(charge.remarks) || undefined,
+      hsn: "",
+      qty: 0,
+      uom: "",
+      rate: tax.taxableValue,
+      discount: 0,
+      taxableValue: tax.taxableValue,
+      gstPercent: toNumber(charge.cgstPct) + toNumber(charge.sgstPct) + toNumber(charge.igstPct),
+      cgstAmount: tax.cgstAmount,
+      sgstAmount: tax.sgstAmount,
+      igstAmount: tax.igstAmount,
+      total: tax.netAmount,
+      isCharge: true,
+    });
+  });
+
   const summary = po.summary;
+  const chargeTaxes = sumAdditionalChargeTaxes(additionalCharges);
   const termsLines = splitLines(pick(raw, ["terms_and_conditions", "terms"]));
   const fallbackTerms = splitLines(po.terms.map((term) => term.content));
   const specialInstructionLines = splitLines(
@@ -211,7 +366,6 @@ function buildTemplateData(
     supplierQuotationRef: quotationRef,
     supplierQuotationDate: quotationDate,
     expectedDelivery: formatDate(po.expectedDeliveryDate),
-    deliveryLocation,
     buyer: asText(
       pick(raw, ["buyer_name", "created_by_name"]) ?? po.createdBy,
     ),
@@ -220,9 +374,9 @@ function buildTemplateData(
     ),
     currency: asText(po.currency || "INR"),
     paymentTerms: buildPaymentTerms(po),
-    transactionType: buildTransactionType(raw),
     supplierBlockLines: supplierLines,
-    deliveryBlockLines: deliveryLines,
+    billToBlockLines: billToLines,
+    shipToBlockLines: shipToLines,
     lines: lineRows,
     summary: {
       grossAmount: toNumber(summary.grossAmount),
@@ -231,9 +385,9 @@ function buildTemplateData(
       freight: 0,
       otherCharges: toNumber(summary.additionalChargesTotal),
       taxableValue: toNumber(summary.taxableValue),
-      cgst: toNumber(summary.totalCgst),
-      sgst: toNumber(summary.totalSgst),
-      igst: toNumber(summary.totalIgst),
+      cgst: toNumber(summary.totalCgst) + chargeTaxes.totalCgst,
+      sgst: toNumber(summary.totalSgst) + chargeTaxes.totalSgst,
+      igst: toNumber(summary.totalIgst) + chargeTaxes.totalIgst,
       roundOff: 0,
       grandTotal: toNumber(summary.grandTotal),
     },
