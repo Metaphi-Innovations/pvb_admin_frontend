@@ -47,18 +47,23 @@ export function VoucherFormActionBar({
   className,
 }: VoucherFormActionBarProps) {
   return (
-    <div className={cn("flex items-center justify-between gap-2 w-full", className)}>
+    <div
+      className={cn(
+        "flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between w-full",
+        className,
+      )}
+    >
       <Button
         type="button"
         variant="ghost"
         size="sm"
-        className={cn(BTN, "text-muted-foreground")}
+        className={cn(BTN, "text-muted-foreground self-start sm:self-auto")}
         onClick={onDiscard}
         disabled={discardDisabled}
       >
         Discard Form
       </Button>
-      <div className="flex items-center gap-2 flex-wrap justify-end">
+      <div className="flex items-center gap-2 flex-wrap justify-end w-full sm:w-auto">
         <Button
           type="button"
           variant="outline"

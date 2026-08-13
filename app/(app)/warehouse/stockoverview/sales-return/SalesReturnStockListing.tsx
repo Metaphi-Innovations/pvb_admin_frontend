@@ -1,11 +1,13 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { Eye } from "lucide-react";
 import { MasterListing } from "@/components/listing/MasterListing";
-import { ColumnConfig } from "@/components/listing/types";
+import { ActionItemConfig, ColumnConfig } from "@/components/listing/types";
 import { SALES_RETURN_STOCK_STATUS_OPTIONS, STATUS_BADGE_CONFIG } from "../constants";
 import { useStockOverviewListFilters } from "../hooks/use-stock-overview-list-filters";
-import { ProductDropdownService } from "@/services/product-dropdown.service";
 import {
   ReturnStockListRow,
   StockOverviewApi,
@@ -22,7 +24,18 @@ function formatDate(value: string | null): string {
   return String(value).slice(0, 10);
 }
 
+function moneyCell(val: unknown) {
+  const text = String(val ?? "");
+  const missing = text.toLowerCase().includes("missing");
+  return (
+    <span className={`text-xs tabular-nums ${missing ? "text-amber-700 text-[10px]" : "text-foreground"}`}>
+      {text || "—"}
+    </span>
+  );
+}
+
 export function SalesReturnStockListing({ warehouseId, onFiltersApplied }: SalesReturnStockListingProps) {
+  const router = useRouter();
   const {
     draftFilters,
     appliedFilters,
@@ -81,29 +94,14 @@ export function SalesReturnStockListing({ warehouseId, onFiltersApplied }: Sales
   const handleOpenFilter = (columnKey: string) => {
     if (filterOptions[columnKey] || loadingFilters.has(columnKey)) return;
 
-    if (columnKey === "product_name") {
-      setLoadingFilters((prev) => new Set(prev).add(columnKey));
-      ProductDropdownService.dropdown()
-        .then((items) => {
-          const options = items
-            .map((p) => ({ label: p.product_name, value: p.product_name }))
-            .filter((o) => o.value);
-          setFilterOptions((prev) => ({ ...prev, product_name: options }));
-        })
-        .finally(() => {
-          setLoadingFilters((prev) => {
-            const next = new Set(prev);
-            next.delete(columnKey);
-            return next;
-          });
-        });
-      return;
-    }
-
     const keyMap: Record<string, string> = {
-      warehouse_name: "sales_order_return__warehouse__warehouse_name",
-      customer_name: "sales_order_return__customer__customer_name",
-      batch_no: "batch_code",
+      product_name: "inventory_detail__product__product_name",
+      sku: "inventory_detail__product__sku",
+      uom: "inventory_detail__product__unit",
+      warehouse_name: "inventory_detail__warehouse__warehouse_name",
+      customer_name: "customer_name",
+      batch_no: "batch_no",
+      return_no: "return_no",
     };
     const field = keyMap[columnKey];
     if (!field) return;
@@ -122,27 +120,77 @@ export function SalesReturnStockListing({ warehouseId, onFiltersApplied }: Sales
 
   const columns: ColumnConfig<ReturnStockListRow>[] = [
     {
-      key: "return_no",
-      header: "Sales Return No.",
-      sortable: true,
-      width: "140px",
-      render: (val) => <span className="font-mono text-xs font-semibold">{val}</span>,
-    },
-    {
       key: "product_name",
       header: "Product",
       sortable: true,
       filterable: true,
       filterType: "dropdown",
       filterOptions: filterOptions.product_name || [],
+      render: (_val, row) => (
+        <Link href={`/warehouse/stockoverview/view/${row.id}`} className="block group/name">
+          <span className="text-xs font-semibold text-foreground group-hover/name:text-brand-700">{row.product_name}</span>
+        </Link>
+      ),
     },
     {
-      key: "customer_name",
-      header: "Customer",
+      key: "sku",
+      header: "SKU",
       sortable: true,
       filterable: true,
       filterType: "dropdown",
-      filterOptions: filterOptions.customer_name || [],
+      filterOptions: filterOptions.sku || [],
+      width: "120px",
+      render: (val) => <span className="font-mono text-xs text-foreground">{val || "—"}</span>,
+    },
+    {
+      key: "uom",
+      header: "UOM",
+      sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: filterOptions.uom || [],
+      width: "72px",
+      render: (val) => <span className="text-xs text-foreground">{val || "—"}</span>,
+    },
+    {
+      key: "available_qty",
+      header: "Available Qty",
+      sortable: true,
+      align: "right",
+      width: "110px",
+      render: (val) => (
+        <span className="text-xs font-medium tabular-nums text-foreground">
+          {val != null ? Number(val).toLocaleString() : "—"}
+        </span>
+      ),
+    },
+    {
+      key: "reserved_qty",
+      header: "Reserved Qty",
+      sortable: true,
+      align: "right",
+      width: "110px",
+      render: (val) => (
+        <span className="text-xs font-medium tabular-nums text-foreground">
+          {val != null ? Number(val).toLocaleString() : "—"}
+        </span>
+      ),
+    },
+    {
+      key: "cp",
+      header: "CP",
+      sortable: true,
+      align: "right",
+      width: "120px",
+      render: moneyCell,
+    },
+    {
+      key: "stock_value",
+      header: "Stock Value",
+      sortable: true,
+      align: "right",
+      width: "120px",
+      render: moneyCell,
     },
     {
       key: "warehouse_name",
@@ -151,6 +199,7 @@ export function SalesReturnStockListing({ warehouseId, onFiltersApplied }: Sales
       filterable: true,
       filterType: "dropdown",
       filterOptions: filterOptions.warehouse_name || [],
+      render: (val) => <span className="text-xs text-foreground">{val}</span>,
     },
     {
       key: "batch_no",
@@ -160,33 +209,37 @@ export function SalesReturnStockListing({ warehouseId, onFiltersApplied }: Sales
       filterType: "dropdown",
       filterOptions: filterOptions.batch_no || [],
       width: "130px",
-      render: (val) => <span className="font-mono text-xs">{val}</span>,
-    },
-    {
-      key: "available_qty",
-      header: "Available Qty",
-      sortable: true,
-      align: "right",
-      width: "110px",
-      render: (val) => <span className="text-xs font-medium tabular-nums">{Number(val).toLocaleString()}</span>,
-    },
-    {
-      key: "return_date",
-      header: "Return Date",
-      sortable: true,
-      width: "120px",
-      render: (val) => <span className="text-xs">{formatDate(val as string | null)}</span>,
+      render: (val) => <span className="font-mono text-xs text-foreground">{val}</span>,
     },
     {
       key: "expiry_date",
-      header: "Expiry Date",
+      header: "Expiry",
       sortable: true,
-      width: "120px",
+      width: "110px",
       render: (val) => <span className="text-xs">{formatDate(val as string | null)}</span>,
     },
     {
+      key: "return_no",
+      header: "Return No.",
+      sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: filterOptions.return_no || [],
+      width: "140px",
+      render: (val) => <span className="font-mono text-xs font-semibold">{val || "—"}</span>,
+    },
+    {
+      key: "customer_name",
+      header: "Customer",
+      sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: filterOptions.customer_name || [],
+      render: (val) => <span className="text-xs text-foreground">{val || "—"}</span>,
+    },
+    {
       key: "status",
-      header: "Status",
+      header: "Stock Status",
       sortable: true,
       filterable: true,
       filterType: "dropdown",
@@ -200,6 +253,15 @@ export function SalesReturnStockListing({ warehouseId, onFiltersApplied }: Sales
           </span>
         );
       },
+    },
+  ];
+
+  const actions: ActionItemConfig<ReturnStockListRow>[] = [
+    {
+      label: "View Details",
+      action: "view",
+      icon: Eye,
+      onClick: (row) => router.push(`/warehouse/stockoverview/view/${row.id}`),
     },
   ];
 
@@ -217,8 +279,9 @@ export function SalesReturnStockListing({ warehouseId, onFiltersApplied }: Sales
         onPageSizeChange={handlePageSizeChange}
         onSortChange={setSort}
         onFilterChange={onFilterChange}
+        actions={actions}
         emptyMessage=""
-        searchPlaceholder="Search product, batch or return no..."
+        searchPlaceholder="Search product, batch, return no or customer..."
         currentFilters={draftFilters}
         currentSort={sort}
         onOpenFilter={handleOpenFilter}

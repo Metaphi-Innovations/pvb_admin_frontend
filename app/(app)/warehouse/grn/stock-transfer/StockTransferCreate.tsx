@@ -24,6 +24,10 @@ import {
   type GrnQuantityType,
 } from "@/lib/warehouse/grn-quantity";
 import {
+  exceedsMaxLineQty,
+  maxLineQtyMessage,
+} from "@/lib/quantity-limits";
+import {
   useCreateGrn,
   useGrn,
   useGrnPreviewNumber,
@@ -82,6 +86,18 @@ function SectionCard({
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
+}
+
+function parseGstPct(value: unknown): number {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  const raw = String(value ?? "").replace("%", "").trim();
+  if (!raw) return 0;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function calcGstAmount(qty: number, unitPrice: number, gstPct: number): number {
+  return round2((qty * unitPrice * gstPct) / 100);
 }
 
 interface StockTransferCreateProps {
@@ -170,6 +186,7 @@ export function StockTransferCreate({
         let transferNo = "";
         const receivedBySourceItem = new Map<string, number>();
         const transferQtyBySourceItem = new Map<string, number>();
+        const priceBySourceItem = new Map<string, { unitPrice: number; gstPct: number }>();
         if (sourceId) {
           try {
             const transfer = await StockTransferService.getById(sourceId);
@@ -178,6 +195,10 @@ export function StockTransferCreate({
               if (!line.id) continue;
               receivedBySourceItem.set(String(line.id), Number(line.receivedQty || 0));
               transferQtyBySourceItem.set(String(line.id), Number(line.quantity || 0));
+              priceBySourceItem.set(String(line.id), {
+                unitPrice: Number(line.unitPrice || 0),
+                gstPct: parseGstPct(line.gstRate),
+              });
             }
           } catch {
             transferNo = dispatch.dispatch_number || sourceId;
@@ -218,10 +239,13 @@ export function StockTransferCreate({
                   packingSize: caseSize,
                 }),
               );
+              const pricing = priceBySourceItem.get(line.sourceItemId);
               return {
                 ...line,
                 maxQty: orderedQty,
                 caseSize,
+                unitPrice: pricing?.unitPrice || line.unitPrice || 0,
+                gstPct: pricing?.gstPct || line.gstPct || 0,
                 previousReceivedQty,
                 receivedQty,
                 displayQty,
@@ -255,64 +279,94 @@ export function StockTransferCreate({
     if (!isEdit || !existingGrn || hydratedEdit) return;
     if (existingGrn.status === "qc_completed") return;
 
-    setGrnNo(existingGrn.grnNo || "");
-    setGrnDate(existingGrn.grnDate || new Date().toISOString().slice(0, 10));
-    setWarehouseId(existingGrn.warehouseUuid || "");
-    setWarehouseName(existingGrn.warehouse || existingGrn.toWarehouse || "");
-    setFromWarehouseName(existingGrn.fromWarehouse || "");
-    setStockTransferId(existingGrn.sourceId || "");
-    setStockTransferNo(existingGrn.stockTransferNo || existingGrn.grnNo || "");
-    setRemarks(existingGrn.receiptRemarks || "");
+    let active = true;
 
-    setLines(
-      existingGrn.items.map((item) => {
-        const batch =
-          existingGrn.batches.find(
-            (b) =>
-              (item.sourceItemId && b.productId === item.sourceItemId) ||
-              b.productId === item.productId ||
-              b.productCode === item.productCode,
+    const hydrate = async () => {
+      setGrnNo(existingGrn.grnNo || "");
+      setGrnDate(existingGrn.grnDate || new Date().toISOString().slice(0, 10));
+      setWarehouseId(existingGrn.warehouseUuid || "");
+      setWarehouseName(existingGrn.warehouse || existingGrn.toWarehouse || "");
+      setFromWarehouseName(existingGrn.fromWarehouse || "");
+      setStockTransferId(existingGrn.sourceId || "");
+      setStockTransferNo(existingGrn.stockTransferNo || existingGrn.grnNo || "");
+      setRemarks(existingGrn.receiptRemarks || "");
+
+      const priceBySourceItem = new Map<string, { unitPrice: number; gstPct: number }>();
+      if (existingGrn.sourceId) {
+        try {
+          const transfer = await StockTransferService.getById(existingGrn.sourceId);
+          for (const line of transfer.lineItems || []) {
+            if (!line.id) continue;
+            priceBySourceItem.set(String(line.id), {
+              unitPrice: Number(line.unitPrice || 0),
+              gstPct: parseGstPct(line.gstRate),
+            });
+          }
+        } catch {
+          // Keep batch pricing if transfer lookup fails.
+        }
+      }
+      if (!active) return;
+
+      setLines(
+        existingGrn.items.map((item) => {
+          const batch =
+            existingGrn.batches.find(
+              (b) =>
+                (item.sourceItemId && b.productId === item.sourceItemId) ||
+                b.productId === item.productId ||
+                b.productCode === item.productCode,
+            );
+          const caseSize =
+            item.unitPerPacking != null && item.unitPerPacking > 0
+              ? item.unitPerPacking
+              : 1;
+          const quantityType = resolveGrnQuantityType(item.quantityType);
+          const receivedQty = item.receivedQty;
+          const displayQty = round2(
+            fromBaseQuantity({
+              baseQty: receivedQty,
+              quantityType,
+              packingSize: caseSize,
+            }),
           );
-        const caseSize =
-          item.unitPerPacking != null && item.unitPerPacking > 0
-            ? item.unitPerPacking
-            : 1;
-        const quantityType = resolveGrnQuantityType(item.quantityType);
-        const receivedQty = item.receivedQty;
-        const displayQty = round2(
-          fromBaseQuantity({
-            baseQty: receivedQty,
+          const sourceItemId = item.sourceItemId || item.productId;
+          const pricing = priceBySourceItem.get(sourceItemId);
+          return {
+            sourceItemId,
+            productId: item.productId,
+            sku: item.productCode || "",
+            productName: item.productName,
+            unit: item.unit || "Unit",
+            batchNo: batch?.batchNumber || "",
+            mfgDate: batch?.mfgDate || "",
+            expDate: batch?.expDate || "",
+            maxQty: item.orderedQty || item.receivedQty || 0,
+            previousReceivedQty: item.alreadyReceivedQty || 0,
+            receivedQty,
+            displayQty,
             quantityType,
-            packingSize: caseSize,
-          }),
-        );
-        return {
-          sourceItemId: item.sourceItemId || item.productId,
-          productId: item.productId,
-          sku: item.productCode || "",
-          productName: item.productName,
-          unit: item.unit || "Unit",
-          batchNo: batch?.batchNumber || "",
-          mfgDate: batch?.mfgDate || "",
-          expDate: batch?.expDate || "",
-          maxQty: item.orderedQty || item.receivedQty || 0,
-          previousReceivedQty: item.alreadyReceivedQty || 0,
-          receivedQty,
-          displayQty,
-          quantityType,
-          caseSize,
-          batchLocked: Boolean(batch?.batchNumber),
-          productSnapshot: {
-            product_id: item.productId,
-            product_name: item.productName,
-            product_code: item.productCode,
-            base_unit: item.unit || "Unit",
-            unit_per_packing: caseSize,
-          },
-        };
-      }),
-    );
-    setHydratedEdit(true);
+            caseSize,
+            unitPrice: batch?.unitPrice || pricing?.unitPrice || 0,
+            gstPct: batch?.gstPct || pricing?.gstPct || 0,
+            batchLocked: Boolean(batch?.batchNumber),
+            productSnapshot: {
+              product_id: item.productId,
+              product_name: item.productName,
+              product_code: item.productCode,
+              base_unit: item.unit || "Unit",
+              unit_per_packing: caseSize,
+            },
+          };
+        }),
+      );
+      setHydratedEdit(true);
+    };
+
+    void hydrate();
+    return () => {
+      active = false;
+    };
   }, [isEdit, existingGrn, hydratedEdit]);
 
   const clearLineError = (index: number) => {
@@ -410,6 +464,10 @@ export function StockTransferCreate({
         lineErrors[idx] = `Received qty exceeds remaining qty (${Math.max(0, round2(line.maxQty - line.previousReceivedQty))} base).`;
         return;
       }
+      if (line.receivedQty > 0 && exceedsMaxLineQty(line.displayQty)) {
+        lineErrors[idx] = maxLineQtyMessage("Received quantity");
+        return;
+      }
       if (line.receivedQty > 0) {
         if (!line.batchNo.trim()) {
           lineErrors[idx] = "Batch number is required.";
@@ -460,6 +518,8 @@ export function StockTransferCreate({
         const previous = round2(line.previousReceivedQty);
         const ordered = round2(line.maxQty);
         const caseSize = line.caseSize > 0 ? line.caseSize : 1;
+        const rate = round2(line.unitPrice || 0);
+        const gst = round2(line.gstPct || 0);
         return {
           source_item_id: line.sourceItemId,
           ordered_base_qty: ordered,
@@ -479,9 +539,9 @@ export function StockTransferCreate({
               manufactureDate: line.mfgDate || null,
               expiryDate: line.expDate || null,
               quantity_base_qty: current,
-              rate: null,
-              gst: null,
-              gstAmount: null,
+              rate,
+              gst,
+              gstAmount: calcGstAmount(current, rate, gst),
               remarks: null,
             },
           ],

@@ -5,7 +5,7 @@ import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Building, Layers, Info, Check, AlertCircle, CheckCircle2, X } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { SalesOrderRecord, SalesOrderProduct } from "../../types";
 import { PackingAllocationSummaryDialog } from "../../components/PackingAllocationSummaryDialog";
@@ -16,6 +16,7 @@ import { axiosInstance } from "@/api/axios";
 import { API_ENDPOINTS } from "@/api/endpoints";
 import { invalidatePurchaseOrderModuleListingQueries } from "@/lib/procurement/invalidate-po-listing-queries";
 import {
+  getPackingDateLabel,
   getPackingDocumentNo,
   getPackingDocumentNoLabel,
   getPackingPartyLabel,
@@ -25,9 +26,20 @@ import {
   isPurchaseReturnDoc,
   isStockTransferDoc,
 } from "../../lib/packing-document-labels";
+import { resolvePackingReturnTo } from "../../lib/packing-list-nav";
 
 function getLineKey(p: SalesOrderProduct): string {
   return p.lineId || p.sku;
+}
+
+function toDateOnly(value?: string | null): string {
+  if (!value) return "";
+  const raw = String(value).trim();
+  if (!raw) return "";
+  if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10);
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return parsed.toISOString().slice(0, 10);
 }
 
 function buildInitialSelection(products: SalesOrderRecord["products"]): Record<string, boolean> {
@@ -39,6 +51,7 @@ function buildInitialSelection(products: SalesOrderRecord["products"]): Record<s
 
 export default function EditPackingPage({ params }: { params: { id: string } }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const [loading, setLoading] = useState(true);
   const [order, setOrder] = useState<SalesOrderRecord | null>(null);
@@ -59,16 +72,12 @@ export default function EditPackingPage({ params }: { params: { id: string } }) 
     setTimeout(() => setToast(null), 3000);
   };
 
-  const getBackPath = () => {
-    if (!order) return "/warehouse/packing/sales";
-    switch (order.sourceDocumentType) {
-      case "Stock Transfer": return "/warehouse/packing/stock-transfer";
-      case "Purchase Return": return "/warehouse/packing/purchase-return";
-      case "Sample Order": return "/warehouse/packing/sample";
-      case "Sales Order":
-      default: return "/warehouse/packing/sales";
-    }
-  };
+  const getBackPath = () =>
+    resolvePackingReturnTo(
+      searchParams,
+      order?.sourceDocumentType,
+      "packing-done",
+    );
 
   const warehouseName = order
     ? order.sourceDocumentType === "Stock Transfer" || isPurchaseReturnDoc(order)
@@ -88,7 +97,13 @@ export default function EditPackingPage({ params }: { params: { id: string } }) 
         setOrder(record);
         
         setPackingNo(pd.packingNo);
-        setPackingDate(pd.packingDate);
+        const orderDateOnly = toDateOnly(record.orderDate);
+        const existingPackingDate = toDateOnly(pd.packingDate);
+        setPackingDate(
+          orderDateOnly && existingPackingDate && existingPackingDate < orderDateOnly
+            ? orderDateOnly
+            : existingPackingDate || orderDateOnly || new Date().toISOString().split("T")[0],
+        );
 
         const initialQty: Record<string, number> = {};
         const initialSel: Record<string, boolean> = {};
@@ -120,7 +135,7 @@ export default function EditPackingPage({ params }: { params: { id: string } }) 
         console.error("API loading failed:", err);
         showToast("Failed to load packing list details.", "error");
         setTimeout(() => {
-          if (active) router.push("/warehouse/packing");
+          if (active) router.push(resolvePackingReturnTo(searchParams, undefined, "packing-done"));
         }, 2000);
       } finally {
         if (active) {
@@ -168,11 +183,30 @@ export default function EditPackingPage({ params }: { params: { id: string } }) 
     }
   };
 
+  const orderDateMin = toDateOnly(order?.orderDate);
+  const packingDateError =
+    packingDate && orderDateMin && packingDate < orderDateMin
+      ? `Packing Date cannot be before ${getPackingDateLabel(order?.sourceDocumentType)} (${orderDateMin})`
+      : "";
+
   const proceedWithPacking = () => {
     if (!order) return;
 
     let hasErrors = false;
     const newErrors: Record<string, string> = {};
+
+    if (!packingDate) {
+      showToast("Packing Date is required.", "error");
+      return;
+    }
+
+    if (orderDateMin && packingDate < orderDateMin) {
+      showToast(
+        `Packing Date cannot be before ${getPackingDateLabel(order.sourceDocumentType)} (${orderDateMin}).`,
+        "error",
+      );
+      return;
+    }
 
     order.products.forEach(p => {
       const key = getLineKey(p);
@@ -222,6 +256,11 @@ export default function EditPackingPage({ params }: { params: { id: string } }) 
 
     order.products.forEach((p) => {
       const key = getLineKey(p);
+      if (p.pendingBaseQty <= 0) {
+        next[key] = false;
+        nextQty[key] = 0;
+        return;
+      }
       next[key] = checked;
       nextQty[key] = checked ? p.pendingBaseQty : 0;
     });
@@ -248,7 +287,7 @@ export default function EditPackingPage({ params }: { params: { id: string } }) 
 
   if (loading) {
     return (
-      <FormContainer title="Edit Packing List" onBack={() => router.back()}>
+      <FormContainer title="Edit Packing List" onBack={() => router.push(getBackPath())}>
         <div className="max-w-[800px] mx-auto text-center py-24 space-y-4">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-600 mx-auto" />
           <p className="text-xs text-muted-foreground">Loading packing details...</p>
@@ -259,14 +298,14 @@ export default function EditPackingPage({ params }: { params: { id: string } }) 
 
   if (!order) {
     return (
-      <FormContainer title="Sales Order" onBack={() => router.back()}>
+      <FormContainer title="Sales Order" onBack={() => router.push(getBackPath())}>
         <div className="max-w-[800px] mx-auto text-center py-12 space-y-4">
           <Info className="w-12 h-12 text-blue-500 mx-auto" />
           <h1 className="text-base font-bold text-foreground">Sales Order Not Found</h1>
           <p className="text-xs text-muted-foreground">
             The sales order record you requested for packing does not exist.
           </p>
-          <Button variant="outline" size="sm" onClick={() => router.back()}>
+          <Button variant="outline" size="sm" onClick={() => router.push(getBackPath())}>
             Go Back
           </Button>
         </div>
@@ -363,10 +402,16 @@ export default function EditPackingPage({ params }: { params: { id: string } }) 
                   <Input
                     type="date"
                     value={packingDate}
+                    min={orderDateMin || undefined}
                     onChange={(e) => setPackingDate(e.target.value)}
-                    className="h-8 text-xs focus:ring-1 focus:ring-brand-500"
+                    className={`h-8 text-xs focus:ring-1 focus:ring-brand-500 ${
+                      packingDateError ? "border-red-400 focus:ring-red-400" : ""
+                    }`}
                   />
                 </div>
+                {packingDateError ? (
+                  <p className="text-[11px] text-red-600 mt-1">{packingDateError}</p>
+                ) : null}
               </div>
             </div>
 

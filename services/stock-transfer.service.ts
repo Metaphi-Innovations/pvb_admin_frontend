@@ -33,14 +33,17 @@ export function mapBackendStatusToFrontend(status: string): TransferStatus {
     case "DRAFT": return "draft";
     case "SUBMITTED": return "pending_approval";
     case "APPROVED": return "approved";
-    case "READY_FOR_PACKING": return "ready_for_packing";
-    case "PICKING": return "packing_in_progress";
-    case "FULLY_PACKED": return "packed";
-    case "PACKED": return "packed";
-    case "IN_TRANSIT": return "in_transit";
     case "PARTIALLY_RECEIVED": return "partially_received";
     case "RECEIVED": return "received";
     case "CANCELLED": return "cancelled";
+    case "REJECTED": return "rejected";
+    // Legacy values that used to live on status (warehouse flow) — treat as approved for display
+    case "READY_FOR_PACKING":
+    case "PICKING":
+    case "FULLY_PACKED":
+    case "PACKED":
+    case "IN_TRANSIT":
+      return "approved";
     default: return "draft";
   }
 }
@@ -50,17 +53,19 @@ export function mapFrontendStatusToBackend(status: string): string {
   switch (s) {
     case "draft": return "DRAFT";
     case "pending_approval": return "SUBMITTED";
-    case "approved": return "APPROVED";
+    case "approved":
     case "confirmed": return "APPROVED";
-    case "ready_for_packing": return "READY_FOR_PACKING";
-    case "packing_in_progress": return "PICKING";
-    case "in_transit": return "IN_TRANSIT";
     case "partially_received": return "PARTIALLY_RECEIVED";
     case "received": return "RECEIVED";
     case "rejected": return "REJECTED";
     case "cancelled": return "CANCELLED";
     default: return "DRAFT";
   }
+}
+
+function mapBackendFulfillmentStatus(status: string): string {
+  const raw = asString(status).trim();
+  return raw || "PENDING";
 }
 
 function mapBackendLineItem(raw: any, idx: number): TransferLineItem {
@@ -71,6 +76,10 @@ function mapBackendLineItem(raw: any, idx: number): TransferLineItem {
   const costPrice = asNumber(raw.cp_price ?? prod.cost_price ?? raw.product?.cost_price ?? 0);
   const caseQty = Math.floor(totalQty / unitsPerPacking);
   const pieceQty = totalQty % unitsPerPacking;
+  const gstPct =
+    asNumber(raw.cgst_percent) + asNumber(raw.sgst_percent) ||
+    asNumber(prod.gst_percent) ||
+    0;
 
   let quantityType = "Piece";
   if (raw.quantity_type) {
@@ -97,12 +106,17 @@ function mapBackendLineItem(raw: any, idx: number): TransferLineItem {
     schemeDiscountAmount: 0,
     finalRate: costPrice,
     schemeApplied: "No" as const,
-    gstAmount: asNumber(raw.cgst_amount) + asNumber(raw.sgst_amount),
+    gstAmount: asNumber(raw.cgst_amount) + asNumber(raw.sgst_amount) + asNumber(raw.igst_amount),
     lineTotal: asNumber(raw.total_amount),
     batchNumber: asString(batch.batch_code || raw.batch_no),
     batchInventoryId: raw.inventory_batch_id || undefined,
     expiryDate: batch.expiry_date ? asDateOnly(batch.expiry_date) : undefined,
-    gstRate: prod.gst_percent ? `${prod.gst_percent}%` : "0%",
+    gstRate: (() => {
+      const rate = prod.gst_percent ?? raw.gst_percent ?? raw.cgst_percent;
+      if (rate === null || rate === undefined || rate === "") return "0%";
+      const text = String(rate).trim();
+      return text.endsWith("%") ? text : `${text}%`;
+    })(),
     packingUnit: asString(prod.packing_unit || "Unit"),
     baseUnit: asString(prod.base_unit || "Unit"),
     unitsPerPackingUnit: unitsPerPacking,
@@ -147,6 +161,7 @@ export function mapBackendStockTransfer(raw: any): StockTransfer {
     targetWarehouseName: asString(toWh.warehouse_name),
     targetWarehouseCode: asString(toWh.warehouse_code),
     status: mapBackendStatusToFrontend(raw.status),
+    fulfillmentStatus: mapBackendFulfillmentStatus(raw.fulfillment_status),
     requestedBy: raw.requested_by || req.user_id || "",
     reasonPurpose: asString(raw.reason),
     remarks: asString(raw.remarks),

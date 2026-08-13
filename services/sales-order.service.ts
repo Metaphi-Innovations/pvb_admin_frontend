@@ -57,13 +57,6 @@ function mapBackendStatusToFrontend(status: string): any {
   if (s === "rejected") return "rejected";
   if (s === "confirmed") return "confirmed";
   if (s === "cancelled") return "cancelled";
-  if (s === "dispatched") return "dispatched";
-  if (s === "delivered") return "delivered";
-  if (s === "ready_for_packing") return "ready_for_packing";
-  if (s === "available_for_dispatch") return "Available for Dispatch";
-  if (s === "ready_for_dispatch") return "Ready for Dispatch";
-  if (s === "partially_ready_for_dispatch") return "Partially Ready for Dispatch";
-  if (s === "packed" || s === "fully_packed") return "fully_packed";
   return "draft";
 }
 
@@ -74,14 +67,13 @@ function mapFrontendStatusToBackend(status: string): string {
   if (s === "rejected") return "REJECTED";
   if (s === "confirmed") return "CONFIRMED";
   if (s === "cancelled") return "CANCELLED";
-  if (s === "dispatched") return "DISPATCHED";
-  if (s === "delivered") return "DELIVERED";
-  if (s === "ready_for_packing") return "READY_FOR_PACKING";
-  if (s === "available for dispatch" || s === "available_for_dispatch") return "Available for Dispatch";
-  if (s === "ready for dispatch" || s === "ready_for_dispatch") return "Ready for Dispatch";
-  if (s === "partially ready for dispatch" || s === "partially_ready_for_dispatch") return "Partially Ready for Dispatch";
-  if (s === "packed") return "PACKED";
   return "DRAFT";
+}
+
+function mapBackendFulfillmentStatus(status: string): string {
+  const raw = asString(status).trim();
+  if (!raw) return "PENDING";
+  return raw;
 }
 
 function mapBackendLineItem(raw: Record<string, unknown>, idx: number): SalesOrderLineItem {
@@ -146,7 +138,7 @@ function mapBackendLineItem(raw: Record<string, unknown>, idx: number): SalesOrd
 
 function mapBackendExpense(raw: Record<string, unknown>, idx: number): SalesOrderAdditionalExpense {
   return {
-    id: asString(raw.id || `exp-${idx}`),
+    id: asString(raw.sales_order_expense_id || raw.id || `exp-${idx}`),
     expenseName: asString(raw.charge_name),
     amount: asNumber(raw.amount),
     discountType: "percent",
@@ -182,6 +174,7 @@ export function mapBackendSalesOrder(raw: Record<string, unknown>): SalesOrder {
     orderDate: asDateOnly(raw.order_date),
     deliveryDate: asDateOnly(raw.delivery_date),
     status: mapBackendStatusToFrontend(asString(raw.status)),
+    fulfillmentStatus: mapBackendFulfillmentStatus(asString(raw.fulfillment_status)),
     lineItems,
     additionalExpenses,
     totalAmount: asNumber(raw.grand_total ?? raw.totalAmount),
@@ -546,6 +539,23 @@ export const SalesOrderService = {
       discount_amount: totals.productDiscountTotal + totals.expenseDiscountTotal,
       tax_amount: totals.totalGst,
       grand_total: totals.grandTotal,
+      expenses: (form.additionalExpenses ?? []).map((exp) => {
+        const isInter = (exp.igstAmount || 0) > 0;
+        const gstPct = asNumber(exp.gstRate);
+        return {
+          charge_name: exp.expenseName,
+          amount: exp.amount,
+          gst_percent: gstPct,
+          cgst_percentage: isInter ? 0 : gstPct / 2,
+          cgst_amount: isInter ? 0 : exp.cgstAmount,
+          sgst_percentage: isInter ? 0 : gstPct / 2,
+          sgst_amount: isInter ? 0 : exp.sgstAmount,
+          igst_percentage: isInter ? gstPct : 0,
+          igst_amount: isInter ? exp.igstAmount : 0,
+          total_amount: exp.totalAmount,
+          remarks: exp.remarks || "",
+        };
+      }),
       items: form.lineItems.map((line) => ({
         product_id: line.productId,
         base_qty: line.quantity,

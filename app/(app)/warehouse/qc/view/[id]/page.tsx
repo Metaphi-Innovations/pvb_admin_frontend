@@ -1,24 +1,31 @@
 "use client";
 
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, Suspense } from "react";
 import { RecordDetailPage } from "@/components/record-detail";
 import { Button } from "@/components/ui/button";
 import { Calendar, FileText, CheckCircle2, AlertTriangle, XCircle, ClipboardCheck, Building2 } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { QcService } from "@/services/qc.service";
 import { QcRecord } from "../../types";
+import {
+  buildQcCreateHref,
+  resolveQcReturnTo,
+} from "../../shared/qc-list-nav";
 
 const STATUS_CONFIG = {
   pending: { bg: "bg-amber-50 text-amber-700 border-amber-200", label: "Pending QC", variant: "draft" as const },
   completed: { bg: "bg-emerald-50 text-emerald-700 border-emerald-200", label: "Completed", variant: "active" as const },
 };
 
-export default function ViewQcPage({ params }: { params: { id: string } }) {
+function ViewQcPageContent({ id }: { id: string }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [qc, setQc] = useState<QcRecord | null>(null);
 
+  const listHref = resolveQcReturnTo(searchParams, undefined, "completed");
+
   useEffect(() => {
-    QcService.get(params.id)
+    QcService.get(id)
       .then((record) => {
         if (record) {
           setQc(record);
@@ -27,7 +34,7 @@ export default function ViewQcPage({ params }: { params: { id: string } }) {
       .catch((err) => {
         console.error("Failed to load QC Record:", err);
       });
-  }, [params.id]);
+  }, [id]);
 
   const acceptedStock = useMemo(() => {
     if (!qc) return [];
@@ -42,7 +49,7 @@ export default function ViewQcPage({ params }: { params: { id: string } }) {
   if (!qc) {
     return (
       <RecordDetailPage
-        listHref="/warehouse/qc"
+        listHref={listHref}
         listLabel="QC"
         recordName="QC Record Not Found"
         statusLabel="Not Found"
@@ -52,13 +59,20 @@ export default function ViewQcPage({ params }: { params: { id: string } }) {
           <AlertTriangle className="w-12 h-12 text-red-500 mx-auto" />
           <h1 className="text-base font-bold text-foreground">QC Record Not Found</h1>
           <p className="text-xs text-muted-foreground">The QC record you requested does not exist or has been removed.</p>
-          <Button variant="outline" size="sm" onClick={() => router.push("/warehouse/qc")}>
+          <Button variant="outline" size="sm" onClick={() => router.push(listHref)}>
             Go Back
           </Button>
         </div>
       </RecordDetailPage>
     );
   }
+
+  const backHref = resolveQcReturnTo(
+    searchParams,
+    qc.sourceType,
+    qc.status === "completed" ? "completed" : "pending",
+  );
+  const createReturnTo = backHref;
 
   const statusCfg = STATUS_CONFIG[qc.status] || { bg: "bg-slate-100 text-slate-700 border-slate-200", label: "Unknown", variant: "neutral" as const };
   const totalAccepted = qc.items.reduce((sum, it) => sum + it.acceptedQty, 0);
@@ -67,18 +81,32 @@ export default function ViewQcPage({ params }: { params: { id: string } }) {
   const totalHold = qc.items.reduce((sum, it) => sum + (it.holdQty ?? 0), 0);
   const inspectionDateDisplay = qc.inspectionDate?.trim() ? qc.inspectionDate : "—";
   const canInspect = qc.status === "pending";
+  const sourceDocLabel =
+    qc.sourceType === "sales_return"
+      ? "Sales Return No."
+      : qc.sourceType === "sample_return"
+        ? "Sample Return No."
+        : qc.sourceType === "stock_transfer"
+          ? "Stock Transfer No."
+          : "PO No.";
+  const partyLabel =
+    qc.sourceType === "sales_return" || qc.sourceType === "sample_return"
+      ? "Customer"
+      : qc.sourceType === "stock_transfer"
+        ? "From Warehouse"
+        : "Supplier";
 
   return (
     <RecordDetailPage
-      listHref="/warehouse/qc"
+      listHref={backHref}
       listLabel="QC"
       recordName={qc.qcNo}
       recordCode={qc.grnNo}
       statusLabel={statusCfg.label}
       statusVariant={statusCfg.variant}
       metaItems={[
-        { icon: FileText, label: qc.poNumber ?? "—" },
-        { icon: CheckCircle2, label: qc.vendorName },
+        { icon: FileText, label: qc.poNumber || qc.stockTransferNo || "—" },
+        { icon: CheckCircle2, label: qc.vendorName || qc.fromWarehouse || "—" },
         { icon: Building2, label: qc.warehouse },
         { icon: Calendar, label: inspectionDateDisplay },
       ]}
@@ -86,14 +114,21 @@ export default function ViewQcPage({ params }: { params: { id: string } }) {
         canInspect
           ? {
               label: "Perform QC",
-              onClick: () => router.push(`/warehouse/qc/create?qcId=${qc.id}`),
+              onClick: () =>
+                router.push(
+                  buildQcCreateHref({
+                    grnId: qc.grnId || qc.id,
+                    returnTo: createReturnTo,
+                  }),
+                ),
             }
           : undefined
       }
       sidebar={{
         summary: [
           { label: "GRN No.", value: qc.grnNo, highlight: true },
-          { label: "Supplier", value: qc.vendorName },
+          { label: sourceDocLabel, value: qc.poNumber || qc.stockTransferNo || "—" },
+          { label: partyLabel, value: qc.vendorName || qc.fromWarehouse || "—" },
           { label: "Warehouse", value: qc.warehouse },
           { label: "Total Received", value: totalReceived },
           { label: "Accepted Qty", value: totalAccepted },
@@ -106,7 +141,13 @@ export default function ViewQcPage({ params }: { params: { id: string } }) {
                 label: "Perform QC",
                 icon: ClipboardCheck,
                 variant: "primary" as const,
-                onClick: () => router.push(`/warehouse/qc/create?qcId=${qc.id}`),
+                onClick: () =>
+                  router.push(
+                    buildQcCreateHref({
+                      grnId: qc.grnId || qc.id,
+                      returnTo: createReturnTo,
+                    }),
+                  ),
               },
             ]
           : [],
@@ -116,8 +157,8 @@ export default function ViewQcPage({ params }: { params: { id: string } }) {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
           {[
             { label: "GRN No.", val: qc.grnNo, icon: FileText },
-            { label: "PO No.", val: qc.poNumber ?? "—", icon: FileText },
-            { label: "Supplier", val: qc.vendorName, icon: CheckCircle2 },
+            { label: sourceDocLabel, val: qc.poNumber || qc.stockTransferNo || "—", icon: FileText },
+            { label: partyLabel, val: qc.vendorName || qc.fromWarehouse || "—", icon: CheckCircle2 },
             { label: "Warehouse", val: qc.warehouse, icon: Building2 },
             { label: "Inspection Date", val: inspectionDateDisplay, icon: Calendar },
           ].map((card, idx) => {
@@ -261,5 +302,17 @@ export default function ViewQcPage({ params }: { params: { id: string } }) {
         )}
       </div>
     </RecordDetailPage>
+  );
+}
+
+export default function ViewQcPage({ params }: { params: { id: string } }) {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center h-32 text-sm text-muted-foreground">Loading...</div>
+      }
+    >
+      <ViewQcPageContent id={params.id} />
+    </Suspense>
   );
 }

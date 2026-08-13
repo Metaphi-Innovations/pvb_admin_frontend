@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import { axiosInstance } from "@/api/axios";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -33,8 +34,6 @@ import {
 import { useCustomerDetails, useWarehousesDropdown } from "@/hooks/sales/use-sales-orders";
 import {
 	type SalesOrder,
-	type SalesOrderLineItem,
-	type SalesOrderAdditionalExpense,
 	type SalesOrderFormValues,
 	type ProductCatalogItem,
 	type OrderStatus,
@@ -44,10 +43,6 @@ import {
 	EDITABLE_ORDER_STATUSES,
 	calculateOrderTotalsSummary,
 	orderRequiresApproval,
-	createEmptyLineItem,
-	recalculateLineItem,
-	getProductById,
-	applyLineTaxFields,
 	repriceOrderLineItems,
 	resolveTaxSupplyType,
 	type TaxSupplyType,
@@ -317,109 +312,6 @@ export function validateSplitOrderForm(
 	return e;
 }
 
-function ImportFromOriginalPopover({
-	originalOrder,
-	form,
-	onChange,
-	taxSupplyType,
-	zeroGst,
-}: {
-	originalOrder: SalesOrder;
-	form: SalesOrderFormValues;
-	onChange: (form: SalesOrderFormValues) => void;
-	taxSupplyType: TaxSupplyType;
-	zeroGst: boolean;
-}) {
-	const [open, setOpen] = useState(false);
-	const sourceLines = originalOrder.lineItems.filter(
-		(l) => l.productId && l.quantity > 0,
-	);
-
-	const importLine = (parentLine: SalesOrderLineItem) => {
-		const product = parentLine.productId
-			? getProductById(parentLine.productId)
-			: undefined;
-		const qty = 1;
-		let newLine = recalculateLineItem({
-			...createEmptyLineItem(),
-			id: `line-import-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-			productId: parentLine.productId,
-			productCode: parentLine.productCode,
-			productName: parentLine.productName,
-			availableStock: parentLine.availableStock,
-			quantity: qty,
-			dealerPrice: parentLine.dealerPrice,
-			unitPrice: parentLine.unitPrice,
-			discount: parentLine.discount,
-			schemeDiscountPercent: parentLine.schemeDiscountPercent,
-			schemeDiscountAmount: parentLine.schemeDiscountAmount,
-			schemeDiscountType: parentLine.schemeDiscountType,
-			schemeDiscountValue: parentLine.schemeDiscountValue,
-			appliedSchemeId: parentLine.appliedSchemeId,
-			appliedSchemeCode: parentLine.appliedSchemeCode,
-			appliedSchemeName: parentLine.appliedSchemeName,
-			originalDealerPrice: parentLine.originalDealerPrice,
-			finalRateAfterScheme: parentLine.finalRateAfterScheme,
-			finalRate: parentLine.finalRate,
-			schemeCode: parentLine.schemeCode,
-			schemeName: parentLine.schemeName,
-			schemeApplied: parentLine.schemeApplied,
-			gstAmount: 0,
-			lineTotal: 0,
-			splitSourceLineId: parentLine.id,
-			maxSplitQty: parentLine.quantity,
-		});
-		if (product) {
-			newLine = applyLineTaxFields(
-				newLine,
-				product.gstRate,
-				taxSupplyType,
-				zeroGst,
-			);
-		}
-		const existing = form.lineItems.filter((l) => l.productId);
-		onChange({ ...form, lineItems: [...existing, newLine] });
-		setOpen(false);
-	};
-
-	if (sourceLines.length === 0) return null;
-
-	return (
-		<Popover open={open} onOpenChange={setOpen}>
-			<PopoverTrigger asChild>
-				<button
-					type='button'
-					className='h-7 px-2.5 text-xs border border-border rounded-lg font-medium text-foreground hover:bg-muted/30 transition-colors'
-				>
-					Import from Original Order
-				</button>
-			</PopoverTrigger>
-			<PopoverContent className='p-0 w-72' align='end'>
-				<div className='px-3 py-2 border-b border-border'>
-					<p className='text-xs font-semibold text-foreground'>
-						Original order products
-					</p>
-				</div>
-				<div className='max-h-[200px] overflow-y-auto py-1'>
-					{sourceLines.map((line) => (
-						<button
-							key={line.id}
-							type='button'
-							onClick={() => importLine(line)}
-							className='flex flex-col items-start w-full px-3 py-2 text-xs text-left hover:bg-muted/60'
-						>
-							<span className='font-medium'>{line.productName}</span>
-							<span className='text-[11px] text-muted-foreground font-mono'>
-								{line.productCode} · Avail: {line.quantity}
-							</span>
-						</button>
-					))}
-				</div>
-			</PopoverContent>
-		</Popover>
-	);
-}
-
 export default function SalesOrderForm({
 	mode,
 	orderNumber,
@@ -428,13 +320,65 @@ export default function SalesOrderForm({
 	errors,
 	customers,
 	salesmen,
-	products,
+	products: originalProducts,
 	showStatus = false,
 	originalOrder,
 	auditInfo,
 	excludeOrderId,
 }: SalesOrderFormProps) {
 	const [customerInfoOpen, setCustomerInfoOpen] = useState(false);
+	const [warehouseStock, setWarehouseStock] = useState<Record<string, number>>({});
+
+	useEffect(() => {
+		if (!form.warehouseId) {
+			setWarehouseStock({});
+			return;
+		}
+		const fetchStock = async () => {
+			try {
+				const PAGE_SIZE = 100;
+				const stockMap: Record<string, number> = {};
+				let page = 1;
+				let totalFetched = 0;
+				let totalRecords = Infinity;
+
+				while (totalFetched < totalRecords) {
+					const response = await axiosInstance.post(
+						`/warehouse/stock-overview/inventory/list?warehouse_id=${form.warehouseId}&page=${page}&page_size=${PAGE_SIZE}`,
+						{ warehouse_id: form.warehouseId }
+					);
+					const items: any[] = Array.isArray(response.data?.data) ? response.data.data : [];
+					if (page === 1) totalRecords = Number(response.data?.totalRecords ?? items.length);
+					if (items.length === 0) break;
+					items.forEach((item: any) => {
+						const sku = item.sku;
+						if (sku && sku !== "-") {
+							stockMap[sku] = (stockMap[sku] || 0) + Number(item.available_qty || 0);
+						}
+					});
+					totalFetched += items.length;
+					page++;
+				}
+				setWarehouseStock(stockMap);
+			} catch (err) {
+				console.error("Failed to fetch warehouse stock:", err);
+			}
+		};
+		fetchStock();
+	}, [form.warehouseId]);
+
+	const products = useMemo(() => {
+		if (Object.keys(warehouseStock).length === 0) {
+			if (form.warehouseId) {
+				return originalProducts.map((p) => ({ ...p, stock: 0 }));
+			}
+			return originalProducts;
+		}
+		return originalProducts.map((p) => ({
+			...p,
+			stock: (p.sku ? warehouseStock[p.sku] : 0) || 0,
+		}));
+	}, [originalProducts, warehouseStock, form.warehouseId]);
 
 
 
@@ -717,28 +661,17 @@ export default function SalesOrderForm({
 											getCustomerAddressesForSalesOrder(c),
 										)
 									: { billToAddressId: "", shipToAddressId: "" };
+								const hadProducts = form.lineItems.some((l) => l.productId);
 								const updatedForm = {
 									...form,
 									customerId: id,
 									billToAddressId: addressDefaults.billToAddressId,
 									shipToAddressId: addressDefaults.shipToAddressId,
+									// Clear products when customer changes
+									lineItems: hadProducts ? [] : form.lineItems,
 								};
 								if (c?.salesManId) {
 									updatedForm.salesManId = c.salesManId;
-								}
-								if (c?.stateName && c.customerType && form.orderDate) {
-									updatedForm.lineItems = repriceOrderLineItems(
-										form.lineItems,
-										{
-											stateName: c.stateName,
-											customerMasterType: c.customerType,
-											orderDate: form.orderDate,
-										},
-										{
-											zeroGst: sezLutResolution.appliesLut,
-											supplyType: taxSupplyType,
-										},
-									);
 								}
 								onChange(updatedForm);
 							}}
@@ -769,7 +702,16 @@ export default function SalesOrderForm({
 							label='Source Warehouse'
 							required
 							value={form.warehouseId ?? null}
-							onChange={(id) => set("warehouseId", id)}
+							onChange={(id) => {
+							const hadProducts = form.lineItems.some((l) => l.productId);
+							const updatedForm: typeof form = {
+								...form,
+								warehouseId: id,
+								// Clear products when warehouse changes
+								lineItems: hadProducts ? [] : form.lineItems,
+							};
+							onChange(updatedForm);
+						}}
 							options={warehouses}
 							placeholder='Select source warehouse…'
 							error={errors.warehouseId}
@@ -847,18 +789,6 @@ export default function SalesOrderForm({
 					}}
 				/>
 
-				<SectionDivider title='Products' />
-				{mode === "split" && originalOrder && (
-					<div className='flex items-center justify-end'>
-						<ImportFromOriginalPopover
-							originalOrder={originalOrder}
-							form={form}
-							onChange={onChange}
-							taxSupplyType={taxSupplyType}
-							zeroGst={sezLutResolution.appliesLut}
-						/>
-					</div>
-				)}
 				<ProductLinesEditor
 					lines={form.lineItems}
 					products={products}

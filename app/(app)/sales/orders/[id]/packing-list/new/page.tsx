@@ -6,9 +6,8 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
-  AlertCircle, Check, ChevronsUpDown, Package, Save,
+  AlertCircle, Check, Package, Save,
   ChevronDown, ChevronUp, ArrowLeft
 } from "lucide-react";
 import {
@@ -39,7 +38,6 @@ export default function NewPackingListPage() {
   const [warehouseName, setWarehouseName] = useState("");
   const [lines, setLines] = useState<PackingListLine[]>([]);
   const [error, setError] = useState("");
-  const [whOpen, setWhOpen] = useState(false);
   const [checkedAllocations, setCheckedAllocations] = useState<Record<string, boolean>>({});
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
   const [loadingBatches, setLoadingBatches] = useState(false);
@@ -168,14 +166,6 @@ export default function NewPackingListPage() {
   }, [order, warehouseId]);
 
   if (loadingOrder || !order) return <div className="p-8">Loading order…</div>;
-
-  const selectWarehouse = (id: string, code: string, name: string) => {
-    setWarehouseId(id);
-    setWarehouseCode(code);
-    setWarehouseName(name);
-    setWhOpen(false);
-    setError("");
-  };
 
   const toggleCheckbox = (lineItemId: string, cartonId: string, alloc: CartonAllocation) => {
     const key = `${lineItemId}-${cartonId}`;
@@ -345,39 +335,16 @@ export default function NewPackingListPage() {
             <Label className="text-sm font-medium">
               Warehouse <span className="text-red-500">*</span>
             </Label>
-            <Popover open={whOpen} onOpenChange={setWhOpen}>
-              <PopoverTrigger asChild>
-                <button
-                  type="button"
-                  className={cn(
-                    "w-full h-10 px-3 text-sm text-left border rounded-lg bg-background flex items-center justify-between hover:bg-muted/30",
-                    !warehouseId && error === "Warehouse is required" ? "border-red-400" : "border-border",
-                  )}
-                >
-                  <span className={warehouseId ? "text-foreground" : "text-muted-foreground"}>
-                    {warehouseId ? `${warehouseCode} — ${warehouseName}` : "Select warehouse…"}
-                  </span>
-                  <ChevronsUpDown className="w-4 h-4 text-muted-foreground" />
-                </button>
-              </PopoverTrigger>
-              <PopoverContent className="w-[--radix-popover-trigger-width] p-1 max-h-[200px] overflow-y-auto">
-                {warehouses.map(wh => (
-                  <button
-                    key={wh.id}
-                    type="button"
-                    onClick={() => selectWarehouse(wh.id, wh.warehouseCode, wh.warehouseName)}
-                    className={cn(
-                      "w-full flex items-center gap-2 px-3 py-2 text-sm text-left rounded-lg hover:bg-muted/60",
-                      warehouseId === wh.id && "bg-brand-50",
-                    )}
-                  >
-                    <span className="font-mono text-brand-700 flex-shrink-0">{wh.warehouseCode}</span>
-                    <span className="flex-1 truncate">{wh.warehouseName}</span>
-                    {warehouseId === wh.id && <Check className="w-4 h-4 text-brand-600" />}
-                  </button>
-                ))}
-              </PopoverContent>
-            </Popover>
+            <div
+              className={cn(
+                "w-full h-10 px-3 text-sm border rounded-lg bg-muted/40 flex items-center font-medium",
+                !warehouseId && error === "Warehouse is required" ? "border-red-400" : "border-border",
+              )}
+            >
+              <span className={warehouseId ? "text-foreground" : "text-muted-foreground"}>
+                {warehouseId ? `${warehouseCode} — ${warehouseName}` : "Warehouse will be set from sales order"}
+              </span>
+            </div>
           </div>
         </div>
 

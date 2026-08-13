@@ -48,6 +48,7 @@ export interface PackingListFilterOption {
 
 export type PackingListFilterField =
   | "packing_number"
+  | "source_document_no"
   | "status"
   | "customer_name"
   | "source_type"
@@ -59,6 +60,11 @@ function asString(value: unknown): string {
   if (typeof value === "string") return value;
   if (typeof value === "number" || typeof value === "boolean") return String(value);
   return "";
+}
+
+function firstFilterValue(value: unknown): string {
+  if (Array.isArray(value)) return asString(value[0]).trim();
+  return asString(value).trim();
 }
 
 function asNumber(value: unknown): number {
@@ -119,8 +125,14 @@ function mapItem(raw: Record<string, unknown>): PackingListListItem {
     warehouseId: asString(raw.warehouse_id),
     warehouseName: asString(raw.warehouse_name) || asString(warehouse.warehouse_name),
     customerName: asString(raw.customer_name),
-    sourceWarehouse: asString(raw.source_warehouse) || asString((raw.customer_snapshot as any)?.source_warehouse),
-    targetWarehouse: asString(raw.target_warehouse) || asString((raw.customer_snapshot as any)?.target_warehouse),
+    sourceWarehouse:
+      asString(raw.source_warehouse) ||
+      asString((raw.customer_snapshot as any)?.from_warehouse) ||
+      asString((raw.customer_snapshot as any)?.source_warehouse),
+    targetWarehouse:
+      asString(raw.target_warehouse) ||
+      asString((raw.customer_snapshot as any)?.to_warehouse) ||
+      asString((raw.customer_snapshot as any)?.target_warehouse),
     orderAmount: asNumber(raw.order_amount),
     orderDate: asDateOnly(raw.order_date),
     expectedDeliveryDate: asDateOnly(raw.expected_delivery_date),
@@ -150,51 +162,43 @@ export function buildPackingListApiFilters(
 ): Record<string, unknown> {
   const apiFilters: Record<string, unknown> = {};
 
-  const warehouse = filters.warehouse;
-  if (warehouse) {
-    if (Array.isArray(warehouse)) {
-      if (warehouse.length > 0) apiFilters.warehouse = { warehouse_name: asString(warehouse[0]) };
-    } else {
-      apiFilters.warehouse = { warehouse_name: asString(warehouse) };
-    }
+  const warehouseName = firstFilterValue(filters.warehouse);
+  if (warehouseName) {
+    apiFilters.warehouse = { warehouse_name: warehouseName };
   }
-  
+
   if (selectedWarehouse && selectedWarehouse !== "All") {
     apiFilters.warehouse_id = selectedWarehouse;
   }
 
-  const customerName = filters.customer;
+  const customerName = firstFilterValue(filters.customer);
   if (customerName) {
-    if (Array.isArray(customerName)) {
-      if (customerName.length > 0) apiFilters.customer_name = customerName[0];
-    } else {
-      apiFilters.customer_name = asString(customerName);
-    }
+    apiFilters.customer_name = customerName;
   }
 
-  const status = filters.status;
+  const status = firstFilterValue(filters.status);
   if (status) {
-    if (Array.isArray(status)) {
-      if (status.length > 0) apiFilters.status = status[0];
-    } else {
-      apiFilters.status = asString(status);
-    }
+    apiFilters.status = status;
   }
 
-  const packingNumber = filters.packingNo || filters.salesOrderNo || filters.packingListNo;
-  if (packingNumber) {
-    if (Array.isArray(packingNumber)) {
-      if (packingNumber.length > 0) apiFilters.packing_number = asString(packingNumber[0]);
-    } else {
-      apiFilters.packing_number = asString(packingNumber);
-    }
+  const orderNo = firstFilterValue(
+    filters.packingNo || filters.salesOrderNo || filters.packingListNo,
+  );
+  if (orderNo) {
+    apiFilters.source_document_no = orderNo;
   }
 
   const orderDate = filters.orderDate;
   if (orderDate && typeof orderDate === "object" && !Array.isArray(orderDate)) {
     const range = orderDate as { fromDate?: string; toDate?: string };
-    if (range.fromDate) apiFilters.order_date_from = range.fromDate;
-    if (range.toDate) apiFilters.order_date_to = range.toDate;
+    if (range.fromDate || range.toDate) {
+      apiFilters.range = {
+        order_date: {
+          ...(range.fromDate ? { from: range.fromDate } : {}),
+          ...(range.toDate ? { to: range.toDate } : {}),
+        },
+      };
+    }
   }
 
   return apiFilters;
@@ -208,11 +212,13 @@ export function buildPackingListOrdering(
   if (!sortKey || direction === "none") return undefined;
 
   const fieldMap: Record<string, string> = {
-    packingNo: "packingNumber",
-    customer: "customerName",
+    packingNo: "source_document_no",
+    customer: "customer_name",
     warehouse: "warehouse__warehouse_name",
     orderAmount: "order_amount",
     status: "status",
+    totalItems: "item_count",
+    totalQuantity: "total_qty",
   };
 
   const backendKey = fieldMap[sortKey];

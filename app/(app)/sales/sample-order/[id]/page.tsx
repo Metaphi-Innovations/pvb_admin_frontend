@@ -33,6 +33,7 @@ import {
   type SalesOrder,
   type OrderStatus,
   formatOrderStatus,
+  formatFulfillmentStatus,
   canEditOrder,
   canCancelOrder,
   canGeneratePackingList,
@@ -41,6 +42,7 @@ import {
   getSampleOrderDisplayRecipient,
   SAMPLE_BILLING_DETAILS,
   getProductById,
+  hydrateOrderLineItems,
 } from "../orders-data";
 import {
   useSampleOrder,
@@ -77,8 +79,8 @@ export default function ViewSalesOrderPage() {
   const [approveOpen, setApproveOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
 
-  const { data: order, isLoading, refetch } = useSampleOrder(id);
-  const { data: billingCustomer } = useCustomer("1a15aac2-1e1d-4337-8642-0d1cd6e1366c");
+  const { data: rawOrder, isLoading, refetch } = useSampleOrder(id);
+  const { data: billingCustomer } = useCustomer(rawOrder?.customerId ? String(rawOrder.customerId) : null);
   const updateStatusMutation = useUpdateSampleOrderStatus();
 
   useEffect(() => {
@@ -86,6 +88,8 @@ export default function ViewSalesOrderPage() {
     const t = setTimeout(() => setToast(null), 3200);
     return () => clearTimeout(t);
   }, [toast]);
+
+  const hydratedOrder = rawOrder ? hydrateOrderLineItems(rawOrder) : null;
 
   if (isLoading) {
     return (
@@ -95,7 +99,7 @@ export default function ViewSalesOrderPage() {
     );
   }
 
-  if (!order) {
+  if (!hydratedOrder) {
     return (
       <div className="p-8 text-sm">
         Sample Order not found.{" "}
@@ -103,6 +107,8 @@ export default function ViewSalesOrderPage() {
       </div>
     );
   }
+
+  const order = hydratedOrder;
 
   const packingListIdNum = typeof order.packingListId === "string" ? parseInt(order.packingListId, 10) : order.packingListId;
   const packingList = (packingListIdNum && !isNaN(packingListIdNum)) ? getPackingListById(packingListIdNum) : undefined;
@@ -116,6 +122,27 @@ export default function ViewSalesOrderPage() {
 
   const formatRupee = (value: number) =>
     `₹${value.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+  const getBillingAddress = () => {
+    if (order?.billTo && (order.billTo.address || order.billTo.city || order.billTo.state)) {
+      const { address, city, state, pincode } = order.billTo;
+      return [address, city, state, pincode].filter(Boolean).join(", ");
+    }
+    if (billingCustomer) {
+      if (billingCustomer.registeredGstAddress) {
+        return billingCustomer.registeredGstAddress;
+      }
+      const mainBranch = (billingCustomer.branches?.find((b: any) => b.is_main_branch) || billingCustomer.branches?.[0]) as any;
+      if (mainBranch) {
+        const bAddr = mainBranch.billing_address_line_1 || mainBranch.billingAddress?.address || "";
+        const bCity = mainBranch.billing_city || mainBranch.billingAddress?.city || "";
+        const bState = mainBranch.billing_state || mainBranch.billingAddress?.state || "";
+        const bPin = mainBranch.billing_pincode || mainBranch.billingAddress?.pincode || "";
+        return [bAddr, bCity, bState, bPin].filter(Boolean).join(", ");
+      }
+    }
+    return "—";
+  };
 
   const showToast = (msg: string, type: "success" | "error" = "success") => setToast({ msg, type });
 
@@ -217,6 +244,11 @@ export default function ViewSalesOrderPage() {
       value: formatOrderStatus(order.status),
       tone: orderStatusVariant(order.status) === "active" ? "approved" : orderStatusVariant(order.status) === "blocked" ? "rejected" : "neutral",
     },
+    {
+      label: "Fulfillment",
+      value: formatFulfillmentStatus(order.fulfillmentStatus),
+      tone: "neutral",
+    },
   ];
   if (order.approvedBy) {
     approvalItems.push({ label: "Approved By", value: order.approvedBy, tone: "neutral" });
@@ -232,7 +264,7 @@ export default function ViewSalesOrderPage() {
     quickActions,
     summary: [
       { label: "Salesperson", value: getSampleOrderDisplayRecipient(order) },
-      { label: "Billing", value: billingCustomer?.customerName || SAMPLE_BILLING_DETAILS.companyName },
+      { label: "Billing", value: billingCustomer?.customerName || order?.customerName || "—" },
       { label: "Order Date", value: order.orderDate },
       { label: "Warehouse", value: order.warehouseName || "—" },
       { label: "Grand Total", value: formatRupee(order.totalAmount), highlight: true },
@@ -327,16 +359,17 @@ export default function ViewSalesOrderPage() {
               <RecordKvRow label="Source Warehouse" value={order.warehouseName || "—"} />
               <RecordKvRow label="Remarks" value={order.remarks || "—"} />
               <RecordKvRow label="Order Status" value={formatOrderStatus(order.status)} />
+              <RecordKvRow label="Fulfillment Status" value={formatFulfillmentStatus(order.fulfillmentStatus)} />
               <RecordKvRow label="Approval Status" value={formatApprovalStatus(approvalStatus)} />
               <RecordKvRow label="Total Amount" value={formatRupee(order.totalAmount)} amount isLast />
             </RecordSectionCard>
 
             <RecordSectionCard title="Billing" accent="slate">
-              <RecordKvRow label="Company" value={billingCustomer?.customerName || SAMPLE_BILLING_DETAILS.companyName} />
-              <RecordKvRow label="Address" value={billingCustomer?.registeredGstAddress || SAMPLE_BILLING_DETAILS.address} />
-              <RecordKvRow label="GSTIN" value={billingCustomer?.gstinNo || SAMPLE_BILLING_DETAILS.gstin} mono />
-              <RecordKvRow label="Mobile" value={billingCustomer?.mobileNo || SAMPLE_BILLING_DETAILS.mobile} />
-              <RecordKvRow label="Contact No." value={SAMPLE_BILLING_DETAILS.contactNo} isLast />
+              <RecordKvRow label="Company" value={billingCustomer?.customerName || order?.customerName || "—"} />
+              <RecordKvRow label="Address" value={getBillingAddress()} />
+              <RecordKvRow label="GSTIN" value={billingCustomer?.gstinNo || "—"} mono />
+              <RecordKvRow label="Mobile" value={billingCustomer?.mobileNo || "—"} />
+              <RecordKvRow label="Contact No." value={billingCustomer?.mobileNo || "—"} isLast />
             </RecordSectionCard>
 
             <div className="space-y-4">
@@ -398,7 +431,6 @@ export default function ViewSalesOrderPage() {
                 <thead>
                   <tr className="border-b bg-muted/40 border-border">
                     <th className="px-4 py-2.5 text-left text-xs font-semibold">Product</th>
-                    <th className="px-4 py-2.5 text-right text-xs font-semibold w-16">Stock</th>
                     <th className="px-4 py-2.5 text-right text-xs font-semibold w-24">Qty (Cases/Loose)</th>
                     <th className="px-4 py-2.5 text-left text-xs font-semibold w-16">Unit</th>
                     <th className="px-4 py-2.5 text-left text-xs font-semibold">Batch</th>
@@ -421,18 +453,17 @@ export default function ViewSalesOrderPage() {
                           <p className="text-xs font-semibold text-foreground">{line.productName || "—"}</p>
                           <p className="text-[11px] font-mono text-brand-700">{line.productCode}</p>
                         </td>
-                        <td className="px-4 py-2 text-xs text-right tabular-nums">{line.productId ? line.availableStock : "—"}</td>
                         <td className="px-4 py-2 text-xs text-right tabular-nums">
                           <div className="flex flex-col items-end">
                             <span className="font-semibold">{cases > 0 ? `${cases} Cases` : ""} {loose > 0 ? `${loose} Loose` : ""} {cases === 0 && loose === 0 ? "0" : ""}</span>
                             <span className="text-[10px] text-muted-foreground">{line.quantity} Base Qty</span>
                           </div>
                         </td>
-                        <td className="px-4 py-2 text-xs">{line.unit || "—"}</td>
+                        <td className="px-4 py-2 text-xs">{line.unit || product?.category || "—"}</td>
                         <td className="px-4 py-2 text-xs font-mono text-muted-foreground">{line.batchNumber || "—"}</td>
                         <td className="px-4 py-2 text-xs text-muted-foreground">{line.expiryDate || "—"}</td>
                         <td className="px-4 py-2 text-xs text-right tabular-nums">{formatRupee(line.unitPrice)}</td>
-                        <td className="px-4 py-2 text-xs text-right tabular-nums">{line.discount === 100 ? "0%" : `${100 - line.discount}%`}</td>
+                        <td className="px-4 py-2 text-xs text-right tabular-nums">{(product?.gstRate || "0%")}</td>
                         <td className="px-4 py-2 text-xs font-semibold text-right tabular-nums">{formatRupee(line.lineTotal)}</td>
                       </tr>
                     );

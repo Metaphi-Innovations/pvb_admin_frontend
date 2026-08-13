@@ -97,8 +97,8 @@ function buildSampleIssueHtml(order: SalesOrder): string {
     <div class="section" style="display:flex;gap:48px;flex-wrap:wrap">
       <div>
         <p class="label">Bill To</p>
-        <p style="font-weight:600;margin-top:4px">${SAMPLE_BILLING_DETAILS.companyName}</p>
-        <p style="margin-top:4px;font-size:11px">${SAMPLE_BILLING_DETAILS.address}</p>
+        <p style="font-weight:600;margin-top:4px">${order.customerName}</p>
+        <p style="margin-top:4px;font-size:11px">${order.billTo ? `${order.billTo.address}, ${order.billTo.city}, ${order.billTo.state} - ${order.billTo.pincode}` : ""}</p>
       </div>
       <div>
         <p class="label">Issued To Employee</p>

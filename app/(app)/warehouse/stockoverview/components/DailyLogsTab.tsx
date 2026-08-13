@@ -16,7 +16,7 @@ import {
   StockOverviewApi,
   toStockOrdering,
 } from "../services/stock-overview-api";
-import { QC_PASSED_STATUS_OPTIONS, STATUS_BADGE_CONFIG } from "../constants";
+import { QC_PASSED_STATUS_OPTIONS, INVENTORY_SOURCE_STATUS_OPTIONS, STATUS_BADGE_CONFIG } from "../constants";
 import { formatMoney } from "@/lib/accounts/money-format";
 
 const UUID_RE =
@@ -90,6 +90,7 @@ function mapDailyLogRow(row: DailyLogListRow): StockPositionLine {
     warehouse: row.warehouse_name,
     cp: Number(row.cp) || 0,
     status: (row.status || "Available") as StockLineStatus,
+    sourceStatus: row.source_status || undefined,
     openingQty: Number(row.opening_qty) || 0,
     dayIn: Number.isFinite(dayIn) ? dayIn : 0,
     dayOut: Number.isFinite(dayOut) ? dayOut : 0,
@@ -331,14 +332,6 @@ export function DailyLogsTab() {
   const handleOpenFilter = (columnKey: string) => {
     if (filterOptions[columnKey] || loadingFilters.has(columnKey)) return;
 
-    if (columnKey === "productCode") {
-      setFilterOptions((prev) => ({ ...prev, productCode: productMetaOptions.productCode }));
-      return;
-    }
-    if (columnKey === "productName") {
-      setFilterOptions((prev) => ({ ...prev, productName: productMetaOptions.productName }));
-      return;
-    }
     if (columnKey === "hsn") {
       if (productMetaOptions.hsn.length > 0) {
         setFilterOptions((prev) => ({ ...prev, hsn: productMetaOptions.hsn }));
@@ -366,18 +359,16 @@ export function DailyLogsTab() {
         });
       return;
     }
-    if (columnKey === "scientificName") {
-      setFilterOptions((prev) => ({ ...prev, scientificName: productMetaOptions.scientificName }));
-      return;
-    }
-    if (columnKey === "category") {
-      setFilterOptions((prev) => ({ ...prev, category: productMetaOptions.category }));
-      return;
-    }
 
+    // Scope product / warehouse / batch / source options to real inventory stock
     const keyMap: Record<string, string> = {
+      productCode: "inventory_detail__product__product_code",
+      productName: "inventory_detail__product__product_name",
+      scientificName: "inventory_detail__product__scientific_name",
+      category: "inventory_detail__product__category__categoryName",
       warehouse: "inventory_detail__warehouse__warehouse_name",
       batchNumber: "batch_no",
+      sourceStatus: "source_status",
     };
     const field = keyMap[columnKey];
     if (!field) return;
@@ -419,7 +410,7 @@ export function DailyLogsTab() {
       sortable: true,
       filterable: true,
       filterType: "dropdown",
-      filterOptions: filterOptions.productCode || productMetaOptions.productCode,
+      filterOptions: filterOptions.productCode || [],
       width: "120px",
       render: (v) => <span className="font-mono text-xs font-semibold text-brand-700">{v}</span>,
     },
@@ -429,7 +420,7 @@ export function DailyLogsTab() {
       sortable: true,
       filterable: true,
       filterType: "dropdown",
-      filterOptions: filterOptions.productName || productMetaOptions.productName,
+      filterOptions: filterOptions.productName || [],
     },
     {
       key: "hsn",
@@ -454,7 +445,7 @@ export function DailyLogsTab() {
       sortable: true,
       filterable: true,
       filterType: "dropdown",
-      filterOptions: filterOptions.scientificName || productMetaOptions.scientificName,
+      filterOptions: filterOptions.scientificName || [],
     },
     {
       key: "category",
@@ -462,7 +453,7 @@ export function DailyLogsTab() {
       sortable: true,
       filterable: true,
       filterType: "dropdown",
-      filterOptions: filterOptions.category || productMetaOptions.category,
+      filterOptions: filterOptions.category || [],
     },
     { key: "packSize", header: "Pack Size", sortable: true, width: "90px" },
     { key: "openingQty", header: "Opening Qty", sortable: true, align: "right", width: "100px",
@@ -499,8 +490,27 @@ export function DailyLogsTab() {
     { key: "stockValuation", header: "Valuation", sortable: true, align: "right", width: "110px",
       render: (v) => <span className="tabular-nums text-xs font-medium">{formatMoney(Number(v))}</span> },
     {
+      key: "sourceStatus",
+      header: "Source",
+      sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: filterOptions.sourceStatus?.length
+        ? filterOptions.sourceStatus
+        : INVENTORY_SOURCE_STATUS_OPTIONS,
+      width: "130px",
+      render: (val: string) => {
+        const cfg = STATUS_BADGE_CONFIG[val] || { bg: "bg-slate-100 text-slate-700 border-slate-200", label: val || "—" };
+        return (
+          <span className={`inline-flex items-center text-[11px] px-2.5 py-0.5 rounded-full font-medium border ${cfg.bg}`}>
+            {cfg.label}
+          </span>
+        );
+      },
+    },
+    {
       key: "status",
-      header: "Status",
+      header: "Stock Status",
       sortable: true,
       filterable: true,
       filterType: "dropdown",

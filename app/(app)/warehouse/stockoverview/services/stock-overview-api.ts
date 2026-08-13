@@ -24,6 +24,9 @@ export type InventoryListRow = {
   warehouse_name: string;
   batch_no: string;
   status: string;
+  lifecycle_status?: string;
+  source_status?: string;
+  source_type?: string;
 };
 
 export type RejectedListRow = {
@@ -36,19 +39,31 @@ export type RejectedListRow = {
   qc_number: string;
   inspection_date: string | null;
   status: string;
+  lifecycle_status?: string;
+  source_status?: string;
+  source_type?: string;
 };
 
 export type ReturnStockListRow = {
   id: string;
-  return_no: string;
   product_name: string;
-  customer_name: string;
+  sku: string;
+  uom: string;
+  available_qty: number;
+  reserved_qty: number;
+  cp: string;
+  stock_value: string;
   warehouse_name: string;
   batch_no: string;
-  available_qty: number;
-  return_date: string | null;
   expiry_date: string | null;
+  /** Return document reference */
+  return_no: string;
+  customer_name: string;
+  return_date: string | null;
   status: string;
+  lifecycle_status?: string;
+  source_status?: string;
+  source_type?: string;
 };
 
 export type DailyLogListRow = {
@@ -70,6 +85,9 @@ export type DailyLogListRow = {
   cp: number;
   valuation: number;
   status: string;
+  lifecycle_status?: string;
+  source_status?: string;
+  source_type?: string;
 };
 
 export type DailyLogSummary = {
@@ -103,6 +121,9 @@ export type InventoryDetails = {
   };
   batch_no: string;
   status: string;
+  lifecycle_status?: string;
+  source_status?: string;
+  source_type?: string;
   available_qty: number;
   reserved_qty: number;
   manufacture_date: string | null;
@@ -125,8 +146,11 @@ export type RejectedDetails = {
   };
   batch_no: string;
   rejected_qty: number;
-  reject_reason: string;
+  reject_reason: string | null;
   status: string;
+  lifecycle_status?: string;
+  source_status?: string;
+  source_type?: string;
   qc_number: string;
   inspection_date: string | null;
 };
@@ -220,6 +244,8 @@ export function buildStockOverviewFilters(filters: FilterState | undefined): Rec
     else if (key === "warehouse" || key === "warehouse_name") mapped.warehouse_name = value;
     else if (key === "batchNumber" || key === "batch_no") mapped.batch_no = value;
     else if (key === "status") mapped.status = value;
+    else if (key === "source_status" || key === "sourceStatus") mapped.source_status = value;
+    else if (key === "source_type" || key === "sourceType") mapped.source_type = value;
     else if (key === "product_code" || key === "productCode") mapped.product_code = value;
     else if (key === "sku") mapped.sku = value;
     else if (key === "uom" || key === "unit") mapped.uom = value;
@@ -227,6 +253,9 @@ export function buildStockOverviewFilters(filters: FilterState | undefined): Rec
     else if (key === "scientific_name" || key === "scientificName") mapped.scientific_name = value;
     else if (key === "category") mapped.category = value;
     else if (key === "customer" || key === "customer_name") mapped.customer_name = value;
+    else if (key === "return_no" || key === "returnNo" || key === "salesReturnNo" || key === "sampleReturnNo") {
+      mapped.return_no = value;
+    }
   });
 
   return mapped;
@@ -269,6 +298,8 @@ export function toStockOrdering(key: string, direction: "asc" | "desc" | "none")
     batchNumber: "batch_no",
     batch_no: "batch_no",
     status: "status",
+    source_status: "source_status",
+    sourceStatus: "source_status",
     rejectedQuantity: "rejected_qty",
     rejected_qty: "rejected_qty",
     rejectionReason: "reject_reason",
@@ -458,6 +489,9 @@ export const StockOverviewApi = {
       },
       batch_no: asString(data.batch_no),
       status: asString(data.status),
+      lifecycle_status: data.lifecycle_status ? asString(data.lifecycle_status) : asString(data.status),
+      source_status: data.source_status ? asString(data.source_status) : undefined,
+      source_type: data.source_type ? asString(data.source_type) : undefined,
       available_qty: toNumber(data.available_qty),
       reserved_qty: toNumber(data.reserved_qty),
       manufacture_date: data.manufacture_date
@@ -495,6 +529,9 @@ export const StockOverviewApi = {
       rejected_qty: toNumber(data.rejected_qty),
       reject_reason: asString(data.reject_reason) || "—",
       status: asString(data.status),
+      lifecycle_status: data.lifecycle_status ? asString(data.lifecycle_status) : asString(data.status),
+      source_status: data.source_status ? asString(data.source_status) : undefined,
+      source_type: data.source_type ? asString(data.source_type) : undefined,
       qc_number: asString(data.qc_number) || "—",
       inspection_date: data.inspection_date
         ? asString(data.inspection_date).slice(0, 10)

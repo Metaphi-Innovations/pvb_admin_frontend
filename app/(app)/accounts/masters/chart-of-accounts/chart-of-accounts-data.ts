@@ -833,17 +833,16 @@ export function defaultBalanceTypeForParent(
 }
 
 export function nodeMatchesSearch(
-  records: ChartOfAccount[],
+  _records: ChartOfAccount[],
   node: ChartOfAccount,
   query: string,
 ): boolean {
-  const q = query.toLowerCase();
+  const q = query.trim().toLowerCase();
+  if (!q) return false;
   if (node.accountName.toLowerCase().includes(q)) return true;
   if (node.accountCode.toLowerCase().includes(q)) return true;
   if (node.alias?.toLowerCase().includes(q)) return true;
-  return getAncestorPath(records, node.id).some((a) =>
-    a.accountName.toLowerCase().includes(q),
-  );
+  return false;
 }
 
 /** All COA nodes that match the search query (global, same dataset as tree search). */

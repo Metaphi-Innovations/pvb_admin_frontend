@@ -13,13 +13,16 @@ import { Calendar, Download } from "lucide-react";
 import { RecordDetailPage } from "@/components/record-detail";
 import { loadProducts } from "@/app/(app)/masters/products/product-data";
 import {
-  calcGstLineSplit,
   calcLineAmounts,
   getInvoiceById,
   getInvoiceRowActions,
   type InvoiceLineItem,
   type InvoiceRecord,
 } from "./invoices-data";
+import {
+  SalesInvoiceService,
+  mapSalesInvoiceDetailToRecord,
+} from "@/services/sales-invoice.service";
 import {
   calcAdditionalExpensesTotals,
   resolveInvoiceAdditionalExpenses,
@@ -32,7 +35,7 @@ import {
   WORKFLOW_STATUS_LABELS,
   type AccountsVoucherWorkflowStatus,
 } from "@/lib/accounts/accounts-maker-checker";
-import { getInvoiceGstBreakup } from "@/lib/accounts/invoice-gst-breakup";
+import { getInvoiceGstBreakup, getLineGstSplit } from "@/lib/accounts/invoice-gst-breakup";
 import {
   INVOICE_TYPE_LABELS,
   resolveInvoiceDocumentType,
@@ -41,9 +44,11 @@ import { formatMoneyOrDash } from "@/lib/accounts/money-format";
 import { GENERAL_LEDGER_HREF } from "@/lib/accounts/general-ledger-data";
 import { cn } from "@/lib/utils";
 import { getBankAccountPrintDetails } from "@/components/accounts/WarehouseMappedBankAccountSelect";
+import { listBankAccountSelectOptions } from "@/lib/accounts/bank-accounts-data";
 import {
   InvoiceFormCard,
   INVOICE_FORM_CARD_TITLE_CLASS,
+  INVOICE_FORM_GRID_CLASS,
 } from "@/app/(app)/accounts/components/InvoiceFormLayout";
 import {
   formatMonthYear,
@@ -59,21 +64,24 @@ function Field({
   label,
   value,
   mono,
+  multiline,
   className,
 }: {
   label: string;
   value: React.ReactNode;
   mono?: boolean;
+  multiline?: boolean;
   className?: string;
 }) {
   const empty =
     value == null || value === "" || (typeof value === "string" && !value.trim());
   return (
-    <div className={cn("so-goods-field", className)}>
+    <div className={cn("so-goods-field so-goods-field--view min-w-0 w-full", className)}>
       <p className="so-goods-field__label">{label}</p>
       <div
         className={cn(
-          "so-goods-ro text-xs font-medium",
+          "so-goods-ro text-xs font-medium min-w-0",
+          multiline && "so-goods-ro--multiline h-auto min-h-[var(--so-ctrl-h)] items-start py-1.5 whitespace-pre-wrap",
           mono && "so-goods-ro--mono font-mono text-brand-700",
           empty && "text-muted-foreground",
         )}
@@ -182,7 +190,7 @@ function ProductTable({
   ]);
 
   return (
-    <div className="overflow-x-auto border border-border/60 rounded-lg bg-white">
+    <div className="so-goods-product-table-wrap">
       <table className="w-full text-xs min-w-[1100px] so-goods-product-table">
         <thead className="border-b border-border/60 bg-muted/20">
           <tr>
@@ -212,7 +220,7 @@ function ProductTable({
               const discPct = resolveDisplayDiscountPct(line);
               const discAmt = resolveDisplayDiscountAmount(line);
               /** GST / taxable / line total from stored line amounts — do not re-apply scheme % into totals. */
-              const split = calcGstLineSplit(line, interstate);
+              const split = getLineGstSplit(line, interstate);
               const sku = resolveLineSku(line, productCodeById);
               const hasScheme = lineHasProductDiscount(line);
 
@@ -362,12 +370,35 @@ function CompactSchemeInformation({ record }: { record: InvoiceRecord }) {
   );
 }
 
-export default function InvoiceViewPageClient({ invoiceId }: { invoiceId: number }) {
+export default function InvoiceViewPageClient({
+  invoiceId,
+}: {
+  invoiceId: number | string;
+}) {
   const router = useRouter();
   const [record, setRecord] = useState<InvoiceRecord | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  const refresh = () => {
-    const r = getInvoiceById(invoiceId);
+  const refresh = async () => {
+    setLoadError(null);
+    const idStr = String(invoiceId);
+    if (SalesInvoiceService.isUuid(idStr)) {
+      try {
+        const dto = await SalesInvoiceService.getById(idStr);
+        setRecord(mapSalesInvoiceDetailToRecord(dto));
+        return;
+      } catch (e) {
+        setLoadError(e instanceof Error ? e.message : "Failed to load invoice.");
+        setRecord(null);
+        return;
+      }
+    }
+    const numericId = Number(invoiceId);
+    if (!Number.isFinite(numericId)) {
+      router.replace(INVOICES_LIST_PATH);
+      return;
+    }
+    const r = getInvoiceById(numericId);
     if (!r) {
       router.replace(INVOICES_LIST_PATH);
       return;
@@ -376,7 +407,8 @@ export default function InvoiceViewPageClient({ invoiceId }: { invoiceId: number
   };
 
   useEffect(() => {
-    refresh();
+    void refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [invoiceId]);
 
   const productCodeById = useMemo(() => {
@@ -387,6 +419,17 @@ export default function InvoiceViewPageClient({ invoiceId }: { invoiceId: number
     return map;
   }, []);
 
+  if (loadError) {
+    return (
+      <div className="p-6 text-sm text-red-600">
+        {loadError}{" "}
+        <Link href={INVOICES_LIST_PATH} className="underline text-brand-700">
+          Back to list
+        </Link>
+      </div>
+    );
+  }
+
   if (!record) return null;
 
   const actions = getInvoiceRowActions(record);
@@ -394,7 +437,15 @@ export default function InvoiceViewPageClient({ invoiceId }: { invoiceId: number
   const invoiceType = resolveInvoiceDocumentType(record);
   const gst = getInvoiceGstBreakup(record);
   const interstate = gst.interstate;
-  const bankDetails = getBankAccountPrintDetails(record.bankAccountId);
+  const bankOptions = listBankAccountSelectOptions(
+    record.warehouseUuid || record.warehouse,
+  );
+  const bankDetails =
+    record.bankAccountId != null
+      ? getBankAccountPrintDetails(record.bankAccountId)
+      : bankOptions[0]
+        ? getBankAccountPrintDetails(bankOptions[0].id)
+        : null;
   const isSalesOrderView =
     record.sourceType === "sales_order" ||
     (invoiceType === "sales" && Boolean(record.salesOrderNo || record.dispatchNo));
@@ -466,31 +517,27 @@ export default function InvoiceViewPageClient({ invoiceId }: { invoiceId: number
     >
       <div
         className={cn(
-          "space-y-3",
+          "flex flex-col gap-2 so-invoice-view-page",
           isSalesOrderView && "sales-order-invoice-form-compact",
         )}
       >
         {/* Customer */}
-        <InvoiceFormCard title="Customer">
-          <div className="so-goods-field-grid grid grid-cols-2 md:grid-cols-4 gap-3">
+        <InvoiceFormCard title="Customer" className="so-invoice-view-card">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-2">
             <Field label="Customer Name" value={record.customerName} />
             <Field label="GSTIN" value={gstin} mono />
-            <Field
-              label="Billing Address"
-              value={record.billingAddress}
-              className="md:col-span-2"
-            />
+            <Field label="Billing Address" value={record.billingAddress} multiline />
             <Field
               label="Shipping Address"
               value={record.shippingAddress || record.billingAddress}
-              className="md:col-span-2"
+              multiline
             />
           </div>
         </InvoiceFormCard>
 
         {/* Invoice Details */}
-        <InvoiceFormCard title="Invoice Details">
-          <div className="so-goods-field-grid grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+        <InvoiceFormCard title="Invoice Details" className="so-invoice-view-card">
+          <div className={INVOICE_FORM_GRID_CLASS}>
             <Field label="Invoice No." value={record.invoiceNo} mono />
             <Field label="Invoice Date" value={record.invoiceDate} />
             <Field label="Due Date" value={record.dueDate} />
@@ -530,7 +577,14 @@ export default function InvoiceViewPageClient({ invoiceId }: { invoiceId: number
             <Field
               label="General Ledger"
               value={
-                record.customerLedgerId ? (
+                record.customerLedgerUuid ? (
+                  <Link
+                    href={`/accounts/masters/chart-of-accounts?node=${encodeURIComponent(record.customerLedgerUuid)}`}
+                    className="text-brand-700 hover:underline text-xs"
+                  >
+                    Open customer ledger
+                  </Link>
+                ) : record.customerLedgerId ? (
                   <Link
                     href={`${GENERAL_LEDGER_HREF}?ledgerId=${record.customerLedgerId}&ledgerType=Customer`}
                     className="text-brand-700 hover:underline text-xs"
@@ -549,8 +603,8 @@ export default function InvoiceViewPageClient({ invoiceId }: { invoiceId: number
 
         {/* Transport — when present */}
         {hasTransport ? (
-          <InvoiceFormCard title="Transport & Statutory Details">
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3">
+          <InvoiceFormCard title="Transport & Statutory Details" className="so-invoice-view-card">
+            <div className={cn(INVOICE_FORM_GRID_CLASS, "lg:grid-cols-3 xl:grid-cols-5")}>
               <Field label="Transport Mode" value={record.transportMode} />
               <Field label="Transporter Name" value={record.transporterName} />
               <Field label="Transporter ID" value={record.transporterId} />
@@ -592,7 +646,7 @@ export default function InvoiceViewPageClient({ invoiceId }: { invoiceId: number
         {expenses.length > 0 ? (
           <div className="space-y-2">
             <h2 className={INVOICE_FORM_CARD_TITLE_CLASS}>Additional Charges</h2>
-            <div className="overflow-x-auto border border-border/60 rounded-lg bg-white">
+            <div className="so-goods-product-table-wrap">
               <table className="w-full text-xs min-w-[720px]">
                 <thead className="bg-muted/20 border-b border-border/60">
                   <tr>

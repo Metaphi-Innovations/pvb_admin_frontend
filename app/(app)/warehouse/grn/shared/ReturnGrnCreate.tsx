@@ -25,6 +25,10 @@ import {
   type GrnQuantityType,
 } from "@/lib/warehouse/grn-quantity";
 import {
+  exceedsMaxLineQty,
+  maxLineQtyMessage,
+} from "@/lib/quantity-limits";
+import {
   useCreateGrn,
   useGrn,
   useGrnPreviewNumber,
@@ -420,6 +424,10 @@ export function ReturnGrnCreate({
       }
       if (line.receivedQty > line.maxQty - line.previousReceivedQty) {
         lineErrors[idx] = `Received qty exceeds remaining qty (${Math.max(0, round2(line.maxQty - line.previousReceivedQty))} base).`;
+        return;
+      }
+      if (line.receivedQty > 0 && exceedsMaxLineQty(line.displayQty)) {
+        lineErrors[idx] = maxLineQtyMessage("Received quantity");
         return;
       }
       if (line.receivedQty > 0) {

@@ -49,6 +49,8 @@ import {
   type OrderStatus,
   loadOrders,
   formatOrderStatus,
+  formatFulfillmentStatus,
+  FULFILLMENT_STATUS_OPTIONS,
   ORDER_STATUS_OPTIONS,
   canEditOrder,
   canCancelOrder,
@@ -124,6 +126,18 @@ function StatusPill({ status }: { status: string }) {
     <span className={cn("inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full font-medium", cfg.bg, cfg.text)}>
       <span className={cn("w-1.5 h-1.5 rounded-full", cfg.dot)} />
       {formatOrderStatus(status as OrderStatus)}
+    </span>
+  );
+}
+
+function FulfillmentPill({ status }: { status?: string | null }) {
+  const label = formatFulfillmentStatus(status);
+  const key = label.toLowerCase().replace(/\s+/g, "_");
+  const cfg = STATUS_CFG[key] ?? STATUS_CFG.draft;
+  return (
+    <span className={cn("inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full font-medium", cfg.bg, cfg.text)}>
+      <span className={cn("w-1.5 h-1.5 rounded-full", cfg.dot)} />
+      {label}
     </span>
   );
 }
@@ -208,7 +222,7 @@ export default function SalesOrdersPage() {
   const [isMounted, setIsMounted] = useState(false);
   const [activeTab, setActiveTab] = useState<OrderListTab>("all");
   const [filters, setFilters] = useState<FilterState>({});
-  const [sort, setSort] = useState<SortState>({ key: "orderDate", direction: "desc" });
+  const [sort, setSort] = useState<SortState>({ key: "", direction: "none" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
@@ -239,12 +253,23 @@ export default function SalesOrdersPage() {
       f.status = mapFrontendStatusToBackend(activeTab);
     }
     if (filters.status && Array.isArray(filters.status) && filters.status.length > 0) {
-      f.status = filters.status.map(s => mapFrontendStatusToBackend(s));
+      f.status = filters.status.map((s) => mapFrontendStatusToBackend(String(s)));
+    } else if (filters.status && typeof filters.status === "string") {
+      f.status = mapFrontendStatusToBackend(filters.status);
+    }
+    if (filters.fulfillmentStatus && Array.isArray(filters.fulfillmentStatus) && filters.fulfillmentStatus.length > 0) {
+      f.fulfillment_status = filters.fulfillmentStatus;
+    } else if (filters.fulfillmentStatus && typeof filters.fulfillmentStatus === "string") {
+      f.fulfillment_status = filters.fulfillmentStatus;
     }
     if (filters.soNumber && Array.isArray(filters.soNumber) && filters.soNumber.length > 0) {
       f.order_no = filters.soNumber;
+    } else if (filters.soNumber && typeof filters.soNumber === "string") {
+      f.order_no = filters.soNumber;
     }
     if (filters.customerName && Array.isArray(filters.customerName) && filters.customerName.length > 0) {
+      f.salesperson = { username: filters.customerName };
+    } else if (filters.customerName && typeof filters.customerName === "string") {
       f.salesperson = { username: filters.customerName };
     }
     return f;
@@ -290,7 +315,7 @@ export default function SalesOrdersPage() {
     page: 1,
     pageSize: 1,
     search: filters.search as string,
-    apiFilters: { status: "SUBMITTED" },
+    apiFilters: { status: "PENDING_APPROVAL" },
   });
 
   const { data: rejectedCountData } = useSampleOrders({
@@ -324,6 +349,7 @@ export default function SalesOrdersPage() {
   const { data: orderNoFilterRaw } = useSampleOrderFilterOptions("order_no");
   const { data: salespersonFilterRaw } = useSampleOrderFilterOptions("salesperson__username");
   const { data: statusFilterRaw } = useSampleOrderFilterOptions("status");
+  const { data: fulfillmentFilterRaw } = useSampleOrderFilterOptions("fulfillment_status");
 
   const updateStatusMutation = useUpdateSampleOrderStatus();
 
@@ -363,9 +389,7 @@ export default function SalesOrdersPage() {
     setPage(1);
   }, [activeTab, filters, pageSize]);
 
-  useEffect(() => {
-    if (page > totalPages) setPage(totalPages);
-  }, [page, totalPages]);
+
 
   const kpi = {
     total: allCountData?.total ?? 0,
@@ -427,11 +451,30 @@ export default function SalesOrdersPage() {
         value: o.value.toUpperCase(),
       }));
     }
-    return statusFilterRaw.map((item: any) => ({
-      label: formatOrderStatus((item.status || "").toLowerCase() as OrderStatus) || item.status,
-      value: item.status,
-    }));
+    const allowed = new Set(
+      ["DRAFT", "PENDING_APPROVAL", "APPROVED", "REJECTED", "CANCELLED"],
+    );
+    return statusFilterRaw
+      .filter((item: any) => allowed.has(String(item.status || "").toUpperCase()))
+      .map((item: any) => ({
+        label: formatOrderStatus((item.status || "").toLowerCase() as OrderStatus) || item.status,
+        value: item.status,
+      }));
   }, [statusFilterRaw]);
+
+  const fulfillmentOptions = useMemo(() => {
+    if (!fulfillmentFilterRaw || fulfillmentFilterRaw.length === 0) {
+      return FULFILLMENT_STATUS_OPTIONS;
+    }
+    const allowed = new Set(FULFILLMENT_STATUS_OPTIONS.map((o) => o.value));
+    return fulfillmentFilterRaw
+      .map((item: any) => String(item.fulfillment_status || "").trim())
+      .filter((value: string) => value && allowed.has(value))
+      .map((value: string) => ({
+        label: formatFulfillmentStatus(value),
+        value,
+      }));
+  }, [fulfillmentFilterRaw]);
 
   const columns: ColumnConfig<SalesOrder>[] = [
     {
@@ -463,17 +506,6 @@ export default function SalesOrdersPage() {
       )
     },
     {
-      key: "territory",
-      header: "Territory",
-      sortable: true,
-      filterable: true,
-      filterType: "dropdown",
-      filterOptions: territoryOptions,
-      render: (val, row) => (
-        <span className="text-xs text-muted-foreground">{row.territory}</span>
-      )
-    },
-    {
       key: "items",
       header: "Items",
       sortable: true,
@@ -502,9 +534,17 @@ export default function SalesOrdersPage() {
       render: (val, row) => (
         <div>
           <StatusPill status={row.status} />
-          {row.packingListNumber && <p className="text-[10px] text-muted-foreground mt-0.5">{row.packingListNumber}</p>}
         </div>
       )
+    },
+    {
+      key: "fulfillmentStatus",
+      header: "Fulfillment",
+      sortable: false,
+      filterable: activeTab === "all",
+      filterType: "dropdown",
+      filterOptions: fulfillmentOptions,
+      render: (_val, row) => <FulfillmentPill status={row.fulfillmentStatus} />,
     },
     {
       key: "orderDate",
@@ -656,11 +696,11 @@ export default function SalesOrdersPage() {
         </div>
       }
       tabs={[
-        { value: "all", label: `Sales (${tabCounts.all})` },
-        { value: "draft", label: `Draft (${tabCounts.draft})` },
-        { value: "pending_approval", label: `Approval (${tabCounts.pending_approval})` },
-        { value: "rejected", label: `Rejected (${tabCounts.rejected})` },
-        { value: "sales_return", label: `Sample Return (${tabCounts.sales_return})` },
+        { value: "all", label: "Sales" },
+        { value: "draft", label: "Draft" },
+        { value: "pending_approval", label: "Approval" },
+        { value: "rejected", label: "Rejected" },
+        { value: "sales_return", label: "Sample Return" },
       ]}
       activeTab={activeTab}
       onTabChange={handleTabChange}

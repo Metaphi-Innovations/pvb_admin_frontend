@@ -131,7 +131,8 @@ export function ensureGoodsWe008DemoSalesOrder(customer: Customer): SalesOrder |
     salesManName: customer.salesManName || "Neha Patel",
     orderDate: "2026-07-10",
     deliveryDate: "2026-07-15",
-    status: "dispatched",
+    status: "approved",
+    fulfillmentStatus: "Fully Dispatched",
     lineItems: [
       {
         id: "line-we014-urea",

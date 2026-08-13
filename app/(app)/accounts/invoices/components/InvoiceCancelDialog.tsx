@@ -22,17 +22,18 @@ export function InvoiceCancelDialog({
   open: boolean;
   onClose: () => void;
   invoiceNo: string;
-  onConfirm: (reason: string) => void;
+  onConfirm: (reason: string) => void | Promise<void>;
 }) {
   const [reason, setReason] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+    <Dialog open={open} onOpenChange={(v) => !v && !submitting && onClose()}>
       <DialogContent className="max-w-sm">
         <DialogHeader>
           <DialogTitle className="text-sm">Cancel Invoice</DialogTitle>
           <DialogDescription className="text-xs">
-            Cancel {invoiceNo}? This will be recorded in the activity timeline.
+            Cancel {invoiceNo}? This will reverse the accounting voucher and mark the invoice cancelled.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-1 py-2">
@@ -42,23 +43,36 @@ export function InvoiceCancelDialog({
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             placeholder="Reason for cancellation…"
+            disabled={submitting}
           />
         </div>
         <DialogFooter>
-          <Button variant="outline" size="sm" className="h-9 text-sm font-medium" onClick={onClose}>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-9 text-sm font-medium"
+            onClick={onClose}
+            disabled={submitting}
+          >
             Close
           </Button>
           <Button
             size="sm"
             className="h-9 text-sm font-medium bg-red-600 hover:bg-red-700 text-white"
-            disabled={!reason.trim()}
-            onClick={() => {
-              onConfirm(reason.trim());
-              setReason("");
-              onClose();
+            disabled={!reason.trim() || submitting}
+            onClick={async () => {
+              const trimmed = reason.trim();
+              if (!trimmed) return;
+              setSubmitting(true);
+              try {
+                await onConfirm(trimmed);
+                setReason("");
+              } finally {
+                setSubmitting(false);
+              }
             }}
           >
-            Cancel Invoice
+            {submitting ? "Cancelling…" : "Cancel Invoice"}
           </Button>
         </DialogFooter>
       </DialogContent>

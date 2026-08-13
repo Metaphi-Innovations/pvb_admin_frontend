@@ -41,6 +41,7 @@ import {
   canDownloadNote,
   canGeneratePackingList,
 } from "./stock-transfer-data";
+import { formatFulfillmentStatus, FULFILLMENT_STATUS_OPTIONS } from "@/app/(app)/sales/orders/orders-data";
 import { printTransferPackingList } from "./transfer-note-document";
 import CancelTransferDialog from "./components/CancelTransferDialog";
 import {
@@ -83,12 +84,24 @@ function StatusPill({ status }: { status: string }) {
   );
 }
 
+function FulfillmentPill({ status }: { status?: string | null }) {
+  const label = formatFulfillmentStatus(status);
+  const key = label.toLowerCase().replace(/\s+/g, "_");
+  const cfg = STATUS_CFG[key] ?? STATUS_CFG.draft;
+  return (
+    <span className={cn("inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full font-medium", cfg.bg, cfg.text)}>
+      <span className={cn("w-1.5 h-1.5 rounded-full", cfg.dot)} />
+      {label}
+    </span>
+  );
+}
+
 export default function StockTransferPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<string>("all");
   const [filters, setFilters] = useState<FilterState>({});
-  const [sort, setSort] = useState<SortState>({ key: "transferDate", direction: "desc" });
+  const [sort, setSort] = useState<SortState>({ key: "", direction: "none" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
@@ -155,6 +168,11 @@ export default function StockTransferPage() {
     if (filters.transferNumber) {
       f.transfer_no = filters.transferNumber;
     }
+    if (filters.fulfillmentStatus && Array.isArray(filters.fulfillmentStatus) && filters.fulfillmentStatus.length > 0) {
+      f.fulfillment_status = filters.fulfillmentStatus;
+    } else if (filters.fulfillmentStatus && typeof filters.fulfillmentStatus === "string") {
+      f.fulfillment_status = filters.fulfillmentStatus;
+    }
     return f;
   }, [activeTab, filters]);
 
@@ -198,6 +216,7 @@ export default function StockTransferPage() {
   const { data: targetWhFilterRaw } = useStockTransferFilterOptions("to_warehouse__warehouse_name", filterStatus);
   const { data: transferNoFilterRaw } = useStockTransferFilterOptions("transfer_no", filterStatus);
   const { data: statusFilterRaw } = useStockTransferFilterOptions("status", filterStatus);
+  const { data: fulfillmentFilterRaw } = useStockTransferFilterOptions("fulfillment_status", filterStatus);
 
   const sourceWarehouseOptions = useMemo(() => {
     return (sourceWhFilterRaw || []).map((item: any) => ({
@@ -230,11 +249,35 @@ export default function StockTransferPage() {
         { label: "Cancelled", value: "cancelled" },
       ];
     }
-    return statusFilterRaw.map((item: any) => ({
-      label: formatTransferStatus(item.status as TransferStatus) || item.status,
-      value: item.status,
-    }));
+    const allowed = new Set([
+      "DRAFT",
+      "SUBMITTED",
+      "APPROVED",
+      "CANCELLED",
+      "PARTIALLY_RECEIVED",
+      "RECEIVED",
+    ]);
+    return statusFilterRaw
+      .filter((item: any) => allowed.has(String(item.status || "").toUpperCase()))
+      .map((item: any) => ({
+        label: formatTransferStatus(item.status as TransferStatus) || item.status,
+        value: item.status,
+      }));
   }, [statusFilterRaw]);
+
+  const fulfillmentOptions = useMemo(() => {
+    if (!fulfillmentFilterRaw || fulfillmentFilterRaw.length === 0) {
+      return FULFILLMENT_STATUS_OPTIONS;
+    }
+    const allowed = new Set(FULFILLMENT_STATUS_OPTIONS.map((o) => o.value));
+    return fulfillmentFilterRaw
+      .map((item: any) => String(item.fulfillment_status || "").trim())
+      .filter((value: string) => value && allowed.has(value))
+      .map((value: string) => ({
+        label: formatFulfillmentStatus(value),
+        value,
+      }));
+  }, [fulfillmentFilterRaw]);
 
   const cancelMutation = useCancelStockTransfer();
 
@@ -367,6 +410,15 @@ export default function StockTransferPage() {
       )
     },
     {
+      key: "fulfillmentStatus",
+      header: "Fulfillment",
+      sortable: false,
+      filterable: activeTab === "all",
+      filterType: "dropdown",
+      filterOptions: fulfillmentOptions,
+      render: (_val, row) => <FulfillmentPill status={row.fulfillmentStatus} />,
+    },
+    {
       key: "createdBy",
       header: "Created By",
       sortable: true,
@@ -474,11 +526,11 @@ export default function StockTransferPage() {
         </div>
       }
       tabs={[
-        { value: "all", label: `All (${kpi.total})` },
-        { value: "draft", label: `Draft (${kpi.draft})` },
-        { value: "pending", label: `Pending (${kpi.pending})` },
-        { value: "approved", label: `Approved (${kpi.approved})` },
-        { value: "rejected", label: `Cancelled (${kpi.rejected})` },
+        { value: "all", label: "All" },
+        { value: "draft", label: "Draft" },
+        { value: "pending", label: "Pending" },
+        { value: "approved", label: "Approved" },
+        { value: "rejected", label: "Cancelled" },
       ]}
       activeTab={activeTab}
       onTabChange={handleTabChange}

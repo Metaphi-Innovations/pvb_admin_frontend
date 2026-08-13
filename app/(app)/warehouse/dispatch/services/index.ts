@@ -1,5 +1,6 @@
 import { axiosInstance as api } from "@/api/axios";
 import { API_ENDPOINTS } from "@/api/endpoints";
+import type { FilterState } from "@/components/listing/types";
 
 export async function getPreviewNumber(warehouseId?: string | null): Promise<string> {
   const response = await api.get(API_ENDPOINTS.WAREHOUSE.DISPATCH.PREVIEW_NUMBER, {
@@ -35,6 +36,130 @@ export interface DispatchDropdownItem {
   warehouse_id: string | null;
   warehouse_name: string;
   label: string;
+}
+
+export type DispatchFilterOption = { label: string; value: string };
+
+export type DispatchSourceTab =
+  | "sales_order"
+  | "sample"
+  | "stock_transfer"
+  | "purchase_return";
+
+function asString(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  return "";
+}
+
+function firstFilterValue(value: unknown): string {
+  if (Array.isArray(value)) return asString(value[0]).trim();
+  return asString(value).trim();
+}
+
+export function resolveDispatchApiSourceType(
+  subTab: DispatchSourceTab,
+): "normal_sales" | "sample" | "stock_transfer" | "purchase_return" {
+  if (subTab === "sales_order") return "normal_sales";
+  if (subTab === "sample") return "sample";
+  if (subTab === "stock_transfer") return "stock_transfer";
+  return "purchase_return";
+}
+
+/** Map listing column filters to backend whitelist keys. */
+export function buildDispatchApiFilters(
+  filters: FilterState,
+  options: {
+    selectedWarehouse?: string | null;
+    sourceType: string;
+  },
+): Record<string, unknown> {
+  const apiFilters: Record<string, unknown> = {
+    source_type: options.sourceType,
+  };
+
+  if (options.selectedWarehouse && options.selectedWarehouse !== "All") {
+    apiFilters.warehouse_id = options.selectedWarehouse;
+  }
+
+  const dispatchNo = firstFilterValue(filters.dispatch_number);
+  if (dispatchNo) apiFilters.dispatch_number = dispatchNo;
+
+  const sourceDocNo = firstFilterValue(filters.source_document_no);
+  if (sourceDocNo) apiFilters.source_document_no = sourceDocNo;
+
+  const party = firstFilterValue(filters["customer.customer_name"]);
+  if (party) {
+    if (options.sourceType === "stock_transfer") {
+      apiFilters.to_warehouse = party;
+    } else {
+      apiFilters.customer_name = party;
+    }
+  }
+
+  const warehouseName = firstFilterValue(filters.source_warehouse_name);
+  if (warehouseName) {
+    apiFilters.warehouse = { warehouse_name: warehouseName };
+  }
+
+  const vehicleNo = firstFilterValue(filters.vehicleNumber);
+  if (vehicleNo) apiFilters.vehicle_number = vehicleNo;
+
+  const transporter = firstFilterValue(filters.driverName);
+  if (transporter) apiFilters.transporter = transporter;
+
+  const status = firstFilterValue(filters.status);
+  if (status) apiFilters.status = status;
+
+  const dateRange = filters.dispatch_date;
+  if (
+    dateRange &&
+    typeof dateRange === "object" &&
+    ("fromDate" in dateRange || "toDate" in dateRange)
+  ) {
+    apiFilters.range = {
+      dispatch_date: {
+        from: (dateRange as { fromDate?: string }).fromDate,
+        to: (dateRange as { toDate?: string }).toDate,
+      },
+    };
+  }
+
+  return apiFilters;
+}
+
+export function buildDispatchOrdering(
+  sortKey: string,
+  direction: "asc" | "desc" | "none",
+): string | undefined {
+  if (!sortKey || direction === "none") return undefined;
+
+  const fieldMap: Record<string, string> = {
+    dispatch_number: "dispatch_number",
+    source_document_no: "source_document_no",
+    "customer.customer_name": "customer.customer_name",
+    source_warehouse_name: "source_warehouse_name",
+    orderAmount: "order_amount",
+    vehicleNumber: "vehicle_number",
+    driverName: "transporter",
+    dispatch_date: "dispatch_date",
+    status: "status",
+  };
+
+  const backendKey = fieldMap[sortKey];
+  if (!backendKey) return undefined;
+  return direction === "desc" ? `-${backendKey}` : backendKey;
+}
+
+function pickFilterOptionValue(row: Record<string, unknown>, fieldName: string): string {
+  const direct = asString(row[fieldName]).trim();
+  if (direct) return direct;
+  for (const value of Object.values(row)) {
+    const text = asString(value).trim();
+    if (text) return text;
+  }
+  return "";
 }
 
 /** Lightweight dispatch options for form selects (prefer over list API). */
@@ -75,14 +200,27 @@ export async function getDispatchFilterDropdown(
   options?: {
     status?: string;
     excludeExistingStGrn?: boolean;
+    warehouseId?: string;
   },
-) {
-  const params: any = { field_name: fieldName };
+): Promise<DispatchFilterOption[]> {
+  const params: Record<string, string> = { field_name: fieldName };
   if (sourceType) params.source_type = sourceType;
   if (options?.status) params.status = options.status;
   if (options?.excludeExistingStGrn) params.exclude_existing_st_grn = "true";
-  const response = await api.get(API_ENDPOINTS.WAREHOUSE.DISPATCH.FILTER_DROPDOWN, { params });
-  return response.data?.data || [];
+  if (options?.warehouseId) params.warehouse_id = options.warehouseId;
+
+  const response = await api.get(API_ENDPOINTS.WAREHOUSE.DISPATCH.FILTER_DROPDOWN, {
+    params,
+  });
+  const data = response.data?.data;
+  if (!Array.isArray(data)) return [];
+
+  return data
+    .map((row: Record<string, unknown>) => {
+      const value = pickFilterOptionValue(row, fieldName);
+      return value ? { label: value, value } : null;
+    })
+    .filter((opt): opt is DispatchFilterOption => Boolean(opt));
 }
 
 export async function revertDispatch(id: string) {
@@ -227,6 +365,25 @@ export interface PackedOrderDropdownItem {
       status: string;
       packing_date: string | null;
       warehouse_id: string | null;
+      products?: Array<{
+        packing_done_product_id: string;
+        packing_list_product_id: string;
+        product_id: string;
+        product_code: string | null;
+        sku?: string | null;
+        product_name: string | null;
+        product_snapshot: unknown;
+        batch_code: string | null;
+        batch_snapshot: unknown;
+        /** Qty packed in THIS packing done (base units). */
+        base_qty: number;
+        order_base_qty: number;
+        packed_base_qty: number;
+        pending_base_qty: number;
+        quantity_type: string | null;
+        unit_per_packing: number;
+        remarks: string | null;
+      }>;
     }>;
     products: Array<{
       packing_list_product_id: string;
@@ -241,6 +398,7 @@ export interface PackedOrderDropdownItem {
       packed_base_qty: number;
       pending_base_qty: number;
       quantity_type: string | null;
+      unit_per_packing?: number;
       remarks: string | null;
     }>;
   };

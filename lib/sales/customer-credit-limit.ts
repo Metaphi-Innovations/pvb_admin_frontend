@@ -17,7 +17,6 @@ export const CREDIT_UTILIZING_ORDER_STATUSES: OrderStatus[] = [
 	"pending_approval",
 	"approved",
 	"confirmed",
-	"dispatched",
 ];
 
 /** Available credit ≤ this fraction of total limit → amber "Near Credit Limit". */
@@ -54,10 +53,10 @@ export function getCustomerInvoiceOutstanding(customerId: number): number {
 
 export function getInvoicedSalesOrderLookups(): {
 	soNumbers: Set<string>;
-	orderIds: Set<number>;
+	orderIds: Set<number | string>;
 } {
 	const soNumbers = new Set<string>();
-	const orderIds = new Set<number>();
+	const orderIds = new Set<number | string>();
 
 	for (const inv of getPostedSalesInvoices()) {
 		if (inv.salesOrderId != null) orderIds.add(inv.salesOrderId);
@@ -72,7 +71,7 @@ export function getInvoicedSalesOrderLookups(): {
 
 export function isSalesOrderAlreadyInvoiced(
 	order: SalesOrder,
-	lookups: { soNumbers: Set<string>; orderIds: Set<number> },
+	lookups: { soNumbers: Set<string>; orderIds: Set<number | string> },
 ): boolean {
 	if (lookups.orderIds.has(order.id)) return true;
 	return lookups.soNumbers.has(order.soNumber);
