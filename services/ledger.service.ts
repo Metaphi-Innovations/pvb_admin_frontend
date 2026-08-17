@@ -11,6 +11,16 @@ export interface LedgerOpeningBalanceDto {
   narration?: string | null;
 }
 
+export interface LedgerPeriodBalanceDto {
+  ledgerId: string;
+  openingAmount: number;
+  openingBalanceType: "Debit" | "Credit" | string;
+  currentBalance: number;
+  balanceType: "Debit" | "Credit" | string;
+  totalDebit: number;
+  totalCredit: number;
+}
+
 export interface LedgerTransactionDto {
   date: string;
   voucherNo: string;
@@ -163,6 +173,36 @@ export const LedgerService = {
       { params, signal },
     );
     return unwrapData(response);
+  },
+
+  async getBalances(
+    payload: { ledgerIds: string[]; dateFrom?: string; dateTo?: string },
+    signal?: AbortSignal,
+  ): Promise<LedgerPeriodBalanceDto[]> {
+    const ids = [...new Set(payload.ledgerIds.filter(Boolean))];
+    if (ids.length === 0) return [];
+
+    const chunks: string[][] = [];
+    for (let i = 0; i < ids.length; i += 500) {
+      chunks.push(ids.slice(i, i + 500));
+    }
+
+    const results = await Promise.all(
+      chunks.map(async (ledgerIds) => {
+        const response = await axiosInstance.post<ApiResponse<LedgerPeriodBalanceDto[]>>(
+          API_ENDPOINTS.ACCOUNTS.LEDGERS.BALANCES,
+          {
+            ledgerIds,
+            ...(payload.dateFrom ? { dateFrom: payload.dateFrom } : {}),
+            ...(payload.dateTo ? { dateTo: payload.dateTo } : {}),
+          },
+          { signal },
+        );
+        return unwrapData(response) ?? [];
+      }),
+    );
+
+    return results.flat();
   },
 
   async create(payload: CreateLedgerPayload): Promise<LedgerDetailDto> {
