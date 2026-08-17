@@ -15,11 +15,11 @@ export function CoaListingSummaryBar({
   totalLabel?: string;
 }) {
   const opening =
-    summary.openingAmount > 0
+    summary.balanceFromApi || summary.openingAmount > 0
       ? formatBalanceAmount(summary.openingAmount, summary.openingSide)
       : "—";
   const closing =
-    summary.closingAmount > 0
+    summary.balanceFromApi || summary.closingAmount > 0
       ? formatBalanceAmount(summary.closingAmount, summary.closingSide)
       : "—";
 
@@ -43,11 +43,11 @@ export function CoaLedgerListingSummaryBar({
   summary: CoaLedgerListingSummary;
 }) {
   const opening =
-    summary.openingAmount > 0
+    summary.balanceFromApi || summary.openingAmount > 0
       ? formatBalanceAmount(summary.openingAmount, summary.openingSide)
       : "—";
   const current =
-    summary.currentAmount > 0
+    summary.balanceFromApi || summary.currentAmount > 0
       ? formatBalanceAmount(summary.currentAmount, summary.currentSide)
       : "—";
 

@@ -511,6 +511,7 @@ export const API_ENDPOINTS = {
       CREATE: "/accounts/ledgers",
       VIEW: (id: string) => `/accounts/ledgers/${id}`,
       UPDATE: (id: string) => `/accounts/ledgers/${id}`,
+      BALANCES: "/accounts/ledgers/balances",
       EXPORT: "/accounts/ledgers/export",
       PREVIEW_NUMBER: "/accounts/ledgers/preview-number",
       OPENING_BALANCES: (ledgerId: string) =>

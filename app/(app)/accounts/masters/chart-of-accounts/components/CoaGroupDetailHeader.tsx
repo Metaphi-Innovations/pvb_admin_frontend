@@ -30,7 +30,9 @@ export function CoaGroupDetailHeader({ summary }: { summary: CoaGroupDetailSumma
             Total Balance
           </span>
           <p className="font-semibold tabular-nums text-foreground mt-0.5">
-            {closingAmount > 0 ? formatBalanceAmount(closingAmount, closingSide) : "—"}
+            {summary.balanceFromApi || closingAmount > 0
+              ? formatBalanceAmount(closingAmount, closingSide)
+              : "—"}
           </p>
         </div>
         <div>
