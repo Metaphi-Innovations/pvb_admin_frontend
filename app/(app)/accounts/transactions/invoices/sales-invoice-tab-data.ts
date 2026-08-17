@@ -101,6 +101,8 @@ export interface SalesInvoiceListRow {
   canCancel: boolean;
   canEdit: boolean;
   canPdf: boolean;
+  canDownloadPi: boolean;
+  canDownloadTaxInvoice: boolean;
   eInvoiceStatusLabel: ListingEInvoiceStatus;
   ewayBillStatusLabel: ListingEWayStatus;
   eInvoiceDetails: SalesInvoiceEInvoiceDetails;
@@ -109,10 +111,15 @@ export interface SalesInvoiceListRow {
 
 const LIST_PATH = "/accounts/transactions/invoices";
 
+function hasPdfValue(value: unknown): boolean {
+  const text = String(value ?? "").trim();
+  return Boolean(text) && text !== "-" && text !== "—";
+}
+
 export function mapApiInvoiceToListRow(
   dto: SalesInvoiceListDto,
 ): SalesInvoiceListRow {
-  const kind = mapInvoiceTypeToKind(dto.invoice_type);
+  const kind = mapInvoiceTypeToKind(dto.invoice_type, dto.dispatch?.source_type);
   const status =
     String(dto.status).toUpperCase() === "CANCELLED" ||
     String(dto.status).toUpperCase() === "REVERSED"
@@ -158,12 +165,19 @@ export function mapApiInvoiceToListRow(
           : ("sales_order" as const),
     irn: dto.irn_number || undefined,
     eInvoiceNo: dto.einvoice_status || undefined,
+    ewayBillNo: dto.dispatch?.eway_bill_number || undefined,
   };
   const eInvoiceStatusLabel = resolveListingEInvoiceStatus(
     stubRecord as never,
     kind,
   );
   const ewayBillStatusLabel = resolveListingEWayStatus(stubRecord as never, kind);
+  const canDownloadPi =
+    kind !== "service" && hasPdfValue(dto.dispatch_id);
+  const canDownloadTaxInvoice =
+    canDownloadPi &&
+    hasPdfValue(dto.irn_number) &&
+    hasPdfValue(dto.dispatch?.eway_bill_number);
 
   return {
     id,
@@ -203,7 +217,9 @@ export function mapApiInvoiceToListRow(
     editHref: null,
     canCancel: status !== "cancelled",
     canEdit: false,
-    canPdf: true,
+    canPdf: kind === "service",
+    canDownloadPi,
+    canDownloadTaxInvoice,
     eInvoiceStatusLabel,
     ewayBillStatusLabel,
     eInvoiceDetails: buildEInvoiceDetails(stubRecord as never, eInvoiceStatusLabel),

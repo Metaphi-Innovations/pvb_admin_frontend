@@ -497,6 +497,13 @@ export const API_ENDPOINTS = {
       CREATE_DIRECT_SERVICE: "/accounts/sales-invoice/direct-service",
       PDF: "/accounts/sales-invoice/pdf",
       EXCEL: "/accounts/sales-invoice/excel",
+      PROFORMA_PREVIEW: (id: string) =>
+        `/accounts/sales-invoice/${id}/proforma-preview`,
+      PROFORMA_PDF: (id: string) => `/accounts/sales-invoice/${id}/proforma-pdf`,
+      TAX_INVOICE_PREVIEW: (id: string) =>
+        `/accounts/sales-invoice/${id}/tax-invoice-preview`,
+      TAX_INVOICE_PDF: (id: string) =>
+        `/accounts/sales-invoice/${id}/tax-invoice-pdf`,
     },
     PENDING_INVOICES: {
       LIST: "/accounts/pending-invoices/list",

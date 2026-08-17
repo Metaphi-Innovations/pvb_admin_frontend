@@ -24,7 +24,6 @@ import {
   CheckCircle2,
   TrendingUp,
   ShoppingBag,
-  FileText,
   Package,
   XCircle,
   Clock,
@@ -43,7 +42,6 @@ import ApproveOrderDialog from "./components/ApproveOrderDialog";
 import RejectOrderDialog from "./components/RejectOrderDialog";
 import { SampleReturnTab } from "./components/SampleReturnTab";
 import { useSampleReturns } from "@/hooks/sales/use-return-documents";
-import { downloadProformaInvoicePdf } from "./proforma-pdf/proformaInvoicePdf";
 import {
   type SalesOrder,
   type OrderStatus,
@@ -54,7 +52,6 @@ import {
   ORDER_STATUS_OPTIONS,
   canEditOrder,
   canCancelOrder,
-  canDownloadPI,
   canGeneratePackingList,
   hydrateOrderLineItems,
   isApprovalRelatedOrder,
@@ -353,15 +350,6 @@ export default function SalesOrdersPage() {
 
   const updateStatusMutation = useUpdateSampleOrderStatus();
 
-  const handleDownloadProforma = async (id: string | number) => {
-    try {
-      setToast({ msg: "Opening Proforma Invoice...", type: "success" });
-      await downloadProformaInvoicePdf(id);
-    } catch {
-      setToast({ msg: "Failed to open Proforma Invoice.", type: "error" });
-    }
-  };
-
   const ordersList = listData?.items || [];
   const totalRecords = listData?.total || 0;
 
@@ -563,7 +551,6 @@ export default function SalesOrdersPage() {
         const hydrated = hydrateOrderLineItems(row);
         const editable = canEditOrder(hydrated);
         const cancellable = canCancelOrder(hydrated);
-        const piAllowed = canDownloadPI(hydrated);
         const packingAllowed = canGeneratePackingList(hydrated);
 
         return isApprovalTab ? (
@@ -628,17 +615,6 @@ export default function SalesOrdersPage() {
                 <Edit className="w-3.5 h-3.5 mr-2 shrink-0" /> Edit
               </button>
 
-              <button
-                type="button"
-                disabled={!piAllowed}
-                onClick={() => handleDownloadProforma(hydrated.id)}
-                className={cn(
-                  "flex items-center gap-2 w-full px-2 py-1.5 text-xs transition-colors rounded-sm whitespace-nowrap",
-                  !piAllowed ? "text-muted-foreground/50 cursor-not-allowed" : "text-foreground hover:bg-muted/60"
-                )}
-              >
-                <FileText className="w-3.5 h-3.5 mr-2 shrink-0" /> Download Proforma Invoice
-              </button>
               <button
                 type="button"
                 disabled={!packingAllowed}
