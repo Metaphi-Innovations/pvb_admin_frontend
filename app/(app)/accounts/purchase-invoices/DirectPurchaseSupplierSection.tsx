@@ -3,42 +3,34 @@
 import { useMemo } from "react";
 import { Label } from "@/components/ui/label";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
-import {
-  formatVendorDropdownLabel,
-  formatVendorDropdownSublabel,
-} from "@/lib/masters/entity-display";
-import {
-  vendorMasterToTransactionFields,
-  type VendorTransactionFields,
-} from "@/lib/accounts/transaction-master-fetch";
-import type { Vendor } from "@/app/(app)/masters/vendors/vendor-data";
 import { DP_LABEL_CLASS, DP_SELECT_CLASS } from "./direct-purchase-form-ui";
 
+export type DirectPurchaseSupplierOption = {
+  id: string;
+  name: string;
+  code: string;
+};
+
 export function DirectPurchaseSupplierSection({
-  vendors,
-  vendorId,
-  onVendorSelect,
+  suppliers,
+  supplierId,
+  onSupplierSelect,
   disabled,
 }: {
-  vendors: Vendor[];
-  vendorId: string;
-  onVendorSelect: (id: string, vendorFields: VendorTransactionFields | null) => void;
+  suppliers: DirectPurchaseSupplierOption[];
+  supplierId: string;
+  onSupplierSelect: (id: string) => void;
   disabled?: boolean;
 }) {
   const options = useMemo(
     () =>
-      vendors.map((v) => ({
-        value: String(v.id),
-        label: formatVendorDropdownLabel(v),
-        sublabel: formatVendorDropdownSublabel(v),
+      suppliers.map((s) => ({
+        value: s.id,
+        label: s.name,
+        sublabel: s.code || undefined,
       })),
-    [vendors],
+    [suppliers],
   );
-
-  const handleSelect = (id: string) => {
-    const v = vendors.find((x) => x.id === Number(id));
-    onVendorSelect(id, v ? vendorMasterToTransactionFields(v) : null);
-  };
 
   return (
     <div className="space-y-0.5">
@@ -47,8 +39,8 @@ export function DirectPurchaseSupplierSection({
       </Label>
       <AutocompleteSelect
         options={options}
-        value={vendorId}
-        onChange={handleSelect}
+        value={supplierId}
+        onChange={onSupplierSelect}
         placeholder="Select supplier…"
         searchPlaceholder="Search suppliers…"
         disabled={disabled}

@@ -1,10 +1,9 @@
 "use client";
 
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
-  Pencil,
   FileMinus,
   Truck,
   CheckCircle2,
@@ -15,8 +14,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { PurchaseInvoicePageShell } from "../PurchaseInvoicePageShell";
-import { AccountsVoucherStatusBadge } from "@/components/accounts/AccountsVoucherStatusBadge";
-import { AccountsDocumentWorkflowSection } from "@/components/accounts/AccountsDocumentWorkflowSection";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { DEBIT_NOTES_LIST_PATH } from "@/app/(app)/accounts/debit-notes/note-utils";
 import { formatMoney, formatMoneyOrDash } from "@/lib/accounts/money-format";
@@ -25,20 +22,20 @@ import { LedgerImpactPreview } from "@/components/accounts/LedgerImpactPreview";
 import { cn } from "@/lib/utils";
 import {
   calcPurchaseLineGstSplit,
-  canEditPurchaseInvoice,
-  getPurchaseInvoiceById,
   getPurchaseInvoiceGstBreakup,
-  getPurchaseInvoicePostingStatus,
   isDirectPurchaseInvoice,
   isGrnPurchaseInvoice,
   PURCHASE_SOURCE_TYPE_LABELS,
-  syncPurchaseInvoicePosting,
 } from "../purchase-invoices-data";
+import {
+  PurchaseInvoiceService,
+  mapPurchaseInvoiceDetailToRecord,
+} from "@/services/purchase-invoice.service";
+import type { PurchaseInvoiceRecord } from "../purchase-invoices-data";
 import {
   ITC_CLASSIFICATION_LABELS,
   PURCHASE_NATURE_LABELS,
 } from "../purchase-invoice-direct-utils";
-import { PURCHASE_INVOICE_DIRECT_DEMO_LABELS } from "../purchase-invoice-direct-seed";
 import {
   buildQuantityComparisonsForInvoice,
   detectQuantityMismatch,
@@ -106,17 +103,52 @@ function PaymentBadge({ amountPaid, grandTotal }: { amountPaid: number; grandTot
   );
 }
 
-export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: number }) {
+export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: string }) {
   const router = useRouter();
-  const [refreshKey, setRefreshKey] = useState(0);
-  const invoice = useMemo(() => getPurchaseInvoiceById(invoiceId), [invoiceId, refreshKey]);
-  const refresh = useCallback(() => {
-    setRefreshKey((k) => k + 1);
-    syncPurchaseInvoicePosting(invoiceId);
+  const [invoice, setInvoice] = useState<PurchaseInvoiceRecord | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [cancelling, setCancelling] = useState(false);
+
+  const refresh = useCallback(async () => {
+    setLoadError(null);
+    if (!PurchaseInvoiceService.isUuid(invoiceId)) {
+      setInvoice(null);
+      setLoadError("This purchase invoice is not a live API record.");
+      return;
+    }
+    try {
+      const dto = await PurchaseInvoiceService.getById(invoiceId);
+      setInvoice(mapPurchaseInvoiceDetailToRecord(dto));
+    } catch (e) {
+      setInvoice(null);
+      setLoadError(e instanceof Error ? e.message : "Failed to load purchase invoice.");
+    }
   }, [invoiceId]);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
 
   const isDirect = invoice ? isDirectPurchaseInvoice(invoice) : false;
   const isGrn = invoice ? isGrnPurchaseInvoice(invoice) : false;
+  const recordHref = invoice?.backendId || invoiceId;
+  const postingStatus = invoice?.backendStatus || "POSTED";
+  const canCancel = postingStatus === "POSTED";
+
+  const handleCancel = async () => {
+    if (!canCancel) return;
+    const reason = window.prompt("Reason for cancelling this purchase invoice?");
+    if (!reason?.trim()) return;
+    setCancelling(true);
+    try {
+      await PurchaseInvoiceService.cancel(recordHref, { reason: reason.trim() });
+      await refresh();
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : "Failed to cancel purchase invoice.");
+    } finally {
+      setCancelling(false);
+    }
+  };
 
   const matchStatus = invoice ? resolvePurchaseInvoiceMatchStatus(invoice) : "matched";
   const qtyComparisons = useMemo(
@@ -147,7 +179,7 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: nu
       >
         <div className="flex flex-col items-center py-16">
           <AlertCircle className="w-8 h-8 text-muted-foreground mb-3" />
-          <p className="text-sm font-medium">Purchase invoice #{invoiceId} not found.</p>
+          <p className="text-sm font-medium">{loadError || `Purchase invoice ${invoiceId} not found.`}</p>
           <Button
             variant="outline"
             size="sm"
@@ -167,8 +199,6 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: nu
     isGrn &&
     detectQuantityMismatch(qtyComparisonRows.map((r) => r.comparison)) &&
     matchStatus !== "matched";
-  const demoLabel = PURCHASE_INVOICE_DIRECT_DEMO_LABELS[invoice.id];
-  const postingStatus = getPurchaseInvoicePostingStatus(invoice);
 
   const impactLines = purchaseInvoiceImpactResolved({
     vendorName: invoice.vendorName,
@@ -193,23 +223,23 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: nu
             <ArrowLeft className="w-4 h-4" />
             Back
           </Button>
-          {canEditPurchaseInvoice(invoice) && (
+          {canCancel && (
             <Button
               variant="outline"
               size="sm"
-              className="h-9 text-sm font-medium gap-1.5"
-              onClick={() => router.push(`/accounts/purchase-invoices/${invoice.id}/edit`)}
+              className="h-9 text-sm font-medium gap-1.5 text-red-700 border-red-200 hover:bg-red-50"
+              disabled={cancelling}
+              onClick={() => void handleCancel()}
             >
-              <Pencil className="w-4 h-4" />
-              Edit
+              Cancel Invoice
             </Button>
           )}
-          {isGrn && (
+          {isGrn && postingStatus === "POSTED" && (
             <Button
               variant="outline"
               size="sm"
               className="h-9 text-sm font-medium gap-1.5 text-amber-700 border-amber-200 hover:bg-amber-50"
-              onClick={() => router.push(`${DEBIT_NOTES_LIST_PATH}/new?purchaseInvoiceId=${invoice.id}`)}
+              onClick={() => router.push(`${DEBIT_NOTES_LIST_PATH}/new?purchaseInvoiceId=${recordHref}`)}
             >
               <FileMinus className="w-4 h-4" />
               Debit Note
@@ -246,25 +276,15 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: nu
                 {invoice.grnNo}
               </Badge>
             )}
-            <AccountsVoucherStatusBadge workflow={invoice.workflow} />
             <Badge variant="outline" className="text-xs h-6 capitalize">
-              Posting: {postingStatus}
+              Posting: {postingStatus === "POSTED" ? "Posted" : postingStatus === "CANCELLED" ? "Cancelled" : "Reversed"}
             </Badge>
             <PaymentBadge amountPaid={invoice.amountPaid} grandTotal={invoice.grandTotal} />
           </div>
         </div>
 
-        {demoLabel && (
-          <p className="text-xs text-muted-foreground px-1">Demo: {demoLabel}</p>
-        )}
-
-        {isDirect && (
-          <AccountsDocumentWorkflowSection
-            category="purchase_invoice"
-            documentId={invoice.id}
-            workflow={invoice.workflow}
-            onUpdated={refresh}
-          />
+        {loadError && invoice && (
+          <p className="text-xs text-red-700 px-1">{loadError}</p>
         )}
 
         {/* Document References — GRN only */}
@@ -288,7 +308,7 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: nu
                       router.push(
                         invoice.pendingDebitNoteId
                           ? `${DEBIT_NOTES_LIST_PATH}/${invoice.pendingDebitNoteId}`
-                          : `${DEBIT_NOTES_LIST_PATH}/new?purchaseInvoiceId=${invoice.id}`,
+                          : `${DEBIT_NOTES_LIST_PATH}/new?purchaseInvoiceId=${recordHref}`,
                       )
                     }
                   >

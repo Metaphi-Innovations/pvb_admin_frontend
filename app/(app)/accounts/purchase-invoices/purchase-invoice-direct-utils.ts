@@ -430,6 +430,8 @@ export function emptyDirectLine(defaultItc: ItcClassification = "eligible"): Dir
     expenseLedgerId: null,
     expenseLedgerName: "",
     hsnSac: "",
+    hsnId: null,
+    sacId: null,
     quantity: 1,
     uqc: "NOS",
     rate: 0,

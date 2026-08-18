@@ -493,6 +493,23 @@ export const API_ENDPOINTS = {
       PDF: "/accounts/sales-invoice/pdf",
       EXCEL: "/accounts/sales-invoice/excel",
     },
+    PURCHASE_INVOICE: {
+      LIST: "/accounts/purchase-invoice",
+      FILTER_DROPDOWN: "/accounts/purchase-invoice/filter-dropdown",
+      BY_ID: (id: string) => `/accounts/purchase-invoice/${id}`,
+      CANCEL: (id: string) => `/accounts/purchase-invoice/${id}/cancel`,
+      PREVIEW_NUMBER: "/accounts/purchase-invoice/preview-number",
+      ALLOCATE: "/accounts/purchase-invoice/allocate",
+      ELIGIBLE_GRNS: "/accounts/purchase-invoice/eligible-grns",
+      ELIGIBLE_GRNS_COUNT: "/accounts/purchase-invoice/eligible-grns/count",
+      ELIGIBLE_GRNS_FILTER_DROPDOWN:
+        "/accounts/purchase-invoice/eligible-grns/filter-dropdown",
+      PREPARE_GRN: (grnId: string) =>
+        `/accounts/purchase-invoice/grn/${grnId}/prepare`,
+      CREATE_FROM_GRN: (grnId: string) =>
+        `/accounts/purchase-invoice/from-grn/${grnId}`,
+      CREATE_DIRECT_PURCHASE: "/accounts/purchase-invoice/direct-purchase",
+    },
     PENDING_INVOICES: {
       LIST: "/accounts/pending-invoices/list",
       FILTER_DROPDOWN: "/accounts/pending-invoices/filter-dropdown",

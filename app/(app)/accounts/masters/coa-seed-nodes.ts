@@ -311,6 +311,17 @@ const INDIRECT_EXPENSE_BRANCHES: CoaTreeBranch[] = [
   },
   { name: "Depreciation & Amortisation", code: "4270" },
   { name: "Miscellaneous Expenses", code: "4280" },
+  {
+    name: "Round Off",
+    code: "4290",
+    ledgers: [
+      {
+        name: "Round Off Adjustment",
+        code: "42901",
+        balanceType: "Debit" as const,
+      },
+    ],
+  },
 ];
 
 let _nextId = 100;
@@ -537,6 +548,6 @@ function buildSystemCoaNodes(): ChartOfAccount[] {
 export const SYSTEM_COA_NODES: ChartOfAccount[] = buildSystemCoaNodes();
 
 /** Bump when CA system hierarchy changes — triggers storage reset on mismatch */
-export const COA_SYSTEM_REVISION = 18;
+export const COA_SYSTEM_REVISION = 19;
 
 export const EXPECTED_SYSTEM_NODE_COUNT = SYSTEM_COA_NODES.length;

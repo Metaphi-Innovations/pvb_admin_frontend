@@ -26,6 +26,7 @@ export function DirectPurchaseLineLedgerSelect({
 }) {
   const options = useMemo(() => {
     return getActivePostingLedgers(coaRecords)
+      .filter((ledger) => !ledger.isSystem)
       .filter((ledger) => ledgerMatchesPurchaseNature(ledger, purchaseNature, coaRecords))
       .sort((a, b) => a.accountName.localeCompare(b.accountName))
       .map((ledger) => {

@@ -9,6 +9,8 @@ export interface DirectPurchaseLineItem {
   expenseLedgerId: number | null;
   expenseLedgerName: string;
   hsnSac: string;
+  hsnId?: string | null;
+  sacId?: string | null;
   quantity: number;
   uqc: string;
   rate: number;

@@ -19,6 +19,7 @@ import { DirectPurchaseGstRateSelect } from "./DirectPurchaseGstRateSelect";
 import { DirectPurchaseLineLedgerSelect } from "./DirectPurchaseLineLedgerSelect";
 import type { AutocompleteOption } from "@/components/ui/AutocompleteSelect";
 import { DP_TABLE_INPUT_CLASS } from "./direct-purchase-form-ui";
+import type { HsnDropdownItem } from "@/services/hsn-list.service";
 
 const UQC_SELECT_OPTIONS: AutocompleteOption[] = UQC_OPTIONS.map((u) => ({
   value: u,
@@ -121,6 +122,7 @@ export function PurchaseInvoiceDirectLineTable({
   purchaseNature,
   defaultItc,
   coaRecords,
+  hsnOptions = [],
   readOnly,
 }: {
   lines: DirectPurchaseLineItem[];
@@ -129,6 +131,7 @@ export function PurchaseInvoiceDirectLineTable({
   purchaseNature: PurchaseNature;
   defaultItc: ItcClassification;
   coaRecords: ChartOfAccount[];
+  hsnOptions?: HsnDropdownItem[];
   readOnly?: boolean;
 }) {
   const colSpanBefore = 7;
@@ -218,12 +221,26 @@ export function PurchaseInvoiceDirectLineTable({
                     />
                   </td>
                   <td className={TABLE_CELL}>
-                    <Input
-                      className={cn(DP_TABLE_INPUT_CLASS, "font-mono text-center")}
-                      value={line.hsnSac}
-                      readOnly={readOnly}
-                      onChange={(e) => updateLine(idx, { hsnSac: e.target.value })}
-                      placeholder="HSN"
+                    <DirectPurchaseTableSelect
+                      value={purchaseNature === "service" ? line.sacId || "" : line.hsnId || ""}
+                      disabled={readOnly}
+                      onChange={(id) => {
+                        const picked = hsnOptions.find((h) => h.id === id);
+                        updateLine(idx, {
+                          hsnId: purchaseNature === "service" ? null : id || null,
+                          sacId: purchaseNature === "service" ? id || null : null,
+                          hsnSac: picked?.hsnCode || "",
+                          gstRate: picked?.gstPercentage ?? line.gstRate,
+                        });
+                      }}
+                      options={hsnOptions.map((h) => ({
+                        value: h.id,
+                        label: h.hsnCode,
+                        sublabel: h.hsnDescription,
+                      }))}
+                      placeholder={purchaseNature === "service" ? "SAC" : "HSN"}
+                      searchPlaceholder={purchaseNature === "service" ? "Search SAC…" : "Search HSN…"}
+                      popoverMinWidth={100}
                     />
                   </td>
                   <td className={TABLE_CELL}>

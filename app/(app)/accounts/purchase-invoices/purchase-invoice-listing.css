@@ -1,5 +1,18 @@
-/* Purchase Invoice listing — single page scroll; horizontal scroll only on table wrapper */
+/* Purchase Invoice listing — one scroll region so wheel/touchpad works on the table */
+
+.purchase-invoice-listing,
+.purchase-invoice-listing .accounts-listing-card,
+.purchase-invoice-listing .accounts-listing-table-card {
+  min-height: 0;
+  height: 100%;
+}
+
 .purchase-invoice-listing .accounts-table-scroll {
-  overflow-x: auto;
-  overflow-y: visible;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  /* paint containment can block wheel scrolling in nested flex layouts */
+  contain: none;
+  -webkit-overflow-scrolling: touch;
 }
