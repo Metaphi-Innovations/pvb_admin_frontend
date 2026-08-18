@@ -174,8 +174,8 @@ const SORT_FIELD_MAP: Record<string, string> = {
     district: "district",
     createdAt: "created_at",
     updatedAt: "updated_at",
-    createdBy: "created_by",
-    updatedBy: "updated_by",
+    createdBy: "created_at",
+    updatedBy: "updated_at",
 };
 
 const FILTER_FIELD_MAP: Record<string, string> = {

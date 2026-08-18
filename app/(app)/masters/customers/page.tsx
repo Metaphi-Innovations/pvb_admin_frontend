@@ -38,13 +38,14 @@ import {
 } from "@/components/ui/dialog";
 import {
 	useCustomers,
+	useCustomerSummary,
 	useExportCustomers,
 	useToggleCustomerStatus,
+	useCustomerFilterDropdown,
 } from "@/hooks/masters/use-customers";
 import { readCustomerPermissions } from "./customer-permissions";
 
 import { MasterListing } from "@/components/listing/MasterListing";
-import { applyFilters } from "@/components/listing/filter-utils";
 import {
 	ColumnConfig,
 	FilterState,
@@ -55,6 +56,8 @@ import { ListingAuditCell } from "@/components/listing";
 import { sortStateToOrdering, type CustomerListRecord } from "@/services/customer-list.service";
 import { formatCreditLimit, formatMobile } from "./customer-data";
 import { useCustomerTypeDropdown } from "@/hooks/masters/use-customer-types";
+import { useAppliedListFilters } from "@/lib/masters/use-applied-list-filters";
+import { useLazyFilterColumns } from "@/lib/masters/use-lazy-filter-columns";
 
 function KpiCard({
 	label,
@@ -134,13 +137,17 @@ export default function CustomersPage() {
 	const router = useRouter();
 	const exportCustomers = useExportCustomers();
 	const { data: customerTypes = [] } = useCustomerTypeDropdown();
-	// const customerTypeQuery = useCustomerTypeDropdown();
-
-	// console.log("sdfghj:", customerTypeQuery);
-	const [filters, setFilters] = useState<FilterState>({});
+	const {
+		draftFilters: filters,
+		setDraftFilters: setFilters,
+		appliedFilters,
+		applyFilters,
+		appliedSearch,
+	} = useAppliedListFilters();
+	const { handleOpenFilter, isFilterOpen } = useLazyFilterColumns();
 	const [sort, setSort] = useState<SortState>({
-		key: "customerName",
-		direction: "asc",
+		key: "",
+		direction: "none",
 	});
 	const [toast, setToast] = useState<{
 		msg: string;
@@ -197,6 +204,11 @@ export default function CustomersPage() {
 
 	const toggleStatus = useToggleCustomerStatus();
 
+	const ordering = useMemo(
+		() => sortStateToOrdering(sort.key, sort.direction),
+		[sort.key, sort.direction],
+	);
+
 	const {
 		data,
 		isLoading,
@@ -204,80 +216,80 @@ export default function CustomersPage() {
 	} = useCustomers({
 		page,
 		pageSize,
-		search: String(filters.search ?? ""),
-		ordering: sortStateToOrdering(sort.key, sort.direction),
+		search: appliedSearch,
+		ordering,
 		status: "all",
-		apiFilters: filters,
+		apiFilters: appliedFilters,
 	});
+
+	const { data: summary } = useCustomerSummary();
 
 	const records = data?.items ?? [];
 	const total = data?.total ?? 0;
 
-	const toOptions = (values: Array<string | number | null | undefined>) =>
-		Array.from(
-			new Set(
-				values
-					.map((v) => String(v ?? "").trim())
-					.filter(Boolean),
-			),
-		)
-			.sort((a, b) => a.localeCompare(b))
-			.map((v) => ({ label: v, value: v }));
+	const customerCodeOptionsQuery = useCustomerFilterDropdown("customer_code", {
+		enabled: isFilterOpen("customerCode"),
+	});
+	const customerNameOptionsQuery = useCustomerFilterDropdown("customer_name", {
+		enabled: isFilterOpen("customerName"),
+	});
+	const mobileOptionsQuery = useCustomerFilterDropdown("mobile_no", {
+		enabled: isFilterOpen("mobile"),
+	});
+	const emailOptionsQuery = useCustomerFilterDropdown("email", {
+		enabled: isFilterOpen("email"),
+	});
+	const gstinOptionsQuery = useCustomerFilterDropdown("gstin_no", {
+		enabled: isFilterOpen("gstin"),
+	});
+	const addressOptionsQuery = useCustomerFilterDropdown("billing_address", {
+		enabled: isFilterOpen("address"),
+	});
+	const stateOptionsQuery = useCustomerFilterDropdown("billing_state", {
+		enabled: isFilterOpen("stateName"),
+	});
+	const creditLimitOptionsQuery = useCustomerFilterDropdown("credit_limit", {
+		enabled: isFilterOpen("creditLimit"),
+	});
 
 	const customerCodeOptions = useMemo(
-		() => toOptions(records.map((r) => r.customerCode)),
-		[records],
+		() => customerCodeOptionsQuery.data ?? [],
+		[customerCodeOptionsQuery.data],
 	);
 	const customerNameOptions = useMemo(
-		() => toOptions(records.map((r) => r.customerName)),
-		[records],
+		() => customerNameOptionsQuery.data ?? [],
+		[customerNameOptionsQuery.data],
 	);
 	const mobileOptions = useMemo(
-		() =>
-			toOptions(
-				records.map((r) => formatMobile(r.countryCode, r.mobileNo)),
-			),
-		[records],
+		() => mobileOptionsQuery.data ?? [],
+		[mobileOptionsQuery.data],
 	);
 	const emailOptions = useMemo(
-		() => toOptions(records.map((r) => r.email)),
-		[records],
+		() => emailOptionsQuery.data ?? [],
+		[emailOptionsQuery.data],
 	);
 	const gstinOptions = useMemo(
-		() => toOptions(records.map((r) => r.gstinNo)),
-		[records],
+		() => gstinOptionsQuery.data ?? [],
+		[gstinOptionsQuery.data],
 	);
 	const addressOptions = useMemo(
-		() => {
-			const seen = new Set<string>();
-			const opts: Array<{ label: string; value: string }> = [];
-			for (const row of records) {
-				const label = String(row.address ?? "").trim();
-				if (!label) continue;
-				const value = label.split(",")[0]?.trim() || label;
-				if (!value || seen.has(value)) continue;
-				seen.add(value);
-				opts.push({ label, value });
-			}
-			return opts.sort((a, b) => a.label.localeCompare(b.label));
-		},
-		[records],
+		() => addressOptionsQuery.data ?? [],
+		[addressOptionsQuery.data],
 	);
 	const stateOptions = useMemo(
-		() => toOptions(records.map((r) => r.stateName)),
-		[records],
+		() => stateOptionsQuery.data ?? [],
+		[stateOptionsQuery.data],
 	);
 	const creditLimitOptions = useMemo(
-		() => toOptions(records.map((r) => formatCreditLimit(r.creditLimit ?? 0))),
-		[records],
+		() => creditLimitOptionsQuery.data ?? [],
+		[creditLimitOptionsQuery.data],
 	);
-	const createdByOptions = useMemo(
-		() => toOptions(records.map((r) => r.createdBy)),
-		[records],
-	);
-	const updatedByOptions = useMemo(
-		() => toOptions(records.map((r) => r.updatedBy)),
-		[records],
+	const statusOptions = useMemo(
+		() => [
+			{ label: "Active", value: "active" },
+			{ label: "Inactive", value: "inactive" },
+		],
+		[],
 	);
 
 	const columns: ColumnConfig<CustomerListRecord>[] = [
@@ -307,7 +319,7 @@ export default function CustomersPage() {
 				<div>
 					{perms.canView ? (
 						<Link
-							href={`/masters/customers/${row.id}`}
+							href={`/masters/customers/${row.customerUuid}`}
 							className='block group/name'
 						>
 							<p className='text-xs font-semibold leading-4 text-foreground group-hover/name:text-brand-700'>
@@ -412,12 +424,7 @@ export default function CustomersPage() {
 			sortable: true,
 			filterable: true,
 			filterType: "dropdown",
-			filterOptions: [
-				{ label: "Active", value: "Active" },
-				{ label: "Inactive", value: "Inactive" },
-				{ label: "Draft", value: "draft" },
-				{ label: "Blocked", value: "blocked" },
-			],
+			filterOptions: statusOptions,
 			width: "110px",
 			render: (val, row) => (
 				<DropdownMenu>
@@ -469,8 +476,7 @@ export default function CustomersPage() {
 			header: "Created",
 			sortable: true,
 			filterable: true,
-			filterType: "audit",
-			auditUserOptions: createdByOptions,
+			filterType: "date",
 			width: "120px",
 			render: (val, row) => (
 				<ListingAuditCell name={row.createdBy} date={row.createdAt} variant="created" />
@@ -481,8 +487,7 @@ export default function CustomersPage() {
 			header: "Updated",
 			sortable: true,
 			filterable: true,
-			filterType: "audit",
-			auditUserOptions: updatedByOptions,
+			filterType: "date",
 			width: "120px",
 			render: (val, row) => (
 				<ListingAuditCell name={row.updatedBy} date={row.updatedAt} variant="updated" />
@@ -600,14 +605,20 @@ export default function CustomersPage() {
 
 	useEffect(() => {
 		setPage(1);
-	}, [filters, sort, pageSize]);
+	}, [appliedSearch, appliedFilters, sort.key, sort.direction, pageSize]);
+
+	const handleFilterChange = (next: FilterState) => {
+		setFilters(next);
+		applyFilters(next);
+		setPage(1);
+	};
 
 	const handleExport = () => {
 		exportCustomers.mutate({
-			search: String(filters.search ?? ""),
-			ordering: sortStateToOrdering(sort.key, sort.direction),
+			search: appliedSearch,
+			ordering,
 			status: "all",
-			apiFilters: filters,
+			apiFilters: appliedFilters,
 		});
 	};
 
@@ -615,8 +626,8 @@ export default function CustomersPage() {
 		router.push("/masters/customers/new");
 	};
 
-	const active = records.filter(r => r.status === "active").length;
-	const inactive = records.filter(r => r.status === "inactive").length;
+	const active = summary?.active ?? 0;
+	const inactive = summary?.inactive ?? 0;
 	const blocked = 0;
 	const draft = 0;
 	// const blocked = records.filter((r) => r.status === "blocked").length;
@@ -651,7 +662,7 @@ export default function CustomersPage() {
 				</div>
 
 				<div className='grid grid-cols-2 gap-3 sm:grid-cols-4'>
-					<KpiCard label='Total Customers' value={total} icon={Users} accent />
+					<KpiCard label='Total Customers' value={summary?.total ?? total} icon={Users} accent />
 					<KpiCard
 						label='Active'
 						value={active}
@@ -682,7 +693,7 @@ export default function CustomersPage() {
 					onPageChange={setPage}
 					onPageSizeChange={setPageSize}
 					onSortChange={setSort}
-					onFilterChange={setFilters}
+					onFilterChange={handleFilterChange}
 					actions={actions}
 					onAdd={perms.canCreate ? handleAdd : undefined}
 					addLabel='Add Customer'
@@ -691,6 +702,7 @@ export default function CustomersPage() {
 					searchPlaceholder='Search name, mobile, state…'
 					currentFilters={filters}
 					currentSort={sort}
+					onOpenFilter={handleOpenFilter}
 				/>
 			</div>
 

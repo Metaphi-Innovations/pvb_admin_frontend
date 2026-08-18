@@ -117,7 +117,7 @@ export default function BrandMasterPage() {
     appliedSearch,
   } = useAppliedListFilters();
   const { handleOpenFilter, isFilterOpen } = useLazyFilterColumns();
-  const [sort, setSort] = useState<SortState>({ key: "brandName", direction: "asc" });
+  const [sort, setSort] = useState<SortState>({ key: "", direction: "none" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [toast, setToast] = useState<ToastState | null>(null);
@@ -170,12 +170,6 @@ export default function BrandMasterPage() {
   const brandTypeOptionsQuery = useBrandFilterDropdown("brand_type", { enabled: isFilterOpen("brandType") });
   const remarkOptionsQuery = useBrandFilterDropdown("remark", { enabled: isFilterOpen("remark") });
   const statusOptionsQuery = useBrandFilterDropdown("is_active", { enabled: isFilterOpen("status") });
-  const createdByOptionsQuery = useBrandFilterDropdown("created_by_user__username", {
-    enabled: isFilterOpen("createdBy"),
-  });
-  const updatedByOptionsQuery = useBrandFilterDropdown("updated_by_user__username", {
-    enabled: isFilterOpen("updatedBy"),
-  });
 
   const brandNameOptions = useMemo(
     () => brandNameOptionsQuery.data ?? [],
@@ -196,14 +190,6 @@ export default function BrandMasterPage() {
       { label: "Inactive", value: "inactive" },
     ];
   }, [statusOptionsQuery.data]);
-  const createdByOptions = useMemo(
-    () => createdByOptionsQuery.data ?? [],
-    [createdByOptionsQuery.data],
-  );
-  const updatedByOptions = useMemo(
-    () => updatedByOptionsQuery.data ?? [],
-    [updatedByOptionsQuery.data],
-  );
 
   const formBrandTypeOptions = useMemo(() => {
     if (form.brandType && !brandTypeOptions.some((o) => o.value === form.brandType)) {
@@ -400,8 +386,7 @@ export default function BrandMasterPage() {
         header: "Created",
         sortable: true,
         filterable: true,
-        filterType: "audit",
-        auditUserOptions: createdByOptions,
+        filterType: "date",
         width: "150px",
         render: (_val, row) => (
           <ListingUserCell name={row.createdBy} date={row.createdAt} />
@@ -412,8 +397,7 @@ export default function BrandMasterPage() {
         header: "Updated",
         sortable: true,
         filterable: true,
-        filterType: "audit",
-        auditUserOptions: updatedByOptions,
+        filterType: "date",
         width: "150px",
         render: (_val, row) => (
           <ListingUserCell name={row.updatedBy} date={row.updatedAt} />
@@ -425,8 +409,6 @@ export default function BrandMasterPage() {
       brandTypeOptions,
       remarkOptions,
       statusOptions,
-      createdByOptions,
-      updatedByOptions,
       openView,
     ],
   );

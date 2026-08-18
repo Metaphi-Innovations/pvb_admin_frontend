@@ -41,6 +41,7 @@ import {
   getMasterListErrorMessage,
 } from "@/lib/masters/master-query-errors";
 import type { MasterListKeyParams } from "@/lib/masters/master-query-keys";
+import { sortStateToOrdering } from "@/services/customer-type-list.service";
 import { MasterListing } from "@/components/listing/MasterListing";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
 import { ListingUserCell, ListingStatusToggle, isActiveStatus } from "@/components/listing";
@@ -112,7 +113,7 @@ export default function CustomerTypesPage() {
     appliedSearch,
   } = useAppliedListFilters();
   const { handleOpenFilter, isFilterOpen } = useLazyFilterColumns();
-  const [sort, setSort] = useState<SortState>({ key: "customerType", direction: "asc" });
+  const [sort, setSort] = useState<SortState>({ key: "", direction: "none" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [toast, setToast] = useState<ToastState | null>(null);
@@ -134,9 +135,9 @@ export default function CustomerTypesPage() {
       search: appliedSearch,
       status: listStatus,
       apiFilters,
-      ordering: "",
+      ordering: sortStateToOrdering(sort.key, sort.direction),
     }),
-    [page, pageSize, appliedSearch, listStatus, apiFilters],
+    [page, pageSize, appliedSearch, listStatus, apiFilters, sort.key, sort.direction],
   );
 
   const listQuery = useCustomerTypes(listParams);
@@ -155,12 +156,6 @@ export default function CustomerTypesPage() {
   });
   const statusOptionsQuery = useCustomerTypeFilterDropdown("is_active", {
     enabled: isFilterOpen("status"),
-  });
-  const createdByOptionsQuery = useCustomerTypeFilterDropdown("created_by_user__username", {
-    enabled: isFilterOpen("createdBy"),
-  });
-  const updatedByOptionsQuery = useCustomerTypeFilterDropdown("updated_by_user__username", {
-    enabled: isFilterOpen("updatedBy"),
   });
 
   const customerTypeOptions = useMemo(
@@ -189,14 +184,6 @@ export default function CustomerTypesPage() {
     }
     return merged;
   }, [statusOptionsQuery.data]);
-  const createdByOptions = useMemo(
-    () => createdByOptionsQuery.data ?? [],
-    [createdByOptionsQuery.data],
-  );
-  const updatedByOptions = useMemo(
-    () => updatedByOptionsQuery.data ?? [],
-    [updatedByOptionsQuery.data],
-  );
 
   const records = useMemo(
     () => (listQuery.data?.items ?? []).map(toCustomerTypeRow),
@@ -296,8 +283,7 @@ export default function CustomerTypesPage() {
       header: "Created By",
       sortable: true,
       filterable: true,
-      filterType: "audit",
-      auditUserOptions: createdByOptions,
+      filterType: "date",
       width: "150px",
       render: (_val, row) => (
         <ListingUserCell name={row.createdBy} date={row.createdDate} />
@@ -308,8 +294,7 @@ export default function CustomerTypesPage() {
       header: "Updated By",
       sortable: true,
       filterable: true,
-      filterType: "audit",
-      auditUserOptions: updatedByOptions,
+      filterType: "date",
       width: "150px",
       render: (_val, row) => (
         <ListingUserCell name={row.updatedBy} date={row.updatedDate} />
@@ -331,16 +316,6 @@ export default function CustomerTypesPage() {
       onClick: (row) => router.push(`/masters/customer-types/${routeId(row)}/edit`),
     },
   ];
-
-  const displayRecords = useMemo(() => {
-    if (!sort.key || sort.direction === "none") return records;
-    return [...records].sort((a, b) => {
-      const aVal = String(a[sort.key as keyof CustomerTypeRecord] ?? "").toLowerCase();
-      const bVal = String(b[sort.key as keyof CustomerTypeRecord] ?? "").toLowerCase();
-      const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
-      return sort.direction === "asc" ? cmp : -cmp;
-    });
-  }, [records, sort]);
 
     useEffect(() => {
     setPage(1);
@@ -400,7 +375,7 @@ export default function CustomerTypesPage() {
 
         <MasterListing<CustomerTypeRecord>
           columns={columns}
-          data={displayRecords}
+          data={records}
           loading={loading}
           totalRecords={totalRecords}
           page={page}

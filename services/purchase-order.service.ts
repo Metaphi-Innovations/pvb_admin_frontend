@@ -1,5 +1,6 @@
 import { axiosInstance } from "@/api/axios";
 import { API_ENDPOINTS } from "@/api/endpoints";
+import { openEditablePdfPreview } from "@/lib/pdf/paramverse";
 import { COMPANY_BILLING } from "@/lib/procurement/config";
 import { amountInWords, round2 } from "@/lib/procurement/utils";
 import {
@@ -21,7 +22,6 @@ import type { POFormValues } from "@/app/(app)/procurement/purchase-orders/compo
 import { recalcPO } from "@/app/(app)/procurement/purchase-orders/po-data";
 import type { POFollowUpEntry } from "@/app/(app)/procurement/purchase-orders/po-followup-data";
 import {
-  generateAndPrintPurchaseOrderPdf,
   openPurchaseOrderPdfWindow,
 } from "@/app/(app)/procurement/purchase-orders/po-pdf/poPdfGenerator";
 
@@ -72,6 +72,25 @@ function toDisplayName(user: unknown): string {
 function asRecord(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   return value as Record<string, unknown>;
+}
+
+function triggerBlobDownload(blob: Blob, fileName: string): void {
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => window.URL.revokeObjectURL(url), 2000);
+}
+
+function fileNameFromDisposition(
+  disposition: string | undefined,
+  fallback: string,
+): string {
+  const matched = disposition?.match(/filename="?([^"]+)"?/i);
+  return matched?.[1] || fallback;
 }
 
 function resolveLineQtyFields(line: POLineItem): {
@@ -725,15 +744,54 @@ export const PurchaseOrderService = {
     return data as Record<string, unknown>;
   },
 
+  async fetchPdfPreviewById(
+    id: string,
+    signal?: AbortSignal,
+  ): Promise<{ html: string; fileName: string }> {
+    const response = await axiosInstance.get(
+      API_ENDPOINTS.PROCUREMENT.PURCHASE_ORDER.PREVIEW(id),
+      { signal },
+    );
+    const data = (response.data as Record<string, any>)?.data || {};
+    return {
+      html: String(data.html || ""),
+      fileName: String(data.fileName || "purchase-order.pdf"),
+    };
+  },
+
+  async downloadPdfFileById(
+    id: string,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    const response = await axiosInstance.get(
+      API_ENDPOINTS.PROCUREMENT.PURCHASE_ORDER.PDF(id),
+      { responseType: "blob", signal },
+    );
+    const blob = response.data as Blob;
+    const fileName = fileNameFromDisposition(
+      response.headers?.["content-disposition"] as string | undefined,
+      "purchase-order.pdf",
+    );
+    triggerBlobDownload(blob, fileName);
+  },
+
   async downloadPdfById(
     id: string,
     options?: { signal?: AbortSignal; openedWindow?: Window | null },
   ): Promise<void> {
-    const [po, raw] = await Promise.all([
-      this.getById(id, options?.signal),
-      this.getRawById(id, options?.signal),
-    ]);
-    await generateAndPrintPurchaseOrderPdf(po, raw, options?.openedWindow);
+    const { html, fileName } = await this.fetchPdfPreviewById(id, options?.signal);
+    if (!html.trim()) {
+      throw new Error("Empty Purchase Order preview received from server.");
+    }
+    await openEditablePdfPreview({
+      title: "Purchase Order PDF Preview",
+      initialData: { html },
+      renderHtml: (data) => String(data.html || ""),
+      enableDirectPreviewEditing: false,
+      printButtonLabel: "Download PO PDF",
+      outputFileName: fileName,
+      onDownload: () => this.downloadPdfFileById(id, options?.signal),
+    });
   },
 
   async getPreviewNumber(

@@ -196,11 +196,8 @@ export default function DepartmentPage() {
   const remarksOptionsQuery = useDepartmentFilterDropdown("remark", {
     enabled: isFilterOpen("remarks"),
   });
-  const createdByOptionsQuery = useDepartmentFilterDropdown("created_by_user__username", {
-    enabled: isFilterOpen("createdDate"),
-  });
-  const updatedByOptionsQuery = useDepartmentFilterDropdown("updated_by_user__username", {
-    enabled: isFilterOpen("updatedDate"),
+  const statusOptionsQuery = useDepartmentFilterDropdown("is_active", {
+    enabled: isFilterOpen("status"),
   });
 
   const nameOptions = useMemo(() => nameOptionsQuery.data ?? [], [nameOptionsQuery.data]);
@@ -208,20 +205,9 @@ export default function DepartmentPage() {
     () => remarksOptionsQuery.data ?? [],
     [remarksOptionsQuery.data],
   );
-  const createdByOptions = useMemo(
-    () => createdByOptionsQuery.data ?? [],
-    [createdByOptionsQuery.data],
-  );
-  const updatedByOptions = useMemo(
-    () => updatedByOptionsQuery.data ?? [],
-    [updatedByOptionsQuery.data],
-  );
   const statusOptions = useMemo(
-    () => [
-      { label: "Active", value: "active" },
-      { label: "Inactive", value: "inactive" },
-    ],
-    [],
+    () => statusOptionsQuery.data ?? [],
+    [statusOptionsQuery.data],
   );
 
   const records = useMemo(
@@ -470,8 +456,7 @@ export default function DepartmentPage() {
         header: "Created",
         sortable: true,
         filterable: true,
-        filterType: "audit",
-        auditUserOptions: createdByOptions,
+        filterType: "date",
         render: (_val, row) => (
           <ListingAuditCell name={row.createdBy} date={row.createdDate} variant="created" />
         ),
@@ -481,8 +466,7 @@ export default function DepartmentPage() {
         header: "Updated",
         sortable: true,
         filterable: true,
-        filterType: "audit",
-        auditUserOptions: updatedByOptions,
+        filterType: "date",
         render: (_val, row) => (
           <ListingAuditCell name={row.updatedBy} date={row.updatedDate} variant="updated" />
         ),
@@ -515,7 +499,7 @@ export default function DepartmentPage() {
         ),
       },
     ],
-    [nameOptions, remarksOptions, statusOptions, createdByOptions, updatedByOptions, openView],
+    [nameOptions, remarksOptions, statusOptions, openView],
   );
 
   return (

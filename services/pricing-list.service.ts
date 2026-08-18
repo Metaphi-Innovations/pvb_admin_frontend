@@ -143,8 +143,8 @@ const SORT_FIELD_MAP: Record<string, string> = {
   status: "is_active",
   createdAt: "created_at",
   updatedAt: "updated_at",
-  createdBy: "created_by_user__username",
-  updatedBy: "updated_by_user__username",
+  createdBy: "created_at",
+  updatedBy: "updated_at",
 };
 
 export function sortStateToOrdering(
@@ -333,11 +333,10 @@ function mapSummary(data: Record<string, unknown>): PricingSummary {
 
 export const PricingListService = {
   async list(params: PricingListParams): Promise<PricingListResult> {
-    const ordering = encodeURIComponent(params.ordering ?? "");
     const backendFilters = toBackendFilters(params.apiFilters);
 
     const response = await axiosInstance.post(
-      `${API_ENDPOINTS.MASTER.PRICING.LIST}?page=${params.page}&limit=${params.pageSize}&search=${encodeURIComponent(params.search)}&ordering=${ordering}`,
+      `${API_ENDPOINTS.MASTER.PRICING.LIST}?page=${params.page}&limit=${params.pageSize}&search=${encodeURIComponent(params.search)}&ordering=${encodeURIComponent(params.ordering ?? "")}`,
       { filters: backendFilters },
       { signal: params.signal },
     );
@@ -444,11 +443,10 @@ export const PricingListService = {
   },
 
   async export(params: PricingExportParams): Promise<void> {
-    const ordering = encodeURIComponent(params.ordering ?? "");
     const backendFilters = toBackendFilters(params.apiFilters);
 
     const response = await axiosInstance.post(
-      `${API_ENDPOINTS.MASTER.PRICING.EXPORT}?search=${encodeURIComponent(params.search)}&ordering=${ordering}`,
+      `${API_ENDPOINTS.MASTER.PRICING.EXPORT}?search=${encodeURIComponent(params.search)}&ordering=${encodeURIComponent(params.ordering ?? "")}`,
       { filters: backendFilters },
       { responseType: "blob" },
     );

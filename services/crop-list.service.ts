@@ -173,18 +173,31 @@ function mapFilterOptions(data: unknown[], fieldName: CropFilterField): CropFilt
     const record = row as Record<string, unknown>;
     const raw = record[fieldName];
     const value = asString(raw).trim();
-    if (!value || seen.has(value)) continue;
-    seen.add(value);
+    if (!value) continue;
 
     if (fieldName === "is_active") {
       const active = raw === true || value.toLowerCase() === "true";
+      const optionValue = active ? "active" : "inactive";
+      if (seen.has(optionValue)) continue;
+      seen.add(optionValue);
       options.push({
         label: active ? "Active" : "Inactive",
-        value: active ? "active" : "inactive",
+        value: optionValue,
       });
       continue;
     }
 
+    if (fieldName === "season") {
+      for (const part of parseSeason(value)) {
+        if (seen.has(part)) continue;
+        seen.add(part);
+        options.push({ label: part, value: part });
+      }
+      continue;
+    }
+
+    if (seen.has(value)) continue;
+    seen.add(value);
     options.push({ label: value, value });
   }
 

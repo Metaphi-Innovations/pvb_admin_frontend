@@ -139,7 +139,7 @@ export default function FormulationMasterPage() {
     appliedSearch,
   } = useAppliedListFilters();
   const { handleOpenFilter, isFilterOpen } = useLazyFilterColumns();
-  const [sort, setSort] = useState<SortState>({ key: "formulationName", direction: "asc" });
+  const [sort, setSort] = useState<SortState>({ key: "", direction: "none" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [toast, setToast] = useState<ToastState | null>(null);
@@ -197,12 +197,6 @@ export default function FormulationMasterPage() {
   const statusOptionsQuery = useFormulationFilterDropdown("is_active", {
     enabled: isFilterOpen("status"),
   });
-  const createdByOptionsQuery = useFormulationFilterDropdown("created_by_user__username", {
-    enabled: isFilterOpen("createdBy"),
-  });
-  const updatedByOptionsQuery = useFormulationFilterDropdown("updated_by_user__username", {
-    enabled: isFilterOpen("updatedBy"),
-  });
 
   const formulationNameOptions = useMemo(
     () => nameOptionsQuery.data ?? [],
@@ -219,14 +213,6 @@ export default function FormulationMasterPage() {
       { label: "Inactive", value: "inactive" },
     ];
   }, [statusOptionsQuery.data]);
-  const createdByOptions = useMemo(
-    () => createdByOptionsQuery.data ?? [],
-    [createdByOptionsQuery.data],
-  );
-  const updatedByOptions = useMemo(
-    () => updatedByOptionsQuery.data ?? [],
-    [updatedByOptionsQuery.data],
-  );
 
   const records = useMemo(
     () => (listQuery.data?.items ?? []).map(toFormulationRow),
@@ -403,8 +389,7 @@ export default function FormulationMasterPage() {
         header: "Created By",
         sortable: true,
         filterable: true,
-        filterType: "audit",
-        auditUserOptions: createdByOptions,
+        filterType: "date",
         width: "150px",
         render: (_val, row) => (
           <ListingUserCell name={row.createdBy} date={row.createdAt} />
@@ -415,8 +400,7 @@ export default function FormulationMasterPage() {
         header: "Updated By",
         sortable: true,
         filterable: true,
-        filterType: "audit",
-        auditUserOptions: updatedByOptions,
+        filterType: "date",
         width: "150px",
         render: (_val, row) => (
           <ListingUserCell name={row.updatedBy} date={row.updatedAt} />
@@ -427,8 +411,6 @@ export default function FormulationMasterPage() {
       formulationNameOptions,
       descriptionOptions,
       statusOptions,
-      createdByOptions,
-      updatedByOptions,
       openView,
     ],
   );

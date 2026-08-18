@@ -157,7 +157,7 @@ export default function UomPageClient() {
     appliedSearch,
   } = useAppliedListFilters();
   const { handleOpenFilter, isFilterOpen } = useLazyFilterColumns();
-  const [sort, setSort] = useState<SortState>({ key: "unitName", direction: "asc" });
+  const [sort, setSort] = useState<SortState>({ key: "", direction: "none" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [toast, setToast] = useState<ToastState | null>(null);
@@ -218,12 +218,6 @@ export default function UomPageClient() {
     enabled: isFilterOpen("conversionFactor"),
   });
   const statusOptionsQuery = useUnitFilterDropdown("is_active", { enabled: isFilterOpen("status") });
-  const createdByOptionsQuery = useUnitFilterDropdown("created_by_user__username", {
-    enabled: isFilterOpen("createdBy"),
-  });
-  const updatedByOptionsQuery = useUnitFilterDropdown("updated_by_user__username", {
-    enabled: isFilterOpen("updatedBy"),
-  });
 
   const unitNameOptions = useMemo(() => unitNameOptionsQuery.data ?? [], [unitNameOptionsQuery.data]);
   const shortNameOptions = useMemo(() => shortNameOptionsQuery.data ?? [], [shortNameOptionsQuery.data]);
@@ -242,14 +236,6 @@ export default function UomPageClient() {
       { label: "Inactive", value: "inactive" },
     ];
   }, [statusOptionsQuery.data]);
-  const createdByOptions = useMemo(
-    () => createdByOptionsQuery.data ?? [],
-    [createdByOptionsQuery.data],
-  );
-  const updatedByOptions = useMemo(
-    () => updatedByOptionsQuery.data ?? [],
-    [updatedByOptionsQuery.data],
-  );
 
   const parentUomSelectOptions = useMemo(() => {
     const fromApi = parentUomQuery.data ?? [];
@@ -446,8 +432,7 @@ export default function UomPageClient() {
         header: "Created By",
         sortable: true,
         filterable: true,
-        filterType: "audit",
-        auditUserOptions: createdByOptions,
+        filterType: "date",
         width: "150px",
         render: (_val, row) => (
           <ListingUserCell name={row.createdBy} date={row.createdAt} />
@@ -458,8 +443,7 @@ export default function UomPageClient() {
         header: "Updated By",
         sortable: true,
         filterable: true,
-        filterType: "audit",
-        auditUserOptions: updatedByOptions,
+        filterType: "date",
         width: "150px",
         render: (_val, row) => (
           <ListingUserCell name={row.updatedBy} date={row.updatedAt} />
@@ -472,8 +456,6 @@ export default function UomPageClient() {
       parentUomFilterOptions,
       conversionOptions,
       statusOptions,
-      createdByOptions,
-      updatedByOptions,
       openView,
     ],
   );

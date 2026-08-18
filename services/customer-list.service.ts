@@ -165,6 +165,12 @@ export interface CustomerListResult {
     total: number;
 }
 
+export interface CustomerSummary {
+    total: number;
+    active: number;
+    inactive: number;
+}
+
 export interface CustomerListParams {
     page: number;
     pageSize: number;
@@ -181,6 +187,23 @@ export interface CustomerExportParams {
     ordering?: string;
     apiFilters?: Record<string, unknown>;
 }
+
+export interface CustomerFilterOption {
+    label: string;
+    value: string;
+}
+
+export type CustomerFilterField =
+    | "customer_code"
+    | "customer_name"
+    | "mobile_no"
+    | "email"
+    | "gstin_no"
+    | "customer_type_id"
+    | "credit_limit"
+    | "billing_address"
+    | "billing_state"
+    | "is_active";
 
 export interface CustomerDropdownItem {
     customer_id: string;
@@ -231,23 +254,23 @@ const SORT_FIELD_MAP: Record<string, string> = {
     mobile: "mobile_no",
     mobileNo: "mobile_no",
     email: "email",
+    gstin: "gstin_no",
     paymentType: "payment_type",
     creditLimit: "credit_limit",
     creditDays: "credit_days",
-    status: "status",
+    status: "is_active",
     address: "address",
+    stateName: "state",
     createdBy: "created_at",
     updatedBy: "updated_at",
 };
 
 const createdByAuditMapper = createFlatDateAuditFieldMapper({
-    userField: "created_by_user.username",
     fromKey: "created_at_from",
     toKey: "created_at_to",
 });
 
 const updatedByAuditMapper = createFlatDateAuditFieldMapper({
-    userField: "updated_by_user.username",
     fromKey: "updated_at_from",
     toKey: "updated_at_to",
 });
@@ -315,6 +338,23 @@ function mapFilters(filters: Record<string, unknown> = {}) {
             const raw = String(Array.isArray(value) ? value[0] : value).trim();
             const digits = raw.replace(/^\+\d+\s*/, "").replace(/\D/g, "");
             if (digits) mapped.mobile_no = digits;
+            continue;
+        }
+
+        if (key === "creditLimit") {
+            const raw = String(Array.isArray(value) ? value[0] : value)
+                .replace(/[₹,\s]/g, "")
+                .trim();
+            const num = Number(raw);
+            if (Number.isFinite(num)) mapped.credit_limit = num;
+            continue;
+        }
+
+        if (key === "status") {
+            const raw = String(Array.isArray(value) ? value[0] : value).trim().toLowerCase();
+            if (raw === "active") mapped.status = "Active";
+            else if (raw === "inactive") mapped.status = "Inactive";
+            else if (raw) mapped.status = raw;
             continue;
         }
 
@@ -486,6 +526,49 @@ function mapDetail(raw: Record<string, unknown>): CustomerListRecord {
     return mapped;
 }
 
+function mapFilterOptions(
+    data: unknown[],
+    fieldName: CustomerFilterField,
+): CustomerFilterOption[] {
+    const options: CustomerFilterOption[] = [];
+    const seen = new Set<string>();
+
+    for (const row of data) {
+        if (!row || typeof row !== "object") continue;
+        const record = row as Record<string, unknown>;
+        const responseKey =
+            fieldName === "billing_address"
+                ? "branches__billing_address_line_1"
+                : fieldName === "billing_state"
+                    ? "branches__billing_state"
+                    : fieldName;
+        const raw = record[responseKey] ?? record[fieldName];
+        const value = asString(raw).trim();
+        if (!value || seen.has(value)) continue;
+        seen.add(value);
+
+        if (fieldName === "is_active") {
+            const active = raw === true || value.toLowerCase() === "true";
+            options.push({
+                label: active ? "Active" : "Inactive",
+                value: active ? "active" : "inactive",
+            });
+            continue;
+        }
+
+        if (fieldName === "credit_limit") {
+            const num = Number(value);
+            const label = Number.isFinite(num) ? String(num) : value;
+            options.push({ label, value: label });
+            continue;
+        }
+
+        options.push({ label: value, value });
+    }
+
+    return options.sort((a, b) => a.label.localeCompare(b.label));
+}
+
 function extractErrorMessage(error: unknown, fallback: string): string {
     const err = error as {
         response?: { data?: { message?: string; error?: string } };
@@ -510,10 +593,8 @@ export function buildFileKey(branchIndex: number, documentTypeId: string): strin
 
 export const CustomerListService = {
     async list(params: CustomerListParams): Promise<CustomerListResult> {
-        const ordering = encodeURIComponent(params.ordering ?? "");
-
         const response = await axiosInstance.post(
-            `${API_ENDPOINTS.MASTER.CUSTOMER.LIST}?page=${params.page}&limit=${params.pageSize}&search=${encodeURIComponent(params.search)}&ordering=${ordering}`,
+            `${API_ENDPOINTS.MASTER.CUSTOMER.LIST}?page=${params.page}&page_size=${params.pageSize}&search=${encodeURIComponent(params.search)}&ordering=${encodeURIComponent(params.ordering ?? "")}`,
             { filters: mapFilters(params.apiFilters) },
             { signal: params.signal },
         );
@@ -649,11 +730,25 @@ export const CustomerListService = {
         }
     },
 
-    async export(params: CustomerExportParams): Promise<void> {
-        const ordering = encodeURIComponent(params.ordering ?? "");
+    async getSummary(signal?: AbortSignal): Promise<CustomerSummary> {
+        const response = await axiosInstance.get(
+            API_ENDPOINTS.MASTER.CUSTOMER.SUMMARY,
+            { signal },
+        );
 
+        const payload = response.data as Record<string, unknown>;
+        const data = (payload.data ?? payload) as Record<string, unknown>;
+
+        return {
+            total: Number(data.totalCustomers ?? data.total ?? 0),
+            active: Number(data.activeCustomers ?? data.active ?? 0),
+            inactive: Number(data.inactiveCustomers ?? data.inactive ?? 0),
+        };
+    },
+
+    async export(params: CustomerExportParams): Promise<void> {
         const response = await axiosInstance.post(
-            `${API_ENDPOINTS.MASTER.CUSTOMER.EXPORT}?search=${encodeURIComponent(params.search)}&ordering=${ordering}`,
+            `${API_ENDPOINTS.MASTER.CUSTOMER.EXPORT}?search=${encodeURIComponent(params.search)}&ordering=${encodeURIComponent(params.ordering ?? "")}`,
             { filters: mapFilters(params.apiFilters) },
             { responseType: "blob" },
         );
@@ -667,6 +762,27 @@ export const CustomerListService = {
         link.click();
         link.remove();
         window.URL.revokeObjectURL(url);
+    },
+
+    async getFilterDropdown(
+        fieldName: CustomerFilterField,
+        signal?: AbortSignal,
+    ): Promise<CustomerFilterOption[]> {
+        const response = await axiosInstance.get(
+            API_ENDPOINTS.MASTER.CUSTOMER.FILTER_DROPDOWN,
+            {
+                params: { field_name: fieldName },
+                signal,
+            },
+        );
+
+        const payload = response.data as Record<string, unknown>;
+        const data = payload.data;
+        if (!Array.isArray(data)) {
+            throw new Error("Unexpected response shape: 'data' must be an array.");
+        }
+
+        return mapFilterOptions(data, fieldName);
     },
 
     async dropdown(): Promise<CustomerDropdownItem[]> {

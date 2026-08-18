@@ -137,11 +137,8 @@ export default function EmployeeListingPage() {
     enabled: isFilterOpen("employeeType"),
   });
   const roleTypeOptionsQuery = useUserFilterDropdown("role_type", { enabled: isFilterOpen("roleType") });
-  const createdByOptionsQuery = useUserFilterDropdown("created_by_user__username", {
-    enabled: isFilterOpen("createdBy"),
-  });
-  const updatedByOptionsQuery = useUserFilterDropdown("updated_by_user__username", {
-    enabled: isFilterOpen("updatedBy"),
+  const statusOptionsQuery = useUserFilterDropdown("is_active", {
+    enabled: isFilterOpen("status"),
   });
 
   const employeeIdOptions = employeeIdOptionsQuery.data ?? [];
@@ -153,14 +150,9 @@ export default function EmployeeListingPage() {
   const employeeTypeOptions = employeeTypeOptionsQuery.data ?? [];
   const roleTypeOptions = roleTypeOptionsQuery.data ?? [];
   const statusOptions = useMemo(
-    () => [
-      { label: "Active", value: "active" },
-      { label: "Inactive", value: "inactive" },
-    ],
-    [],
+    () => statusOptionsQuery.data ?? [],
+    [statusOptionsQuery.data],
   );
-  const createdByOptions = createdByOptionsQuery.data ?? [];
-  const updatedByOptions = updatedByOptionsQuery.data ?? [];
 
   const listStatus = resolveListStatus(appliedFilters, "all");
   const apiFilters = useMemo(
@@ -373,8 +365,7 @@ export default function EmployeeListingPage() {
         header: "Created By",
         sortable: true,
         filterable: true,
-        filterType: "audit",
-        auditUserOptions: createdByOptions,
+        filterType: "date",
         render: (_val, row) => (
           <ListingUserCell name={row.createdBy} date={row.createdDate} />
         ),
@@ -384,8 +375,7 @@ export default function EmployeeListingPage() {
         header: "Updated By",
         sortable: true,
         filterable: true,
-        filterType: "audit",
-        auditUserOptions: updatedByOptions,
+        filterType: "date",
         render: (_val, row) => (
           <ListingUserCell name={row.updatedBy} date={row.updatedDate} />
         ),
@@ -434,8 +424,6 @@ export default function EmployeeListingPage() {
       employeeTypeOptions,
       roleTypeOptions,
       statusOptions,
-      createdByOptions,
-      updatedByOptions,
       router,
     ],
   );

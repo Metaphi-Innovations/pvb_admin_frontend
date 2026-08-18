@@ -116,7 +116,7 @@ export default function CropMasterPage() {
     appliedSearch,
   } = useAppliedListFilters();
   const { handleOpenFilter, isFilterOpen } = useLazyFilterColumns();
-  const [sort, setSort] = useState<SortState>({ key: "cropName", direction: "asc" });
+  const [sort, setSort] = useState<SortState>({ key: "", direction: "none" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [toast, setToast] = useState<ToastState | null>(null);
@@ -166,13 +166,8 @@ export default function CropMasterPage() {
   const exportMutation = useExportCrops();
 
   const cropNameOptionsQuery = useCropFilterDropdown("crop_name", { enabled: isFilterOpen("cropName") });
+  const seasonOptionsQuery = useCropFilterDropdown("season", { enabled: isFilterOpen("season") });
   const statusOptionsQuery = useCropFilterDropdown("is_active", { enabled: isFilterOpen("status") });
-  const createdByOptionsQuery = useCropFilterDropdown("created_by_user__username", {
-    enabled: isFilterOpen("createdBy"),
-  });
-  const updatedByOptionsQuery = useCropFilterDropdown("updated_by_user__username", {
-    enabled: isFilterOpen("updatedBy"),
-  });
 
   const cropNameOptions = useMemo(
     () => cropNameOptionsQuery.data ?? [],
@@ -186,10 +181,10 @@ export default function CropMasterPage() {
     () => CATEGORIES.map((value) => ({ label: value, value })),
     [],
   );
-  const seasonOptions = useMemo(
-    () => SEASONS.map((value) => ({ label: value, value })),
-    [],
-  );
+  const seasonOptions = useMemo(() => {
+    if (seasonOptionsQuery.data?.length) return seasonOptionsQuery.data;
+    return SEASONS.map((value) => ({ label: value, value }));
+  }, [seasonOptionsQuery.data]);
   const statusOptions = useMemo(() => {
     if (statusOptionsQuery.data?.length) return statusOptionsQuery.data;
     return [
@@ -197,14 +192,6 @@ export default function CropMasterPage() {
       { label: "Inactive", value: "inactive" },
     ];
   }, [statusOptionsQuery.data]);
-  const createdByOptions = useMemo(
-    () => createdByOptionsQuery.data ?? [],
-    [createdByOptionsQuery.data],
-  );
-  const updatedByOptions = useMemo(
-    () => updatedByOptionsQuery.data ?? [],
-    [updatedByOptionsQuery.data],
-  );
 
   const records = useMemo(
     () => (listQuery.data?.items ?? []).map(toCropRecord),
@@ -399,8 +386,7 @@ export default function CropMasterPage() {
         header: "Created",
         sortable: true,
         filterable: true,
-        filterType: "audit",
-        auditUserOptions: createdByOptions,
+        filterType: "date",
         width: "150px",
         render: (_val, row) => (
           <ListingUserCell name={row.createdBy} date={row.createdAt} />
@@ -411,8 +397,7 @@ export default function CropMasterPage() {
         header: "Updated",
         sortable: true,
         filterable: true,
-        filterType: "audit",
-        auditUserOptions: updatedByOptions,
+        filterType: "date",
         width: "150px",
         render: (_val, row) => (
           <ListingUserCell name={row.updatedBy} date={row.updatedAt} />
@@ -425,8 +410,6 @@ export default function CropMasterPage() {
       categoryOptions,
       seasonOptions,
       statusOptions,
-      createdByOptions,
-      updatedByOptions,
       openView,
     ],
   );
