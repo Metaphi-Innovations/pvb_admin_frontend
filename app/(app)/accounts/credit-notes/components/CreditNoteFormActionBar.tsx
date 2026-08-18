@@ -11,9 +11,14 @@ export function CreditNoteFormActionBar({
   status,
   busy,
   canCancel,
+  approvalRequired = true,
+  configReady = true,
+  isPendingGenerate = false,
+  hasExistingId = false,
   onDiscard,
   onSaveDraft,
   onSubmitForApproval,
+  onSaveAndPost,
   onApprove,
   onReject,
   onPost,
@@ -22,9 +27,14 @@ export function CreditNoteFormActionBar({
   status?: CreditNoteStatus | string | null;
   busy?: boolean;
   canCancel?: boolean;
+  approvalRequired?: boolean;
+  configReady?: boolean;
+  isPendingGenerate?: boolean;
+  hasExistingId?: boolean;
   onDiscard: () => void;
   onSaveDraft?: () => void;
   onSubmitForApproval?: () => void;
+  onSaveAndPost?: () => void;
   onApprove?: () => void;
   onReject?: () => void;
   onPost?: () => void;
@@ -36,6 +46,9 @@ export function CreditNoteFormActionBar({
   const approved = st === "APPROVED";
   const posted = st === "POSTED";
   const cancelled = st === "CANCELLED" || st === "REVERSED";
+  const bypass = configReady && approvalRequired === false;
+  const saveDraftLabel = isPendingGenerate && !hasExistingId ? "Generate Draft" : "Save Draft";
+  const saveAndPostLabel = isPendingGenerate && !hasExistingId ? "Generate & Post" : "Save & Post";
 
   return (
     <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between w-full">
@@ -63,72 +76,112 @@ export function CreditNoteFormActionBar({
           </Button>
         ) : null}
       </div>
-      <div className="flex items-center gap-2 flex-wrap justify-end w-full sm:w-auto">
-        {draftLike ? (
-          <>
-            {onSaveDraft ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className={BTN}
-                onClick={onSaveDraft}
-                disabled={busy}
-              >
-                <Save className="w-3.5 h-3.5" /> Save Draft
-              </Button>
-            ) : null}
-            {onSubmitForApproval ? (
-              <Button
-                type="button"
-                size="sm"
-                className={cn(BTN, "bg-brand-600 hover:bg-brand-700 text-white")}
-                onClick={onSubmitForApproval}
-                disabled={busy}
-              >
-                <Send className="w-3.5 h-3.5" /> Submit for Approval
-              </Button>
-            ) : null}
-          </>
+      <div className="flex flex-col items-stretch sm:items-end gap-1 w-full sm:w-auto">
+        {bypass ? (
+          <p className="text-[11px] text-muted-foreground sm:text-right">
+            Approval is temporarily disabled for Phase 1.
+          </p>
         ) : null}
-        {pendingApproval ? (
-          <>
-            {onReject ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className={cn(BTN, "text-red-600 border-red-200")}
-                onClick={onReject}
-                disabled={busy}
-              >
-                Reject
-              </Button>
-            ) : null}
-            {onApprove ? (
-              <Button
-                type="button"
-                size="sm"
-                className={cn(BTN, "bg-brand-600 hover:bg-brand-700 text-white")}
-                onClick={onApprove}
-                disabled={busy}
-              >
-                <Check className="w-3.5 h-3.5" /> Approve
-              </Button>
-            ) : null}
-          </>
-        ) : null}
-        {approved && onPost ? (
-          <Button
-            type="button"
-            size="sm"
-            className={cn(BTN, "bg-brand-600 hover:bg-brand-700 text-white")}
-            onClick={onPost}
-            disabled={busy}
-          >
-            <Save className="w-3.5 h-3.5" /> Post Credit Note
-          </Button>
-        ) : null}
+        <div className="flex items-center gap-2 flex-wrap justify-end w-full sm:w-auto">
+          {draftLike ? (
+            <>
+              {onSaveDraft ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className={BTN}
+                  onClick={onSaveDraft}
+                  disabled={busy}
+                >
+                  <Save className="w-3.5 h-3.5" /> {bypass ? saveDraftLabel : "Save Draft"}
+                </Button>
+              ) : null}
+              {!bypass && onSubmitForApproval ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  className={cn(BTN, "bg-brand-600 hover:bg-brand-700 text-white")}
+                  onClick={onSubmitForApproval}
+                  disabled={busy}
+                >
+                  <Send className="w-3.5 h-3.5" /> Submit for Approval
+                </Button>
+              ) : null}
+              {bypass && onSaveAndPost ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  className={cn(BTN, "bg-brand-600 hover:bg-brand-700 text-white")}
+                  onClick={onSaveAndPost}
+                  disabled={busy}
+                >
+                  <Save className="w-3.5 h-3.5" /> {saveAndPostLabel}
+                </Button>
+              ) : null}
+              {bypass && !onSaveAndPost && onPost ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  className={cn(BTN, "bg-brand-600 hover:bg-brand-700 text-white")}
+                  onClick={onPost}
+                  disabled={busy}
+                >
+                  <Save className="w-3.5 h-3.5" /> Post Credit Note
+                </Button>
+              ) : null}
+            </>
+          ) : null}
+          {pendingApproval && !bypass ? (
+            <>
+              {onReject ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className={cn(BTN, "text-red-600 border-red-200")}
+                  onClick={onReject}
+                  disabled={busy}
+                >
+                  Reject
+                </Button>
+              ) : null}
+              {onApprove ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  className={cn(BTN, "bg-brand-600 hover:bg-brand-700 text-white")}
+                  onClick={onApprove}
+                  disabled={busy}
+                >
+                  <Check className="w-3.5 h-3.5" /> Approve
+                </Button>
+              ) : null}
+            </>
+          ) : null}
+          {pendingApproval && bypass && onPost ? (
+            <Button
+              type="button"
+              size="sm"
+              className={cn(BTN, "bg-brand-600 hover:bg-brand-700 text-white")}
+              onClick={onPost}
+              disabled={busy}
+            >
+              <Save className="w-3.5 h-3.5" /> Post Credit Note
+            </Button>
+          ) : null}
+          {approved && onPost ? (
+            <Button
+              type="button"
+              size="sm"
+              className={cn(BTN, "bg-brand-600 hover:bg-brand-700 text-white")}
+              onClick={onPost}
+              disabled={busy}
+            >
+              <Save className="w-3.5 h-3.5" /> Post Credit Note
+            </Button>
+          ) : null}
+        </div>
       </div>
     </div>
   );

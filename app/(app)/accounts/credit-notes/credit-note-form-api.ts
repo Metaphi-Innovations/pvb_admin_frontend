@@ -4,6 +4,7 @@ import type { ApiResponse } from "@/types/api.types";
 import type {
   CreateDirectCreditNotePayload,
   CreateFromPendingPayload,
+  CreditNoteApprovalConfig,
   CreditNoteDetail,
   PendingCreditNoteDetail,
   SchemeTypeLedgerMapping,
@@ -26,6 +27,24 @@ function unwrapData<T>(response: { data?: ApiResponse<T> | T }): T {
   return body as T;
 }
 
+function errorBlob(error: unknown): string {
+  const err = error as {
+    message?: string;
+    error?: string;
+    validation_errors?: Array<{ message?: string; path?: string }>;
+    response?: { data?: { message?: string; error?: string } };
+  };
+  return [
+    err?.message,
+    err?.error,
+    err?.response?.data?.message,
+    err?.response?.data?.error,
+    err?.validation_errors?.[0]?.message,
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
 export function creditNoteApiError(error: unknown, fallback: string): string {
   const err = error as {
     message?: string;
@@ -35,16 +54,48 @@ export function creditNoteApiError(error: unknown, fallback: string): string {
   };
   const validation = err?.validation_errors?.[0]?.message;
   if (validation) return validation;
-  return (
+  const message =
     err?.message ||
     err?.error ||
     err?.response?.data?.message ||
     err?.response?.data?.error ||
-    fallback
-  );
+    fallback;
+  const code = err?.error || err?.response?.data?.error;
+  if (code && /^[A-Z][A-Z0-9_]+$/.test(code) && !message.includes(code)) {
+    return `${code}: ${message}`;
+  }
+  return message;
+}
+
+export function creditNoteErrorIncludes(error: unknown, code: string): boolean {
+  return errorBlob(error).includes(code);
+}
+
+function unwrapCreditNoteDetail(data: unknown): CreditNoteDetail {
+  if (data && typeof data === "object") {
+    const rec = data as { credit_note?: CreditNoteDetail; credit_note_id?: string };
+    if (rec.credit_note && typeof rec.credit_note === "object" && rec.credit_note.credit_note_id) {
+      return rec.credit_note;
+    }
+    if (typeof rec.credit_note_id === "string" && rec.credit_note_id) {
+      return data as CreditNoteDetail;
+    }
+  }
+  throw new Error("CREDIT_NOTE_ID_MISSING: The server did not return a Credit Note id.");
 }
 
 export const CreditNoteFormApi = {
+  async getConfig(): Promise<CreditNoteApprovalConfig> {
+    const response = await axiosInstance.get<ApiResponse<CreditNoteApprovalConfig>>(
+      `${CN}/config`,
+    );
+    const data = unwrapData(response) as CreditNoteApprovalConfig | undefined;
+    return {
+      // Missing/invalid payload must not enable bypass.
+      approval_required: data?.approval_required !== false,
+    };
+  },
+
   async getPendingById(id: string): Promise<PendingCreditNoteDetail> {
     const response = await axiosInstance.get<ApiResponse<PendingCreditNoteDetail>>(
       `${CN}/pending/${id}`,
@@ -64,7 +115,7 @@ export const CreditNoteFormApi = {
       `${CN}/direct`,
       payload,
     );
-    return unwrapData(response);
+    return unwrapCreditNoteDetail(unwrapData(response));
   },
 
   async createFromPending(
@@ -75,7 +126,7 @@ export const CreditNoteFormApi = {
       `${CN}/from-pending/${pendingId}`,
       payload,
     );
-    return unwrapData(response);
+    return unwrapCreditNoteDetail(unwrapData(response));
   },
 
   async updateDraft(
@@ -86,7 +137,7 @@ export const CreditNoteFormApi = {
       `${CN}/${id}`,
       payload,
     );
-    return unwrapData(response);
+    return unwrapCreditNoteDetail(unwrapData(response));
   },
 
   async submit(id: string, approverId: string): Promise<CreditNoteDetail> {
@@ -117,11 +168,7 @@ export const CreditNoteFormApi = {
     const response = await axiosInstance.post<
       ApiResponse<CreditNoteDetail | { credit_note?: CreditNoteDetail }>
     >(`${CN}/${id}/post`, {});
-    const data = unwrapData(response);
-    if (data && typeof data === "object" && "credit_note" in data && data.credit_note) {
-      return data.credit_note;
-    }
-    return data as CreditNoteDetail;
+    return unwrapCreditNoteDetail(unwrapData(response));
   },
 
   async cancel(id: string, reason: string): Promise<CreditNoteDetail> {

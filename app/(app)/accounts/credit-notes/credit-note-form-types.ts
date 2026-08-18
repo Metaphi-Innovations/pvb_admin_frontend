@@ -285,6 +285,10 @@ export interface CreateFromPendingPayload {
   remarks?: string | null;
 }
 
+export interface CreditNoteApprovalConfig {
+  approval_required: boolean;
+}
+
 export interface SchemeTypeLedgerMapping {
   scheme_type: string;
   ledger_id?: string;
