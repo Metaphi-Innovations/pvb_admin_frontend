@@ -32,7 +32,6 @@ import {
   getDispatchFilterDropdown,
   updateDispatchStatus,
   getDispatchById,
-  allocateSalesInvoiceNumber,
   allocateStockTransferInvoiceNumber,
   buildDispatchApiFilters,
   buildDispatchOrdering,
@@ -42,10 +41,6 @@ import {
 import {
   openDeliveryChallanPreviewForDispatch,
 } from "./dc-pdf/deliveryChallanPdf";
-import {
-  mapDispatchToTaxInvoice,
-  openEditableTaxInvoicePreview,
-} from "./tax-invoice-pdf/taxInvoicePdf";
 import {
   mapDispatchToStockTransfer,
   openEditableStockTransferPreview,
@@ -576,58 +571,6 @@ export function DispatchListing({ selectedWarehouse = "All" }: DispatchListingPr
           },
         },
       ],
-    },
-    {
-      label: "Download Tax Invoice",
-      action: "tax_invoice",
-      icon: FileText,
-      onClick: async (row) => {
-        try {
-          const detail = await getDispatchById(row.id);
-          const source = detail || row;
-          let salesOrder: Record<string, unknown> | null = null;
-          const sourceId = source.source_id || source.sourceId;
-          const sourceType = String(source.source_type || "").toLowerCase();
-          if (sourceId && (sourceType === "normal_sales" || sourceType === "sales_order")) {
-            try {
-              const soRes = await axiosInstance.get(
-                API_ENDPOINTS.SALES.SALES_ORDER.DETAILS(String(sourceId)),
-              );
-              salesOrder = (soRes.data?.data || null) as Record<string, unknown> | null;
-            } catch {
-              salesOrder = null;
-            }
-          }
-          let allocatedInvoiceNo: string | null = null;
-          try {
-            const allocated = await allocateSalesInvoiceNumber(String(row.id));
-            allocatedInvoiceNo = allocated || null;
-          } catch {
-            allocatedInvoiceNo = null;
-          }
-          await openEditableTaxInvoicePreview(
-            mapDispatchToTaxInvoice(source, salesOrder, allocatedInvoiceNo),
-          );
-        } catch (err) {
-          console.error(err);
-        }
-      },
-      hide: (row) => {
-        const status = String(row.status || row.dispatch_status || "").toUpperCase();
-        const isDispatched =
-          status === "DISPATCHED" || status === "DELIVERED" || status === "CLOSED";
-        const orderType = resolveWarehouseOrderType({
-          sourceDocumentType: row.sourceDocumentType,
-          source_type: row.source_type,
-          salesOrderNo: row.salesOrderNumber,
-          source_document_no: row.source_document_no,
-        });
-        const isSample = orderType === "sample_order";
-        const isStockTransfer =
-          orderType === "stock_transfer" ||
-          String(row.source_type || "").toLowerCase() === "stock_transfer";
-        return !isDispatched || isSample || isStockTransfer;
-      },
     },
     {
       label: "Download Stock Transfer",

@@ -47,6 +47,14 @@ import {
   ACCOUNTS_ACTION_ICON_CLASS,
 } from "@/components/accounts/AccountsTableActions";
 import { cn } from "@/lib/utils";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { loadFinancialYears } from "@/app/(app)/accounts/masters/masters-data";
 import { resolveDateRangePreset } from "@/lib/accounts/report-date-presets";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
@@ -71,6 +79,11 @@ import {
   mapSalesInvoiceDetailToRecord,
 } from "@/services/sales-invoice.service";
 import { downloadInvoicePdf } from "@/app/(app)/accounts/invoices/invoice-pdf";
+import {
+  openProformaInvoicePreview,
+  openTaxInvoicePreview,
+  TAX_INVOICE_COPY_LABELS,
+} from "./sales-invoice-official-pdf";
 import { InvoiceCancelDialog } from "@/app/(app)/accounts/invoices/components/InvoiceCancelDialog";
 import { InvoiceStatusBadge } from "@/app/(app)/accounts/invoices/components/InvoiceStatusBadge";
 import { CustomerPartyNameCell } from "@/app/(app)/accounts/invoices/components/CustomerPartyInfo";
@@ -461,10 +474,62 @@ function RowActions({
   onCancel: (row: SalesInvoiceListRow) => void;
   onPrint: (row: SalesInvoiceListRow) => void;
 }) {
+  const invoiceId = String(row.salesInvoiceId || row.invoiceId);
+  const showOfficialDownloads = row.canDownloadPi || row.canDownloadTaxInvoice;
+
+  const handleOfficialError = (error: unknown, fallback: string) => {
+    const err = error as { response?: { data?: { message?: string } }; message?: string };
+    alert(err?.response?.data?.message || err?.message || fallback);
+  };
+
   return (
     <AccountsTableActionCell variant="multi">
       <AccountsViewAction href={row.viewHref} title="View Invoice" />
-      {row.canPdf ? (
+      {showOfficialDownloads ? (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              title="Download invoice PDFs"
+              aria-label="Download invoice PDFs"
+              className={cn(ACCOUNTS_ACTION_BTN_CLASS)}
+            >
+              <Download className={ACCOUNTS_ACTION_ICON_CLASS} />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56">
+            {row.canDownloadPi ? (
+              <DropdownMenuItem
+                onClick={() => {
+                  void openProformaInvoicePreview(invoiceId).catch((error) =>
+                    handleOfficialError(error, "Failed to open Proforma Invoice."),
+                  );
+                }}
+              >
+                Download Proforma Invoice
+              </DropdownMenuItem>
+            ) : null}
+            {row.canDownloadTaxInvoice ? (
+              <>
+                {row.canDownloadPi ? <DropdownMenuSeparator /> : null}
+                <DropdownMenuLabel>Tax Invoice</DropdownMenuLabel>
+                {TAX_INVOICE_COPY_LABELS.map((copyLabel) => (
+                  <DropdownMenuItem
+                    key={copyLabel}
+                    onClick={() => {
+                      void openTaxInvoicePreview(invoiceId, copyLabel).catch((error) =>
+                        handleOfficialError(error, "Failed to open Tax Invoice."),
+                      );
+                    }}
+                  >
+                    {copyLabel}
+                  </DropdownMenuItem>
+                ))}
+              </>
+            ) : null}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : row.canPdf ? (
         <button
           type="button"
           title="Print / Download Invoice"

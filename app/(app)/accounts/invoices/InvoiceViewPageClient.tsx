@@ -9,7 +9,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Calendar, Download } from "lucide-react";
+import { Calendar, ChevronDown, Download } from "lucide-react";
 import { RecordDetailPage } from "@/components/record-detail";
 import { loadProducts } from "@/app/(app)/masters/products/product-data";
 import {
@@ -29,6 +29,19 @@ import {
   type InvoiceAdditionalExpense,
 } from "./invoice-additional-expenses";
 import { downloadInvoicePdf } from "./invoice-pdf";
+import {
+  openProformaInvoicePreview,
+  openTaxInvoicePreview,
+  TAX_INVOICE_COPY_LABELS,
+} from "@/app/(app)/accounts/transactions/invoices/sales-invoice-official-pdf";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { formatINR, INVOICES_LIST_PATH } from "./invoice-utils";
 import {
   resolveWorkflowStatus,
@@ -489,6 +502,21 @@ export default function InvoiceViewPageClient({
     record.customerNotes?.trim() ||
     "";
 
+  const canDownloadPi =
+    record.sourceType !== "service" &&
+    Boolean(record.salesInvoiceId) &&
+    Boolean(record.sourceDispatchId);
+  const canDownloadTaxInvoice =
+    canDownloadPi &&
+    Boolean(record.irn?.trim()) &&
+    Boolean(record.ewayBillNo?.trim());
+  const invoicePdfId = String(record.salesInvoiceId || "");
+
+  const handleOfficialPdfError = (error: unknown, fallback: string) => {
+    const err = error as { response?: { data?: { message?: string } }; message?: string };
+    alert(err?.response?.data?.message || err?.message || fallback);
+  };
+
   return (
     <RecordDetailPage
       embedded
@@ -505,14 +533,56 @@ export default function InvoiceViewPageClient({
           : undefined
       }
       headerActions={
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-8 text-xs font-medium gap-1.5"
-          onClick={() => downloadInvoicePdf(record)}
-        >
-          <Download className="w-3.5 h-3.5" /> Print / PDF
-        </Button>
+        canDownloadPi || canDownloadTaxInvoice ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="h-8 text-xs font-medium gap-1.5">
+                <Download className="w-3.5 h-3.5" /> Download PDF
+                <ChevronDown className="w-3.5 h-3.5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              {canDownloadPi ? (
+                <DropdownMenuItem
+                  onClick={() => {
+                    void openProformaInvoicePreview(invoicePdfId).catch((error) =>
+                      handleOfficialPdfError(error, "Failed to open Proforma Invoice."),
+                    );
+                  }}
+                >
+                  Download Proforma Invoice
+                </DropdownMenuItem>
+              ) : null}
+              {canDownloadTaxInvoice ? (
+                <>
+                  {canDownloadPi ? <DropdownMenuSeparator /> : null}
+                  <DropdownMenuLabel>Tax Invoice</DropdownMenuLabel>
+                  {TAX_INVOICE_COPY_LABELS.map((copyLabel) => (
+                    <DropdownMenuItem
+                      key={copyLabel}
+                      onClick={() => {
+                        void openTaxInvoicePreview(invoicePdfId, copyLabel).catch((error) =>
+                          handleOfficialPdfError(error, "Failed to open Tax Invoice."),
+                        );
+                      }}
+                    >
+                      {copyLabel}
+                    </DropdownMenuItem>
+                  ))}
+                </>
+              ) : null}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs font-medium gap-1.5"
+            onClick={() => downloadInvoicePdf(record)}
+          >
+            <Download className="w-3.5 h-3.5" /> Print / PDF
+          </Button>
+        )
       }
     >
       <div

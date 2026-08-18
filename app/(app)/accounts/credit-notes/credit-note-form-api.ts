@@ -1,0 +1,174 @@
+import { axiosInstance } from "@/api/axios";
+import { API_ENDPOINTS } from "@/api/endpoints";
+import type { ApiResponse } from "@/types/api.types";
+import type {
+  CreateDirectCreditNotePayload,
+  CreateFromPendingPayload,
+  CreditNoteDetail,
+  PendingCreditNoteDetail,
+  SchemeTypeLedgerMapping,
+  UpdateDraftCreditNotePayload,
+} from "./credit-note-form-types";
+
+/** Form-local CN routes — do not add these to the shared endpoints map. */
+const CN = "/accounts/credit-note";
+
+function unwrapData<T>(response: { data?: ApiResponse<T> | T }): T {
+  const body = response.data as ApiResponse<T> | T | undefined;
+  if (
+    body &&
+    typeof body === "object" &&
+    "data" in body &&
+    (body as ApiResponse<T>).data !== undefined
+  ) {
+    return (body as ApiResponse<T>).data as T;
+  }
+  return body as T;
+}
+
+export function creditNoteApiError(error: unknown, fallback: string): string {
+  const err = error as {
+    message?: string;
+    error?: string;
+    validation_errors?: Array<{ message?: string; path?: string }>;
+    response?: { data?: { message?: string; error?: string } };
+  };
+  const validation = err?.validation_errors?.[0]?.message;
+  if (validation) return validation;
+  return (
+    err?.message ||
+    err?.error ||
+    err?.response?.data?.message ||
+    err?.response?.data?.error ||
+    fallback
+  );
+}
+
+export const CreditNoteFormApi = {
+  async getPendingById(id: string): Promise<PendingCreditNoteDetail> {
+    const response = await axiosInstance.get<ApiResponse<PendingCreditNoteDetail>>(
+      `${CN}/pending/${id}`,
+    );
+    return unwrapData(response);
+  },
+
+  async getById(id: string): Promise<CreditNoteDetail> {
+    const response = await axiosInstance.get<ApiResponse<CreditNoteDetail>>(
+      `${CN}/${id}`,
+    );
+    return unwrapData(response);
+  },
+
+  async createDirect(payload: CreateDirectCreditNotePayload): Promise<CreditNoteDetail> {
+    const response = await axiosInstance.post<ApiResponse<CreditNoteDetail>>(
+      `${CN}/direct`,
+      payload,
+    );
+    return unwrapData(response);
+  },
+
+  async createFromPending(
+    pendingId: string,
+    payload: CreateFromPendingPayload,
+  ): Promise<CreditNoteDetail> {
+    const response = await axiosInstance.post<ApiResponse<CreditNoteDetail>>(
+      `${CN}/from-pending/${pendingId}`,
+      payload,
+    );
+    return unwrapData(response);
+  },
+
+  async updateDraft(
+    id: string,
+    payload: UpdateDraftCreditNotePayload,
+  ): Promise<CreditNoteDetail> {
+    const response = await axiosInstance.put<ApiResponse<CreditNoteDetail>>(
+      `${CN}/${id}`,
+      payload,
+    );
+    return unwrapData(response);
+  },
+
+  async submit(id: string, approverId: string): Promise<CreditNoteDetail> {
+    const response = await axiosInstance.post<ApiResponse<CreditNoteDetail>>(
+      `${CN}/${id}/submit`,
+      { approver_id: approverId },
+    );
+    return unwrapData(response);
+  },
+
+  async approve(id: string): Promise<CreditNoteDetail> {
+    const response = await axiosInstance.post<ApiResponse<CreditNoteDetail>>(
+      `${CN}/${id}/approve`,
+      {},
+    );
+    return unwrapData(response);
+  },
+
+  async reject(id: string, rejectionReason: string): Promise<CreditNoteDetail> {
+    const response = await axiosInstance.post<ApiResponse<CreditNoteDetail>>(
+      `${CN}/${id}/reject`,
+      { rejection_reason: rejectionReason },
+    );
+    return unwrapData(response);
+  },
+
+  async post(id: string): Promise<CreditNoteDetail> {
+    const response = await axiosInstance.post<
+      ApiResponse<CreditNoteDetail | { credit_note?: CreditNoteDetail }>
+    >(`${CN}/${id}/post`, {});
+    const data = unwrapData(response);
+    if (data && typeof data === "object" && "credit_note" in data && data.credit_note) {
+      return data.credit_note;
+    }
+    return data as CreditNoteDetail;
+  },
+
+  async cancel(id: string, reason: string): Promise<CreditNoteDetail> {
+    const response = await axiosInstance.post<ApiResponse<CreditNoteDetail>>(
+      `${CN}/${id}/cancel`,
+      { reason },
+    );
+    return unwrapData(response);
+  },
+
+  async listSchemeTypeLedgerMappings(): Promise<SchemeTypeLedgerMapping[]> {
+    const response = await axiosInstance.get<ApiResponse<SchemeTypeLedgerMapping[]>>(
+      `${CN}/scheme-type-ledger-mappings`,
+    );
+    const data = unwrapData(response);
+    return Array.isArray(data) ? data : [];
+  },
+
+  async listManualLedgers(search?: string): Promise<
+    Array<{
+      ledgerId: string;
+      ledgerCode: string;
+      ledgerName: string;
+      allowManualPosting?: boolean;
+      status?: string;
+    }>
+  > {
+    const response = await axiosInstance.get(API_ENDPOINTS.ACCOUNTS.LEDGERS.LIST, {
+      params: {
+        search: search?.trim() || undefined,
+        status: "ACTIVE",
+        page: 1,
+        limit: 50,
+      },
+    });
+    const body = response.data as { data?: unknown };
+    const rows = Array.isArray(body?.data) ? body.data : [];
+    return (rows as Array<Record<string, unknown>>)
+      .map((row) => ({
+        ledgerId: String(row.ledgerId ?? row.ledger_id ?? ""),
+        ledgerCode: String(row.ledgerCode ?? row.ledger_code ?? ""),
+        ledgerName: String(row.ledgerName ?? row.ledger_name ?? ""),
+        allowManualPosting: Boolean(
+          row.allowManualPosting ?? row.allow_manual_posting ?? false,
+        ),
+        status: String(row.status ?? ""),
+      }))
+      .filter((row) => row.ledgerId && row.allowManualPosting !== false);
+  },
+};

@@ -434,6 +434,10 @@ export const API_ENDPOINTS = {
       LIST: "/warehouse/packing-list/list",
       CREATE: "/warehouse/packing-list/create",
       DETAILS: (id: string) => `/warehouse/packing-list/details/${id}`,
+      PREVIEW: (id: string) => `/warehouse/packing-list/details/${id}/preview`,
+      PDF: (id: string) => `/warehouse/packing-list/details/${id}/pdf`,
+      PDF_PREVIEW_BY_SOURCE: "/warehouse/packing-list/pdf-preview",
+      PDF_BY_SOURCE: "/warehouse/packing-list/pdf",
       REVERT: (id: string) => `/warehouse/packing-list/revert/${id}`,
     },
     DISPATCH: {
@@ -445,6 +449,7 @@ export const API_ENDPOINTS = {
       DETAILS: (id: string) => `/warehouse/dispatch/${id}`,
       REVERT: (id: string) => `/warehouse/dispatch/${id}/revert`,
       DOWNLOAD_CHALLAN: (id: string) => `/warehouse/dispatch/${id}/download-challan`,
+      CHALLAN_PREVIEW: (id: string) => `/warehouse/dispatch/${id}/challan-preview`,
       ALLOCATE_DC: (id: string) => `/warehouse/dispatch/${id}/allocate-dc`,
       ALLOCATE_SI: (id: string) => `/warehouse/dispatch/${id}/allocate-si`,
       ALLOCATE_ST: (id: string) => `/warehouse/dispatch/${id}/allocate-st`,
@@ -492,6 +497,13 @@ export const API_ENDPOINTS = {
       CREATE_DIRECT_SERVICE: "/accounts/sales-invoice/direct-service",
       PDF: "/accounts/sales-invoice/pdf",
       EXCEL: "/accounts/sales-invoice/excel",
+      PROFORMA_PREVIEW: (id: string) =>
+        `/accounts/sales-invoice/${id}/proforma-preview`,
+      PROFORMA_PDF: (id: string) => `/accounts/sales-invoice/${id}/proforma-pdf`,
+      TAX_INVOICE_PREVIEW: (id: string) =>
+        `/accounts/sales-invoice/${id}/tax-invoice-preview`,
+      TAX_INVOICE_PDF: (id: string) =>
+        `/accounts/sales-invoice/${id}/tax-invoice-pdf`,
     },
     PURCHASE_INVOICE: {
       LIST: "/accounts/purchase-invoice",
