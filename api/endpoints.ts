@@ -257,6 +257,8 @@ export const API_ENDPOINTS = {
       CREATE: "/procurement/purchase-order/create",
       UPDATE: (id: string) => `/procurement/purchase-order/update/${id}`,
       DETAILS: (id: string) => `/procurement/purchase-order/details/${id}`,
+      PREVIEW: (id: string) => `/procurement/purchase-order/${id}/preview`,
+      PDF: (id: string) => `/procurement/purchase-order/${id}/pdf`,
       FOLLOWUP_CREATE: "/procurement/purchase-order/followup/create",
       INVOICE_UPLOAD: "/procurement/purchase-order/invoice/upload",
       SHORT_CLOSE: "/procurement/purchase-order/short-close",
