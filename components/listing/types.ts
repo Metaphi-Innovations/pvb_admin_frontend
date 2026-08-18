@@ -46,6 +46,9 @@ export interface SortState {
   direction: "asc" | "desc" | "none";
 }
 
+/** Open master lists with newest records first; no column is pre-selected. */
+export const DEFAULT_MASTER_LIST_SORT: SortState = { key: "", direction: "none" };
+
 export interface ActionItemConfig<T = any> {
   label: string;
   action: string;

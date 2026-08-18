@@ -152,9 +152,8 @@ function normalizeAuditFilter(value: FilterValue): AuditFilterValue | null {
   return null;
 }
 
-/** Brand API uses flat created_at_from / created_at_to keys instead of range.* */
+/** Maps Created/Updated filters to flat created_at_from / created_at_to keys (date only). */
 export function createFlatDateAuditFieldMapper(options: {
-  userField: string;
   fromKey: string;
   toKey: string;
 }): FieldMapper {
@@ -163,10 +162,6 @@ export function createFlatDateAuditFieldMapper(options: {
     if (!audit) return null;
 
     const result: Record<string, unknown> = {};
-
-    if (audit.user) {
-      assignNested(result, options.userField, audit.user);
-    }
 
     if (audit.fromDate) {
       result[options.fromKey] = audit.fromDate;
@@ -179,55 +174,29 @@ export function createFlatDateAuditFieldMapper(options: {
   };
 }
 
-const brandCreatedAuditMapper = createFlatDateAuditFieldMapper({
-  userField: "created_by_user.username",
-  fromKey: "created_at_from",
-  toKey: "created_at_to",
-});
-
-const brandUpdatedAuditMapper = createFlatDateAuditFieldMapper({
-  userField: "updated_by_user.username",
-  fromKey: "updated_at_from",
-  toKey: "updated_at_to",
-});
-
-/** Maps Created/Updated audit column filters to API user + date range fields. */
+/** Maps Created/Updated filters to date range fields (name is display-only). */
 export function createAuditFieldMapper(options: {
-  userField: string;
   dateField: string;
 }): FieldMapper {
   return (value) => {
     const audit = normalizeAuditFilter(value);
     if (!audit) return null;
+    if (!audit.fromDate && !audit.toDate) return null;
 
-    const result: Record<string, unknown> = {};
-
-    if (audit.user) {
-      assignNested(result, options.userField, audit.user);
-    }
-
-    if (audit.fromDate || audit.toDate) {
-      result.range = {
+    return {
+      range: {
         [options.dateField]: {
           from: audit.fromDate || undefined,
           to: audit.toDate || undefined,
         },
-      };
-    }
-
-    return result;
+      },
+    };
   };
 }
 
-const createdAuditMapper = createAuditFieldMapper({
-  userField: "created_by_user.username",
-  dateField: "created_at",
-});
-
-const updatedAuditMapper = createAuditFieldMapper({
-  userField: "updated_by_user.username",
-  dateField: "updated_at",
-});
+/** Created/Updated columns filter by date only (name is display-only). */
+const createdDateFilterMapper: FieldMapper = "created_at";
+const updatedDateFilterMapper: FieldMapper = "updated_at";
 
 export function buildListApiFilters(
   filters: FilterState,
@@ -289,15 +258,6 @@ const cfuStatusColumnMapper: FieldMapper = (value) => {
   return active === null ? null : { status: active };
 };
 
-const cfuCreatedAuditMapper = createAuditFieldMapper({
-  userField: "created_by.username",
-  dateField: "created_at",
-});
-
-const cfuUpdatedAuditMapper = createAuditFieldMapper({
-  userField: "updated_by.username",
-  dateField: "updated_at",
-});
 
 export const statusColumnMapper: FieldMapper = (value) => {
   const isActive = mapStatusToIsActive(value);
@@ -305,12 +265,12 @@ export const statusColumnMapper: FieldMapper = (value) => {
 };
 
 const AUDIT_FILTER_FIELDS = {
-  createdBy: createdAuditMapper,
-  updatedBy: updatedAuditMapper,
-  createdDate: createdAuditMapper,
-  updatedDate: updatedAuditMapper,
-  createdAt: createdAuditMapper,
-  updatedAt: updatedAuditMapper,
+  createdBy: createdDateFilterMapper,
+  updatedBy: updatedDateFilterMapper,
+  createdDate: createdDateFilterMapper,
+  updatedDate: updatedDateFilterMapper,
+  createdAt: createdDateFilterMapper,
+  updatedAt: updatedDateFilterMapper,
 } as const;
 
 export const MASTER_FILTER_FIELD_MAPS = {
@@ -353,9 +313,11 @@ export const MASTER_FILTER_FIELD_MAPS = {
     fieldType: "field_type",
     category: "category",
     season: (value) => {
-      const raw = Array.isArray(value) ? value.join(", ") : value;
-      const trimmed = String(raw ?? "").trim();
-      return trimmed ? { season: trimmed } : null;
+      const values = (Array.isArray(value) ? value : [value])
+        .map((item) => String(item ?? "").trim())
+        .filter(Boolean);
+      if (values.length === 0) return null;
+      return { season: values.length === 1 ? values[0] : values };
     },
     status: statusColumnMapper,
     ...AUDIT_FILTER_FIELDS,
@@ -371,15 +333,13 @@ export const MASTER_FILTER_FIELD_MAPS = {
     brandType: "brand_type",
     remark: "remark",
     status: statusColumnMapper,
-    createdBy: brandCreatedAuditMapper,
-    updatedBy: brandUpdatedAuditMapper,
+    ...AUDIT_FILTER_FIELDS,
   },
   cfu: {
     cfuName: "cfu_name",
     description: "description",
     status: cfuStatusColumnMapper,
-    createdBy: cfuCreatedAuditMapper,
-    updatedBy: cfuUpdatedAuditMapper,
+    ...AUDIT_FILTER_FIELDS,
   },
   department: {
     name: "department_name",

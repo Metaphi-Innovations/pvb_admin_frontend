@@ -100,7 +100,7 @@ export function PincodeMasterTab(props: {
   const { onWorkflowChange, onNext } = props;
   const [records, setRecords] = useState<PincodeRecord[]>([]);
   const [filters, setFilters] = useState<FilterState>({});
-  const [sort, setSort] = useState<SortState>({ key: "pincode", direction: "asc" });
+  const [sort, setSort] = useState<SortState>({ key: "", direction: "none" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
@@ -168,6 +168,11 @@ export function PincodeMasterTab(props: {
         const bv = String(b[sort.key as keyof PincodeRecord] ?? "");
         const c = av.localeCompare(bv);
         return sort.direction === "asc" ? c : -c;
+      });
+    } else {
+      r.sort((a, b) => {
+        const byDate = String(b.createdDate ?? "").localeCompare(String(a.createdDate ?? ""));
+        return byDate !== 0 ? byDate : Number(b.id) - Number(a.id);
       });
     }
     return r;

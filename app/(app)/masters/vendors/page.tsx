@@ -76,7 +76,7 @@ export default function VendorMasterPage() {
     appliedSearch,
   } = useAppliedListFilters();
   const { handleOpenFilter, isFilterOpen } = useLazyFilterColumns();
-  const [sort, setSort] = useState<SortState>({ key: "supplierName", direction: "asc" });
+  const [sort, setSort] = useState<SortState>({ key: "", direction: "none" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [toast, setToast] = useState<ToastState | null>(null);
@@ -125,12 +125,6 @@ export default function VendorMasterPage() {
   const statusOptionsQuery = useSupplierFilterDropdown("is_active", {
     enabled: isFilterOpen("status"),
   });
-  const createdByOptionsQuery = useSupplierFilterDropdown("created_by_user__username", {
-    enabled: isFilterOpen("createdBy"),
-  });
-  const updatedByOptionsQuery = useSupplierFilterDropdown("updated_by_user__username", {
-    enabled: isFilterOpen("updatedBy"),
-  });
 
   const supplierCodeOptions = useMemo(() => supplierCodeOptionsQuery.data ?? [], [supplierCodeOptionsQuery.data]);
   const supplierNameOptions = useMemo(() => supplierNameOptionsQuery.data ?? [], [supplierNameOptionsQuery.data]);
@@ -148,8 +142,6 @@ export default function VendorMasterPage() {
           ],
     [statusOptionsQuery.data],
   );
-  const createdByOptions = useMemo(() => createdByOptionsQuery.data ?? [], [createdByOptionsQuery.data]);
-  const updatedByOptions = useMemo(() => updatedByOptionsQuery.data ?? [], [updatedByOptionsQuery.data]);
 
   useEffect(() => {
     if (!toast) return;
@@ -278,8 +270,7 @@ export default function VendorMasterPage() {
       header: "Created By",
       sortable: true,
       filterable: true,
-      filterType: "audit",
-      auditUserOptions: createdByOptions,
+      filterType: "date",
       width: "150px",
       render: (_val, row) => (
         <ListingUserCell name={row.createdBy} date={row.createdAt} />
@@ -290,8 +281,7 @@ export default function VendorMasterPage() {
       header: "Updated By",
       sortable: true,
       filterable: true,
-      filterType: "audit",
-      auditUserOptions: updatedByOptions,
+      filterType: "date",
       width: "150px",
       render: (_val, row) => (
         <ListingUserCell name={row.updatedBy} date={row.updatedAt} />

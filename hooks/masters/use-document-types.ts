@@ -17,6 +17,7 @@ function toListParams(params: MasterListKeyParams): DocumentTypeListParams {
     page: params.page,
     pageSize: params.pageSize,
     search: params.search,
+    ordering: params.ordering,
     status: params.status,
     apiFilters: params.apiFilters,
   };

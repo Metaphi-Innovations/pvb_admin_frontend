@@ -222,7 +222,7 @@ export default function SchemeMasterPage() {
   const [records, setRecords] = useState<SchemeRecord[]>([]);
   const [activeTab, setActiveTab] = useState<string>("all");
   const [filters, setFilters] = useState<FilterState>({});
-  const [sort, setSort] = useState<SortState>({ key: "schemeName", direction: "asc" });
+  const [sort, setSort] = useState<SortState>({ key: "", direction: "none" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [toast, setToast] = useState<ToastState | null>(null);
@@ -555,6 +555,11 @@ export default function SchemeMasterPage() {
         const bVal = String(b[sort.key as keyof SchemeRecord] ?? "").toLowerCase();
         const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
         return sort.direction === "asc" ? cmp : -cmp;
+      });
+    } else {
+      result.sort((a, b) => {
+        const byDate = String(b.createdAt ?? "").localeCompare(String(a.createdAt ?? ""));
+        return byDate !== 0 ? byDate : Number(b.id) - Number(a.id);
       });
     }
 

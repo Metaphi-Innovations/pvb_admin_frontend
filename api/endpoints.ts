@@ -229,9 +229,11 @@ export const API_ENDPOINTS = {
       STATUS_UPDATE: (id: string) => `/master/customer/update-status/${id}`,
       VIEW: (id: string) => `/master/customer/${id}`,
       EXPORT: "/master/customer/export",
+      SUMMARY: "/master/customer/summary",
       PREVIEW_NUMBER: "/master/customer/preview-number",
       DROPDOWN: "/master/customer/dropdown",
-      CFDROPDOWN: "/master/customer/cf-customer-dropdown"
+      CFDROPDOWN: "/master/customer/cf-customer-dropdown",
+      FILTER_DROPDOWN: "/master/customer/filter-dropdown",
     },
     SUPPLIER_TYPE: {
       LIST: "/master/supplier-type/list",

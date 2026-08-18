@@ -70,9 +70,12 @@ export type SegmentFilterField =
 const SORT_KEY_TO_ORDERING: Record<string, string> = {
   segmentName: "segmentName",
   segmentCode: "segmentCode",
+  description: "description",
   status: "isActive",
   createdAt: "createdAt",
   updatedAt: "updatedAt",
+  createdBy: "createdAt",
+  updatedBy: "updatedAt",
 };
 
 export function sortStateToOrdering(

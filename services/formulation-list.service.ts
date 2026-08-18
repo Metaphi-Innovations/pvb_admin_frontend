@@ -73,6 +73,8 @@ const SORT_KEY_TO_ORDERING: Record<string, string> = {
   status: "isActive",
   createdAt: "createdAt",
   updatedAt: "updatedAt",
+  createdBy: "createdAt",
+  updatedBy: "updatedAt",
 };
 
 export function sortStateToOrdering(
