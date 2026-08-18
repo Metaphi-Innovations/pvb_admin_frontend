@@ -132,7 +132,7 @@ export interface PurchaseInvoiceRecord {
   id: number;
   /** Backend purchase invoice UUID when loaded from Accounts API. */
   backendId?: string;
-  backendStatus?: "POSTED" | "CANCELLED" | "REVERSED";
+  backendStatus?: "POSTED" | "CANCELLED" | "REVERSED" | "PENDING";
   /** Internal purchase record no. (e.g. PUR-0001) */
   invoiceNo: string;
   invoiceDate: string;

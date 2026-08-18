@@ -30,6 +30,8 @@ import {
 import {
   PurchaseInvoiceService,
   mapPurchaseInvoiceDetailToRecord,
+  mapPrepareGrnToRecord,
+  parsePendingGrnViewId,
 } from "@/services/purchase-invoice.service";
 import type { PurchaseInvoiceRecord } from "../purchase-invoices-data";
 import {
@@ -107,21 +109,31 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: st
   const router = useRouter();
   const [invoice, setInvoice] = useState<PurchaseInvoiceRecord | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const [cancelling, setCancelling] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoadError(null);
-    if (!PurchaseInvoiceService.isUuid(invoiceId)) {
-      setInvoice(null);
-      setLoadError("This purchase invoice is not a live API record.");
-      return;
-    }
+    setLoading(true);
+    const pendingGrnId = parsePendingGrnViewId(invoiceId);
     try {
+      if (pendingGrnId) {
+        const dto = await PurchaseInvoiceService.prepareGrn(pendingGrnId);
+        setInvoice(mapPrepareGrnToRecord(dto));
+        return;
+      }
+      if (!PurchaseInvoiceService.isUuid(invoiceId)) {
+        setInvoice(null);
+        setLoadError("This purchase invoice is not a live API record.");
+        return;
+      }
       const dto = await PurchaseInvoiceService.getById(invoiceId);
       setInvoice(mapPurchaseInvoiceDetailToRecord(dto));
     } catch (e) {
       setInvoice(null);
       setLoadError(e instanceof Error ? e.message : "Failed to load purchase invoice.");
+    } finally {
+      setLoading(false);
     }
   }, [invoiceId]);
 
@@ -169,6 +181,18 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: st
       },
     }));
   }, [invoice, qtyComparisons]);
+
+  if (loading) {
+    return (
+      <PurchaseInvoicePageShell
+        breadcrumbs={accountsBreadcrumb("Purchase Invoices", "View")}
+        title="Purchase Invoice"
+        description=""
+      >
+        <p className="text-sm text-muted-foreground py-16 text-center">Loading purchase invoice…</p>
+      </PurchaseInvoicePageShell>
+    );
+  }
 
   if (!invoice) {
     return (
@@ -277,7 +301,14 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: st
               </Badge>
             )}
             <Badge variant="outline" className="text-xs h-6 capitalize">
-              Posting: {postingStatus === "POSTED" ? "Posted" : postingStatus === "CANCELLED" ? "Cancelled" : "Reversed"}
+              Posting:{" "}
+              {postingStatus === "POSTED"
+                ? "Posted"
+                : postingStatus === "CANCELLED"
+                  ? "Cancelled"
+                  : postingStatus === "PENDING"
+                    ? "Pending"
+                    : "Reversed"}
             </Badge>
             <PaymentBadge amountPaid={invoice.amountPaid} grandTotal={invoice.grandTotal} />
           </div>

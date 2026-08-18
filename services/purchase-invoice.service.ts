@@ -11,6 +11,18 @@ import type {
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+export const PENDING_GRN_VIEW_PREFIX = "pending-grn-";
+
+export function toPendingGrnViewId(grnId: string): string {
+  return `${PENDING_GRN_VIEW_PREFIX}${grnId}`;
+}
+
+export function parsePendingGrnViewId(id: string): string | null {
+  if (!id.startsWith(PENDING_GRN_VIEW_PREFIX)) return null;
+  const grnId = id.slice(PENDING_GRN_VIEW_PREFIX.length).trim();
+  return UUID_RE.test(grnId) ? grnId : null;
+}
+
 export type PurchaseInvoiceBackendType = "PURCHASE" | "DIRECT_PURCHASE";
 export type PurchaseInvoiceBackendStatus = "POSTED" | "CANCELLED" | "REVERSED" | "PENDING";
 
@@ -126,6 +138,7 @@ export type EligibleGrnDto = {
   status: string;
   source_type: string;
   purchase_order_id?: string | null;
+  po_no?: string | null;
   warehouse_id: string;
   warehouse_name?: string | null;
   supplier_id: string | null;
@@ -327,6 +340,15 @@ function unwrapData<T>(response: { data?: ApiResponse<T> | T }): T {
     return (body as ApiResponse<T>).data as T;
   }
   return body as T;
+}
+
+function isAbortError(error: unknown): boolean {
+  const err = error as { name?: string; code?: string };
+  return (
+    err?.name === "CanceledError" ||
+    err?.name === "AbortError" ||
+    err?.code === "ERR_CANCELED"
+  );
 }
 
 function extractErrorMessage(error: unknown, fallback: string): string {
@@ -575,6 +597,61 @@ export function mapPrepareItemsToLines(
   });
 }
 
+export function mapPrepareGrnToRecord(dto: PrepareGrnInvoiceDto): PurchaseInvoiceRecord {
+  const lineItems = mapPrepareItemsToLines(dto.items);
+  const taxable = lineItems.reduce((sum, line) => sum + line.lineAmount, 0);
+  const gstAmount = lineItems.reduce((sum, line) => sum + line.taxAmount, 0);
+  const chargeTotal = (dto.suggested_additional_charges || [])
+    .filter((charge) => charge.mapping_ok)
+    .reduce((sum, charge) => sum + asNumber(charge.amount), 0);
+  const grandTotal = taxable + gstAmount + chargeTotal;
+  return {
+    id: 0,
+    invoiceNo: "Pending GRN Invoice",
+    invoiceDate: asDateOnly(dto.supplier_invoice.supplier_invoice_date) || asDateOnly(dto.grn.grn_date),
+    vendorInvoiceNo: asString(dto.supplier_invoice.supplier_invoice_number),
+    vendorId: 0,
+    vendorName: dto.supplier?.supplier_name || "—",
+    vendorGst: "",
+    poId: null,
+    poNumber: dto.purchase_order?.po_no || "",
+    poDate: "",
+    grnId: dto.grn.grn_id,
+    grnNo: dto.grn.grn_number,
+    warehouse: dto.warehouse?.warehouse_name || "",
+    source: "po_invoice",
+    sourceType: "from_grn",
+    postingDate: asDateOnly(dto.grn.grn_date),
+    narration: "",
+    remarks: "",
+    taxableAmount: taxable,
+    cgstTotal: 0,
+    sgstTotal: 0,
+    igstTotal: gstAmount,
+    roundingAdjustment: 0,
+    netPayable: grandTotal,
+    lineItems,
+    additionalCharges: [],
+    productAmount: taxable,
+    subtotal: taxable,
+    taxAmount: gstAmount,
+    grandTotal,
+    amountPaid: 0,
+    amountDebited: 0,
+    balanceDebitAllowed: 0,
+    debitStatus: "no_debit",
+    poAdjustmentStatus: "open",
+    attachment: null,
+    createdBy: "",
+    updatedBy: "",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    activity: [],
+    invoiceMatchStatus: "matched",
+    backendStatus: "PENDING",
+  };
+}
+
 export const PurchaseInvoiceService = {
   isUuid(value: string | null | undefined): boolean {
     return Boolean(value && UUID_RE.test(value.trim()));
@@ -602,24 +679,29 @@ export const PurchaseInvoiceService = {
 
   async listEligibleGrns(
     query: EligibleGrnsQuery = {},
+    signal?: AbortSignal,
   ): Promise<PaginatedResult<EligibleGrnDto>> {
     try {
       const response = await axiosInstance.get(
         `${API_ENDPOINTS.ACCOUNTS.PURCHASE_INVOICE.ELIGIBLE_GRNS}${buildQuery(query)}`,
+        { signal },
       );
       return unwrapData(response) as PaginatedResult<EligibleGrnDto>;
     } catch (error) {
+      if (isAbortError(error)) throw error;
       throw new Error(extractErrorMessage(error, "Failed to load eligible GRNs."));
     }
   },
 
-  async countEligibleGrns(): Promise<{ total: number }> {
+  async countEligibleGrns(signal?: AbortSignal): Promise<{ total: number }> {
     try {
       const response = await axiosInstance.get(
         API_ENDPOINTS.ACCOUNTS.PURCHASE_INVOICE.ELIGIBLE_GRNS_COUNT,
+        { signal },
       );
       return unwrapData(response) as { total: number };
     } catch (error) {
+      if (isAbortError(error)) throw error;
       throw new Error(extractErrorMessage(error, "Failed to count eligible GRNs."));
     }
   },
@@ -713,13 +795,16 @@ export const PurchaseInvoiceService = {
 
   async list(
     query: ListPurchaseInvoicesQuery = {},
+    signal?: AbortSignal,
   ): Promise<PaginatedResult<PurchaseInvoiceListDto>> {
     try {
       const response = await axiosInstance.get(
         `${API_ENDPOINTS.ACCOUNTS.PURCHASE_INVOICE.LIST}${buildQuery(query)}`,
+        { signal },
       );
       return unwrapData(response) as PaginatedResult<PurchaseInvoiceListDto>;
     } catch (error) {
+      if (isAbortError(error)) throw error;
       throw new Error(
         extractErrorMessage(error, "Failed to list purchase invoices."),
       );
