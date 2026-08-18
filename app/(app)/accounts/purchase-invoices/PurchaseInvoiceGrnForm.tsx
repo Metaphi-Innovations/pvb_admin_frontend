@@ -108,7 +108,7 @@ function GrnSelector({
   loading: boolean;
 }) {
   if (loading && grns.length === 0) {
-    return <p className="text-xs text-muted-foreground py-6 text-center">Loading eligible GRNs…</p>;
+    return <p className="text-xs text-muted-foreground py-6 text-center">Loading pending GRNs…</p>;
   }
   if (grns.length === 0) {
     return (
@@ -116,7 +116,7 @@ function GrnSelector({
         <CheckCircle2 className="w-8 h-8 text-emerald-500 mb-2" />
         <p className="text-sm font-medium">No pending GRNs</p>
         <p className="text-xs text-muted-foreground mt-1">
-          All QC-completed GRNs already have purchase invoices.
+          All purchase-order GRNs already have purchase invoices.
         </p>
       </div>
     );
@@ -125,7 +125,7 @@ function GrnSelector({
   return (
     <div className="space-y-2">
       <p className="text-xs text-muted-foreground mb-3">
-        Select a QC-completed GRN. Rates and quantities come from the supplier invoice captured at GRN.
+        Select a purchase-order GRN. Rates and quantities come from GRN received batches. QC must be completed before posting.
       </p>
       {grns.map((grn) => {
         const active = selectedId === grn.grn_id;
@@ -197,20 +197,51 @@ export function PurchaseInvoiceGrnForm({
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().slice(0, 10));
   const [vendorInvoiceNo, setVendorInvoiceNo] = useState("");
   const [supplierInvoiceDate, setSupplierInvoiceDate] = useState("");
+  const [dueDate, setDueDate] = useState("");
   const [remarks, setRemarks] = useState("");
+  const [attachment, setAttachment] = useState<File | null>(null);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+
+  function applyPrepared(data: PrepareGrnInvoiceDto, fallback?: EligibleGrnDto | null) {
+    setPrepared(data);
+    setVendorInvoiceNo(data.supplier_invoice.supplier_invoice_number || "");
+    setSupplierInvoiceDate(formatDateOnly(data.supplier_invoice.supplier_invoice_date));
+    setInvoiceDate(formatDateOnly(data.grn.grn_date) || new Date().toISOString().slice(0, 10));
+    setDueDate("");
+    setShowGrnSelector(false);
+    setSelectedGrn(
+      fallback ?? {
+        grn_id: data.grn.grn_id,
+        grn_number: data.grn.grn_number,
+        grn_date: data.grn.grn_date,
+        status: data.grn.status,
+        source_type: "PURCHASE_ORDER",
+        purchase_order_id: data.purchase_order?.purchase_order_id ?? null,
+        po_no: data.purchase_order?.po_no ?? null,
+        warehouse_id: data.grn.warehouse_id,
+        warehouse_name: data.warehouse.warehouse_name,
+        supplier_id: data.grn.supplier_id,
+        supplier_name: data.supplier.supplier_name,
+        item_count: data.items.length,
+        total_received_qty: data.items.reduce((sum, item) => sum + Number(item.quantity || 0), 0),
+        has_supplier_invoice: Boolean(data.supplier_invoice.supplier_invoice_number),
+        supplier_invoice_no: data.supplier_invoice.supplier_invoice_number,
+        supplier_invoice_date: data.supplier_invoice.supplier_invoice_date,
+      },
+    );
+  }
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       setLoadingGrns(true);
       try {
-        const res = await PurchaseInvoiceService.listEligibleGrns({ page: 1, page_size: 100 });
+        const res = await PurchaseInvoiceService.listPendingGrns({ page: 1, page_size: 100 });
         if (!cancelled) setEligibleGrns(res.results || []);
       } catch (e) {
         if (!cancelled) {
-          setError(e instanceof Error ? e.message : "Failed to load eligible GRNs.");
+          setError(e instanceof Error ? e.message : "Failed to load pending GRNs.");
         }
       } finally {
         if (!cancelled) setLoadingGrns(false);
@@ -227,11 +258,7 @@ export function PurchaseInvoiceGrnForm({
     setPreparing(true);
     try {
       const data = await PurchaseInvoiceService.prepareGrn(grn.grn_id);
-      setPrepared(data);
-      setVendorInvoiceNo(data.supplier_invoice.supplier_invoice_number || "");
-      setSupplierInvoiceDate(formatDateOnly(data.supplier_invoice.supplier_invoice_date));
-      setInvoiceDate(formatDateOnly(data.grn.grn_date) || new Date().toISOString().slice(0, 10));
-      setShowGrnSelector(false);
+      applyPrepared(data, grn);
     } catch (e) {
       setPrepared(null);
       setError(e instanceof Error ? e.message : "Failed to prepare GRN for invoice.");
@@ -241,11 +268,29 @@ export function PurchaseInvoiceGrnForm({
   }
 
   useEffect(() => {
-    if (!preselectedGrnId || eligibleGrns.length === 0) return;
-    const grn = eligibleGrns.find((g) => g.grn_id === preselectedGrnId);
-    if (grn) void handleGrnSelect(grn);
+    if (!preselectedGrnId) return;
+    let cancelled = false;
+    (async () => {
+      setPreparing(true);
+      setError("");
+      try {
+        const data = await PurchaseInvoiceService.prepareGrn(preselectedGrnId);
+        if (cancelled) return;
+        applyPrepared(data);
+      } catch (e) {
+        if (cancelled) return;
+        setPrepared(null);
+        setSelectedGrn(null);
+        setError(e instanceof Error ? e.message : "Failed to prepare GRN for invoice.");
+      } finally {
+        if (!cancelled) setPreparing(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [preselectedGrnId, eligibleGrns.length]);
+  }, [preselectedGrnId]);
 
   const items = prepared?.items ?? [];
   const subtotal = items.reduce((s, l) => s + Number(l.taxable_amount || 0), 0);
@@ -262,7 +307,7 @@ export function PurchaseInvoiceGrnForm({
 
   const doSave = async () => {
     setError("");
-    if (!selectedGrn) return setError("Select a completed GRN to create the purchase invoice.");
+    if (!selectedGrn) return setError("Select a GRN to create the purchase invoice.");
     if (!invoiceDate) return setError("Invoice date is required.");
     if (!vendorInvoiceNo.trim() && !supplierInvoiceLocked) {
       return setError("Enter the supplier invoice number.");
@@ -285,9 +330,11 @@ export function PurchaseInvoiceGrnForm({
         purchase_invoice_date: invoiceDate,
         supplier_invoice_number: vendorInvoiceNo.trim() || undefined,
         supplier_invoice_date: supplierInvoiceDate || null,
+        due_date: dueDate || null,
         narration: remarks.trim() || undefined,
         remarks: remarks.trim() || undefined,
         additional_charges: additionalCharges,
+        attachment,
       });
       dispatchAccountsDataChanged("purchase-invoices");
       showToast(
@@ -331,7 +378,7 @@ export function PurchaseInvoiceGrnForm({
       <PurchaseInvoicePageShell
         breadcrumbs={accountsBreadcrumb("Transactions", "New Purchase Invoice")}
         title={title}
-        description="Create a purchase invoice from a QC-completed GRN. Rates are taken from the supplier invoice."
+        description="Create a purchase invoice from a purchase-order GRN. Rates and quantities come from GRN received batches."
       >
         <div className="space-y-4 w-full pb-10">
           <SourceTypeSelector value={sourceType} onChange={onSourceTypeChange} />
@@ -353,7 +400,7 @@ export function PurchaseInvoiceGrnForm({
                   <div className="flex items-center gap-2">
                     <span className="font-bold font-mono text-blue-700 text-sm">{selectedGrn.grn_number}</span>
                     <Badge className="text-xs h-4 bg-emerald-100 text-emerald-700 border-emerald-200">
-                      QC Completed
+                      {selectedGrn.status.replaceAll("_", " ")}
                     </Badge>
                   </div>
                   <p className="text-xs text-muted-foreground mt-0.5">
@@ -370,6 +417,8 @@ export function PurchaseInvoiceGrnForm({
                     setShowGrnSelector(true);
                     setVendorInvoiceNo("");
                     setSupplierInvoiceDate("");
+                    setDueDate("");
+                    setAttachment(null);
                   }}
                 >
                   Change GRN
@@ -442,12 +491,29 @@ export function PurchaseInvoiceGrnForm({
                       className="h-8 text-xs mt-1"
                     />
                   </div>
+                  <div>
+                    <Label className="text-xs">Due Date</Label>
+                    <AccountsDateInput
+                      value={dueDate}
+                      onChange={setDueDate}
+                      aria-label="Due date"
+                      className="h-8 text-xs mt-1"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Approval</Label>
+                    <Input className="h-8 text-xs mt-1 bg-muted/25" readOnly value="Approved" />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Payment</Label>
+                    <Input className="h-8 text-xs mt-1 bg-muted/25" readOnly value="Unpaid" />
+                  </div>
                 </div>
               </Section>
 
               <Section title="Item Details">
                 <p className="text-xs text-muted-foreground mb-2">
-                  Quantities and rates are copied from the supplier invoice captured at GRN and cannot be edited here.
+                  Quantities and rates are copied from GRN received batches and cannot be edited here.
                 </p>
                 <div className="overflow-x-auto">
                   <table className="w-full text-xs min-w-[720px]">
@@ -557,6 +623,18 @@ export function PurchaseInvoiceGrnForm({
                   onChange={(e) => setRemarks(e.target.value)}
                   placeholder="Internal notes, reference, etc."
                 />
+                <div className="pt-3">
+                  <Label className="text-xs">Attachment</Label>
+                  <Input
+                    className="h-8 text-xs mt-1"
+                    type="file"
+                    accept="application/pdf,image/jpeg,image/png,image/webp"
+                    onChange={(e) => setAttachment(e.target.files?.[0] ?? null)}
+                  />
+                  {attachment && (
+                    <p className="mt-1 text-[11px] text-muted-foreground">{attachment.name}</p>
+                  )}
+                </div>
               </Section>
 
               <LedgerImpactPreview

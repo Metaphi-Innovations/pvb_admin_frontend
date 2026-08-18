@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Download, FileText, Truck } from "lucide-react";
+import { Download, FileText, Paperclip, Plus, Truck } from "lucide-react";
 import {
   AccountsTableActionCell,
   AccountsViewAction,
@@ -12,6 +13,7 @@ import {
 } from "@/components/accounts/AccountsTableActions";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/ui/StatusBadge";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import {
   AccountsTable,
@@ -39,7 +41,10 @@ import {
 } from "@/components/accounts/ReportFilters";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { accountsListingFiltersActive } from "@/lib/accounts/use-accounts-listing-reset";
-import { INVOICE_LISTING_DATE_PRESETS, resolveDateRangePreset } from "@/lib/accounts/report-date-presets";
+import {
+  INVOICE_LISTING_DATE_PRESETS,
+  resolveDateRangePreset,
+} from "@/lib/accounts/report-date-presets";
 import {
   AccountsColumnFilterProvider,
   AccountsColumnHeader,
@@ -48,12 +53,11 @@ import {
 } from "@/app/(app)/accounts/components/AccountsUI";
 import { useDebouncedValue } from "@/app/(app)/accounts/reports/pl/pl-hooks";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
-import { dispatchAccountsDataChanged } from "@/lib/accounts/accounts-data-events";
 import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
 import { useLazyFilterColumns } from "@/lib/masters/use-lazy-filter-columns";
 import { formatMoney } from "@/lib/accounts/money-format";
 import { cn } from "@/lib/utils";
-import { PURCHASE_SOURCE_TYPE_LABELS, type PurchaseSourceType } from "./purchase-invoice-types";
+import { PURCHASE_SOURCE_TYPE_LABELS, type PurchaseNature, type PurchaseSourceType } from "./purchase-invoice-types";
 import { downloadPurchaseInvoicePdf } from "./purchase-invoice-pdf";
 import {
   PurchaseInvoiceService,
@@ -61,10 +65,23 @@ import {
   mapPurchaseInvoiceListDto,
   sourceTypeToInvoiceType,
   type EligibleGrnDto,
+  type PurchaseInvoiceApprovalStatus,
   type PurchaseInvoiceListRow,
+  type PurchaseInvoicePaymentStatus,
 } from "@/services/purchase-invoice.service";
 import "./purchase-invoice-listing.css";
 
+const PURCHASE_NATURE_OPTION_LABELS: Record<string, string> = {
+  inventory: "Inventory",
+  expense: "Expense",
+  service: "Service",
+  fixed_asset: "Fixed Asset",
+  other_non_stock: "Capital Goods",
+};
+
+const PURCHASE_NATURE_COLUMN_FILTER_OPTIONS = Object.keys(PURCHASE_NATURE_OPTION_LABELS).map(
+  (value) => ({ value, count: 0 }),
+);
 type FilterValueOptions = Record<string, { value: string; count: number }[]>;
 type FilterFlagMap = Record<string, boolean>;
 
@@ -80,8 +97,14 @@ function mapDropdownOptions(
 
 type Tab = "invoices" | "grn_pending";
 type SourceTypeFilter = "all" | PurchaseSourceType;
+type PurchaseNatureFilter = "all" | "inventory" | PurchaseNature;
 
-const LISTING_DEFAULT_PRESET = "this_month" as const;
+const LISTING_DEFAULT_PRESET = "all_transactions" as const;
+const PURCHASE_INVOICE_DATE_PRESETS = [
+  ...INVOICE_LISTING_DATE_PRESETS.filter((option) => option.id !== "custom"),
+  { id: "all_transactions" as const, label: "All Transactions" },
+  ...INVOICE_LISTING_DATE_PRESETS.filter((option) => option.id === "custom"),
+];
 
 function listingFilterDefaults() {
   const { from, to } = resolveDateRangePreset(LISTING_DEFAULT_PRESET);
@@ -91,6 +114,7 @@ function listingFilterDefaults() {
     dateFrom: from,
     dateTo: to,
     sourceType: "all" as SourceTypeFilter,
+    purchaseNature: "all" as PurchaseNatureFilter,
   };
 }
 
@@ -129,9 +153,8 @@ function formatDateOnly(value: string | null | undefined): string {
   return parsed.toISOString().slice(0, 10);
 }
 
-function toApiDate(value: string | null | undefined): string | undefined {
-  const formatted = formatDateOnly(value);
-  return formatted === "—" ? undefined : formatted;
+function isQcCompletedStatus(status: string | null | undefined): boolean {
+  return String(status ?? "").trim().toUpperCase() === "QC_COMPLETED";
 }
 
 function SourceTypeBadge({ type }: { type: PurchaseSourceType }) {
@@ -147,6 +170,40 @@ function SourceTypeBadge({ type }: { type: PurchaseSourceType }) {
       {PURCHASE_SOURCE_TYPE_LABELS[type]}
     </Badge>
   );
+}
+
+function ApprovalStatusBadge({ status }: { status: PurchaseInvoiceApprovalStatus }) {
+  const cfg =
+    status === "approved"
+      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+      : status === "pending_approval"
+        ? "bg-orange-50 text-orange-700 border-orange-200"
+        : "bg-sky-50 text-sky-700 border-sky-200";
+  const label =
+    status === "approved"
+      ? "Approved"
+      : status === "pending_approval"
+        ? "Pending Approval"
+        : "Draft";
+  return (
+    <Badge variant="outline" className={cn("text-xs h-5 font-medium", cfg)}>
+      {label}
+    </Badge>
+  );
+}
+
+function PaymentStatusBadge({ status }: { status: PurchaseInvoicePaymentStatus }) {
+  const map = {
+    paid: { status: "approved" as const, label: "Paid" },
+    partial: { status: "partial" as const, label: "Partial" },
+    unpaid: { status: "pending" as const, label: "Unpaid" },
+  };
+  const cfg = map[status];
+  return <StatusBadge status={cfg.status} label={cfg.label} size="sm" />;
+}
+
+function PostingStatusText({ label }: { label: string }) {
+  return <span className="text-xs text-muted-foreground">{label}</span>;
 }
 
 function ListingRowActions({
@@ -176,25 +233,6 @@ function ListingRowActions({
         </button>
       ) : null}
     </AccountsTableActionCell>
-  );
-}
-
-function PostingStatusBadge({ status }: { status: PurchaseInvoiceListRow["status"] }) {
-  if (status === "PENDING") {
-    return (
-      <Badge variant="outline" className="text-xs h-5 bg-amber-50 text-amber-700 border-amber-200">
-        Pending
-      </Badge>
-    );
-  }
-  const cfg =
-    status === "POSTED"
-      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-      : "bg-muted text-muted-foreground border-border";
-  return (
-    <Badge variant="outline" className={cn("text-xs h-5", cfg)}>
-      {status === "POSTED" ? "Posted" : status === "CANCELLED" ? "Cancelled" : "Reversed"}
-    </Badge>
   );
 }
 
@@ -286,26 +324,36 @@ function PurchaseInvoicesTabTable({
   onDownload: (row: PurchaseInvoiceListRow) => void;
 }) {
   const opts = (key: string) => filterOptions[key] || [];
-  const filterProps = (key: string) => ({
-    valueOptions: opts(key),
-    onFilterOpen: () => onOpenFilter(key),
-    optionsLoading: Boolean(filterLoading[key]),
-    optionsReady: Boolean(filterReady[key]),
-  });
+  const filterProps = (key: string) => {
+    const loaded = opts(key);
+    const isReady = Boolean(filterReady[key]);
+    return {
+      ...(isReady && loaded.length === 0 ? {} : { valueOptions: loaded }),
+      onFilterOpen: () => onOpenFilter(key),
+      optionsLoading: Boolean(filterLoading[key]),
+      optionsReady: isReady,
+    };
+  };
 
   return (
     <>
-      <AccountsTable minWidth={1480}>
+      <AccountsTable minWidth={2040}>
         <AccountsTableHead>
           <AccountsTableHeadRow>
+            <SortTh label="Invoice No" colKey="invoiceNo" {...filterProps("invoiceNo")} />
             <SortTh label="Source Type" colKey="sourceType" {...filterProps("sourceType")} />
             <SortTh label="Supplier" colKey="vendorName" className="accounts-col-party" {...filterProps("vendorName")} />
             <SortTh label="Supplier Inv. No" colKey="vendorInvoiceNo" {...filterProps("vendorInvoiceNo")} />
             <SortTh label="Invoice Date" colKey="invoiceDate" filterType="date" {...filterProps("invoiceDate")} />
+            <SortTh label="Purchase Nature" colKey="purchaseNature" {...filterProps("purchaseNature")} />
             <SortTh label="Taxable Amount" colKey="taxableAmount" filterType="amount" align="right" {...filterProps("taxableAmount")} />
             <SortTh label="GST Amount" colKey="gstAmount" filterType="amount" align="right" {...filterProps("gstAmount")} />
             <SortTh label="Net Payable" colKey="netPayable" filterType="amount" align="right" {...filterProps("netPayable")} />
-            <SortTh label="Posting" colKey="status" {...filterProps("status")} />
+            <SortTh label="Due Date" colKey="dueDate" filterType="date" {...filterProps("dueDate")} />
+            <SortTh label="Approval" colKey="approvalStatus" {...filterProps("approvalStatus")} />
+            <SortTh label="Posting" colKey="postingStatusLabel" filterable={false} />
+            <SortTh label="Payment" colKey="paymentStatus" {...filterProps("paymentStatus")} />
+            <SortTh label="Attachment" colKey="hasAttachment" {...filterProps("hasAttachment")} />
             <AccountsColumnHeader
               label="Actions"
               colKey="_actions"
@@ -318,18 +366,31 @@ function PurchaseInvoicesTabTable({
         </AccountsTableHead>
         <AccountsTableBody>
           {loading && toolbarRows.length === 0 ? (
-            <AccountsTableEmpty colSpan={9} message="Loading purchase invoices…" />
+            <AccountsTableEmpty colSpan={15} message="Loading purchase invoices…" />
           ) : toolbarRows.length === 0 ? (
-            <AccountsTableEmpty colSpan={9} message="No purchase invoices found." />
+            <AccountsTableEmpty colSpan={15} message="No purchase invoices found." />
           ) : (
             toolbarRows.map((inv) => (
               <AccountsTableRow key={inv.id}>
+                <AccountsTableCell className="font-medium">
+                  {PurchaseInvoiceService.isUuid(inv.id) ? (
+                    <Link
+                      href={`/accounts/purchase-invoices/${inv.id}`}
+                      className="text-brand-700 hover:text-brand-800 hover:underline"
+                    >
+                      {inv.invoiceNo || "—"}
+                    </Link>
+                  ) : (
+                    inv.invoiceNo || "—"
+                  )}
+                </AccountsTableCell>
                 <AccountsTableCell>
                   <SourceTypeBadge type={inv.sourceType} />
                 </AccountsTableCell>
                 <AccountsTableCell className="font-medium">{inv.vendorName}</AccountsTableCell>
                 <AccountsTableCell className="text-muted-foreground">{inv.vendorInvoiceNo || "—"}</AccountsTableCell>
                 <AccountsTableCell>{inv.invoiceDate || "—"}</AccountsTableCell>
+                <AccountsTableCell>{inv.purchaseNatureLabel}</AccountsTableCell>
                 <AccountsTableCell align="right" money>
                   {formatMoney(inv.taxableAmount)}
                 </AccountsTableCell>
@@ -339,8 +400,22 @@ function PurchaseInvoicesTabTable({
                 <AccountsTableCell align="right" money>
                   {formatMoney(inv.netPayable)}
                 </AccountsTableCell>
+                <AccountsTableCell>{inv.dueDate || "—"}</AccountsTableCell>
                 <AccountsTableCell>
-                  <PostingStatusBadge status={inv.status} />
+                  <ApprovalStatusBadge status={inv.approvalStatus} />
+                </AccountsTableCell>
+                <AccountsTableCell>
+                  <PostingStatusText label={inv.postingStatusLabel} />
+                </AccountsTableCell>
+                <AccountsTableCell>
+                  <PaymentStatusBadge status={inv.paymentStatus} />
+                </AccountsTableCell>
+                <AccountsTableCell>
+                  {inv.hasAttachment ? (
+                    <Paperclip className="w-3.5 h-3.5 text-muted-foreground" aria-label="Has attachment" />
+                  ) : (
+                    "—"
+                  )}
                 </AccountsTableCell>
                 <AccountsTableCell align="right" className={accountsActionColClass("multi")}>
                   <ListingRowActions
@@ -366,7 +441,6 @@ function GrnPendingTabTable({
   filterLoading,
   filterReady,
   onOpenFilter,
-  creatingGrnId,
   onCreateInvoice,
 }: {
   toolbarRows: EligibleGrnDto[];
@@ -375,7 +449,6 @@ function GrnPendingTabTable({
   filterLoading: FilterFlagMap;
   filterReady: FilterFlagMap;
   onOpenFilter: (key: string) => void;
-  creatingGrnId: string | null;
   onCreateInvoice: (grn: EligibleGrnDto) => void;
 }) {
   const opts = (key: string) => filterOptions[key] || [];
@@ -408,11 +481,11 @@ function GrnPendingTabTable({
         </AccountsTableHead>
         <AccountsTableBody>
           {loading && toolbarRows.length === 0 ? (
-            <AccountsTableEmpty colSpan={8} message="Loading eligible GRNs…" />
+            <AccountsTableEmpty colSpan={8} message="Loading pending GRNs…" />
           ) : toolbarRows.length === 0 ? (
             <AccountsTableEmpty
               colSpan={8}
-              message="No QC-completed GRNs with a supplier invoice in Purchase Order Invoices are pending a purchase invoice."
+              message="No purchase-order GRNs are pending a purchase invoice."
             />
           ) : (
             toolbarRows.map((grn) => (
@@ -432,11 +505,10 @@ function GrnPendingTabTable({
                   <Button
                     size="sm"
                     className="h-8 text-xs font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1"
-                    disabled={creatingGrnId === grn.grn_id}
                     onClick={() => onCreateInvoice(grn)}
                   >
                     <FileText className="w-3 h-3" />
-                    {creatingGrnId === grn.grn_id ? "Creating…" : "Create Invoice"}
+                    Create Invoice
                   </Button>
                 </AccountsTableCell>
               </AccountsTableRow>
@@ -455,6 +527,8 @@ function PurchaseInvoicesTabBody({
   setSearch,
   sourceTypeFilter,
   setSourceTypeFilter,
+  purchaseNatureFilter,
+  setPurchaseNatureFilter,
   preset,
   setPreset,
   dateFrom,
@@ -472,6 +546,9 @@ function PurchaseInvoicesTabBody({
   onOpenFilter,
   downloadingId,
   onDownload,
+  exporting,
+  onExportExcel,
+  onExportCsv,
 }: {
   invoices: PurchaseInvoiceListRow[];
   totalRecords: number;
@@ -479,6 +556,8 @@ function PurchaseInvoicesTabBody({
   setSearch: (v: string) => void;
   sourceTypeFilter: SourceTypeFilter;
   setSourceTypeFilter: (v: SourceTypeFilter) => void;
+  purchaseNatureFilter: PurchaseNatureFilter;
+  setPurchaseNatureFilter: (v: PurchaseNatureFilter) => void;
   preset: ReturnType<typeof useReportDateRange>["preset"];
   setPreset: ReturnType<typeof useReportDateRange>["setPreset"];
   dateFrom: string;
@@ -496,41 +575,10 @@ function PurchaseInvoicesTabBody({
   onOpenFilter: (key: string) => void;
   downloadingId: string | null;
   onDownload: (row: PurchaseInvoiceListRow) => void;
+  exporting: boolean;
+  onExportExcel: () => void;
+  onExportCsv: () => void;
 }) {
-  const exportCsv = () => {
-    const headers = [
-      "Source Type",
-      "Supplier",
-      "Supplier Invoice No",
-      "Invoice Date",
-      "Taxable Amount",
-      "GST Amount",
-      "Net Payable",
-      "Posting",
-    ];
-    const lines = invoices.map((inv) =>
-      [
-        PURCHASE_SOURCE_TYPE_LABELS[inv.sourceType],
-        inv.vendorName,
-        inv.vendorInvoiceNo,
-        inv.invoiceDate,
-        inv.taxableAmount,
-        inv.gstAmount,
-        inv.netPayable,
-        inv.status,
-      ]
-        .map((v) => `"${String(v).replace(/"/g, '""')}"`)
-        .join(","),
-    );
-    const blob = new Blob([[headers.join(","), ...lines].join("\n")], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "purchase-invoices.csv";
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
   return (
     <AccountsTableListing
       className="h-full min-h-0"
@@ -539,9 +587,10 @@ function PurchaseInvoicesTabBody({
           <ReportFilterRow
             end={
               <AccountsExportMenu
-                onExcel={exportCsv}
-                onPdf={exportCsv}
-                disabled={invoices.length === 0}
+                onExcel={onExportExcel}
+                onCsv={onExportCsv}
+                onPdf={onExportCsv}
+                disabled={exporting}
               />
             }
           >
@@ -562,6 +611,20 @@ function PurchaseInvoicesTabBody({
                 { value: "direct_purchase", label: "Direct Purchase" },
               ]}
             />
+            <ListingSelectFilter
+              label="Purchase Nature"
+              value={purchaseNatureFilter}
+              onChange={setPurchaseNatureFilter}
+              widthClass="w-[148px]"
+              options={[
+                { value: "all", label: "All Nature" },
+                { value: "inventory", label: "Inventory" },
+                { value: "expense", label: "Expense" },
+                { value: "service", label: "Service" },
+                { value: "fixed_asset", label: "Fixed Asset" },
+                { value: "other_non_stock", label: "Capital Goods" },
+              ]}
+            />
             <ReportDateRangeFilter
               preset={preset}
               dateFrom={dateFrom}
@@ -569,7 +632,7 @@ function PurchaseInvoicesTabBody({
               onPresetChange={setPreset}
               onDateFromChange={setDateFrom}
               onDateToChange={setDateTo}
-              presetOptions={INVOICE_LISTING_DATE_PRESETS}
+              presetOptions={PURCHASE_INVOICE_DATE_PRESETS}
             />
             <ListingFilterReset
               active={accountsListingFiltersActive(
@@ -579,6 +642,7 @@ function PurchaseInvoicesTabBody({
                   dateFrom,
                   dateTo,
                   sourceType: sourceTypeFilter,
+                  purchaseNature: purchaseNatureFilter,
                 },
                 listingFilterDefaults(),
               )}
@@ -586,6 +650,7 @@ function PurchaseInvoicesTabBody({
                 const defaults = listingFilterDefaults();
                 setSearch(defaults.search);
                 setSourceTypeFilter(defaults.sourceType);
+                setPurchaseNatureFilter(defaults.purchaseNature);
                 setPreset(defaults.preset);
                 setDateFrom(defaults.dateFrom);
                 setDateTo(defaults.dateTo);
@@ -640,7 +705,6 @@ function GrnPendingTabBody({
   filterLoading,
   filterReady,
   onOpenFilter,
-  creatingGrnId,
   onCreateInvoice,
 }: {
   pendingGrns: EligibleGrnDto[];
@@ -656,7 +720,6 @@ function GrnPendingTabBody({
   filterLoading: FilterFlagMap;
   filterReady: FilterFlagMap;
   onOpenFilter: (key: string) => void;
-  creatingGrnId: string | null;
   onCreateInvoice: (grn: EligibleGrnDto) => void;
 }) {
   return (
@@ -695,7 +758,6 @@ function GrnPendingTabBody({
         filterLoading={filterLoading}
         filterReady={filterReady}
         onOpenFilter={onOpenFilter}
-        creatingGrnId={creatingGrnId}
         onCreateInvoice={onCreateInvoice}
       />
     </AccountsTableListing>
@@ -708,6 +770,7 @@ export default function PurchaseInvoiceListClient() {
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedValue(search, 300);
   const [sourceTypeFilter, setSourceTypeFilter] = useState<SourceTypeFilter>("all");
+  const [purchaseNatureFilter, setPurchaseNatureFilter] = useState<PurchaseNatureFilter>("all");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [invoiceSortKey, setInvoiceSortKey] = useState("");
@@ -727,7 +790,7 @@ export default function PurchaseInvoiceListClient() {
   const [grnLoading, setGrnLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
-  const [creatingGrnId, setCreatingGrnId] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
   const [invoiceFilterOptions, setInvoiceFilterOptions] = useState<FilterValueOptions>({});
   const [invoiceFilterLoading, setInvoiceFilterLoading] = useState<FilterFlagMap>({});
   const [invoiceFilterReady, setInvoiceFilterReady] = useState<FilterFlagMap>({});
@@ -746,7 +809,13 @@ export default function PurchaseInvoiceListClient() {
   const [grnSortKey, setGrnSortKey] = useState("");
   const [grnSortDir, setGrnSortDir] = useState<"asc" | "desc">("asc");
   const [grnColumnFilters, setGrnColumnFilters] = useState<Record<string, unknown>>({});
-  const invoiceFiltersKey = JSON.stringify(invoiceColumnFilters);
+  const invoiceFiltersKey = useMemo(() => {
+    const merged: Record<string, unknown> = { ...invoiceColumnFilters };
+    if (purchaseNatureFilter !== "all") {
+      merged.purchaseNature = { selectedValues: [purchaseNatureFilter] };
+    }
+    return JSON.stringify(merged);
+  }, [invoiceColumnFilters, purchaseNatureFilter]);
   const grnFiltersKey = JSON.stringify(grnColumnFilters);
 
   useEffect(() => {
@@ -797,6 +866,7 @@ export default function PurchaseInvoiceListClient() {
     pageSize,
     debouncedSearch,
     sourceTypeFilter,
+    purchaseNatureFilter,
     dateFrom,
     dateTo,
     invoiceSortKey,
@@ -809,7 +879,7 @@ export default function PurchaseInvoiceListClient() {
     const ac = new AbortController();
     (async () => {
       try {
-        const pendingRes = await PurchaseInvoiceService.countEligibleGrns(ac.signal);
+        const pendingRes = await PurchaseInvoiceService.countPendingGrns(ac.signal);
         if (ac.signal.aborted) return;
         setPendingGrnTotal(pendingRes.total ?? 0);
       } catch {
@@ -832,7 +902,7 @@ export default function PurchaseInvoiceListClient() {
             ? `-${grnSortKey}`
             : grnSortKey
           : undefined;
-        const grnRes = await PurchaseInvoiceService.listEligibleGrns(
+        const grnRes = await PurchaseInvoiceService.listPendingGrns(
           {
             page: grnPage,
             page_size: grnPageSize,
@@ -847,7 +917,7 @@ export default function PurchaseInvoiceListClient() {
         setPendingGrnTotal(grnRes.total ?? 0);
       } catch (e) {
         if (ac.signal.aborted) return;
-        setError(e instanceof Error ? e.message : "Failed to load eligible GRNs.");
+        setError(e instanceof Error ? e.message : "Failed to load pending GRNs.");
         setPendingGrns([]);
         setPendingGrnTotal(0);
       } finally {
@@ -873,7 +943,7 @@ export default function PurchaseInvoiceListClient() {
     setInvoiceFilterOptions({});
     setInvoiceFilterLoading({});
     setInvoiceFilterReady({});
-  }, [sourceTypeFilter, sectionRefresh]);
+  }, [sourceTypeFilter, purchaseNatureFilter, sectionRefresh]);
 
   useEffect(() => {
     grnFilterLoadedRef.current = new Set();
@@ -884,7 +954,7 @@ export default function PurchaseInvoiceListClient() {
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, sourceTypeFilter, dateFrom, dateTo, invoiceSortKey, invoiceSortDir, invoiceFiltersKey]);
+  }, [debouncedSearch, sourceTypeFilter, purchaseNatureFilter, dateFrom, dateTo, invoiceSortKey, invoiceSortDir, invoiceFiltersKey]);
 
   useEffect(() => {
     setGrnPage(1);
@@ -922,43 +992,59 @@ export default function PurchaseInvoiceListClient() {
     }
   }, []);
 
-  const handleCreateInvoiceFromGrn = useCallback(
-    async (grn: EligibleGrnDto) => {
-      setCreatingGrnId(grn.grn_id);
+  const buildExportQuery = useCallback(() => {
+    const ordering = invoiceSortKey
+      ? invoiceSortDir === "desc"
+        ? `-${invoiceSortKey}`
+        : invoiceSortKey
+      : undefined;
+    return {
+      search: debouncedSearch.trim() || undefined,
+      invoice_type: sourceTypeToInvoiceType(sourceTypeFilter),
+      from_date: dateFrom || undefined,
+      to_date: dateTo || undefined,
+      ordering,
+      filters: invoiceFiltersKey !== "{}" ? invoiceFiltersKey : undefined,
+      include_pending: false,
+    };
+  }, [
+    debouncedSearch,
+    sourceTypeFilter,
+    dateFrom,
+    dateTo,
+    invoiceSortKey,
+    invoiceSortDir,
+    invoiceFiltersKey,
+  ]);
+
+  const handleExportInvoices = useCallback(
+    async (format: "csv" | "xlsx") => {
+      setExporting(true);
       setError(null);
       try {
-        const prepared = await PurchaseInvoiceService.prepareGrn(grn.grn_id);
-        const invoiceDate =
-          toApiDate(prepared.supplier_invoice.supplier_invoice_date) ||
-          toApiDate(prepared.grn.grn_date) ||
-          new Date().toISOString().slice(0, 10);
-        const additionalCharges = (prepared.suggested_additional_charges || [])
-          .filter((charge) => charge.mapping_ok && charge.matched_additional_charge_id)
-          .map((charge) => ({
-            additional_charge_id: charge.matched_additional_charge_id as string,
-            amount: Number(charge.amount || 0),
-            charge_source: "ORDER" as const,
-            gst_applicable: charge.gst_percent != null && Number(charge.gst_percent) > 0,
-            gst_rate: charge.gst_percent != null ? Number(charge.gst_percent) : undefined,
-          }));
-        const created = await PurchaseInvoiceService.createFromGrn(grn.grn_id, {
-          purchase_invoice_date: invoiceDate,
-          supplier_invoice_number:
-            prepared.supplier_invoice.supplier_invoice_number ||
-            grn.supplier_invoice_no ||
-            undefined,
-          supplier_invoice_date:
-            toApiDate(prepared.supplier_invoice.supplier_invoice_date) ||
-            toApiDate(grn.supplier_invoice_date) ||
-            null,
-          additional_charges: additionalCharges,
+        await PurchaseInvoiceService.export({
+          ...buildExportQuery(),
+          format,
         });
-        dispatchAccountsDataChanged("purchase-invoices");
-        router.push(`/accounts/purchase-invoices/${created.purchase_invoice_id}`);
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Failed to create purchase invoice from GRN.");
-        setCreatingGrnId(null);
+        setError(e instanceof Error ? e.message : "Failed to export purchase invoices.");
+      } finally {
+        setExporting(false);
       }
+    },
+    [buildExportQuery],
+  );
+
+  const handleCreateInvoiceFromGrn = useCallback(
+    async (grn: EligibleGrnDto) => {
+      if (!isQcCompletedStatus(grn.status)) {
+        setError(
+          `QC has not been completed for ${grn.grn_number}. Complete QC before creating the purchase invoice.`,
+        );
+        return;
+      }
+      setError(null);
+      router.push(`/accounts/purchase-invoices/new?mode=grn&grnId=${grn.grn_id}`);
     },
     [router],
   );
@@ -966,6 +1052,16 @@ export default function PurchaseInvoiceListClient() {
   const openInvoiceFilter = useCallback(
     async (field: string) => {
       markInvoiceFilterOpened(field);
+      if (field === "purchaseNature") {
+        if (invoiceFilterLoadedRef.current.has(field)) return;
+        invoiceFilterLoadedRef.current.add(field);
+        setInvoiceFilterOptions((prev) => ({
+          ...prev,
+          purchaseNature: PURCHASE_NATURE_COLUMN_FILTER_OPTIONS,
+        }));
+        setInvoiceFilterReady((prev) => ({ ...prev, purchaseNature: true }));
+        return;
+      }
       if (invoiceFilterLoadedRef.current.has(field)) return;
       invoiceFilterLoadedRef.current.add(field);
       setInvoiceFilterLoading((prev) => ({ ...prev, [field]: true }));
@@ -996,7 +1092,7 @@ export default function PurchaseInvoiceListClient() {
       grnFilterLoadedRef.current.add(field);
       setGrnFilterLoading((prev) => ({ ...prev, [field]: true }));
       try {
-        const rows = await PurchaseInvoiceService.getEligibleGrnFilterDropdown(field);
+        const rows = await PurchaseInvoiceService.getPendingGrnFilterDropdown(field);
         setGrnFilterOptions((prev) => ({
           ...prev,
           [field]: mapDropdownOptions(rows, field),
@@ -1013,6 +1109,10 @@ export default function PurchaseInvoiceListClient() {
   );
 
   const getInvoiceCellValue = useCallback((row: PurchaseInvoiceListRow, key: string) => {
+    if (key === "purchaseNature") {
+      return row.sourceType === "from_grn" ? "inventory" : row.purchaseNature ?? "expense";
+    }
+    if (key === "hasAttachment") return row.hasAttachment ? "yes" : "no";
     return (row as unknown as Record<string, unknown>)[key];
   }, []);
 
@@ -1026,14 +1126,23 @@ export default function PurchaseInvoiceListClient() {
 
   const invoiceColumnConfig = useMemo(
     () => ({
+      invoiceNo: { type: "text" as const },
       sourceType: { type: "text" as const },
       vendorName: { type: "text" as const },
       vendorInvoiceNo: { type: "text" as const },
       invoiceDate: { type: "date" as const },
+      purchaseNature: {
+        type: "text" as const,
+        optionLabels: PURCHASE_NATURE_OPTION_LABELS,
+      },
       taxableAmount: { type: "amount" as const },
       gstAmount: { type: "amount" as const },
       netPayable: { type: "amount" as const },
-      status: { type: "text" as const },
+      dueDate: { type: "date" as const },
+      approvalStatus: { type: "text" as const },
+      postingStatusLabel: { type: "text" as const },
+      paymentStatus: { type: "text" as const },
+      hasAttachment: { type: "text" as const },
     }),
     [],
   );
@@ -1074,7 +1183,7 @@ export default function PurchaseInvoiceListClient() {
             className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
             onClick={() => router.push("/accounts/purchase-invoices/new?mode=direct")}
           >
-            <FileText className="w-3.5 h-3.5" />
+            <Plus className="w-3.5 h-3.5" />
             Direct Purchase
           </Button>
         }
@@ -1107,6 +1216,8 @@ export default function PurchaseInvoiceListClient() {
                   setSearch={setSearch}
                   sourceTypeFilter={sourceTypeFilter}
                   setSourceTypeFilter={setSourceTypeFilter}
+                  purchaseNatureFilter={purchaseNatureFilter}
+                  setPurchaseNatureFilter={setPurchaseNatureFilter}
                   preset={preset}
                   setPreset={setPreset}
                   dateFrom={dateFrom}
@@ -1124,6 +1235,9 @@ export default function PurchaseInvoiceListClient() {
                   onOpenFilter={openInvoiceFilter}
                   downloadingId={downloadingId}
                   onDownload={handleDownloadInvoice}
+                  exporting={exporting}
+                  onExportExcel={() => handleExportInvoices("xlsx")}
+                  onExportCsv={() => handleExportInvoices("csv")}
                 />
               </div>
             </AccountsColumnFilterProvider>
@@ -1159,7 +1273,6 @@ export default function PurchaseInvoiceListClient() {
                   filterLoading={grnFilterLoading}
                   filterReady={grnFilterReady}
                   onOpenFilter={openGrnFilter}
-                  creatingGrnId={creatingGrnId}
                   onCreateInvoice={handleCreateInvoiceFromGrn}
                 />
               </div>

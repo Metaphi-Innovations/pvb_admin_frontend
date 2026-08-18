@@ -283,7 +283,7 @@ export function buildSingleDirectLine(input: {
   lineId?: string;
   description: string;
   purchaseNature: PurchaseNature;
-  expenseLedgerId: number;
+  expenseLedgerId: number | string;
   expenseLedgerName: string;
   grossAmount: number;
   discount: number;

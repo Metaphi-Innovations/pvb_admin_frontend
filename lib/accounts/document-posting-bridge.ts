@@ -146,7 +146,7 @@ function maybePostDirectPurchaseInvoice(invoice: PurchaseInvoiceRecord): Posting
     vendorName: invoice.vendorName,
     date: invoice.postingDate ?? invoice.invoiceDate,
     expenseLines: directLines
-      .filter((dl): dl is typeof dl & { expenseLedgerId: number } => dl.expenseLedgerId != null)
+      .filter((dl): dl is typeof dl & { expenseLedgerId: number } => typeof dl.expenseLedgerId === "number")
       .map((dl) => ({
         ledgerId: dl.expenseLedgerId,
         ledgerName: dl.expenseLedgerName,

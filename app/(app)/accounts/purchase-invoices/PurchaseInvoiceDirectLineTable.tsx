@@ -7,7 +7,6 @@ import { Input } from "@/components/ui/input";
 import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
 import { formatMoney } from "@/lib/accounts/money-format";
 import { cn } from "@/lib/utils";
-import type { ChartOfAccount } from "@/app/(app)/accounts/data";
 import type { DirectPurchaseLineItem, ItcClassification, PurchaseNature } from "./purchase-invoices-data";
 import {
   UQC_OPTIONS,
@@ -121,7 +120,6 @@ export function PurchaseInvoiceDirectLineTable({
   interstate,
   purchaseNature,
   defaultItc,
-  coaRecords,
   hsnOptions = [],
   readOnly,
 }: {
@@ -130,7 +128,6 @@ export function PurchaseInvoiceDirectLineTable({
   interstate: boolean;
   purchaseNature: PurchaseNature;
   defaultItc: ItcClassification;
-  coaRecords: ChartOfAccount[];
   hsnOptions?: HsnDropdownItem[];
   readOnly?: boolean;
 }) {
@@ -208,14 +205,13 @@ export function PurchaseInvoiceDirectLineTable({
                   <td className={TABLE_CELL}>
                     <DirectPurchaseLineLedgerSelect
                       purchaseNature={purchaseNature}
-                      coaRecords={coaRecords}
                       value={line.expenseLedgerId}
                       fallbackLabel={line.expenseLedgerName}
                       disabled={readOnly}
                       onChange={(ledger) =>
                         updateLine(idx, {
-                          expenseLedgerId: ledger.id,
-                          expenseLedgerName: ledger.accountName,
+                          expenseLedgerId: ledger.ledgerId,
+                          expenseLedgerName: ledger.ledgerName,
                         })
                       }
                     />

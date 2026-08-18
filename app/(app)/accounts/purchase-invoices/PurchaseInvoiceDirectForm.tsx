@@ -10,7 +10,6 @@ import { AccountsDateInput } from "@/components/accounts/AccountsDateInput";
 import { DirectPurchaseSupplierSection } from "./DirectPurchaseSupplierSection";
 import { dispatchAccountsDataChanged } from "@/lib/accounts/accounts-data-events";
 import { COMPANY_BILLING } from "@/lib/procurement/config";
-import { useChartOfAccountsTree } from "@/hooks/accounts/use-chart-of-accounts";
 import { useSuppliersDropdown } from "@/hooks/masters/use-supplier";
 import { useWarehousesDropdown } from "@/hooks/masters/use-warehouse-master";
 import { useHsnDropdown } from "@/hooks/masters/use-hsn";
@@ -23,7 +22,6 @@ import {
   computeDirectPurchaseInvoiceTotals,
   emptyDirectLine,
   isInterstatePurchase,
-  ledgerMatchesPurchaseNature,
   recalcDirectLine,
 } from "./purchase-invoice-direct-utils";
 import { PurchaseInvoiceDirectTotals } from "./PurchaseInvoiceDirectTotals";
@@ -39,9 +37,9 @@ import {
   DP_LABEL_CLASS,
 } from "./direct-purchase-form-ui";
 
-function ledgerApiUuid(ledgerId: number | null, records: { id: number; apiNodeId?: string }[]): string | null {
-  if (ledgerId == null) return null;
-  return records.find((r) => r.id === ledgerId)?.apiNodeId?.trim() || null;
+function selectedLedgerId(ledgerId: string | number | null | undefined): string | null {
+  if (typeof ledgerId === "string" && ledgerId.trim()) return ledgerId.trim();
+  return null;
 }
 
 export function PurchaseInvoiceDirectForm({
@@ -55,7 +53,6 @@ export function PurchaseInvoiceDirectForm({
   const router = useRouter();
   const { data: supplierData } = useSuppliersDropdown();
   const { data: warehouseData } = useWarehousesDropdown();
-  const { data: coaRecords = [] } = useChartOfAccountsTree({ includeLedgers: true });
   const { data: hsnDropdown = [] } = useHsnDropdown();
 
   const suppliers = useMemo(
@@ -81,11 +78,13 @@ export function PurchaseInvoiceDirectForm({
   const [warehouseId, setWarehouseId] = useState("");
   const [vendorInvoiceNo, setVendorInvoiceNo] = useState("");
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().slice(0, 10));
+  const [dueDate, setDueDate] = useState("");
   const [purchaseNature, setPurchaseNature] = useState<PurchaseNature>("expense");
   const [placeOfSupply, setPlaceOfSupply] = useState(COMPANY_BILLING.state);
   const [branchGstin] = useState(COMPANY_BILLING.gstNumber);
   const [roundingAdjustment, setRoundingAdjustment] = useState(0);
   const [narration, setNarration] = useState("");
+  const [attachment, setAttachment] = useState<File | null>(null);
   const defaultItc: ItcClassification = "eligible";
   const [lines, setLines] = useState(() => [emptyDirectLine(defaultItc)]);
   const [error, setError] = useState("");
@@ -103,23 +102,9 @@ export function PurchaseInvoiceDirectForm({
 
   useEffect(() => {
     setLines((prev) =>
-      prev.map((l) => {
-        const recalculated = recalcDirectLine({ ...l, purchaseNature }, interstate);
-        if (!recalculated.expenseLedgerId) return recalculated;
-        const ledger = coaRecords.find((r) => r.id === recalculated.expenseLedgerId);
-        if (ledger && ledgerMatchesPurchaseNature(ledger, purchaseNature, coaRecords)) {
-          return recalculated;
-        }
-        return {
-          ...recalculated,
-          expenseLedgerId: null,
-          expenseLedgerName: "",
-          hsnId: purchaseNature === "service" ? null : recalculated.hsnId,
-          sacId: purchaseNature === "service" ? recalculated.sacId : null,
-        };
-      }),
+      prev.map((l) => recalcDirectLine({ ...l, purchaseNature }, interstate)),
     );
-  }, [branchGstin, placeOfSupply, purchaseNature, interstate, coaRecords]);
+  }, [branchGstin, placeOfSupply, purchaseNature, interstate]);
 
   const totals = useMemo(
     () => computeDirectPurchaseInvoiceTotals(lines, { roundingAdjustment }),
@@ -158,7 +143,7 @@ export function PurchaseInvoiceDirectForm({
       setError("All line items require a description / particulars.");
       return false;
     }
-    if (lines.some((l) => !ledgerApiUuid(l.expenseLedgerId, coaRecords))) {
+    if (lines.some((l) => !selectedLedgerId(l.expenseLedgerId))) {
       setError("Select a ledger for each line item.");
       return false;
     }
@@ -192,12 +177,15 @@ export function PurchaseInvoiceDirectForm({
         purchase_invoice_date: invoiceDate,
         supplier_invoice_number: vendorInvoiceNo.trim(),
         supplier_invoice_date: invoiceDate,
+        due_date: dueDate || null,
         warehouse_id: warehouseId,
         supplier_id: supplierId,
         narration: narration.trim() || undefined,
         remarks: narration.trim() || undefined,
+        round_off_amount: roundingAdjustment,
+        attachment,
         items: lines.map((line) => {
-          const expenseLedgerId = ledgerApiUuid(line.expenseLedgerId, coaRecords);
+          const expenseLedgerId = selectedLedgerId(line.expenseLedgerId);
           if (!expenseLedgerId) {
             throw new Error(`Ledger UUID missing for "${line.description}".`);
           }
@@ -208,6 +196,7 @@ export function PurchaseInvoiceDirectForm({
             sac_id: purchaseNature === "service" ? line.sacId || null : null,
             hsn_id: purchaseNature === "service" ? null : line.hsnId || null,
             quantity: line.quantity || 1,
+            quantity_type: line.uqc || "NOS",
             rate: line.rate || line.taxableAmount,
             gst_rate: line.gstRate,
             is_input_credit_eligible: line.itcClassification === "eligible",
@@ -270,6 +259,10 @@ export function PurchaseInvoiceDirectForm({
             <Label className={DP_LABEL_CLASS}>Invoice Date *</Label>
             <AccountsDateInput value={invoiceDate} onChange={setInvoiceDate} className={DP_FIELD_CLASS} />
           </div>
+          <div className={cn(DP_HEADER_FIELD_CLASS, "w-[130px]")}>
+            <Label className={DP_LABEL_CLASS}>Due Date</Label>
+            <AccountsDateInput value={dueDate} onChange={setDueDate} className={DP_FIELD_CLASS} />
+          </div>
           <div className={cn(DP_HEADER_FIELD_CLASS, "w-[140px]")}>
             <DirectPurchaseSelectField
               label="Place of Supply"
@@ -290,6 +283,14 @@ export function PurchaseInvoiceDirectForm({
               searchPlaceholder="Search…"
             />
           </div>
+          <div className={cn(DP_HEADER_FIELD_CLASS, "w-[140px]")}>
+            <Label className={DP_LABEL_CLASS}>Approval</Label>
+            <Input className={DP_FIELD_CLASS} value="Approved" readOnly />
+          </div>
+          <div className={cn(DP_HEADER_FIELD_CLASS, "w-[140px]")}>
+            <Label className={DP_LABEL_CLASS}>Payment</Label>
+            <Input className={DP_FIELD_CLASS} value="Unpaid" readOnly />
+          </div>
         </div>
       </div>
 
@@ -305,7 +306,6 @@ export function PurchaseInvoiceDirectForm({
           interstate={interstate}
           purchaseNature={purchaseNature}
           defaultItc={defaultItc}
-          coaRecords={coaRecords}
           hsnOptions={hsnOptions}
         />
         <div className="flex justify-end border-t border-border/60 px-2 py-2">
@@ -327,9 +327,20 @@ export function PurchaseInvoiceDirectForm({
         />
       </div>
 
+      <div className="space-y-0.5">
+        <Label className={DP_LABEL_CLASS}>Attachment</Label>
+        <Input
+          className={DP_FIELD_CLASS}
+          type="file"
+          accept="application/pdf,image/jpeg,image/png,image/webp"
+          onChange={(e) => setAttachment(e.target.files?.[0] ?? null)}
+        />
+        {attachment && <p className="text-[11px] text-muted-foreground">{attachment.name}</p>}
+      </div>
+
       <p className="text-[11px] text-muted-foreground">
-        Posting creates supplier outstanding (Purchase Payable) and books GST / Round Off Adjustment automatically.
-        Round-off is calculated by the server to the nearest rupee.
+        Posting creates supplier outstanding (Purchase Payable) and books GST automatically.
+        Round off is saved on the invoice and posted to Round Off Adjustment.
       </p>
 
       <div className="flex items-center gap-2 pt-1 border-t border-border">

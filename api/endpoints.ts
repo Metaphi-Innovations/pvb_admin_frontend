@@ -507,11 +507,16 @@ export const API_ENDPOINTS = {
     },
     PURCHASE_INVOICE: {
       LIST: "/accounts/purchase-invoice",
+      EXPORT: "/accounts/purchase-invoice/export",
       FILTER_DROPDOWN: "/accounts/purchase-invoice/filter-dropdown",
       BY_ID: (id: string) => `/accounts/purchase-invoice/${id}`,
       CANCEL: (id: string) => `/accounts/purchase-invoice/${id}/cancel`,
       PREVIEW_NUMBER: "/accounts/purchase-invoice/preview-number",
       ALLOCATE: "/accounts/purchase-invoice/allocate",
+      PENDING_GRNS: "/accounts/purchase-invoice/pending-grns",
+      PENDING_GRNS_COUNT: "/accounts/purchase-invoice/pending-grns/count",
+      PENDING_GRNS_FILTER_DROPDOWN:
+        "/accounts/purchase-invoice/pending-grns/filter-dropdown",
       ELIGIBLE_GRNS: "/accounts/purchase-invoice/eligible-grns",
       ELIGIBLE_GRNS_COUNT: "/accounts/purchase-invoice/eligible-grns/count",
       ELIGIBLE_GRNS_FILTER_DROPDOWN:
@@ -540,6 +545,7 @@ export const API_ENDPOINTS = {
       CREATE: "/accounts/ledgers",
       VIEW: (id: string) => `/accounts/ledgers/${id}`,
       UPDATE: (id: string) => `/accounts/ledgers/${id}`,
+      DROPDOWN: "/accounts/ledgers/dropdown",
       BALANCES: "/accounts/ledgers/balances",
       EXPORT: "/accounts/ledgers/export",
       PREVIEW_NUMBER: "/accounts/ledgers/preview-number",

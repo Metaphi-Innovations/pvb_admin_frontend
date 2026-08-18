@@ -50,6 +50,7 @@ import {
 } from "../PurchaseInvoiceQtyComparisonTable";
 import { DirectPurchaseAttachmentPanel } from "../DirectPurchaseAttachmentPanel";
 import { getBankAccountPrintDetails } from "@/components/accounts/WarehouseMappedBankAccountSelect";
+import { isoToDisplayDate } from "@/lib/accounts/date-display";
 
 function Field({ label, value }: { label: string; value?: string | null }) {
   return (
@@ -58,6 +59,11 @@ function Field({ label, value }: { label: string; value?: string | null }) {
       <p className="text-xs font-semibold mt-0.5">{value || "—"}</p>
     </div>
   );
+}
+
+function DateField({ label, value }: { label: string; value?: string | null }) {
+  const display = value ? isoToDisplayDate(value) || value : "";
+  return <Field label={label} value={display} />;
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -229,6 +235,10 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: st
     taxable: invoice.subtotal,
     taxAmount: invoice.taxAmount,
     grandTotal: invoice.grandTotal,
+    cgst: invoice.cgstTotal,
+    sgst: invoice.sgstTotal,
+    igst: invoice.igstTotal,
+    roundOff: invoice.roundingAdjustment ?? 0,
   });
 
   return (
@@ -369,8 +379,23 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: st
             <div className="grid grid-cols-2 gap-3">
               <Field label="Invoice No (Internal)" value={invoice.invoiceNo} />
               <Field label="Supplier Invoice No" value={invoice.vendorInvoiceNo} />
-              <Field label="Supplier Invoice Date" value={invoice.invoiceDate} />
-              {isDirect && <Field label="Posting Date" value={invoice.postingDate} />}
+              <DateField label="Supplier Invoice Date" value={invoice.invoiceDate} />
+              <DateField label="Due Date" value={invoice.dueDate} />
+              <Field
+                label="Approval"
+                value={invoice.backendStatus === "PENDING" ? "Pending Approval" : "Approved"}
+              />
+              <Field
+                label="Payment"
+                value={
+                  invoice.amountPaid >= invoice.grandTotal && invoice.grandTotal > 0
+                    ? "Paid"
+                    : invoice.amountPaid > 0
+                      ? "Partial"
+                      : "Unpaid"
+                }
+              />
+              {isDirect && <DateField label="Posting Date" value={invoice.postingDate} />}
               {isDirect && (
                 <Field
                   label="Purchase Nature"
@@ -387,7 +412,6 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: st
                   }
                 />
               )}
-              {isDirect && <Field label="Due Date" value={invoice.dueDate} />}
               {isDirect && <Field label="Payment Terms" value={invoice.paymentTerms} />}
               {isDirect && <Field label="Currency" value={invoice.currency} />}
               {isDirect && <Field label="Reference No." value={invoice.referenceNumber} />}
@@ -409,7 +433,7 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: st
           </Section>
         </div>
 
-        {isDirect && invoice.attachment && (
+        {invoice.attachment && (
           <Section title="Supplier Invoice Attachment">
             <DirectPurchaseAttachmentPanel attachment={invoice.attachment} />
           </Section>
@@ -581,11 +605,22 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: st
                   highlight={(invoice.tdsDeduction ?? 0) > 0}
                 />
               )}
-              {(invoice.roundingAdjustment ?? 0) !== 0 && (
+              {isDirect && (
+                <AmountRow
+                  label="Round Off"
+                  value={formatMoney(invoice.roundingAdjustment ?? 0)}
+                  muted
+                />
+              )}
+              {!isDirect && (invoice.roundingAdjustment ?? 0) !== 0 && (
                 <AmountRow label="Rounding" value={formatMoney(invoice.roundingAdjustment!)} muted />
               )}
               <div className="border-t border-border/60 pt-2">
-                <AmountRow label="Invoice Total" value={formatMoney(gst.invoiceTotal)} bold />
+                <AmountRow
+                  label="Invoice Total"
+                  value={formatMoney(invoice.grandTotal)}
+                  bold
+                />
                 {isDirect && (
                   <AmountRow label="Net Payable" value={formatMoney(invoice.netPayable ?? gst.invoiceTotal)} bold />
                 )}
