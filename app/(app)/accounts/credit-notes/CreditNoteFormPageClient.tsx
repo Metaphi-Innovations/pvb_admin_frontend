@@ -26,7 +26,7 @@ import { CreditNoteParticularsEditor } from "./components/CreditNoteParticularsE
 import { CreditNoteReasonDialog } from "./components/CreditNoteReasonDialog";
 import { CreditNoteSourceEntitlementSection } from "./components/CreditNoteSourceEntitlementSection";
 import { CREDIT_NOTES_BREADCRUMB, CREDIT_NOTES_LIST_PATH } from "./note-utils";
-import { CreditNoteFormApi, creditNoteApiError } from "./credit-note-form-api";
+import { CreditNoteFormApi, creditNoteApiError, creditNoteErrorIncludes } from "./credit-note-form-api";
 import type {
   CreateDirectCreditNotePayload,
   CreditNoteDetail,
@@ -95,6 +95,8 @@ export default function CreditNoteFormPageClient({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const submittingRef = useRef(false);
+  const [approvalRequired, setApprovalRequired] = useState(true);
+  const [configReady, setConfigReady] = useState(false);
 
   const [cnDate, setCnDate] = useState(todayIso());
   const [warehouseId, setWarehouseId] = useState("");
@@ -291,6 +293,25 @@ export default function CreditNoteFormPageClient({
       cancelled = true;
     };
   }, [routeCnId, pendingId, applyCn]);
+
+  const refreshConfig = useCallback(async () => {
+    try {
+      const cfg = await CreditNoteFormApi.getConfig();
+      setApprovalRequired(cfg.approval_required !== false);
+    } catch (e) {
+      setApprovalRequired(true);
+      showToast(
+        creditNoteApiError(e, "Could not load Credit Note approval settings. Approval remains required."),
+        "error",
+      );
+    } finally {
+      setConfigReady(true);
+    }
+  }, [showToast]);
+
+  useEffect(() => {
+    void refreshConfig();
+  }, [refreshConfig]);
 
   useEffect(() => {
     CreditNoteFormApi.listSchemeTypeLedgerMappings()
@@ -498,6 +519,68 @@ export default function CreditNoteFormPageClient({
     router.replace(`${CREDIT_NOTES_LIST_PATH}/${id}/edit`);
   };
 
+  const goToDetail = (id: string) => {
+    router.replace(`${CREDIT_NOTES_LIST_PATH}/${id}`);
+  };
+
+  const requireCreditNoteId = (detail: CreditNoteDetail | null | undefined): string => {
+    const id = detail?.credit_note_id?.trim() || "";
+    if (!isUuid(id)) {
+      throw new Error("CREDIT_NOTE_ID_MISSING: The server did not return a Credit Note id.");
+    }
+    return id;
+  };
+
+  const refreshConfigIfApprovalDisabled = async (error: unknown) => {
+    if (creditNoteErrorIncludes(error, "CREDIT_NOTE_APPROVAL_DISABLED")) {
+      await refreshConfig();
+    }
+  };
+
+  const updateCurrentDraft = async (id: string): Promise<CreditNoteDetail> => {
+    if (pendingEntitlementLocked) {
+      const updated = await CreditNoteFormApi.updateDraft(id, {
+        cn_date: cnDate,
+        narration: narration.trim() || null,
+      });
+      applyCn(updated);
+      return updated;
+    }
+    const invalid = validateDirect();
+    if (invalid) throw new Error(invalid);
+    const payload = buildDirectPayload();
+    const updated = await CreditNoteFormApi.updateDraft(id, {
+      cn_date: payload.cn_date,
+      narration: payload.narration,
+      lines: payload.lines,
+      references: payload.references,
+    });
+    applyCn(updated);
+    return updated;
+  };
+
+  const postById = async (id: string): Promise<CreditNoteDetail> => {
+    if (!isUuid(id)) {
+      throw new Error("CREDIT_NOTE_ID_MISSING: Cannot post before the Credit Note exists.");
+    }
+    try {
+      const posted = await CreditNoteFormApi.post(id);
+      applyCn(posted);
+      return posted;
+    } catch (e) {
+      await refreshConfigIfApprovalDisabled(e);
+      if (
+        creditNoteErrorIncludes(e, "ALREADY_POSTED") ||
+        /already posted/i.test(creditNoteApiError(e, ""))
+      ) {
+        const latest = await CreditNoteFormApi.getById(id);
+        applyCn(latest);
+        if (latest.status === "POSTED") return latest;
+      }
+      throw e;
+    }
+  };
+
   const saveDraft = () =>
     guardBusy(async () => {
       if (pendingEntitlementLocked && pendingId && !cnId) {
@@ -563,32 +646,127 @@ export default function CreditNoteFormPageClient({
 
   const submitForApproval = () =>
     guardBusy(async () => {
-      if (!approverId) throw new Error("CREDIT_NOTE_APPROVER_REQUIRED: Select an approver before submitting.");
-      if (!pendingEntitlementLocked) {
-        const invalid = validateDirect();
-        if (invalid) throw new Error(invalid);
+      try {
+        if (!approverId) throw new Error("CREDIT_NOTE_APPROVER_REQUIRED: Select an approver before submitting.");
+        if (!pendingEntitlementLocked) {
+          const invalid = validateDirect();
+          if (invalid) throw new Error(invalid);
+        }
+        const id = await ensureSavedId();
+        const updated = await CreditNoteFormApi.submit(id, approverId);
+        applyCn(updated);
+        showToast("Submitted for approval", "success");
+        goToEdit(id);
+      } catch (e) {
+        await refreshConfigIfApprovalDisabled(e);
+        throw e;
       }
-      const id = await ensureSavedId();
-      const updated = await CreditNoteFormApi.submit(id, approverId);
-      applyCn(updated);
-      showToast("Submitted for approval", "success");
-      goToEdit(id);
     });
 
   const approve = () =>
     guardBusy(async () => {
-      if (!cnId) return;
-      const updated = await CreditNoteFormApi.approve(cnId);
-      applyCn(updated);
-      showToast("Credit Note approved", "success");
+      try {
+        if (!cnId) return;
+        const updated = await CreditNoteFormApi.approve(cnId);
+        applyCn(updated);
+        showToast("Credit Note approved", "success");
+      } catch (e) {
+        await refreshConfigIfApprovalDisabled(e);
+        throw e;
+      }
     });
 
   const postCn = () =>
     guardBusy(async () => {
-      if (!cnId) return;
-      const updated = await CreditNoteFormApi.post(cnId);
-      applyCn(updated);
-      showToast("Credit Note posted", "success");
+      try {
+        if (!approvalRequired) {
+          if (status === "DRAFT" && cnId) {
+            const updated = await updateCurrentDraft(cnId);
+            if (updated.status && updated.status !== "DRAFT") {
+              throw new Error("CREDIT_NOTE_INVALID_STATUS: Cannot post until the Credit Note is a Draft.");
+            }
+            await postById(requireCreditNoteId(updated));
+            showToast("Credit Note posted", "success");
+            goToDetail(requireCreditNoteId(updated));
+            return;
+          }
+          if ((status === "PENDING_APPROVAL" || status === "APPROVED") && cnId) {
+            await postById(cnId);
+            showToast("Credit Note posted", "success");
+            goToDetail(cnId);
+            return;
+          }
+          return;
+        }
+        if (!cnId) return;
+        const updated = await CreditNoteFormApi.post(cnId);
+        applyCn(updated);
+        showToast("Credit Note posted", "success");
+      } catch (e) {
+        await refreshConfigIfApprovalDisabled(e);
+        throw e;
+      }
+    });
+
+  const saveAndPost = () =>
+    guardBusy(async () => {
+      try {
+        if (pendingEntitlementLocked && pendingId && !cnId) {
+          if (!cnDate) throw new Error("Credit Note Date is required.");
+          if (pending?.credit_note?.credit_note_id) {
+            throw new Error("PENDING_CREDIT_NOTE_ALREADY_CONVERTED: This Pending CN is already converted.");
+          }
+          const created = await CreditNoteFormApi.createFromPending(pendingId, {
+            cn_date: cnDate,
+            narration: narration.trim() || null,
+            remarks: pending?.remarks || null,
+          });
+          const id = requireCreditNoteId(created);
+          applyCn(created);
+          try {
+            await postById(id);
+          } catch (e) {
+            goToEdit(id);
+            throw e;
+          }
+          showToast("Credit Note posted", "success");
+          goToDetail(id);
+          return;
+        }
+        if (status === "REJECTED" && cnId) {
+          const updated = await updateCurrentDraft(cnId);
+          if (updated.status !== "DRAFT") {
+            throw new Error("CREDIT_NOTE_INVALID_STATUS: Save the rejected Credit Note to Draft before posting.");
+          }
+          await postById(requireCreditNoteId(updated));
+          showToast("Credit Note posted", "success");
+          goToDetail(requireCreditNoteId(updated));
+          return;
+        }
+        const invalid = validateDirect();
+        if (invalid) throw new Error(invalid);
+        if (cnId) {
+          const updated = await updateCurrentDraft(cnId);
+          await postById(requireCreditNoteId(updated));
+          showToast("Credit Note posted", "success");
+          goToDetail(requireCreditNoteId(updated));
+          return;
+        }
+        const created = await CreditNoteFormApi.createDirect(buildDirectPayload());
+        const id = requireCreditNoteId(created);
+        applyCn(created);
+        try {
+          await postById(id);
+        } catch (e) {
+          goToEdit(id);
+          throw e;
+        }
+        showToast("Credit Note posted", "success");
+        goToDetail(id);
+      } catch (e) {
+        await refreshConfigIfApprovalDisabled(e);
+        throw e;
+      }
     });
 
   const onReasonConfirm = (reason: string) => {
@@ -596,14 +774,19 @@ export default function CreditNoteFormPageClient({
     setReasonDialog(null);
     if (!kind || !cnId) return;
     void guardBusy(async () => {
-      if (kind === "reject") {
-        const updated = await CreditNoteFormApi.reject(cnId, reason);
-        applyCn(updated);
-        showToast("Credit Note rejected", "success");
-      } else {
-        const updated = await CreditNoteFormApi.cancel(cnId, reason);
-        applyCn(updated);
-        showToast("Credit Note cancelled", "success");
+      try {
+        if (kind === "reject") {
+          const updated = await CreditNoteFormApi.reject(cnId, reason);
+          applyCn(updated);
+          showToast("Credit Note rejected", "success");
+        } else {
+          const updated = await CreditNoteFormApi.cancel(cnId, reason);
+          applyCn(updated);
+          showToast("Credit Note cancelled", "success");
+        }
+      } catch (e) {
+        await refreshConfigIfApprovalDisabled(e);
+        throw e;
       }
     });
   };
@@ -702,13 +885,36 @@ export default function CreditNoteFormPageClient({
               <CreditNoteFormActionBar
                 status={status}
                 busy={busy || pageLoading}
+                approvalRequired={approvalRequired}
+                configReady={configReady}
+                isPendingGenerate={isPendingFlow && !cnId}
+                hasExistingId={Boolean(cnId)}
                 canCancel={Boolean(cnId) && status !== "POSTED" && status !== "CANCELLED" && status !== "REVERSED"}
                 onDiscard={requestCancel}
                 onSaveDraft={fieldsEditable ? saveDraft : undefined}
-                onSubmitForApproval={fieldsEditable ? submitForApproval : undefined}
-                onApprove={canActAsApprover ? approve : undefined}
-                onReject={canActAsApprover ? () => setReasonDialog("reject") : undefined}
-                onPost={status === "APPROVED" ? postCn : undefined}
+                onSubmitForApproval={approvalRequired && fieldsEditable ? submitForApproval : undefined}
+                onSaveAndPost={
+                  !approvalRequired &&
+                  configReady &&
+                  fieldsEditable &&
+                  (!cnId || status === "REJECTED")
+                    ? saveAndPost
+                    : undefined
+                }
+                onApprove={approvalRequired && canActAsApprover ? approve : undefined}
+                onReject={approvalRequired && canActAsApprover ? () => setReasonDialog("reject") : undefined}
+                onPost={
+                  approvalRequired
+                    ? status === "APPROVED"
+                      ? postCn
+                      : undefined
+                    : configReady &&
+                        (status === "APPROVED" ||
+                          status === "PENDING_APPROVAL" ||
+                          (status === "DRAFT" && Boolean(cnId)))
+                      ? postCn
+                      : undefined
+                }
                 onCancel={cnId && status !== "POSTED" ? () => setReasonDialog("cancel") : undefined}
               />
             )
@@ -800,7 +1006,7 @@ export default function CreditNoteFormPageClient({
                     <VoucherNoteReadOnly>{salesperson}</VoucherNoteReadOnly>
                   </VoucherNoteField>
                 ) : null}
-                {fieldsEditable && (status === "DRAFT" || status === "REJECTED" || !status) ? (
+                {approvalRequired && fieldsEditable && (status === "DRAFT" || status === "REJECTED" || !status) ? (
                   <VoucherNoteField label="Approver" width="md">
                     <SearchableSelect
                       value={approverId}
