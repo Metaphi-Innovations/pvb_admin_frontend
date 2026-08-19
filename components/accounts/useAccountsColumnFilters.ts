@@ -108,7 +108,7 @@ export function useAccountsColumnFilters<T>({
       colKey: columnKey,
       align: opts?.align ?? "left",
       sortable: opts?.sortable !== false,
-      sortKey,
+      sortKey: sortKey ?? undefined,
       sortDir,
       onSort: handleSort,
       onRemoveSort: removeSort,

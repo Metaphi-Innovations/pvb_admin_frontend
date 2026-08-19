@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AlertCircle, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -14,7 +14,16 @@ import { useSuppliersDropdown } from "@/hooks/masters/use-supplier";
 import { useWarehousesDropdown } from "@/hooks/masters/use-warehouse-master";
 import { useHsnDropdown } from "@/hooks/masters/use-hsn";
 import { cn } from "@/lib/utils";
-import { PurchaseInvoiceService } from "@/services/purchase-invoice.service";
+import { PurchaseInvoiceService, type AdditionalChargeInput, type CreateDirectPurchasePayload } from "@/services/purchase-invoice.service";
+import { useFY, setStoredFYId } from "@/lib/fy-store";
+import {
+  GoodsInvoiceAdditionalChargesEditor,
+} from "@/app/(app)/accounts/invoices/components/GoodsInvoiceAdditionalChargesEditor";
+import {
+  createEmptyAdditionalExpense,
+  calcAdditionalExpenseRow,
+  type InvoiceAdditionalExpense,
+} from "@/app/(app)/accounts/invoices/invoice-additional-expenses";
 import type { ItcClassification, PurchaseNature } from "./purchase-invoices-data";
 import {
   INDIAN_STATE_OPTIONS,
@@ -51,6 +60,7 @@ export function PurchaseInvoiceDirectForm({
   showToast: (msg: string) => void;
 }) {
   const router = useRouter();
+  const { selectedFY } = useFY();
   const { data: supplierData } = useSuppliersDropdown();
   const { data: warehouseData } = useWarehousesDropdown();
   const { data: hsnDropdown = [] } = useHsnDropdown();
@@ -87,10 +97,27 @@ export function PurchaseInvoiceDirectForm({
   const [attachment, setAttachment] = useState<File | null>(null);
   const defaultItc: ItcClassification = "eligible";
   const [lines, setLines] = useState(() => [emptyDirectLine(defaultItc)]);
+  const [additionalExpenses, setAdditionalExpenses] = useState<InvoiceAdditionalExpense[]>([]);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
   const interstate = isInterstatePurchase(branchGstin, placeOfSupply);
+
+  const handleExpensesChange = useCallback(
+    (updater: React.SetStateAction<InvoiceAdditionalExpense[]>) => {
+      setAdditionalExpenses(updater);
+    },
+    [],
+  );
+
+  const chargeTotal = useMemo(
+    () =>
+      additionalExpenses.reduce((s, row) => {
+        const calc = calcAdditionalExpenseRow(row, interstate);
+        return s + (calc.totalAmount > 0 ? calc.totalAmount : 0);
+      }, 0),
+    [additionalExpenses, interstate],
+  );
 
   const hsnOptions = useMemo(
     () =>
@@ -107,8 +134,14 @@ export function PurchaseInvoiceDirectForm({
   }, [branchGstin, placeOfSupply, purchaseNature, interstate]);
 
   const totals = useMemo(
-    () => computeDirectPurchaseInvoiceTotals(lines, { roundingAdjustment }),
-    [lines, roundingAdjustment],
+    () => {
+      const base = computeDirectPurchaseInvoiceTotals(lines, { roundingAdjustment });
+      return {
+        ...base,
+        netPayable: Math.round((base.netPayable + chargeTotal) * 100) / 100,
+      };
+    },
+    [lines, roundingAdjustment, chargeTotal],
   );
 
   const purchaseNatureOptions = (Object.keys(PURCHASE_NATURE_LABELS) as PurchaseNature[]).map((k) => ({
@@ -172,7 +205,19 @@ export function PurchaseInvoiceDirectForm({
     if (!validate()) return;
     setSaving(true);
     setError("");
+    // Ensure the FY id is in localStorage before axios fires the request.
+    if (selectedFY?.id) setStoredFYId(selectedFY.id);
     try {
+      const additionalCharges: CreateDirectPurchasePayload["additional_charges"] & {} = additionalExpenses
+        .filter((e) => e.chargeMasterId && e.amount > 0)
+        .map((e) => ({
+          additional_charge_id: e.chargeMasterId!,
+          amount: e.amount,
+          charge_source: "INVOICE" as const,
+          gst_applicable: e.gstApplicable,
+          gst_rate: e.gstApplicable ? e.gstPct : undefined,
+        }));
+
       const created = await PurchaseInvoiceService.createDirectPurchase({
         purchase_invoice_date: invoiceDate,
         supplier_invoice_number: vendorInvoiceNo.trim(),
@@ -184,6 +229,7 @@ export function PurchaseInvoiceDirectForm({
         remarks: narration.trim() || undefined,
         round_off_amount: roundingAdjustment,
         attachment,
+        additional_charges: additionalCharges.length > 0 ? additionalCharges : undefined,
         items: lines.map((line) => {
           const expenseLedgerId = selectedLedgerId(line.expenseLedgerId);
           if (!expenseLedgerId) {
@@ -313,6 +359,23 @@ export function PurchaseInvoiceDirectForm({
             totals={totals}
             roundingAdjustment={roundingAdjustment}
             onRoundingChange={setRoundingAdjustment}
+            additionalChargeTotal={chargeTotal}
+          />
+        </div>
+      </div>
+
+      <div className="bg-white rounded-lg border border-border overflow-hidden">
+        <div className="px-2 py-1 border-b border-border/60 bg-muted/20">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+            Additional Charges
+          </p>
+        </div>
+        <div className="p-2">
+          <GoodsInvoiceAdditionalChargesEditor
+            expenses={additionalExpenses}
+            onChange={handleExpensesChange}
+            disabled={saving}
+            interstate={interstate}
           />
         </div>
       </div>

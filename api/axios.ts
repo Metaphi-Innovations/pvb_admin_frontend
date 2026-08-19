@@ -77,6 +77,13 @@ axiosInstance.interceptors.request.use(
       }
     }
 
+    // When the request body is FormData, clear the instance-level
+    // Content-Type: application/json so axios automatically sets
+    // multipart/form-data; boundary=... from the FormData object.
+    if (typeof FormData !== "undefined" && config.data instanceof FormData) {
+      config.headers.delete("Content-Type");
+    }
+
     return config;
   },
   (error) => {
@@ -105,6 +112,10 @@ axiosInstance.interceptors.response.use(
     return response;
   },
   async (error: AxiosError) => {
+    if (axios.isCancel(error)) {
+      return Promise.reject(error);
+    }
+
     const originalRequest = error.config as any;
 
     if (!originalRequest) {

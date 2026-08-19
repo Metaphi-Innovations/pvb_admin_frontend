@@ -496,6 +496,8 @@ export const API_ENDPOINTS = {
       ELIGIBLE_DISPATCHES: "/accounts/sales-invoice/eligible-dispatches",
       PREPARE_DISPATCH: (dispatchId: string) =>
         `/accounts/sales-invoice/dispatch/${dispatchId}/prepare`,
+      PREVIEW_DISPATCH_TOTALS: (dispatchId: string) =>
+        `/accounts/sales-invoice/dispatch/${dispatchId}/preview-totals`,
       CREATE_FROM_DISPATCH: (dispatchId: string) =>
         `/accounts/sales-invoice/from-dispatch/${dispatchId}`,
       CREATE_DIRECT_SERVICE: "/accounts/sales-invoice/direct-service",
@@ -553,6 +555,12 @@ export const API_ENDPOINTS = {
       BALANCES: "/accounts/ledgers/balances",
       EXPORT: "/accounts/ledgers/export",
       PREVIEW_NUMBER: "/accounts/ledgers/preview-number",
+      STOCK_IN_HAND: "/accounts/ledgers/stock-in-hand",
+      COGS: "/accounts/ledgers/cogs",
+      SALES_PRODUCT_WISE: "/accounts/ledgers/sales",
+      STOCK_IN_HAND_PRODUCT_TRANSACTIONS: "/accounts/ledgers/stock-in-hand/product-transactions",
+      COGS_PRODUCT_TRANSACTIONS: "/accounts/ledgers/cogs/product-transactions",
+      SALES_PRODUCT_TRANSACTIONS: "/accounts/ledgers/sales/product-transactions",
       OPENING_BALANCES: (ledgerId: string) =>
         `/accounts/ledgers/${ledgerId}/opening-balances`,
       OPENING_BALANCE: (ledgerId: string, openingBalanceId: string) =>

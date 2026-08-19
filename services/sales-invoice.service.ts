@@ -60,7 +60,12 @@ export type CreateFromDispatchPayload = {
   vehicle_number?: string | null;
   lr_number?: string | null;
   eway_bill_number?: string | null;
+  irn_number?: string | null;
+  acknowledgement_number?: string | null;
+  acknowledgement_date?: string | null;
+  einvoice_status?: string | null;
   additional_charges?: AdditionalChargeInput[];
+  round_off_amount?: number | string | null;
 };
 
 export type DirectServiceItemInput = {
@@ -302,6 +307,20 @@ export type PrepareDispatchInvoiceDto = {
     default_gst_rate: string | null;
     mapping_ok: boolean;
   }>;
+  totals?: DispatchInvoiceTotalsPreview;
+};
+
+export type DispatchInvoiceTotalsPreview = {
+  gross_amount: string;
+  product_discount_amount: string;
+  taxable_amount: string;
+  additional_charge_amount: string;
+  cgst_amount: string;
+  sgst_amount: string;
+  igst_amount: string;
+  gst_amount: string;
+  round_off_amount: string;
+  invoice_amount: string;
 };
 
 export function readTransportDistanceKm(
@@ -604,7 +623,7 @@ function mapBackendLineItem(
       asString(sacSnap.hsnCode || sacSnap.hsn_code || sacSnap.code) ||
       "",
     qty,
-    unit: asString(uomSnap.label || uomSnap.uom || raw.quantity_type) || "NOS",
+    unit: asString(uomSnap.label || uomSnap.uom || uomSnap.unit || raw.quantity_type) || "NOS",
     unitPrice: rate,
     discountPct,
     taxPct: gstPct,
@@ -743,9 +762,19 @@ export function mapSalesInvoiceDetailToRecord(
     roundOff: asNumber(dto.round_off_amount),
     irn: asString(dto.irn_number) || undefined,
     eInvoiceNo: asString(dto.acknowledgement_number) || undefined,
+    acknowledgementNo: asString(dto.acknowledgement_number) || undefined,
+    acknowledgementDate: asDateOnly(dto.acknowledgement_date) || undefined,
+    eInvoiceStatus: (
+      ["not_applicable", "not_generated", "generated", "stale", "failed", "cancelled"].includes(
+        asString(dto.einvoice_status),
+      )
+        ? asString(dto.einvoice_status)
+        : undefined
+    ) as InvoiceRecord["eInvoiceStatus"],
     ewayBillNo: asString(dto.dispatch?.eway_bill_number) || undefined,
     vehicleNo: asString(dto.dispatch?.vehicle_number) || undefined,
     transporterName: asString(dto.dispatch?.transporter) || undefined,
+    lrNo: asString(dto.dispatch?.lr_number) || undefined,
     postedVoucherNo: dto.accounting_voucher?.voucher_number || undefined,
     postedVoucherId: dto.accounting_voucher?.accounting_voucher_id ?? null,
     customerLedgerUuid:
@@ -834,6 +863,27 @@ export const SalesInvoiceService = {
     } catch (error) {
       throw new Error(
         extractErrorMessage(error, "Failed to prepare dispatch for invoice."),
+      );
+    }
+  },
+
+  async previewDispatchTotals(
+    dispatchId: string,
+    payload: Pick<CreateFromDispatchPayload, "additional_charges" | "round_off_amount"> = {},
+  ): Promise<DispatchInvoiceTotalsPreview> {
+    try {
+      const response = await axiosInstance.post(
+        API_ENDPOINTS.ACCOUNTS.SALES_INVOICE.PREVIEW_DISPATCH_TOTALS(dispatchId),
+        payload,
+      );
+      const data = unwrapData(response);
+      if (!data) {
+        throw new Error("Failed to preview dispatch invoice totals.");
+      }
+      return data as DispatchInvoiceTotalsPreview;
+    } catch (error) {
+      throw new Error(
+        extractErrorMessage(error, "Failed to preview dispatch invoice totals."),
       );
     }
   },

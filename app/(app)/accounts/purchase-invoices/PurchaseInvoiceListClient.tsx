@@ -353,7 +353,6 @@ function PurchaseInvoicesTabTable({
             <SortTh label="Approval" colKey="approvalStatus" {...filterProps("approvalStatus")} />
             <SortTh label="Posting" colKey="postingStatusLabel" filterable={false} />
             <SortTh label="Payment" colKey="paymentStatus" {...filterProps("paymentStatus")} />
-            <SortTh label="Attachment" colKey="hasAttachment" {...filterProps("hasAttachment")} />
             <AccountsColumnHeader
               label="Actions"
               colKey="_actions"
@@ -366,9 +365,9 @@ function PurchaseInvoicesTabTable({
         </AccountsTableHead>
         <AccountsTableBody>
           {loading && toolbarRows.length === 0 ? (
-            <AccountsTableEmpty colSpan={15} message="Loading purchase invoices…" />
+            <AccountsTableEmpty colSpan={14} message="Loading purchase invoices…" />
           ) : toolbarRows.length === 0 ? (
-            <AccountsTableEmpty colSpan={15} message="No purchase invoices found." />
+            <AccountsTableEmpty colSpan={14} message="No purchase invoices found." />
           ) : (
             toolbarRows.map((inv) => (
               <AccountsTableRow key={inv.id}>
@@ -410,13 +409,7 @@ function PurchaseInvoicesTabTable({
                 <AccountsTableCell>
                   <PaymentStatusBadge status={inv.paymentStatus} />
                 </AccountsTableCell>
-                <AccountsTableCell>
-                  {inv.hasAttachment ? (
-                    <Paperclip className="w-3.5 h-3.5 text-muted-foreground" aria-label="Has attachment" />
-                  ) : (
-                    "—"
-                  )}
-                </AccountsTableCell>
+
                 <AccountsTableCell align="right" className={accountsActionColClass("multi")}>
                   <ListingRowActions
                     viewHref={`/accounts/purchase-invoices/${inv.id}`}
@@ -589,7 +582,7 @@ function PurchaseInvoicesTabBody({
               <AccountsExportMenu
                 onExcel={onExportExcel}
                 onCsv={onExportCsv}
-                onPdf={onExportCsv}
+                // onPdf={onExportCsv}
                 disabled={exporting}
               />
             }
