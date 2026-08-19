@@ -308,11 +308,8 @@ export default function RolesPage() {
   const geoLevelOptionsQuery = useRoleFilterDropdown("geography_level", {
     enabled: isFilterOpen("geoLevel"),
   });
-  const createdByOptionsQuery = useRoleFilterDropdown("created_by_user__username", {
-    enabled: isFilterOpen("createdBy"),
-  });
-  const updatedByOptionsQuery = useRoleFilterDropdown("updated_by_user__username", {
-    enabled: isFilterOpen("updatedBy"),
+  const statusOptionsQuery = useRoleFilterDropdown("is_active", {
+    enabled: isFilterOpen("status"),
   });
 
   const templatesQuery = useTemplates(templateParams, { enabled: activeTab === "templates" });
@@ -480,10 +477,7 @@ export default function RolesPage() {
       sortable: true,
       filterable: true,
       filterType: "dropdown",
-      filterOptions: [
-        { label: "Active", value: "active" },
-        { label: "Inactive", value: "inactive" },
-      ],
+      filterOptions: statusOptionsQuery.data ?? [],
       render: (_val, row) => (
         <ListingStatusToggle
           active={isActiveStatus(row.status)}
@@ -496,8 +490,7 @@ export default function RolesPage() {
       header: "Created",
       sortable: true,
       filterable: true,
-      filterType: "audit",
-      auditUserOptions: createdByOptionsQuery.data ?? [],
+      filterType: "date",
       render: (_val, row) => (
         <ListingAuditCell name={row.createdBy} date={row.createdDate} variant="created" />
       ),
@@ -507,8 +500,7 @@ export default function RolesPage() {
       header: "Updated",
       sortable: true,
       filterable: true,
-      filterType: "audit",
-      auditUserOptions: updatedByOptionsQuery.data ?? [],
+      filterType: "date",
       render: (_val, row) => (
         <ListingAuditCell name={row.updatedBy} date={row.updatedDate} variant="updated" />
       ),
@@ -613,8 +605,7 @@ export default function RolesPage() {
       header: "Created",
       sortable: true,
       filterable: true,
-      filterType: "audit",
-      auditUserOptions: templateCreatedByOptions,
+      filterType: "date",
       render: (_val, row) => (
         <ListingAuditCell name={row.createdBy} date={row.createdAt} variant="created" />
       ),
@@ -624,8 +615,7 @@ export default function RolesPage() {
       header: "Updated",
       sortable: true,
       filterable: true,
-      filterType: "audit",
-      auditUserOptions: templateUpdatedByOptions,
+      filterType: "date",
       render: (_val, row) => (
         <ListingAuditCell name={row.updatedBy} date={row.updatedAt} variant="updated" />
       ),

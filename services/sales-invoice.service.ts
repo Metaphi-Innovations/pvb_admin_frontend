@@ -144,6 +144,12 @@ export type SalesInvoiceListDto = {
   destination_warehouse_id?: string | null;
   irn_number?: string | null;
   einvoice_status?: string | null;
+  dispatch?: {
+    dispatch_number?: string | null;
+    source_id?: string | null;
+    source_type?: string | null;
+    eway_bill_number?: string | null;
+  } | null;
   narration?: string | null;
   remarks?: string | null;
   cancellation_reason?: string | null;
@@ -159,10 +165,6 @@ export type SalesInvoiceListDto = {
   customer_snapshot?: Record<string, unknown> | null;
   warehouse_snapshot?: Record<string, unknown> | null;
   destination_warehouse_snapshot?: Record<string, unknown> | null;
-  dispatch?: {
-    dispatch_number?: string | null;
-    source_id?: string | null;
-  } | null;
   dispatch_number?: string | null;
   sales_order?: {
     sales_order_id?: string | null;
@@ -181,6 +183,10 @@ export type SalesInvoiceDetailDto = SalesInvoiceListDto & {
     dispatch_date?: string | null;
     source_id?: string | null;
     source_type?: string | null;
+    eway_bill_number?: string | null;
+    transporter?: string | null;
+    vehicle_number?: string | null;
+    lr_number?: string | null;
   } | null;
   billing_address_snapshot?: Record<string, unknown> | null;
   shipping_address_snapshot?: Record<string, unknown> | null;
@@ -737,6 +743,9 @@ export function mapSalesInvoiceDetailToRecord(
     roundOff: asNumber(dto.round_off_amount),
     irn: asString(dto.irn_number) || undefined,
     eInvoiceNo: asString(dto.acknowledgement_number) || undefined,
+    ewayBillNo: asString(dto.dispatch?.eway_bill_number) || undefined,
+    vehicleNo: asString(dto.dispatch?.vehicle_number) || undefined,
+    transporterName: asString(dto.dispatch?.transporter) || undefined,
     postedVoucherNo: dto.accounting_voucher?.voucher_number || undefined,
     postedVoucherId: dto.accounting_voucher?.accounting_voucher_id ?? null,
     customerLedgerUuid:

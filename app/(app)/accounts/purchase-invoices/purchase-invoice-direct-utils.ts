@@ -283,7 +283,7 @@ export function buildSingleDirectLine(input: {
   lineId?: string;
   description: string;
   purchaseNature: PurchaseNature;
-  expenseLedgerId: number;
+  expenseLedgerId: number | string;
   expenseLedgerName: string;
   grossAmount: number;
   discount: number;
@@ -430,6 +430,8 @@ export function emptyDirectLine(defaultItc: ItcClassification = "eligible"): Dir
     expenseLedgerId: null,
     expenseLedgerName: "",
     hsnSac: "",
+    hsnId: null,
+    sacId: null,
     quantity: 1,
     uqc: "NOS",
     rate: 0,

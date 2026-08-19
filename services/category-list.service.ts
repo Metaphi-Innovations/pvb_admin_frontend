@@ -5,6 +5,7 @@ export interface CategoryListParams {
   page: number;
   pageSize: number;
   search: string;
+  ordering?: string;
   status: "all" | "active" | "inactive";
   apiFilters?: Record<string, unknown>;
   signal?: AbortSignal;
@@ -71,6 +72,24 @@ function mapFilterOptions(
 
 function asString(value: unknown): string {
   return typeof value === "string" ? value : String(value ?? "");
+}
+
+const SORT_KEY_TO_ORDERING: Record<string, string> = {
+  categoryName: "categoryName",
+  description: "description",
+  status: "is_active",
+  createdBy: "created_at",
+  updatedBy: "updated_at",
+};
+
+export function sortStateToOrdering(
+  key: string,
+  direction: "asc" | "desc" | "none",
+): string {
+  if (!key || direction === "none") return "";
+  const field = SORT_KEY_TO_ORDERING[key];
+  if (!field) return "";
+  return direction === "desc" ? `-${field}` : field;
 }
 
 function toStatus(value: unknown): "active" | "inactive" {
@@ -183,7 +202,7 @@ export function toCategoryIdSelectOptions(
 export const CategoryListService = {
   async list(params: CategoryListParams): Promise<CategoryListResult> {
     const response = await axiosInstance.post(
-      `${API_ENDPOINTS.MASTER.CATEGORY.LIST}?page=${params.page}&page_size=${params.pageSize}&search=${encodeURIComponent(params.search)}`,
+      `${API_ENDPOINTS.MASTER.CATEGORY.LIST}?page=${params.page}&page_size=${params.pageSize}&search=${encodeURIComponent(params.search)}&ordering=${encodeURIComponent(params.ordering ?? "")}`,
       { filters: params.apiFilters ?? {} },
       { signal: params.signal },
     );

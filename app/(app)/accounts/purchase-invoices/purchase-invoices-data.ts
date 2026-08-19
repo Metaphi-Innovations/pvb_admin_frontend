@@ -130,6 +130,9 @@ export interface PurchaseInvoiceOcrPayload {
 
 export interface PurchaseInvoiceRecord {
   id: number;
+  /** Backend purchase invoice UUID when loaded from Accounts API. */
+  backendId?: string;
+  backendStatus?: "POSTED" | "CANCELLED" | "REVERSED" | "PENDING";
   /** Internal purchase record no. (e.g. PUR-0001) */
   invoiceNo: string;
   invoiceDate: string;
@@ -393,7 +396,7 @@ export function calcPurchaseLineGstSplit(
 
 export function getPurchaseInvoiceGstBreakup(rec: PurchaseInvoiceRecord) {
   const taxableValue = rec.taxableAmount ?? rec.subtotal ?? rec.productAmount ?? 0;
-  if (isDirectPurchaseInvoice(rec) && (rec.cgstTotal != null || rec.igstTotal != null)) {
+  if (rec.cgstTotal != null || rec.sgstTotal != null || rec.igstTotal != null) {
     const cgst = rec.cgstTotal ?? 0;
     const sgst = rec.sgstTotal ?? 0;
     const igst = rec.igstTotal ?? 0;

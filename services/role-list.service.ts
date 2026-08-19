@@ -71,6 +71,7 @@ export type RoleFilterField =
   | "role_name"
   | "geography_level"
   | "department__department_name"
+  | "is_active"
   | "created_by_user__username"
   | "updated_by_user__username"
   | "created_by_user__first_name"
@@ -146,6 +147,18 @@ function mapFilterOptions(data: unknown[], fieldName: RoleFilterField): RoleFilt
     const record = row as Record<string, unknown>;
     const raw = record[fieldName];
     const value = asString(raw).trim();
+    if (value === "" && fieldName !== "is_active") continue;
+    if (fieldName === "is_active") {
+      const active = raw === true || value.toLowerCase() === "true";
+      const token = active ? "active" : "inactive";
+      if (seen.has(token)) continue;
+      seen.add(token);
+      options.push({
+        label: active ? "Active" : "Inactive",
+        value: token,
+      });
+      continue;
+    }
     if (!value || seen.has(value)) continue;
     seen.add(value);
     options.push({ label: value, value });

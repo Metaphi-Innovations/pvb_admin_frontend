@@ -273,6 +273,23 @@ export async function downloadDeliveryChallan(
   window.URL.revokeObjectURL(url);
 }
 
+export async function fetchDeliveryChallanPreview(
+  id: string,
+  options: { withGoodsValue?: boolean } = {},
+): Promise<{ html: string; fileName: string; challanNumber: string }> {
+  const withGoodsValue = options.withGoodsValue !== false;
+  const response = await api.get(
+    API_ENDPOINTS.WAREHOUSE.DISPATCH.CHALLAN_PREVIEW(id),
+    { params: { withGoodsValue } },
+  );
+  const data = response.data?.data || {};
+  return {
+    html: String(data.html || ""),
+    fileName: String(data.fileName || "delivery-challan.pdf"),
+    challanNumber: String(data.challan_number || data.challanNumber || ""),
+  };
+}
+
 export async function fetchDeliveryChallanPdf(
   id: string,
   options: { withGoodsValue?: boolean } = {},

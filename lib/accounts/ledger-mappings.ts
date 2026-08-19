@@ -139,7 +139,7 @@ export const DEFAULT_MAPPING_TARGETS: Record<
   },
   cash_ledger: { module: "payments", subGroupName: "Cash-in-Hand", description: "Default cash ledger" },
   bank_ledger: { module: "payments", subGroupName: "Bank Accounts", description: "Default bank ledger" },
-  round_off: { module: "journal", subGroupName: "Miscellaneous Expenses", description: "Round-off differences" },
+  round_off: { module: "journal", subGroupName: "Round Off", description: "Round-off differences" },
 };
 
 const STORAGE_KEY = "ds_accounts_ledger_mappings_v1";

@@ -79,7 +79,7 @@ export default function SubCategoryMasterPage() {
 	const router = useRouter();
 	const [records, setRecords] = useState<SubCategory[]>([]);
 	const [filters, setFilters] = useState<FilterState>({});
-	const [sort, setSort] = useState<SortState>({ key: "subCategoryCode", direction: "asc" });
+	const [sort, setSort] = useState<SortState>({ key: "", direction: "none" });
 	const [page, setPage] = useState(1);
 	const [pageSize, setPageSize] = useState(10);
 	const [toast, setToast] = useState<ToastState | null>(null);
@@ -204,6 +204,11 @@ export default function SubCategoryMasterPage() {
 				const bVal = String(b[sort.key as keyof SubCategory] || "").toLowerCase();
 				const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
 				return sort.direction === "asc" ? cmp : -cmp;
+			});
+		} else {
+			result.sort((a, b) => {
+				const byDate = String(b.createdDate ?? "").localeCompare(String(a.createdDate ?? ""));
+				return byDate !== 0 ? byDate : Number(b.id) - Number(a.id);
 			});
 		}
 

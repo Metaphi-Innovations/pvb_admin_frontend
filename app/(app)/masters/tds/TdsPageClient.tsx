@@ -159,7 +159,7 @@ export default function TdsPageClient() {
     appliedSearch,
   } = useAppliedListFilters();
   const { handleOpenFilter, isFilterOpen } = useLazyFilterColumns();
-  const [sort, setSort] = useState<SortState>({ key: "sectionName", direction: "asc" });
+  const [sort, setSort] = useState<SortState>({ key: "", direction: "none" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [toast, setToast] = useState<ToastState | null>(null);
@@ -221,12 +221,6 @@ export default function TdsPageClient() {
     enabled: isFilterOpen("description"),
   });
   const statusOptionsQuery = useTdsFilterDropdown("is_active", { enabled: isFilterOpen("status") });
-  const createdByOptionsQuery = useTdsFilterDropdown("created_by_user__username", {
-    enabled: isFilterOpen("createdBy"),
-  });
-  const updatedByOptionsQuery = useTdsFilterDropdown("updated_by_user__username", {
-    enabled: isFilterOpen("updatedBy"),
-  });
 
   const sectionNameOptions = useMemo(
     () => sectionNameOptionsQuery.data ?? [],
@@ -265,14 +259,6 @@ export default function TdsPageClient() {
       { label: "Inactive", value: "inactive" },
     ];
   }, [statusOptionsQuery.data]);
-  const createdByOptions = useMemo(
-    () => createdByOptionsQuery.data ?? [],
-    [createdByOptionsQuery.data],
-  );
-  const updatedByOptions = useMemo(
-    () => updatedByOptionsQuery.data ?? [],
-    [updatedByOptionsQuery.data],
-  );
 
   const records = useMemo(
     () => (listQuery.data?.items ?? []).map(toTdsRow),
@@ -476,8 +462,7 @@ export default function TdsPageClient() {
         header: "Created By",
         sortable: true,
         filterable: true,
-        filterType: "audit",
-        auditUserOptions: createdByOptions,
+        filterType: "date",
         width: "150px",
         render: (_val, row) => (
           <ListingUserCell name={row.createdBy} date={row.createdAt} />
@@ -488,8 +473,7 @@ export default function TdsPageClient() {
         header: "Updated By",
         sortable: true,
         filterable: true,
-        filterType: "audit",
-        auditUserOptions: updatedByOptions,
+        filterType: "date",
         width: "150px",
         render: (_val, row) => (
           <ListingUserCell name={row.updatedBy} date={row.updatedAt} />
@@ -502,8 +486,6 @@ export default function TdsPageClient() {
       applicableToFilterOptions,
       descriptionOptions,
       statusOptions,
-      createdByOptions,
-      updatedByOptions,
       openView,
     ],
   );

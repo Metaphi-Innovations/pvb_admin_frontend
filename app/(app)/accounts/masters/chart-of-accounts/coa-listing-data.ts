@@ -48,6 +48,8 @@ export interface CoaLedgerListingRow {
   openingSide: "Debit" | "Credit";
   currentAmount: number;
   currentSide: "Debit" | "Credit";
+  /** True when opening/current came from posted voucher API balances. */
+  balanceFromApi?: boolean;
   /** Populated for TDS section ledgers */
   tdsSection?: string;
   tdsRate?: string;
@@ -196,6 +198,7 @@ export interface CoaLedgerListingSummary {
   openingSide: "Debit" | "Credit";
   currentAmount: number;
   currentSide: "Debit" | "Credit";
+  balanceFromApi?: boolean;
 }
 
 export function computeCoaLedgerListingSummary(
@@ -204,6 +207,7 @@ export function computeCoaLedgerListingSummary(
   return {
     totalLedgers: rows.length,
     ...sumLedgerListingBalances(rows),
+    balanceFromApi: rows.some((row) => row.balanceFromApi),
   };
 }
 
@@ -231,6 +235,9 @@ export interface CoaListingRow {
   closingSide: "Debit" | "Credit";
 
   hasChildren: boolean;
+
+  /** True when opening/closing came from posted voucher API balances. */
+  balanceFromApi?: boolean;
 
 }
 
@@ -433,6 +440,7 @@ export interface CoaListingSummary {
   periodCredit: number;
   closingAmount: number;
   closingSide: "Debit" | "Credit";
+  balanceFromApi?: boolean;
 }
 
 /** Summary totals for the current listing context (selected node or root view). */
@@ -464,6 +472,8 @@ export interface CoaGroupDetailSummary {
   ledgerCount: number;
   closingAmount: number;
   closingSide: "Debit" | "Credit";
+  /** True when total balance came from posted voucher API balances. */
+  balanceFromApi?: boolean;
 }
 
 /** Metadata and aggregated balance for an account group drill-down header. */
@@ -488,6 +498,161 @@ export function computeCoaGroupDetailSummary(
     ledgerCount: countLedgersUnder(records, groupId),
     closingAmount: balances.closingAmount,
     closingSide: balances.closingSide,
+  };
+}
+
+export interface CoaApiLedgerBalance {
+  ledgerId: string;
+  openingAmount: number;
+  openingSide: "Debit" | "Credit";
+  currentAmount: number;
+  currentSide: "Debit" | "Credit";
+  periodDebit: number;
+  periodCredit: number;
+}
+
+function apiBalanceSide(raw: string | null | undefined, fallback: "Debit" | "Credit" = "Debit"): "Debit" | "Credit" {
+  const value = String(raw ?? fallback).toUpperCase();
+  return value === "CREDIT" || value === "CR" ? "Credit" : "Debit";
+}
+
+export function toCoaApiLedgerBalance(row: {
+  ledgerId: string;
+  openingAmount: number;
+  openingBalanceType?: string;
+  currentBalance: number;
+  balanceType?: string;
+  totalDebit?: number;
+  totalCredit?: number;
+}): CoaApiLedgerBalance {
+  return {
+    ledgerId: row.ledgerId,
+    openingAmount: Number(row.openingAmount) || 0,
+    openingSide: apiBalanceSide(row.openingBalanceType),
+    currentAmount: Number(row.currentBalance) || 0,
+    currentSide: apiBalanceSide(row.balanceType, apiBalanceSide(row.openingBalanceType)),
+    periodDebit: Number(row.totalDebit) || 0,
+    periodCredit: Number(row.totalCredit) || 0,
+  };
+}
+
+function aggregateApiLedgerBalances(balances: CoaApiLedgerBalance[]) {
+  let openingSigned = 0;
+  let currentSigned = 0;
+  let debit = 0;
+  let credit = 0;
+
+  for (const balance of balances) {
+    openingSigned += toSignedBalance(balance.openingAmount, balance.openingSide);
+    currentSigned += toSignedBalance(balance.currentAmount, balance.currentSide);
+    debit += balance.periodDebit;
+    credit += balance.periodCredit;
+  }
+
+  const opening = fromSignedBalance(openingSigned);
+  const current = fromSignedBalance(currentSigned);
+  return {
+    openingAmount: opening.amount,
+    openingSide: opening.balanceType,
+    currentAmount: current.amount,
+    currentSide: current.balanceType,
+    periodDebit: debit,
+    periodCredit: credit,
+  };
+}
+
+function descendantLedgersForNode(
+  records: ChartOfAccount[],
+  node: ChartOfAccount,
+): ChartOfAccount[] {
+  if (node.nodeLevel === "ledger") {
+    return node.bankGroupFlag ? [] : [node];
+  }
+  return collectDescendantLedgers(records, node.id).filter((ledger) => !ledger.bankGroupFlag);
+}
+
+function matchedApiBalancesForNode(
+  records: ChartOfAccount[],
+  node: ChartOfAccount,
+  balances: Map<string, CoaApiLedgerBalance>,
+): CoaApiLedgerBalance[] {
+  const matched: CoaApiLedgerBalance[] = [];
+  for (const ledger of descendantLedgersForNode(records, node)) {
+    const id = ledger.apiNodeId ? String(ledger.apiNodeId) : "";
+    const balance = id ? balances.get(id) : undefined;
+    if (balance) matched.push(balance);
+  }
+  return matched;
+}
+
+/** Replace locally computed ledger-listing amounts with posted API balances. */
+export function overlayApiBalancesOnLedgerRows(
+  rows: CoaLedgerListingRow[],
+  balances: Map<string, CoaApiLedgerBalance>,
+): CoaLedgerListingRow[] {
+  if (balances.size === 0) return rows;
+  return rows.map((row) => {
+    const id = row.ledger.apiNodeId ? String(row.ledger.apiNodeId) : "";
+    const balance = id ? balances.get(id) : undefined;
+    if (!balance) return row;
+    return {
+      ...row,
+      openingAmount: balance.openingAmount,
+      openingSide: balance.openingSide,
+      currentAmount: balance.currentAmount,
+      currentSide: balance.currentSide,
+      balanceFromApi: true,
+    };
+  });
+}
+
+/** Replace locally computed hierarchy-listing amounts with posted API balances. */
+export function overlayApiBalancesOnListingRows(
+  records: ChartOfAccount[],
+  rows: CoaListingRow[],
+  balances: Map<string, CoaApiLedgerBalance>,
+): CoaListingRow[] {
+  if (balances.size === 0) return rows;
+  return rows.map((row) => {
+    const matched = matchedApiBalancesForNode(records, row.node, balances);
+    if (!matched.length) return row;
+    const aggregated = aggregateApiLedgerBalances(matched);
+    return {
+      ...row,
+      openingAmount: aggregated.openingAmount,
+      openingSide: aggregated.openingSide,
+      periodDebit: aggregated.periodDebit,
+      periodCredit: aggregated.periodCredit,
+      closingAmount: aggregated.currentAmount,
+      closingSide: aggregated.currentSide,
+      balanceFromApi: true,
+    };
+  });
+}
+
+/** Replace group-header total with aggregated posted API balances. */
+export function overlayApiBalancesOnGroupSummary(
+  summary: CoaGroupDetailSummary,
+  records: ChartOfAccount[],
+  balances: Map<string, CoaApiLedgerBalance>,
+): CoaGroupDetailSummary {
+  if (balances.size === 0) return summary;
+  const matched = matchedApiBalancesForNode(records, summary.group, balances);
+  if (!matched.length) return summary;
+  const aggregated = aggregateApiLedgerBalances(matched);
+  return {
+    ...summary,
+    closingAmount: aggregated.currentAmount,
+    closingSide: aggregated.currentSide,
+    balanceFromApi: true,
+  };
+}
+
+export function computeCoaListingSummaryFromRows(rows: CoaListingRow[]): CoaListingSummary {
+  return {
+    totalAccounts: rows.length,
+    ...sumRowBalances(rows),
+    balanceFromApi: rows.some((row) => row.balanceFromApi),
   };
 }
 

@@ -356,24 +356,13 @@ export function buildQuantityComparisonsForInvoice(
       shortQty: 0,
     }));
   }
-  try {
-    const { getGrnRecords } = require("@/app/(app)/warehouse/grn/mock-data");
-    const grn = (getGrnRecords() as GrnRecord[]).find((g) => g.id === rec.grnId);
-    if (!grn) {
-      return rec.lineItems.map((l) => ({
-        supplierInvoiceQty: l.invoiceQty,
-        grnReceivedQty: 0,
-        qcAcceptedQty: 0,
-        qcRejectedQty: 0,
-        shortQty: 0,
-      }));
-    }
-    return rec.lineItems.map((l) =>
-      buildComparison(l.id, l.invoiceQty, grn, l.productName, l.batchNumber),
-    );
-  } catch {
-    return [];
-  }
+  return rec.lineItems.map((l) => ({
+    supplierInvoiceQty: l.invoiceQty,
+    grnReceivedQty: 0,
+    qcAcceptedQty: 0,
+    qcRejectedQty: 0,
+    shortQty: 0,
+  }));
 }
 
 /** Create a draft debit note (no posting) when quantity mismatch is detected. */

@@ -1,5 +1,8 @@
 "use client";
+
 import CreditNoteFormPageClient from "./CreditNoteFormPageClient";
-export default function CreditNoteEditPageClient({ creditNoteId }: { creditNoteId: number }) {
-  return <CreditNoteFormPageClient creditNoteId={creditNoteId} />;
+
+/** Edit wrapper — Credit Note identity is a UUID in the URL; the form reads it from the pathname. */
+export default function CreditNoteEditPageClient() {
+  return <CreditNoteFormPageClient />;
 }

@@ -147,7 +147,7 @@ export default function HSNPage() {
     appliedSearch,
 	} = useAppliedListFilters();
 	const { handleOpenFilter, isFilterOpen } = useLazyFilterColumns();
-	const [sort, setSort] = useState<SortState>({ key: "hsnCode", direction: "asc" });
+	const [sort, setSort] = useState<SortState>({ key: "", direction: "none" });
 	const [page, setPage] = useState(1);
 	const [pageSize, setPageSize] = useState(10);
 	const [toast, setToast] = useState<ToastState | null>(null);
@@ -203,12 +203,6 @@ export default function HSNPage() {
 	});
 	const gstRateOptionsQuery = useHsnFilterDropdown("gstPercentage", { enabled: isFilterOpen("gstRate") });
 	const statusOptionsQuery = useHsnFilterDropdown("is_active", { enabled: isFilterOpen("status") });
-	const createdByOptionsQuery = useHsnFilterDropdown("created_by_user__username", {
-		enabled: isFilterOpen("createdBy"),
-	});
-	const updatedByOptionsQuery = useHsnFilterDropdown("updated_by_user__username", {
-		enabled: isFilterOpen("updatedBy"),
-	});
 
 	const hsnCodeOptions = useMemo(
 		() => hsnCodeOptionsQuery.data ?? [],
@@ -232,14 +226,6 @@ export default function HSNPage() {
 			{ label: "Inactive", value: "inactive" },
 		];
 	}, [statusOptionsQuery.data]);
-	const createdByOptions = useMemo(
-		() => createdByOptionsQuery.data ?? [],
-		[createdByOptionsQuery.data],
-	);
-	const updatedByOptions = useMemo(
-		() => updatedByOptionsQuery.data ?? [],
-		[updatedByOptionsQuery.data],
-	);
 
 	const records = useMemo(
 		() => (listQuery.data?.items ?? []).map(toHsnRow),
@@ -431,8 +417,7 @@ export default function HSNPage() {
 			header: "Created By",
 			sortable: true,
 			filterable: true,
-			filterType: "audit",
-			auditUserOptions: createdByOptions,
+			filterType: "date",
 			width: "150px",
 			render: (_val, row) => (
 				<ListingUserCell name={row.createdBy} date={row.createdDate} />
@@ -443,8 +428,7 @@ export default function HSNPage() {
 			header: "Updated By",
 			sortable: true,
 			filterable: true,
-			filterType: "audit",
-			auditUserOptions: updatedByOptions,
+			filterType: "date",
 			width: "150px",
 			render: (_val, row) => (
 				<ListingUserCell name={row.updatedBy} date={row.updatedDate} />

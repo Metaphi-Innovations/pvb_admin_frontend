@@ -10,6 +10,8 @@ interface EditablePreviewOptions<T extends Record<string, unknown>> {
   outputFileName?: string;
   openedWindow?: Window | null;
   enableDirectPreviewEditing?: boolean;
+  /** When set, Download uses this instead of posting HTML to /pdf/from-html. */
+  onDownload?: () => Promise<void>;
 }
 
 export function openEditablePdfPreview<T extends Record<string, unknown>>(
@@ -57,7 +59,11 @@ export function openEditablePdfPreview<T extends Record<string, unknown>>(
       flexShrink: "0",
     });
     header.innerHTML = `<div style="font:600 14px Arial,sans-serif;color:#111827">${options.title}</div>
-      <div style="font:500 12px Arial,sans-serif;color:#475569">Preview-only editing (no DB changes)</div>`;
+      <div style="font:500 12px Arial,sans-serif;color:#475569">${
+        options.enableDirectPreviewEditing === false
+          ? "Official server preview"
+          : "Preview-only editing (no DB changes)"
+      }</div>`;
 
     // ── Toolbar ──
     const toolbar = document.createElement("div");
@@ -179,8 +185,10 @@ export function openEditablePdfPreview<T extends Record<string, unknown>>(
       zoomSelect.appendChild(opt);
     }
 
-    toolbarLeft.appendChild(toggleEditBtn);
-    toolbarLeft.appendChild(resetBtn);
+    if (options.enableDirectPreviewEditing !== false) {
+      toolbarLeft.appendChild(toggleEditBtn);
+      toolbarLeft.appendChild(resetBtn);
+    }
     toolbarLeft.appendChild(fitWidthBtn);
     toolbarLeft.appendChild(zoomSelect);
 
@@ -321,6 +329,12 @@ export function openEditablePdfPreview<T extends Record<string, unknown>>(
 
     printBtn.onclick = async () => {
       try {
+        if (options.onDownload) {
+          cleanup();
+          await options.onDownload();
+          resolve();
+          return;
+        }
         let html = initialHtml;
         try {
           const doc = iframe.contentDocument;

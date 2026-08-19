@@ -5,5 +5,6 @@ const CreditNoteViewPageClient = lazyAccountsPage(() => import("../../../credit-
 type PageProps = { params: { id: string } };
 
 export default function CreditNoteViewPage({ params }: PageProps) {
-  return <CreditNoteViewPageClient creditNoteId={Number(params.id)} />;
+  const creditNoteId = params.id;
+  return <CreditNoteViewPageClient creditNoteId={creditNoteId} />;
 }

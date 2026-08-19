@@ -11,6 +11,16 @@ export interface LedgerOpeningBalanceDto {
   narration?: string | null;
 }
 
+export interface LedgerPeriodBalanceDto {
+  ledgerId: string;
+  openingAmount: number;
+  openingBalanceType: "Debit" | "Credit" | string;
+  currentBalance: number;
+  balanceType: "Debit" | "Credit" | string;
+  totalDebit: number;
+  totalCredit: number;
+}
+
 export interface LedgerTransactionDto {
   date: string;
   voucherNo: string;
@@ -117,6 +127,57 @@ export interface FinancialYearDto {
   endDate?: string;
 }
 
+export type LedgerDropdownNodeType =
+  | "PRIMARY_HEAD"
+  | "ACCOUNT_GROUP"
+  | "ACCOUNT_SUB_GROUP"
+  | "LEDGER";
+
+export interface LedgerDropdownNode {
+  id: string;
+  code: string;
+  name: string;
+  type: LedgerDropdownNodeType;
+  parentPath: string;
+  selectable: boolean;
+  aliasName?: string | null;
+  allowManualPosting?: boolean;
+  isSystemGenerated?: boolean;
+  status?: string;
+  sourceType?: string;
+  children: LedgerDropdownNode[];
+}
+
+export interface LedgerDropdownItem {
+  ledgerId: string;
+  ledgerCode: string;
+  ledgerName: string;
+  aliasName?: string | null;
+  parentPath: string;
+  allowManualPosting: boolean;
+  isSystemGenerated: boolean;
+  status: string;
+  sourceType: string;
+  primaryHead: { id: string; code: string; name: string };
+  accountGroup: { id: string; code: string; name: string };
+  accountSubGroup: { id: string; code: string; name: string };
+}
+
+export interface LedgerDropdownResponse {
+  tree: LedgerDropdownNode[];
+  ledgers: LedgerDropdownItem[];
+}
+
+export interface LedgerDropdownQuery {
+  search?: string;
+  status?: string;
+  sourceType?: string;
+  primaryHeadId?: string;
+  accountGroupId?: string;
+  accountSubGroupId?: string;
+  allowManualPosting?: boolean;
+}
+
 function unwrapData<T>(response: { data?: ApiResponse<T> | T }): T {
   const body = response.data as ApiResponse<T> | T | undefined;
   if (
@@ -144,6 +205,25 @@ function extractErrorMessage(error: unknown, fallback: string): string {
 }
 
 export const LedgerService = {
+  async getDropdown(
+    query: LedgerDropdownQuery = {},
+    signal?: AbortSignal,
+  ): Promise<LedgerDropdownResponse> {
+    try {
+      const response = await axiosInstance.get<ApiResponse<LedgerDropdownResponse>>(
+        API_ENDPOINTS.ACCOUNTS.LEDGERS.DROPDOWN,
+        { params: query, signal },
+      );
+      const data = unwrapData(response);
+      return {
+        tree: data?.tree ?? [],
+        ledgers: data?.ledgers ?? [],
+      };
+    } catch (error) {
+      throw new Error(extractErrorMessage(error, "Failed to load ledger dropdown."));
+    }
+  },
+
   async previewNumber(signal?: AbortSignal): Promise<string> {
     const response = await axiosInstance.get<ApiResponse<{ previewNumber: string }>>(
       API_ENDPOINTS.ACCOUNTS.LEDGERS.PREVIEW_NUMBER,
@@ -163,6 +243,36 @@ export const LedgerService = {
       { params, signal },
     );
     return unwrapData(response);
+  },
+
+  async getBalances(
+    payload: { ledgerIds: string[]; dateFrom?: string; dateTo?: string },
+    signal?: AbortSignal,
+  ): Promise<LedgerPeriodBalanceDto[]> {
+    const ids = [...new Set(payload.ledgerIds.filter(Boolean))];
+    if (ids.length === 0) return [];
+
+    const chunks: string[][] = [];
+    for (let i = 0; i < ids.length; i += 500) {
+      chunks.push(ids.slice(i, i + 500));
+    }
+
+    const results = await Promise.all(
+      chunks.map(async (ledgerIds) => {
+        const response = await axiosInstance.post<ApiResponse<LedgerPeriodBalanceDto[]>>(
+          API_ENDPOINTS.ACCOUNTS.LEDGERS.BALANCES,
+          {
+            ledgerIds,
+            ...(payload.dateFrom ? { dateFrom: payload.dateFrom } : {}),
+            ...(payload.dateTo ? { dateTo: payload.dateTo } : {}),
+          },
+          { signal },
+        );
+        return unwrapData(response) ?? [];
+      }),
+    );
+
+    return results.flat();
   },
 
   async create(payload: CreateLedgerPayload): Promise<LedgerDetailDto> {

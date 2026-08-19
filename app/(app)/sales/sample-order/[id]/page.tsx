@@ -6,7 +6,6 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
   Edit,
-  FileText,
   Package,
   Trash2,
   CheckCircle2,
@@ -49,7 +48,6 @@ import {
   useUpdateSampleOrderStatus,
 } from "@/hooks/sales/use-sample-orders";
 import { useCustomer } from "@/hooks/masters/use-customers";
-import { downloadProformaInvoicePdf } from "../proforma-pdf/proformaInvoicePdf";
 
 function orderStatusVariant(status: OrderStatus): "active" | "inactive" | "draft" | "blocked" | "neutral" {
   if (["approved", "confirmed", "packed", "delivered", "dispatched"].includes(status)) return "active";
@@ -146,15 +144,6 @@ export default function ViewSalesOrderPage() {
 
   const showToast = (msg: string, type: "success" | "error" = "success") => setToast({ msg, type });
 
-  const handleDownloadProforma = async () => {
-    try {
-      showToast("Opening Proforma Invoice...");
-      await downloadProformaInvoicePdf(id);
-    } catch {
-      showToast("Failed to open Proforma Invoice.", "error");
-    }
-  };
-
   const handleApprove = () => {
     updateStatusMutation.mutate(
       { id, status: "approved" },
@@ -211,12 +200,6 @@ export default function ViewSalesOrderPage() {
       onClick: () => router.push(`/sales/sample-order/${order.id}/edit`),
     });
   }
-  // Proforma Invoice download is always allowed for viewing
-  quickActions.push({
-    label: "Download Proforma Invoice",
-    icon: FileText,
-    onClick: handleDownloadProforma,
-  });
   if (!showApprovalActions && packingAllowed) {
     quickActions.push({
       label: "Generate Packing List",

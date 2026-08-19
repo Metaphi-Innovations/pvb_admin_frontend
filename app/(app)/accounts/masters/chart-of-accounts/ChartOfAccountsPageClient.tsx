@@ -35,7 +35,13 @@ import {
   buildCoaListingRows,
   computeCoaLedgerListingSummary,
   computeCoaListingSummary,
+  computeCoaListingSummaryFromRows,
   computeCoaGroupDetailSummary,
+  overlayApiBalancesOnGroupSummary,
+  overlayApiBalancesOnLedgerRows,
+  overlayApiBalancesOnListingRows,
+  toCoaApiLedgerBalance,
+  type CoaApiLedgerBalance,
 } from "./coa-listing-data";
 import {
   exportCoaLedgerListingToExcel,
@@ -80,6 +86,8 @@ import {
   chartOfAccountsKeys,
 } from "@/hooks/accounts/use-chart-of-accounts";
 import { useLedgerDetail } from "@/hooks/accounts/use-ledger-detail";
+import { useLedgerBalances } from "@/hooks/accounts/use-ledger-balances";
+import { collectDescendantLedgers } from "@/lib/accounts/coa-accounting-view";
 import { LedgerService } from "@/services/ledger.service";
 import { ChartOfAccountsService } from "@/services/chart-of-accounts.service";
 import { mapCoaApiTreeToRecords } from "@/lib/accounts/coa-api-mapper";
@@ -147,6 +155,10 @@ export default function ChartOfAccountsPageClient() {
   const deferredRecords = useDeferredValue(records);
   const ledgerDataTick = useAccountsSectionRefresh([
     "ledgers",
+    "sales-invoices",
+    "purchase-invoices",
+    "credit-notes",
+    "debit-notes",
     "receipt-vouchers",
     "payment-vouchers",
     "contra-vouchers",
@@ -156,8 +168,18 @@ export default function ChartOfAccountsPageClient() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [datesReady, setDatesReady] = useState(false);
+  const [showRoot, setShowRoot] = useState(false);
 
   const selectedLedgerApiId = selectedNode?.apiNodeId ?? null;
+
+  const groupLedgerApiIds = useMemo(() => {
+    if (!selectedNode || showRoot || isCoaLedgerDetailView(selectedNode, records)) {
+      return [];
+    }
+    return collectDescendantLedgers(records, selectedNode.id)
+      .filter((ledger) => !ledger.bankGroupFlag && ledger.apiNodeId)
+      .map((ledger) => String(ledger.apiNodeId));
+  }, [selectedNode, showRoot, records]);
 
   const {
     data: selectedLedgerDetail,
@@ -173,7 +195,22 @@ export default function ChartOfAccountsPageClient() {
     ),
   });
 
-  const [showRoot, setShowRoot] = useState(false);
+  const { data: groupLedgerBalanceRows } = useLedgerBalances({
+    ledgerIds: groupLedgerApiIds,
+    dateFrom,
+    dateTo,
+    refreshTick: ledgerDataTick,
+    enabled: Boolean(datesReady && groupLedgerApiIds.length > 0),
+  });
+
+  const groupLedgerBalanceMap = useMemo(() => {
+    const map = new Map<string, CoaApiLedgerBalance>();
+    for (const row of groupLedgerBalanceRows ?? []) {
+      map.set(row.ledgerId, toCoaApiLedgerBalance(row));
+    }
+    return map;
+  }, [groupLedgerBalanceRows]);
+
   const [contentSearch, setContentSearch] = useState("");
   const debouncedSearch = useDebouncedValue(contentSearch, 300);
   const [exporting, setExporting] = useState(false);
@@ -324,8 +361,10 @@ export default function ChartOfAccountsPageClient() {
 
   const groupDetailSummary = useMemo(() => {
     if (!isGroupView || !selectedNode || !datesReady) return null;
-    return computeCoaGroupDetailSummary(deferredRecords, selectedNode.id, dateFrom, dateTo);
-  }, [isGroupView, selectedNode, deferredRecords, dateFrom, dateTo, datesReady, ledgerDataTick]);
+    const summary = computeCoaGroupDetailSummary(deferredRecords, selectedNode.id, dateFrom, dateTo);
+    if (!summary) return null;
+    return overlayApiBalancesOnGroupSummary(summary, deferredRecords, groupLedgerBalanceMap);
+  }, [isGroupView, selectedNode, deferredRecords, dateFrom, dateTo, datesReady, ledgerDataTick, groupLedgerBalanceMap]);
   /** Parent whose immediate children are shown in the hierarchy listing table */
   const tableParentId =
     showEmptyState || isLedgerStatementView || isAccountingGroupLedgerListing
@@ -441,14 +480,15 @@ export default function ChartOfAccountsPageClient() {
     const rows = buildCoaLedgerListingRows(effectiveRecords, selectedNode.id, {
       search: debouncedSearch,
     });
-    return rows;
-  }, [effectiveRecords, selectedNode, debouncedSearch, isAccountingGroupLedgerListing]);
+    return overlayApiBalancesOnLedgerRows(rows, groupLedgerBalanceMap);
+  }, [effectiveRecords, selectedNode, debouncedSearch, isAccountingGroupLedgerListing, groupLedgerBalanceMap]);
 
   const listingRows = useMemo(() => {
     if (!datesReady || isLedgerStatementView || isAccountingGroupLedgerListing) return [];
-    return buildCoaListingRows(effectiveRecords, tableParentId, dateFrom, dateTo, {
+    const rows = buildCoaListingRows(effectiveRecords, tableParentId, dateFrom, dateTo, {
       search: debouncedSearch,
     });
+    return overlayApiBalancesOnListingRows(effectiveRecords, rows, groupLedgerBalanceMap);
   }, [
     effectiveRecords,
     tableParentId,
@@ -459,6 +499,7 @@ export default function ChartOfAccountsPageClient() {
     isLedgerStatementView,
     isAccountingGroupLedgerListing,
     ledgerDataTick,
+    groupLedgerBalanceMap,
   ]);
 
   const ledgerListingSummary = useMemo(() => {
@@ -480,6 +521,10 @@ export default function ChartOfAccountsPageClient() {
         closingAmount: ledgerAccounting.currentBalance,
         closingSide: ledgerAccounting.balanceType,
       };
+    }
+
+    if (groupLedgerBalanceMap.size > 0) {
+      return computeCoaListingSummaryFromRows(listingRows);
     }
 
     return computeCoaListingSummary(
@@ -505,6 +550,7 @@ export default function ChartOfAccountsPageClient() {
     filteredTransactions,
     isAccountingGroupLedgerListing,
     ledgerDataTick,
+    groupLedgerBalanceMap,
   ]);
 
   const pageBreadcrumbs = useMemo(() => {
@@ -826,7 +872,6 @@ export default function ChartOfAccountsPageClient() {
                   ? "Search ledger name, code, source…"
                   : "Search accounts in this view…"
             }
-            hideDateRange={isAccountingGroupLedgerListing}
             preset={preset}
             dateFrom={dateFrom}
             dateTo={dateTo}

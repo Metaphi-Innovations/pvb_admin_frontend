@@ -54,6 +54,7 @@ import {
   getMasterListErrorMessage,
 } from "@/lib/masters/master-query-errors";
 import type { MasterListKeyParams } from "@/lib/masters/master-query-keys";
+import { sortStateToOrdering } from "@/services/document-type-list.service";
 import { MasterListing } from "@/components/listing/MasterListing";
 import { ColumnConfig, SortState, ActionItemConfig } from "@/components/listing/types";
 import {
@@ -94,7 +95,7 @@ export default function DocumentTypesPage() {
     appliedSearch,
   } = useAppliedListFilters();
   const { handleOpenFilter, isFilterOpen } = useLazyFilterColumns();
-  const [sort, setSort] = useState<SortState>({ key: "title", direction: "asc" });
+  const [sort, setSort] = useState<SortState>({ key: "", direction: "none" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [toast, setToast] = useState<ToastState | null>(null);
@@ -123,8 +124,9 @@ export default function DocumentTypesPage() {
       search: appliedSearch,
       status: listStatus,
       apiFilters,
+      ordering: sortStateToOrdering(sort.key, sort.direction),
     }),
-    [page, pageSize, appliedSearch, listStatus, apiFilters],
+    [page, pageSize, appliedSearch, listStatus, apiFilters, sort.key, sort.direction],
   );
 
   const listQuery = useDocumentTypes(listParams);
@@ -141,12 +143,6 @@ export default function DocumentTypesPage() {
   const statusOptionsQuery = useDocumentTypeFilterDropdown("is_active", {
     enabled: isFilterOpen("status"),
   });
-  const createdByOptionsQuery = useDocumentTypeFilterDropdown("created_by_user__username", {
-    enabled: isFilterOpen("createdBy"),
-  });
-  const updatedByOptionsQuery = useDocumentTypeFilterDropdown("updated_by_user__username", {
-    enabled: isFilterOpen("updatedBy"),
-  });
 
   const titleOptions = useMemo(() => titleOptionsQuery.data ?? [], [titleOptionsQuery.data]);
   const descriptionOptions = useMemo(
@@ -160,14 +156,6 @@ export default function DocumentTypesPage() {
       { label: "Inactive", value: "inactive" },
     ];
   }, [statusOptionsQuery.data]);
-  const createdByOptions = useMemo(
-    () => createdByOptionsQuery.data ?? [],
-    [createdByOptionsQuery.data],
-  );
-  const updatedByOptions = useMemo(
-    () => updatedByOptionsQuery.data ?? [],
-    [updatedByOptionsQuery.data],
-  );
 
   const records = useMemo(
     () => (listQuery.data?.items ?? []).map(toDocumentTypeRecord),
@@ -321,8 +309,7 @@ export default function DocumentTypesPage() {
       header: "Created",
       sortable: true,
       filterable: true,
-      filterType: "audit",
-      auditUserOptions: createdByOptions,
+      filterType: "date",
       width: "120px",
       render: (_val, row) => (
         <ListingAuditCell name={row.createdBy} date={row.createdAt} variant="created" />
@@ -333,8 +320,7 @@ export default function DocumentTypesPage() {
       header: "Updated",
       sortable: true,
       filterable: true,
-      filterType: "audit",
-      auditUserOptions: updatedByOptions,
+      filterType: "date",
       width: "120px",
       render: (_val, row) => (
         <ListingAuditCell name={row.updatedBy} date={row.updatedAt} variant="updated" />
@@ -360,6 +346,7 @@ export default function DocumentTypesPage() {
 
   const displayRecords = useMemo(() => {
     if (!sort.key || sort.direction === "none") return records;
+    if (sort.key === "createdBy" || sort.key === "updatedBy") return records;
     return [...records].sort((a, b) => {
       const aVal = String(a[sort.key as keyof DocumentTypeRecord] || "").toLowerCase();
       const bVal = String(b[sort.key as keyof DocumentTypeRecord] || "").toLowerCase();

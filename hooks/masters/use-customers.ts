@@ -11,6 +11,8 @@ import {
 } from "@/services/customer-list.service";
 import { masterKeys, type MasterListKeyParams } from "@/lib/masters/master-query-keys";
 import { CustomerBranch } from "@/app/(app)/masters/customers/customer-data";
+import type { FilterDropdownQueryOptions } from "@/lib/masters/use-lazy-filter-columns";
+import type { CustomerFilterField } from "@/services/customer-list.service";
 
 function toListParams(params: MasterListKeyParams): CustomerListParams {
     return {
@@ -28,6 +30,14 @@ export function useCustomers(params: MasterListKeyParams) {
         queryKey: masterKeys.customers.list(params),
         queryFn: ({ signal }) =>
             CustomerListService.list({ ...toListParams(params), signal }),
+    });
+}
+
+export function useCustomerSummary() {
+    return useQuery({
+        queryKey: masterKeys.customers.summary(),
+        queryFn: ({ signal }) => CustomerListService.getSummary(signal),
+        staleTime: 30_000,
     });
 }
 
@@ -60,9 +70,14 @@ export function useCreateCustomer() {
         }) => CustomerListService.create(payload, branches),
 
         onSuccess: async () => {
-            await queryClient.invalidateQueries({
-                queryKey: masterKeys.customers.lists(),
-            });
+            await Promise.all([
+                queryClient.invalidateQueries({
+                    queryKey: masterKeys.customers.lists(),
+                }),
+                queryClient.invalidateQueries({
+                    queryKey: masterKeys.customers.summary(),
+                }),
+            ]);
         },
     });
 }
@@ -85,6 +100,9 @@ export function useUpdateCustomer() {
             await Promise.all([
                 queryClient.invalidateQueries({
                     queryKey: masterKeys.customers.lists(),
+                }),
+                queryClient.invalidateQueries({
+                    queryKey: masterKeys.customers.summary(),
                 }),
                 queryClient.invalidateQueries({
                     queryKey: masterKeys.customers.detail(variables.id),
@@ -112,6 +130,9 @@ export function useToggleCustomerStatus() {
                     queryKey: masterKeys.customers.lists(),
                 }),
                 queryClient.invalidateQueries({
+                    queryKey: masterKeys.customers.summary(),
+                }),
+                queryClient.invalidateQueries({
                     queryKey: masterKeys.customers.detail(variables.id),
                 }),
             ]);
@@ -130,5 +151,17 @@ export function useCfDropdown() {
     return useQuery({
         queryKey: masterKeys.customers.cfDropdown(),
         queryFn: () => CustomerListService.getCfCustomerDropdown(),
+    });
+}
+
+export function useCustomerFilterDropdown(
+    fieldName: CustomerFilterField,
+    options?: FilterDropdownQueryOptions,
+) {
+    return useQuery({
+        queryKey: masterKeys.customers.filterDropdown(fieldName),
+        queryFn: ({ signal }) => CustomerListService.getFilterDropdown(fieldName, signal),
+        staleTime: 5 * 60 * 1000,
+        enabled: options?.enabled ?? true,
     });
 }

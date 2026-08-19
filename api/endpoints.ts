@@ -229,9 +229,11 @@ export const API_ENDPOINTS = {
       STATUS_UPDATE: (id: string) => `/master/customer/update-status/${id}`,
       VIEW: (id: string) => `/master/customer/${id}`,
       EXPORT: "/master/customer/export",
+      SUMMARY: "/master/customer/summary",
       PREVIEW_NUMBER: "/master/customer/preview-number",
       DROPDOWN: "/master/customer/dropdown",
-      CFDROPDOWN: "/master/customer/cf-customer-dropdown"
+      CFDROPDOWN: "/master/customer/cf-customer-dropdown",
+      FILTER_DROPDOWN: "/master/customer/filter-dropdown",
     },
     SUPPLIER_TYPE: {
       LIST: "/master/supplier-type/list",
@@ -257,6 +259,8 @@ export const API_ENDPOINTS = {
       CREATE: "/procurement/purchase-order/create",
       UPDATE: (id: string) => `/procurement/purchase-order/update/${id}`,
       DETAILS: (id: string) => `/procurement/purchase-order/details/${id}`,
+      PREVIEW: (id: string) => `/procurement/purchase-order/${id}/preview`,
+      PDF: (id: string) => `/procurement/purchase-order/${id}/pdf`,
       FOLLOWUP_CREATE: "/procurement/purchase-order/followup/create",
       INVOICE_UPLOAD: "/procurement/purchase-order/invoice/upload",
       SHORT_CLOSE: "/procurement/purchase-order/short-close",
@@ -434,6 +438,10 @@ export const API_ENDPOINTS = {
       LIST: "/warehouse/packing-list/list",
       CREATE: "/warehouse/packing-list/create",
       DETAILS: (id: string) => `/warehouse/packing-list/details/${id}`,
+      PREVIEW: (id: string) => `/warehouse/packing-list/details/${id}/preview`,
+      PDF: (id: string) => `/warehouse/packing-list/details/${id}/pdf`,
+      PDF_PREVIEW_BY_SOURCE: "/warehouse/packing-list/pdf-preview",
+      PDF_BY_SOURCE: "/warehouse/packing-list/pdf",
       REVERT: (id: string) => `/warehouse/packing-list/revert/${id}`,
     },
     DISPATCH: {
@@ -445,6 +453,7 @@ export const API_ENDPOINTS = {
       DETAILS: (id: string) => `/warehouse/dispatch/${id}`,
       REVERT: (id: string) => `/warehouse/dispatch/${id}/revert`,
       DOWNLOAD_CHALLAN: (id: string) => `/warehouse/dispatch/${id}/download-challan`,
+      CHALLAN_PREVIEW: (id: string) => `/warehouse/dispatch/${id}/challan-preview`,
       ALLOCATE_DC: (id: string) => `/warehouse/dispatch/${id}/allocate-dc`,
       ALLOCATE_SI: (id: string) => `/warehouse/dispatch/${id}/allocate-si`,
       ALLOCATE_ST: (id: string) => `/warehouse/dispatch/${id}/allocate-st`,
@@ -492,6 +501,35 @@ export const API_ENDPOINTS = {
       CREATE_DIRECT_SERVICE: "/accounts/sales-invoice/direct-service",
       PDF: "/accounts/sales-invoice/pdf",
       EXCEL: "/accounts/sales-invoice/excel",
+      PROFORMA_PREVIEW: (id: string) =>
+        `/accounts/sales-invoice/${id}/proforma-preview`,
+      PROFORMA_PDF: (id: string) => `/accounts/sales-invoice/${id}/proforma-pdf`,
+      TAX_INVOICE_PREVIEW: (id: string) =>
+        `/accounts/sales-invoice/${id}/tax-invoice-preview`,
+      TAX_INVOICE_PDF: (id: string) =>
+        `/accounts/sales-invoice/${id}/tax-invoice-pdf`,
+    },
+    PURCHASE_INVOICE: {
+      LIST: "/accounts/purchase-invoice",
+      EXPORT: "/accounts/purchase-invoice/export",
+      FILTER_DROPDOWN: "/accounts/purchase-invoice/filter-dropdown",
+      BY_ID: (id: string) => `/accounts/purchase-invoice/${id}`,
+      CANCEL: (id: string) => `/accounts/purchase-invoice/${id}/cancel`,
+      PREVIEW_NUMBER: "/accounts/purchase-invoice/preview-number",
+      ALLOCATE: "/accounts/purchase-invoice/allocate",
+      PENDING_GRNS: "/accounts/purchase-invoice/pending-grns",
+      PENDING_GRNS_COUNT: "/accounts/purchase-invoice/pending-grns/count",
+      PENDING_GRNS_FILTER_DROPDOWN:
+        "/accounts/purchase-invoice/pending-grns/filter-dropdown",
+      ELIGIBLE_GRNS: "/accounts/purchase-invoice/eligible-grns",
+      ELIGIBLE_GRNS_COUNT: "/accounts/purchase-invoice/eligible-grns/count",
+      ELIGIBLE_GRNS_FILTER_DROPDOWN:
+        "/accounts/purchase-invoice/eligible-grns/filter-dropdown",
+      PREPARE_GRN: (grnId: string) =>
+        `/accounts/purchase-invoice/grn/${grnId}/prepare`,
+      CREATE_FROM_GRN: (grnId: string) =>
+        `/accounts/purchase-invoice/from-grn/${grnId}`,
+      CREATE_DIRECT_PURCHASE: "/accounts/purchase-invoice/direct-purchase",
     },
     PENDING_INVOICES: {
       LIST: "/accounts/pending-invoices/list",
@@ -511,6 +549,8 @@ export const API_ENDPOINTS = {
       CREATE: "/accounts/ledgers",
       VIEW: (id: string) => `/accounts/ledgers/${id}`,
       UPDATE: (id: string) => `/accounts/ledgers/${id}`,
+      DROPDOWN: "/accounts/ledgers/dropdown",
+      BALANCES: "/accounts/ledgers/balances",
       EXPORT: "/accounts/ledgers/export",
       PREVIEW_NUMBER: "/accounts/ledgers/preview-number",
       OPENING_BALANCES: (ledgerId: string) =>

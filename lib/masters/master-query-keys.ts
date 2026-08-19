@@ -234,6 +234,9 @@ export const masterKeys = {
     previewNumber: () => [...masterKeys.customers.all(), "preview-number"] as const,
     export: () => [...masterKeys.customers.all(), "export"] as const,
     cfDropdown: () => [...masterKeys.customers.all(), "cf-dropdown"] as const,
+    summary: () => [...masterKeys.customers.all(), "summary"] as const,
+    filterDropdown: (field: string) =>
+      [...masterKeys.customers.all(), "filter-dropdown", field] as const,
   },
 
   warehouses: {
