@@ -57,9 +57,25 @@ export type CreateFromDispatchPayload = {
   narration?: string | null;
   remarks?: string | null;
   transporter?: string | null;
+  transporter_id?: string | null;
+  transport_mode?: string | null;
   vehicle_number?: string | null;
+  vehicle_type?: string | null;
   lr_number?: string | null;
+  lr_date?: string | null;
+  transport_doc_number?: string | null;
+  transport_doc_date?: string | null;
+  approx_distance?: number | string | null;
+  irn_number?: string | null;
+  acknowledgement_number?: string | null;
+  acknowledgement_date?: string | null;
+  signed_qr_code?: string | null;
+  einvoice_status?: string | null;
   eway_bill_number?: string | null;
+  eway_bill_date?: string | null;
+  eway_bill_valid_upto?: string | null;
+  eway_bill_status?: string | null;
+  eway_bill_qr_code?: string | null;
   additional_charges?: AdditionalChargeInput[];
 };
 
@@ -144,11 +160,27 @@ export type SalesInvoiceListDto = {
   destination_warehouse_id?: string | null;
   irn_number?: string | null;
   einvoice_status?: string | null;
+  acknowledgement_number?: string | null;
+  acknowledgement_date?: string | null;
+  eway_bill_number?: string | null;
+  eway_bill_date?: string | null;
+  eway_bill_valid_upto?: string | null;
+  eway_bill_status?: string | null;
+  eway_bill_qr_code?: string | null;
   dispatch?: {
     dispatch_number?: string | null;
     source_id?: string | null;
     source_type?: string | null;
-    eway_bill_number?: string | null;
+    transporter?: string | null;
+    transporter_id?: string | null;
+    transport_mode?: string | null;
+    vehicle_number?: string | null;
+    vehicle_type?: string | null;
+    lr_number?: string | null;
+    lr_date?: string | null;
+    transport_doc_number?: string | null;
+    transport_doc_date?: string | null;
+    approx_distance?: number | string | null;
   } | null;
   narration?: string | null;
   remarks?: string | null;
@@ -183,10 +215,16 @@ export type SalesInvoiceDetailDto = SalesInvoiceListDto & {
     dispatch_date?: string | null;
     source_id?: string | null;
     source_type?: string | null;
-    eway_bill_number?: string | null;
     transporter?: string | null;
+    transporter_id?: string | null;
+    transport_mode?: string | null;
     vehicle_number?: string | null;
+    vehicle_type?: string | null;
     lr_number?: string | null;
+    lr_date?: string | null;
+    transport_doc_number?: string | null;
+    transport_doc_date?: string | null;
+    approx_distance?: number | string | null;
   } | null;
   billing_address_snapshot?: Record<string, unknown> | null;
   shipping_address_snapshot?: Record<string, unknown> | null;
@@ -222,9 +260,15 @@ export type PrepareDispatchInvoiceDto = {
     source_type: string;
     source_id: string | null;
     transporter?: string | null;
+    transporter_id?: string | null;
+    transport_mode?: string | null;
     vehicle_number?: string | null;
+    vehicle_type?: string | null;
     lr_number?: string | null;
-    eway_bill_number?: string | null;
+    lr_date?: string | null;
+    transport_doc_number?: string | null;
+    transport_doc_date?: string | null;
+    approx_distance?: number | string | null;
     remarks?: string | null;
   };
   sales_order: {
@@ -504,6 +548,15 @@ function snapshotStr(
   return "";
 }
 
+function statutoryStatus(
+  stored: string | null | undefined,
+  hasDocument: boolean,
+): string {
+  const raw = String(stored || "").trim().toLowerCase();
+  if (raw) return raw;
+  return hasDocument ? "generated" : "not_generated";
+}
+
 function formatAddressSnapshot(
   snapshot: Record<string, unknown> | null | undefined,
 ): string {
@@ -743,9 +796,39 @@ export function mapSalesInvoiceDetailToRecord(
     roundOff: asNumber(dto.round_off_amount),
     irn: asString(dto.irn_number) || undefined,
     eInvoiceNo: asString(dto.acknowledgement_number) || undefined,
-    ewayBillNo: asString(dto.dispatch?.eway_bill_number) || undefined,
+    eInvoiceStatus: (dto.einvoice_status || dto.irn_number
+      ? statutoryStatus(dto.einvoice_status, Boolean(asString(dto.irn_number)))
+      : undefined) as InvoiceRecord["eInvoiceStatus"],
+    acknowledgementNo: asString(dto.acknowledgement_number) || undefined,
+    acknowledgementDate: asDateOnly(dto.acknowledgement_date) || undefined,
+    qrCodeAvailable: Boolean(asString(dto.signed_qr_code || dto.irn_number)),
+    ewayBillNo: asString(dto.eway_bill_number) || undefined,
+    ewayBillExpiryDate: asDateOnly(dto.eway_bill_valid_upto) || undefined,
+    ewayBillGeneratedAt: asDateOnly(dto.eway_bill_date) || undefined,
+    ewayBillStatus: (dto.eway_bill_status || dto.eway_bill_number
+      ? statutoryStatus(
+          dto.eway_bill_status,
+          Boolean(asString(dto.eway_bill_number)),
+        )
+      : undefined) as InvoiceRecord["ewayBillStatus"],
     vehicleNo: asString(dto.dispatch?.vehicle_number) || undefined,
     transporterName: asString(dto.dispatch?.transporter) || undefined,
+    transporterId: asString(dto.dispatch?.transporter_id) || undefined,
+    transportMode: asString(dto.dispatch?.transport_mode) || undefined,
+    lrNo: asString(dto.dispatch?.lr_number) || undefined,
+    lrDate: asDateOnly(dto.dispatch?.lr_date) || undefined,
+    transportDocNo:
+      asString(dto.dispatch?.transport_doc_number) ||
+      asString(dto.dispatch?.lr_number) ||
+      undefined,
+    transportDocDate:
+      asDateOnly(dto.dispatch?.transport_doc_date) ||
+      asDateOnly(dto.dispatch?.lr_date) ||
+      undefined,
+    distanceKm: (() => {
+      const n = Number(dto.dispatch?.approx_distance);
+      return Number.isFinite(n) && n > 0 ? n : undefined;
+    })(),
     postedVoucherNo: dto.accounting_voucher?.voucher_number || undefined,
     postedVoucherId: dto.accounting_voucher?.accounting_voucher_id ?? null,
     customerLedgerUuid:

@@ -855,7 +855,7 @@ export default function CreditNoteFormPageClient({
 
   return (
     <>
-      <div className="credit-debit-note-form h-full min-h-0 flex flex-col">
+      <div className="credit-debit-note-form flex-1 min-h-0 h-full flex flex-col">
         <AccountsFormLayout
           fullWidth
           onBackClick={requestCancel}
@@ -920,7 +920,7 @@ export default function CreditNoteFormPageClient({
             )
           }
         >
-          <div className="cdn-stack pb-20">
+          <div className="cdn-stack pb-3">
             {pageLoading ? (
               <div className="bg-muted/30 border border-border rounded-lg px-3 py-2 text-xs text-muted-foreground">
                 Loading Credit Note…

@@ -76,17 +76,53 @@ export function isSchemePendingSource(source: string): boolean {
   return SCHEME_SOURCES.has(source);
 }
 
+const UUID_TAIL =
+  /(?:^|:)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function codesForType(
+  refs: PendingCreditNoteListApiRow["references"],
+  type: string,
+): string[] {
+  const seen = new Set<string>();
+  const codes: string[] = [];
+  for (const ref of refs ?? []) {
+    if (ref.reference_type !== type) continue;
+    const code = ref.reference_code?.trim();
+    if (!code || seen.has(code)) continue;
+    seen.add(code);
+    codes.push(code);
+  }
+  return codes;
+}
+
+function pickDisplayReference(raw: PendingCreditNoteListApiRow): string {
+  const returnNos = codesForType(raw.references, "SALES_RETURN");
+  if (returnNos.length) return returnNos.join(", ");
+
+  const schemeCode = raw.scheme?.scheme_code?.trim();
+  if (schemeCode) return schemeCode;
+
+  const invoiceNos = codesForType(raw.references, "SALES_INVOICE");
+  if (invoiceNos.length) return invoiceNos.join(", ");
+
+  const key = raw.eligibility_key?.trim();
+  if (key && !UUID_TAIL.test(key)) return key;
+
+  return "—";
+}
+
 export function mapPendingListRow(raw: PendingCreditNoteListApiRow): PendingCreditNoteRow {
   const from = toDate(raw.eligibility_from);
   const to = toDate(raw.eligibility_to);
+  const linkedInvoiceNos = codesForType(raw.references, "SALES_INVOICE");
   return {
     id: raw.pending_credit_note_id,
     pending_credit_note_id: raw.pending_credit_note_id,
     sourceType: raw.source_type || "",
     status: raw.status || "PENDING",
     customerName: raw.customer?.customer_name || "",
-    referenceNo: raw.eligibility_key || raw.scheme?.scheme_code || raw.pending_credit_note_id,
-    linkedInvoiceNos: [],
+    referenceNo: pickDisplayReference(raw),
+    linkedInvoiceNos,
     eligibleCreditAmount: toNum(raw.taxable_credit_amount ?? raw.eligible_base_amount),
     gstAmount: toNum(raw.gst_amount),
     totalAmount: toNum(raw.eligible_cn_amount),
@@ -126,6 +162,7 @@ export function filterPendingCreditNotes(
         x.schemeName?.toLowerCase().includes(q) ||
         x.schemeCode?.toLowerCase().includes(q) ||
         x.schemeType?.toLowerCase().includes(q) ||
+        x.linkedInvoiceNos.some((n) => n.toLowerCase().includes(q)) ||
         PENDING_CREDIT_SOURCE_LABELS[x.sourceType]?.toLowerCase().includes(q),
     );
   }

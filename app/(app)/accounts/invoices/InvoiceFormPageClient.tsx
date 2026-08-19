@@ -777,15 +777,25 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
             billTo: customerName,
             shipTo: customerName,
             dispatchQty: lineItems.reduce((acc, l) => acc + (l.qty || 0), 0),
-            transportMode: "",
+            transportMode: prepared.dispatch.transport_mode || "",
             transporterName: prepared.dispatch.transporter || "",
-            transporterId: "",
+            transporterId: prepared.dispatch.transporter_id || "",
             vehicleNo: prepared.dispatch.vehicle_number || "",
             lrNo: prepared.dispatch.lr_number || "",
-            lrDate: "",
-            transportDocNo: "",
-            transportDocDate: "",
-            distanceKm: null,
+            lrDate: String(prepared.dispatch.lr_date || "").slice(0, 10),
+            transportDocNo:
+              prepared.dispatch.transport_doc_number ||
+              prepared.dispatch.lr_number ||
+              "",
+            transportDocDate: String(
+              prepared.dispatch.transport_doc_date ||
+                prepared.dispatch.lr_date ||
+                "",
+            ).slice(0, 10),
+            distanceKm:
+              prepared.dispatch.approx_distance != null
+                ? Number(prepared.dispatch.approx_distance)
+                : null,
             lineItems,
             lineErrors: [],
             additionalExpenses,
@@ -802,9 +812,28 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
 
           setTransport((prev) => ({
             ...prev,
+            transportMode: prepared.dispatch.transport_mode || prev.transportMode,
             transporterName: prepared.dispatch.transporter || prev.transporterName,
+            transporterId: prepared.dispatch.transporter_id || prev.transporterId,
             vehicleNo: prepared.dispatch.vehicle_number || prev.vehicleNo,
             lrNo: prepared.dispatch.lr_number || prev.lrNo,
+            lrDate:
+              String(prepared.dispatch.lr_date || "").slice(0, 10) || prev.lrDate,
+            transportDocNo:
+              prepared.dispatch.transport_doc_number ||
+              prepared.dispatch.lr_number ||
+              prev.transportDocNo,
+            transportDocDate:
+              String(
+                prepared.dispatch.transport_doc_date ||
+                  prepared.dispatch.lr_date ||
+                  "",
+              ).slice(0, 10) || prev.transportDocDate,
+            distanceKm:
+              prepared.dispatch.approx_distance != null &&
+              Number(prepared.dispatch.approx_distance) > 0
+                ? String(prepared.dispatch.approx_distance)
+                : prev.distanceKm,
           }));
         } catch (err) {
           setError(
@@ -989,15 +1018,28 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
             billTo: isSTDispatch ? destWhName : customerName,
             shipTo: isSTDispatch ? destWhName : customerName,
             dispatchQty: lineItems.reduce((acc, l) => acc + (l.qty || 0), 0),
-            transportMode: transportDistanceKm != null ? "Road" : "",
+            transportMode:
+              prepared.dispatch.transport_mode ||
+              (transportDistanceKm != null ? "Road" : ""),
             transporterName: prepared.dispatch.transporter || "",
-            transporterId: "",
+            transporterId: prepared.dispatch.transporter_id || "",
             vehicleNo: prepared.dispatch.vehicle_number || "",
             lrNo: prepared.dispatch.lr_number || "",
-            lrDate: "",
-            transportDocNo: prepared.dispatch.lr_number || "",
-            transportDocDate: String(prepared.dispatch.dispatch_date || "").slice(0, 10),
-            distanceKm: transportDistanceKm,
+            lrDate: String(prepared.dispatch.lr_date || "").slice(0, 10),
+            transportDocNo:
+              prepared.dispatch.transport_doc_number ||
+              prepared.dispatch.lr_number ||
+              "",
+            transportDocDate: String(
+              prepared.dispatch.transport_doc_date ||
+                prepared.dispatch.lr_date ||
+                prepared.dispatch.dispatch_date ||
+                "",
+            ).slice(0, 10),
+            distanceKm:
+              prepared.dispatch.approx_distance != null
+                ? Number(prepared.dispatch.approx_distance)
+                : transportDistanceKm,
             lineItems,
             lineErrors: [],
             additionalExpenses,
@@ -1016,21 +1058,39 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
           if (
             prepared.dispatch.transporter ||
             prepared.dispatch.vehicle_number ||
+            prepared.dispatch.transport_mode ||
             transportDistanceKm != null
           ) {
             setTransport((prev) => ({
               ...prev,
+              transportMode:
+                prepared.dispatch.transport_mode || prev.transportMode,
               transporterName: prepared.dispatch.transporter || prev.transporterName,
+              transporterId:
+                prepared.dispatch.transporter_id || prev.transporterId,
               vehicleNo: prepared.dispatch.vehicle_number || prev.vehicleNo,
               lrNo: prepared.dispatch.lr_number || prev.lrNo,
-              transportDocNo: prepared.dispatch.lr_number || prev.transportDocNo,
+              lrDate:
+                String(prepared.dispatch.lr_date || "").slice(0, 10) ||
+                prev.lrDate,
+              transportDocNo:
+                prepared.dispatch.transport_doc_number ||
+                prepared.dispatch.lr_number ||
+                prev.transportDocNo,
               transportDocDate:
-                String(prepared.dispatch.dispatch_date || "").slice(0, 10) ||
-                prev.transportDocDate,
+                String(
+                  prepared.dispatch.transport_doc_date ||
+                    prepared.dispatch.lr_date ||
+                    prepared.dispatch.dispatch_date ||
+                    "",
+                ).slice(0, 10) || prev.transportDocDate,
               distanceKm:
-                transportDistanceKm != null && transportDistanceKm > 0
-                  ? String(transportDistanceKm)
-                  : prev.distanceKm,
+                prepared.dispatch.approx_distance != null &&
+                Number(prepared.dispatch.approx_distance) > 0
+                  ? String(prepared.dispatch.approx_distance)
+                  : transportDistanceKm != null && transportDistanceKm > 0
+                    ? String(transportDistanceKm)
+                    : prev.distanceKm,
             }));
           }
         } catch (err) {
@@ -1968,9 +2028,28 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
           narration: remarks.trim() || undefined,
           remarks: remarks.trim() || undefined,
           transporter: transport.transporterName.trim() || undefined,
+          transporter_id: transport.transporterId.trim() || undefined,
+          transport_mode: transport.transportMode.trim() || undefined,
           vehicle_number: transport.vehicleNo.trim() || undefined,
           lr_number: transport.lrNo.trim() || undefined,
+          lr_date: transport.lrDate.trim() || undefined,
+          transport_doc_number:
+            transport.transportDocNo.trim() || transport.lrNo.trim() || undefined,
+          transport_doc_date:
+            transport.transportDocDate.trim() || transport.lrDate.trim() || undefined,
+          approx_distance: transport.distanceKm.trim()
+            ? Number(transport.distanceKm)
+            : undefined,
+          irn_number: transport.irn.trim() || undefined,
+          acknowledgement_number:
+            transport.acknowledgementNo.trim() ||
+            transport.eInvoiceNo.trim() ||
+            undefined,
+          acknowledgement_date: transport.acknowledgementDate.trim() || undefined,
+          einvoice_status: transport.eInvoiceStatus || undefined,
           eway_bill_number: transport.ewayBillNo?.trim() || undefined,
+          eway_bill_valid_upto: transport.ewayBillExpiryDate.trim() || undefined,
+          eway_bill_status: transport.ewayBillStatus || undefined,
           additional_charges: charges,
         });
 

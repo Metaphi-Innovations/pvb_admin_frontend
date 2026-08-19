@@ -164,8 +164,21 @@ export function mapApiInvoiceToListRow(
           ? ("stock_transfer" as const)
           : ("sales_order" as const),
     irn: dto.irn_number || undefined,
-    eInvoiceNo: dto.einvoice_status || undefined,
-    ewayBillNo: dto.dispatch?.eway_bill_number || undefined,
+    eInvoiceNo: dto.acknowledgement_number || undefined,
+    eInvoiceStatus: dto.einvoice_status || (dto.irn_number ? "generated" : undefined),
+    ewayBillNo: dto.eway_bill_number || undefined,
+    ewayBillStatus:
+      dto.eway_bill_status || (dto.eway_bill_number ? "generated" : undefined),
+    ewayBillExpiryDate: dto.eway_bill_valid_upto
+      ? String(dto.eway_bill_valid_upto).slice(0, 10)
+      : undefined,
+    ewayBillGeneratedAt: dto.eway_bill_date
+      ? String(dto.eway_bill_date).slice(0, 10)
+      : undefined,
+    vehicleNo: dto.dispatch?.vehicle_number || undefined,
+    transporterName: dto.dispatch?.transporter || undefined,
+    transporterId: dto.dispatch?.transporter_id || undefined,
+    transportMode: dto.dispatch?.transport_mode || undefined,
   };
   const eInvoiceStatusLabel = resolveListingEInvoiceStatus(
     stubRecord as never,
@@ -177,7 +190,7 @@ export function mapApiInvoiceToListRow(
   const canDownloadTaxInvoice =
     canDownloadPi &&
     hasPdfValue(dto.irn_number) &&
-    hasPdfValue(dto.dispatch?.eway_bill_number);
+    hasPdfValue(dto.eway_bill_number);
 
   return {
     id,

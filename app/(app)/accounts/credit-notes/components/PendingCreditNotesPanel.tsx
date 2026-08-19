@@ -7,7 +7,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Eye, X } from "lucide-react";
+import { Eye } from "lucide-react";
 import {
   AccountsGenerateAction,
   AccountsTableActionCell,
@@ -35,6 +35,7 @@ import {
   AccountsColumnFilterProvider,
   AccountsColumnHeader,
   SortTh,
+  useAccountsColumnFilterContext,
   useAccountsFilteredRows,
 } from "@/app/(app)/accounts/components/AccountsUI";
 import type { AccountsColumnFilterConfig } from "@/lib/accounts/column-filter-types";
@@ -44,17 +45,17 @@ import {
   mapPendingListRow,
   PENDING_CREDIT_SOURCE_LABELS,
   type PendingCreditNoteRow,
-  type PendingSourceFilter,
 } from "../pending-credit-notes-data";
 import { CREDIT_NOTES_LIST_PATH, formatINR } from "../note-utils";
-import { ReportMoreFilters } from "@/components/accounts/ReportMoreFilters";
 import { CreditNoteListApi, creditNoteListApiError } from "../credit-note-list-api";
 import { AccountsToast, useAccountsToast } from "@/components/accounts/AccountsToast";
 
+/* Toolbar Source options — restore with ReportMoreFilters when needed.
 const SOURCE_FILTER_OPTIONS: { value: Exclude<PendingSourceFilter, "all">; label: string }[] = [
   { value: "sales_return", label: "Sales Return" },
   { value: "scheme", label: "Scheme" },
 ];
+*/
 
 const SOURCE_COLUMN_OPTIONS = [
   "SALES_RETURN",
@@ -99,10 +100,15 @@ function PendingCreditNotesTable({
   loading: boolean;
 }) {
   const visible = useAccountsFilteredRows(toolbarFiltered);
+  const ctx = useAccountsColumnFilterContext();
   const pagedRows = useMemo(
     () => visible.slice((page - 1) * pageSize, page * pageSize),
     [visible, page, pageSize],
   );
+
+  useEffect(() => {
+    onPageChange(1);
+  }, [ctx?.columnFilters, ctx?.sortKey, ctx?.sortDir, onPageChange]);
 
   const colSpan = schemeFocused ? 11 : 8;
 
@@ -135,8 +141,9 @@ function PendingCreditNotesTable({
                   label="Source"
                   colKey="sourceType"
                   filterType="status"
-                  sortable={false}
-                  statusOptions={SOURCE_COLUMN_OPTIONS}
+                  statusOptions={SOURCE_COLUMN_OPTIONS.map(
+                    (k) => PENDING_CREDIT_SOURCE_LABELS[k] || k,
+                  )}
                 />
                 <SortTh label="Customer" colKey="customerName" className="accounts-col-party" />
                 <SortTh label="Reference" colKey="referenceNo" />
@@ -232,9 +239,9 @@ function PendingCreditNotesTable({
                       <AccountsTableCell mono className="font-semibold text-brand-700 truncate text-xs">
                         {row.referenceNo}
                       </AccountsTableCell>
-                      <AccountsTableCell mono className="truncate text-xs">
-                        {row.referenceCount
-                          ? `${row.referenceCount} reference${row.referenceCount === 1 ? "" : "s"}`
+                      <AccountsTableCell mono className="truncate text-xs" title={row.linkedInvoiceNos.join(", ") || undefined}>
+                        {row.linkedInvoiceNos.length
+                          ? row.linkedInvoiceNos.join(", ")
                           : "—"}
                       </AccountsTableCell>
                       <AccountsTableCell align="right" money className="text-xs tabular-nums">
@@ -362,12 +369,6 @@ export function PendingCreditNotesPanel({
     };
   }, [schemeFocused]);
 
-  const activeSourceCount = sourceFilter !== "all" ? 1 : 0;
-
-  const toggleSourceFilter = (value: Exclude<PendingSourceFilter, "all">) => {
-    setSourceFilter((cur) => (cur === value ? "all" : value));
-  };
-
   const handleGenerate = (row: PendingCreditNoteRow) => {
     if (!canGeneratePendingCreditNote(row)) return;
     router.push(
@@ -395,6 +396,7 @@ export function PendingCreditNotesPanel({
               placeholder="Search reference, customer, invoice, scheme…"
               className="min-w-[180px] flex-1 max-w-sm"
             />
+            {/* Toolbar Source / More Filters — same filter lives on the Source column.
             <ReportMoreFilters activeCount={activeSourceCount}>
               <div className="px-1 space-y-2">
                 <p className="text-xs font-semibold text-foreground">Source</p>
@@ -419,6 +421,7 @@ export function PendingCreditNotesPanel({
                 </button>
               </span>
             )}
+            */}
           </AccountsListingFilterCard>
         }
       >

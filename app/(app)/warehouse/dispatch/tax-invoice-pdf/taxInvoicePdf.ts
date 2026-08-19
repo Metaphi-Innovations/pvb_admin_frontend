@@ -502,8 +502,16 @@ export function mapDispatchToTaxInvoice(
     eInvoiceNo: asText(dispatch?.e_invoice_no, "—"),
     acknowledgementNo: asText(dispatch?.acknowledgement_no, "—"),
     acknowledgementDate: asText(dispatch?.acknowledgement_date, "—"),
-    ewayBillNo: asText(dispatch?.eway_bill_number, "—"),
-    ewayBillExpiry: asText(dispatch?.eway_bill_expiry || dispatch?.eway_bill_date, "—"),
+    ewayBillNo: asText(
+      dispatch?.sales_invoice?.eway_bill_number || dispatch?.eway_bill_number,
+      "—",
+    ),
+    ewayBillExpiry: asText(
+      dispatch?.sales_invoice?.eway_bill_valid_upto ||
+        dispatch?.eway_bill_expiry ||
+        dispatch?.eway_bill_date,
+      "—",
+    ),
     irn: asText(dispatch?.irn, "—"),
     billFrom,
     billTo: billing,
