@@ -77,6 +77,7 @@ export type CreateFromDispatchPayload = {
   eway_bill_status?: string | null;
   eway_bill_qr_code?: string | null;
   additional_charges?: AdditionalChargeInput[];
+  round_off_amount?: number | string | null;
 };
 
 export type DirectServiceItemInput = {
@@ -346,6 +347,20 @@ export type PrepareDispatchInvoiceDto = {
     default_gst_rate: string | null;
     mapping_ok: boolean;
   }>;
+  totals?: DispatchInvoiceTotalsPreview;
+};
+
+export type DispatchInvoiceTotalsPreview = {
+  gross_amount: string;
+  product_discount_amount: string;
+  taxable_amount: string;
+  additional_charge_amount: string;
+  cgst_amount: string;
+  sgst_amount: string;
+  igst_amount: string;
+  gst_amount: string;
+  round_off_amount: string;
+  invoice_amount: string;
 };
 
 export function readTransportDistanceKm(
@@ -657,7 +672,7 @@ function mapBackendLineItem(
       asString(sacSnap.hsnCode || sacSnap.hsn_code || sacSnap.code) ||
       "",
     qty,
-    unit: asString(uomSnap.label || uomSnap.uom || raw.quantity_type) || "NOS",
+    unit: asString(uomSnap.label || uomSnap.uom || uomSnap.unit || raw.quantity_type) || "NOS",
     unitPrice: rate,
     discountPct,
     taxPct: gstPct,
@@ -917,6 +932,27 @@ export const SalesInvoiceService = {
     } catch (error) {
       throw new Error(
         extractErrorMessage(error, "Failed to prepare dispatch for invoice."),
+      );
+    }
+  },
+
+  async previewDispatchTotals(
+    dispatchId: string,
+    payload: Pick<CreateFromDispatchPayload, "additional_charges" | "round_off_amount"> = {},
+  ): Promise<DispatchInvoiceTotalsPreview> {
+    try {
+      const response = await axiosInstance.post(
+        API_ENDPOINTS.ACCOUNTS.SALES_INVOICE.PREVIEW_DISPATCH_TOTALS(dispatchId),
+        payload,
+      );
+      const data = unwrapData(response);
+      if (!data) {
+        throw new Error("Failed to preview dispatch invoice totals.");
+      }
+      return data as DispatchInvoiceTotalsPreview;
+    } catch (error) {
+      throw new Error(
+        extractErrorMessage(error, "Failed to preview dispatch invoice totals."),
       );
     }
   },

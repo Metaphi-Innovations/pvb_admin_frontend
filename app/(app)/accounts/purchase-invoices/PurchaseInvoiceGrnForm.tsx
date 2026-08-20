@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Truck,
@@ -26,6 +26,7 @@ import { AccountingImpactSection } from "@/components/accounts/AccountingImpactS
 import { AccountsDateInput } from "@/components/accounts/AccountsDateInput";
 import { dispatchAccountsDataChanged } from "@/lib/accounts/accounts-data-events";
 import { AccountsToast, type AccountsToastState } from "@/components/accounts/AccountsToast";
+import { useFY, setStoredFYId } from "@/lib/fy-store";
 import { PurchaseInvoicePageShell } from "./PurchaseInvoicePageShell";
 import { PURCHASE_SOURCE_TYPE_LABELS, type PurchaseSourceType } from "./purchase-invoice-types";
 import {
@@ -34,6 +35,15 @@ import {
   type EligibleGrnDto,
   type PrepareGrnInvoiceDto,
 } from "@/services/purchase-invoice.service";
+import {
+  GoodsInvoiceAdditionalChargesEditor,
+  enrichExpensesFromChargeMaster,
+} from "@/app/(app)/accounts/invoices/components/GoodsInvoiceAdditionalChargesEditor";
+import {
+  createEmptyAdditionalExpense,
+  calcAdditionalExpenseRow,
+  type InvoiceAdditionalExpense,
+} from "@/app/(app)/accounts/invoices/invoice-additional-expenses";
 import { cn } from "@/lib/utils";
 
 function formatDateOnly(value: string | null | undefined): string {
@@ -188,6 +198,7 @@ export function PurchaseInvoiceGrnForm({
   dismissToast: () => void;
 }) {
   const router = useRouter();
+  const { selectedFY } = useFY();
   const [eligibleGrns, setEligibleGrns] = useState<EligibleGrnDto[]>([]);
   const [loadingGrns, setLoadingGrns] = useState(true);
   const [selectedGrn, setSelectedGrn] = useState<EligibleGrnDto | null>(null);
@@ -200,11 +211,31 @@ export function PurchaseInvoiceGrnForm({
   const [dueDate, setDueDate] = useState("");
   const [remarks, setRemarks] = useState("");
   const [attachment, setAttachment] = useState<File | null>(null);
+  const [additionalExpenses, setAdditionalExpenses] = useState<InvoiceAdditionalExpense[]>([]);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
   function applyPrepared(data: PrepareGrnInvoiceDto, fallback?: EligibleGrnDto | null) {
     setPrepared(data);
+    // Pre-populate charges from PO suggestions
+    const suggested = (data.suggested_additional_charges || []).filter(
+      (c) => c.mapping_ok && c.matched_additional_charge_id,
+    );
+    if (suggested.length > 0) {
+      setAdditionalExpenses(
+        suggested.map((c) => ({
+          ...createEmptyAdditionalExpense("purchase_order" as any),
+          expenseHead: c.charge_name as any,
+          chargeMasterId: c.matched_additional_charge_id!,
+          amount: Number(c.amount || 0),
+          gstApplicable: c.gst_percent != null && Number(c.gst_percent) > 0,
+          gstPct: c.gst_percent != null ? Number(c.gst_percent) : 0,
+          origin: "sales_order" as const,
+        })),
+      );
+    } else {
+      setAdditionalExpenses([]);
+    }
     setVendorInvoiceNo(data.supplier_invoice.supplier_invoice_number || "");
     setSupplierInvoiceDate(formatDateOnly(data.supplier_invoice.supplier_invoice_date));
     setInvoiceDate(formatDateOnly(data.grn.grn_date) || new Date().toISOString().slice(0, 10));
@@ -292,16 +323,23 @@ export function PurchaseInvoiceGrnForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [preselectedGrnId]);
 
+  const handleExpensesChange = useCallback(
+    (updater: React.SetStateAction<InvoiceAdditionalExpense[]>) => {
+      setAdditionalExpenses(updater);
+    },
+    [],
+  );
+
   const items = prepared?.items ?? [];
   const subtotal = items.reduce((s, l) => s + Number(l.taxable_amount || 0), 0);
   const totalGst = items.reduce((s, l) => s + Number(l.gst_amount || 0), 0);
-  const chargeTotal = (prepared?.suggested_additional_charges || [])
-    .filter((c) => c.mapping_ok)
-    .reduce((s, c) => s + Number(c.amount || 0), 0);
+  const chargeTotal = additionalExpenses.reduce((s, row) => {
+    const calc = calcAdditionalExpenseRow(row, false);
+    return s + (calc.totalAmount > 0 ? calc.totalAmount : 0);
+  }, 0);
   const grandTotal = subtotal + totalGst + chargeTotal;
   const roundOff = Math.round(grandTotal) - grandTotal;
   const finalTotal = Math.round(grandTotal);
-  const mappedCharges = (prepared?.suggested_additional_charges || []).filter((c) => c.mapping_ok);
   const unmappedCharges = (prepared?.suggested_additional_charges || []).filter((c) => !c.mapping_ok);
   const supplierInvoiceLocked = Boolean(prepared?.supplier_invoice.supplier_invoice_number);
 
@@ -314,17 +352,19 @@ export function PurchaseInvoiceGrnForm({
     }
     if (items.length === 0) return setError("This GRN has no invoiceable items.");
 
-    const additionalCharges: AdditionalChargeInput[] = mappedCharges
-      .filter((c) => c.matched_additional_charge_id)
-      .map((c) => ({
-        additional_charge_id: c.matched_additional_charge_id as string,
-        amount: Number(c.amount || 0),
-        charge_source: "ORDER" as const,
-        gst_applicable: c.gst_percent != null && Number(c.gst_percent) > 0,
-        gst_rate: c.gst_percent != null ? Number(c.gst_percent) : undefined,
+    const additionalCharges: AdditionalChargeInput[] = additionalExpenses
+      .filter((e) => e.chargeMasterId && e.amount > 0)
+      .map((e) => ({
+        additional_charge_id: e.chargeMasterId!,
+        amount: e.amount,
+        charge_source: (e.origin === "sales_order" ? "ORDER" : "INVOICE") as "ORDER" | "INVOICE",
+        gst_applicable: e.gstApplicable,
+        gst_rate: e.gstApplicable ? e.gstPct : undefined,
       }));
 
     setSaving(true);
+    // Ensure the FY id is in localStorage before axios fires the request.
+    if (selectedFY?.id) setStoredFYId(selectedFY.id);
     try {
       const created = await PurchaseInvoiceService.createFromGrn(selectedGrn.grn_id, {
         purchase_invoice_date: invoiceDate,
@@ -419,6 +459,7 @@ export function PurchaseInvoiceGrnForm({
                     setSupplierInvoiceDate("");
                     setDueDate("");
                     setAttachment(null);
+                    setAdditionalExpenses([]);
                   }}
                 >
                   Change GRN
@@ -568,22 +609,20 @@ export function PurchaseInvoiceGrnForm({
                 </div>
               </Section>
 
-              {(mappedCharges.length > 0 || unmappedCharges.length > 0) && (
-                <Section title="Additional Charges">
-                  {mappedCharges.map((c) => (
-                    <div key={c.charge_name} className="flex justify-between text-xs">
-                      <span>{c.charge_name}</span>
-                      <span className="tabular-nums">{formatMoney(Number(c.amount))}</span>
-                    </div>
-                  ))}
-                  {unmappedCharges.length > 0 && (
-                    <p className="text-xs text-amber-700">
-                      Unmapped PO charges are skipped until they exist in Additional Charge Master:{" "}
-                      {unmappedCharges.map((c) => c.charge_name).join(", ")}
-                    </p>
-                  )}
-                </Section>
-              )}
+              <Section title="Additional Charges">
+                {unmappedCharges.length > 0 && (
+                  <p className="text-xs text-amber-700 mb-2">
+                    The following PO charges are not in Additional Charge Master and were skipped:{" "}
+                    {unmappedCharges.map((c) => c.charge_name).join(", ")}
+                  </p>
+                )}
+                <GoodsInvoiceAdditionalChargesEditor
+                  expenses={additionalExpenses}
+                  onChange={handleExpensesChange}
+                  disabled={saving}
+                  interstate={false}
+                />
+              </Section>
 
               <Section title="Invoice Summary">
                 <div className="flex justify-end">
@@ -641,7 +680,7 @@ export function PurchaseInvoiceGrnForm({
                 title="Accounting Impact Preview"
                 lines={purchaseInvoiceImpactResolved({
                   vendorName: prepared.supplier.supplier_name || "Supplier",
-                  taxable: subtotal,
+                  taxable: subtotal + chargeTotal,
                   taxAmount: totalGst,
                   grandTotal: finalTotal,
                 })}

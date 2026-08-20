@@ -268,17 +268,6 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: st
               Cancel Invoice
             </Button>
           )}
-          {isGrn && postingStatus === "POSTED" && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-9 text-sm font-medium gap-1.5 text-amber-700 border-amber-200 hover:bg-amber-50"
-              onClick={() => router.push(`${DEBIT_NOTES_LIST_PATH}/new?purchaseInvoiceId=${recordHref}`)}
-            >
-              <FileMinus className="w-4 h-4" />
-              Debit Note
-            </Button>
-          )}
         </div>
       }
     >
@@ -564,6 +553,50 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: st
           </div>
         </Section>
 
+        {invoice.additionalCharges.length > 0 && (
+          <Section title="Additional Charges">
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs min-w-[600px]">
+                <thead>
+                  <tr className="border-b border-border/60 bg-muted/20">
+                    {["#", "Charge Name", "Taxable Amount", "CGST", "SGST", "IGST", "Total"].map((h) => (
+                      <th
+                        key={h}
+                        className={cn(
+                          "px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap",
+                          h === "#" || h === "Charge Name" ? "text-left" : "text-right",
+                        )}
+                      >
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {invoice.additionalCharges.map((charge, i) => {
+                    const taxable = charge.amount;
+                    const cgstAmt = Math.round(taxable * ((charge.cgstPct ?? 0) / 100) * 100) / 100;
+                    const sgstAmt = Math.round(taxable * ((charge.sgstPct ?? 0) / 100) * 100) / 100;
+                    const igstAmt = Math.round(taxable * ((charge.igstPct ?? 0) / 100) * 100) / 100;
+                    const total = taxable + cgstAmt + sgstAmt + igstAmt;
+                    return (
+                      <tr key={charge.uid} className="border-b border-border/40 last:border-0 hover:bg-muted/20">
+                        <td className="px-3 py-2 text-muted-foreground">{i + 1}</td>
+                        <td className="px-3 py-2 font-medium">{charge.chargeName}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{formatMoney(taxable)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{cgstAmt > 0 ? formatMoney(cgstAmt) : "—"}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{sgstAmt > 0 ? formatMoney(sgstAmt) : "—"}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{igstAmt > 0 ? formatMoney(igstAmt) : "—"}</td>
+                        <td className="px-3 py-2 text-right tabular-nums font-semibold">{formatMoney(total)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </Section>
+        )}
+
         {qtyComparisonRows.length > 0 && invoice.grnNo && (
           <Section title="Quantity Comparison">
             <p className="text-xs text-muted-foreground mb-3">
@@ -584,6 +617,13 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: st
                 </>
               )}
               <AmountRow label="Taxable Amount" value={formatMoney(gst.taxableValue)} />
+              {invoice.additionalCharges.length > 0 && (
+                <AmountRow
+                  label="Additional Charges"
+                  value={formatMoney(invoice.additionalCharges.reduce((s, c) => s + c.amount, 0))}
+                  muted
+                />
+              )}
               {(!isDirect || invoice.gstApplicable !== false) && (
                 <>
                   <AmountRow label="CGST" value={formatMoneyOrDash(gst.cgst)} muted />

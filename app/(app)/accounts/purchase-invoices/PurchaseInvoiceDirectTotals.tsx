@@ -42,6 +42,8 @@ export function PurchaseInvoiceDirectTotals({
 
   readOnly,
 
+  additionalChargeTotal,
+
 }: {
 
   totals: DirectPurchaseTotals;
@@ -51,6 +53,8 @@ export function PurchaseInvoiceDirectTotals({
   onRoundingChange?: (v: number) => void;
 
   readOnly?: boolean;
+
+  additionalChargeTotal?: number;
 
 }) {
 
@@ -77,6 +81,12 @@ export function PurchaseInvoiceDirectTotals({
       <SummaryRow label="IGST" value={formatMoney(totals.igst)} />
 
       <SummaryRow label="Total GST" value={formatMoney(totals.totalGst)} />
+
+      {additionalChargeTotal != null && additionalChargeTotal > 0 && (
+
+        <SummaryRow label="Additional Charges" value={formatMoney(additionalChargeTotal)} />
+
+      )}
 
       <SummaryRow label="TDS" value={tdsDisplay} />
 
