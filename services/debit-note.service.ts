@@ -67,7 +67,7 @@ export function mapDebitNoteToRecord(item: any): DebitNoteRecord {
     warehouse: item.warehouse?.warehouse_name || "",
     branch: item.warehouse?.warehouse_name || "",
     bankAccountId: item.bank_account_id || null,
-    round_off: parseFloat(item.round_off || "0"),
+    round_off: parseFloat(item.round_off_amount ?? item.round_off ?? "0"),
     reversal_voucher_number: item.reversal?.voucher_number || null,
     reversed_at: item.reversal?.posted_at || null,
     reversed_by: item.reversal?.posted_by_name || null,

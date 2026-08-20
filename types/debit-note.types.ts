@@ -33,6 +33,8 @@ export interface CreateDirectDebitNotePayload {
   purchase_invoice_id?: string | null;
   allocated_amount?: number | string | null;
   references?: DebitNoteReferenceInput[];
+  /** Signed round-off; stored on header and posted to ROUND_OFF ledger when non-zero. */
+  round_off_amount?: number | string | null;
 }
 
 export interface CreateDebitNoteFromPendingPayload {

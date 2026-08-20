@@ -548,7 +548,7 @@ export default function DebitNoteFormPageClient({
         setParticular("");
         setParticularQty("1");
         setParticularRate("");
-        setRoundOff(0);
+        setRoundOff(rec.round_off ?? 0);
       } else if (fresh) {
         setUiRefType(rec.sourceInvoiceId ? "purchase_invoice" : "direct");
         const line = rec.lineItems[0];
@@ -581,7 +581,11 @@ export default function DebitNoteFormPageClient({
               );
         const expected = computeNoteParticularTotals(qtyStr, rateStr, gstOn, gstPctStr, false).total;
         const savedTotal = rec.standaloneDebitAmount || rec.currentDebitAmount || expected;
-        setRoundOff(roundMoney(savedTotal - expected));
+        setRoundOff(
+          rec.round_off != null && Math.abs(rec.round_off) > 0.0001
+            ? rec.round_off
+            : roundMoney(savedTotal - expected),
+        );
         setParticular(rec.reason || line?.productName || "");
         if (rec.sourceInvoiceId) {
           const p = buildReferenceFromPurchaseInvoice(rec.sourceInvoiceId);
@@ -605,7 +609,7 @@ export default function DebitNoteFormPageClient({
           setParticular("");
           setParticularQty("1");
           setParticularRate("");
-          setRoundOff(0);
+          setRoundOff(rec.round_off ?? 0);
         } else {
           setInvoiceAdjustmentBasis("amount");
           setLines([]);
@@ -634,7 +638,11 @@ export default function DebitNoteFormPageClient({
               ? String(line.unitPrice)
               : String(taxable || rec.currentDebitAmount || "");
           const expected = computeNoteParticularTotals(qtyStr, rateStr, gstOn, gstPctStr, false).total;
-          setRoundOff(roundMoney((rec.currentDebitAmount ?? expected) - expected));
+          setRoundOff(
+            rec.round_off != null && Math.abs(rec.round_off) > 0.0001
+              ? rec.round_off
+              : roundMoney((rec.currentDebitAmount ?? expected) - expected),
+          );
         }
       }
     }).catch(() => {
@@ -762,7 +770,7 @@ export default function DebitNoteFormPageClient({
     }
     if (particularTotals.total <= 0 && Math.abs(roundOff) < 0.005) return [];
     const name = particular.trim() || "Adjustment";
-    const lineTotal = roundMoney(particularTotals.total + roundOff);
+    // Round-off is header-level (round_off_amount) — do not bake into line taxable.
     return [
       normalizeDebitLine({
         ...createEmptyDebitLine(),
@@ -771,9 +779,9 @@ export default function DebitNoteFormPageClient({
         unitPrice: particularTotals.rate || particularTotals.basicAmount,
         taxPct: gstApplicable ? parseFloat(gstPct) || 0 : 0,
         gstApplicable,
-        debitAmount: lineTotal,
+        debitAmount: particularTotals.basicAmount,
         gstAmount: particularTotals.gstAmount,
-        lineAmount: lineTotal,
+        lineAmount: particularTotals.total,
         adjustmentLedgerId: adjustmentLedgerId ?? undefined,
         adjustmentLedgerName: adjustmentLedgerName || undefined,
         lineRemarks: narration.trim() || remarks.trim(),
@@ -858,6 +866,13 @@ export default function DebitNoteFormPageClient({
       setError("Select a supplier before saving.");
       return false;
     }
+    const resolvedWarehouse = referencePreview?.sourceGrnNo
+      ? resolveWarehouseFromGrnNo(referencePreview.sourceGrnNo) || warehouseId
+      : warehouseId;
+    if (!String(resolvedWarehouse || "").trim()) {
+      setError("Select a warehouse before saving.");
+      return false;
+    }
     if (!adjustmentLedgerId && !adjustmentLedgerName) {
       setError("Select an adjustment ledger.");
       return false;
@@ -904,36 +919,57 @@ export default function DebitNoteFormPageClient({
   const [createdNoteId, setCreatedNoteId] = useState<string | number | null>(null);
 
   const mapFormInputToPayload = (input: any) => {
-    const linesInput = input.lineItems.map((l: any) => ({
-      description: l.productName || "Adjustment",
-      ledger_id: l.adjustmentLedgerId
-        ? String(l.adjustmentLedgerId)
-        : adjustmentLedgerId
-          ? String(adjustmentLedgerId)
-          : undefined,
-      product_id: null,
-      inventory_detail_id: null,
-      hsn_id: null,
-      sac_id: null,
-      quantity: l.returnQty || 1,
-      quantity_type: l.uom || null,
-      rate: l.unitPrice || l.debitAmount,
-      taxable_amount: l.debitAmount || (l.returnQty * l.unitPrice),
-      gst_rate: l.taxPct || 0,
-      narration: l.lineRemarks || null,
-    }));
+    const linesInput = input.lineItems.map((l: any) => {
+      const qty = Number(l.returnQty) || 0;
+      const rate = Number(l.unitPrice) || 0;
+      const discPct = Number(l.discountPct) || 0;
+      const qtyTaxable =
+        qty > 0 && rate > 0
+          ? roundMoney(Math.max(0, qty * rate * (1 - discPct / 100)))
+          : 0;
+      const debit =
+        Number(l.debitAmount) > 0 ? Number(l.debitAmount) : calcDebitFromQty(l);
+      const taxFactor = 1 + (Number(l.taxPct) || 0) / 100;
+      const taxableFromDebit =
+        taxFactor > 0 ? roundMoney(debit / taxFactor) : roundMoney(debit);
+      const taxable = usesQuantityLines
+        ? qtyTaxable > 0
+          ? qtyTaxable
+          : taxableFromDebit
+        : particularTotals.basicAmount;
+
+      return {
+        description: l.productName || "Adjustment",
+        ledger_id: l.adjustmentLedgerId
+          ? String(l.adjustmentLedgerId)
+          : adjustmentLedgerId
+            ? String(adjustmentLedgerId)
+            : undefined,
+        product_id: null,
+        inventory_detail_id: null,
+        hsn_id: null,
+        sac_id: null,
+        quantity: l.returnQty || 1,
+        quantity_type: l.uom || null,
+        rate: l.unitPrice || taxable,
+        taxable_amount: taxable,
+        gst_rate: l.taxPct || 0,
+        narration: l.lineRemarks || null,
+      };
+    });
 
     const wId = referencePreview?.sourceGrnNo
-      ? (resolveWarehouseFromGrnNo(referencePreview.sourceGrnNo) || warehouseId)
+      ? resolveWarehouseFromGrnNo(referencePreview.sourceGrnNo) || warehouseId
       : warehouseId;
 
     return {
       dn_date: input.debitNoteDate,
-      warehouse_id: wId || undefined,
+      warehouse_id: String(wId),
       supplier_id: String(input.vendorId),
       narration: input.remarks || null,
       remarks: input.remarks || null,
       purchase_invoice_id: referenceInvoiceId ? String(referenceInvoiceId) : undefined,
+      round_off_amount: roundOff,
       lines: linesInput,
     };
   };
