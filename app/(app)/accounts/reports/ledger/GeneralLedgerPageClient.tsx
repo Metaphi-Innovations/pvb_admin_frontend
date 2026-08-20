@@ -8,6 +8,10 @@ import {
 } from "@/components/accounts/ReportFilters";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, BookOpen, Printer } from "lucide-react";
+import {
+  InventoryProductWisePanel,
+  CogsProductWisePanel,
+} from "@/components/accounts/InventoryProductWisePanels";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
@@ -86,6 +90,18 @@ function resolveLedgerFromUrl(urlLedgerId: string): string {
   const numericId = String(Number(urlLedgerId));
   if (numericId !== "NaN" && ledgers.some((l) => l.id === numericId)) return numericId;
   return "";
+}
+
+const STOCK_IN_HAND_LEDGER_NAME = "stock in hand";
+const COGS_LEDGER_NAMES = new Set(["cost of goods sold", "cogs"]);
+
+function isInventoryProductWiseLedger(ledgerName: string, ledgerType: string): boolean {
+  const name = ledgerName.trim().toLowerCase();
+  return name === STOCK_IN_HAND_LEDGER_NAME || ledgerType === "Inventory";
+}
+
+function isCOGSProductWiseLedger(ledgerName: string): boolean {
+  return COGS_LEDGER_NAMES.has(ledgerName.trim().toLowerCase());
 }
 
 function GeneralLedgerSkeleton() {
@@ -724,6 +740,11 @@ function GeneralLedgerPageBody({
               onSelectLedger={onSelectLedgerFromGroup}
             />
           ) : showLedgerView && statement && openingRow && closingRow ? (
+            isInventoryProductWiseLedger(statement.summary.ledgerName, statement.summary.ledgerType) ? (
+              <InventoryProductWisePanel dateFrom={dateFrom} dateTo={dateTo} />
+            ) : isCOGSProductWiseLedger(statement.summary.ledgerName) ? (
+              <CogsProductWisePanel dateFrom={dateFrom} dateTo={dateTo} />
+            ) : (
             <>
               <GeneralLedgerReportHeader
                 ledgerName={statement.summary.ledgerName}
@@ -768,6 +789,7 @@ function GeneralLedgerPageBody({
                 onVoucherClick={onVoucherClick}
               />
             </>
+            )
           ) : ledgerId ? (
             <div className="flex-1 flex items-center justify-center p-8 text-sm text-muted-foreground">
               Ledger not found or has no statement data.

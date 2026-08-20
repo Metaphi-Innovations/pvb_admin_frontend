@@ -81,6 +81,7 @@ type CreditNoteListRow = {
   credit_note_id: string;
   cn_number: string;
   source_type: string;
+  invoiceNos: string[];
   customerName: string;
   warehouse: string;
   creditNoteDate: string;
@@ -91,6 +92,19 @@ type CreditNoteListRow = {
   currentCreditAmount: number;
   status: string;
 };
+
+function uniqueInvoiceCodes(raw: CreditNoteListApiRow): string[] {
+  const seen = new Set<string>();
+  const codes: string[] = [];
+  for (const ref of raw.references ?? []) {
+    if (ref.reference_type !== "SALES_INVOICE") continue;
+    const code = ref.reference_code?.trim();
+    if (!code || seen.has(code)) continue;
+    seen.add(code);
+    codes.push(code);
+  }
+  return codes;
+}
 
 function toNum(value: unknown, fallback = 0): number {
   if (value == null || value === "") return fallback;
@@ -110,6 +124,7 @@ function mapCreditNoteListRow(raw: CreditNoteListApiRow): CreditNoteListRow {
     credit_note_id: raw.credit_note_id,
     cn_number: raw.cn_number || "—",
     source_type: raw.source_type || "",
+    invoiceNos: uniqueInvoiceCodes(raw),
     customerName: raw.customer?.customer_name || "",
     warehouse: raw.warehouse?.warehouse_name || "",
     creditNoteDate: toDate(raw.cn_date),
@@ -201,6 +216,10 @@ function applyCreditNoteToolbarFilters(
     const q = filters.voucherNo.toLowerCase();
     list = list.filter((x) => x.cn_number.toLowerCase().includes(q));
   }
+  if (filters.invoiceNo.trim()) {
+    const q = filters.invoiceNo.toLowerCase();
+    list = list.filter((x) => x.invoiceNos.some((n) => n.toLowerCase().includes(q)));
+  }
   if (filters.search.trim()) {
     const q = filters.search.toLowerCase();
     list = list.filter(
@@ -208,7 +227,10 @@ function applyCreditNoteToolbarFilters(
         x.cn_number.toLowerCase().includes(q) ||
         x.customerName.toLowerCase().includes(q) ||
         sourceLabel(x.source_type).toLowerCase().includes(q) ||
-        x.warehouse.toLowerCase().includes(q),
+        x.warehouse.toLowerCase().includes(q) ||
+        x.status.toLowerCase().includes(q) ||
+        cnStatusToBadge(x.status).label.toLowerCase().includes(q) ||
+        x.invoiceNos.some((n) => n.toLowerCase().includes(q)),
     );
   }
   return list;
@@ -283,7 +305,12 @@ function CreditNotesRecordsTable({
         <AccountsTableHead>
           <AccountsTableHeadRow>
             <SortTh label="CN No." colKey="cn_number" />
-            <SortTh label="Source" colKey="source_type" />
+            <SortTh
+              label="Source"
+              colKey="source_type"
+              filterType="status"
+              statusOptions={Object.values(CN_SOURCE_LABELS)}
+            />
             <SortTh label="Invoice" colKey="invoice" />
             <SortTh label="Customer" colKey="customerName" className="accounts-col-party" />
             <SortTh label="Warehouse" colKey="warehouse" />
@@ -293,7 +320,12 @@ function CreditNotesRecordsTable({
             <SortTh label="SGST" colKey="sgstAmount" filterType="amount" align="right" />
             <SortTh label="IGST" colKey="igstAmount" filterType="amount" align="right" />
             <SortTh label="Total" colKey="currentCreditAmount" filterType="amount" align="right" />
-            <SortTh label="Status" colKey="status" />
+            <SortTh
+              label="Status"
+              colKey="status"
+              filterType="status"
+              statusOptions={["Draft", "Pending Approval", "Approved", "Posted", "Rejected", "Cancelled", "Reversed"]}
+            />
             <AccountsColumnHeader
               label="Actions"
               colKey="_actions"
@@ -329,8 +361,8 @@ function CreditNotesRecordsTable({
                   <AccountsTableCell className="truncate text-xs">
                     {sourceLabel(r.source_type)}
                   </AccountsTableCell>
-                  <AccountsTableCell mono className="truncate text-xs">
-                    —
+                  <AccountsTableCell mono className="truncate text-xs" title={r.invoiceNos.join(", ") || undefined}>
+                    {r.invoiceNos.length ? r.invoiceNos.join(", ") : "—"}
                   </AccountsTableCell>
                   <AccountsTableCell className="accounts-col-party truncate text-xs font-medium" title={r.customerName}>
                     {r.customerName || "—"}
@@ -484,7 +516,8 @@ export default function CreditNotesListClient() {
 
   const getCellValue = useCallback((row: CreditNoteListRow, key: string) => {
     if (key === "source_type") return sourceLabel(row.source_type);
-    if (key === "invoice") return "";
+    if (key === "invoice") return row.invoiceNos.join(", ");
+    if (key === "status") return cnStatusToBadge(row.status).label;
     return (row as unknown as Record<string, unknown>)[key];
   }, []);
 
@@ -592,7 +625,8 @@ export default function CreditNotesListClient() {
                       partyOptions={partyOptions}
                       sourceOptions={sourceOptions}
                       statusOptions={NOTES_STATUS_FILTER_OPTIONS}
-                      searchPlaceholder="Search CN no., customer, warehouse, source…"
+                      searchPlaceholder="Search CN no., customer, warehouse, source, invoice…"
+                      showEntityFilters={false}
                       onChange={(patch) => setFilters((prev) => ({ ...prev, ...patch }))}
                       onReset={handleResetFilters}
                     />

@@ -2,32 +2,34 @@
 
 /**
  * Credit Note View — loads GET /accounts/credit-note/:credit_note_id (UUID).
+ * Same workspace chrome as Create/Edit so the header never overlays the document.
  */
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { AccountsFormLayout } from "../expenses/components/AccountsFormLayout";
+import { AccountingImpactSection } from "@/components/accounts/AccountingImpactSection";
+import { VoucherAccountingPostingSummary } from "@/components/accounts/voucher-form/VoucherAccountingPostingSummary";
+import { VoucherFormSectionCard } from "@/components/accounts/voucher-form/VoucherFormSectionCard";
+import {
+  VoucherNoteField,
+  VoucherNoteFieldGrid,
+  VoucherNoteReadOnly,
+} from "@/components/accounts/voucher-form/VoucherNoteFieldGrid";
+import { defaultVisibilityForType } from "@/components/accounts/voucher-form/voucher-form-shell";
 import { CreditNoteCancelDialog } from "./components/CreditNoteCancelDialog";
-import { CREDIT_NOTES_BREADCRUMB, CREDIT_NOTES_LIST_PATH, formatINR } from "./note-utils";
-import { LedgerImpactPreview } from "@/components/accounts/LedgerImpactPreview";
-import { creditNoteImpactResolved } from "@/lib/accounts/resolved-impact-previews";
+import { CreditNoteAmountSummary } from "./components/CreditNoteAmountSummary";
+import { CREDIT_NOTES_BREADCRUMB, CREDIT_NOTES_LIST_PATH } from "./note-utils";
 import {
   CreditNoteListApi,
   creditNoteListApiError,
   type CreditNoteDetailApi,
 } from "./credit-note-list-api";
+import { SOURCE_TYPE_LABELS, STATUS_LABELS, statusChipClass } from "./credit-note-form-utils";
+import { formatMoney } from "@/lib/accounts/money-format";
 import "./credit-note-tx.css";
-
-const SOURCE_LABELS: Record<string, string> = {
-  DIRECT: "Direct",
-  SALES_INVOICE: "Sales Invoice",
-  SALES_RETURN: "Sales Return",
-  CASH_DISCOUNT: "Cash Discount",
-  SPECIAL_SCHEME: "Special Scheme",
-  TURNOVER_DISCOUNT: "Turnover Discount",
-  NEAR_EXPIRY: "Near Expiry",
-};
+import "@/components/accounts/voucher-form/note-form-compact.css";
 
 function toNum(value: unknown, fallback = 0): number {
   if (value == null || value === "") return fallback;
@@ -46,6 +48,21 @@ function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
     value,
   );
+}
+
+function uniqueRefCodes(record: CreditNoteDetailApi, type: string): string[] {
+  const refs = Array.isArray(record.references) ? record.references : [];
+  const seen = new Set<string>();
+  const codes: string[] = [];
+  for (const raw of refs) {
+    const r = raw as Record<string, unknown>;
+    if (r.reference_type !== type) continue;
+    const code = String(r.reference_code || "").trim();
+    if (!code || seen.has(code)) continue;
+    seen.add(code);
+    codes.push(code);
+  }
+  return codes;
 }
 
 type ViewLine = {
@@ -116,22 +133,50 @@ export default function CreditNoteViewPageClient({ creditNoteId }: { creditNoteI
 
   if (loading) {
     return (
-      <div className="p-8 text-sm text-muted-foreground">Loading credit note…</div>
+      <div className="credit-debit-note-form flex-1 min-h-0 h-full flex flex-col">
+        <AccountsFormLayout
+          fullWidth
+          title="Credit Note"
+          breadcrumb={[...CREDIT_NOTES_BREADCRUMB]}
+          stickyFooter={
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs"
+              onClick={() => router.push(CREDIT_NOTES_LIST_PATH)}
+            >
+              Back
+            </Button>
+          }
+        >
+          <div className="bg-muted/30 border border-border rounded-lg px-3 py-2 text-xs text-muted-foreground">
+            Loading credit note…
+          </div>
+        </AccountsFormLayout>
+      </div>
     );
   }
 
   if (error || !record) {
     return (
-      <div className="p-8 space-y-3">
-        <p className="text-sm text-red-600">{error || "Credit note not found."}</p>
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-8 text-xs"
-          onClick={() => router.push(CREDIT_NOTES_LIST_PATH)}
+      <div className="credit-debit-note-form flex-1 min-h-0 h-full flex flex-col">
+        <AccountsFormLayout
+          fullWidth
+          title="Credit Note"
+          breadcrumb={[...CREDIT_NOTES_BREADCRUMB]}
+          stickyFooter={
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs"
+              onClick={() => router.push(CREDIT_NOTES_LIST_PATH)}
+            >
+              Back to Credit Notes
+            </Button>
+          }
         >
-          Back to Credit Notes
-        </Button>
+          <p className="text-sm text-red-600">{error || "Credit note not found."}</p>
+        </AccountsFormLayout>
       </div>
     );
   }
@@ -144,224 +189,234 @@ export default function CreditNoteViewPageClient({ creditNoteId }: { creditNoteI
   const cgst = toNum(record.cgst_amount);
   const sgst = toNum(record.sgst_amount);
   const igst = toNum(record.igst_amount);
+  const gst = toNum(record.gst_amount);
   const taxable = toNum(record.taxable_amount);
   const total = toNum(record.cn_amount);
-  const invoiceCount = Array.isArray(record.references)
-    ? record.references.filter((r) => {
-        const t = (r as Record<string, unknown>).reference_type;
-        return t === "SALES_INVOICE" || t === "SALES_INVOICE_ITEM";
-      }).length
-    : 0;
+  const roundOff = toNum(record.round_off_amount);
+  const interstate = Boolean(record.is_interstate);
+  const invoiceNos = uniqueRefCodes(record, "SALES_INVOICE");
+  const returnNos = uniqueRefCodes(record, "SALES_RETURN");
   const cnNo = record.cn_number || "—";
   const customerName = record.customer?.customer_name || "—";
-  const sourceLabel = SOURCE_LABELS[String(record.source_type)] || record.source_type || "—";
+  const sourceLabel = SOURCE_TYPE_LABELS[String(record.source_type)] || record.source_type || "—";
+  const debitLedger = lines[0]?.ledgerName || "Adjustment ledger";
+  const creditLedger = record.party_ledger?.ledger_name || customerName;
+  const showGst = gst > 0.004;
 
   return (
     <>
-      <div className="h-full min-h-0 flex flex-col">
-      <AccountsFormLayout
-        fullWidth
-        title="Credit Note"
-        breadcrumb={[...CREDIT_NOTES_BREADCRUMB]}
-        code={cnNo}
-        headerMeta={
-          <span className="inline-flex items-center h-6 px-2 rounded-md border border-brand-200 bg-brand-50 font-mono text-[11px] font-semibold text-brand-700">
-            {cnNo}
-          </span>
-        }
-        footer={
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 text-xs"
-              onClick={() => router.push(CREDIT_NOTES_LIST_PATH)}
-            >
-              Back
-            </Button>
-            {canEdit ? (
-              <Button
-                size="sm"
-                className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white"
-                onClick={() =>
-                  router.push(`${CREDIT_NOTES_LIST_PATH}/${record.credit_note_id}/edit`)
-                }
+      <div className="credit-debit-note-form flex-1 min-h-0 h-full flex flex-col">
+        <AccountsFormLayout
+          fullWidth
+          title="Credit Note"
+          breadcrumb={[...CREDIT_NOTES_BREADCRUMB]}
+          code={cnNo !== "—" ? cnNo : undefined}
+          headerMeta={
+            <div className="flex items-center gap-1.5">
+              <span
+                className={`cdn-chip inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium ${statusChipClass(status)}`}
               >
-                Edit
-              </Button>
-            ) : null}
-            {canCancel ? (
+                {STATUS_LABELS[status] || status.replaceAll("_", " ")}
+              </span>
+              {cnNo !== "—" ? (
+                <span className="cdn-chip cdn-chip--code inline-flex items-center h-5 px-1.5 rounded border font-mono text-[10px]">
+                  {cnNo}
+                </span>
+              ) : null}
+            </div>
+          }
+          stickyFooter={
+            <div className="flex items-center justify-between w-full gap-2 flex-wrap">
               <Button
                 variant="outline"
                 size="sm"
-                className="h-8 text-xs text-red-600"
-                onClick={() => setCancelOpen(true)}
+                className="h-8 text-xs"
+                onClick={() => router.push(CREDIT_NOTES_LIST_PATH)}
               >
-                Cancel
+                Back
               </Button>
-            ) : null}
-          </div>
-        }
-      >
-        <div className="cnz">
-          <div className="cnz-head">
-            <div className="cnz-f">
-              <label>Customer</label>
-              <p className="cnz-ro font-medium">{customerName}</p>
-            </div>
-            <div className="cnz-f">
-              <label>Credit Note No.</label>
-              <p className="cnz-ro font-mono text-[13px]">{cnNo}</p>
-            </div>
-            <div className="cnz-f">
-              <label>Credit Note Date</label>
-              <p className="cnz-ro text-[13px]">{toDate(record.cn_date) || "—"}</p>
-            </div>
-            <div className="cnz-f">
-              <label>Warehouse</label>
-              <p className="cnz-ro text-[13px]">{record.warehouse?.warehouse_name || "—"}</p>
-            </div>
-            <div className="cnz-f">
-              <label>Source</label>
-              <p className="cnz-ro text-[13px]">{sourceLabel}</p>
-            </div>
-            <div className="cnz-f">
-              <label>Status</label>
-              <p className="cnz-ro text-[13px]">{status.replaceAll("_", " ") || "—"}</p>
-            </div>
-            <div className="cnz-f">
-              <label>Linked Invoice</label>
-              <p className="cnz-ro text-[13px]">
-                {invoiceCount > 0
-                  ? `${invoiceCount} Invoice${invoiceCount === 1 ? "" : "s"}`
-                  : "—"}
-              </p>
-            </div>
-            {record.scheme?.scheme_name ? (
-              <div className="cnz-f">
-                <label>Scheme</label>
-                <p className="cnz-ro text-[13px] truncate">{record.scheme.scheme_name}</p>
+              <div className="flex items-center gap-1.5">
+                {canEdit ? (
+                  <Button
+                    size="sm"
+                    className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white"
+                    onClick={() =>
+                      router.push(`${CREDIT_NOTES_LIST_PATH}/${record.credit_note_id}/edit`)
+                    }
+                  >
+                    Edit
+                  </Button>
+                ) : null}
+                {canCancel ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 text-xs text-red-600"
+                    onClick={() => setCancelOpen(true)}
+                  >
+                    Cancel
+                  </Button>
+                ) : null}
               </div>
-            ) : null}
-            <div className="cnz-f cnz-head__full">
-              <span className="cnz-tag">
-                Source: {sourceLabel} · Status: {status.replaceAll("_", " ")}
-              </span>
             </div>
-          </div>
+          }
+        >
+          <div className="cdn-stack pb-4">
+            <VoucherFormSectionCard title="Basic Details" compact>
+              <VoucherNoteFieldGrid columns={4}>
+                <VoucherNoteField label="Customer" width="md">
+                  <VoucherNoteReadOnly>{customerName}</VoucherNoteReadOnly>
+                </VoucherNoteField>
+                <VoucherNoteField label="Credit Note No." width="sm">
+                  <VoucherNoteReadOnly mono>{cnNo}</VoucherNoteReadOnly>
+                </VoucherNoteField>
+                <VoucherNoteField label="Credit Note Date" width="sm">
+                  <VoucherNoteReadOnly>{toDate(record.cn_date) || "—"}</VoucherNoteReadOnly>
+                </VoucherNoteField>
+                <VoucherNoteField label="Warehouse" width="md">
+                  <VoucherNoteReadOnly>
+                    {record.warehouse?.warehouse_name || "—"}
+                  </VoucherNoteReadOnly>
+                </VoucherNoteField>
+                <VoucherNoteField label="Source" width="md">
+                  <VoucherNoteReadOnly>{sourceLabel}</VoucherNoteReadOnly>
+                </VoucherNoteField>
+                <VoucherNoteField label="Status" width="sm">
+                  <VoucherNoteReadOnly>
+                    {STATUS_LABELS[status] || status.replaceAll("_", " ") || "—"}
+                  </VoucherNoteReadOnly>
+                </VoucherNoteField>
+                {returnNos.length ? (
+                  <VoucherNoteField label="Sales Return" width="md">
+                    <VoucherNoteReadOnly mono>{returnNos.join(", ")}</VoucherNoteReadOnly>
+                  </VoucherNoteField>
+                ) : null}
+                <VoucherNoteField label="Linked Invoice" width="lg">
+                  <VoucherNoteReadOnly mono>
+                    {invoiceNos.length ? invoiceNos.join(", ") : "—"}
+                  </VoucherNoteReadOnly>
+                </VoucherNoteField>
+                {record.scheme?.scheme_name ? (
+                  <VoucherNoteField label="Scheme" width="md">
+                    <VoucherNoteReadOnly>{record.scheme.scheme_name}</VoucherNoteReadOnly>
+                  </VoucherNoteField>
+                ) : null}
+              </VoucherNoteFieldGrid>
+            </VoucherFormSectionCard>
 
-          <div className="cnz-items">
-            <div className="cnz-items__bar">
-              <h2 className="cnz-items__title">
-                {isQty ? "Quantity Particulars" : "Particulars"}
-              </h2>
-            </div>
-            <div className="cnz-table-wrap">
-              <table className={isQty ? "cnz-table cnz-table--qty" : "cnz-table cnz-table--amt"}>
-                <thead>
-                  <tr>
-                    <th>Particular</th>
-                    <th>Ledger</th>
-                    {isQty ? <th className="text-right">Qty</th> : null}
-                    <th className="text-right">Taxable</th>
-                    <th className="text-right">GST %</th>
-                    {igst > 0 ? (
-                      <th className="text-right">IGST</th>
-                    ) : (
-                      <>
-                        <th className="text-right">CGST</th>
-                        <th className="text-right">SGST</th>
-                      </>
-                    )}
-                    <th className="text-right">Line Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {lines.length === 0 ? (
+            <VoucherFormSectionCard
+              title={isQty ? "Quantity Particulars" : "Particulars"}
+              compact
+              flush
+            >
+              <div className="cnz-table-wrap">
+                <table className={isQty ? "cnz-table cnz-table--qty accounts-table" : "cnz-table cnz-table--amt accounts-table"}>
+                  <thead>
                     <tr>
-                      <td colSpan={isQty ? 8 : 7} className="text-muted-foreground text-xs">
-                        No line items.
-                      </td>
+                      <th>Particular</th>
+                      <th>Ledger</th>
+                      {isQty ? <th className="text-right">Qty</th> : null}
+                      <th className="text-right">Taxable</th>
+                      <th className="text-right">GST %</th>
+                      {igst > 0 ? (
+                        <th className="text-right">IGST</th>
+                      ) : (
+                        <>
+                          <th className="text-right">CGST</th>
+                          <th className="text-right">SGST</th>
+                        </>
+                      )}
+                      <th className="text-right">Line Total</th>
                     </tr>
-                  ) : (
-                    lines.map((l) => (
-                      <tr key={l.key}>
-                        <td>{l.description}</td>
-                        <td>{l.ledgerName}</td>
-                        {isQty ? <td className="cnz-num">{l.qty}</td> : null}
-                        <td className="cnz-num">{formatINR(l.taxable)}</td>
-                        <td className="cnz-num">{l.gstRate > 0 ? `${l.gstRate}%` : "—"}</td>
-                        {igst > 0 ? (
-                          <td className="cnz-num">{formatINR(l.igst || l.gstAmount)}</td>
-                        ) : (
-                          <>
-                            <td className="cnz-num">{formatINR(l.cgst)}</td>
-                            <td className="cnz-num">{formatINR(l.sgst)}</td>
-                          </>
-                        )}
-                        <td className="cnz-num font-semibold">{formatINR(l.total)}</td>
+                  </thead>
+                  <tbody>
+                    {lines.length === 0 ? (
+                      <tr>
+                        <td colSpan={isQty ? 8 : 7} className="text-muted-foreground text-xs">
+                          No line items.
+                        </td>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <div className="cnz-after-table">
-            <div />
-            <div className="cnz-totals">
-              <div className="cnz-totals__row">
-                <span>Subtotal</span>
-                <span>{formatINR(taxable)}</span>
+                    ) : (
+                      lines.map((l) => (
+                        <tr key={l.key}>
+                          <td>{l.description}</td>
+                          <td>{l.ledgerName}</td>
+                          {isQty ? <td className="cnz-num">{l.qty}</td> : null}
+                          <td className="cnz-num">{formatMoney(l.taxable)}</td>
+                          <td className="cnz-num">{l.gstRate > 0 ? `${l.gstRate}%` : "—"}</td>
+                          {igst > 0 ? (
+                            <td className="cnz-num">{formatMoney(l.igst || l.gstAmount)}</td>
+                          ) : (
+                            <>
+                              <td className="cnz-num">{formatMoney(l.cgst)}</td>
+                              <td className="cnz-num">{formatMoney(l.sgst)}</td>
+                            </>
+                          )}
+                          <td className="cnz-num font-semibold">{formatMoney(l.total)}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
               </div>
-              {cgst > 0 ? (
-                <div className="cnz-totals__row">
-                  <span>CGST</span>
-                  <span>{formatINR(cgst)}</span>
-                </div>
-              ) : null}
-              {sgst > 0 ? (
-                <div className="cnz-totals__row">
-                  <span>SGST</span>
-                  <span>{formatINR(sgst)}</span>
-                </div>
-              ) : null}
-              {igst > 0 ? (
-                <div className="cnz-totals__row">
-                  <span>IGST</span>
-                  <span>{formatINR(igst)}</span>
-                </div>
-              ) : null}
-              <div className="cnz-totals__grand">
-                <span>Credit Note Total</span>
-                <span>{formatINR(total)}</span>
-              </div>
-            </div>
-          </div>
+            </VoucherFormSectionCard>
 
-          <div className="cnz-notes">
-            <div className="cnz-f">
-              <label>Narration</label>
-              <p className="cnz-ro min-h-[3.25rem] items-start py-2 whitespace-pre-wrap text-[13px]">
-                {record.narration || "—"}
+            <CreditNoteAmountSummary
+              taxable={taxable}
+              cgst={cgst}
+              sgst={sgst}
+              igst={igst}
+              gst={gst}
+              roundOff={roundOff}
+              total={total}
+              interstate={interstate}
+              locked
+            />
+
+            <VoucherFormSectionCard title="Narration" compact>
+              <p className="text-xs text-foreground whitespace-pre-wrap min-h-[2.5rem]">
+                {record.narration?.trim() || "—"}
               </p>
-            </div>
-          </div>
+            </VoucherFormSectionCard>
 
-          <div className="cnz-impact">
-            <LedgerImpactPreview
-              title="Accounting Entry"
-              lines={creditNoteImpactResolved({
-                customerName,
-                taxable: Math.max(0, total - toNum(record.gst_amount)),
-                taxAmount: toNum(record.gst_amount),
-                grandTotal: total,
-              })}
+            <AccountingImpactSection
+              docKey="credit_note"
+              compact
+              entryPreview={
+                <div className="space-y-1">
+                  <p className="text-[10px] text-muted-foreground">
+                    Posted accounting preview. Ledger balances are not edited from this screen.
+                  </p>
+                  <VoucherAccountingPostingSummary
+                    compact
+                    voucherTypeLabel="Credit Note"
+                    debitLedgerLabel="Debit"
+                    debitLedgerName={debitLedger}
+                    creditLedgerLabel="Credit"
+                    creditLedgerName={creditLedger}
+                    voucherAmount={total}
+                    voucherAmountLabel="Credit Note Amount"
+                    gstAdjustments={
+                      showGst
+                        ? {
+                            cgstLabel: "Output CGST",
+                            cgstAmount: cgst,
+                            sgstLabel: "Output SGST",
+                            sgstAmount: sgst,
+                            igstLabel: "Output IGST",
+                            igstAmount: igst,
+                          }
+                        : undefined
+                    }
+                    visibilityItems={defaultVisibilityForType("credit_note", {
+                      gstApplicable: showGst,
+                    })}
+                  />
+                </div>
+              }
             />
           </div>
-        </div>
-      </AccountsFormLayout>
+        </AccountsFormLayout>
       </div>
 
       <CreditNoteCancelDialog

@@ -12,6 +12,7 @@ export function CreditNoteAmountSummary({
   roundOff,
   total,
   interstate,
+  locked = false,
 }: {
   taxable: number;
   cgst: number;
@@ -21,6 +22,7 @@ export function CreditNoteAmountSummary({
   roundOff: number;
   total: number;
   interstate: boolean;
+  locked?: boolean;
 }) {
   const showGst = gst > 0.004 || cgst > 0.004 || sgst > 0.004 || igst > 0.004;
   const showIntra = showGst && !interstate && (cgst > 0.004 || sgst > 0.004);
@@ -46,9 +48,11 @@ export function CreditNoteAmountSummary({
           <Row label="Credit Note Amount" value={total} strong />
         </div>
       </div>
-      <p className="text-[10px] text-muted-foreground px-1 pb-1">
-        Preview only. Backend totals are authoritative when saving.
-      </p>
+      {locked ? null : (
+        <p className="text-[10px] text-muted-foreground px-1 pb-1">
+          Preview only. Backend totals are authoritative when saving.
+        </p>
+      )}
     </VoucherFormSectionCard>
   );
 }

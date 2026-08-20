@@ -33,7 +33,8 @@ export function useAccountsColumnFilters<T>({
   defaultSortDir = "desc",
 }: UseAccountsColumnFiltersOptions<T>) {
   const [columnFilters, setColumnFilters] = useState<AccountsColumnFilters>({});
-  const [sortKey, setSortKey] = useState<string | null>(defaultSortKey);
+  /** User-applied sort only. Null = default listing order (no column chevron). */
+  const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">(defaultSortDir);
 
   const setColumnFilter = useCallback((key: string, value: AccountsColumnFilters[string]) => {
@@ -49,13 +50,19 @@ export function useAccountsColumnFilters<T>({
 
   const handleSort = useCallback(
     (key: string) => {
-      if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-      else {
+      if (sortKey !== key) {
         setSortKey(key);
         setSortDir("asc");
+        return;
       }
+      if (sortDir === "asc") {
+        setSortDir("desc");
+        return;
+      }
+      setSortKey(null);
+      setSortDir(defaultSortDir);
     },
-    [sortKey],
+    [sortKey, sortDir, defaultSortDir],
   );
 
   const removeSort = useCallback(() => {
@@ -65,8 +72,10 @@ export function useAccountsColumnFilters<T>({
 
   const filteredRows = useMemo(() => {
     const result = applyAccountsColumnFilters(rows, columnFilters, getCellValue, getFilterValue);
-    return sortAccountsRows(result, sortKey, sortDir, getCellValue);
-  }, [rows, columnFilters, sortKey, sortDir, getCellValue, getFilterValue]);
+    const activeKey = sortKey ?? defaultSortKey;
+    const activeDir = sortKey ? sortDir : defaultSortDir;
+    return sortAccountsRows(result, activeKey, activeDir, getCellValue);
+  }, [rows, columnFilters, sortKey, sortDir, defaultSortKey, defaultSortDir, getCellValue, getFilterValue]);
 
   const activeFilterCount = useMemo(() => countActiveColumnFilters(columnFilters), [columnFilters]);
 
@@ -108,7 +117,7 @@ export function useAccountsColumnFilters<T>({
       colKey: columnKey,
       align: opts?.align ?? "left",
       sortable: opts?.sortable !== false,
-      sortKey,
+      sortKey: sortKey ?? undefined,
       sortDir,
       onSort: handleSort,
       onRemoveSort: removeSort,

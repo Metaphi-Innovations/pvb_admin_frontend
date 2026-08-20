@@ -89,6 +89,9 @@ import { useLedgerDetail } from "@/hooks/accounts/use-ledger-detail";
 import { useLedgerBalances } from "@/hooks/accounts/use-ledger-balances";
 import { collectDescendantLedgers } from "@/lib/accounts/coa-accounting-view";
 import { LedgerService } from "@/services/ledger.service";
+import { isStockInHandLedger } from "@/lib/accounts/coa-stock-in-hand";
+import { InventoryProductWisePanel, CogsProductWisePanel, SalesProductWisePanel } from "@/components/accounts/InventoryProductWisePanels";
+import { MANDATORY_SYSTEM_LEDGERS } from "./coa-statutory-ledgers";
 import { ChartOfAccountsService } from "@/services/chart-of-accounts.service";
 import { mapCoaApiTreeToRecords } from "@/lib/accounts/coa-api-mapper";
 import { dispatchCoaChanged } from "@/lib/accounts/coa-events";
@@ -935,6 +938,13 @@ export default function ChartOfAccountsPageClient() {
                   </p>
                 </div>
               ) : datesReady && ledgerDataReady ? (
+                isStockInHandLedger(selectedNode!) ? (
+                  <InventoryProductWisePanel dateFrom={dateFrom} dateTo={dateTo} />
+                ) : selectedNode && ["cost of goods sold", "cogs"].includes((selectedNode.accountName ?? "").trim().toLowerCase()) ? (
+                  <CogsProductWisePanel dateFrom={dateFrom} dateTo={dateTo} />
+                ) : selectedNode && (selectedNode.accountName ?? "").trim().toLowerCase() === MANDATORY_SYSTEM_LEDGERS.productSales.name.toLowerCase() ? (
+                  <SalesProductWisePanel dateFrom={dateFrom} dateTo={dateTo} />
+                ) : (
                 <CoaLedgerDetailTable
                   rows={filteredTransactions}
                   onVoucherClick={handleLedgerStatementVoucherClick}
@@ -946,6 +956,7 @@ export default function ChartOfAccountsPageClient() {
                   }}
                   emptyLabel="No transactions found for this ledger."
                 />
+                )
               ) : (
                 <div className="flex flex-1 items-center justify-center py-12">
                   <p className="text-sm text-muted-foreground">Loading ledger transactions…</p>

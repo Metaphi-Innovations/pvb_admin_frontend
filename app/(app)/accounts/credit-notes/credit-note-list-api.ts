@@ -81,6 +81,10 @@ export type CreditNoteListApiRow = {
     scheme_name?: string | null;
     scheme_type?: string | null;
   } | null;
+  references?: Array<{
+    reference_type?: string | null;
+    reference_code?: string | null;
+  }>;
 };
 
 export type PendingCreditNoteListApiRow = {
@@ -115,6 +119,11 @@ export type PendingCreditNoteListApiRow = {
     cn_number?: string | null;
     status?: string | null;
   } | null;
+  references?: Array<{
+    reference_type?: string | null;
+    reference_code?: string | null;
+    relation_type?: string | null;
+  }>;
   _count?: { lines?: number; references?: number };
 };
 

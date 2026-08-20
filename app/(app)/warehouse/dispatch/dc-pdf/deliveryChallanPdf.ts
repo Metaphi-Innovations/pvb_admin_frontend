@@ -416,8 +416,12 @@ export function mapDispatchToDeliveryChallan(
     placeOfSupply: placeOfSupply || "—",
     driverName: asText(dispatch?.driver_name),
     driverMobile: asText(dispatch?.driver_mobile),
-    ewayBillNo: asText(dispatch?.eway_bill_number),
-    ewayBillDate: asText(dispatch?.eway_bill_date),
+    ewayBillNo: asText(
+      dispatch?.sales_invoice?.eway_bill_number || dispatch?.eway_bill_number,
+    ),
+    ewayBillDate: asText(
+      dispatch?.sales_invoice?.eway_bill_date || dispatch?.eway_bill_date,
+    ),
     deliverTo: customerName,
     sourceDocument: asText(
       dispatch?.source_document_no || packingDone.packing_done_no,

@@ -44,11 +44,12 @@ export function CreditNoteInvoiceAllocationSection({
   return (
     <VoucherFormSectionCard title="Invoice Allocation" compact>
       <VoucherNoteFieldGrid columns={4}>
-        <VoucherNoteField label="Direct mode" width="md">
-          <div className="cnz-gst-toggle">
+        <VoucherNoteField label="Direct mode" width="ref">
+          <div className="cnz-gst-toggle" role="group" aria-label="Direct credit note mode">
             <button
               type="button"
               data-active={mode === "on_account"}
+              aria-pressed={mode === "on_account"}
               disabled={disabled}
               onClick={() => onModeChange("on_account")}
             >
@@ -57,6 +58,7 @@ export function CreditNoteInvoiceAllocationSection({
             <button
               type="button"
               data-active={mode === "against_invoice"}
+              aria-pressed={mode === "against_invoice"}
               disabled={disabled}
               onClick={() => onModeChange("against_invoice")}
             >

@@ -1,3 +1,4 @@
+import axios from "axios";
 import { axiosInstance } from "@/api/axios";
 import { API_ENDPOINTS } from "@/api/endpoints";
 import type { ApiResponse } from "@/types/api.types";
@@ -204,6 +205,89 @@ function extractErrorMessage(error: unknown, fallback: string): string {
   );
 }
 
+export interface InventoryProductWiseRow {
+  productId: string;
+  productCode: string | null;
+  productName: string;
+  uom: string | null;
+  netQuantityConsumed: number;
+  netInventoryValue: number;
+  totalCreditAmount: number;
+  totalDebitAmount: number;
+  averageUnitCost: number;
+}
+
+export interface CogsProductWiseRow {
+  productId: string;
+  productCode: string | null;
+  productName: string;
+  uom: string | null;
+  netQuantitySold: number;
+  netCogsValue: number;
+  totalDebitAmount: number;
+  totalCreditAmount: number;
+  averageUnitCost: number;
+}
+
+export interface InventoryProductWiseLedger {
+  ledger_id: string;
+  ledger_name: string;
+  ledger_code: string;
+}
+
+export interface InventoryProductWiseResponse {
+  ledger: InventoryProductWiseLedger | null;
+  data: InventoryProductWiseRow[];
+  pagination: { page: number; limit: number; total: number; totalPages: number };
+  summary: { totalProducts: number; totalInventoryValue: number };
+}
+
+export interface CogsProductWiseResponse {
+  ledger: InventoryProductWiseLedger | null;
+  data: CogsProductWiseRow[];
+  pagination: { page: number; limit: number; total: number; totalPages: number };
+  summary: { totalProducts: number; totalCogsValue: number };
+}
+
+export interface SalesProductWiseRow {
+  productId: string;
+  productCode: string | null;
+  productName: string;
+  uom: string | null;
+  netSalesQty: number;
+  netSalesValue: number;
+  totalCreditAmount: number;
+  totalDebitAmount: number;
+  averageUnitCost: number;
+}
+
+export interface SalesProductWiseResponse {
+  ledger: InventoryProductWiseLedger | null;
+  data: SalesProductWiseRow[];
+  pagination: { page: number; limit: number; total: number; totalPages: number };
+  summary: { totalProducts: number; totalSalesValue: number };
+}
+
+export interface ProductTransactionRow {
+  lineId: string;
+  date: string;
+  voucherNo: string;
+  voucherType: string;
+  narration: string | null;
+  sourceModule: string | null;
+  referenceNo: string | null;
+  quantity: number | null;
+  unitRate: number | null;
+  debit: number;
+  credit: number;
+}
+
+export interface ProductTransactionsResponse {
+  ledger: InventoryProductWiseLedger | null;
+  data: ProductTransactionRow[];
+  pagination: { page: number; limit: number; total: number; totalPages: number };
+}
+
 export const LedgerService = {
   async getDropdown(
     query: LedgerDropdownQuery = {},
@@ -363,6 +447,106 @@ export const LedgerService = {
       return unwrapData(response) ?? null;
     } catch {
       return null;
+    }
+  },
+
+  async getStockInHandProductWise(params?: {
+    dateFrom?: string;
+    dateTo?: string;
+    warehouseId?: string;
+    page?: number;
+    limit?: number;
+    sortBy?: string;
+    sortDir?: "asc" | "desc";
+    search?: string;
+    minValue?: number;
+    maxValue?: number;
+    minQty?: number;
+    maxQty?: number;
+  }, signal?: AbortSignal): Promise<InventoryProductWiseResponse> {
+    try {
+      const response = await axiosInstance.get<ApiResponse<InventoryProductWiseResponse>>(
+        API_ENDPOINTS.ACCOUNTS.LEDGERS.STOCK_IN_HAND,
+        { params, signal },
+      );
+      return unwrapData(response) ?? { ledger: null, data: [], pagination: { page: 1, limit: 50, total: 0, totalPages: 0 }, summary: { totalProducts: 0, totalInventoryValue: 0 } };
+    } catch (error) {
+      if (axios.isCancel(error)) throw error;
+      throw new Error(extractErrorMessage(error, "Failed to load Stock in Hand product-wise listing."));
+    }
+  },
+
+  async getCogsProductWise(params?: {
+    dateFrom?: string;
+    dateTo?: string;
+    warehouseId?: string;
+    page?: number;
+    limit?: number;
+    sortBy?: string;
+    sortDir?: "asc" | "desc";
+    search?: string;
+    minValue?: number;
+    maxValue?: number;
+    minQty?: number;
+    maxQty?: number;
+  }, signal?: AbortSignal): Promise<CogsProductWiseResponse> {
+    try {
+      const response = await axiosInstance.get<ApiResponse<CogsProductWiseResponse>>(
+        API_ENDPOINTS.ACCOUNTS.LEDGERS.COGS,
+        { params, signal },
+      );
+      return unwrapData(response) ?? { ledger: null, data: [], pagination: { page: 1, limit: 50, total: 0, totalPages: 0 }, summary: { totalProducts: 0, totalCogsValue: 0 } };
+    } catch (error) {
+      if (axios.isCancel(error)) throw error;
+      throw new Error(extractErrorMessage(error, "Failed to load COGS product-wise listing."));
+    }
+  },
+
+  async getSalesProductWise(params?: {
+    dateFrom?: string;
+    dateTo?: string;
+    warehouseId?: string;
+    page?: number;
+    limit?: number;
+    sortBy?: string;
+    sortDir?: "asc" | "desc";
+    search?: string;
+    minValue?: number;
+    maxValue?: number;
+    minQty?: number;
+    maxQty?: number;
+  }, signal?: AbortSignal): Promise<SalesProductWiseResponse> {
+    try {
+      const response = await axiosInstance.get<ApiResponse<SalesProductWiseResponse>>(
+        API_ENDPOINTS.ACCOUNTS.LEDGERS.SALES_PRODUCT_WISE,
+        { params, signal },
+      );
+      return unwrapData(response) ?? { ledger: null, data: [], pagination: { page: 1, limit: 50, total: 0, totalPages: 0 }, summary: { totalProducts: 0, totalSalesValue: 0 } };
+    } catch (error) {
+      if (axios.isCancel(error)) throw error;
+      throw new Error(extractErrorMessage(error, "Failed to load Sales product-wise listing."));
+    }
+  },
+
+  async getProductTransactions(
+    ledgerType: "stock-in-hand" | "cogs" | "sales",
+    params: { productId: string; dateFrom?: string; dateTo?: string; warehouseId?: string; page?: number; limit?: number },
+    signal?: AbortSignal,
+  ): Promise<ProductTransactionsResponse> {
+    const endpointMap = {
+      "stock-in-hand": API_ENDPOINTS.ACCOUNTS.LEDGERS.STOCK_IN_HAND_PRODUCT_TRANSACTIONS,
+      "cogs": API_ENDPOINTS.ACCOUNTS.LEDGERS.COGS_PRODUCT_TRANSACTIONS,
+      "sales": API_ENDPOINTS.ACCOUNTS.LEDGERS.SALES_PRODUCT_TRANSACTIONS,
+    };
+    try {
+      const response = await axiosInstance.get<ApiResponse<ProductTransactionsResponse>>(
+        endpointMap[ledgerType],
+        { params, signal },
+      );
+      return unwrapData(response) ?? { ledger: null, data: [], pagination: { page: 1, limit: 50, total: 0, totalPages: 0 } };
+    } catch (error) {
+      if (axios.isCancel(error)) throw error;
+      throw new Error(extractErrorMessage(error, "Failed to load product transactions."));
     }
   },
 

@@ -22,6 +22,24 @@ import {
   exportLedgerStatementToExcel,
   exportLedgerStatementToPdf,
 } from "@/lib/accounts/ledger-statement-export";
+import { isStockInHandLedger } from "@/lib/accounts/coa-stock-in-hand";
+import {
+  InventoryProductWisePanel,
+  CogsProductWisePanel,
+  SalesProductWisePanel,
+} from "@/components/accounts/InventoryProductWisePanels";
+import { MANDATORY_SYSTEM_LEDGERS } from "@/app/(app)/accounts/masters/chart-of-accounts/coa-statutory-ledgers";
+
+const COGS_LEDGER_NAMES = new Set(["cost of goods sold", "cogs"]);
+const SALES_LEDGER_NAME = MANDATORY_SYSTEM_LEDGERS.productSales.name.toLowerCase();
+
+function isCOGSLedger(node: Pick<ChartOfAccount, "accountName">): boolean {
+  return COGS_LEDGER_NAMES.has((node.accountName ?? "").trim().toLowerCase());
+}
+
+function isSalesLedger(node: Pick<ChartOfAccount, "accountName">): boolean {
+  return (node.accountName ?? "").trim().toLowerCase() === SALES_LEDGER_NAME;
+}
 
 function filterTransactions(rows: CoaTransactionRow[], query: string): CoaTransactionRow[] {
   const q = query.trim().toLowerCase();
@@ -54,6 +72,11 @@ export function CoaLedgerDetailPanel({
 
   const ledgerType = useMemo(() => resolveLedgerType(ledger, records), [ledger, records]);
   const parentGroup = useMemo(() => parentGroupLabel(records, ledger), [ledger, records]);
+
+  const isStockInHand = useMemo(() => isStockInHandLedger(ledger), [ledger]);
+  const isCOGS = useMemo(() => isCOGSLedger(ledger), [ledger]);
+  const isSales = useMemo(() => isSalesLedger(ledger), [ledger]);
+  const isProductWise = isStockInHand || isCOGS || isSales;
 
   const summary = useMemo(
     () => buildLedgerAccountingSummary(ledger, records, applied.from, applied.to),
@@ -156,23 +179,30 @@ export function CoaLedgerDetailPanel({
           onDateToChange={setDraftTo}
           onApply={apply}
           autoApplyPresets
-          search={search}
-          onSearchChange={setSearch}
-          onExportExcel={handleExportExcel}
-          onExportPdf={handleExportPdf}
+          search={isProductWise ? undefined : search}
+          onSearchChange={isProductWise ? undefined : setSearch}
+          onExportExcel={isProductWise ? undefined : handleExportExcel}
+          onExportPdf={isProductWise ? undefined : handleExportPdf}
           exporting={exporting}
         />
       </div>
 
       <div className="flex flex-col flex-1 min-h-0 master-listing-table-shell">
-        <CoaAccountingTransactionsTable
-          rows={filteredRows}
-          variant="ledger-detail"
-          footer={tableFooter}
-          emptyLabel="No vouchers posted to this ledger in the selected period. Adjust the date range or post sales invoices, purchase bills, or vouchers to see entries here."
-        />
+        {isStockInHand ? (
+          <InventoryProductWisePanel dateFrom={applied.from} dateTo={applied.to} />
+        ) : isCOGS ? (
+          <CogsProductWisePanel dateFrom={applied.from} dateTo={applied.to} />
+        ) : isSales ? (
+          <SalesProductWisePanel dateFrom={applied.from} dateTo={applied.to} />
+        ) : (
+          <CoaAccountingTransactionsTable
+            rows={filteredRows}
+            variant="ledger-detail"
+            footer={tableFooter}
+            emptyLabel="No vouchers posted to this ledger in the selected period. Adjust the date range or post sales invoices, purchase bills, or vouchers to see entries here."
+          />
+        )}
       </div>
     </div>
   );
 }
-

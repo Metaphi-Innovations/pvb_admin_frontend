@@ -1,5 +1,6 @@
 import { axiosInstance } from "@/api/axios";
 import { API_ENDPOINTS } from "@/api/endpoints";
+import { getStoredFYId } from "@/lib/fy-storage";
 import type { ApiResponse } from "@/types/api.types";
 import type {
   PurchaseInvoiceLine,
@@ -783,7 +784,21 @@ export function mapPurchaseInvoiceDetailToRecord(
     roundingAdjustment: asNumber(dto.round_off_amount),
     netPayable: grandTotal,
     lineItems,
-    additionalCharges: [],
+    additionalCharges: (dto.additional_charges || []).map((raw, idx) => {
+      const c = raw as Record<string, unknown>;
+      const snap = (c.additional_charge_snapshot || {}) as Record<string, unknown>;
+      return {
+        uid: asString(c.purchase_invoice_additional_charge_id) || `charge-${idx}`,
+        chargeName:
+          asString(snap.charge_name || snap.chargeName || c.charge_name) ||
+          `Charge ${idx + 1}`,
+        amount: asNumber(c.taxable_amount || c.amount),
+        cgstPct: asNumber(c.cgst_rate),
+        sgstPct: asNumber(c.sgst_rate),
+        igstPct: asNumber(c.igst_rate),
+        remarks: asString(c.remarks) || undefined,
+      };
+    }),
     productAmount: taxable,
     subtotal: taxable,
     taxAmount: gstAmount,
@@ -1046,9 +1061,18 @@ export const PurchaseInvoiceService = {
     payload: CreateFromGrnPayload,
   ): Promise<PurchaseInvoiceCreateResult> {
     try {
+      const formData = buildMultipartPayload(payload as Record<string, unknown>);
+      const fyId = getStoredFYId();
       const response = await axiosInstance.post(
         API_ENDPOINTS.ACCOUNTS.PURCHASE_INVOICE.CREATE_FROM_GRN(grnId),
-        buildMultipartPayload(payload as Record<string, unknown>),
+        formData,
+        {
+          headers: {
+            // Explicitly carry the FY header — multipart requests can lose it
+            // if the interceptor's header merge is affected by FormData body detection.
+            ...(fyId ? { "x-financial-year-id": fyId } : {}),
+          },
+        },
       );
       const data = unwrapData(response);
       if (!data) throw new Error("Failed to create purchase invoice from GRN.");
@@ -1064,9 +1088,16 @@ export const PurchaseInvoiceService = {
     payload: CreateDirectPurchasePayload,
   ): Promise<PurchaseInvoiceCreateResult> {
     try {
+      const formData = buildMultipartPayload(payload as Record<string, unknown>);
+      const fyId = getStoredFYId();
       const response = await axiosInstance.post(
         API_ENDPOINTS.ACCOUNTS.PURCHASE_INVOICE.CREATE_DIRECT_PURCHASE,
-        buildMultipartPayload(payload as Record<string, unknown>),
+        formData,
+        {
+          headers: {
+            ...(fyId ? { "x-financial-year-id": fyId } : {}),
+          },
+        },
       );
       const data = unwrapData(response);
       if (!data) throw new Error("Failed to create direct purchase invoice.");
