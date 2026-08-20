@@ -590,6 +590,23 @@ export const API_ENDPOINTS = {
           `/accounts/banking/bank-accounts/${bankAccountId}/status`,
       },
     },
+    DEBIT_NOTE: {
+      CONFIG: "/accounts/debit-note/config",
+      LIST: "/accounts/debit-note",
+      CREATE_DIRECT: "/accounts/debit-note/direct",
+      GET_BY_ID: (id: string | number) => `/accounts/debit-note/${id}`,
+      UPDATE: (id: string | number) => `/accounts/debit-note/${id}`,
+      EWAY_BILL: (id: string | number) => `/accounts/debit-note/${id}/eway-bill`,
+      SUBMIT: (id: string | number) => `/accounts/debit-note/${id}/submit`,
+      APPROVE: (id: string | number) => `/accounts/debit-note/${id}/approve`,
+      REJECT: (id: string | number) => `/accounts/debit-note/${id}/reject`,
+      POST: (id: string | number) => `/accounts/debit-note/${id}/post`,
+      CANCEL: (id: string | number) => `/accounts/debit-note/${id}/cancel`,
+      REVERSE: (id: string | number) => `/accounts/debit-note/${id}/reverse`,
+      PENDING: "/accounts/debit-note/pending",
+      PENDING_BY_ID: (id: string | number) => `/accounts/debit-note/pending/${id}`,
+      CREATE_FROM_PENDING: (pendingId: string | number) => `/accounts/debit-note/from-pending/${pendingId}`,
+    },
   },
   INVOICE_EXTRACTION: {
     EXTRACT: "/invoice-extraction/extract"

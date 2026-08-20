@@ -5,5 +5,5 @@ const DebitNoteFormPageClient = lazyAccountsPage(() => import("../../../../debit
 type PageProps = { params: { id: string } };
 
 export default function EditDebitNotePage({ params }: PageProps) {
-  return <DebitNoteFormPageClient debitNoteId={Number(params.id)} />;
+  return <DebitNoteFormPageClient debitNoteId={params.id as any} />;
 }

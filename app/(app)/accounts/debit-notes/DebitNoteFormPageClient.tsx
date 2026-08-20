@@ -3,6 +3,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import { Loader2 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { useFormDirtySnapshot } from "@/lib/accounts/use-form-dirty-snapshot";
 import { useTransactionFormCancel } from "@/components/accounts/TransactionFormCancel";
 import { AccountsFormLayout } from "../expenses/components/AccountsFormLayout";
@@ -10,19 +20,14 @@ import { SearchableSelect } from "../credit-notes/components/SearchableSelect";
 import {
   buildReferenceFromPurchaseInvoice,
   buildReferenceFromPurchaseReturn,
-  createDebitNote,
   createEmptyDebitLine,
-  getDebitNoteById,
   getPendingDebitNoteRow,
-  getVendorsForDebitNote,
   listCreditablePurchaseInvoices,
   listPurchaseReturnsForDebitNote,
   newDebitAttachmentId,
   normalizeDebitLine,
   peekNextDebitNoteNo,
-  postDebitNoteRecord,
   previewToDebitForm,
-  updateDebitNote,
   getDebitLineMaxQty,
   calcDebitFromQty,
   type DebitNoteAttachment,
@@ -32,10 +37,11 @@ import {
 } from "./debit-notes-data";
 import { DEBIT_NOTES_BREADCRUMB, DEBIT_NOTES_LIST_PATH, formatINR } from "./note-utils";
 import { dispatchAccountsDataChanged } from "@/lib/accounts/accounts-data-events";
-import {
-  attachWorkflowOnCreate,
-  submitDocumentForApproval,
-} from "@/lib/accounts/accounts-workflow-persist";
+import { DebitNoteService, mapDebitNoteToRecord } from "@/services/debit-note.service";
+import { SupplierService } from "@/services/supplier.service";
+import { type ChartOfAccount } from "@/app/(app)/accounts/data";
+import { WarehouseService } from "@/services/warehouse.service";
+import { UserListService } from "@/services/user-list.service";
 import { AccountsToast, useAccountsToast } from "@/components/accounts/AccountsToast";
 import { AccountsDateInput } from "@/components/accounts/AccountsDateInput";
 import { roundMoney } from "@/lib/accounts/money-format";
@@ -63,7 +69,7 @@ import {
   NoteInventoryImpactBanner,
   NoteNoInventoryImpactBanner,
 } from "@/components/accounts/voucher-form/NoteScenarioBanners";
-import { GroupedLedgerSelect } from "@/components/accounts/GroupedLedgerSelect";
+import { LedgerHierarchySelect } from "@/components/accounts/LedgerHierarchySelect";
 import {
   adaptPurchaseInvoiceReference,
   adaptPurchaseReturnReference,
@@ -72,11 +78,13 @@ import { defaultVisibilityForType } from "@/components/accounts/voucher-form/vou
 import "@/components/accounts/voucher-form/note-form-compact.css";
 import {
   vendorMasterToTransactionFields,
+  getActiveVendorsForTransaction,
   type VendorTransactionFields,
 } from "@/lib/accounts/transaction-master-fetch";
 import { getPurchaseInvoiceById } from "@/app/(app)/accounts/purchase-invoices/purchase-invoices-data";
 import { resolveWarehouseFromGrnNo } from "@/lib/accounts/bank-warehouse-mapping";
 import { WarehouseMappedBankAccountSelect } from "@/components/accounts/WarehouseMappedBankAccountSelect";
+import { LedgerService } from "@/services/ledger.service";
 import "../credit-notes/credit-note-tx.css";
 
 type FormMode = "fresh" | "return" | "purchase_invoice";
@@ -113,9 +121,75 @@ export default function DebitNoteFormPageClient({
   const isPurchaseInvoice =
     !isEdit && (mode === "purchase_invoice" || purchaseInvoiceId != null);
 
-  const vendors = useMemo(() => getVendorsForDebitNote(), []);
-  const purchaseInvoices = useMemo(() => listCreditablePurchaseInvoices(), []);
-  const purchaseReturns = useMemo(() => listPurchaseReturnsForDebitNote(), []);
+  const mapSupplierToTransactionFields = (s: any): VendorTransactionFields => {
+    const parts = [s.address_1, s.address_2, s.town, s.city, s.state, s.pincode];
+    const address = parts.filter(Boolean).join(", ");
+    const gstRegistered = !!(s.gst_registered && s.gstin_number?.trim());
+    const formattedAddress = address || s.registered_gst_address || "";
+
+    return {
+      vendorId: s.supplier_id,
+      vendorCode: s.supplier_code,
+      vendorName: s.supplier_name,
+      vendorMobile: s.mobile_number ? `${s.mobile_country_code || "+91"} ${s.mobile_number}` : "",
+      vendorEmail: s.email || "",
+      vendorGst: gstRegistered ? s.gstin_number : "",
+      vendorGstCategory: s.registration_type || undefined,
+      pan: s.pan_number || "",
+      contactPerson: s.contact_person || "",
+      paymentTerms: "Net 30",
+      creditDays: 30,
+      payableLedger: s.supplier_name,
+      billingAddress: formattedAddress,
+      shippingAddress: formattedAddress,
+      bankName: "",
+      bankBranch: "",
+      accountNumber: "",
+      ifscCode: "",
+      accountHolderName: s.supplier_name,
+      billToOptions: [
+        {
+          id: "bill-0",
+          label: `${s.supplier_name} - Registered Office`,
+          address: s.address_1 || "",
+          city: s.city || "",
+          state: s.state || "",
+          pincode: s.pincode || "",
+          formatted: formattedAddress,
+        },
+      ],
+      shipToOptions: [
+        {
+          id: "ship-0",
+          label: `${s.supplier_name} - Delivery Address`,
+          address: s.address_1 || "",
+          city: s.city || "",
+          state: s.state || "",
+          pincode: s.pincode || "",
+          formatted: formattedAddress,
+        },
+      ],
+      defaultBillToId: "bill-0",
+      defaultShipToId: "ship-0",
+    };
+  };
+
+  const [vendors, setVendors] = useState<any[]>([]);
+  const [purchaseInvoices, setPurchaseInvoices] = useState<any[]>([]);
+  const [purchaseReturns, setPurchaseReturns] = useState<any[]>([]);
+  const [warehouseList, setWarehouseList] = useState<any[]>([]);
+  const [warehouseId, setWarehouseId] = useState("");
+  const [approvalRequired, setApprovalRequired] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    SupplierService.dropdown().then(setVendors).catch(() => {});
+    setPurchaseInvoices(listCreditablePurchaseInvoices());
+    setPurchaseReturns(listPurchaseReturnsForDebitNote());
+
+    WarehouseService.dropdown().then(setWarehouseList).catch(() => {});
+    DebitNoteService.getConfig().then((cfg) => setApprovalRequired(cfg.approval_required)).catch(() => {});
+  }, []);
 
   const [uiRefType, setUiRefType] = useState<UiRefType>(() => {
     if (isFresh || (!isReturn && !isPurchaseInvoice)) return "direct";
@@ -167,7 +241,7 @@ export default function DebitNoteFormPageClient({
   const [roundOff, setRoundOff] = useState(0);
 
   const [referenceNo, setReferenceNo] = useState("");
-  const [adjustmentLedgerId, setAdjustmentLedgerId] = useState<number | null>(null);
+  const [adjustmentLedgerId, setAdjustmentLedgerId] = useState<string | number | null>(null);
   const [adjustmentLedgerName, setAdjustmentLedgerName] = useState("");
   const [gstApplicable, setGstApplicable] = useState(false);
   const [gstPct, setGstPct] = useState("18");
@@ -259,10 +333,18 @@ export default function DebitNoteFormPageClient({
     setSourceReturnNo(retNo);
     setSourcePackingNo(preview.sourcePackingNo ?? "");
     setSourceDispatchNo(preview.sourceDispatchNo ?? "");
-    if (pre.vendorId) {
-      const v = vendors.find((x) => x.id === pre.vendorId);
-      if (v) onVendorChange(String(pre.vendorId), vendorMasterToTransactionFields(v));
-      else setVendorId(String(pre.vendorId));
+    if (pre.vendorId || preview.vendorName) {
+      const name = preview.vendorName || "";
+      const v = vendors.find((x) => x.supplier_name?.toLowerCase() === name.toLowerCase());
+      if (v) {
+        SupplierService.view(v.supplier_id)
+          .then((supplier) => {
+            onVendorChange(v.supplier_id, mapSupplierToTransactionFields(supplier));
+          })
+          .catch(() => {});
+      } else {
+        setVendorId(String(pre.vendorId || ""));
+      }
     }
     setOriginalAmount(String(pre.originalAmount ?? ""));
     setAlreadyAdjusted(String(pre.alreadyAdjustedAmount ?? 0));
@@ -301,10 +383,18 @@ export default function DebitNoteFormPageClient({
     setSourceReturnNo("");
     setSourcePackingNo(preview.sourcePackingNo ?? "");
     setSourceDispatchNo(preview.sourceDispatchNo ?? "");
-    if (pre.vendorId) {
-      const v = vendors.find((x) => x.id === pre.vendorId);
-      if (v) onVendorChange(String(pre.vendorId), vendorMasterToTransactionFields(v));
-      else setVendorId(String(pre.vendorId));
+    if (pre.vendorId || preview.vendorName) {
+      const name = preview.vendorName || "";
+      const v = vendors.find((x) => x.supplier_name?.toLowerCase() === name.toLowerCase());
+      if (v) {
+        SupplierService.view(v.supplier_id)
+          .then((supplier) => {
+            onVendorChange(v.supplier_id, mapSupplierToTransactionFields(supplier));
+          })
+          .catch(() => {});
+      } else {
+        setVendorId(String(pre.vendorId || ""));
+      }
     }
     setOriginalAmount(String(pre.originalAmount ?? ""));
     setAlreadyAdjusted(String(pre.alreadyAdjustedAmount ?? 0));
@@ -371,24 +461,6 @@ export default function DebitNoteFormPageClient({
     clearReference();
     setReferenceInvoiceId("");
     setReferenceReturnId("");
-    // #region agent log
-    fetch("http://127.0.0.1:7502/ingest/b60215f3-a2ea-4dec-b0ac-4488ce88b732", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Debug-Session-Id": "e2f165",
-      },
-      body: JSON.stringify({
-        sessionId: "e2f165",
-        location: "DebitNoteFormPageClient.tsx:onUiRefTypeChange",
-        message: "DN ref type change",
-        data: { next, prev: uiRefType },
-        timestamp: Date.now(),
-        hypothesisId: "B",
-        runId: "pre-fix",
-      }),
-    }).catch(() => {});
-    // #endregion
   };
 
   useEffect(() => {
@@ -426,145 +498,148 @@ export default function DebitNoteFormPageClient({
   }, [isEdit]);
 
   useEffect(() => {
-    if (!isEdit || debitNoteId == null) return;
-    const rec = getDebitNoteById(debitNoteId);
-    if (!rec) {
-      router.replace(DEBIT_NOTES_LIST_PATH);
-      return;
-    }
-    const fresh = rec.againstType === "standalone_adjustment";
-    setDebitNoteNo(rec.debitNoteNo);
-    setDebitNoteDate(rec.debitNoteDate);
-    setVendorId(rec.vendorId ? String(rec.vendorId) : "");
-    if (rec.vendorId) {
-      const v = vendors.find((x) => x.id === rec.vendorId);
-      if (v) onVendorChange(String(rec.vendorId), vendorMasterToTransactionFields(v));
-    }
-    setSourceInvoiceId(rec.sourceInvoiceId);
-    setSourcePoId(rec.sourcePoId);
-    setSourceReturnId(rec.sourceReturnId ?? "");
-    setSourceReturnNo(rec.sourceReturnNo ?? "");
-    setSourcePackingNo(rec.sourcePackingNo ?? "");
-    setSourceDispatchNo(rec.sourceDispatchNo ?? "");
-    setOriginalAmount(String(rec.originalAmount));
-    setAlreadyAdjusted(String(rec.alreadyAdjustedAmount));
-    setRemarks(rec.remarks);
-    setNarration(rec.remarks);
-    setBankAccountId(rec.bankAccountId ?? null);
-    setAttachments(rec.attachments ?? []);
-    setReferenceNo(rec.referenceNo ?? "");
-    setAdjustmentLedgerId(rec.adjustmentLedgerId ?? null);
-    setAdjustmentLedgerName(rec.adjustmentLedgerName ?? "");
+    if (!isEdit || debitNoteId == null || vendors.length === 0) return;
+    DebitNoteService.getById(debitNoteId).then((dn) => {
+      const rec = mapDebitNoteToRecord(dn);
+      const fresh = rec.againstType === "standalone_adjustment";
+      setDebitNoteNo(rec.debitNoteNo);
+      setDebitNoteDate(rec.debitNoteDate);
+      setVendorId(rec.vendorId ? String(rec.vendorId) : "");
+      if (rec.vendorId) {
+        SupplierService.view(String(rec.vendorId))
+          .then((supplier) => {
+            onVendorChange(String(rec.vendorId), mapSupplierToTransactionFields(supplier));
+          })
+          .catch(() => {});
+      }
+      setSourceInvoiceId(rec.sourceInvoiceId);
+      setSourcePoId(rec.sourcePoId);
+      setSourceReturnId(rec.sourceReturnId ?? "");
+      setSourceReturnNo(rec.sourceReturnNo ?? "");
+      setSourcePackingNo(rec.sourcePackingNo ?? "");
+      setSourceDispatchNo(rec.sourceDispatchNo ?? "");
+      setOriginalAmount(String(rec.originalAmount));
+      setAlreadyAdjusted(String(rec.alreadyAdjustedAmount));
+      setRemarks(rec.remarks);
+      setNarration(rec.remarks);
+      setBankAccountId(rec.bankAccountId ?? null);
+      setAttachments(rec.attachments ?? []);
+      setReferenceNo(rec.referenceNo ?? "");
+      setAdjustmentLedgerId(rec.adjustmentLedgerId ?? null);
+      setAdjustmentLedgerName(rec.adjustmentLedgerName ?? "");
+      if (dn.warehouse_id) setWarehouseId(dn.warehouse_id);
 
-    if (rec.sourceInvoiceId) setReferenceInvoiceId(String(rec.sourceInvoiceId));
-    if (rec.sourceReturnId) setReferenceReturnId(String(rec.sourceReturnId));
+      if (rec.sourceInvoiceId) setReferenceInvoiceId(String(rec.sourceInvoiceId));
+      if (rec.sourceReturnId) setReferenceReturnId(String(rec.sourceReturnId));
 
-    if (rec.sourceReturnId) {
-      // Purchase Return DN: restore locked quantity lines (never a single particular fallback).
-      setUiRefType("purchase_return");
-      let loaded = rec.lineItems.length
-        ? rec.lineItems.map((l) => normalizeDebitLine(l))
-        : [];
-      const p = buildReferenceFromPurchaseReturn(Number(rec.sourceReturnId));
-      if (p) {
-        setReferencePreview(p);
-        if (!loaded.length && p.lineItems?.length) {
-          loaded = p.lineItems.map((l) => normalizeDebitLine(l));
+      if (rec.sourceReturnId) {
+        setUiRefType("purchase_return");
+        let loaded = rec.lineItems.length
+          ? rec.lineItems.map((l: any) => normalizeDebitLine(l))
+          : [];
+        const p = buildReferenceFromPurchaseReturn(Number(rec.sourceReturnId));
+        if (p) {
+          setReferencePreview(p);
+          if (!loaded.length && p.lineItems?.length) {
+            loaded = p.lineItems.map((l) => normalizeDebitLine(l));
+          }
         }
-      }
-      setLines(loaded);
-      setParticular("");
-      setParticularQty("1");
-      setParticularRate("");
-      setRoundOff(0);
-    } else if (fresh) {
-      setUiRefType(rec.sourceInvoiceId ? "purchase_invoice" : "direct");
-      const line = rec.lineItems[0];
-      const taxable = rec.taxableAmount ?? 0;
-      const gstOn = (rec.gstAmount ?? 0) > 0 || (line?.taxPct ?? 0) > 0;
-      const gstPctStr = String(rec.freshGstPct ?? line?.taxPct ?? 18);
-      if (line && line.returnQty > 0 && line.unitPrice > 0) {
-        setParticularQty(String(line.returnQty));
-        setParticularRate(String(line.unitPrice));
-      } else {
-        setParticularQty("1");
-        setParticularRate(
-          String(
-            taxable > 0
-              ? taxable
-              : Math.max(0, (rec.standaloneDebitAmount || 0) - (rec.gstAmount || 0)),
-          ),
-        );
-      }
-      setGstApplicable(gstOn);
-      setGstPct(gstPctStr);
-      const qtyStr = line && line.returnQty > 0 ? String(line.returnQty) : "1";
-      const rateStr =
-        line && line.unitPrice > 0
-          ? String(line.unitPrice)
-          : String(
-              taxable > 0
-                ? taxable
-                : Math.max(0, (rec.standaloneDebitAmount || 0) - (rec.gstAmount || 0)),
-            );
-      const expected = computeNoteParticularTotals(qtyStr, rateStr, gstOn, gstPctStr, false).total;
-      const savedTotal = rec.standaloneDebitAmount || rec.currentDebitAmount || expected;
-      setRoundOff(roundMoney(savedTotal - expected));
-      setParticular(rec.reason || line?.productName || "");
-      if (rec.sourceInvoiceId) {
-        const p = buildReferenceFromPurchaseInvoice(rec.sourceInvoiceId);
-        if (p) setReferencePreview(p);
-      }
-      setLines([]);
-    } else {
-      setUiRefType("purchase_invoice");
-      const loaded = rec.lineItems.length
-        ? rec.lineItems.map((l) => normalizeDebitLine(l))
-        : [];
-      const keepQty =
-        loaded.some((l) => (l.invoiceQty ?? 0) > 0) && loaded.length > 0;
-      if (rec.sourceInvoiceId) {
-        const p = buildReferenceFromPurchaseInvoice(rec.sourceInvoiceId);
-        if (p) setReferencePreview(p);
-      }
-      if (keepQty) {
-        setInvoiceAdjustmentBasis("quantity");
         setLines(loaded);
         setParticular("");
         setParticularQty("1");
         setParticularRate("");
         setRoundOff(0);
-      } else {
-        setInvoiceAdjustmentBasis("amount");
-        setLines([]);
+      } else if (fresh) {
+        setUiRefType(rec.sourceInvoiceId ? "purchase_invoice" : "direct");
         const line = rec.lineItems[0];
-        const taxable = rec.taxableAmount || 0;
+        const taxable = rec.taxableAmount ?? 0;
         const gstOn = (rec.gstAmount ?? 0) > 0 || (line?.taxPct ?? 0) > 0;
-        const gstPctStr =
-          line?.taxPct && line.taxPct > 0
-            ? String(line.taxPct)
-            : taxable > 0 && gstOn
-              ? String(Math.round(((rec.gstAmount ?? 0) / taxable) * 10000) / 100)
-              : "18";
+        const gstPctStr = String(rec.freshGstPct ?? line?.taxPct ?? 18);
         if (line && line.returnQty > 0 && line.unitPrice > 0) {
           setParticularQty(String(line.returnQty));
           setParticularRate(String(line.unitPrice));
         } else {
           setParticularQty("1");
-          setParticularRate(String(taxable || line?.unitPrice || rec.currentDebitAmount || ""));
+          setParticularRate(
+            String(
+              taxable > 0
+                ? taxable
+                : Math.max(0, (rec.standaloneDebitAmount || 0) - (rec.gstAmount || 0)),
+            ),
+          );
         }
         setGstApplicable(gstOn);
         setGstPct(gstPctStr);
-        setParticular(line?.productName || rec.reason || "");
         const qtyStr = line && line.returnQty > 0 ? String(line.returnQty) : "1";
         const rateStr =
           line && line.unitPrice > 0
             ? String(line.unitPrice)
-            : String(taxable || rec.currentDebitAmount || "");
+            : String(
+                taxable > 0
+                  ? taxable
+                  : Math.max(0, (rec.standaloneDebitAmount || 0) - (rec.gstAmount || 0)),
+              );
         const expected = computeNoteParticularTotals(qtyStr, rateStr, gstOn, gstPctStr, false).total;
-        setRoundOff(roundMoney((rec.currentDebitAmount ?? expected) - expected));
+        const savedTotal = rec.standaloneDebitAmount || rec.currentDebitAmount || expected;
+        setRoundOff(roundMoney(savedTotal - expected));
+        setParticular(rec.reason || line?.productName || "");
+        if (rec.sourceInvoiceId) {
+          const p = buildReferenceFromPurchaseInvoice(rec.sourceInvoiceId);
+          if (p) setReferencePreview(p);
+        }
+        setLines([]);
+      } else {
+        setUiRefType("purchase_invoice");
+        const loaded = rec.lineItems.length
+          ? rec.lineItems.map((l: any) => normalizeDebitLine(l))
+          : [];
+        const keepQty =
+          loaded.some((l: any) => (l.invoiceQty ?? 0) > 0) && loaded.length > 0;
+        if (rec.sourceInvoiceId) {
+          const p = buildReferenceFromPurchaseInvoice(rec.sourceInvoiceId);
+          if (p) setReferencePreview(p);
+        }
+        if (keepQty) {
+          setInvoiceAdjustmentBasis("quantity");
+          setLines(loaded);
+          setParticular("");
+          setParticularQty("1");
+          setParticularRate("");
+          setRoundOff(0);
+        } else {
+          setInvoiceAdjustmentBasis("amount");
+          setLines([]);
+          const line = rec.lineItems[0];
+          const taxable = rec.taxableAmount || 0;
+          const gstOn = (rec.gstAmount ?? 0) > 0 || (line?.taxPct ?? 0) > 0;
+          const gstPctStr =
+            line?.taxPct && line.taxPct > 0
+              ? String(line.taxPct)
+              : taxable > 0 && gstOn
+                ? String(Math.round(((rec.gstAmount ?? 0) / taxable) * 10000) / 100)
+                : "18";
+          if (line && line.returnQty > 0 && line.unitPrice > 0) {
+            setParticularQty(String(line.returnQty));
+            setParticularRate(String(line.unitPrice));
+          } else {
+            setParticularQty("1");
+            setParticularRate(String(taxable || line?.unitPrice || rec.currentDebitAmount || ""));
+          }
+          setGstApplicable(gstOn);
+          setGstPct(gstPctStr);
+          setParticular(line?.productName || rec.reason || "");
+          const qtyStr = line && line.returnQty > 0 ? String(line.returnQty) : "1";
+          const rateStr =
+            line && line.unitPrice > 0
+              ? String(line.unitPrice)
+              : String(taxable || rec.currentDebitAmount || "");
+          const expected = computeNoteParticularTotals(qtyStr, rateStr, gstOn, gstPctStr, false).total;
+          setRoundOff(roundMoney((rec.currentDebitAmount ?? expected) - expected));
+        }
       }
-    }
+    }).catch(() => {
+      router.replace(DEBIT_NOTES_LIST_PATH);
+    });
   }, [isEdit, debitNoteId, router, vendors]);
 
   const particularTotals = computeNoteParticularTotals(
@@ -665,8 +740,8 @@ export default function DebitNoteFormPageClient({
   }, [isSourceRefMode, referencePreview, uiRefType, sourceReturnNo]);
 
   const resolveVendorName = (): string => {
-    const v = vendors.find((x) => x.id === Number(vendorId));
-    if (v) return v.vendorName;
+    const v = vendors.find((x) => String(x.supplier_id) === String(vendorId));
+    if (v) return v.supplier_name;
     if (referencePreview?.vendorName) return referencePreview.vendorName;
     return "";
   };
@@ -722,7 +797,7 @@ export default function DebitNoteFormPageClient({
       againstType: isDirectMode
         ? ("standalone_adjustment" as const)
         : ("purchase_invoice" as const),
-      vendorId: vendorId ? Number(vendorId) : null,
+      vendorId: vendorId || null,
       vendorName: resolveVendorName(),
       sourceInvoiceId: sourceInvoiceId,
       sourceInvoiceNo: referencePreview?.sourceInvoiceNo ?? "",
@@ -823,68 +898,145 @@ export default function DebitNoteFormPageClient({
     return true;
   };
 
-  const saveDraft = () => {
+  const [submitApproverOpen, setSubmitApproverOpen] = useState(false);
+  const [approvers, setApprovers] = useState<any[]>([]);
+  const [selectedApproverId, setSelectedApproverId] = useState("");
+  const [createdNoteId, setCreatedNoteId] = useState<string | number | null>(null);
+
+  const mapFormInputToPayload = (input: any) => {
+    const linesInput = input.lineItems.map((l: any) => ({
+      description: l.productName || "Adjustment",
+      ledger_id: l.adjustmentLedgerId
+        ? String(l.adjustmentLedgerId)
+        : adjustmentLedgerId
+          ? String(adjustmentLedgerId)
+          : undefined,
+      product_id: null,
+      inventory_detail_id: null,
+      hsn_id: null,
+      sac_id: null,
+      quantity: l.returnQty || 1,
+      quantity_type: l.uom || null,
+      rate: l.unitPrice || l.debitAmount,
+      taxable_amount: l.debitAmount || (l.returnQty * l.unitPrice),
+      gst_rate: l.taxPct || 0,
+      narration: l.lineRemarks || null,
+    }));
+
+    const wId = referencePreview?.sourceGrnNo
+      ? (resolveWarehouseFromGrnNo(referencePreview.sourceGrnNo) || warehouseId)
+      : warehouseId;
+
+    return {
+      dn_date: input.debitNoteDate,
+      warehouse_id: wId || undefined,
+      supplier_id: String(input.vendorId),
+      narration: input.remarks || null,
+      remarks: input.remarks || null,
+      purchase_invoice_id: referenceInvoiceId ? String(referenceInvoiceId) : undefined,
+      lines: linesInput,
+    };
+  };
+
+  const saveDraft = async () => {
     setError(null);
+    setSaving(true);
     try {
       if (!validateForm()) return;
+      const input = buildInput("draft");
+      const payload = mapFormInputToPayload(input);
       if (isEdit && debitNoteId != null) {
-        updateDebitNote(debitNoteId, buildInput("draft"));
-        dispatchAccountsDataChanged("debit-notes");
-        showToast("Debit note saved as draft");
+        await DebitNoteService.updateDraft(debitNoteId, payload);
+        showToast("Debit note updated as draft", "success");
         router.push(`${DEBIT_NOTES_LIST_PATH}/${debitNoteId}`);
       } else {
-        const rec = createDebitNote(buildInput("draft"));
-        dispatchAccountsDataChanged("debit-notes");
-        showToast("Debit note saved as draft");
-        router.push(`${DEBIT_NOTES_LIST_PATH}/${rec.id}`);
+        const res = await DebitNoteService.createDirect(payload);
+        const newId = res?.debit_note_id || res?.id;
+        showToast("Debit note saved as draft", "success");
+        router.push(`${DEBIT_NOTES_LIST_PATH}/${newId}`);
       }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not save debit note.");
+      dispatchAccountsDataChanged("debit-notes");
+    } catch (e: any) {
+      setError(e.message || "Could not save debit note.");
+    } finally {
+      setSaving(false);
     }
   };
 
-  const submitForApproval = () => {
+  const submitForApproval = async () => {
     setError(null);
+    if (!validateForm()) return;
+    setSaving(true);
     try {
-      if (!validateForm()) return;
-      let id = debitNoteId;
+      const input = buildInput("draft");
+      const payload = mapFormInputToPayload(input);
+      let targetId: string | number | undefined = debitNoteId;
       if (isEdit && debitNoteId != null) {
-        updateDebitNote(debitNoteId, buildInput("pending_approval"));
+        await DebitNoteService.updateDraft(debitNoteId, payload);
       } else {
-        const rec = createDebitNote(buildInput("pending_approval"));
-        id = rec.id;
-        attachWorkflowOnCreate("debit_note", rec.id);
+        const res = await DebitNoteService.createDirect(payload);
+        targetId = res?.debit_note_id || res?.id;
       }
-      if (id != null) {
-        submitDocumentForApproval("debit_note", id);
-        dispatchAccountsDataChanged("debit-notes");
-        showToast("Debit note submitted for approval");
-        router.push(`${DEBIT_NOTES_LIST_PATH}/${id}`);
+      if (targetId) {
+        setCreatedNoteId(targetId);
+        const users = await UserListService.dropdown();
+        setApprovers(users);
+        if (users.length > 0) {
+          setSelectedApproverId(users[0].userId);
+          setSubmitApproverOpen(true);
+        } else {
+          showToast("No approval users found.", "error");
+        }
       }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not submit for approval.");
+    } catch (e: any) {
+      setError(e.message || "Could not prepare submission.");
+    } finally {
+      setSaving(false);
     }
   };
 
-  const postNote = () => {
+  const executeApprovalSubmit = async () => {
+    if (!createdNoteId || !selectedApproverId) return;
+    setSaving(true);
+    try {
+      await DebitNoteService.submit(createdNoteId, { approver_id: selectedApproverId });
+      dispatchAccountsDataChanged("debit-notes");
+      showToast("Debit note submitted for approval", "success");
+      setSubmitApproverOpen(false);
+      router.push(`${DEBIT_NOTES_LIST_PATH}/${createdNoteId}`);
+    } catch (e: any) {
+      setError(e.message || "Failed to submit for approval.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const postNote = async () => {
     setError(null);
+    setSaving(true);
     try {
       if (!validateForm()) return;
-      let id = debitNoteId;
+      const input = buildInput("draft");
+      const payload = mapFormInputToPayload(input);
+      let targetId: string | number | undefined = debitNoteId;
       if (isEdit && debitNoteId != null) {
-        updateDebitNote(debitNoteId, buildInput("draft"));
+        await DebitNoteService.updateDraft(debitNoteId, payload);
       } else {
-        const rec = createDebitNote(buildInput("draft"));
-        id = rec.id;
+        const res = await DebitNoteService.createDirect(payload);
+        targetId = res?.debit_note_id || res?.id;
       }
-      if (id != null) {
-        postDebitNoteRecord(id);
+      if (targetId) {
+        await DebitNoteService.post(targetId);
         dispatchAccountsDataChanged("debit-notes");
-        showToast("Debit note posted successfully");
-        router.push(`${DEBIT_NOTES_LIST_PATH}/${id}`);
+        showToast("Debit note posted successfully", "success");
+        router.push(`${DEBIT_NOTES_LIST_PATH}/${targetId}`);
+      } else {
+        setError("Could not determine debit note ID after creation.");
       }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not post debit note.");
+    } catch (e: any) {
+      setError(e.message || "Could not post debit note.");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -989,43 +1141,7 @@ export default function DebitNoteFormPageClient({
     />
   );
 
-  // #region agent log
-  useEffect(() => {
-    fetch("http://127.0.0.1:7502/ingest/b60215f3-a2ea-4dec-b0ac-4488ce88b732", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Debug-Session-Id": "e2f165",
-      },
-      body: JSON.stringify({
-        sessionId: "e2f165",
-        location: "DebitNoteFormPageClient.tsx:render",
-        message: "DN render branch",
-        data: {
-          uiRefType,
-          isSourceRefMode,
-          hasPreview: Boolean(referencePreview),
-          hasRefDoc: Boolean(referenceDocumentView),
-          gstOn: gstApplicable,
-          particularQty,
-          particularRate,
-          usesSharedParticulars: true,
-        },
-        timestamp: Date.now(),
-        hypothesisId: "A",
-        runId: "pre-fix",
-      }),
-    }).catch(() => {});
-  }, [
-    uiRefType,
-    isSourceRefMode,
-    referencePreview,
-    referenceDocumentView,
-    gstApplicable,
-    particularQty,
-    particularRate,
-  ]);
-  // #endregion
+
 
   return (
     <>
@@ -1080,6 +1196,22 @@ export default function DebitNoteFormPageClient({
                     placeholder="Optional"
                   />
                 </VoucherNoteField>
+                {isDirectMode ? (
+                  <VoucherNoteField label="Warehouse *" width="md">
+                    <select
+                      className="h-[30px] border rounded px-2 text-xs w-full cdn-control"
+                      value={warehouseId}
+                      onChange={(e) => setWarehouseId(e.target.value)}
+                    >
+                      <option value="">Select Warehouse</option>
+                      {warehouseList.map((w) => (
+                        <option key={w.warehouse_id} value={w.warehouse_id}>
+                          {w.warehouse_name}
+                        </option>
+                      ))}
+                    </select>
+                  </VoucherNoteField>
+                ) : null}
                 {warehouseRef ? (
                   <VoucherNoteField label="Bank Account (optional — refund only)" width="lg">
                     <div className="space-y-1">
@@ -1103,14 +1235,17 @@ export default function DebitNoteFormPageClient({
                     <SearchableSelect
                       label=""
                       options={vendors.map((v) => ({
-                        value: String(v.id),
-                        label: v.vendorName,
-                        sub: v.vendorCode,
+                        value: String(v.supplier_id),
+                        label: v.supplier_name,
+                        sub: v.supplier_code,
                       }))}
                       value={vendorId}
                       onChange={(id) => {
-                        const v = vendors.find((x) => x.id === Number(id));
-                        onVendorChange(id, v ? vendorMasterToTransactionFields(v) : null);
+                        SupplierService.view(id)
+                          .then((supplier) => {
+                            onVendorChange(id, mapSupplierToTransactionFields(supplier));
+                          })
+                          .catch(() => {});
                       }}
                       placeholder="Select supplier…"
                       required
@@ -1236,15 +1371,17 @@ export default function DebitNoteFormPageClient({
                       <p className="text-[11px] font-medium text-muted-foreground mb-1">
                         Adjustment Ledger <span className="text-red-500">*</span>
                       </p>
-                      <GroupedLedgerSelect
-                        value={adjustmentLedgerId}
+                      <LedgerHierarchySelect
+                        value={adjustmentLedgerId ? String(adjustmentLedgerId) : null}
                         onChange={(l) => {
-                          setAdjustmentLedgerId(l.id);
-                          setAdjustmentLedgerName(l.accountName);
+                          setAdjustmentLedgerId(l.ledgerId);
+                          setAdjustmentLedgerName(l.ledgerName);
                         }}
+                        fallbackLabel={adjustmentLedgerName}
                         placeholder="Select adjustment ledger"
-                        required
-                        compact
+                        disabled={saving}
+                        className="h-8 w-full text-left font-normal"
+                        ledgerFilter={(l) => l.allowManualPosting === true}
                       />
                     </div>
                     <NoteQuantityLinesTable
@@ -1265,6 +1402,7 @@ export default function DebitNoteFormPageClient({
                         setAdjustmentLedgerId(l.id);
                         setAdjustmentLedgerName(l.accountName);
                       }}
+                      adjustmentLedgerName={adjustmentLedgerName}
                       qty={particularQty}
                       onQtyChange={setParticularQty}
                       rate={particularRate}
@@ -1275,6 +1413,7 @@ export default function DebitNoteFormPageClient({
                       onGstApplicableChange={setGstApplicable}
                       interstate={false}
                       switchId="dn-gst-applicable"
+                      ledgerFilter={(l) => l.allowManualPosting === true}
                     />
                   </div>
                 )}
@@ -1322,6 +1461,39 @@ export default function DebitNoteFormPageClient({
       </div>
       <AccountsToast toast={toast} onDismiss={dismissToast} />
       {discardDialog}
+
+      {/* Submit Approval Modal */}
+      <Dialog open={submitApproverOpen} onOpenChange={setSubmitApproverOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle className="text-sm font-semibold">Submit for Approval</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-4 py-4 text-xs">
+            <div className="grid gap-2">
+              <Label className="text-xs">Select Approver *</Label>
+              <select
+                className="h-9 border rounded px-2 text-xs w-full"
+                value={selectedApproverId}
+                onChange={(e) => setSelectedApproverId(e.target.value)}
+              >
+                {approvers.map((user) => (
+                  <option key={user.userId} value={user.userId}>
+                    {user.label} ({user.roleName || "User"})
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setSubmitApproverOpen(false)} disabled={saving}>
+              Cancel
+            </Button>
+            <Button size="sm" className="bg-indigo-600 text-white hover:bg-indigo-700" onClick={executeApprovalSubmit} disabled={saving}>
+              {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : null} Submit
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
