@@ -144,6 +144,8 @@ export function PurchaseView({ id }: { id: string }) {
           invoiceNumber: grn.invoiceNumber || primaryInvoice?.fileName || "—",
           supplierName: grn.vendorName,
           invoiceDate: grn.invoiceDate || primaryInvoice?.uploadedAt || "—",
+          fileUrl: primaryInvoice?.fileUrl,
+          fileName: primaryInvoice?.fileName,
         }
       : undefined;
 

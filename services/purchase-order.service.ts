@@ -154,6 +154,8 @@ function mapAdditionalCharges(raw: unknown): ProcurementAdditionalCharge[] {
     const row = (item ?? {}) as Record<string, unknown>;
     return {
       uid: `chg-${idx}`,
+      chargeMasterId: asString(row.additional_charge_id || row.chargeMasterId) || undefined,
+      chargeCode: asString(row.charge_code || row.chargeCode) || undefined,
       chargeName: asString(row.charge_name ?? row.name ?? row.chargeName),
       amount: asNumber(row.amount ?? row.value),
       remarks: asString(row.remarks),
@@ -443,6 +445,7 @@ export function mapDetail(raw: Record<string, unknown>): PurchaseOrder {
     approvedDate: asDateOnly(raw.approved_at),
     activity,
     shortClose,
+    hasReturnableQty: raw.has_returnable_qty === true,
   };
 }
 
@@ -555,6 +558,8 @@ function buildWriteBody(
     warehouse_name: form.warehouseName || null,
     delivery_address: form.deliveryAddress || null,
     additional_charges: (form.additionalCharges ?? []).map((c) => ({
+      additional_charge_id: c.chargeMasterId || null,
+      charge_code: c.chargeCode || null,
       charge_name: c.chargeName,
       charge_type: "Fixed",
       value: c.amount,

@@ -57,6 +57,10 @@ export interface PurchaseReturnItem {
   mfgDate: string;
   expDate: string;
   caseSize: number;
+  /** Net Kg/Ltr per Case (from product snapshot) for stacked weight display. */
+  netWeightPerPack?: number;
+  /** Kg or Ltr label for weight stack line. */
+  weightUom?: "Kg" | "Ltr";
   grnReceivedQty: number;
   qcRejectedQty: number;
   alreadyReturnedQty: number;

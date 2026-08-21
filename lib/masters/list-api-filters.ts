@@ -388,6 +388,24 @@ export const MASTER_FILTER_FIELD_MAPS = {
     status: statusColumnMapper,
     ...AUDIT_FILTER_FIELDS,
   },
+  additionalCharge: {
+    chargeCode: "charge_code",
+    chargeName: "charge_name",
+    hsnSacCode: "hsn_sac_code",
+    description: "description",
+    gstApplicable: (value) => {
+      const token = normalizeStatusToken(value);
+      if (token === "yes" || token === "true") return { gst_applicable: true };
+      if (token === "no" || token === "false") return { gst_applicable: false };
+      const raw = Array.isArray(value) ? value[0] : value;
+      const label = String(raw ?? "").trim().toLowerCase();
+      if (label === "yes") return { gst_applicable: true };
+      if (label === "no") return { gst_applicable: false };
+      return null;
+    },
+    status: statusColumnMapper,
+    ...AUDIT_FILTER_FIELDS,
+  },
   customerType: {
     customerType: "customer_type_name",
     initialCode: "customer_initial_code",

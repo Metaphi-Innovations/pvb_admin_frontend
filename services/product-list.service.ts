@@ -498,16 +498,24 @@ export const ProductListService = {
     return mapDetail(data as Record<string, unknown>);
   },
 
-  async previewNumber(): Promise<string> {
-    const response = await axiosInstance.get(
+  async previewNumber(input: {
+    pack_size: number;
+    unit: string;
+    exclude_product_id?: string;
+  }): Promise<string> {
+    const response = await axiosInstance.post(
       API_ENDPOINTS.MASTER.PRODUCT.PREVIEW_NUMBER,
+      input,
     );
     const payload = response.data as Record<string, unknown>;
     const data = payload.data as Record<string, unknown> | undefined;
     return asString(data?.previewNumber);
   },
 
-  async create(payload: ProductCreatePayload, images: File[] = []): Promise<void> {
+  async create(
+    payload: ProductCreatePayload,
+    images: File[] = [],
+  ): Promise<{ productId: string; productCode: string; productName: string }> {
     const response = await axiosInstance.post(
       API_ENDPOINTS.MASTER.PRODUCT.CREATE,
       buildProductFormData(payload, images),
@@ -518,6 +526,13 @@ export const ProductListService = {
     if (!body.success) {
       throw new Error(asString(body.message) || "Failed to create product.");
     }
+
+    const data = (body.data ?? {}) as Record<string, unknown>;
+    return {
+      productId: asString(data.product_id),
+      productCode: asString(data.product_code),
+      productName: asString(data.product_name),
+    };
   },
 
   async update(id: string, payload: ProductUpdatePayload, images: File[] = []): Promise<void> {

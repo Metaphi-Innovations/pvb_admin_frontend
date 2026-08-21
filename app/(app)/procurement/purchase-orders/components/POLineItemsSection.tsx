@@ -18,12 +18,14 @@ import {
 } from "@/lib/procurement/gst-master-utils";
 import {
   calcPackingToBaseQty,
-  enrichProductForProcurement,
+  calcPackingToWeightQty,
   enrichProductFromDropdown,
+  formatWeightQty,
   resolvePOLineCostPrice,
 } from "@/lib/procurement/procurement-line-utils";
 import { useProductDropdown } from "@/hooks/masters/use-products";
 import { loadProducts } from "@/app/(app)/masters/products/product-data";
+import { QuickAddProductSheet } from "@/app/(app)/masters/products/components/QuickAddProductSheet";
 import type { POLineItem } from "../po-data";
 import type { LinkedPurchaseRequest, POFormValues } from "./PurchaseOrderForm";
 import { emptyPOLine } from "./PurchaseOrderForm";
@@ -112,6 +114,9 @@ function lineFromProduct(
     baseUnit: info.baseUnit,
     packagingUnit: info.packagingUnit,
     conversionQty: info.conversionQty,
+    packSize: info.packSize,
+    netWeightPerPack: info.netWeightPerPack,
+    weightUom: info.weightUom,
     orderUom,
     orderedQtyPack,
     uom: orderUom,
@@ -161,8 +166,9 @@ export function POLineItemsSection({
   const [inlineEditUid, setInlineEditUid] = useState<string | null>(null);
   const [inlineEditDraft, setInlineEditDraft] = useState<InlineEditDraft | null>(null);
   const [inlineEditError, setInlineEditError] = useState<string | null>(null);
+  const [quickAddProductOpen, setQuickAddProductOpen] = useState(false);
 
-  const { data: dbProducts } = useProductDropdown();
+  const { data: dbProducts, refetch: refetchProductDropdown } = useProductDropdown();
   const masterProducts = useMemo(
     () => loadProducts().filter((p) => p.status === "active"),
     [],
@@ -173,11 +179,15 @@ export function POLineItemsSection({
       const isAlreadyAdded = form.lines.some(
         (l) => l.uid !== excludeLineUid && String(l.productId) === String(p.product_id)
       );
+      const scientificName = (p.scientific_name || "").trim();
       return {
         value: String(p.product_id),
         label: `${p.product_name} (${p.sku || p.product_code})`,
         disabled: isAlreadyAdded,
-        sublabel: isAlreadyAdded ? "Already added" : undefined,
+        sublabel: isAlreadyAdded
+          ? "Already added"
+          : scientificName || undefined,
+        searchText: scientificName,
       };
     });
     if (list.length === 0) {
@@ -185,11 +195,15 @@ export function POLineItemsSection({
         const isAlreadyAdded = form.lines.some(
           (l) => l.uid !== excludeLineUid && String(l.productId) === String(p.id)
         );
+        const scientificName = (p.scientificName || "").trim();
         return {
           value: String(p.id),
           label: `${p.productName} (${p.sku || p.productId})`,
           disabled: isAlreadyAdded,
-          sublabel: isAlreadyAdded ? "Already added" : undefined,
+          sublabel: isAlreadyAdded
+            ? "Already added"
+            : scientificName || undefined,
+          searchText: scientificName,
         };
       });
     }
@@ -199,12 +213,30 @@ export function POLineItemsSection({
   const filledLines = form.lines.filter((l) => Boolean(l.productId) && l.productId !== 0 && l.productId !== "0");
   const totalPackingQty = filledLines.reduce((sum, l) => sum + (l.orderedQtyPack || 0), 0);
   const totalSkuQty = filledLines.reduce((sum, l) => sum + (l.orderedQty || 0), 0);
+  const totalWeightByUom = filledLines.reduce(
+    (acc, l) => {
+      const net =
+        l.netWeightPerPack ??
+        enrichProductFromDropdown(l.productId, dbProducts)?.netWeightPerPack;
+      const uom =
+        l.weightUom ?? enrichProductFromDropdown(l.productId, dbProducts)?.weightUom;
+      const qty = calcPackingToWeightQty(l.orderedQtyPack || 0, net);
+      if (!(qty > 0) || !uom) return acc;
+      if (uom === "Kg") acc.kg += qty;
+      else if (uom === "Ltr") acc.ltr += qty;
+      return acc;
+    },
+    { kg: 0, ltr: 0 },
+  );
   const totalAmount = previewLines.reduce((sum, l) => sum + (l.netAmount || 0), 0);
 
   const previewProductId = quickProductIds[0];
   const previewInfo = previewProductId ? enrichProductFromDropdown(previewProductId, dbProducts) : null;
   const previewSkuQty = previewInfo
     ? calcPackingToBaseQty(Number(quickQty) || 0, previewInfo.conversionQty)
+    : 0;
+  const previewWeightQty = previewInfo
+    ? calcPackingToWeightQty(Number(quickQty) || 0, previewInfo.netWeightPerPack)
     : 0;
 
   const patch = (p: Partial<POFormValues>) => onChange({ ...form, ...p });
@@ -288,7 +320,7 @@ export function POLineItemsSection({
     if (!inlineEditUid || !inlineEditDraft) return;
     const packingQty = Number(inlineEditDraft.packingQty);
     if (!packingQty || packingQty <= 0) {
-      setInlineEditError("Quantity is required and must be greater than 0");
+      setInlineEditError("Qty in Case is required and must be greater than 0");
       return;
     }
     const productId = inlineEditDraft.productId;
@@ -326,9 +358,18 @@ export function POLineItemsSection({
             baseUnit: base.baseUnit,
             packagingUnit: base.packagingUnit,
             conversionQty: base.conversionQty,
+            packSize: base.packSize,
+            netWeightPerPack: base.netWeightPerPack,
+            weightUom: base.weightUom,
             orderUom: base.orderUom,
           }),
       orderedQtyPack: packingQty,
+      // Keep weight snapshot even when product is locked (PR lines) so qty in Kg/Ltr stays accurate
+      packSize: keepProduct ? existing?.packSize ?? base.packSize : base.packSize,
+      netWeightPerPack: keepProduct
+        ? existing?.netWeightPerPack ?? base.netWeightPerPack
+        : base.netWeightPerPack,
+      weightUom: keepProduct ? existing?.weightUom ?? base.weightUom : base.weightUom,
       unitPrice: Number(inlineEditDraft.unitPrice) || existing?.unitPrice || 0,
       cpSource: existing?.cpSource ?? "manual",
       discountType: "percentage",
@@ -353,30 +394,11 @@ export function POLineItemsSection({
 
   return (
     <div id="po-field-lines" className="border-t border-border/60 pt-4">
-      <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
-        <div>
-          <SectionHead
-            label="Product / Item Details"
-            sub="Packaging quantity, SKU conversion and GST are auto-calculated from product master."
-            required={!readOnly}
-          />
-        </div>
-        <div className="flex flex-wrap items-center gap-2 mb-2.5 md:mb-0">
-          <span className="inline-flex h-6 items-center rounded-full bg-brand-50 px-2.5 text-[11px] font-semibold text-brand-700">
-            {filledLines.length} item{filledLines.length === 1 ? "" : "s"}
-          </span>
-          {filledLines.length > 0 && (
-            <>
-              <span className="inline-flex h-6 items-center rounded-full bg-muted px-2.5 text-[11px] font-semibold text-muted-foreground">
-                {totalSkuQty} SKU qty
-              </span>
-              <span className="inline-flex h-6 items-center rounded-full bg-muted px-2.5 text-[11px] font-semibold text-muted-foreground">
-                {formatCurrency(totalAmount)}
-              </span>
-            </>
-          )}
-        </div>
-      </div>
+      <SectionHead
+        label="Product / Item Details"
+        sub="Qty in Case is entered; Qty in Unit and Qty in Kg/Ltr are auto-calculated from product master."
+        required={!readOnly}
+      />
 
       {linesError && (
         <p className="mb-2 text-[11px] text-red-500">{linesError}</p>
@@ -386,7 +408,17 @@ export function POLineItemsSection({
         <div className="mb-3 mt-3 rounded-lg border border-border bg-muted/20 p-3">
           <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_80px_minmax(0,1fr)_auto]">
             <div className="space-y-1">
-              <Label className="text-xs font-medium">Product</Label>
+              <div className="flex items-center justify-between gap-2">
+                <Label className="text-xs font-medium">Product</Label>
+                <button
+                  type="button"
+                  onClick={() => setQuickAddProductOpen(true)}
+                  disabled={!!inlineEditUid}
+                  className="text-[11px] font-semibold text-brand-700 hover:text-brand-800 hover:underline disabled:pointer-events-none disabled:opacity-40"
+                >
+                  + Quick Add Product
+                </button>
+              </div>
               <AutocompleteSelect
                 options={getProductOptions(null)}
                 value={quickProductIds}
@@ -398,7 +430,7 @@ export function POLineItemsSection({
               />
             </div>
             <div className="space-y-1">
-              <Label className="text-xs font-medium">Quantity</Label>
+              <Label className="text-xs font-medium">Qty in Case</Label>
               <Input
                 type="text"
                 inputMode="numeric"
@@ -445,8 +477,14 @@ export function POLineItemsSection({
                 <span className="font-medium">{previewInfo.packagingUnit}</span>
               </span>
               <span>
-                <span className="text-muted-foreground">Total SKU Qty: </span>
+                <span className="text-muted-foreground">Qty in Unit: </span>
                 <span className="font-semibold text-brand-700 tabular-nums">{previewSkuQty}</span>
+              </span>
+              <span>
+                <span className="text-muted-foreground">Qty in Kg/Ltr: </span>
+                <span className="font-semibold text-brand-700 tabular-nums">
+                  {formatWeightQty(previewWeightQty, previewInfo.weightUom)}
+                </span>
               </span>
             </div>
           )}
@@ -463,7 +501,7 @@ export function POLineItemsSection({
         </div>
       ) : (
         <div className="overflow-x-auto rounded-xl border border-border shadow-sm">
-          <table className="w-full min-w-[900px] table-fixed">
+          <table className="w-full min-w-[980px] table-fixed">
             <thead>
               <tr className="border-b border-border bg-muted/40">
                 <th className="min-w-[180px] px-3 py-2.5 text-left text-xs font-semibold text-foreground">Product</th>
@@ -472,8 +510,9 @@ export function POLineItemsSection({
                 {poType === "pr" && (
                   <th className="w-24 px-3 py-2.5 text-right text-xs font-semibold text-foreground">PR Qty</th>
                 )}
-                <th className="w-20 px-3 py-2.5 text-right text-xs font-semibold text-foreground">Qty</th>
-                <th className="w-24 px-3 py-2.5 text-right text-xs font-semibold text-foreground">SKU Qty</th>
+                <th className="w-24 px-3 py-2.5 text-right text-xs font-semibold text-foreground">Qty in Case</th>
+                <th className="w-24 px-3 py-2.5 text-right text-xs font-semibold text-foreground">Qty in Unit</th>
+                <th className="w-28 px-3 py-2.5 text-right text-xs font-semibold text-foreground">Qty in Kg/Ltr</th>
                 {showReceiptContext && (
                   <>
                     <th className="w-24 px-3 py-2.5 text-right text-xs font-semibold text-foreground">
@@ -511,10 +550,31 @@ export function POLineItemsSection({
                 const displayHsn = draftInfo?.hsnCode ?? line.hsnCode;
                 const displayPackaging = draftInfo?.packagingUnit ?? line.packagingUnit;
                 const displayConversion = draftInfo?.conversionQty ?? line.conversionQty;
+                const displayScientificName =
+                  (draftInfo?.description || "").trim() ||
+                  (line.description || "").trim() ||
+                  (
+                    enrichProductFromDropdown(line.productId, dbProducts)?.description || ""
+                  ).trim();
                 const displaySkuQty =
                   isEditing && draft
                     ? calcPackingToBaseQty(Number(draft.packingQty) || 0, displayConversion)
                     : line.orderedQty;
+                const weightInfo =
+                  draftInfo ??
+                  (line.netWeightPerPack != null && line.weightUom
+                    ? null
+                    : enrichProductFromDropdown(line.productId, dbProducts));
+                const displayNetWeight =
+                  draftInfo?.netWeightPerPack ??
+                  line.netWeightPerPack ??
+                  weightInfo?.netWeightPerPack;
+                const displayWeightUom =
+                  draftInfo?.weightUom ?? line.weightUom ?? weightInfo?.weightUom;
+                const displayWeightQty =
+                  isEditing && draft
+                    ? calcPackingToWeightQty(Number(draft.packingQty) || 0, displayNetWeight)
+                    : calcPackingToWeightQty(line.orderedQtyPack || 0, displayNetWeight);
                 const displayRate = line.unitPrice;
                 const draftTaxRates =
                   isEditing && draft
@@ -594,10 +654,14 @@ export function POLineItemsSection({
                       ) : (
                         <div>
                           <p className="text-xs font-semibold text-foreground">{line.productName}</p>
-                          <p className="mt-0.5 text-[11px] text-muted-foreground">
-                            <span className="font-mono font-semibold text-brand-700">{line.sku}</span>
-                            {line.category ? ` · ${line.category}` : ""}
+                          <p className="mt-0.5 font-mono text-[11px] font-semibold text-brand-700">
+                            {line.sku || "—"}
                           </p>
+                          {displayScientificName ? (
+                            <p className="mt-0.5 text-[11px] text-muted-foreground">
+                              {displayScientificName}
+                            </p>
+                          ) : null}
                         </div>
                       )}
                     </td>
@@ -637,6 +701,9 @@ export function POLineItemsSection({
                       )}
                     </td>
                     <td className="px-3 py-2 text-right text-xs font-semibold tabular-nums">{displaySkuQty}</td>
+                    <td className="px-3 py-2 text-right text-xs tabular-nums">
+                      {formatWeightQty(displayWeightQty, displayWeightUom)}
+                    </td>
                     {showReceiptContext && (
                       <>
                         <td className="px-3 py-2 text-right">
@@ -771,18 +838,52 @@ export function POLineItemsSection({
             </p>
             <div className="flex flex-wrap items-center gap-3">
               <p className="text-[11px] text-muted-foreground">
-                Total qty: <span className="font-medium tabular-nums">{totalPackingQty}</span>
+                Total Qty in Case:{" "}
+                <span className="font-medium tabular-nums text-foreground">{totalPackingQty}</span>
               </p>
               <p className="text-[11px] text-muted-foreground">
-                Total SKU qty: <span className="font-medium tabular-nums">{totalSkuQty}</span>
+                Total Qty in Unit:{" "}
+                <span className="font-medium tabular-nums text-foreground">{totalSkuQty}</span>
               </p>
+              {totalWeightByUom.kg > 0 && (
+                <p className="text-[11px] text-muted-foreground">
+                  Total Qty in Kg:{" "}
+                  <span className="font-medium tabular-nums text-foreground">
+                    {formatWeightQty(totalWeightByUom.kg, "Kg")}
+                  </span>
+                </p>
+              )}
+              {totalWeightByUom.ltr > 0 && (
+                <p className="text-[11px] text-muted-foreground">
+                  Total Qty in Ltr:{" "}
+                  <span className="font-medium tabular-nums text-foreground">
+                    {formatWeightQty(totalWeightByUom.ltr, "Ltr")}
+                  </span>
+                </p>
+              )}
               <p className="text-[11px] text-muted-foreground">
-                Total amount: <span className="font-medium tabular-nums font-mono">{formatCurrency(totalAmount)}</span>
+                Total amount:{" "}
+                <span className="font-medium tabular-nums font-mono text-foreground">
+                  {formatCurrency(totalAmount)}
+                </span>
               </p>
             </div>
           </div>
         </div>
       )}
+
+      <QuickAddProductSheet
+        open={quickAddProductOpen}
+        onOpenChange={setQuickAddProductOpen}
+        onCreated={async (created) => {
+          await refetchProductDropdown();
+          if (created.productId) {
+            setQuickProductIds((prev) =>
+              prev.includes(created.productId) ? prev : [...prev, created.productId],
+            );
+          }
+        }}
+      />
     </div>
   );
 }

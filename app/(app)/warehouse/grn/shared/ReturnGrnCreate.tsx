@@ -533,7 +533,7 @@ export function ReturnGrnCreate({
           items: payloadItems,
           invoices: [{ invoiceNumber, invoiceDate }],
         };
-        await createGrnMutation.mutateAsync(payload);
+        await createGrnMutation.mutateAsync({ input: payload });
         router.push(basePath);
       }
     } catch (err) {

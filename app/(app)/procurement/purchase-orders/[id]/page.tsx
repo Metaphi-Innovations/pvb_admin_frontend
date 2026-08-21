@@ -9,15 +9,14 @@ import {
   FileText,
   IndianRupee,
   ListOrdered,
+  RotateCcw,
   Scissors,
-  Upload,
 } from "lucide-react";
 import {
   RecordDetailPage,
   type RecordDetailTab,
 } from "@/components/record-detail";
 import { Button } from "@/components/ui/button";
-import { UploadVendorInvoiceDialog } from "../components/UploadVendorInvoiceDialog";
 import { ShortClosePOModal } from "../components/ShortClosePOModal";
 import {
   POClosureInformation,
@@ -36,8 +35,12 @@ import {
 } from "../components/PurchaseOrderForm";
 import { PO_STATUS_CFG, type POStatus } from "../po-data";
 import { getPOTotalItems } from "../po-listing-utils";
-import { canShortClosePO } from "../po-qty";
-import { canUploadPOInvoice } from "../po-invoice-utils";
+import {
+  canCancelPO,
+  canClosePO,
+  canCreatePurchaseReturnPO,
+  canShortClosePO,
+} from "../po-actions";
 import { formatCurrency } from "@/lib/procurement/utils";
 import {
   useCancelPurchaseOrder,
@@ -45,7 +48,6 @@ import {
   useCreatePOFollowup,
   usePurchaseOrder,
   useShortClosePurchaseOrder,
-  useUploadPOInvoice,
 } from "@/hooks/procurement";
 import {
   mapFollowupsFromDetail,
@@ -56,6 +58,7 @@ import { getErrorMessage } from "@/lib/masters/master-query-errors";
 import { getPOStatusLabel } from "@/lib/procurement/po-status";
 import { shortCloseReasonLabel } from "../po-qty";
 import { PODetailPageSkeleton } from "../components/POSkeletons";
+import { purchaseReturnRoutes } from "../../purchase-returns/purchase-return-utils";
 
 const PO_TABS: RecordDetailTab[] = [
   { value: "overview", label: "Overview" },
@@ -84,7 +87,6 @@ export default function PODetailPage() {
   const searchParams = useSearchParams();
   const id = String(params.id ?? "");
   const detailQuery = usePurchaseOrder(id);
-  const uploadMutation = useUploadPOInvoice();
   const followupMutation = useCreatePOFollowup();
   const shortCloseMutation = useShortClosePurchaseOrder();
   const closeMutation = useClosePurchaseOrder();
@@ -93,9 +95,6 @@ export default function PODetailPage() {
   const po = detailQuery.data;
   // console.log(po);
   const [activeTab, setActiveTab] = useState("overview");
-  const [uploadOpen, setUploadOpen] = useState(
-    searchParams.get("upload") === "1",
-  );
   const [shortCloseOpen, setShortCloseOpen] = useState(
     searchParams.get("shortClose") === "1",
   );
@@ -175,7 +174,6 @@ export default function PODetailPage() {
     );
   }
 
-  const canUploadInvoice = canUploadPOInvoice(po);
   const statusLabel =
     PO_STATUS_CFG[po.status]?.label ?? getPOStatusLabel(po.status);
 
@@ -193,15 +191,6 @@ export default function PODetailPage() {
           <Edit2 className="w-3.5 h-3.5" /> Edit
         </Button>
       )}
-      {canUploadInvoice && (
-        <Button
-          size="sm"
-          className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
-          onClick={() => setUploadOpen(true)}
-        >
-          <Upload className="w-3.5 h-3.5" /> Upload Invoice
-        </Button>
-      )}
       {canShortClosePO(po) && (
         <Button
           variant="outline"
@@ -212,12 +201,7 @@ export default function PODetailPage() {
           <Scissors className="w-3.5 h-3.5" /> Short Close PO
         </Button>
       )}
-      {[
-        "approved",
-        "invoice_uploaded",
-        "partially_received",
-        "received",
-      ].includes(po.status) && (
+      {canClosePO(po) && (
         <Button
           variant="outline"
           size="sm"
@@ -230,7 +214,17 @@ export default function PODetailPage() {
           Close PO
         </Button>
       )}
-      {!["closed", "cancelled", "short_closed"].includes(po.status) && (
+      {canCreatePurchaseReturnPO(po) && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 text-xs gap-1.5"
+          onClick={() => router.push(purchaseReturnRoutes.new(po.id, "po"))}
+        >
+          <RotateCcw className="w-3.5 h-3.5" /> Purchase Return
+        </Button>
+      )}
+      {canCancelPO(po) && (
         <Button
           variant="outline"
           size="sm"
@@ -337,7 +331,6 @@ export default function PODetailPage() {
               po={po}
               refreshKey={detailQuery.dataUpdatedAt}
               invoices={invoices}
-              onUpload={() => setUploadOpen(true)}
             />
           ))}
         {activeTab === "follow-up" &&
@@ -389,40 +382,6 @@ export default function PODetailPage() {
             />
           ))}
       </RecordDetailPage>
-
-      <UploadVendorInvoiceDialog
-        open={uploadOpen}
-        onClose={() => setUploadOpen(false)}
-        po={po}
-        submitting={uploadMutation.isPending}
-        onSaved={(input) => {
-          uploadMutation.mutate(
-            {
-              purchaseOrderId: po.id,
-              supplierInvoiceNo: input.supplierInvoiceNo,
-              supplierInvoiceDate: input.supplierInvoiceDate,
-              invoiceAmount: input.invoiceAmount,
-              gstAmount: input.gstAmount,
-              totalInvoiceAmount: input.totalInvoiceAmount,
-              remarks: input.remarks,
-              file: input.file,
-            },
-            {
-              onSuccess: () => {
-                setUploadOpen(false);
-                setToast({ msg: "Vendor invoice saved.", type: "success" });
-                void detailQuery.refetch();
-              },
-              onError: (error) => {
-                setToast({
-                  msg: getErrorMessage(error, "Failed to upload invoice."),
-                  type: "error",
-                });
-              },
-            },
-          );
-        }}
-      />
 
       <ShortClosePOModal
         open={shortCloseOpen}

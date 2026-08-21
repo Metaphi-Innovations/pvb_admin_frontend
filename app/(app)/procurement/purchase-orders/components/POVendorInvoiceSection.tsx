@@ -1,12 +1,11 @@
 "use client";
 
-import { Eye, FileText, Upload } from "lucide-react";
+import { Eye, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { RecordSectionCard } from "@/components/record-detail";
 import { formatCurrency } from "@/lib/procurement/utils";
 import { formatListingDate } from "../../components/listing/ListingCells";
 import type { PurchaseOrder } from "../po-data";
-import { canUploadPOInvoice } from "../po-invoice-utils";
 import type { POVendorInvoiceView } from "@/services/purchase-order.service";
 
 function POVendorInvoiceCard({ invoice }: { invoice: POVendorInvoiceView }) {
@@ -75,37 +74,35 @@ function POVendorInvoiceCard({ invoice }: { invoice: POVendorInvoiceView }) {
   );
 }
 
+/** Read-only supplier invoices linked via GRN → Invoice (no upload from PO). */
 export function POVendorInvoiceSection({
-  po,
-  onUpload,
   invoices = [],
 }: {
-  po: PurchaseOrder;
-  onUpload: () => void;
+  po?: PurchaseOrder;
+  onUpload?: () => void;
   refreshKey?: number;
   invoices?: POVendorInvoiceView[];
 }) {
-  const canUpload = canUploadPOInvoice(po);
-
-  if (invoices.length === 0 && !canUpload) return null;
+  if (invoices.length === 0) {
+    return (
+      <div id="vendor-invoice">
+        <RecordSectionCard title="Supplier Invoices" icon={FileText} accent="green">
+          <p className="text-xs text-muted-foreground">
+            No supplier invoice yet. Invoices uploaded from GRN will appear here.
+          </p>
+        </RecordSectionCard>
+      </div>
+    );
+  }
 
   return (
     <div id="vendor-invoice">
       <RecordSectionCard title="Supplier Invoices" icon={FileText} accent="green">
-        {invoices.length === 0 ? (
-          <p className="text-xs text-muted-foreground mb-3">No supplier invoice uploaded yet.</p>
-        ) : (
-          <div className="space-y-3 mb-3">
-            {invoices.map((invoice) => (
-              <POVendorInvoiceCard key={invoice.id} invoice={invoice} />
-            ))}
-          </div>
-        )}
-        {canUpload && (
-          <Button size="sm" className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white gap-1.5" onClick={onUpload}>
-            <Upload className="w-3.5 h-3.5" /> Upload Invoice
-          </Button>
-        )}
+        <div className="space-y-3">
+          {invoices.map((invoice) => (
+            <POVendorInvoiceCard key={invoice.id} invoice={invoice} />
+          ))}
+        </div>
       </RecordSectionCard>
     </div>
   );
@@ -115,54 +112,41 @@ export function InvoiceListingCell({
   hasInvoice = false,
   invoiceCount = 0,
   onView,
-  onUpload,
-  canUpload = false,
 }: {
   hasInvoice?: boolean;
   invoiceCount?: number;
   onView: () => void;
-  onUpload: () => void;
+  /** @deprecated Upload from PO is disabled; kept for call-site compatibility. */
+  onUpload?: () => void;
   canUpload?: boolean;
 }) {
   const count = invoiceCount > 0 ? invoiceCount : hasInvoice ? 1 : 0;
 
   return (
     <div
-  className="py-1.5 flex flex-col items-start gap-1"
-  onClick={(e) => e.stopPropagation()}
->
-  {count > 0 ? (
-    <>
-      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5">
-        {count > 1 ? `${count} Invoices` : "Invoice Uploaded"}
-      </span>
+      className="py-1.5 flex flex-col items-start gap-1"
+      onClick={(e) => e.stopPropagation()}
+    >
+      {count > 0 ? (
+        <>
+          <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5">
+            {count > 1 ? `${count} Invoices` : "Invoice Uploaded"}
+          </span>
 
-      <button
-        type="button"
-        className="text-[10px] text-brand-600 hover:underline inline-flex items-center gap-0.5"
-        onClick={onView}
-      >
-        <Eye className="w-3 h-3" />
-        View
-      </button>
-    </>
-  ) : (
-    <>
-      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-slate-600 bg-slate-100 border border-slate-200 rounded-full px-2 py-0.5">
-        Not Uploaded
-      </span>
-
-      {canUpload && (
-        <button
-          type="button"
-          className="text-[10px] text-brand-600 hover:underline"
-          onClick={onUpload}
-        >
-          Upload
-        </button>
+          <button
+            type="button"
+            className="text-[10px] text-brand-600 hover:underline inline-flex items-center gap-0.5"
+            onClick={onView}
+          >
+            <Eye className="w-3 h-3" />
+            View
+          </button>
+        </>
+      ) : (
+        <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-slate-600 bg-slate-100 border border-slate-200 rounded-full px-2 py-0.5">
+          Not Uploaded
+        </span>
       )}
-    </>
-  )}
-</div>
+    </div>
   );
 }

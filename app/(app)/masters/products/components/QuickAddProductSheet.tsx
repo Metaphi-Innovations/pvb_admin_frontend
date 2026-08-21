@@ -1,11 +1,18 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { CheckCircle2, Save, XCircle } from "lucide-react";
-import { FormContainer } from "@/components/layout/FormContainer";
+import { Save } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import {
+  Sheet,
+  SheetBody,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import {
   buildProductApiAssets,
   collectNewProductImageFiles,
@@ -16,14 +23,13 @@ import {
   getProductApiValidationToastMessage,
   isProductApiValidationError,
   mapProductApiErrorsToFormFields,
-} from "../product-data";
+} from "@/app/(app)/masters/products/product-data";
 import {
   DEFAULT_PRODUCT_FORM,
-  formValuesToProduct,
   ProductForm,
   type ProductFormValues,
   validateProductForm,
-} from "../components/ProductForm";
+} from "@/app/(app)/masters/products/components/ProductForm";
 import { useCreateProduct, useProductPreviewNumber } from "@/hooks/masters";
 import { ProductListService } from "@/services/product-list.service";
 
@@ -36,17 +42,41 @@ function toUuidOrNull(value: unknown): string | null {
   return raw;
 }
 
-export default function NewProductPage() {
-  const router = useRouter();
+export type QuickAddProductResult = {
+  productId: string;
+  productCode: string;
+  productName: string;
+};
+
+type QuickAddProductSheetProps = {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onCreated?: (product: QuickAddProductResult) => void;
+};
+
+export function QuickAddProductSheet({
+  open,
+  onOpenChange,
+  onCreated,
+}: QuickAddProductSheetProps) {
   const [form, setForm] = useState<ProductFormValues>(DEFAULT_PRODUCT_FORM);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [productImages, setProductImages] = useState<ProductImage[]>([]);
   const [productUrls, setProductUrls] = useState<ProductUrl[]>([]);
-  const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
   const { data: previewNumber } = useProductPreviewNumber(
     form.packSize,
     form.baseUnit,
   );
+  const createMutation = useCreateProduct();
+
+  useEffect(() => {
+    if (!open) return;
+    setForm({ ...DEFAULT_PRODUCT_FORM });
+    setErrors({});
+    setProductImages([]);
+    setProductUrls([]);
+  }, [open]);
+
   const clearErr = (key: string) =>
     setErrors((prev) => {
       const next = { ...prev };
@@ -54,7 +84,10 @@ export default function NewProductPage() {
       return next;
     });
 
-  const createMutation = useCreateProduct();
+  const handleClose = () => {
+    if (createMutation.isPending) return;
+    onOpenChange(false);
+  };
 
   const handleSave = () => {
     const list = loadProducts();
@@ -67,12 +100,7 @@ export default function NewProductPage() {
     const validation = validateProductForm(resolvedForm);
     setErrors(validation);
     if (Object.keys(validation).length > 0) {
-      const firstError = Object.values(validation)[0];
-      setToast({
-        msg: firstError ?? "Please fix the errors before saving.",
-        type: "error",
-      });
-      setTimeout(() => setToast(null), 3200);
+      toast.error(Object.values(validation)[0] ?? "Please fix the errors before saving.");
       return;
     }
 
@@ -118,12 +146,12 @@ export default function NewProductPage() {
         images: collectNewProductImageFiles(productImages),
       },
       {
-        onSuccess: () => {
-          setToast({
-            msg: "Product created successfully.",
-            type: "success",
-          });
-          setTimeout(() => router.push("/masters/products"), 900);
+        onSuccess: (created) => {
+          toast.success("Product created successfully.");
+          onOpenChange(false);
+          if (created.productId) {
+            onCreated?.(created);
+          }
         },
         onError: (err) => {
           if (isProductApiValidationError(err)) {
@@ -131,81 +159,73 @@ export default function NewProductPage() {
             if (Object.keys(apiFieldErrors).length > 0) {
               setErrors((prev) => ({ ...prev, ...apiFieldErrors }));
             }
-            setToast({
-              msg: getProductApiValidationToastMessage(
+            toast.error(
+              getProductApiValidationToastMessage(
                 err,
                 "Please fix the validation errors.",
               ),
-              type: "error",
-            });
-            setTimeout(() => setToast(null), 5000);
+            );
             return;
           }
 
-          setToast({
-            msg: ProductListService.extractErrorMessage(
-              err,
-              "Failed to save product.",
-            ),
-            type: "error",
-          });
-          setTimeout(() => setToast(null), 4000);
+          toast.error(
+            ProductListService.extractErrorMessage(err, "Failed to save product."),
+          );
         },
-      }
+      },
     );
   };
 
   return (
-    <FormContainer
-      title="Add Product"
-      description="Masters → Product Master → Add"
-      onBack={() => router.back()}
-      actions={
-        <div className="flex items-center gap-2">
-          <Button variant="outline" className="h-9 text-xs font-semibold rounded-lg" onClick={() => router.back()}>
-            Discard
+    <Sheet open={open} onOpenChange={(next) => (next ? onOpenChange(true) : handleClose())}>
+      <SheetContent className="max-w-[960px] w-[min(960px,100vw)]">
+        <SheetHeader>
+          <SheetTitle>Quick Add Product</SheetTitle>
+          <SheetDescription>
+            Same Product Master form — code generation, GST, packaging and assets.
+          </SheetDescription>
+        </SheetHeader>
+        <SheetBody className="px-4 sm:px-6">
+          <ProductForm
+            form={form}
+            onChange={setForm}
+            errors={errors}
+            onClearError={clearErr}
+            productImages={productImages}
+            previewNumber={previewNumber}
+            productUrls={productUrls}
+            onImageAdd={(items) => setProductImages((prev) => [...prev, ...items])}
+            onImageRemove={(id) =>
+              setProductImages((prev) => prev.filter((item) => item.id !== id))
+            }
+            onUrlAdd={(item) => setProductUrls((prev) => [...prev, item])}
+            onUrlRemove={(id) =>
+              setProductUrls((prev) => prev.filter((item) => item.id !== id))
+            }
+            isNew
+          />
+        </SheetBody>
+        <SheetFooter>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-9 rounded-lg text-xs font-semibold"
+            onClick={handleClose}
+            disabled={createMutation.isPending}
+          >
+            Cancel
           </Button>
           <Button
             type="button"
-            className="h-9 text-xs font-semibold rounded-lg gap-1.5 bg-brand-600 text-white hover:bg-brand-700"
+            className="h-9 gap-1.5 rounded-lg bg-brand-600 text-xs font-semibold text-white hover:bg-brand-700"
             onClick={handleSave}
             disabled={createMutation.isPending}
           >
-            <Save className="w-4 h-4" /> Save
+            <Save className="h-4 w-4" />
+            {createMutation.isPending ? "Saving…" : "Save Product"}
           </Button>
-        </div>
-      }
-    >
-      <ProductForm
-        form={form}
-        onChange={setForm}
-        errors={errors}
-        onClearError={clearErr}
-        productImages={productImages}
-        previewNumber={previewNumber}
-        productUrls={productUrls}
-        onImageAdd={(items) => setProductImages((prev) => [...prev, ...items])}
-        onImageRemove={(id) => setProductImages((prev) => prev.filter((item) => item.id !== id))}
-        onUrlAdd={(item) => setProductUrls((prev) => [...prev, item])}
-        onUrlRemove={(id) => setProductUrls((prev) => prev.filter((item) => item.id !== id))}
-        isNew
-      />
-
-      {toast && (
-        <div
-          className={cn(
-            "fixed top-5 right-5 z-[100] flex items-start gap-2.5 px-4 py-3 rounded-xl shadow-xl text-white text-sm font-medium max-w-md",
-            toast.type === "success" ? "bg-emerald-600" : "bg-red-600",
-          )}
-        >
-          {toast.type === "success" ? (
-            <CheckCircle2 className="w-4 h-4 flex-shrink-0 mt-0.5" />
-          ) : (
-            <XCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-          )}
-          <span className="leading-snug whitespace-pre-wrap">{toast.msg}</span>
-        </div>
-      )}
-    </FormContainer>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   );
 }

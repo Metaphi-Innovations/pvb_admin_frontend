@@ -51,6 +51,7 @@ export function PurchaseReturnForm({
   readOnly = false,
   errors = {},
   editMode = false,
+  linesLoading = false,
 }: {
   record: PurchaseReturn;
   onChange: (record: PurchaseReturn) => void;
@@ -58,6 +59,7 @@ export function PurchaseReturnForm({
   errors?: Record<string, string>;
   /** When true, line items are split into existing return lines + additional eligible GRNs. */
   editMode?: boolean;
+  linesLoading?: boolean;
 }) {
   const detailsGridCls = "grid grid-cols-4 gap-3";
   const taxSupplyType = record.taxSupplyType ?? "intra";
@@ -151,6 +153,7 @@ export function PurchaseReturnForm({
           onItemChange={setItem}
           editMode={editMode}
           warehouseName={record.warehouseName}
+          loading={linesLoading}
         />
 
         <div className="border-t border-border/60 pt-4">

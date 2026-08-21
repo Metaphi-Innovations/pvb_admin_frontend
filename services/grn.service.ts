@@ -189,12 +189,15 @@ export function mapGrnDetail(raw: Record<string, unknown>): GrnRecord {
     const row = asRecord(inv);
     const id = asString(row.id) || `inv-${idx}`;
     invoiceById.set(id, row);
+    const fileUrl = asString(row.invoiceFile) || undefined;
+    const invoiceNumber = asString(row.invoiceNumber) || `Invoice ${idx + 1}`;
+    const fileNameFromUrl = fileUrl
+      ? decodeURIComponent(fileUrl.split("/").pop() || "")
+      : "";
     return {
       id,
-      fileName:
-        asString(row.invoiceFile) ||
-        asString(row.invoiceNumber) ||
-        `Invoice ${idx + 1}`,
+      fileName: fileNameFromUrl || invoiceNumber,
+      fileUrl,
       uploadedAt: asDateOnly(row.invoiceDate || row.created_at),
     };
   });
@@ -337,7 +340,7 @@ export function mapGrnDetail(raw: Record<string, unknown>): GrnRecord {
     ocrExtractionCompleted: false,
     invoiceNumber: asString(primaryInvoice.invoiceNumber) || undefined,
     invoiceDate: asDateOnly(primaryInvoice.invoiceDate) || undefined,
-    invoiceFileName: asString(primaryInvoice.invoiceFile) || undefined,
+    invoiceFileName: supplierInvoices[0]?.fileName || undefined,
     invoiceFileNames: supplierInvoices.map((inv) => inv.fileName),
     createdBy: toDisplayName(raw.created_by_user),
     updatedBy: toDisplayName(raw.updated_by_user),
@@ -393,8 +396,25 @@ export const GrnService = {
     return mapGrnDetail(data as Record<string, unknown>);
   },
 
-  async create(input: CreateGrnPayload): Promise<Record<string, unknown>> {
-    const response = await axiosInstance.post(API_ENDPOINTS.WAREHOUSE.GRN.CREATE, input);
+  async create(
+    input: CreateGrnPayload,
+    invoiceFiles: File[] = [],
+  ): Promise<Record<string, unknown>> {
+    const hasFiles = invoiceFiles.length > 0;
+    const response = hasFiles
+      ? await axiosInstance.post(
+          API_ENDPOINTS.WAREHOUSE.GRN.CREATE,
+          (() => {
+            const formData = new FormData();
+            formData.append("payload", JSON.stringify(input));
+            invoiceFiles.forEach((file, idx) => {
+              formData.append(`invoiceFiles[${idx}]`, file);
+            });
+            return formData;
+          })(),
+          { headers: { "Content-Type": "multipart/form-data" } },
+        )
+      : await axiosInstance.post(API_ENDPOINTS.WAREHOUSE.GRN.CREATE, input);
     const payload = response.data as Record<string, unknown>;
     assertSuccess(payload, "Failed to create GRN.");
     const data = payload.data;
@@ -404,8 +424,26 @@ export const GrnService = {
     return data as Record<string, unknown>;
   },
 
-  async update(id: string, input: UpdateGrnPayload): Promise<Record<string, unknown>> {
-    const response = await axiosInstance.put(API_ENDPOINTS.WAREHOUSE.GRN.UPDATE(id), input);
+  async update(
+    id: string,
+    input: UpdateGrnPayload,
+    invoiceFiles: File[] = [],
+  ): Promise<Record<string, unknown>> {
+    const hasFiles = invoiceFiles.length > 0;
+    const response = hasFiles
+      ? await axiosInstance.put(
+          API_ENDPOINTS.WAREHOUSE.GRN.UPDATE(id),
+          (() => {
+            const formData = new FormData();
+            formData.append("payload", JSON.stringify(input));
+            invoiceFiles.forEach((file, idx) => {
+              formData.append(`invoiceFiles[${idx}]`, file);
+            });
+            return formData;
+          })(),
+          { headers: { "Content-Type": "multipart/form-data" } },
+        )
+      : await axiosInstance.put(API_ENDPOINTS.WAREHOUSE.GRN.UPDATE(id), input);
     const payload = response.data as Record<string, unknown>;
     assertSuccess(payload, "Failed to update GRN.");
     const data = payload.data;

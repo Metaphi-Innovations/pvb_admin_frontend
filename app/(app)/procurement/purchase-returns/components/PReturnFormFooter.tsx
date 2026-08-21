@@ -10,12 +10,14 @@ export function PReturnFormFooter({
   onSaveDraft,
   onSubmit,
   showSubmit = true,
+  submitDisabled = false,
 }: {
   readOnly?: boolean;
   onCancel: () => void;
   onSaveDraft?: () => void;
   onSubmit?: () => void;
   showSubmit?: boolean;
+  submitDisabled?: boolean;
 }) {
   if (readOnly) {
     return (
@@ -33,6 +35,7 @@ export function PReturnFormFooter({
         <Button
           className="h-9 gap-1.5 rounded-lg bg-brand-600 text-xs font-semibold text-white hover:bg-brand-700"
           onClick={onSaveDraft}
+          disabled={submitDisabled}
         >
           <Save className="h-3.5 w-3.5" /> Save Draft
         </Button>
@@ -41,6 +44,7 @@ export function PReturnFormFooter({
         <Button
           className="h-9 gap-1.5 rounded-lg bg-brand-600 text-xs font-semibold text-white hover:bg-brand-700"
           onClick={onSubmit}
+          disabled={submitDisabled}
         >
           <Send className="h-3.5 w-3.5" /> Submit Purchase Return
         </Button>

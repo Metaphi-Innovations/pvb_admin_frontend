@@ -26,14 +26,14 @@ const CONFIG: Record<
   close: {
     title: "Close Purchase Order",
     description:
-      "Are you sure you want to close this purchase order? The PO will be marked as closed.",
+      "Close this purchase order to stop further receipt activity. Use this after the PO has been approved / received. Invoices continue to be managed from GRN.",
     confirmLabel: "Close PO",
     destructive: false,
   },
   cancel: {
     title: "Cancel Purchase Order",
     description:
-      "Are you sure you want to cancel this purchase order? The PO will be marked as cancelled.",
+      "Cancel this draft or unapproved purchase order. This marks the PO as cancelled and should be used before fulfillment starts.",
     confirmLabel: "Cancel PO",
     destructive: true,
   },
