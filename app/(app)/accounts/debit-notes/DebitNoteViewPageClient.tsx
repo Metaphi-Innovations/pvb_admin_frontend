@@ -483,7 +483,7 @@ export default function DebitNoteViewPageClient({ debitNoteId }: { debitNoteId: 
                 {isFresh ? "Amount Based" : "Quantity Based"}
               </span>
               <span className="cn-ws__hint">
-                Source: {DEBIT_NOTE_SOURCE_LABELS[record.source]}
+                Source: {DEBIT_NOTE_SOURCE_LABELS[record.source] ?? record.source}
               </span>
             </div>
           </section>
@@ -526,42 +526,70 @@ export default function DebitNoteViewPageClient({ debitNoteId }: { debitNoteId: 
               </TabsList>
 
               <TabsContent value="lines" className="border rounded-md mt-2 overflow-x-auto bg-white">
-                <table className="cn-ws__table min-w-full text-xs">
-                  <thead>
-                    <tr className="border-b bg-muted/40">
-                      <th className="p-2 text-left">Description</th>
-                      <th className="p-2 text-left">Ledger</th>
-                      <th className="p-2 text-right">Quantity</th>
-                      <th className="p-2 text-right">Rate</th>
-                      <th className="p-2 aggression text-right">Taxable</th>
-                      <th className="p-2 text-right">GST %</th>
-                      <th className="p-2 text-right">GST Amount</th>
-                      <th className="p-2 text-right font-medium">Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rawRecord.lines?.map((l: any) => {
-                      const totalLine = parseFloat(l.taxable_amount) + parseFloat(l.cgst_amount || 0) + parseFloat(l.sgst_amount || 0) + parseFloat(l.igst_amount || 0);
-                      return (
-                        <tr key={l.id} className="border-b hover:bg-muted/10">
-                          <td className="p-2 font-medium">{l.description || l.product_name || "—"}</td>
-                          <td className="p-2">{l.ledger?.ledger_name || "—"}</td>
-                          <td className="p-2 text-right">{l.quantity || "—"}</td>
-                          <td className="p-2 text-right">{l.rate ? formatINR(l.rate) : "—"}</td>
-                          <td className="p-2 text-right">{formatINR(l.taxable_amount)}</td>
-                          <td className="p-2 text-right">{l.gst_rate}%</td>
-                          <td className="p-2 text-right">{formatINR((l.cgst_amount || 0) + (l.sgst_amount || 0) + (l.igst_amount || 0))}</td>
-                          <td className="p-2 text-right font-semibold">{formatINR(totalLine)}</td>
-                        </tr>
-                      );
-                    })}
-                    {(!rawRecord.lines || rawRecord.lines.length === 0) && (
-                      <tr>
-                        <td colSpan={8} className="p-4 text-center text-muted-foreground">No Line Items</td>
+                <div className="cn-ws__table-wrap">
+                  <table className="cn-ws__table min-w-full text-xs">
+                    <colgroup>
+                      <col style={{ width: "22%" }} />
+                      <col style={{ width: "20%" }} />
+                      <col style={{ width: "8%" }} />
+                      <col style={{ width: "12%" }} />
+                      <col style={{ width: "12%" }} />
+                      <col style={{ width: "8%" }} />
+                      <col style={{ width: "10%" }} />
+                      <col style={{ width: "8%" }} />
+                    </colgroup>
+                    <thead>
+                      <tr className="border-b bg-muted/40">
+                        <th className="p-2 text-left">Description</th>
+                        <th className="p-2 text-left">Ledger</th>
+                        <th className="p-2 text-right cn-num">Quantity</th>
+                        <th className="p-2 text-right cn-num">Rate</th>
+                        <th className="p-2 text-right cn-num">Taxable</th>
+                        <th className="p-2 text-right cn-num">GST %</th>
+                        <th className="p-2 text-right cn-num">GST Amount</th>
+                        <th className="p-2 text-right cn-num font-medium">Total</th>
                       </tr>
-                    )}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {rawRecord.lines?.map((l: any) => {
+                        const totalLine =
+                          parseFloat(l.taxable_amount) +
+                          parseFloat(l.cgst_amount || 0) +
+                          parseFloat(l.sgst_amount || 0) +
+                          parseFloat(l.igst_amount || 0);
+                        return (
+                          <tr key={l.id} className="border-b hover:bg-muted/10">
+                            <td className="p-2 font-medium truncate" title={l.description || l.product_name || undefined}>
+                              {l.description || l.product_name || "—"}
+                            </td>
+                            <td className="p-2 truncate" title={l.ledger?.ledger_name || undefined}>
+                              {l.ledger?.ledger_name || "—"}
+                            </td>
+                            <td className="p-2 cn-num">{l.quantity || "—"}</td>
+                            <td className="p-2 cn-num">{l.rate ? formatINR(l.rate) : "—"}</td>
+                            <td className="p-2 cn-num">{formatINR(l.taxable_amount)}</td>
+                            <td className="p-2 cn-num">{l.gst_rate}%</td>
+                            <td className="p-2 cn-num">
+                              {formatINR(
+                                (l.cgst_amount || 0) +
+                                  (l.sgst_amount || 0) +
+                                  (l.igst_amount || 0),
+                              )}
+                            </td>
+                            <td className="p-2 cn-num font-semibold">{formatINR(totalLine)}</td>
+                          </tr>
+                        );
+                      })}
+                      {(!rawRecord.lines || rawRecord.lines.length === 0) && (
+                        <tr>
+                          <td colSpan={8} className="p-4 text-center text-muted-foreground">
+                            No Line Items
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </TabsContent>
 
               <TabsContent value="charges" className="border rounded-md mt-2 overflow-x-auto bg-white">

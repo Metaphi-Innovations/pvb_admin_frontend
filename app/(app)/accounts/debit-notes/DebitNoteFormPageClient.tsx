@@ -84,16 +84,21 @@ import {
 import { getPurchaseInvoiceById } from "@/app/(app)/accounts/purchase-invoices/purchase-invoices-data";
 import { resolveWarehouseFromGrnNo } from "@/lib/accounts/bank-warehouse-mapping";
 import { WarehouseMappedBankAccountSelect } from "@/components/accounts/WarehouseMappedBankAccountSelect";
-import { LedgerService } from "@/services/ledger.service";
 import "../credit-notes/credit-note-tx.css";
 
 type FormMode = "fresh" | "return" | "purchase_invoice";
 type UiRefType = "direct" | "purchase_invoice" | "purchase_return";
 type InvoiceAdjustmentBasis = "quantity" | "amount";
 
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value.trim(),
+  );
+}
+
 const REF_TYPE_OPTIONS: { value: UiRefType; label: string }[] = [
   { value: "direct", label: "Direct" },
-  { value: "purchase_invoice", label: "Purchase Invoice" },
+  // { value: "purchase_invoice", label: "Purchase Invoice" }, // DN against PI not used
   { value: "purchase_return", label: "Purchase Return" },
 ];
 
@@ -102,22 +107,40 @@ const INVOICE_BASIS_OPTIONS: { value: InvoiceAdjustmentBasis; label: string }[] 
   { value: "quantity", label: "Quantity" },
 ];
 
+type DirectExtraCharge = {
+  id: string;
+  description: string;
+  ledgerId: string | null;
+  ledgerName: string;
+  amount: string;
+  gstPct: string;
+};
+
+function newDirectExtraChargeId() {
+  return `dn-xch-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
 export default function DebitNoteFormPageClient({
   debitNoteId,
   returnId,
   purchaseInvoiceId,
+  pendingId: pendingIdProp,
   mode,
 }: {
   debitNoteId?: number;
   returnId?: number;
   purchaseInvoiceId?: number;
+  pendingId?: string;
   mode?: FormMode;
 }) {
   const router = useRouter();
   const { toast, showToast, dismissToast } = useAccountsToast();
+  const pendingId = pendingIdProp?.trim() || "";
+  const isPendingEntitlement = Boolean(pendingId) && isUuid(pendingId);
   const isEdit = debitNoteId != null;
-  const isFresh = !isEdit && mode === "fresh";
-  const isReturn = !isEdit && (mode === "return" || returnId != null);
+  const isFresh = !isEdit && mode === "fresh" && !isPendingEntitlement;
+  const isReturn =
+    !isEdit && (mode === "return" || returnId != null || isPendingEntitlement);
   const isPurchaseInvoice =
     !isEdit && (mode === "purchase_invoice" || purchaseInvoiceId != null);
 
@@ -192,8 +215,8 @@ export default function DebitNoteFormPageClient({
   }, []);
 
   const [uiRefType, setUiRefType] = useState<UiRefType>(() => {
+    if (isPendingEntitlement || isReturn) return "purchase_return";
     if (isFresh || (!isReturn && !isPurchaseInvoice)) return "direct";
-    if (isReturn) return "purchase_return";
     if (isPurchaseInvoice) return "purchase_invoice";
     return "direct";
   });
@@ -201,6 +224,8 @@ export default function DebitNoteFormPageClient({
   const isSourceRefMode =
     uiRefType === "purchase_invoice" || uiRefType === "purchase_return";
   const isDirectMode = uiRefType === "direct";
+  /** Free-form charges editable on Direct always; on PR pending only until converted. */
+  const chargesEditable = !saving && !(isPendingEntitlement && isEdit);
   const [invoiceAdjustmentBasis, setInvoiceAdjustmentBasis] =
     useState<InvoiceAdjustmentBasis>("amount");
   const isReturnRefMode = uiRefType === "purchase_return";
@@ -239,6 +264,9 @@ export default function DebitNoteFormPageClient({
   const [error, setError] = useState<string | null>(null);
   const [bankAccountId, setBankAccountId] = useState<number | null>(null);
   const [roundOff, setRoundOff] = useState(0);
+  const [directExtraCharges, setDirectExtraCharges] = useState<DirectExtraCharge[]>([]);
+  const [pendingDetail, setPendingDetail] = useState<any | null>(null);
+  const [pendingLoading, setPendingLoading] = useState(isPendingEntitlement);
 
   const [referenceNo, setReferenceNo] = useState("");
   const [adjustmentLedgerId, setAdjustmentLedgerId] = useState<string | number | null>(null);
@@ -247,8 +275,9 @@ export default function DebitNoteFormPageClient({
   const [gstPct, setGstPct] = useState("18");
   const [narration, setNarration] = useState("");
 
-  const vendorLocked = Boolean(referencePreview) || isReturn || isPurchaseInvoice;
-  const refControlsLocked = isReturn || isPurchaseInvoice;
+  const vendorLocked =
+    Boolean(referencePreview) || isReturn || isPurchaseInvoice || isPendingEntitlement;
+  const refControlsLocked = isReturn || isPurchaseInvoice || isPendingEntitlement;
   const alreadyAdjustedNum = parseFloat(alreadyAdjusted) || 0;
 
   const purchaseInvoiceOptions = useMemo(
@@ -461,10 +490,11 @@ export default function DebitNoteFormPageClient({
     clearReference();
     setReferenceInvoiceId("");
     setReferenceReturnId("");
+    if (next !== "direct") setDirectExtraCharges([]);
   };
 
   useEffect(() => {
-    if (!isReturn || returnId == null || isEdit) return;
+    if (!isReturn || returnId == null || isEdit || isPendingEntitlement) return;
     setUiRefType("purchase_return");
     setReferenceReturnId(String(returnId));
     const pending = getPendingDebitNoteRow(returnId);
@@ -478,7 +508,138 @@ export default function DebitNoteFormPageClient({
     setParticularQty("1");
     setParticularRate("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isReturn, returnId, isEdit, vendors]);
+  }, [isReturn, returnId, isEdit, vendors, isPendingEntitlement]);
+
+  useEffect(() => {
+    if (!isPendingEntitlement || isEdit) return;
+    let cancelled = false;
+    setPendingLoading(true);
+    setError(null);
+    (async () => {
+      try {
+        const detail = await DebitNoteService.getPendingById(pendingId);
+        if (cancelled) return;
+        setPendingDetail(detail);
+        setUiRefType("purchase_return");
+
+        const returnNo =
+          detail.purchase_return_number ||
+          detail.purchase_return?.return_no ||
+          "—";
+        const returnDateRaw =
+          detail.purchase_return?.return_date || detail.eligibility_date;
+        if (returnDateRaw) {
+          setDebitNoteDate(
+            new Date(returnDateRaw).toISOString().slice(0, 10),
+          );
+        }
+        setSourceReturnId(String(detail.purchase_return_id || ""));
+        setSourceReturnNo(returnNo);
+        setReferenceReturnId(String(detail.purchase_return_id || ""));
+        setReferenceNo(returnNo !== "—" ? returnNo : "");
+        setSourceDispatchNo(
+          detail.dispatch?.dispatch_number || detail.dispatch?.challan_number || "",
+        );
+        setNarration(`Converted from Purchase Return ${returnNo}`);
+        setRemarks(detail.remarks || "");
+        setRoundOff(0);
+
+        if (detail.warehouse_id) setWarehouseId(String(detail.warehouse_id));
+
+        if (detail.debit_note?.debit_note_id) {
+          showToast("This pending debit note was already converted.", "error");
+          router.replace(
+            `${DEBIT_NOTES_LIST_PATH}/${detail.debit_note.debit_note_id}`,
+          );
+          return;
+        }
+
+        const supplierId = detail.supplier_id || detail.supplier?.supplier_id;
+        if (supplierId) {
+          setVendorId(String(supplierId));
+          try {
+            const supplier = await SupplierService.view(String(supplierId));
+            if (!cancelled) {
+              onVendorChange(String(supplierId), mapSupplierToTransactionFields(supplier));
+            }
+          } catch {
+            /* vendor name from snapshot still usable */
+          }
+        }
+
+        const pendingLines = (detail.lines || []).map((line: any, idx: number) => {
+          const qty = parseFloat(String(line.quantity || "0"));
+          const rate = parseFloat(String(line.rate || "0"));
+          const taxPct = parseFloat(String(line.gst_rate || "0"));
+          const taxable = parseFloat(String(line.taxable_amount || "0"));
+          const gstAmt = parseFloat(String(line.gst_amount || "0"));
+          const lineTotal = parseFloat(String(line.line_total || taxable + gstAmt));
+          return normalizeDebitLine({
+            id: String(line.pending_debit_note_line_id || `pdl-${idx}`),
+            productName: line.description || "Line",
+            returnQty: qty,
+            purchaseReturnQty: qty,
+            eligibleReturnQty: qty,
+            invoiceQty: qty,
+            unitPrice: rate,
+            taxPct,
+            gstApplicable: taxPct > 0,
+            debitAmount: lineTotal,
+            gstAmount: gstAmt,
+            lineAmount: taxable,
+            uom: line.quantity_type || "Unit",
+          });
+        });
+        setLines(pendingLines);
+
+        const eligible = parseFloat(String(detail.eligible_dn_amount || "0"));
+        setOriginalAmount(String(eligible));
+        setAlreadyAdjusted("0");
+
+        setReferencePreview({
+          referenceType: "purchase_invoice",
+          documentDate: returnDateRaw
+            ? new Date(returnDateRaw).toISOString().slice(0, 10)
+            : debitNoteDate,
+          sourceInvoiceId: null,
+          sourceInvoiceNo: returnNo,
+          sourcePoId: null,
+          sourcePoNo: "",
+          sourceGrnNo: "",
+          sourceQcNo: "",
+          sourcePackingNo: "",
+          sourceDispatchNo:
+            detail.dispatch?.dispatch_number || detail.dispatch?.challan_number || "",
+          dispatchStatus: "",
+          vendorId: supplierId ? Number(supplierId) || null : null,
+          vendorName:
+            detail.supplier?.supplier_name ||
+            detail.supplier_name ||
+            "",
+          vendorPhone: "",
+          vendorEmail: "",
+          vendorGstin: "",
+          originalAmount: eligible,
+          taxAmount: parseFloat(String(detail.gst_amount || "0")),
+          alreadyAdjustedAmount: 0,
+          lineItems: pendingLines,
+        } as DebitReferencePreview);
+
+        setDebitNoteNo(peekNextDebitNoteNo());
+      } catch (e: any) {
+        if (!cancelled) {
+          setError(e.message || "Failed to load pending debit note.");
+          showToast(e.message || "Failed to load pending debit note.", "error");
+        }
+      } finally {
+        if (!cancelled) setPendingLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPendingEntitlement, pendingId, isEdit]);
 
   useEffect(() => {
     if (!isPurchaseInvoice || purchaseInvoiceId == null || isEdit) return;
@@ -658,6 +819,28 @@ export default function DebitNoteFormPageClient({
     false,
   );
 
+  const directExtraChargeRows = useMemo(() => {
+    if (!isDirectMode && !isPendingEntitlement) return [];
+    return directExtraCharges
+      .map((c) => {
+        const taxable = roundMoney(parseFloat(c.amount) || 0);
+        const ratePct = parseFloat(c.gstPct) || 0;
+        const gstAmt = roundMoney((taxable * ratePct) / 100);
+        return {
+          ...c,
+          taxable,
+          ratePct,
+          gstAmt,
+          total: roundMoney(taxable + gstAmt),
+        };
+      })
+      .filter((c) => c.taxable > 0 || c.description.trim());
+  }, [isDirectMode, isPendingEntitlement, directExtraCharges]);
+
+  const directExtraTaxable = directExtraChargeRows.reduce((s, c) => s + c.taxable, 0);
+  const directExtraGst = directExtraChargeRows.reduce((s, c) => s + c.gstAmt, 0);
+  const directExtraTotal = directExtraChargeRows.reduce((s, c) => s + c.total, 0);
+
   const againstLines = lines.filter(
     (l) => l.productName && (l.returnQty > 0 || l.debitAmount > 0),
   );
@@ -673,20 +856,30 @@ export default function DebitNoteFormPageClient({
   const qtyLinesGst = Math.max(0, qtyLinesTotal - qtyLinesTaxable);
 
   const displayTaxable = usesQuantityLines
-    ? roundMoney(qtyLinesTaxable)
-    : particularTotals.basicAmount;
+    ? roundMoney(qtyLinesTaxable + (isPendingEntitlement ? directExtraTaxable : 0))
+    : roundMoney(particularTotals.basicAmount + directExtraTaxable);
+  const directMainGst = particularTotals.gstAmount;
+  const combinedDirectGst = roundMoney(directMainGst + directExtraGst);
+  const pendingCombinedGst = roundMoney(qtyLinesGst + directExtraGst);
   const cgstDisplay = usesQuantityLines
-    ? roundMoney(qtyLinesGst / 2)
-    : particularTotals.cgst;
+    ? roundMoney((isPendingEntitlement ? pendingCombinedGst : qtyLinesGst) / 2)
+    : roundMoney(combinedDirectGst / 2);
   const sgstDisplay = usesQuantityLines
-    ? roundMoney(qtyLinesGst - qtyLinesGst / 2)
-    : particularTotals.sgst;
+    ? roundMoney(
+        (isPendingEntitlement ? pendingCombinedGst : qtyLinesGst) -
+          (isPendingEntitlement ? pendingCombinedGst : qtyLinesGst) / 2,
+      )
+    : roundMoney(combinedDirectGst - combinedDirectGst / 2);
   const igstDisplay = usesQuantityLines ? 0 : particularTotals.igst;
   const totalDebit = Math.max(
     0,
-    (usesQuantityLines ? roundMoney(qtyLinesTotal) : particularTotals.total) + roundOff,
+    (usesQuantityLines
+      ? roundMoney(qtyLinesTotal + (isPendingEntitlement ? directExtraTotal : 0))
+      : roundMoney(particularTotals.total + directExtraTotal)) + roundOff,
   );
-  const showGst = usesQuantityLines ? qtyLinesGst > 0 : gstApplicable;
+  const showGst = usesQuantityLines
+    ? qtyLinesGst > 0 || (isPendingEntitlement && directExtraGst > 0)
+    : gstApplicable || directExtraGst > 0;
   const originalNum = parseFloat(originalAmount) || totalDebit;
   const alreadyAdjustedNumSafe = parseFloat(alreadyAdjusted) || 0;
 
@@ -768,25 +961,49 @@ export default function DebitNoteFormPageClient({
     if (usesQuantityLines) {
       return againstLines;
     }
-    if (particularTotals.total <= 0 && Math.abs(roundOff) < 0.005) return [];
-    const name = particular.trim() || "Adjustment";
-    // Round-off is header-level (round_off_amount) — do not bake into line taxable.
-    return [
-      normalizeDebitLine({
-        ...createEmptyDebitLine(),
-        productName: name,
-        returnQty: particularTotals.qty || 1,
-        unitPrice: particularTotals.rate || particularTotals.basicAmount,
-        taxPct: gstApplicable ? parseFloat(gstPct) || 0 : 0,
-        gstApplicable,
-        debitAmount: particularTotals.basicAmount,
-        gstAmount: particularTotals.gstAmount,
-        lineAmount: particularTotals.total,
-        adjustmentLedgerId: adjustmentLedgerId ?? undefined,
-        adjustmentLedgerName: adjustmentLedgerName || undefined,
-        lineRemarks: narration.trim() || remarks.trim(),
-      }),
-    ];
+    const mainOk = particularTotals.total > 0 || Math.abs(roundOff) >= 0.005;
+    const extras = directExtraChargeRows.filter((c) => c.taxable > 0 && c.description.trim());
+    if (!mainOk && extras.length === 0) return [];
+
+    const out: DebitNoteLine[] = [];
+    if (mainOk && (particularTotals.total > 0 || particular.trim())) {
+      const name = particular.trim() || "Adjustment";
+      out.push(
+        normalizeDebitLine({
+          ...createEmptyDebitLine(),
+          productName: name,
+          returnQty: particularTotals.qty || 1,
+          unitPrice: particularTotals.rate || particularTotals.basicAmount,
+          taxPct: gstApplicable ? parseFloat(gstPct) || 0 : 0,
+          gstApplicable,
+          debitAmount: particularTotals.basicAmount,
+          gstAmount: particularTotals.gstAmount,
+          lineAmount: particularTotals.total,
+          adjustmentLedgerId: adjustmentLedgerId ?? undefined,
+          adjustmentLedgerName: adjustmentLedgerName || undefined,
+          lineRemarks: narration.trim() || remarks.trim(),
+        }),
+      );
+    }
+    for (const c of extras) {
+      out.push(
+        normalizeDebitLine({
+          ...createEmptyDebitLine(),
+          productName: c.description.trim(),
+          returnQty: 1,
+          unitPrice: c.taxable,
+          taxPct: c.ratePct,
+          gstApplicable: c.ratePct > 0,
+          debitAmount: c.taxable,
+          gstAmount: c.gstAmt,
+          lineAmount: c.total,
+          adjustmentLedgerId: c.ledgerId ?? undefined,
+          adjustmentLedgerName: c.ledgerName || undefined,
+          lineRemarks: "Additional charge",
+        }),
+      );
+    }
+    return out;
   };
 
   const buildInput = (status: NoteWorkflowStatus) => {
@@ -866,6 +1083,32 @@ export default function DebitNoteFormPageClient({
       setError("Select a supplier before saving.");
       return false;
     }
+    if (isPendingEntitlement) {
+      if (!(narration || remarks).trim()) {
+        setError("Narration is required.");
+        return false;
+      }
+      if (againstLines.length === 0 || qtyLinesTotal <= 0) {
+        setError("Return product lines are required.");
+        return false;
+      }
+      for (const c of directExtraCharges) {
+        const amt = parseFloat(c.amount) || 0;
+        if (amt <= 0 && !c.description.trim() && !c.ledgerId) continue;
+        if (amt <= 0) continue;
+        if (!c.description.trim()) {
+          setError("Enter a description for each additional charge with an amount.");
+          return false;
+        }
+        if (!c.ledgerId || !isUuid(String(c.ledgerId))) {
+          setError(
+            `Select a ledger for additional charge "${c.description.trim() || "row"}".`,
+          );
+          return false;
+        }
+      }
+      return true;
+    }
     const resolvedWarehouse = referencePreview?.sourceGrnNo
       ? resolveWarehouseFromGrnNo(referencePreview.sourceGrnNo) || warehouseId
       : warehouseId;
@@ -887,13 +1130,30 @@ export default function DebitNoteFormPageClient({
         return false;
       }
     } else {
-      if (!particular.trim()) {
-        setError("Enter a particular / description for the adjustment.");
+      if (!particular.trim() && directExtraTotal <= 0) {
+        setError("Enter a particular / description for the adjustment, or add additional charges.");
         return false;
       }
-      if (particularTotals.total <= 0) {
+      if (particularTotals.total <= 0 && directExtraTotal <= 0) {
+        setError("Enter a valid Qty and Rate for the particular, or add additional charges.");
+        return false;
+      }
+      if (particular.trim() && particularTotals.total <= 0 && directExtraTotal <= 0) {
         setError("Enter a valid Qty and Rate for the particular.");
         return false;
+      }
+    }
+    if (isDirectMode) {
+      for (const c of directExtraChargeRows) {
+        if (c.taxable <= 0) continue;
+        if (!c.description.trim()) {
+          setError("Enter a description for each additional charge.");
+          return false;
+        }
+        if (!c.ledgerId) {
+          setError(`Select a ledger for additional charge "${c.description.trim()}".`);
+          return false;
+        }
       }
     }
     if (isSourceRefMode) {
@@ -911,6 +1171,30 @@ export default function DebitNoteFormPageClient({
       }
     }
     return true;
+  };
+
+  const buildPendingCreatePayload = () => {
+    const extra_charges = directExtraCharges
+      .filter(
+        (c) =>
+          (parseFloat(c.amount) || 0) > 0 &&
+          c.description.trim() &&
+          c.ledgerId &&
+          isUuid(String(c.ledgerId)),
+      )
+      .map((c) => ({
+        description: c.description.trim(),
+        ledger_id: String(c.ledgerId),
+        taxable_amount: parseFloat(c.amount) || 0,
+        gst_rate: parseFloat(c.gstPct) || 0,
+      }));
+    return {
+      dn_date: debitNoteDate,
+      narration: narration.trim() || null,
+      remarks: remarks.trim() || null,
+      round_off_amount: roundOff,
+      extra_charges,
+    };
   };
 
   const [submitApproverOpen, setSubmitApproverOpen] = useState(false);
@@ -936,7 +1220,9 @@ export default function DebitNoteFormPageClient({
         ? qtyTaxable > 0
           ? qtyTaxable
           : taxableFromDebit
-        : particularTotals.basicAmount;
+        : Number(l.debitAmount) > 0
+          ? roundMoney(Number(l.debitAmount))
+          : particularTotals.basicAmount;
 
       return {
         description: l.productName || "Adjustment",
@@ -979,6 +1265,17 @@ export default function DebitNoteFormPageClient({
     setSaving(true);
     try {
       if (!validateForm()) return;
+      if (isPendingEntitlement) {
+        const res = await DebitNoteService.createFromPending(
+          pendingId,
+          buildPendingCreatePayload(),
+        );
+        const newId = res?.debit_note_id || res?.id;
+        showToast("Debit note saved as draft", "success");
+        dispatchAccountsDataChanged("debit-notes");
+        router.push(`${DEBIT_NOTES_LIST_PATH}/${newId}`);
+        return;
+      }
       const input = buildInput("draft");
       const payload = mapFormInputToPayload(input);
       if (isEdit && debitNoteId != null) {
@@ -1052,6 +1349,22 @@ export default function DebitNoteFormPageClient({
     setSaving(true);
     try {
       if (!validateForm()) return;
+      if (isPendingEntitlement) {
+        const res = await DebitNoteService.createFromPending(
+          pendingId,
+          buildPendingCreatePayload(),
+        );
+        const targetId = res?.debit_note_id || res?.id;
+        if (!targetId) {
+          setError("Could not determine debit note ID after creation.");
+          return;
+        }
+        await DebitNoteService.post(targetId);
+        dispatchAccountsDataChanged("debit-notes");
+        showToast("Debit note posted successfully", "success");
+        router.push(`${DEBIT_NOTES_LIST_PATH}/${targetId}`);
+        return;
+      }
       const input = buildInput("draft");
       const payload = mapFormInputToPayload(input);
       let targetId: string | number | undefined = debitNoteId;
@@ -1078,18 +1391,20 @@ export default function DebitNoteFormPageClient({
 
   const title = isEdit
     ? "Edit Debit Note"
-    : isFresh
-      ? "Create Debit Note"
-      : isPurchaseInvoice
-        ? "Create Debit Note from Purchase Invoice"
-        : "Create Debit Note from Purchase Return";
+    : isPendingEntitlement
+      ? "Create Debit Note from Purchase Return"
+      : isFresh
+        ? "Create Debit Note"
+        : isPurchaseInvoice
+          ? "Create Debit Note from Purchase Invoice"
+          : "Create Debit Note from Purchase Return";
 
   const [baselineReady, setBaselineReady] = useState(false);
   useEffect(() => {
     setBaselineReady(false);
     const id = window.setTimeout(() => setBaselineReady(true), 350);
     return () => window.clearTimeout(id);
-  }, [debitNoteId, isFresh, returnId, purchaseInvoiceId]);
+  }, [debitNoteId, isFresh, returnId, purchaseInvoiceId, pendingId]);
 
   const formSnapshot = useMemo(
     () => ({
@@ -1109,6 +1424,7 @@ export default function DebitNoteFormPageClient({
       referenceInvoiceId,
       referenceReturnId,
       roundOff,
+      directExtraCharges,
     }),
     [
       debitNoteDate,
@@ -1127,6 +1443,7 @@ export default function DebitNoteFormPageClient({
       referenceInvoiceId,
       referenceReturnId,
       roundOff,
+      directExtraCharges,
     ],
   );
   const isDirty = useFormDirtySnapshot(formSnapshot, { ready: baselineReady });
@@ -1140,9 +1457,13 @@ export default function DebitNoteFormPageClient({
       onDiscard={requestCancel}
       onSaveDraft={saveDraft}
       onSubmitForApproval={submitForApproval}
-      showSubmitForApproval
+      showSubmitForApproval={!isPendingEntitlement}
       onSaveAndPost={postNote}
       saveAndPostLabel="Save & Post"
+      discardDisabled={saving}
+      saveDraftDisabled={saving || pendingLoading}
+      saveAndPostDisabled={saving || pendingLoading}
+      submitForApprovalDisabled={saving}
     />
   );
 
@@ -1182,6 +1503,12 @@ export default function DebitNoteFormPageClient({
   return (
     <>
       <div className="credit-debit-note-form h-full min-h-0 flex flex-col">
+        {pendingLoading ? (
+          <div className="flex flex-1 items-center justify-center gap-2 p-8 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Loading pending debit note…
+          </div>
+        ) : (
         <AccountsFormLayout
           fullWidth
           onBackClick={requestCancel}
@@ -1320,6 +1647,7 @@ export default function DebitNoteFormPageClient({
                     />
                   )}
                 </VoucherNoteField>
+                {/* Purchase Invoice reference fields — hidden while DN against PI is not used
                 {!refControlsLocked && uiRefType === "purchase_invoice" ? (
                   <>
                     <VoucherNoteField label="Reference Document" span={2} width="ref">
@@ -1368,6 +1696,7 @@ export default function DebitNoteFormPageClient({
                     </VoucherNoteField>
                   </>
                 ) : null}
+                */}
                 {!refControlsLocked && uiRefType === "purchase_return" ? (
                   <VoucherNoteField label="Reference Document" span={2} width="ref">
                     <SearchableSelect
@@ -1403,33 +1732,35 @@ export default function DebitNoteFormPageClient({
               <div className="cnz-items !shadow-none !border-0 !rounded-none">
                 {usesQuantityLines ? (
                   <div className="space-y-2">
-                    <div className="px-3 pt-2 max-w-sm">
-                      <p className="text-[11px] font-medium text-muted-foreground mb-1">
-                        Adjustment Ledger <span className="text-red-500">*</span>
-                      </p>
-                      <LedgerHierarchySelect
-                        value={adjustmentLedgerId ? String(adjustmentLedgerId) : null}
-                        onChange={(l) => {
-                          setAdjustmentLedgerId(l.ledgerId);
-                          setAdjustmentLedgerName(l.ledgerName);
-                        }}
-                        fallbackLabel={adjustmentLedgerName}
-                        placeholder="Select adjustment ledger"
-                        disabled={saving}
-                        className="h-8 w-full text-left font-normal"
-                        ledgerFilter={(l) => l.allowManualPosting === true}
-                      />
-                    </div>
+                    {!isPendingEntitlement ? (
+                      <div className="px-3 pt-2 max-w-sm">
+                        <p className="text-[11px] font-medium text-muted-foreground mb-1">
+                          Adjustment Ledger <span className="text-red-500">*</span>
+                        </p>
+                        <LedgerHierarchySelect
+                          value={adjustmentLedgerId ? String(adjustmentLedgerId) : null}
+                          onChange={(l) => {
+                            setAdjustmentLedgerId(l.ledgerId);
+                            setAdjustmentLedgerName(l.ledgerName);
+                          }}
+                          fallbackLabel={adjustmentLedgerName}
+                          placeholder="Select adjustment ledger"
+                          disabled={saving}
+                          className="h-8 w-full text-left font-normal"
+                          ledgerFilter={(l) => l.allowManualPosting === true}
+                        />
+                      </div>
+                    ) : null}
                     <NoteQuantityLinesTable
                       lines={quantityLineViews}
-                      qtyLocked={isReturnRefMode}
+                      qtyLocked={isReturnRefMode || isPendingEntitlement}
                       currentQtyLabel="Qty"
                       onCurrentQtyChange={handleQuantityLineQtyChange}
                       emptyMessage={quantityLinesEmptyMessage}
                     />
                   </div>
                 ) : (
-                  <div className="px-3 py-2">
+                  <div className="px-3 py-2 space-y-3">
                     <NoteParticularsTable
                       particular={particular}
                       onParticularChange={setParticular}
@@ -1451,8 +1782,354 @@ export default function DebitNoteFormPageClient({
                       switchId="dn-gst-applicable"
                       ledgerFilter={(l) => l.allowManualPosting === true}
                     />
+
+                    {isDirectMode ? (
+                      <div className="border rounded-md overflow-hidden">
+                        <div className="flex items-center justify-between px-2.5 py-1.5 bg-muted/30 border-b">
+                          <p className="text-[11px] font-semibold text-foreground">
+                            Additional Charges
+                          </p>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-[11px]"
+                            disabled={!chargesEditable}
+                            onClick={() =>
+                              setDirectExtraCharges((prev) => [
+                                ...prev,
+                                {
+                                  id: newDirectExtraChargeId(),
+                                  description: "",
+                                  ledgerId: null,
+                                  ledgerName: "",
+                                  amount: "",
+                                  gstPct: "0",
+                                },
+                              ])
+                            }
+                          >
+                            + Add charge
+                          </Button>
+                        </div>
+                        {directExtraCharges.length === 0 ? (
+                          <p className="px-2.5 py-2 text-[11px] text-muted-foreground">
+                            Optional freight, packing, or other charges. These post as extra debit note lines.
+                          </p>
+                        ) : (
+                          <table className="w-full text-[11px]">
+                            <thead>
+                              <tr className="border-b bg-muted/20">
+                                <th className="p-1.5 text-left font-medium">Description</th>
+                                <th className="p-1.5 text-left font-medium">Ledger</th>
+                                <th className="p-1.5 text-right font-medium w-24">Taxable</th>
+                                <th className="p-1.5 text-right font-medium w-16">GST %</th>
+                                <th className="p-1.5 text-right font-medium w-10" />
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {directExtraCharges.map((row) => (
+                                <tr key={row.id} className="border-b last:border-0">
+                                  <td className="p-1.5">
+                                    <Input
+                                      className="h-7 text-xs"
+                                      value={row.description}
+                                      placeholder="e.g. Freight"
+                                      disabled={!chargesEditable}
+                                      onChange={(e) =>
+                                        setDirectExtraCharges((prev) =>
+                                          prev.map((c) =>
+                                            c.id === row.id
+                                              ? { ...c, description: e.target.value }
+                                              : c,
+                                          ),
+                                        )
+                                      }
+                                    />
+                                  </td>
+                                  <td className="p-1.5 min-w-[160px]">
+                                    <LedgerHierarchySelect
+                                      value={row.ledgerId}
+                                      onChange={(l) =>
+                                        setDirectExtraCharges((prev) =>
+                                          prev.map((c) =>
+                                            c.id === row.id
+                                              ? {
+                                                  ...c,
+                                                  ledgerId: l.ledgerId,
+                                                  ledgerName: l.ledgerName,
+                                                }
+                                              : c,
+                                          ),
+                                        )
+                                      }
+                                      fallbackLabel={row.ledgerName}
+                                      placeholder="Select ledger"
+                                      disabled={!chargesEditable}
+                                      className="h-7 w-full text-left font-normal text-xs"
+                                      ledgerFilter={(l) => l.allowManualPosting === true}
+                                    />
+                                  </td>
+                                  <td className="p-1.5">
+                                    <Input
+                                      className="h-7 text-xs text-right"
+                                      value={row.amount}
+                                      placeholder="0.00"
+                                      disabled={!chargesEditable}
+                                      onChange={(e) =>
+                                        setDirectExtraCharges((prev) =>
+                                          prev.map((c) =>
+                                            c.id === row.id
+                                              ? { ...c, amount: e.target.value }
+                                              : c,
+                                          ),
+                                        )
+                                      }
+                                    />
+                                  </td>
+                                  <td className="p-1.5">
+                                    <Input
+                                      className="h-7 text-xs text-right"
+                                      value={row.gstPct}
+                                      placeholder="0"
+                                      disabled={!chargesEditable}
+                                      onChange={(e) =>
+                                        setDirectExtraCharges((prev) =>
+                                          prev.map((c) =>
+                                            c.id === row.id
+                                              ? { ...c, gstPct: e.target.value }
+                                              : c,
+                                          ),
+                                        )
+                                      }
+                                    />
+                                  </td>
+                                  <td className="p-1.5 text-right">
+                                    <button
+                                      type="button"
+                                      className="text-[11px] text-red-600 hover:underline"
+                                      disabled={!chargesEditable}
+                                      onClick={() =>
+                                        setDirectExtraCharges((prev) =>
+                                          prev.filter((c) => c.id !== row.id),
+                                        )
+                                      }
+                                    >
+                                      Remove
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        )}
+                      </div>
+                    ) : null}
                   </div>
                 )}
+
+                {isPendingEntitlement ? (
+                  <div className="px-3 pb-3 space-y-3">
+                    {(pendingDetail?.purchase_return_additional_charges || []).length > 0 ? (
+                      <div className="border rounded-md overflow-hidden">
+                        <div className="px-2.5 py-1.5 bg-muted/30 border-b">
+                          <p className="text-[11px] font-semibold text-foreground">
+                            Purchase Return Additional Charges
+                          </p>
+                          <p className="text-[10px] text-muted-foreground">
+                            Charges from the purchase return (display only — not posted).
+                          </p>
+                        </div>
+                        <table className="w-full text-[11px]">
+                          <thead>
+                            <tr className="border-b bg-muted/20">
+                              <th className="p-1.5 text-left font-medium">Charge</th>
+                              <th className="p-1.5 text-right font-medium w-28">Original</th>
+                              <th className="p-1.5 text-right font-medium w-28">Remaining</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(pendingDetail.purchase_return_additional_charges || []).map(
+                              (charge: any) => {
+                                const chargeId =
+                                  charge.purchase_return_additional_charge_id || charge.id;
+                                if (!chargeId) return null;
+                                const original = parseFloat(
+                                  String(
+                                    charge.original_total_amount ??
+                                      charge.original_taxable_amount ??
+                                      "0",
+                                  ),
+                                );
+                                const remaining = parseFloat(
+                                  String(
+                                    charge.remaining_amount ??
+                                      charge.original_total_amount ??
+                                      "0",
+                                  ),
+                                );
+                                return (
+                                  <tr key={`pr-display-${chargeId}`} className="border-b last:border-0">
+                                    <td className="p-1.5">
+                                      {charge.description || "Additional charge"}
+                                    </td>
+                                    <td className="p-1.5 text-right tabular-nums">
+                                      {formatINR(original)}
+                                    </td>
+                                    <td className="p-1.5 text-right tabular-nums">
+                                      {formatINR(remaining)}
+                                    </td>
+                                  </tr>
+                                );
+                              },
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : null}
+
+                    <div className="border rounded-md overflow-hidden">
+                      <div className="flex items-center justify-between px-2.5 py-1.5 bg-muted/30 border-b">
+                        <p className="text-[11px] font-semibold text-foreground">
+                          Additional Charges
+                        </p>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-[11px]"
+                          disabled={!chargesEditable}
+                          onClick={() =>
+                            setDirectExtraCharges((prev) => [
+                              ...prev,
+                              {
+                                id: newDirectExtraChargeId(),
+                                description: "",
+                                ledgerId: null,
+                                ledgerName: "",
+                                amount: "",
+                                gstPct: "0",
+                              },
+                            ])
+                          }
+                        >
+                          + Add charge
+                        </Button>
+                      </div>
+                      {directExtraCharges.length === 0 ? (
+                        <p className="px-2.5 py-2 text-[11px] text-muted-foreground">
+                          Optional freight, packing, or other charges. These post as extra debit note lines.
+                        </p>
+                      ) : (
+                        <table className="w-full text-[11px]">
+                          <thead>
+                            <tr className="border-b bg-muted/20">
+                              <th className="p-1.5 text-left font-medium">Description</th>
+                              <th className="p-1.5 text-left font-medium">Ledger</th>
+                              <th className="p-1.5 text-right font-medium w-24">Taxable</th>
+                              <th className="p-1.5 text-right font-medium w-16">GST %</th>
+                              <th className="p-1.5 text-right font-medium w-10" />
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {directExtraCharges.map((row) => (
+                              <tr key={row.id} className="border-b last:border-0">
+                                <td className="p-1.5">
+                                  <Input
+                                    className="h-7 text-xs"
+                                    value={row.description}
+                                    placeholder="e.g. Freight"
+                                    disabled={!chargesEditable}
+                                    onChange={(e) =>
+                                      setDirectExtraCharges((prev) =>
+                                        prev.map((c) =>
+                                          c.id === row.id
+                                            ? { ...c, description: e.target.value }
+                                            : c,
+                                        ),
+                                      )
+                                    }
+                                  />
+                                </td>
+                                <td className="p-1.5 min-w-[160px]">
+                                  <LedgerHierarchySelect
+                                    value={row.ledgerId}
+                                    onChange={(l) =>
+                                      setDirectExtraCharges((prev) =>
+                                        prev.map((c) =>
+                                          c.id === row.id
+                                            ? {
+                                                ...c,
+                                                ledgerId: l.ledgerId,
+                                                ledgerName: l.ledgerName,
+                                              }
+                                            : c,
+                                        ),
+                                      )
+                                    }
+                                    fallbackLabel={row.ledgerName}
+                                    placeholder="Select ledger"
+                                    disabled={!chargesEditable}
+                                    className="h-7 w-full text-left font-normal text-xs"
+                                    ledgerFilter={(l) => l.allowManualPosting === true}
+                                  />
+                                </td>
+                                <td className="p-1.5">
+                                  <Input
+                                    className="h-7 text-xs text-right"
+                                    value={row.amount}
+                                    placeholder="0.00"
+                                    disabled={!chargesEditable}
+                                    onChange={(e) =>
+                                      setDirectExtraCharges((prev) =>
+                                        prev.map((c) =>
+                                          c.id === row.id
+                                            ? { ...c, amount: e.target.value }
+                                            : c,
+                                        ),
+                                      )
+                                    }
+                                  />
+                                </td>
+                                <td className="p-1.5">
+                                  <Input
+                                    className="h-7 text-xs text-right"
+                                    value={row.gstPct}
+                                    placeholder="0"
+                                    disabled={!chargesEditable}
+                                    onChange={(e) =>
+                                      setDirectExtraCharges((prev) =>
+                                        prev.map((c) =>
+                                          c.id === row.id
+                                            ? { ...c, gstPct: e.target.value }
+                                            : c,
+                                        ),
+                                      )
+                                    }
+                                  />
+                                </td>
+                                <td className="p-1.5 text-right">
+                                  <button
+                                    type="button"
+                                    className="text-[11px] text-red-600 hover:underline"
+                                    disabled={!chargesEditable}
+                                    onClick={() =>
+                                      setDirectExtraCharges((prev) =>
+                                        prev.filter((c) => c.id !== row.id),
+                                      )
+                                    }
+                                  >
+                                    Remove
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+                    </div>
+                  </div>
+                ) : null}
               </div>
               <VoucherGstSummaryCard
                 embedded
@@ -1494,6 +2171,7 @@ export default function DebitNoteFormPageClient({
             <AccountingImpactSection docKey="debit_note" compact entryPreview={postingSummary} />
           </div>
         </AccountsFormLayout>
+        )}
       </div>
       <AccountsToast toast={toast} onDismiss={dismissToast} />
       {discardDialog}

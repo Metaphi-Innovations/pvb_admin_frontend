@@ -26,7 +26,7 @@ import { AccountingImpactSection } from "@/components/accounts/AccountingImpactS
 import { AccountsDateInput } from "@/components/accounts/AccountsDateInput";
 import { dispatchAccountsDataChanged } from "@/lib/accounts/accounts-data-events";
 import { AccountsToast, type AccountsToastState } from "@/components/accounts/AccountsToast";
-import { useFY, setStoredFYId } from "@/lib/fy-store";
+import { useFY, setStoredFYId, getStoredFYId } from "@/lib/fy-store";
 import { PurchaseInvoicePageShell } from "./PurchaseInvoicePageShell";
 import { PURCHASE_SOURCE_TYPE_LABELS, type PurchaseSourceType } from "./purchase-invoice-types";
 import {
@@ -198,7 +198,7 @@ export function PurchaseInvoiceGrnForm({
   dismissToast: () => void;
 }) {
   const router = useRouter();
-  const { selectedFY } = useFY();
+  const { selectedFY, isLoading: fyLoading } = useFY();
   const [eligibleGrns, setEligibleGrns] = useState<EligibleGrnDto[]>([]);
   const [loadingGrns, setLoadingGrns] = useState(true);
   const [selectedGrn, setSelectedGrn] = useState<EligibleGrnDto | null>(null);
@@ -352,6 +352,14 @@ export function PurchaseInvoiceGrnForm({
     }
     if (items.length === 0) return setError("This GRN has no invoiceable items.");
 
+    if (!selectedFY.id && !getStoredFYId()) {
+      return setError(
+        fyLoading
+          ? "Financial year is still loading. Please wait a moment and try again."
+          : "Select a financial year from the header before posting.",
+      );
+    }
+
     const additionalCharges: AdditionalChargeInput[] = additionalExpenses
       .filter((e) => e.chargeMasterId && e.amount > 0)
       .map((e) => ({
@@ -365,17 +373,22 @@ export function PurchaseInvoiceGrnForm({
     setSaving(true);
     // Ensure the FY id is in localStorage before axios fires the request.
     if (selectedFY?.id) setStoredFYId(selectedFY.id);
+    const financialYearId = selectedFY.id || getStoredFYId();
     try {
-      const created = await PurchaseInvoiceService.createFromGrn(selectedGrn.grn_id, {
-        purchase_invoice_date: invoiceDate,
-        supplier_invoice_number: vendorInvoiceNo.trim() || undefined,
-        supplier_invoice_date: supplierInvoiceDate || null,
-        due_date: dueDate || null,
-        narration: remarks.trim() || undefined,
-        remarks: remarks.trim() || undefined,
-        additional_charges: additionalCharges,
-        attachment,
-      });
+      const created = await PurchaseInvoiceService.createFromGrn(
+        selectedGrn.grn_id,
+        {
+          purchase_invoice_date: invoiceDate,
+          supplier_invoice_number: vendorInvoiceNo.trim() || undefined,
+          supplier_invoice_date: supplierInvoiceDate || null,
+          due_date: dueDate || null,
+          narration: remarks.trim() || undefined,
+          remarks: remarks.trim() || undefined,
+          additional_charges: additionalCharges,
+          attachment,
+        },
+        { financialYearId },
+      );
       dispatchAccountsDataChanged("purchase-invoices");
       showToast(
         created.already_posted

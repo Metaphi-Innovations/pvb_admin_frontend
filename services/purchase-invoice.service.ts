@@ -556,6 +556,25 @@ function buildMultipartPayload(payload: Record<string, unknown>): FormData {
   return formData;
 }
 
+/** Prefer explicit Working FY UUID; fall back to storage. Never call create APIs without this. */
+function resolveFyHeaderId(explicit?: string | null): string {
+  const id = (explicit?.trim() || getStoredFYId() || "").trim();
+  if (!id) {
+    throw new Error(
+      "Select a financial year from the header before posting.",
+    );
+  }
+  return id;
+}
+
+function multipartFyHeaders(financialYearId: string): Record<string, string | false> {
+  return {
+    "x-financial-year-id": financialYearId,
+    // Let the browser set multipart boundary (instance default is application/json).
+    "Content-Type": false,
+  };
+}
+
 export function mapInvoiceTypeToSource(
   type: PurchaseInvoiceBackendType | string | undefined,
 ): PurchaseSourceType {
@@ -1059,19 +1078,16 @@ export const PurchaseInvoiceService = {
   async createFromGrn(
     grnId: string,
     payload: CreateFromGrnPayload,
+    options?: { financialYearId?: string | null },
   ): Promise<PurchaseInvoiceCreateResult> {
     try {
+      const fyId = resolveFyHeaderId(options?.financialYearId);
       const formData = buildMultipartPayload(payload as Record<string, unknown>);
-      const fyId = getStoredFYId();
       const response = await axiosInstance.post(
         API_ENDPOINTS.ACCOUNTS.PURCHASE_INVOICE.CREATE_FROM_GRN(grnId),
         formData,
         {
-          headers: {
-            // Explicitly carry the FY header — multipart requests can lose it
-            // if the interceptor's header merge is affected by FormData body detection.
-            ...(fyId ? { "x-financial-year-id": fyId } : {}),
-          },
+          headers: multipartFyHeaders(fyId),
         },
       );
       const data = unwrapData(response);
@@ -1086,17 +1102,16 @@ export const PurchaseInvoiceService = {
 
   async createDirectPurchase(
     payload: CreateDirectPurchasePayload,
+    options?: { financialYearId?: string | null },
   ): Promise<PurchaseInvoiceCreateResult> {
     try {
+      const fyId = resolveFyHeaderId(options?.financialYearId);
       const formData = buildMultipartPayload(payload as Record<string, unknown>);
-      const fyId = getStoredFYId();
       const response = await axiosInstance.post(
         API_ENDPOINTS.ACCOUNTS.PURCHASE_INVOICE.CREATE_DIRECT_PURCHASE,
         formData,
         {
-          headers: {
-            ...(fyId ? { "x-financial-year-id": fyId } : {}),
-          },
+          headers: multipartFyHeaders(fyId),
         },
       );
       const data = unwrapData(response);
