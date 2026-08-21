@@ -3,15 +3,16 @@
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
-import { GroupedLedgerSelect } from "@/components/accounts/GroupedLedgerSelect";
+import { LedgerHierarchySelect } from "@/components/accounts/LedgerHierarchySelect";
 import { formatMoney } from "@/lib/accounts/money-format";
 import { cn } from "@/lib/utils";
 
 export interface NoteParticularsTableProps {
   particular: string;
   onParticularChange: (value: string) => void;
-  adjustmentLedgerId: number | null;
-  onAdjustmentLedgerChange: (ledger: { id: number; accountName: string }) => void;
+  adjustmentLedgerId: string | number | null;
+  onAdjustmentLedgerChange: (ledger: { id: any; accountName: string }) => void;
+  adjustmentLedgerName?: string;
   qty: string;
   onQtyChange: (value: string) => void;
   rate: string;
@@ -23,6 +24,8 @@ export interface NoteParticularsTableProps {
   interstate?: boolean;
   disabled?: boolean;
   className?: string;
+  /** Optional filter to restrict which ledgers appear in the dropdown. */
+  ledgerFilter?: (ledger: import("@/services/ledger.service").LedgerDropdownItem) => boolean;
   /** Switch id prefix to avoid duplicate ids when both CN/DN mount (should not). */
   switchId?: string;
 }
@@ -36,6 +39,7 @@ export function NoteParticularsTable({
   onParticularChange,
   adjustmentLedgerId,
   onAdjustmentLedgerChange,
+  adjustmentLedgerName,
   qty,
   onQtyChange,
   rate,
@@ -45,8 +49,9 @@ export function NoteParticularsTable({
   gstApplicable,
   onGstApplicableChange,
   interstate = false,
-  disabled,
+  disabled = false,
   className,
+  ledgerFilter,
   switchId = "note-gst-applicable",
 }: NoteParticularsTableProps) {
   const totals = computeNoteParticularTotals(qty, rate, gstApplicable, gstPct, interstate);
@@ -86,18 +91,19 @@ export function NoteParticularsTable({
               />
             </td>
             <td className="px-2 py-1" style={{ minWidth: 140 }}>
-              <GroupedLedgerSelect
-                value={adjustmentLedgerId}
+              <LedgerHierarchySelect
+                value={adjustmentLedgerId ? String(adjustmentLedgerId) : null}
                 onChange={(ledger) =>
                   onAdjustmentLedgerChange({
-                    id: ledger.id,
-                    accountName: ledger.accountName,
+                    id: ledger.ledgerId,
+                    accountName: ledger.ledgerName,
                   })
                 }
+                fallbackLabel={adjustmentLedgerName}
                 placeholder="Select ledger"
-                required
                 disabled={disabled}
-                compact
+                className="h-[30px] w-full text-left font-normal"
+                ledgerFilter={ledgerFilter}
               />
             </td>
             <td className="px-2 py-1 text-right" style={{ width: 64 }}>
