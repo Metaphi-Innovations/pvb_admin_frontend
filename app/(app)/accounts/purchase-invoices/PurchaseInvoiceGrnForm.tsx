@@ -35,12 +35,8 @@ import {
   type EligibleGrnDto,
   type PrepareGrnInvoiceDto,
 } from "@/services/purchase-invoice.service";
+import { GoodsInvoiceAdditionalChargesEditor } from "@/app/(app)/accounts/invoices/components/GoodsInvoiceAdditionalChargesEditor";
 import {
-  GoodsInvoiceAdditionalChargesEditor,
-  enrichExpensesFromChargeMaster,
-} from "@/app/(app)/accounts/invoices/components/GoodsInvoiceAdditionalChargesEditor";
-import {
-  createEmptyAdditionalExpense,
   calcAdditionalExpenseRow,
   type InvoiceAdditionalExpense,
 } from "@/app/(app)/accounts/invoices/invoice-additional-expenses";
@@ -217,25 +213,8 @@ export function PurchaseInvoiceGrnForm({
 
   function applyPrepared(data: PrepareGrnInvoiceDto, fallback?: EligibleGrnDto | null) {
     setPrepared(data);
-    // Pre-populate charges from PO suggestions
-    const suggested = (data.suggested_additional_charges || []).filter(
-      (c) => c.mapping_ok && c.matched_additional_charge_id,
-    );
-    if (suggested.length > 0) {
-      setAdditionalExpenses(
-        suggested.map((c) => ({
-          ...createEmptyAdditionalExpense("purchase_order" as any),
-          expenseHead: c.charge_name as any,
-          chargeMasterId: c.matched_additional_charge_id!,
-          amount: Number(c.amount || 0),
-          gstApplicable: c.gst_percent != null && Number(c.gst_percent) > 0,
-          gstPct: c.gst_percent != null ? Number(c.gst_percent) : 0,
-          origin: "sales_order" as const,
-        })),
-      );
-    } else {
-      setAdditionalExpenses([]);
-    }
+    // PO charges stay read-only; editable invoice charges start empty (CN/DN pattern).
+    setAdditionalExpenses([]);
     setVendorInvoiceNo(data.supplier_invoice.supplier_invoice_number || "");
     setSupplierInvoiceDate(formatDateOnly(data.supplier_invoice.supplier_invoice_date));
     setInvoiceDate(formatDateOnly(data.grn.grn_date) || new Date().toISOString().slice(0, 10));
@@ -340,7 +319,8 @@ export function PurchaseInvoiceGrnForm({
   const grandTotal = subtotal + totalGst + chargeTotal;
   const roundOff = Math.round(grandTotal) - grandTotal;
   const finalTotal = Math.round(grandTotal);
-  const unmappedCharges = (prepared?.suggested_additional_charges || []).filter((c) => !c.mapping_ok);
+  const poSuggestedCharges = prepared?.suggested_additional_charges || [];
+  const unmappedCharges = poSuggestedCharges.filter((c) => !c.mapping_ok);
   const supplierInvoiceLocked = Boolean(prepared?.supplier_invoice.supplier_invoice_number);
 
   const doSave = async () => {
@@ -365,7 +345,7 @@ export function PurchaseInvoiceGrnForm({
       .map((e) => ({
         additional_charge_id: e.chargeMasterId!,
         amount: e.amount,
-        charge_source: (e.origin === "sales_order" ? "ORDER" : "INVOICE") as "ORDER" | "INVOICE",
+        charge_source: "INVOICE" as const,
         gst_applicable: e.gstApplicable,
         gst_rate: e.gstApplicable ? e.gstPct : undefined,
       }));
@@ -384,7 +364,7 @@ export function PurchaseInvoiceGrnForm({
           due_date: dueDate || null,
           narration: remarks.trim() || undefined,
           remarks: remarks.trim() || undefined,
-          additional_charges: additionalCharges,
+          additional_charges: additionalCharges.length > 0 ? additionalCharges : undefined,
           attachment,
         },
         { financialYearId },
@@ -622,13 +602,58 @@ export function PurchaseInvoiceGrnForm({
                 </div>
               </Section>
 
-              <Section title="Additional Charges">
-                {unmappedCharges.length > 0 && (
-                  <p className="text-xs text-amber-700 mb-2">
-                    The following PO charges are not in Additional Charge Master and were skipped:{" "}
-                    {unmappedCharges.map((c) => c.charge_name).join(", ")}
+              {poSuggestedCharges.length > 0 ? (
+                <Section title="PO Additional Charges">
+                  <p className="text-[10px] text-muted-foreground -mt-1">
+                    Charges from the purchase order (display only — not posted).
                   </p>
-                )}
+                  <div className="border rounded-md overflow-hidden">
+                    <table className="w-full text-[11px]">
+                      <thead>
+                        <tr className="border-b bg-muted/20">
+                          <th className="p-1.5 text-left font-medium">Charge</th>
+                          <th className="p-1.5 text-right font-medium w-28">Amount</th>
+                          <th className="p-1.5 text-right font-medium w-20">GST %</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {poSuggestedCharges.map((charge, idx) => (
+                          <tr
+                            key={`po-charge-${charge.matched_additional_charge_id || charge.charge_name}-${idx}`}
+                            className="border-b last:border-0"
+                          >
+                            <td className="p-1.5">
+                              {charge.charge_name}
+                              {!charge.mapping_ok ? (
+                                <span className="ml-1 text-[10px] text-amber-700">(unmapped)</span>
+                              ) : null}
+                            </td>
+                            <td className="p-1.5 text-right tabular-nums">
+                              {formatMoney(Number(charge.amount || 0))}
+                            </td>
+                            <td className="p-1.5 text-right tabular-nums">
+                              {charge.gst_percent != null && Number(charge.gst_percent) > 0
+                                ? Number(charge.gst_percent)
+                                : "—"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {unmappedCharges.length > 0 ? (
+                    <p className="text-xs text-amber-700">
+                      The following PO charges are not in Additional Charge Master:{" "}
+                      {unmappedCharges.map((c) => c.charge_name).join(", ")}
+                    </p>
+                  ) : null}
+                </Section>
+              ) : null}
+
+              <Section title="Additional Charges">
+                <p className="text-[10px] text-muted-foreground -mt-1">
+                  Optional freight, packing, or other charges. These post on the purchase invoice.
+                </p>
                 <GoodsInvoiceAdditionalChargesEditor
                   expenses={additionalExpenses}
                   onChange={handleExpensesChange}
