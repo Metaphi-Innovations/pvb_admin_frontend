@@ -85,6 +85,7 @@ export type CreateFromGrnPayload = {
   due_date?: string | null;
   narration?: string | null;
   remarks?: string | null;
+  round_off_amount?: number | string | null;
   additional_charges?: AdditionalChargeInput[];
   attachment?: File | null;
 };

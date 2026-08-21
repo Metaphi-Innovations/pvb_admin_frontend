@@ -24,6 +24,7 @@ import { purchaseInvoiceImpactResolved } from "@/lib/accounts/resolved-impact-pr
 import { LedgerImpactPreview } from "@/components/accounts/LedgerImpactPreview";
 import { AccountingImpactSection } from "@/components/accounts/AccountingImpactSection";
 import { AccountsDateInput } from "@/components/accounts/AccountsDateInput";
+import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
 import { dispatchAccountsDataChanged } from "@/lib/accounts/accounts-data-events";
 import { AccountsToast, type AccountsToastState } from "@/components/accounts/AccountsToast";
 import { useFY, setStoredFYId, getStoredFYId } from "@/lib/fy-store";
@@ -208,6 +209,7 @@ export function PurchaseInvoiceGrnForm({
   const [remarks, setRemarks] = useState("");
   const [attachment, setAttachment] = useState<File | null>(null);
   const [additionalExpenses, setAdditionalExpenses] = useState<InvoiceAdditionalExpense[]>([]);
+  const [roundOff, setRoundOff] = useState(0);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -215,6 +217,7 @@ export function PurchaseInvoiceGrnForm({
     setPrepared(data);
     // PO charges stay read-only; editable invoice charges start empty (CN/DN pattern).
     setAdditionalExpenses([]);
+    setRoundOff(0);
     setVendorInvoiceNo(data.supplier_invoice.supplier_invoice_number || "");
     setSupplierInvoiceDate(formatDateOnly(data.supplier_invoice.supplier_invoice_date));
     setInvoiceDate(formatDateOnly(data.grn.grn_date) || new Date().toISOString().slice(0, 10));
@@ -317,8 +320,7 @@ export function PurchaseInvoiceGrnForm({
     return s + (calc.totalAmount > 0 ? calc.totalAmount : 0);
   }, 0);
   const grandTotal = subtotal + totalGst + chargeTotal;
-  const roundOff = Math.round(grandTotal) - grandTotal;
-  const finalTotal = Math.round(grandTotal);
+  const finalTotal = grandTotal + roundOff;
   const poSuggestedCharges = prepared?.suggested_additional_charges || [];
   const unmappedCharges = poSuggestedCharges.filter((c) => !c.mapping_ok);
   const supplierInvoiceLocked = Boolean(prepared?.supplier_invoice.supplier_invoice_number);
@@ -365,6 +367,7 @@ export function PurchaseInvoiceGrnForm({
           narration: remarks.trim() || undefined,
           remarks: remarks.trim() || undefined,
           additional_charges: additionalCharges.length > 0 ? additionalCharges : undefined,
+          round_off_amount: roundOff,
           attachment,
         },
         { financialYearId },
@@ -395,8 +398,9 @@ export function PurchaseInvoiceGrnForm({
       invoiceDate,
       vendorInvoiceNo,
       remarks,
+      roundOff,
     }),
-    [selectedGrn?.grn_id, invoiceDate, vendorInvoiceNo, remarks],
+    [selectedGrn?.grn_id, invoiceDate, vendorInvoiceNo, remarks, roundOff],
   );
   const isDirty = useFormDirtySnapshot(formSnapshot, { ready: baselineReady });
   const { requestCancel, discardDialog } = useTransactionFormCancel({
@@ -453,6 +457,7 @@ export function PurchaseInvoiceGrnForm({
                     setDueDate("");
                     setAttachment(null);
                     setAdditionalExpenses([]);
+                    setRoundOff(0);
                   }}
                 >
                   Change GRN
@@ -679,12 +684,15 @@ export function PurchaseInvoiceGrnForm({
                         <span className="tabular-nums">{formatMoney(chargeTotal)}</span>
                       </div>
                     )}
-                    {Math.abs(roundOff) > 0.001 && (
-                      <div className="flex justify-between text-muted-foreground">
-                        <span>Round Off</span>
-                        <span className="tabular-nums">{formatMoney(roundOff)}</span>
-                      </div>
-                    )}
+                    <div className="flex items-center justify-between gap-3 text-muted-foreground">
+                      <span>Round Off</span>
+                      <AccountsMoneyInput
+                        className="h-7 w-24 text-xs text-right"
+                        value={roundOff}
+                        onChange={setRoundOff}
+                        disabled={saving}
+                      />
+                    </div>
                     <div className="border-t border-border/60 pt-2 mt-1 flex justify-between font-bold">
                       <span>Grand Total</span>
                       <span className="tabular-nums">{formatMoney(finalTotal)}</span>
