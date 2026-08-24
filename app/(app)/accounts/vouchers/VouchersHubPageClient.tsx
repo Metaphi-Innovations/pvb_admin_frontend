@@ -12,6 +12,7 @@ import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { VOUCHER_TYPE_LABELS, type VoucherTypeCode } from "../masters/masters-data";
 import { VoucherListClient } from "./components/VoucherListClient";
 import { ReceiptVoucherListClient } from "./receipt/ReceiptVoucherListClient";
+import { PaymentVoucherListClient } from "./payment/PaymentVoucherListClient";
 import { voucherTypeToUrl, parseVoucherTypeParam } from "./voucher-routes";
 
 const VoucherNewEntry = dynamic(
@@ -85,6 +86,8 @@ export default function VouchersHubPageClient() {
     >
       {activeTab === "receipt" ? (
         <ReceiptVoucherListClient />
+      ) : activeTab === "payment" ? (
+        <PaymentVoucherListClient />
       ) : (
         <VoucherListClient voucherType={activeTab} embedded />
       )}
