@@ -1,17 +1,15 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { StandardVoucherForm } from "@/components/accounts/voucher-form/StandardVoucherForm";
-import { JOURNAL_VOUCHER_HREF } from "@/lib/accounts/accounts-nav";
+import { JournalVoucherForm } from "./JournalVoucherForm";
+import { JOURNAL_LIST_PATH } from "./journal-voucher-utils";
 
 export default function JournalEntryPageClient() {
   const router = useRouter();
 
   return (
-    <StandardVoucherForm
-      voucherType="journal"
-      cancelHref={JOURNAL_VOUCHER_HREF}
-      onDone={() => router.push(JOURNAL_VOUCHER_HREF)}
+    <JournalVoucherForm
+      onDone={() => router.push(JOURNAL_LIST_PATH)}
     />
   );
 }

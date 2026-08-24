@@ -1,9 +1,6 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import { createLazyClientPage } from "@/lib/createLazyClientPage";
-
-const JournalListPageClient = createLazyClientPage(() => import("./JournalListPageClient"));
-
+/** Dedicated journal list URL redirects to the vouchers hub Journal tab (API-backed). */
 export default function JournalVoucherPage() {
-  return <JournalListPageClient />;
+  redirect("/accounts/vouchers?tab=journal");
 }

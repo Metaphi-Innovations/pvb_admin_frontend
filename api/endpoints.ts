@@ -641,6 +641,20 @@ export const API_ENDPOINTS = {
       CANCEL: (id: string) => `/accounts/payment-voucher/${id}/cancel`,
       REVERSE: (id: string) => `/accounts/payment-voucher/${id}/reverse`,
     },
+    JOURNAL_VOUCHER: {
+      CONFIG: "/accounts/journal-voucher/config",
+      ELIGIBLE_LEDGERS: "/accounts/journal-voucher/eligible-ledgers",
+      LIST: "/accounts/journal-voucher",
+      CREATE: "/accounts/journal-voucher",
+      GET_BY_ID: (id: string) => `/accounts/journal-voucher/${id}`,
+      UPDATE: (id: string) => `/accounts/journal-voucher/${id}`,
+      SUBMIT: (id: string) => `/accounts/journal-voucher/${id}/submit`,
+      APPROVE: (id: string) => `/accounts/journal-voucher/${id}/approve`,
+      REJECT: (id: string) => `/accounts/journal-voucher/${id}/reject`,
+      POST: (id: string) => `/accounts/journal-voucher/${id}/post`,
+      CANCEL: (id: string) => `/accounts/journal-voucher/${id}/cancel`,
+      REVERSE: (id: string) => `/accounts/journal-voucher/${id}/reverse`,
+    },
   },
   INVOICE_EXTRACTION: {
     EXTRACT: "/invoice-extraction/extract"
