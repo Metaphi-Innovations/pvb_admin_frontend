@@ -15,6 +15,7 @@ import {
   IndianRupee,
   FileText,
   Package,
+  Download,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -32,6 +33,7 @@ import {
   canCancelTransfer,
   canDownloadNote,
   canGeneratePackingList,
+  canDownloadPackingList,
 } from "../stock-transfer-data";
 import { formatFulfillmentStatus } from "@/app/(app)/sales/orders/orders-data";
 import { getProductById, calculateOrderTotalsSummary } from "@/app/(app)/sales/orders/orders-data";
@@ -42,6 +44,8 @@ import {
   useUpdateStockTransferStatus,
 } from "@/hooks/sales/use-stock-transfers";
 import { StockTransferService } from "@/services/stock-transfer.service";
+import { openPackingListPdfById } from "@/app/(app)/sales/orders/pl-pdf/packingListPdfGenerator";
+import { PackingListDownloadDialog, type PackingListDownloadOption } from "@/app/(app)/sales/shared/PackingListDownloadDialog";
 
 function transferStatusVariant(status: TransferStatus): "active" | "inactive" | "draft" | "blocked" | "neutral" {
   if (status === "approved" || status === "confirmed" || status === "received") return "active";
@@ -58,6 +62,8 @@ export default function ViewStockTransferPage() {
   const [activeTab, setActiveTab] = useState("overview");
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
   const [cancelOpen, setCancelOpen] = useState(false);
+  const [plDownloadOpen, setPlDownloadOpen] = useState(false);
+  const [plDownloadOptions, setPlDownloadOptions] = useState<PackingListDownloadOption[]>([]);
 
   const { data: transfer, isLoading, isError, refetch } = useStockTransfer(id);
   const cancelMutation = useCancelStockTransfer();
@@ -133,6 +139,36 @@ export default function ViewStockTransferPage() {
       onClick: () => router.push(`/sales/stock-transfer/${transfer.id}/packing-list/new`),
     });
   }
+  quickActions.push({
+    label: "Download Packing List",
+    icon: Download,
+    disabled: !canDownloadPackingList(transfer),
+    onClick: () => {
+      const opts: PackingListDownloadOption[] =
+        transfer.packingLists && transfer.packingLists.length > 0
+          ? transfer.packingLists
+          : transfer.packingListId
+            ? [
+                {
+                  packingListId: String(transfer.packingListId),
+                  packingNumber: transfer.packingListNumber || String(transfer.packingListId),
+                },
+              ]
+            : [];
+      if (opts.length === 1) {
+        void openPackingListPdfById(opts[0].packingListId).catch((e: unknown) => {
+          const message =
+            e instanceof Error && e.message
+              ? e.message
+              : "Failed to download Packing List.";
+          window.alert(message);
+        });
+        return;
+      }
+      setPlDownloadOptions(opts);
+      setPlDownloadOpen(true);
+    },
+  });
   if (canCancelTransfer(transfer)) {
     quickActions.push({
       label: "Cancel Transfer",
@@ -373,6 +409,24 @@ export default function ViewStockTransferPage() {
         onClose={() => setCancelOpen(false)}
         onConfirm={handleCancelConfirm}
         isLoading={cancelMutation.isPending}
+      />
+
+      <PackingListDownloadDialog
+        open={plDownloadOpen}
+        onOpenChange={setPlDownloadOpen}
+        options={plDownloadOptions}
+        onDownload={async (opt) => {
+          try {
+            await openPackingListPdfById(opt.packingListId);
+            setPlDownloadOpen(false);
+          } catch (e: unknown) {
+            const message =
+              e instanceof Error && e.message
+                ? e.message
+                : "Failed to download Packing List.";
+            window.alert(message);
+          }
+        }}
       />
 
       {toast && (

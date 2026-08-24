@@ -14,6 +14,33 @@ import {
 } from "@/lib/procurement/procurement-line-utils";
 import type { POSummary, PurchaseOrder } from "../purchase-orders/po-data";
 import type { PurchaseReturn, PurchaseReturnItem } from "./purchase-return-data";
+import { resolveAvailableReturnBaseQty } from "./purchase-return-utils";
+
+export function previewReturnLineTax(item: PurchaseReturnItem) {
+  const qty =
+    item.returnQty > 0 ? item.returnQty : resolveAvailableReturnBaseQty(item);
+  if (qty <= 0 || item.unitPrice <= 0) {
+    return {
+      grossAmount: 0,
+      taxableValue: 0,
+      cgstAmount: 0,
+      sgstAmount: 0,
+      igstAmount: 0,
+      taxAmount: 0,
+      netAmount: 0,
+    };
+  }
+  return calcLineAmounts({
+    orderedQty: qty,
+    unitPrice: item.unitPrice,
+    discountType: "percentage",
+    discountPct: 0,
+    discountFlatAmount: 0,
+    cgstPct: item.cgstPct,
+    sgstPct: item.sgstPct,
+    igstPct: item.igstPct,
+  });
+}
 
 export function resolveTaxSupplyForPO(po: PurchaseOrder): TaxSupplyType {
   const warehouseState = po.state ?? po.shipping?.shipToLocation ?? "";

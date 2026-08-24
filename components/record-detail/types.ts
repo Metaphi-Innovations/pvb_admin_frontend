@@ -27,6 +27,7 @@ export interface RecordSidebarAction {
   icon?: LucideIcon;
   onClick?: () => void;
   variant?: "default" | "primary" | "outline";
+  disabled?: boolean;
   /** Nested dropdown items (e.g. Download Challan variants). */
   children?: Array<{
     label: string;

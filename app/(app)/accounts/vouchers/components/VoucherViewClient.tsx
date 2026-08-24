@@ -16,6 +16,7 @@ import { VoucherEntryClient } from "./VoucherEntryClient";
 import { ReceiptVoucherForm } from "./ReceiptVoucherForm";
 import { PaymentVoucherForm } from "./PaymentVoucherForm";
 import { ContraVoucherForm } from "./ContraVoucherForm";
+import { JournalVoucherForm } from "../journal/JournalVoucherForm";
 import { ensureManualDemoDisplayVouchers } from "@/lib/accounts/bank-recon-display";
 
 interface VoucherViewClientProps {
@@ -93,6 +94,20 @@ export function VoucherViewClient({ voucherId }: VoucherViewClientProps) {
     return (
       <>
         <ContraVoucherForm
+          voucherId={voucherId}
+          readOnly
+          onDone={handleBack}
+          onEdit={editAction}
+        />
+        <VoucherFormToastHost />
+      </>
+    );
+  }
+
+  if (voucher.voucherType === "journal") {
+    return (
+      <>
+        <JournalVoucherForm
           voucherId={voucherId}
           readOnly
           onDone={handleBack}

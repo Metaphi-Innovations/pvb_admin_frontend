@@ -33,6 +33,30 @@ function asNumber(value: unknown): number {
   return 0;
 }
 
+function resolveItemTaxFields(raw: Record<string, unknown>): {
+  gstPct: number;
+  cgstPct: number;
+  sgstPct: number;
+  igstPct: number;
+} {
+  let gstPct = asNumber(raw.gst_percent);
+  let cgstPct = asNumber(raw.cgst_percent);
+  let sgstPct = asNumber(raw.sgst_percent);
+  let igstPct = asNumber(raw.igst_percent);
+
+  const splitTotal = cgstPct + sgstPct + igstPct;
+  if (splitTotal <= 0 && gstPct > 0) {
+    const half = gstPct / 2;
+    cgstPct = half;
+    sgstPct = half;
+    igstPct = 0;
+  } else if (gstPct <= 0 && splitTotal > 0) {
+    gstPct = splitTotal;
+  }
+
+  return { gstPct, cgstPct, sgstPct, igstPct };
+}
+
 function asDateOnly(value: unknown): string {
   const raw = asString(value);
   if (!raw) return "";
@@ -218,6 +242,11 @@ function mapEligibleOrDetailItem(raw: Record<string, unknown>): PurchaseReturnIt
     productId: asString(raw.product_id),
     productCode: asString(raw.product_code),
     productName: asString(raw.product_name),
+    sku:
+      asString(snapshot.sku) ||
+      asString(raw.sku) ||
+      asString(raw.product_sku) ||
+      undefined,
     batchNumber: asString(raw.batch_no),
     grnNo,
     grnId: originGrnId || asString(raw.grn_id),
@@ -260,17 +289,28 @@ function mapEligibleOrDetailItem(raw: Record<string, unknown>): PurchaseReturnIt
     selected,
     lineStatus: balanceQty <= 0 && returnQty <= 0 ? "fully_returned" : "available",
     unitPrice: asNumber(raw.rate),
-    gstPct: asNumber(raw.gst_percent),
-    cgstPct: asNumber(raw.cgst_percent),
-    sgstPct: asNumber(raw.sgst_percent),
-    igstPct: asNumber(raw.igst_percent),
-    grossAmount: asNumber(raw.amount),
-    taxableValue: asNumber(raw.amount),
-    cgstAmount: round2((asNumber(raw.amount) * asNumber(raw.cgst_percent)) / 100),
-    sgstAmount: round2((asNumber(raw.amount) * asNumber(raw.sgst_percent)) / 100),
-    igstAmount: round2((asNumber(raw.amount) * asNumber(raw.igst_percent)) / 100),
-    taxAmount: asNumber(raw.gst_amount),
-    netAmount: round2(asNumber(raw.amount) + asNumber(raw.gst_amount)),
+    ...(() => {
+      const tax = resolveItemTaxFields(raw);
+      const amount = asNumber(raw.amount);
+      const cgstAmount = round2((amount * tax.cgstPct) / 100);
+      const sgstAmount = round2((amount * tax.sgstPct) / 100);
+      const igstAmount = round2((amount * tax.igstPct) / 100);
+      const taxAmount =
+        asNumber(raw.gst_amount) || round2(cgstAmount + sgstAmount + igstAmount);
+      return {
+        gstPct: tax.gstPct,
+        cgstPct: tax.cgstPct,
+        sgstPct: tax.sgstPct,
+        igstPct: tax.igstPct,
+        grossAmount: amount,
+        taxableValue: amount,
+        cgstAmount,
+        sgstAmount,
+        igstAmount,
+        taxAmount,
+        netAmount: round2(amount + taxAmount),
+      };
+    })(),
   };
 }
 

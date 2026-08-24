@@ -34,9 +34,9 @@ import CancelOrderDialog from "./components/CancelOrderDialog";
 import { SalesReturnTab } from "./components/SalesReturnTab";
 import { getSalesReturnRecords } from "./sales-return-data";
 import {
-  openPackingListPdfWindow,
-  downloadPackingListPdfForSalesOrder,
+  openPackingListPdfById,
 } from "./pl-pdf/packingListPdfGenerator";
+import { PackingListDownloadDialog, type PackingListDownloadOption } from "@/app/(app)/sales/shared/PackingListDownloadDialog";
 import {
   type SalesOrder,
   type OrderStatus,
@@ -46,6 +46,7 @@ import {
   canSplitOrder,
   canCancelOrder,
   canGeneratePackingList,
+  canDownloadPackingList,
   hydrateOrderLineItems,
   FULFILLMENT_STATUS_OPTIONS,
 } from "./orders-data";
@@ -109,6 +110,8 @@ export default function SalesOrdersPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
+  const [plDownloadOpen, setPlDownloadOpen] = useState(false);
+  const [plDownloadOptions, setPlDownloadOptions] = useState<PackingListDownloadOption[]>([]);
   const [salesReturnCount, setSalesReturnCount] = useState(0);
   const [cancelOrder, setCancelOrder] = useState<SalesOrder | null>(null);
 
@@ -378,6 +381,7 @@ export default function SalesOrdersPage() {
         const splittable = canSplitOrder(hydrated);
         const cancellable = canCancelOrder(hydrated);
         const packingAllowed = canGeneratePackingList(hydrated);
+        const packingDownloadAllowed = canDownloadPackingList(hydrated);
 
         return isApprovalTab ? (
           <button
@@ -442,20 +446,43 @@ export default function SalesOrdersPage() {
               </button>
               <button
                 type="button"
-                onClick={async () => {
-                  try {
-                    await downloadPackingListPdfForSalesOrder(String(row.id));
-                    setToast({ msg: "Packing List ready to download.", type: "success" });
-                  } catch (e: unknown) {
-                    console.error("Packing List download error", e);
-                    const message =
-                      e instanceof Error && e.message
-                        ? e.message
-                        : "Failed to download Packing List.";
-                    setToast({ msg: message, type: "error" });
+                disabled={!packingDownloadAllowed}
+                onClick={() => {
+                  const opts: PackingListDownloadOption[] =
+                    (hydrated.packingLists && hydrated.packingLists.length > 0
+                      ? hydrated.packingLists
+                      : hydrated.packingListId
+                        ? [
+                            {
+                              packingListId: String(hydrated.packingListId),
+                              packingNumber: hydrated.packingListNumber || String(hydrated.packingListId),
+                            },
+                          ]
+                        : []);
+                  if (opts.length === 1) {
+                    void (async () => {
+                      try {
+                        await openPackingListPdfById(opts[0].packingListId);
+                        setToast({ msg: "Packing List ready to download.", type: "success" });
+                      } catch (e: unknown) {
+                        const message =
+                          e instanceof Error && e.message
+                            ? e.message
+                            : "Failed to download Packing List.";
+                        setToast({ msg: message, type: "error" });
+                      }
+                    })();
+                    return;
                   }
+                  setPlDownloadOptions(opts);
+                  setPlDownloadOpen(true);
                 }}
-                className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted/60 transition-colors rounded-sm"
+                className={cn(
+                  "flex items-center gap-2 w-full px-2 py-1.5 text-xs transition-colors rounded-sm",
+                  !packingDownloadAllowed
+                    ? "text-muted-foreground/50 cursor-not-allowed"
+                    : "text-foreground hover:bg-muted/60"
+                )}
               >
                 <Download className="w-3.5 h-3.5 mr-2" /> Download Packing List
               </button>
@@ -560,6 +587,25 @@ export default function SalesOrdersPage() {
           onSuccess={handleCancelSuccess}
         />
       )}
+
+      <PackingListDownloadDialog
+        open={plDownloadOpen}
+        onOpenChange={setPlDownloadOpen}
+        options={plDownloadOptions}
+        onDownload={async (opt) => {
+          try {
+            await openPackingListPdfById(opt.packingListId);
+            setPlDownloadOpen(false);
+            setToast({ msg: "Packing List ready to download.", type: "success" });
+          } catch (e: unknown) {
+            const message =
+              e instanceof Error && e.message
+                ? e.message
+                : "Failed to download Packing List.";
+            setToast({ msg: message, type: "error" });
+          }
+        }}
+      />
 
       {toast && (
         <div
