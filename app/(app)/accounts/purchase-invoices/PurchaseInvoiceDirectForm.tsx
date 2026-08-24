@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, CheckCircle2 } from "lucide-react";
+import { AlertCircle, CheckCircle2, Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,7 +15,7 @@ import { useWarehousesDropdown } from "@/hooks/masters/use-warehouse-master";
 import { useHsnDropdown } from "@/hooks/masters/use-hsn";
 import { cn } from "@/lib/utils";
 import { PurchaseInvoiceService, type AdditionalChargeInput, type CreateDirectPurchasePayload } from "@/services/purchase-invoice.service";
-import { useFY, setStoredFYId } from "@/lib/fy-store";
+import { useFY, setStoredFYId, getStoredFYId } from "@/lib/fy-store";
 import {
   GoodsInvoiceAdditionalChargesEditor,
 } from "@/app/(app)/accounts/invoices/components/GoodsInvoiceAdditionalChargesEditor";
@@ -60,7 +60,7 @@ export function PurchaseInvoiceDirectForm({
   showToast: (msg: string) => void;
 }) {
   const router = useRouter();
-  const { selectedFY } = useFY();
+  const { selectedFY, isLoading: fyLoading } = useFY();
   const { data: supplierData } = useSuppliersDropdown();
   const { data: warehouseData } = useWarehousesDropdown();
   const { data: hsnDropdown = [] } = useHsnDropdown();
@@ -203,10 +203,21 @@ export function PurchaseInvoiceDirectForm({
 
   const handlePost = async () => {
     if (!validate()) return;
+
+    if (!selectedFY.id && !getStoredFYId()) {
+      setError(
+        fyLoading
+          ? "Financial year is still loading. Please wait a moment and try again."
+          : "Select a financial year from the header before posting.",
+      );
+      return;
+    }
+
     setSaving(true);
     setError("");
     // Ensure the FY id is in localStorage before axios fires the request.
     if (selectedFY?.id) setStoredFYId(selectedFY.id);
+    const financialYearId = selectedFY.id || getStoredFYId();
     try {
       const additionalCharges: CreateDirectPurchasePayload["additional_charges"] & {} = additionalExpenses
         .filter((e) => e.chargeMasterId && e.amount > 0)
@@ -218,38 +229,41 @@ export function PurchaseInvoiceDirectForm({
           gst_rate: e.gstApplicable ? e.gstPct : undefined,
         }));
 
-      const created = await PurchaseInvoiceService.createDirectPurchase({
-        purchase_invoice_date: invoiceDate,
-        supplier_invoice_number: vendorInvoiceNo.trim(),
-        supplier_invoice_date: invoiceDate,
-        due_date: dueDate || null,
-        warehouse_id: warehouseId,
-        supplier_id: supplierId,
-        narration: narration.trim() || undefined,
-        remarks: narration.trim() || undefined,
-        round_off_amount: roundingAdjustment,
-        attachment,
-        additional_charges: additionalCharges.length > 0 ? additionalCharges : undefined,
-        items: lines.map((line) => {
-          const expenseLedgerId = selectedLedgerId(line.expenseLedgerId);
-          if (!expenseLedgerId) {
-            throw new Error(`Ledger UUID missing for "${line.description}".`);
-          }
-          return {
-            item_type: purchaseNature === "service" ? ("SERVICE" as const) : ("EXPENSE" as const),
-            expense_ledger_id: expenseLedgerId,
-            expense_description: line.description.trim(),
-            sac_id: purchaseNature === "service" ? line.sacId || null : null,
-            hsn_id: purchaseNature === "service" ? null : line.hsnId || null,
-            quantity: line.quantity || 1,
-            quantity_type: line.uqc || "NOS",
-            rate: line.rate || line.taxableAmount,
-            gst_rate: line.gstRate,
-            is_input_credit_eligible: line.itcClassification === "eligible",
-            narration: line.remarks || null,
-          };
-        }),
-      });
+      const created = await PurchaseInvoiceService.createDirectPurchase(
+        {
+          purchase_invoice_date: invoiceDate,
+          supplier_invoice_number: vendorInvoiceNo.trim(),
+          supplier_invoice_date: invoiceDate,
+          due_date: dueDate || null,
+          warehouse_id: warehouseId,
+          supplier_id: supplierId,
+          narration: narration.trim() || undefined,
+          remarks: narration.trim() || undefined,
+          round_off_amount: roundingAdjustment,
+          attachment,
+          additional_charges: additionalCharges.length > 0 ? additionalCharges : undefined,
+          items: lines.map((line) => {
+            const expenseLedgerId = selectedLedgerId(line.expenseLedgerId);
+            if (!expenseLedgerId) {
+              throw new Error(`Ledger UUID missing for "${line.description}".`);
+            }
+            return {
+              item_type: purchaseNature === "service" ? ("SERVICE" as const) : ("EXPENSE" as const),
+              expense_ledger_id: expenseLedgerId,
+              expense_description: line.description.trim(),
+              sac_id: purchaseNature === "service" ? line.sacId || null : null,
+              hsn_id: purchaseNature === "service" ? null : line.hsnId || null,
+              quantity: line.quantity || 1,
+              quantity_type: line.uqc || "NOS",
+              rate: line.rate || line.taxableAmount,
+              gst_rate: line.gstRate,
+              is_input_credit_eligible: line.itcClassification === "eligible",
+              narration: line.remarks || null,
+            };
+          }),
+        },
+        { financialYearId },
+      );
       dispatchAccountsDataChanged("purchase-invoices");
       showToast(
         created.already_posted
@@ -380,25 +394,68 @@ export function PurchaseInvoiceDirectForm({
         </div>
       </div>
 
-      <div className="space-y-0.5">
-        <Label className={DP_LABEL_CLASS}>Narration</Label>
-        <Input
-          className={DP_FIELD_CLASS}
-          value={narration}
-          onChange={(e) => setNarration(e.target.value)}
-          placeholder="Optional narration"
-        />
-      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="space-y-0.5 min-w-0">
+          <Label className={DP_LABEL_CLASS}>Narration</Label>
+          <Input
+            className={DP_FIELD_CLASS}
+            value={narration}
+            onChange={(e) => setNarration(e.target.value)}
+            placeholder="Optional narration"
+          />
+        </div>
 
-      <div className="space-y-0.5">
-        <Label className={DP_LABEL_CLASS}>Attachment</Label>
-        <Input
-          className={DP_FIELD_CLASS}
-          type="file"
-          accept="application/pdf,image/jpeg,image/png,image/webp"
-          onChange={(e) => setAttachment(e.target.files?.[0] ?? null)}
-        />
-        {attachment && <p className="text-[11px] text-muted-foreground">{attachment.name}</p>}
+        <div className="space-y-0.5 min-w-0">
+          <Label className={DP_LABEL_CLASS}>Attachment</Label>
+          <div
+            className={cn(
+              DP_FIELD_CLASS,
+              "flex items-center gap-2 w-full border border-border bg-white",
+            )}
+          >
+            <label
+              className={cn(
+                "inline-flex items-center gap-1.5 h-6 px-2 rounded-md border border-border bg-muted/20",
+                "text-xs font-medium cursor-pointer hover:bg-muted/40 transition-colors whitespace-nowrap flex-shrink-0",
+                saving && "opacity-50 pointer-events-none",
+              )}
+            >
+              <Upload className="w-3.5 h-3.5 text-muted-foreground" />
+              Upload File
+              <input
+                type="file"
+                className="hidden"
+                accept="application/pdf,image/jpeg,image/png,image/webp"
+                disabled={saving}
+                onChange={(e) => {
+                  setAttachment(e.target.files?.[0] ?? null);
+                  e.target.value = "";
+                }}
+              />
+            </label>
+            {attachment ? (
+              <>
+                <span
+                  className="text-[13px] font-medium text-foreground truncate min-w-0 flex-1"
+                  title={attachment.name}
+                >
+                  {attachment.name}
+                </span>
+                <button
+                  type="button"
+                  className="p-0.5 rounded-md hover:bg-red-50 text-red-600 flex-shrink-0"
+                  disabled={saving}
+                  onClick={() => setAttachment(null)}
+                  aria-label="Remove attachment"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </>
+            ) : (
+              <span className="text-[13px] text-muted-foreground truncate">No file chosen</span>
+            )}
+          </div>
+        </div>
       </div>
 
       <p className="text-[11px] text-muted-foreground">

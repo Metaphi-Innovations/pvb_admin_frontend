@@ -10,6 +10,8 @@ export interface BatchDetailsInvoiceMeta {
   invoiceNumber: string;
   supplierName: string;
   invoiceDate: string;
+  fileUrl?: string;
+  fileName?: string;
 }
 
 function fmtNum(n: number | undefined) {
@@ -54,19 +56,36 @@ export function BatchDetailsReadOnlyTable({
   return (
     <div className="space-y-3">
       {invoiceMeta && (
-        <div className="rounded-lg border border-border bg-muted/20 px-3 py-2.5 grid grid-cols-1 sm:grid-cols-3 gap-2">
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Invoice No.</p>
-            <p className="text-xs font-mono font-semibold text-brand-700 mt-0.5">{invoiceMeta.invoiceNumber}</p>
+        <div className="rounded-lg border border-border bg-muted/20 px-3 py-2.5 space-y-2">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Invoice No.</p>
+              <p className="text-xs font-mono font-semibold text-brand-700 mt-0.5">{invoiceMeta.invoiceNumber}</p>
+            </div>
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Supplier</p>
+              <p className="text-xs font-medium text-foreground mt-0.5 truncate">{invoiceMeta.supplierName}</p>
+            </div>
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Invoice Date</p>
+              <p className="text-xs text-foreground mt-0.5">{invoiceMeta.invoiceDate}</p>
+            </div>
           </div>
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Supplier</p>
-            <p className="text-xs font-medium text-foreground mt-0.5 truncate">{invoiceMeta.supplierName}</p>
-          </div>
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Invoice Date</p>
-            <p className="text-xs text-foreground mt-0.5">{invoiceMeta.invoiceDate}</p>
-          </div>
+          {invoiceMeta.fileUrl && (
+            <div className="flex items-center justify-between gap-2 pt-1 border-t border-border/60">
+              <p className="text-[11px] text-muted-foreground truncate" title={invoiceMeta.fileName}>
+                {invoiceMeta.fileName || "Invoice file"}
+              </p>
+              <a
+                href={invoiceMeta.fileUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="shrink-0 text-[11px] font-medium text-brand-700 hover:underline"
+              >
+                View File
+              </a>
+            </div>
+          )}
         </div>
       )}
 

@@ -128,6 +128,10 @@ export const ROUTE_PERMISSION_RULES: RoutePermissionRule[] = [
   { prefix: "/masters/tds", candidates: [{ module: "masters", submodule: "tds" }] },
   { prefix: "/masters/tcs", candidates: [{ module: "masters", submodule: "tcs" }] },
   {
+    prefix: "/masters/additional-charges",
+    candidates: [{ module: "masters", submodule: "additional_charge" }],
+  },
+  {
     prefix: "/masters/document-types",
     candidates: [{ module: "masters", submodule: "document_type" }],
   },
@@ -279,6 +283,9 @@ export const NAV_PERMISSION_MAP: Record<string, ModuleSubmoduleRef[]> = {
   "/masters/segment": [{ module: "masters", submodule: "segment" }],
   "/masters/tds": [{ module: "masters", submodule: "tds" }],
   "/masters/tcs": [{ module: "masters", submodule: "tcs" }],
+  "/masters/additional-charges": [
+    { module: "masters", submodule: "additional_charge" },
+  ],
   "/masters/uom": [
     { module: "masters", submodule: "unit" },
     { module: "masters", submodule: "uomMaster" },

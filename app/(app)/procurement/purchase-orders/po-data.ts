@@ -9,7 +9,8 @@ import type { PODiscountType } from "@/lib/procurement/utils";
 import type { PriceSource } from "@/lib/pricing/resolve-pricing";
 
 export type { POShortCloseInfo } from "./po-qty";
-export { canShortClosePO, getPOQtySummary, shortClosePO } from "./po-qty";
+export { getPOQtySummary, shortClosePO } from "./po-qty";
+export { canShortClosePO, canClosePO, canCancelPO, canCreatePurchaseReturnPO } from "./po-actions";
 
 export type POStatus =
   | "draft"
@@ -61,6 +62,12 @@ export interface POLineItem {
   baseUnit: string;
   packagingUnit: string;
   conversionQty: number;
+  /** Pack size of one SKU unit (Gms/Ml/Kg/Ltr). */
+  packSize?: number;
+  /** Net Kg/Ltr per Case (packaging unit). */
+  netWeightPerPack?: number;
+  /** Display UOM for weight/volume — Kg or Ltr. */
+  weightUom?: "Kg" | "Ltr";
   orderUom: PackagingUom;
   orderedQtyPack: number;
   uom: string;
@@ -177,6 +184,8 @@ export interface PurchaseOrder {
   approvedDate: string;
   activity: ActivityEntry[];
   shortClose?: POShortCloseInfo;
+  /** True when QC-rejected stock still remains returnable for this PO. */
+  hasReturnableQty?: boolean;
 }
 
 const STORAGE_KEY = "ds_procurement_purchase_orders_v2";
@@ -270,6 +279,9 @@ function migratePOLine(line: Partial<POLineItem>): POLineItem {
     baseUnit: line.baseUnit ?? enriched?.baseUnit ?? "Unit",
     packagingUnit: line.packagingUnit ?? enriched?.packagingUnit ?? "Box",
     conversionQty,
+    packSize: line.packSize ?? enriched?.packSize,
+    netWeightPerPack: line.netWeightPerPack ?? enriched?.netWeightPerPack,
+    weightUom: line.weightUom ?? enriched?.weightUom,
     orderUom,
     orderedQtyPack,
     uom: line.uom ?? orderUom,

@@ -1240,6 +1240,10 @@ export function PurchaseCreate({
       setFormError("Invoice Date is required.");
       return;
     }
+    if (!isEdit && invoiceFiles.length === 0) {
+      setFormError("Upload at least one invoice file before saving the GRN.");
+      return;
+    }
     if (supplierMatch === false) {
       setFormError(
         extractionErrors[0] ||
@@ -1388,7 +1392,11 @@ export function PurchaseCreate({
             },
           ],
         };
-        await updateGrnMutation.mutateAsync({ id: grnId, input: updatePayload });
+        await updateGrnMutation.mutateAsync({
+          id: grnId,
+          input: updatePayload,
+          invoiceFiles,
+        });
         router.push(`/warehouse/grn/purchase/${grnId}`);
       } else {
         const payload: CreateGrnPayload = {
@@ -1406,7 +1414,7 @@ export function PurchaseCreate({
             },
           ],
         };
-        await createGrnMutation.mutateAsync(payload);
+        await createGrnMutation.mutateAsync({ input: payload, invoiceFiles });
         router.push("/warehouse/grn/purchase");
       }
     } catch (err) {

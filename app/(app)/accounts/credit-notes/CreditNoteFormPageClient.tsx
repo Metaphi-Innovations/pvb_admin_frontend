@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { AccountsFormLayout } from "../expenses/components/AccountsFormLayout";
 import { AccountsDateInput } from "@/components/accounts/AccountsDateInput";
 import { AccountsToast, useAccountsToast } from "@/components/accounts/AccountsToast";
@@ -11,6 +13,7 @@ import { AccountingImpactSection } from "@/components/accounts/AccountingImpactS
 import { VoucherAccountingPostingSummary } from "@/components/accounts/voucher-form/VoucherAccountingPostingSummary";
 import { VoucherFormSectionCard } from "@/components/accounts/voucher-form/VoucherFormSectionCard";
 import { VoucherNarrationAttachmentsSection } from "@/components/accounts/voucher-form/VoucherNarrationAttachmentsSection";
+import { VoucherSignedRoundOffInput } from "@/components/accounts/voucher-form/VoucherSignedRoundOffInput";
 import {
   VoucherNoteField,
   VoucherNoteFieldGrid,
@@ -25,6 +28,7 @@ import { CreditNoteInvoiceAllocationSection } from "./components/CreditNoteInvoi
 import { CreditNoteParticularsEditor } from "./components/CreditNoteParticularsEditor";
 import { CreditNoteReasonDialog } from "./components/CreditNoteReasonDialog";
 import { CreditNoteSourceEntitlementSection } from "./components/CreditNoteSourceEntitlementSection";
+import { CreditNoteLedgerSelect } from "./components/CreditNoteLedgerSelect";
 import { CREDIT_NOTES_BREADCRUMB, CREDIT_NOTES_LIST_PATH } from "./note-utils";
 import { CreditNoteFormApi, creditNoteApiError, creditNoteErrorIncludes } from "./credit-note-form-api";
 import type {
@@ -41,6 +45,7 @@ import {
   canEditDocument,
   computeDirectLinePreview,
   extractCreditNoteIdFromPath,
+  formatCnMoney,
   isPendingGeneratedSource,
   isReadOnlyStatus,
   isUuid,
@@ -63,6 +68,19 @@ import "./credit-note-tx.css";
 import "@/components/accounts/voucher-form/note-form-compact.css";
 
 type FormModeProp = "fresh" | "return" | "scheme";
+
+type DirectExtraCharge = {
+  id: string;
+  description: string;
+  ledgerId: string;
+  ledgerName: string;
+  amount: string;
+  gstPct: string;
+};
+
+function newDirectExtraChargeId() {
+  return `cn-xch-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+}
 
 export default function CreditNoteFormPageClient({
   creditNoteId: creditNoteIdProp,
@@ -115,6 +133,8 @@ export default function CreditNoteFormPageClient({
   const [attachments, setAttachments] = useState<VoucherAttachmentFile[]>([]);
   const [fyLabel, setFyLabel] = useState("");
   const [reasonDialog, setReasonDialog] = useState<"reject" | "cancel" | null>(null);
+  const [directExtraCharges, setDirectExtraCharges] = useState<DirectExtraCharge[]>([]);
+  const [roundOff, setRoundOff] = useState(0);
 
   const { data: customerData } = useCustomersDropdown();
   const { data: warehouseData } = useWarehousesDropdown();
@@ -127,6 +147,8 @@ export default function CreditNoteFormPageClient({
   const fieldsEditable = canEditDocument(status) && !readOnly;
   const pendingEntitlementLocked = isPendingFlow;
   const linesEditable = fieldsEditable && !pendingEntitlementLocked;
+  /** Free-form charges editable on Direct always; on SR pending only until converted to a CN. */
+  const chargesEditable = fieldsEditable && (!pendingEntitlementLocked || !cnId);
 
   const customers = useMemo(() => {
     if (!Array.isArray(customerData)) return [];
@@ -218,6 +240,7 @@ export default function CreditNoteFormPageClient({
     setWarehouseId(detail.warehouse_id || "");
     setCustomerId(detail.customer_id || "");
     setNarration(detail.narration || "");
+    setRoundOff(toNum(detail.round_off_amount));
     setArLedgerName(detail.party_ledger?.ledger_name || snapshotStr(detail.party_ledger_snapshot, "ledger_name"));
     setArLedgerCode(detail.party_ledger?.ledger_code || snapshotStr(detail.party_ledger_snapshot, "ledger_code"));
     setFyLabel(detail.financial_year?.name || detail.financial_year?.code || "");
@@ -261,7 +284,9 @@ export default function CreditNoteFormPageClient({
           if (detail.pending_credit_note_id) {
             try {
               const p = await CreditNoteFormApi.getPendingById(detail.pending_credit_note_id);
-              if (!cancelled) setPending(p);
+              if (!cancelled) {
+                setPending(p);
+              }
             } catch {
               /* pending snapshot on CN is enough */
             }
@@ -387,7 +412,7 @@ export default function CreditNoteFormPageClient({
   }, [invoiceIdFromUrl, pendingEntitlementLocked]);
 
   const directTotals = useMemo(() => {
-    return directLines.reduce(
+    const fromLines = directLines.reduce(
       (acc, line) => {
         const p = computeDirectLinePreview(line, interstate);
         acc.taxable += p.basicAmount;
@@ -400,44 +425,133 @@ export default function CreditNoteFormPageClient({
       },
       { taxable: 0, cgst: 0, sgst: 0, igst: 0, gst: 0, raw: 0 },
     );
-  }, [directLines, interstate]);
+    for (const c of directExtraCharges) {
+      const taxable = toNum(c.amount);
+      if (taxable <= 0) continue;
+      const rate = toNum(c.gstPct);
+      const gst = Math.round(((taxable * rate) / 100) * 100) / 100;
+      const half = Math.round((gst / 2) * 100) / 100;
+      fromLines.taxable += taxable;
+      if (interstate) {
+        fromLines.igst += gst;
+      } else {
+        fromLines.cgst += half;
+        fromLines.sgst += Math.round((gst - half) * 100) / 100;
+      }
+      fromLines.gst += gst;
+      fromLines.raw += taxable + gst;
+    }
+    return fromLines;
+  }, [directLines, directExtraCharges, interstate]);
 
   const amountPreview = useMemo(() => {
-    if (cn && !linesEditable) {
+    if (cn && !fieldsEditable) {
       const taxable = toNum(cn.taxable_amount);
       const cgst = toNum(cn.cgst_amount);
       const sgst = toNum(cn.sgst_amount);
       const igst = toNum(cn.igst_amount);
       const gst = toNum(cn.gst_amount);
+      const storedRoundOff = toNum(cn.round_off_amount);
       const total = toNum(cn.cn_amount);
-      const roundOff = toNum(cn.round_off_amount);
-      return { taxable, cgst, sgst, igst, gst, roundOff, total };
+      return { taxable, cgst, sgst, igst, gst, roundOff: storedRoundOff, total };
+    }
+    if (pendingEntitlementLocked && cn) {
+      const taxable = toNum(cn.taxable_amount);
+      const cgst = toNum(cn.cgst_amount);
+      const sgst = toNum(cn.sgst_amount);
+      const igst = toNum(cn.igst_amount);
+      const gst = toNum(cn.gst_amount);
+      const raw = Math.round((taxable + gst) * 100) / 100;
+      return {
+        taxable,
+        cgst,
+        sgst,
+        igst,
+        gst,
+        roundOff,
+        total: Math.round((raw + roundOff) * 100) / 100,
+      };
     }
     if (pendingEntitlementLocked && pending) {
-      const taxable = toNum(pending.taxable_credit_amount);
-      const cgst = toNum(pending.cgst_amount);
-      const sgst = toNum(pending.sgst_amount);
-      const igst = toNum(pending.igst_amount);
-      const gst = toNum(pending.gst_amount);
-      const raw = taxable + gst;
-      const total = toNum(pending.eligible_cn_amount) || Math.round(raw * 100) / 100;
-      return { taxable, cgst, sgst, igst, gst, roundOff: Math.round((total - raw) * 100) / 100, total };
+      let taxable = toNum(pending.taxable_credit_amount);
+      let cgst = toNum(pending.cgst_amount);
+      let sgst = toNum(pending.sgst_amount);
+      let igst = toNum(pending.igst_amount);
+      let gst = toNum(pending.gst_amount);
+      for (const c of directExtraCharges) {
+        const amt = toNum(c.amount);
+        if (amt <= 0 || !c.description.trim()) continue;
+        const rate = toNum(c.gstPct);
+        const lineGst = Math.round(((amt * rate) / 100) * 100) / 100;
+        taxable += amt;
+        gst += lineGst;
+        if (interstate) igst += lineGst;
+        else {
+          const half = Math.round((lineGst / 2) * 100) / 100;
+          cgst += half;
+          sgst += Math.round((lineGst - half) * 100) / 100;
+        }
+      }
+      const raw = Math.round((taxable + gst) * 100) / 100;
+      return {
+        taxable: Math.round(taxable * 100) / 100,
+        cgst: Math.round(cgst * 100) / 100,
+        sgst: Math.round(sgst * 100) / 100,
+        igst: Math.round(igst * 100) / 100,
+        gst: Math.round(gst * 100) / 100,
+        roundOff,
+        total: Math.round((raw + roundOff) * 100) / 100,
+      };
     }
-    const raw = directTotals.raw;
-    const total = Math.round(raw * 100) / 100;
+    const raw = Math.round(directTotals.raw * 100) / 100;
+    const total = Math.round((raw + roundOff) * 100) / 100;
     return {
       taxable: Math.round(directTotals.taxable * 100) / 100,
       cgst: Math.round(directTotals.cgst * 100) / 100,
       sgst: Math.round(directTotals.sgst * 100) / 100,
       igst: Math.round(directTotals.igst * 100) / 100,
       gst: Math.round(directTotals.gst * 100) / 100,
-      roundOff: Math.round((total - raw) * 100) / 100,
+      roundOff,
       total,
     };
-  }, [cn, linesEditable, pendingEntitlementLocked, pending, directTotals]);
+  }, [
+    cn,
+    fieldsEditable,
+    pendingEntitlementLocked,
+    pending,
+    directTotals,
+    directExtraCharges,
+    interstate,
+    roundOff,
+  ]);
+
+  const buildPendingExtraChargesPayload = () =>
+    directExtraCharges
+      .filter((c) => toNum(c.amount) > 0 && c.description.trim() && isUuid(c.ledgerId))
+      .map((c) => ({
+        description: c.description.trim(),
+        ledger_id: c.ledgerId,
+        taxable_amount: toNum(c.amount),
+        gst_rate: toNum(c.gstPct),
+      }));
+
+  const validatePendingCharges = (): string | null => {
+    for (const c of directExtraCharges) {
+      const amt = toNum(c.amount);
+      if (amt <= 0 && !c.description.trim() && !c.ledgerId) continue;
+      if (amt <= 0) continue;
+      if (!c.description.trim()) {
+        return "Enter a description for each additional charge with an amount.";
+      }
+      if (!isUuid(c.ledgerId)) {
+        return `Select a ledger for additional charge "${c.description.trim() || "row"}".`;
+      }
+    }
+    return null;
+  };
 
   const buildDirectPayload = (): CreateDirectCreditNotePayload => {
-    const lines = directLines.map((line) => {
+    const mainLines = directLines.map((line) => {
       const preview = computeDirectLinePreview(line, interstate);
       const qty = toNum(line.quantity);
       return {
@@ -450,6 +564,18 @@ export default function CreditNoteFormPageClient({
         gst_rate: line.gst_applicable ? toNum(line.gst_rate) : 0,
       };
     });
+    const extraLines = directExtraCharges
+      .filter((c) => toNum(c.amount) > 0 && c.description.trim() && isUuid(c.ledgerId))
+      .map((c) => ({
+        description: c.description.trim(),
+        ledger_id: c.ledgerId,
+        calculation_basis: "DIRECT" as const,
+        quantity: null,
+        eligible_base_amount: toNum(c.amount),
+        taxable_amount: toNum(c.amount),
+        gst_rate: toNum(c.gstPct),
+      }));
+    const lines = [...mainLines, ...extraLines];
     const references =
       directMode === "against_invoice" && invoiceId
         ? [
@@ -468,6 +594,7 @@ export default function CreditNoteFormPageClient({
       warehouse_id: warehouseId,
       customer_id: customerId,
       narration: narration.trim() || null,
+      round_off_amount: roundOff,
       lines,
       references,
     };
@@ -483,6 +610,16 @@ export default function CreditNoteFormPageClient({
       if (!isUuid(line.ledger_id)) return `Line ${i + 1}: select an adjustment ledger.`;
       if (computeDirectLinePreview(line, interstate).basicAmount <= 0) {
         return `Line ${i + 1}: taxable amount must be greater than zero.`;
+      }
+    }
+    for (const c of directExtraCharges) {
+      if (toNum(c.amount) <= 0 && !c.description.trim()) continue;
+      if (!c.description.trim()) return "Enter a description for each additional charge.";
+      if (!isUuid(c.ledgerId)) {
+        return `Select a ledger for additional charge "${c.description.trim()}".`;
+      }
+      if (toNum(c.amount) <= 0) {
+        return `Enter an amount for additional charge "${c.description.trim()}".`;
       }
     }
     if (directMode === "against_invoice") {
@@ -542,6 +679,7 @@ export default function CreditNoteFormPageClient({
       const updated = await CreditNoteFormApi.updateDraft(id, {
         cn_date: cnDate,
         narration: narration.trim() || null,
+        round_off_amount: roundOff,
       });
       applyCn(updated);
       return updated;
@@ -552,6 +690,7 @@ export default function CreditNoteFormPageClient({
     const updated = await CreditNoteFormApi.updateDraft(id, {
       cn_date: payload.cn_date,
       narration: payload.narration,
+      round_off_amount: payload.round_off_amount,
       lines: payload.lines,
       references: payload.references,
     });
@@ -587,10 +726,14 @@ export default function CreditNoteFormPageClient({
         if (pending?.credit_note?.credit_note_id) {
           throw new Error("PENDING_CREDIT_NOTE_ALREADY_CONVERTED: This Pending CN is already converted.");
         }
+        const chargeErr = validatePendingCharges();
+        if (chargeErr) throw new Error(chargeErr);
         const created = await CreditNoteFormApi.createFromPending(pendingId, {
           cn_date: cnDate,
           narration: narration.trim() || null,
           remarks: pending?.remarks || null,
+          round_off_amount: roundOff,
+          extra_charges: buildPendingExtraChargesPayload(),
         });
         applyCn(created);
         showToast("Credit Note created as Draft", "success");
@@ -601,6 +744,7 @@ export default function CreditNoteFormPageClient({
         const updated = await CreditNoteFormApi.updateDraft(cnId, {
           cn_date: cnDate,
           narration: narration.trim() || null,
+          round_off_amount: roundOff,
         });
         applyCn(updated);
         showToast("Draft updated", "success");
@@ -613,6 +757,7 @@ export default function CreditNoteFormPageClient({
         const updated = await CreditNoteFormApi.updateDraft(cnId, {
           cn_date: payload.cn_date,
           narration: payload.narration,
+          round_off_amount: payload.round_off_amount,
           lines: payload.lines,
           references: payload.references,
         });
@@ -629,10 +774,14 @@ export default function CreditNoteFormPageClient({
   const ensureSavedId = async (): Promise<string> => {
     if (cnId) return cnId;
     if (pendingEntitlementLocked && pendingId) {
+      const chargeErr = validatePendingCharges();
+      if (chargeErr) throw new Error(chargeErr);
       const created = await CreditNoteFormApi.createFromPending(pendingId, {
         cn_date: cnDate,
         narration: narration.trim() || null,
         remarks: pending?.remarks || null,
+        round_off_amount: roundOff,
+        extra_charges: buildPendingExtraChargesPayload(),
       });
       applyCn(created);
       return created.credit_note_id;
@@ -716,10 +865,14 @@ export default function CreditNoteFormPageClient({
           if (pending?.credit_note?.credit_note_id) {
             throw new Error("PENDING_CREDIT_NOTE_ALREADY_CONVERTED: This Pending CN is already converted.");
           }
+          const chargeErr = validatePendingCharges();
+          if (chargeErr) throw new Error(chargeErr);
           const created = await CreditNoteFormApi.createFromPending(pendingId, {
             cn_date: cnDate,
             narration: narration.trim() || null,
             remarks: pending?.remarks || null,
+            round_off_amount: roundOff,
+            extra_charges: buildPendingExtraChargesPayload(),
           });
           const id = requireCreditNoteId(created);
           applyCn(created);
@@ -804,8 +957,32 @@ export default function CreditNoteFormPageClient({
   }, [pageLoading, cnId, pendingId]);
 
   const snapshot = useMemo(
-    () => ({ cnDate, warehouseId, customerId, narration, directMode, invoiceId, allocation, directLines, approverId }),
-    [cnDate, warehouseId, customerId, narration, directMode, invoiceId, allocation, directLines, approverId],
+    () => ({
+      cnDate,
+      warehouseId,
+      customerId,
+      narration,
+      directMode,
+      invoiceId,
+      allocation,
+      directLines,
+      approverId,
+      roundOff,
+      directExtraCharges,
+    }),
+    [
+      cnDate,
+      warehouseId,
+      customerId,
+      narration,
+      directMode,
+      invoiceId,
+      allocation,
+      directLines,
+      approverId,
+      roundOff,
+      directExtraCharges,
+    ],
   );
   const isDirty = useFormDirtySnapshot(snapshot, { ready: baselineReady && fieldsEditable });
   const { requestCancel, discardDialog } = useTransactionFormCancel({
@@ -1036,6 +1213,177 @@ export default function CreditNoteFormPageClient({
               onDirectLinesChange={setDirectLines}
             />
 
+            {pendingEntitlementLocked &&
+            (pending?.sales_return_additional_charges || []).length > 0 ? (
+              <VoucherFormSectionCard title="Sales Return Additional Charges" compact>
+                <p className="px-3 pt-2 text-[10px] text-muted-foreground">
+                  Charges from the linked Sales Invoice (display only — not posted).
+                </p>
+                <table className="w-full text-[11px]">
+                  <thead>
+                    <tr className="border-b bg-muted/20">
+                      <th className="p-1.5 text-left font-medium">Charge</th>
+                      <th className="p-1.5 text-right font-medium w-28">Original</th>
+                      <th className="p-1.5 text-right font-medium w-28">Remaining</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(pending?.sales_return_additional_charges || []).map((charge) => {
+                      const id = charge.sales_invoice_additional_charge_id;
+                      return (
+                        <tr key={`sr-display-${id}`} className="border-b last:border-0">
+                          <td className="p-1.5">{charge.description || "Additional charge"}</td>
+                          <td className="p-1.5 text-right tabular-nums">
+                            {formatCnMoney(
+                              toNum(
+                                charge.original_total_amount ?? charge.original_taxable_amount,
+                              ),
+                            )}
+                          </td>
+                          <td className="p-1.5 text-right tabular-nums">
+                            {formatCnMoney(
+                              toNum(
+                                charge.remaining_amount ?? charge.original_total_amount,
+                              ),
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </VoucherFormSectionCard>
+            ) : null}
+
+            <VoucherFormSectionCard title="Additional Charges" compact>
+              <div className="flex items-center justify-between px-3 py-1.5 border-b bg-muted/20">
+                <p className="text-[10px] text-muted-foreground">
+                  Optional freight, packing, or other charges. These post as extra credit note lines.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-[11px]"
+                  disabled={!chargesEditable || busy}
+                  onClick={() =>
+                    setDirectExtraCharges((prev) => [
+                      ...prev,
+                      {
+                        id: newDirectExtraChargeId(),
+                        description: "",
+                        ledgerId: "",
+                        ledgerName: "",
+                        amount: "",
+                        gstPct: "0",
+                      },
+                    ])
+                  }
+                >
+                  + Add charge
+                </Button>
+              </div>
+              {directExtraCharges.length === 0 ? (
+                <p className="px-3 py-2 text-[11px] text-muted-foreground">No additional charges.</p>
+              ) : (
+                <table className="w-full text-[11px]">
+                  <thead>
+                    <tr className="border-b bg-muted/20">
+                      <th className="p-1.5 text-left font-medium">Description</th>
+                      <th className="p-1.5 text-left font-medium">Ledger</th>
+                      <th className="p-1.5 text-right font-medium w-24">Taxable</th>
+                      <th className="p-1.5 text-right font-medium w-16">GST %</th>
+                      <th className="p-1.5 text-right font-medium w-10" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {directExtraCharges.map((row) => (
+                      <tr key={row.id} className="border-b last:border-0">
+                        <td className="p-1.5">
+                          <Input
+                            className="h-7 text-xs"
+                            value={row.description}
+                            placeholder="e.g. Freight"
+                            disabled={!chargesEditable || busy}
+                            onChange={(e) =>
+                              setDirectExtraCharges((prev) =>
+                                prev.map((c) =>
+                                  c.id === row.id
+                                    ? { ...c, description: e.target.value }
+                                    : c,
+                                ),
+                              )
+                            }
+                          />
+                        </td>
+                        <td className="p-1.5 min-w-[160px]">
+                          <CreditNoteLedgerSelect
+                            value={row.ledgerId}
+                            fallbackLabel={row.ledgerName}
+                            placeholder="Select ledger"
+                            disabled={!chargesEditable || busy}
+                            onChange={(ledgerId, ledgerName) =>
+                              setDirectExtraCharges((prev) =>
+                                prev.map((c) =>
+                                  c.id === row.id
+                                    ? { ...c, ledgerId, ledgerName }
+                                    : c,
+                                ),
+                              )
+                            }
+                          />
+                        </td>
+                        <td className="p-1.5">
+                          <Input
+                            className="h-7 text-xs text-right"
+                            value={row.amount}
+                            placeholder="0.00"
+                            disabled={!chargesEditable || busy}
+                            onChange={(e) =>
+                              setDirectExtraCharges((prev) =>
+                                prev.map((c) =>
+                                  c.id === row.id ? { ...c, amount: e.target.value } : c,
+                                ),
+                              )
+                            }
+                          />
+                        </td>
+                        <td className="p-1.5">
+                          <Input
+                            className="h-7 text-xs text-right"
+                            value={row.gstPct}
+                            placeholder="0"
+                            disabled={!chargesEditable || busy}
+                            onChange={(e) =>
+                              setDirectExtraCharges((prev) =>
+                                prev.map((c) =>
+                                  c.id === row.id ? { ...c, gstPct: e.target.value } : c,
+                                ),
+                              )
+                            }
+                          />
+                        </td>
+                        <td className="p-1.5 text-right">
+                          <button
+                            type="button"
+                            className="text-[11px] text-red-600 hover:underline"
+                            disabled={!chargesEditable || busy}
+                            onClick={() =>
+                              setDirectExtraCharges((prev) =>
+                                prev.filter((c) => c.id !== row.id),
+                              )
+                            }
+                          >
+                            Remove
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </VoucherFormSectionCard>
+
             <CreditNoteInvoiceAllocationSection
               visible={!pendingEntitlementLocked}
               mode={directMode}
@@ -1068,6 +1416,12 @@ export default function CreditNoteFormPageClient({
               roundOff={amountPreview.roundOff}
               total={amountPreview.total}
               interstate={interstate}
+              locked={!fieldsEditable}
+              roundOffSlot={
+                fieldsEditable ? (
+                  <VoucherSignedRoundOffInput value={roundOff} onChange={setRoundOff} />
+                ) : undefined
+              }
             />
 
             <VoucherNarrationAttachmentsSection

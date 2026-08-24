@@ -27,6 +27,8 @@ import {
   totalGstPctFromRates,
 } from "@/lib/procurement/gst-master-utils";
 import { useGstDropdown } from "@/hooks/masters/use-gst";
+import { useAdditionalChargeDropdown } from "@/hooks/masters/use-additional-charge";
+import type { AdditionalChargeDropdownItem } from "@/services/additional-charge.service";
 
 type GstSelectOption = {
   value: string;
@@ -119,6 +121,32 @@ export function ProcurementTotalSummary({
   );
 }
 
+function resolveChargeGst(
+  charge: AdditionalChargeDropdownItem,
+  taxSupplyType: TaxSupplyType,
+  gstOptions: GstSelectOption[],
+): Pick<ProcurementAdditionalCharge, "gstId" | "gstMasterId" | "cgstPct" | "sgstPct" | "igstPct"> {
+  const gstPct = charge.gst_applicable ? Number(charge.default_gst_rate) || 0 : 0;
+  const rates = applyTaxSupplyToRates(gstPct, taxSupplyType);
+  const gstIdFromMaster =
+    charge.default_gst_rate_id &&
+    gstOptions.some((o) => o.value === charge.default_gst_rate_id)
+      ? charge.default_gst_rate_id
+      : undefined;
+  const gstId =
+    gstIdFromMaster ??
+    gstOptions.find((o) => Math.abs(o.gstPercentage - gstPct) < 0.001)?.value ??
+    gstOptions.find((o) => o.gstPercentage === 0)?.value ??
+    "";
+  const gstMasterId =
+    findGstMasterIdByTotalPct(gstPct) ?? getDefaultGstMasterId();
+  return {
+    gstId: gstId || undefined,
+    gstMasterId,
+    ...rates,
+  };
+}
+
 export function AdditionalChargesEditor({
   charges,
   onChange,
@@ -133,6 +161,8 @@ export function AdditionalChargesEditor({
   className?: string;
 }) {
   const gstDropdownQuery = useGstDropdown();
+  const chargeDropdownQuery = useAdditionalChargeDropdown();
+
   const gstOptions = React.useMemo((): GstSelectOption[] => {
     const fromApi = (gstDropdownQuery.data ?? [])
       .map((g) => ({
@@ -160,39 +190,43 @@ export function AdditionalChargesEditor({
     });
   }, [gstDropdownQuery.data]);
 
-  const resolveGstOptionValue = (
-    charge: ProcurementAdditionalCharge,
-    gstPct: number,
-  ): string => {
-    if (charge.gstId && gstOptions.some((o) => o.value === charge.gstId)) {
-      return charge.gstId;
-    }
-    const byPct = gstOptions.find(
-      (o) => Math.abs(o.gstPercentage - gstPct) < 0.001,
-    );
-    if (byPct) return byPct.value;
-    return (
-      gstOptions.find((o) => o.gstPercentage === 0)?.value ??
-      gstOptions.find((o) => o.gstPercentage === 18)?.value ??
-      gstOptions[0]?.value ??
-      ""
-    );
-  };
+  const chargeOptions = React.useMemo(() => {
+    return (chargeDropdownQuery.data ?? []).map((c) => {
+      const isAlreadyAdded = charges.some(
+        (row) =>
+          row.chargeMasterId === c.additional_charge_id ||
+          (!row.chargeMasterId &&
+            row.chargeName.trim().toLowerCase() === c.charge_name.trim().toLowerCase()),
+      );
+      const gstLabel = c.gst_applicable
+        ? `GST ${Number(c.default_gst_rate) || 0}%`
+        : "No GST";
+      return {
+        value: c.additional_charge_id,
+        label: c.charge_name,
+        sublabel: isAlreadyAdded
+          ? "Already added"
+          : [c.charge_code, gstLabel].filter(Boolean).join(" · "),
+        disabled: isAlreadyAdded,
+        searchText: `${c.charge_code} ${c.description ?? ""}`,
+      };
+    });
+  }, [chargeDropdownQuery.data, charges]);
 
   const update = (uid: string, patch: Partial<ProcurementAdditionalCharge>) => {
     onChange(charges.map((c) => (c.uid === uid ? { ...c, ...patch } : c)));
   };
 
-  const updateGstSelection = (uid: string, gstOptionValue: string) => {
-    const selected = gstOptions.find((o) => o.value === gstOptionValue);
-    if (!selected) return;
-    const rates = applyTaxSupplyToRates(selected.gstPercentage, taxSupplyType);
-    const localGstMasterId =
-      findGstMasterIdByTotalPct(selected.gstPercentage) ?? getDefaultGstMasterId();
+  const selectChargeFromMaster = (uid: string, chargeMasterId: string) => {
+    const master = (chargeDropdownQuery.data ?? []).find(
+      (c) => c.additional_charge_id === chargeMasterId,
+    );
+    if (!master) return;
     update(uid, {
-      gstId: gstOptionValue,
-      gstMasterId: localGstMasterId,
-      ...rates,
+      chargeMasterId: master.additional_charge_id,
+      chargeCode: master.charge_code,
+      chargeName: master.charge_name,
+      ...resolveChargeGst(master, taxSupplyType, gstOptions),
     });
   };
 
@@ -201,7 +235,9 @@ export function AdditionalChargesEditor({
       <div className="flex items-center justify-between gap-2">
         <div>
           <p className="text-xs font-bold uppercase tracking-wider text-foreground">Additional Charges</p>
-          <p className="text-[11px] text-muted-foreground">Freight, transport, loading, and other charges</p>
+          <p className="text-[11px] text-muted-foreground">
+            Select from Additional Charge Master — GST auto-fills from master and stays locked
+          </p>
         </div>
         {!readOnly && (
           <Button
@@ -225,7 +261,7 @@ export function AdditionalChargesEditor({
           <table className="min-w-full">
             <thead className="bg-muted/30">
               <tr className="border-b border-border">
-                <th className="min-w-[140px] px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground">
+                <th className="min-w-[180px] px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground">
                   Charge Name
                 </th>
                 <th className="w-32 px-3 py-2 text-right text-[11px] font-semibold text-muted-foreground">Amount</th>
@@ -252,18 +288,46 @@ export function AdditionalChargesEditor({
                   migrated.sgstPct,
                   migrated.igstPct,
                 );
-                const selectedGstValue = resolveGstOptionValue(migrated, gstPct);
+                const selectedChargeValue = (() => {
+                  if (
+                    row.chargeMasterId &&
+                    chargeOptions.some((o) => o.value === row.chargeMasterId)
+                  ) {
+                    return row.chargeMasterId;
+                  }
+                  const byName = (chargeDropdownQuery.data ?? []).find(
+                    (c) =>
+                      c.charge_name.trim().toLowerCase() ===
+                      (row.chargeName || "").trim().toLowerCase(),
+                  );
+                  return byName?.additional_charge_id ?? "";
+                })();
 
                 return (
                   <tr key={row.uid} className="hover:bg-muted/20 transition-colors">
                     <td className="px-3 py-2">
                       {readOnly ? (
-                        <span className="text-xs text-foreground">{row.chargeName || "—"}</span>
+                        <div>
+                          <span className="text-xs text-foreground">{row.chargeName || "—"}</span>
+                          {row.chargeCode ? (
+                            <p className="mt-0.5 text-[10px] text-muted-foreground">{row.chargeCode}</p>
+                          ) : null}
+                        </div>
                       ) : (
-                        <Input
-                          value={row.chargeName}
-                          onChange={(e) => update(row.uid, { chargeName: e.target.value })}
-                          placeholder="e.g. Freight Charges"
+                        <AutocompleteSelect
+                          options={chargeOptions.map((o) =>
+                            o.value === row.chargeMasterId
+                              ? { ...o, disabled: false, sublabel: o.sublabel === "Already added" ? undefined : o.sublabel }
+                              : o,
+                          )}
+                          value={selectedChargeValue}
+                          onChange={(v) => selectChargeFromMaster(row.uid, String(v))}
+                          placeholder={
+                            chargeDropdownQuery.isLoading
+                              ? "Loading charges…"
+                              : "Select additional charge…"
+                          }
+                          searchPlaceholder="Search charge…"
                           className={inputCls}
                         />
                       )}
@@ -277,17 +341,15 @@ export function AdditionalChargesEditor({
                       />
                     </td>
                     <td className="px-3 py-2 text-right">
-                      {readOnly ? (
-                        <span className="text-xs tabular-nums">{gstPct}%</span>
-                      ) : (
-                        <AutocompleteSelect
-                          options={gstOptions}
-                          value={selectedGstValue}
-                          onChange={(v) => updateGstSelection(row.uid, String(v))}
-                          placeholder="Select GST…"
-                          className={cn(inputCls, "ml-auto min-w-[88px]")}
-                        />
-                      )}
+                      <span
+                        className={cn(
+                          "inline-flex h-8 min-w-[56px] items-center justify-end rounded-lg border border-border bg-muted/40 px-2 text-xs tabular-nums text-muted-foreground",
+                          !row.chargeMasterId && !row.chargeName && "text-muted-foreground/60",
+                        )}
+                        title="GST is set from Additional Charge Master"
+                      >
+                        {row.chargeMasterId || row.chargeName ? `${gstPct}%` : "—"}
+                      </span>
                     </td>
                     {taxSupplyType === "intra" ? (
                       <>

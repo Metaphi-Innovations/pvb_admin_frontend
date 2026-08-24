@@ -13,12 +13,11 @@ type TabId = "invoice" | "match";
 export function POIntegrationTabs({
   po,
   refreshKey,
-  onUpload,
   invoices = [],
 }: {
   po: PurchaseOrder;
   refreshKey: number;
-  onUpload: () => void;
+  onUpload?: () => void;
   invoices?: POVendorInvoiceView[];
 }) {
   const [tab, setTab] = useState<TabId>("invoice");
@@ -61,7 +60,6 @@ export function POIntegrationTabs({
           po={po}
           refreshKey={refreshKey}
           invoices={invoices}
-          onUpload={onUpload}
         />
       )}
 

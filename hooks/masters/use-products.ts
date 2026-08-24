@@ -52,7 +52,7 @@ export function useCreateProduct() {
     mutationFn: ({ payload, images }: { payload: ProductCreatePayload; images: File[] }) =>
       ProductListService.create(payload, images),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: masterKeys.products.lists() });
+      await queryClient.invalidateQueries({ queryKey: masterKeys.products.all() });
     },
   });
 }
@@ -102,10 +102,29 @@ export function useExportProducts() {
   });
 }
 
-export function useProductPreviewNumber() {
+export function useProductPreviewNumber(
+  packSize?: string,
+  unit?: string,
+  excludeProductId?: string,
+) {
+  const pack = Number(packSize);
+  const enabled =
+    !!packSize &&
+    Number.isFinite(pack) &&
+    pack > 0 &&
+    !!unit?.trim();
+
   return useQuery({
-    queryKey: ["product-preview-number"],
-    queryFn: () => ProductListService.previewNumber(),
+    queryKey: ["product-preview-number", packSize, unit, excludeProductId],
+    queryFn: () =>
+      ProductListService.previewNumber({
+        pack_size: pack,
+        unit: unit!.trim(),
+        ...(excludeProductId
+          ? { exclude_product_id: excludeProductId }
+          : {}),
+      }),
+    enabled,
   });
 }
 

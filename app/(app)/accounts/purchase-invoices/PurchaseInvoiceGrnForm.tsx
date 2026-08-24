@@ -24,9 +24,10 @@ import { purchaseInvoiceImpactResolved } from "@/lib/accounts/resolved-impact-pr
 import { LedgerImpactPreview } from "@/components/accounts/LedgerImpactPreview";
 import { AccountingImpactSection } from "@/components/accounts/AccountingImpactSection";
 import { AccountsDateInput } from "@/components/accounts/AccountsDateInput";
+import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
 import { dispatchAccountsDataChanged } from "@/lib/accounts/accounts-data-events";
 import { AccountsToast, type AccountsToastState } from "@/components/accounts/AccountsToast";
-import { useFY, setStoredFYId } from "@/lib/fy-store";
+import { useFY, setStoredFYId, getStoredFYId } from "@/lib/fy-store";
 import { PurchaseInvoicePageShell } from "./PurchaseInvoicePageShell";
 import { PURCHASE_SOURCE_TYPE_LABELS, type PurchaseSourceType } from "./purchase-invoice-types";
 import {
@@ -35,12 +36,8 @@ import {
   type EligibleGrnDto,
   type PrepareGrnInvoiceDto,
 } from "@/services/purchase-invoice.service";
+import { GoodsInvoiceAdditionalChargesEditor } from "@/app/(app)/accounts/invoices/components/GoodsInvoiceAdditionalChargesEditor";
 import {
-  GoodsInvoiceAdditionalChargesEditor,
-  enrichExpensesFromChargeMaster,
-} from "@/app/(app)/accounts/invoices/components/GoodsInvoiceAdditionalChargesEditor";
-import {
-  createEmptyAdditionalExpense,
   calcAdditionalExpenseRow,
   type InvoiceAdditionalExpense,
 } from "@/app/(app)/accounts/invoices/invoice-additional-expenses";
@@ -198,7 +195,7 @@ export function PurchaseInvoiceGrnForm({
   dismissToast: () => void;
 }) {
   const router = useRouter();
-  const { selectedFY } = useFY();
+  const { selectedFY, isLoading: fyLoading } = useFY();
   const [eligibleGrns, setEligibleGrns] = useState<EligibleGrnDto[]>([]);
   const [loadingGrns, setLoadingGrns] = useState(true);
   const [selectedGrn, setSelectedGrn] = useState<EligibleGrnDto | null>(null);
@@ -212,30 +209,15 @@ export function PurchaseInvoiceGrnForm({
   const [remarks, setRemarks] = useState("");
   const [attachment, setAttachment] = useState<File | null>(null);
   const [additionalExpenses, setAdditionalExpenses] = useState<InvoiceAdditionalExpense[]>([]);
+  const [roundOff, setRoundOff] = useState(0);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
   function applyPrepared(data: PrepareGrnInvoiceDto, fallback?: EligibleGrnDto | null) {
     setPrepared(data);
-    // Pre-populate charges from PO suggestions
-    const suggested = (data.suggested_additional_charges || []).filter(
-      (c) => c.mapping_ok && c.matched_additional_charge_id,
-    );
-    if (suggested.length > 0) {
-      setAdditionalExpenses(
-        suggested.map((c) => ({
-          ...createEmptyAdditionalExpense("purchase_order" as any),
-          expenseHead: c.charge_name as any,
-          chargeMasterId: c.matched_additional_charge_id!,
-          amount: Number(c.amount || 0),
-          gstApplicable: c.gst_percent != null && Number(c.gst_percent) > 0,
-          gstPct: c.gst_percent != null ? Number(c.gst_percent) : 0,
-          origin: "sales_order" as const,
-        })),
-      );
-    } else {
-      setAdditionalExpenses([]);
-    }
+    // PO charges stay read-only; editable invoice charges start empty (CN/DN pattern).
+    setAdditionalExpenses([]);
+    setRoundOff(0);
     setVendorInvoiceNo(data.supplier_invoice.supplier_invoice_number || "");
     setSupplierInvoiceDate(formatDateOnly(data.supplier_invoice.supplier_invoice_date));
     setInvoiceDate(formatDateOnly(data.grn.grn_date) || new Date().toISOString().slice(0, 10));
@@ -338,9 +320,9 @@ export function PurchaseInvoiceGrnForm({
     return s + (calc.totalAmount > 0 ? calc.totalAmount : 0);
   }, 0);
   const grandTotal = subtotal + totalGst + chargeTotal;
-  const roundOff = Math.round(grandTotal) - grandTotal;
-  const finalTotal = Math.round(grandTotal);
-  const unmappedCharges = (prepared?.suggested_additional_charges || []).filter((c) => !c.mapping_ok);
+  const finalTotal = grandTotal + roundOff;
+  const poSuggestedCharges = prepared?.suggested_additional_charges || [];
+  const unmappedCharges = poSuggestedCharges.filter((c) => !c.mapping_ok);
   const supplierInvoiceLocked = Boolean(prepared?.supplier_invoice.supplier_invoice_number);
 
   const doSave = async () => {
@@ -352,12 +334,20 @@ export function PurchaseInvoiceGrnForm({
     }
     if (items.length === 0) return setError("This GRN has no invoiceable items.");
 
+    if (!selectedFY.id && !getStoredFYId()) {
+      return setError(
+        fyLoading
+          ? "Financial year is still loading. Please wait a moment and try again."
+          : "Select a financial year from the header before posting.",
+      );
+    }
+
     const additionalCharges: AdditionalChargeInput[] = additionalExpenses
       .filter((e) => e.chargeMasterId && e.amount > 0)
       .map((e) => ({
         additional_charge_id: e.chargeMasterId!,
         amount: e.amount,
-        charge_source: (e.origin === "sales_order" ? "ORDER" : "INVOICE") as "ORDER" | "INVOICE",
+        charge_source: "INVOICE" as const,
         gst_applicable: e.gstApplicable,
         gst_rate: e.gstApplicable ? e.gstPct : undefined,
       }));
@@ -365,17 +355,23 @@ export function PurchaseInvoiceGrnForm({
     setSaving(true);
     // Ensure the FY id is in localStorage before axios fires the request.
     if (selectedFY?.id) setStoredFYId(selectedFY.id);
+    const financialYearId = selectedFY.id || getStoredFYId();
     try {
-      const created = await PurchaseInvoiceService.createFromGrn(selectedGrn.grn_id, {
-        purchase_invoice_date: invoiceDate,
-        supplier_invoice_number: vendorInvoiceNo.trim() || undefined,
-        supplier_invoice_date: supplierInvoiceDate || null,
-        due_date: dueDate || null,
-        narration: remarks.trim() || undefined,
-        remarks: remarks.trim() || undefined,
-        additional_charges: additionalCharges,
-        attachment,
-      });
+      const created = await PurchaseInvoiceService.createFromGrn(
+        selectedGrn.grn_id,
+        {
+          purchase_invoice_date: invoiceDate,
+          supplier_invoice_number: vendorInvoiceNo.trim() || undefined,
+          supplier_invoice_date: supplierInvoiceDate || null,
+          due_date: dueDate || null,
+          narration: remarks.trim() || undefined,
+          remarks: remarks.trim() || undefined,
+          additional_charges: additionalCharges.length > 0 ? additionalCharges : undefined,
+          round_off_amount: roundOff,
+          attachment,
+        },
+        { financialYearId },
+      );
       dispatchAccountsDataChanged("purchase-invoices");
       showToast(
         created.already_posted
@@ -402,8 +398,9 @@ export function PurchaseInvoiceGrnForm({
       invoiceDate,
       vendorInvoiceNo,
       remarks,
+      roundOff,
     }),
-    [selectedGrn?.grn_id, invoiceDate, vendorInvoiceNo, remarks],
+    [selectedGrn?.grn_id, invoiceDate, vendorInvoiceNo, remarks, roundOff],
   );
   const isDirty = useFormDirtySnapshot(formSnapshot, { ready: baselineReady });
   const { requestCancel, discardDialog } = useTransactionFormCancel({
@@ -460,6 +457,7 @@ export function PurchaseInvoiceGrnForm({
                     setDueDate("");
                     setAttachment(null);
                     setAdditionalExpenses([]);
+                    setRoundOff(0);
                   }}
                 >
                   Change GRN
@@ -609,13 +607,58 @@ export function PurchaseInvoiceGrnForm({
                 </div>
               </Section>
 
-              <Section title="Additional Charges">
-                {unmappedCharges.length > 0 && (
-                  <p className="text-xs text-amber-700 mb-2">
-                    The following PO charges are not in Additional Charge Master and were skipped:{" "}
-                    {unmappedCharges.map((c) => c.charge_name).join(", ")}
+              {poSuggestedCharges.length > 0 ? (
+                <Section title="PO Additional Charges">
+                  <p className="text-[10px] text-muted-foreground -mt-1">
+                    Charges from the purchase order (display only — not posted).
                   </p>
-                )}
+                  <div className="border rounded-md overflow-hidden">
+                    <table className="w-full text-[11px]">
+                      <thead>
+                        <tr className="border-b bg-muted/20">
+                          <th className="p-1.5 text-left font-medium">Charge</th>
+                          <th className="p-1.5 text-right font-medium w-28">Amount</th>
+                          <th className="p-1.5 text-right font-medium w-20">GST %</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {poSuggestedCharges.map((charge, idx) => (
+                          <tr
+                            key={`po-charge-${charge.matched_additional_charge_id || charge.charge_name}-${idx}`}
+                            className="border-b last:border-0"
+                          >
+                            <td className="p-1.5">
+                              {charge.charge_name}
+                              {!charge.mapping_ok ? (
+                                <span className="ml-1 text-[10px] text-amber-700">(unmapped)</span>
+                              ) : null}
+                            </td>
+                            <td className="p-1.5 text-right tabular-nums">
+                              {formatMoney(Number(charge.amount || 0))}
+                            </td>
+                            <td className="p-1.5 text-right tabular-nums">
+                              {charge.gst_percent != null && Number(charge.gst_percent) > 0
+                                ? Number(charge.gst_percent)
+                                : "—"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {unmappedCharges.length > 0 ? (
+                    <p className="text-xs text-amber-700">
+                      The following PO charges are not in Additional Charge Master:{" "}
+                      {unmappedCharges.map((c) => c.charge_name).join(", ")}
+                    </p>
+                  ) : null}
+                </Section>
+              ) : null}
+
+              <Section title="Additional Charges">
+                <p className="text-[10px] text-muted-foreground -mt-1">
+                  Optional freight, packing, or other charges. These post on the purchase invoice.
+                </p>
                 <GoodsInvoiceAdditionalChargesEditor
                   expenses={additionalExpenses}
                   onChange={handleExpensesChange}
@@ -641,12 +684,15 @@ export function PurchaseInvoiceGrnForm({
                         <span className="tabular-nums">{formatMoney(chargeTotal)}</span>
                       </div>
                     )}
-                    {Math.abs(roundOff) > 0.001 && (
-                      <div className="flex justify-between text-muted-foreground">
-                        <span>Round Off</span>
-                        <span className="tabular-nums">{formatMoney(roundOff)}</span>
-                      </div>
-                    )}
+                    <div className="flex items-center justify-between gap-3 text-muted-foreground">
+                      <span>Round Off</span>
+                      <AccountsMoneyInput
+                        className="h-7 w-24 text-xs text-right"
+                        value={roundOff}
+                        onChange={setRoundOff}
+                        disabled={saving}
+                      />
+                    </div>
                     <div className="border-t border-border/60 pt-2 mt-1 flex justify-between font-bold">
                       <span>Grand Total</span>
                       <span className="tabular-nums">{formatMoney(finalTotal)}</span>

@@ -3,6 +3,7 @@ import { API_ENDPOINTS } from "@/api/endpoints";
 import type { FilterState } from "@/components/listing/types";
 import { amountInWords, round2 } from "@/lib/procurement/utils";
 import type { ProcurementAdditionalCharge } from "@/lib/procurement/procurement-line-utils";
+import { resolveNetWeightPerPack } from "@/lib/procurement/procurement-line-utils";
 import type {
   PurchaseReturn,
   PurchaseReturnItem,
@@ -178,6 +179,21 @@ function mapEligibleOrDetailItem(raw: Record<string, unknown>): PurchaseReturnIt
       : resolveDisplayQtyFromBase(balanceQty, quantityType, caseSize);
   const originGrn = (raw.origin_grn ?? {}) as Record<string, unknown>;
   const latestGrn = (raw.latest_grn ?? {}) as Record<string, unknown>;
+  const snapshot = asRecord(raw.product_snapshot);
+  const weight = resolveNetWeightPerPack({
+    netWeight: asNumber(snapshot.net_weight) || asNumber(snapshot.netWeight) || null,
+    packSize: asNumber(snapshot.pack_size) || asNumber(snapshot.packSize) || null,
+    unitPerPacking:
+      caseSize ||
+      asNumber(snapshot.unit_per_packing) ||
+      asNumber(snapshot.unitPerPacking) ||
+      null,
+    baseUnit:
+      asString(snapshot.base_unit) ||
+      asString(snapshot.baseUnit) ||
+      asString(snapshot.unit) ||
+      null,
+  });
   const originGrnNo = asString(raw.origin_grn_no) || asString(originGrn.grnNumber);
   const latestGrnNo = asString(raw.latest_grn_no) || asString(latestGrn.grnNumber);
   const originGrnId = asString(raw.origin_grn_id) || asString(raw.grn_id);
@@ -227,6 +243,8 @@ function mapEligibleOrDetailItem(raw: Record<string, unknown>): PurchaseReturnIt
     mfgDate: asDateOnly(raw.manufacture_date),
     expDate: asDateOnly(raw.expiry_date),
     caseSize,
+    netWeightPerPack: weight?.netWeightPerPack,
+    weightUom: weight?.weightUom,
     grnReceivedQty: asNumber(raw.grn_received_base_qty),
     qcRejectedQty: asNumber(raw.qc_rejected_base_qty),
     alreadyReturnedQty: asNumber(raw.already_returned_base_qty),

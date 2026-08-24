@@ -149,7 +149,11 @@ export default function EditPOPage() {
           onSubmit={() => save(true)}
           showSubmit={["draft", "rejected"].includes(po.status)}
           saveLabel={
-            isMatchAdjustmentEdit ? "Update Quantities" : "Update Purchase Order"
+            isMatchAdjustmentEdit
+              ? "Update Quantities"
+              : ["draft", "rejected"].includes(po.status)
+                ? "Draft"
+                : "Update Purchase Order"
           }
           saving={updateMutation.isPending}
         />

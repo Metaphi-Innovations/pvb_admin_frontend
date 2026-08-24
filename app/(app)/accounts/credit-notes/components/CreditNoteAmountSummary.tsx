@@ -1,7 +1,32 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { formatMoney } from "@/lib/accounts/money-format";
 import { VoucherFormSectionCard } from "@/components/accounts/voucher-form/VoucherFormSectionCard";
+import { formatSignedRoundOff } from "@/components/accounts/voucher-form/VoucherSignedRoundOffInput";
+
+function SummaryRow({
+  label,
+  value,
+  strong,
+  signed,
+  valueSlot,
+}: {
+  label: string;
+  value: number;
+  strong?: boolean;
+  signed?: boolean;
+  valueSlot?: ReactNode;
+}) {
+  return (
+    <div className={strong ? "cnz-totals__grand" : "cnz-totals__row"}>
+      <span>{label}</span>
+      {valueSlot ?? (
+        <span>{signed ? formatSignedRoundOff(value) : formatMoney(value)}</span>
+      )}
+    </div>
+  );
+}
 
 export function CreditNoteAmountSummary({
   taxable,
@@ -13,6 +38,7 @@ export function CreditNoteAmountSummary({
   total,
   interstate,
   locked = false,
+  roundOffSlot,
 }: {
   taxable: number;
   cgst: number;
@@ -23,29 +49,36 @@ export function CreditNoteAmountSummary({
   total: number;
   interstate: boolean;
   locked?: boolean;
+  /** Editable Round Off control (same pattern as Debit Note). */
+  roundOffSlot?: ReactNode;
 }) {
   const showGst = gst > 0.004 || cgst > 0.004 || sgst > 0.004 || igst > 0.004;
   const showIntra = showGst && !interstate && (cgst > 0.004 || sgst > 0.004);
   const showInter = showGst && interstate && igst > 0.004;
-
-  const Row = ({ label, value, strong }: { label: string; value: number; strong?: boolean }) => (
-    <div className={strong ? "cnz-totals__grand" : "cnz-totals__row"}>
-      <span>{label}</span>
-      <span>{formatMoney(value)}</span>
-    </div>
-  );
+  const showRoundOff = Boolean(roundOffSlot) || Math.abs(roundOff) > 0.004 || !locked;
 
   return (
     <VoucherFormSectionCard title="Amount Summary" compact>
       <div className="cnz-after-table !mt-0 !pt-0 !border-0">
         <div className="cnz-totals">
-          <Row label="Taxable / Basic Amount" value={taxable} />
-          {showIntra ? <Row label="CGST" value={cgst} /> : null}
-          {showIntra ? <Row label="SGST" value={sgst} /> : null}
-          {showInter ? <Row label="IGST" value={igst} /> : null}
-          {showGst ? <Row label="Total GST" value={gst} /> : null}
-          {Math.abs(roundOff) > 0.004 ? <Row label="Round Off" value={roundOff} /> : null}
-          <Row label="Credit Note Amount" value={total} strong />
+          <SummaryRow label="Taxable / Basic Amount" value={taxable} />
+          {showIntra ? <SummaryRow label="CGST" value={cgst} /> : null}
+          {showIntra ? <SummaryRow label="SGST" value={sgst} /> : null}
+          {showInter ? <SummaryRow label="IGST" value={igst} /> : null}
+          {showGst ? <SummaryRow label="Total GST" value={gst} /> : null}
+          {showRoundOff ? (
+            <SummaryRow
+              label="Round Off"
+              value={roundOff}
+              signed
+              valueSlot={
+                roundOffSlot && !locked ? (
+                  <div className="flex items-center justify-end min-w-[5.5rem]">{roundOffSlot}</div>
+                ) : undefined
+              }
+            />
+          ) : null}
+          <SummaryRow label="Credit Note Amount" value={total} strong />
         </div>
       </div>
       {locked ? null : (

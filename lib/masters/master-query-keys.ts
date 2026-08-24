@@ -141,7 +141,17 @@ export const masterKeys = {
 
   additionalCharges: {
     all: () => [...masterKeys.all, "additional-charges"] as const,
+    lists: () => [...masterKeys.additionalCharges.all(), "list"] as const,
+    list: (params: MasterListKeyParams) =>
+      [...masterKeys.additionalCharges.lists(), params] as const,
+    details: () => [...masterKeys.additionalCharges.all(), "detail"] as const,
+    detail: (id: string) =>
+      [...masterKeys.additionalCharges.details(), id] as const,
     dropdown: () => [...masterKeys.additionalCharges.all(), "dropdown"] as const,
+    filterDropdowns: () =>
+      [...masterKeys.additionalCharges.all(), "filter-dropdown"] as const,
+    filterDropdown: (fieldName: string) =>
+      [...masterKeys.additionalCharges.filterDropdowns(), fieldName] as const,
   },
 
   documentTypes: {

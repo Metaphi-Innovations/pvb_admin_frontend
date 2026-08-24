@@ -91,7 +91,10 @@ export interface GrnBatch {
 
 export interface GrnSupplierInvoice {
   id: string;
+  /** Display name (invoice number or original file name). */
   fileName: string;
+  /** Public URL to the stored invoice file (opens in new tab). */
+  fileUrl?: string;
   uploadedAt: string;
 }
 

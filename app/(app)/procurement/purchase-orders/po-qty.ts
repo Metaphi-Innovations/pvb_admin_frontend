@@ -56,13 +56,6 @@ export function getPOQtySummary(po: PurchaseOrder): POQtySummary {
   return { orderedQty, receivedQty, shortClosedQty, pendingQty };
 }
 
-export function canShortClosePO(po: PurchaseOrder): boolean {
-  if (!["approved", "invoice_uploaded", "partially_received", "received"].includes(po.status)) {
-    return false;
-  }
-  return getPOQtySummary(po).pendingQty > 0;
-}
-
 function allocateShortCloseQty(
   po: PurchaseOrder,
   lines: POLineItem[],

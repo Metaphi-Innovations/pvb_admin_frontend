@@ -607,6 +607,23 @@ export const API_ENDPOINTS = {
       PENDING_BY_ID: (id: string | number) => `/accounts/debit-note/pending/${id}`,
       CREATE_FROM_PENDING: (pendingId: string | number) => `/accounts/debit-note/from-pending/${pendingId}`,
     },
+    RECEIPT_VOUCHER: {
+      CONFIG: "/accounts/receipt-voucher/config",
+      LIST: "/accounts/receipt-voucher",
+      CREATE: "/accounts/receipt-voucher",
+      GET_BY_ID: (id: string) => `/accounts/receipt-voucher/${id}`,
+      UPDATE: (id: string) => `/accounts/receipt-voucher/${id}`,
+      CUSTOMER_OUTSTANDING: (customerId: string) =>
+        `/accounts/receipt-voucher/customer/${customerId}/outstanding`,
+      SUPPLIER_RECOVERABLE: (supplierId: string) =>
+        `/accounts/receipt-voucher/supplier/${supplierId}/recoverable`,
+      SUBMIT: (id: string) => `/accounts/receipt-voucher/${id}/submit`,
+      APPROVE: (id: string) => `/accounts/receipt-voucher/${id}/approve`,
+      REJECT: (id: string) => `/accounts/receipt-voucher/${id}/reject`,
+      POST: (id: string) => `/accounts/receipt-voucher/${id}/post`,
+      CANCEL: (id: string) => `/accounts/receipt-voucher/${id}/cancel`,
+      REVERSE: (id: string) => `/accounts/receipt-voucher/${id}/reverse`,
+    },
   },
   INVOICE_EXTRACTION: {
     EXTRACT: "/invoice-extraction/extract"
