@@ -1535,11 +1535,20 @@ export function canGeneratePackingList(order: SalesOrder): boolean {
   if (blocked.includes(fulfillment)) return false;
 
   const hydrated = hydrateOrderLineItems(order);
-  return hydrated.lineItems.some((l) => {
-    if (!l.productId || !(l.quantity > 0)) return false;
-    const generated = Number(l.generatedBaseQty || 0);
-    return l.quantity - generated > 1e-9;
-  });
+  const lines = hydrated.lineItems ?? [];
+  if (lines.length > 0) {
+    return lines.some((l) => {
+      if (!l.productId || !(l.quantity > 0)) return false;
+      const generated = Number(l.generatedBaseQty || 0);
+      return l.quantity - generated > 1e-9;
+    });
+  }
+
+  // Listing without lines: allow first generate when order has items and no PL yet
+  if (order.packingListId || order.packingListNumber || (order.packingLists?.length ?? 0) > 0) {
+    return false;
+  }
+  return (order.items ?? 0) > 0;
 }
 
 /** Packing List PDF is only available after at least one packing list has been generated. */

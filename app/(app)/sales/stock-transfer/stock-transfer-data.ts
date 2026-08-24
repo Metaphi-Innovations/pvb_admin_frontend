@@ -647,14 +647,31 @@ export function canGeneratePackingList(transfer: StockTransfer): boolean {
   if (status === "draft" || status === "pending_approval") return false;
   if (!transfer.sourceWarehouseId || !transfer.targetWarehouseId) return false;
 
-  const hasRemaining = (transfer.lineItems && transfer.lineItems.length > 0)
-    ? transfer.lineItems.some((l) => {
-        if (!l.productId || !(l.quantity > 0)) return false;
-        const generated = Number(l.generatedBaseQty || 0);
-        return l.quantity - generated > 1e-9;
-      })
-    : false;
-  return hasRemaining;
+  const fulfillment = (transfer.fulfillmentStatus || "PENDING").toString();
+  const blocked = [
+    "Fully Dispatched",
+    "FULLY_DISPATCHED",
+    "DELIVERED",
+    "delivered",
+    "CANCELLED",
+    "cancelled",
+  ];
+  if (blocked.includes(fulfillment)) return false;
+
+  const lines = transfer.lineItems ?? [];
+  if (lines.length > 0) {
+    return lines.some((l) => {
+      if (!l.productId || !(l.quantity > 0)) return false;
+      const generated = Number(l.generatedBaseQty || 0);
+      return l.quantity - generated > 1e-9;
+    });
+  }
+
+  // Listing may omit lines; fall back to totals when no packing list exists yet
+  if (transfer.packingListId || transfer.packingListNumber || (transfer.packingLists?.length ?? 0) > 0) {
+    return false;
+  }
+  return (transfer.totalItems ?? 0) > 0 || (transfer.totalQuantity ?? 0) > 0;
 }
 
 /** Packing List PDF is only available after at least one packing list has been generated. */
