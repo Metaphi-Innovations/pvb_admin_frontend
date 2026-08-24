@@ -1,5 +1,6 @@
 import { axiosInstance } from "@/api/axios";
 import { API_ENDPOINTS } from "@/api/endpoints";
+import { getStoredFYId } from "@/lib/fy-storage";
 import type {
   CancelReceiptVoucherPayload,
   CreateReceiptVoucherPayload,
@@ -43,6 +44,16 @@ function unwrapData<T>(response: { data?: { data?: T } | T }): T {
   return body as T;
 }
 
+function unwrapReceiptDetail(raw: unknown): ReceiptVoucherDetail {
+  if (raw && typeof raw === "object" && "receipt_voucher" in raw) {
+    const inner = (raw as { receipt_voucher?: ReceiptVoucherDetail }).receipt_voucher;
+    if (inner && typeof inner === "object" && "receipt_voucher_id" in inner) {
+      return inner;
+    }
+  }
+  return raw as ReceiptVoucherDetail;
+}
+
 async function withReceiptError<T>(
   action: () => Promise<T>,
   fallback: string,
@@ -52,6 +63,23 @@ async function withReceiptError<T>(
   } catch (error) {
     throw new Error(extractErrorMessage(error, fallback));
   }
+}
+
+/** Prefer explicit Working FY UUID; fall back to storage. Never call create APIs without this. */
+function resolveFyHeaderId(explicit?: string | null): string {
+  const id = (explicit?.trim() || getStoredFYId() || "").trim();
+  if (!id) {
+    throw new Error(
+      "Select a financial year from the header before saving.",
+    );
+  }
+  return id;
+}
+
+function multipartFyHeaders(financialYearId: string): Record<string, string> {
+  return {
+    "x-financial-year-id": financialYearId,
+  };
 }
 
 /** Multipart uploads can exceed the default 15s axios timeout. */
@@ -102,7 +130,8 @@ export const ReceiptVoucherService = {
       const response = await axiosInstance.get(
         API_ENDPOINTS.ACCOUNTS.RECEIPT_VOUCHER.GET_BY_ID(id),
       );
-      return unwrapData<ReceiptVoucherDetail>(response);
+      const data = unwrapData<unknown>(response);
+      return unwrapReceiptDetail(data);
     }, "Failed to load Receipt Voucher.");
   },
 
@@ -135,8 +164,10 @@ export const ReceiptVoucherService = {
   async create(
     payload: CreateReceiptVoucherPayload,
     pendingFiles: File[] = [],
+    options?: { financialYearId?: string | null },
   ): Promise<ReceiptVoucherDetail> {
     return withReceiptError(async () => {
+      const fyId = resolveFyHeaderId(options?.financialYearId);
       const formData = buildReceiptMultipartFormData(payload, {
         pendingFiles,
         isUpdate: false,
@@ -144,9 +175,12 @@ export const ReceiptVoucherService = {
       const response = await axiosInstance.post(
         API_ENDPOINTS.ACCOUNTS.RECEIPT_VOUCHER.CREATE,
         formData,
-        { timeout: RECEIPT_UPLOAD_TIMEOUT_MS },
+        {
+          timeout: RECEIPT_UPLOAD_TIMEOUT_MS,
+          headers: multipartFyHeaders(fyId),
+        },
       );
-      return unwrapData<ReceiptVoucherDetail>(response);
+      return unwrapReceiptDetail(unwrapData<unknown>(response));
     }, "Failed to create Receipt Voucher draft.");
   },
 
@@ -161,9 +195,11 @@ export const ReceiptVoucherService = {
     options?: {
       pendingFiles?: File[];
       existingAttachments?: ReceiptAttachmentMeta[];
+      financialYearId?: string | null;
     },
   ): Promise<ReceiptVoucherDetail> {
     return withReceiptError(async () => {
+      const fyId = resolveFyHeaderId(options?.financialYearId);
       const formData = buildReceiptMultipartFormData(payload, {
         pendingFiles: options?.pendingFiles ?? [],
         existingAttachments:
@@ -173,9 +209,12 @@ export const ReceiptVoucherService = {
       const response = await axiosInstance.put(
         API_ENDPOINTS.ACCOUNTS.RECEIPT_VOUCHER.UPDATE(id),
         formData,
-        { timeout: RECEIPT_UPLOAD_TIMEOUT_MS },
+        {
+          timeout: RECEIPT_UPLOAD_TIMEOUT_MS,
+          headers: multipartFyHeaders(fyId),
+        },
       );
-      return unwrapData<ReceiptVoucherDetail>(response);
+      return unwrapReceiptDetail(unwrapData<unknown>(response));
     }, "Failed to update Receipt Voucher draft.");
   },
 
@@ -219,7 +258,7 @@ export const ReceiptVoucherService = {
       const response = await axiosInstance.post(
         API_ENDPOINTS.ACCOUNTS.RECEIPT_VOUCHER.POST(id),
       );
-      return unwrapData<ReceiptVoucherDetail>(response);
+      return unwrapReceiptDetail(unwrapData<unknown>(response));
     }, "Failed to post Receipt Voucher.");
   },
 

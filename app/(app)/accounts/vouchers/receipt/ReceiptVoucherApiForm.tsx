@@ -11,6 +11,7 @@ import {
   VOUCHER_INPUT_CLASS,
   VOUCHER_MONEY_INPUT_CLASS,
   VoucherFormField,
+  VoucherReadonlyValue,
 } from "@/components/accounts/voucher-simple-form-ui";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
@@ -24,6 +25,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { showToast } from "@/lib/toast";
+import { useFY } from "@/lib/fy-store";
 import { ReceiptVoucherService } from "@/services/receipt-voucher.service";
 import { CustomerListService } from "@/services/customer-list.service";
 import { SupplierListService } from "@/services/supplier-list.service";
@@ -47,6 +49,7 @@ import { ReceiptAllocationTable } from "./components/ReceiptAllocationTable";
 import { ReceiptAdjustmentsEditor } from "./components/ReceiptAdjustmentsEditor";
 import { ReceiptSummaryCard } from "./components/ReceiptSummaryCard";
 import { ReceiptAccountingPreview } from "./components/ReceiptAccountingPreview";
+import { ReceiptViewHero } from "./components/ReceiptViewHero";
 import { ReceiptReasonDialog } from "./components/ReceiptReasonDialog";
 import { ReceiptAttachmentsPanel } from "./components/ReceiptAttachmentsPanel";
 import {
@@ -85,6 +88,7 @@ export function ReceiptVoucherApiForm({
   onEdit,
 }: ReceiptVoucherApiFormProps) {
   const router = useRouter();
+  const { selectedFY } = useFY();
   const [form, setForm] = useState<ReceiptFormState>(emptyReceiptForm);
   const [detail, setDetail] = useState<ReceiptVoucherDetail | null>(null);
   const [status, setStatus] = useState<ReceiptVoucherStatus>("DRAFT");
@@ -112,12 +116,13 @@ export function ReceiptVoucherApiForm({
   const [rejectReason, setRejectReason] = useState("");
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
-  const [postOpen, setPostOpen] = useState(false);
   const [reverseOpen, setReverseOpen] = useState(false);
   const [reverseReason, setReverseReason] = useState("");
   const [reverseDate, setReverseDate] = useState("");
+  const outstandingReqRef = useRef(0);
 
   const fieldsEditable = isDraftEditable(status) && !readOnlyProp;
+  const isViewMode = readOnlyProp || !fieldsEditable;
   const preview = useMemo(() => computeReceiptPreview(form), [form]);
 
   const patch = useCallback((p: Partial<ReceiptFormState>) => {
@@ -144,30 +149,11 @@ export function ReceiptVoucherApiForm({
 
   useEffect(() => {
     let cancelled = false;
+    const ac = new AbortController();
     (async () => {
       try {
-        const cfg = await ReceiptVoucherService.getConfig();
-        if (!cancelled) {
-          setApprovalRequired(!!cfg.approval_required);
-          setConfigReady(true);
-        }
-      } catch {
-        if (!cancelled) {
-          setApprovalRequired(true);
-          setConfigReady(true);
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const [wh, cust, supp, banks, ledgers, users] = await Promise.all([
+        const [cfg, wh, cust, supp, banks, ledgers, users] = await Promise.all([
+          ReceiptVoucherService.getConfig().catch(() => ({ approval_required: true })),
           WarehouseService.dropdown().catch(() => []),
           CustomerListService.dropdown().catch(() => []),
           SupplierListService.dropdown().catch(() => []),
@@ -180,7 +166,10 @@ export function ReceiptVoucherApiForm({
           ),
           UserListService.dropdown().catch(() => []),
         ]);
-        if (cancelled) return;
+        if (cancelled || ac.signal.aborted) return;
+
+        setApprovalRequired(!!cfg.approval_required);
+        setConfigReady(true);
 
         setWarehouses(
           (wh as Array<Record<string, unknown>>).map((w) => ({
@@ -237,11 +226,15 @@ export function ReceiptVoucherApiForm({
           })).filter((u) => u.value),
         );
       } catch {
-        /* dropdown failures are non-fatal */
+        if (!cancelled) {
+          setApprovalRequired(true);
+          setConfigReady(true);
+        }
       }
     })();
     return () => {
       cancelled = true;
+      ac.abort();
     };
   }, []);
 
@@ -253,7 +246,9 @@ export function ReceiptVoucherApiForm({
       setError(null);
       try {
         const d = await ReceiptVoucherService.getById(voucherId);
-        if (!cancelled) hydrateFromDetail(d);
+        if (!cancelled) {
+          hydrateFromDetail(d);
+        }
       } catch (e) {
         if (!cancelled) {
           setError(e instanceof Error ? e.message : "Failed to load Receipt Voucher.");
@@ -273,9 +268,11 @@ export function ReceiptVoucherApiForm({
         patch({ allocations: [] });
         return;
       }
+      const reqId = ++outstandingReqRef.current;
       setOutstandingLoading(true);
       try {
         const res = await ReceiptVoucherService.listCustomerOutstanding(customerId);
+        if (reqId !== outstandingReqRef.current) return;
         setForm((prev) => ({
           ...prev,
           allocations: mapOpenItemsToAllocations(
@@ -284,13 +281,14 @@ export function ReceiptVoucherApiForm({
           ),
         }));
       } catch (e) {
+        if (reqId !== outstandingReqRef.current) return;
         showToast(
           e instanceof Error ? e.message : "Failed to load customer outstanding.",
           "error",
         );
         patch({ allocations: [] });
       } finally {
-        setOutstandingLoading(false);
+        if (reqId === outstandingReqRef.current) setOutstandingLoading(false);
       }
     },
     [patch],
@@ -302,9 +300,11 @@ export function ReceiptVoucherApiForm({
         patch({ allocations: [] });
         return;
       }
+      const reqId = ++outstandingReqRef.current;
       setOutstandingLoading(true);
       try {
         const res = await ReceiptVoucherService.listSupplierRecoverable(supplierId);
+        if (reqId !== outstandingReqRef.current) return;
         setForm((prev) => ({
           ...prev,
           allocations: mapOpenItemsToAllocations(
@@ -313,13 +313,14 @@ export function ReceiptVoucherApiForm({
           ),
         }));
       } catch (e) {
+        if (reqId !== outstandingReqRef.current) return;
         showToast(
           e instanceof Error ? e.message : "Failed to load supplier recoverables.",
           "error",
         );
         patch({ allocations: [] });
       } finally {
-        setOutstandingLoading(false);
+        if (reqId === outstandingReqRef.current) setOutstandingLoading(false);
       }
     },
     [patch],
@@ -404,7 +405,10 @@ export function ReceiptVoucherApiForm({
     });
   };
 
-  const saveDraft = async (): Promise<ReceiptVoucherDetail | null> => {
+  const saveDraft = async (options?: {
+    skipToast?: boolean;
+    skipNavigate?: boolean;
+  }): Promise<ReceiptVoucherDetail | null> => {
     const validationError = validateReceiptForm(form);
     if (validationError) {
       setError(validationError);
@@ -415,6 +419,7 @@ export function ReceiptVoucherApiForm({
     setBusy(true);
     try {
       const pendingFiles = form.pendingFiles.map((p) => p.file);
+      const fyId = selectedFY.id || null;
       const saved = currentId
         ? await ReceiptVoucherService.update(
             currentId,
@@ -422,18 +427,22 @@ export function ReceiptVoucherApiForm({
             {
               pendingFiles,
               existingAttachments: form.persistedAttachments,
+              financialYearId: fyId,
             },
           )
         : await ReceiptVoucherService.create(
             buildCreatePayload(form),
             pendingFiles,
+            { financialYearId: fyId },
           );
       hydrateFromDetail(saved);
-      showToast(
-        currentId ? "Receipt draft updated." : "Receipt draft created.",
-        "success",
-      );
-      if (!currentId) {
+      if (!options?.skipToast) {
+        showToast(
+          currentId ? "Receipt draft updated." : "Receipt draft created.",
+          "success",
+        );
+      }
+      if (!currentId && !options?.skipNavigate) {
         router.replace(receiptEditPath(saved.receipt_voucher_id));
       }
       return saved;
@@ -474,10 +483,31 @@ export function ReceiptVoucherApiForm({
     else router.push(RECEIPT_LIST_PATH);
   };
 
+  /** Save current form then post immediately — no confirmation dialog. */
   const handleSaveAndPost = async () => {
-    const saved = await saveDraft();
-    if (!saved) return;
-    setPostOpen(true);
+    const saved = await saveDraft({ skipToast: true, skipNavigate: true });
+    if (!saved?.receipt_voucher_id) return;
+    const posted = await runAction(
+      () => ReceiptVoucherService.post(saved.receipt_voucher_id),
+      "Receipt posted successfully.",
+    );
+    if (posted?.receipt_voucher_id) {
+      router.push(receiptViewPath(posted.receipt_voucher_id));
+      return;
+    }
+    router.replace(receiptEditPath(saved.receipt_voucher_id));
+  };
+
+  /** Post an already-saved voucher without confirmation (approved / view flows). */
+  const handlePostDirect = async () => {
+    if (!currentId) return;
+    const posted = await runAction(
+      () => ReceiptVoucherService.post(currentId),
+      "Receipt posted successfully.",
+    );
+    if (posted?.receipt_voucher_id) {
+      router.push(receiptViewPath(posted.receipt_voucher_id));
+    }
   };
 
   const title =
@@ -524,11 +554,39 @@ export function ReceiptVoucherApiForm({
         ) : null
       }
     >
-      <div className="w-full space-y-3 pb-24">
+      <div
+        className={cn(
+          "w-full space-y-3 pb-24",
+          isViewMode && "receipt-voucher-view",
+        )}
+      >
         {error ? <div className={VOUCHER_ERROR_CLASS}>{error}</div> : null}
 
+        {isViewMode ? (
+          <ReceiptViewHero
+            draftNo={detail ? formatSrNo(detail.sr_no) : "—"}
+            accountingVoucherNo={detail?.accounting_voucher?.voucher_number}
+            voucherDate={form.voucher_date}
+            branchName={warehouseName || undefined}
+            modeLabel={
+              BANK_TRANSACTION_MODE_LABELS[form.transaction_mode] ||
+              form.transaction_mode
+            }
+            partyLabel={
+              form.party_kind === "OTHER_LEDGER"
+                ? form.other_ledger_name || RECEIPT_PARTY_KIND_LABELS.OTHER_LEDGER
+                : partyName || RECEIPT_PARTY_KIND_LABELS[form.party_kind]
+            }
+            netBank={preview.netBank}
+            status={status}
+          />
+        ) : null}
+
         {/* A. Voucher Details */}
-        <VoucherFormSectionCard title="Voucher Details">
+        <VoucherFormSectionCard
+          title="Voucher Details"
+          highlight={isViewMode}
+        >
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-2.5">
             <VoucherFormField label="Voucher Date" required>
               <Input
@@ -540,15 +598,15 @@ export function ReceiptVoucherApiForm({
               />
             </VoucherFormField>
             <VoucherFormField label="Draft Receipt No.">
-              <p className="h-8 flex items-center text-xs font-mono font-semibold text-brand-700">
+              <VoucherReadonlyValue tone="brand" mono>
                 {detail ? formatSrNo(detail.sr_no) : "Auto on save"}
-              </p>
+              </VoucherReadonlyValue>
             </VoucherFormField>
             {detail?.accounting_voucher?.voucher_number ? (
               <VoucherFormField label="Accounting Voucher No.">
-                <p className="h-8 flex items-center text-xs font-mono font-semibold text-navy-700">
+                <VoucherReadonlyValue tone="navy" mono>
                   {detail.accounting_voucher.voucher_number}
-                </p>
+                </VoucherReadonlyValue>
               </VoucherFormField>
             ) : null}
             <ReceiptSearchableSelect
@@ -1016,23 +1074,35 @@ export function ReceiptVoucherApiForm({
             totalAllocated={preview.totalAllocated}
             advance={preview.advance}
             partyKind={form.party_kind}
+            vibrant={isViewMode}
           />
-          <ReceiptAccountingPreview form={form} partyLedgerName={partyName} />
+          <ReceiptAccountingPreview
+            form={form}
+            partyLedgerName={partyName}
+            defaultOpen={isViewMode}
+            vibrant={isViewMode}
+          />
         </div>
 
         {detail?.accounting_voucher ? (
-          <VoucherFormSectionCard title="Posted Accounting Voucher">
-            <div className="text-xs space-y-1">
-              <p>
-                <span className="text-muted-foreground">Voucher No.: </span>
-                <span className="font-mono font-semibold text-brand-700">
+          <VoucherFormSectionCard title="Posted Accounting Voucher" highlight>
+            <div className="flex flex-wrap gap-3 text-xs">
+              <div className="rounded-lg border border-brand-100 bg-brand-50/60 px-3 py-2 min-w-[160px]">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-brand-700/80">
+                  Voucher No.
+                </p>
+                <p className="mt-0.5 font-mono font-semibold text-brand-800">
                   {detail.accounting_voucher.voucher_number || "—"}
-                </span>
-              </p>
-              <p>
-                <span className="text-muted-foreground">Status: </span>
-                {detail.accounting_voucher.status || "—"}
-              </p>
+                </p>
+              </div>
+              <div className="rounded-lg border border-emerald-100 bg-emerald-50/70 px-3 py-2 min-w-[140px]">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-800/80">
+                  Status
+                </p>
+                <p className="mt-0.5 font-semibold text-emerald-900">
+                  {detail.accounting_voucher.status || "—"}
+                </p>
+              </div>
             </div>
           </VoucherFormSectionCard>
         ) : null}
@@ -1083,7 +1153,10 @@ export function ReceiptVoucherApiForm({
                   : undefined
               }
               onSaveAndPost={
-                fieldsEditable && !readOnlyProp && !approvalRequired
+                fieldsEditable &&
+                !readOnlyProp &&
+                !approvalRequired &&
+                !currentId
                   ? () => void handleSaveAndPost()
                   : undefined
               }
@@ -1102,14 +1175,21 @@ export function ReceiptVoucherApiForm({
                   : undefined
               }
               onPost={
+                !approvalRequired &&
                 currentId &&
                 (status === "APPROVED" ||
-                  (status === "DRAFT" && !approvalRequired))
-                  ? () => setPostOpen(true)
+                  ((status === "DRAFT" || status === "REJECTED" || !status) &&
+                    fieldsEditable &&
+                    !readOnlyProp))
+                  ? status === "APPROVED"
+                    ? () => void handlePostDirect()
+                    : () => void handleSaveAndPost()
                   : undefined
               }
               onCancel={
-                canCancelStatus(status) && currentId
+                canCancelStatus(status) &&
+                currentId &&
+                !isDraftEditable(status)
                   ? () => setCancelOpen(true)
                   : undefined
               }
@@ -1190,23 +1270,6 @@ export function ReceiptVoucherApiForm({
                 reason: cancelReason.trim(),
               }),
             "Receipt cancelled.",
-          );
-        }}
-      />
-
-      <ReceiptReasonDialog
-        open={postOpen}
-        onOpenChange={setPostOpen}
-        title="Post Receipt Voucher"
-        description="Posting creates the accounting voucher, settlements, advance, and bank detail atomically."
-        confirmLabel="Post"
-        busy={busy}
-        onConfirm={() => {
-          if (!currentId) return;
-          setPostOpen(false);
-          void runAction(
-            () => ReceiptVoucherService.post(currentId),
-            "Receipt posted successfully.",
           );
         }}
       />

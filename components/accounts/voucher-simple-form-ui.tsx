@@ -220,6 +220,45 @@ export function VoucherFormField({
   );
 }
 
+/**
+ * Read-only value tile — same height as voucher inputs, without looking editable.
+ * Use for system/auto numbers and locked display fields on view screens.
+ */
+export function VoucherReadonlyValue({
+  children,
+  tone = "brand",
+  mono = false,
+  className,
+}: {
+  children: React.ReactNode;
+  tone?: "brand" | "navy" | "muted" | "success";
+  mono?: boolean;
+  className?: string;
+}) {
+  const toneClass =
+    tone === "navy"
+      ? "border-navy-200/80 bg-navy-50/70 text-navy-800"
+      : tone === "success"
+        ? "border-emerald-200 bg-emerald-50/80 text-emerald-900"
+        : tone === "muted"
+          ? "border-border bg-muted/40 text-foreground"
+          : "border-brand-200 bg-brand-50/80 text-brand-800";
+
+  return (
+    <div
+      className={cn(
+        "h-8 min-h-8 max-h-8 w-full min-w-0 inline-flex items-center rounded-md border px-2.5",
+        "text-xs font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.65)]",
+        mono && "font-mono tracking-wide",
+        toneClass,
+        className,
+      )}
+    >
+      <span className="truncate">{children}</span>
+    </div>
+  );
+}
+
 export function VoucherFormSection({
   title,
   children,

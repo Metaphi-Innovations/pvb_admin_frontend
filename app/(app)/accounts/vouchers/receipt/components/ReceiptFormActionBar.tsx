@@ -10,6 +10,9 @@ const BTN = "h-8 text-xs gap-1.5";
 
 /**
  * Receipt lifecycle action bar.
+ *
+ * Create (no id): Cancel · Save as Draft · Save & Post
+ * Edit draft: Cancel (Discard changes) · Save as Draft · Post
  * PENDING_APPROVAL never shows Post — even when approval config is false.
  */
 export function ReceiptFormActionBar({
@@ -47,6 +50,8 @@ export function ReceiptFormActionBar({
 }) {
   const st = (status || "DRAFT") as ReceiptVoucherStatus;
   const draftLike = st === "DRAFT" || st === "REJECTED" || !status;
+  const isCreate = draftLike && !hasExistingId;
+  const isEditDraft = draftLike && hasExistingId;
   const pendingApproval = st === "PENDING_APPROVAL";
   const approved = st === "APPROVED";
   const posted = st === "POSTED";
@@ -65,9 +70,10 @@ export function ReceiptFormActionBar({
           onClick={onDiscard}
           disabled={busy}
         >
-          Discard Form
+          {isEditDraft ? "Cancel (Discard changes)" : "Cancel"}
         </Button>
-        {canCancel && !posted && !cancelled && onCancel ? (
+        {/* Document cancel only after the voucher leaves draft-like states */}
+        {canCancel && !draftLike && !posted && !cancelled && onCancel ? (
           <Button
             type="button"
             variant="outline"
@@ -111,7 +117,7 @@ export function ReceiptFormActionBar({
                   onClick={onSaveDraft}
                   disabled={busy}
                 >
-                  <Save className="w-3.5 h-3.5" /> Save Draft
+                  <Save className="w-3.5 h-3.5" /> Save as Draft
                 </Button>
               ) : null}
               {!bypass && onSubmitForApproval ? (
@@ -125,7 +131,8 @@ export function ReceiptFormActionBar({
                   <Send className="w-3.5 h-3.5" /> Submit for Approval
                 </Button>
               ) : null}
-              {bypass && onSaveAndPost ? (
+              {/* Create: Save & Post (save + post in one step, no confirm) */}
+              {bypass && isCreate && onSaveAndPost ? (
                 <Button
                   type="button"
                   size="sm"
@@ -136,15 +143,16 @@ export function ReceiptFormActionBar({
                   <Save className="w-3.5 h-3.5" /> Save & Post
                 </Button>
               ) : null}
-              {bypass && !onSaveAndPost && allowPost && onPost ? (
+              {/* Edit draft: Post (persist latest edits then post, no confirm) */}
+              {bypass && isEditDraft && allowPost && (onPost || onSaveAndPost) ? (
                 <Button
                   type="button"
                   size="sm"
                   className={cn(BTN, "bg-brand-600 hover:bg-brand-700 text-white")}
-                  onClick={onPost}
+                  onClick={onPost ?? onSaveAndPost}
                   disabled={busy}
                 >
-                  <Save className="w-3.5 h-3.5" /> Post Receipt
+                  <Save className="w-3.5 h-3.5" /> Post
                 </Button>
               ) : null}
             </>
