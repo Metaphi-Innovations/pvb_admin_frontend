@@ -31,6 +31,7 @@ export function SortTh({
   sortDir: sortDirProp,
   onSort: onSortProp,
   align = "left",
+  sortable = true,
   filterable = true,
   filterType = "text",
   filterValue: filterValueProp,
@@ -49,6 +50,7 @@ export function SortTh({
   sortDir?: "asc" | "desc";
   onSort?: (k: string) => void;
   align?: "left" | "right" | "center";
+  sortable?: boolean;
   filterable?: boolean;
   filterType?: AccountsColumnHeaderProps["filterType"];
   filterValue?: AccountsColumnHeaderProps["filterValue"];
@@ -62,14 +64,14 @@ export function SortTh({
   className?: string;
 }) {
   const ctx = useAccountsColumnFilterContext();
-  const fromCtx = ctx?.headerProps(colKey, label, { filterType, align, filterable });
+  const fromCtx = ctx?.headerProps(colKey, label, { filterType, align, filterable, sortable });
 
   return (
     <AccountsColumnHeader
       label={label}
       colKey={colKey}
       align={align}
-      sortable={fromCtx?.sortable ?? Boolean(onSortProp)}
+      sortable={fromCtx?.sortable ?? sortable}
       sortKey={sortKeyProp ?? fromCtx?.sortKey ?? ""}
       sortDir={sortDirProp ?? fromCtx?.sortDir ?? "asc"}
       onSort={onSortProp ?? fromCtx?.onSort}

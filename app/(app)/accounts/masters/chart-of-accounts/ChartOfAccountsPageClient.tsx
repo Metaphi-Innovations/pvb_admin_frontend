@@ -10,7 +10,7 @@ import { isGroupingLedger, isPostingLedger } from "@/lib/accounts/coa-hierarchy"
 import { useCanCoa } from "@/lib/accounts/use-can-coa";
 import { defaultLedgerDateRangeState } from "@/lib/accounts/ledger-transaction-date-filter";
 import { type DateRangePresetId } from "@/lib/accounts/report-date-presets";
-import { isTdsCoaNode } from "@/lib/accounts/tds-coa-utils";
+import { isTdsCoaNode, isTdsReceivablePostingLedger } from "@/lib/accounts/tds-coa-utils";
 import {
   isStatutoryTaxPayableParent,
   isStatutoryTaxSectionProjection,
@@ -133,10 +133,10 @@ const BankAccountFormClient = dynamic(
 
 const HIGHLIGHT_MS = 4000;
 
-/** Ledger detail view for posting ledgers only (TDS/TCS statutory nodes excluded). */
+/** Ledger statement for posting ledgers, including TDS Receivable. */
 function isCoaLedgerDetailView(node: ChartOfAccount, records: ChartOfAccount[]): boolean {
+  if (isTdsReceivablePostingLedger(node)) return true;
   if (!isPostingLedger(node, records)) return false;
-  if (isTdsCoaNode(node, records)) return false;
   if (isStatutoryTaxPayableParent(node)) return false;
   if (isStatutoryTaxSectionProjection(node)) return false;
   return true;
@@ -173,7 +173,9 @@ export default function ChartOfAccountsPageClient() {
   const [datesReady, setDatesReady] = useState(false);
   const [showRoot, setShowRoot] = useState(false);
 
-  const selectedLedgerApiId = selectedNode?.apiNodeId ?? null;
+  const selectedLedgerApiId = selectedNode?.apiNodeId
+    ? String(selectedNode.apiNodeId)
+    : null;
 
   const groupLedgerApiIds = useMemo(() => {
     if (!selectedNode || showRoot || isCoaLedgerDetailView(selectedNode, records)) {
@@ -353,7 +355,7 @@ export default function ChartOfAccountsPageClient() {
   const isTdsLedgerSummaryView = Boolean(
     !showRoot &&
       selectedNode &&
-      selectedNode.nodeLevel === "ledger" &&
+      selectedNode.nodeLevel === "account_group" &&
       isTdsCoaNode(selectedNode, records),
   );
 

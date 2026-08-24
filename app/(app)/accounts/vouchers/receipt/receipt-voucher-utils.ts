@@ -32,6 +32,29 @@ export function toMoneyNumber(value: unknown): number {
   return Number.isFinite(n) ? roundMoney(n) : 0;
 }
 
+/** Keep editable money fields free of a sticky leading zero (avoids typing 0112). */
+export function sanitizeMoneyInput(raw: string): string {
+  let v = raw.replace(/[^\d.]/g, "");
+  const firstDot = v.indexOf(".");
+  if (firstDot !== -1) {
+    v =
+      v.slice(0, firstDot + 1) +
+      v.slice(firstDot + 1).replace(/\./g, "");
+  }
+  if (v.startsWith(".")) v = `0${v}`;
+  if (/^0\d/.test(v)) {
+    v = v.replace(/^0+(?=\d)/, "");
+  }
+  return v;
+}
+
+/** Empty string when amount is zero — better for typing than a prefilled "0". */
+export function moneyInputValue(value: unknown): string {
+  const n = toMoneyNumber(value);
+  if (n === 0) return "";
+  return String(value ?? "").trim() === "" ? "" : String(value);
+}
+
 export function formatDateInput(value: unknown): string {
   if (!value) return "";
   const s = String(value);
@@ -188,8 +211,8 @@ export function mapOpenItemsToAllocations(
       open_item_id: item.open_item_id,
       selected: prior?.selected ?? false,
       allocated_amount: prior?.allocated_amount ?? "",
-      tds_amount: prior?.tds_amount ?? "0",
-      discount_amount: prior?.discount_amount ?? "0",
+      tds_amount: prior?.tds_amount ?? "",
+      discount_amount: prior?.discount_amount ?? "",
       document_number: item.document_number || "—",
       open_item_type: item.open_item_type || "—",
       document_date: formatDateInput(item.document_date),
@@ -215,9 +238,9 @@ export function mapDetailToForm(detail: ReceiptVoucherDetail): ReceiptFormState 
       return {
         open_item_id: a.open_item_id,
         selected: true,
-        allocated_amount: String(toMoneyNumber(a.allocated_amount)),
-        tds_amount: String(toMoneyNumber(a.tds_amount)),
-        discount_amount: String(toMoneyNumber(a.discount_amount)),
+        allocated_amount: moneyInputValue(a.allocated_amount),
+        tds_amount: moneyInputValue(a.tds_amount),
+        discount_amount: moneyInputValue(a.discount_amount),
         document_number: String(
           snap.document_number ?? snap.documentNumber ?? "—",
         ),
@@ -277,30 +300,87 @@ export function mapDetailToForm(detail: ReceiptVoucherDetail): ReceiptFormState 
       amount: String(toMoneyNumber(adj.amount)),
       narration: adj.narration || "",
     })),
-    persistedAttachments: normalizePersistedAttachments(detail.attachments),
+    persistedAttachments: normalizePersistedAttachments(
+      detail.attachments ??
+        (detail as ReceiptVoucherDetail & { receipt_voucher?: { attachments?: unknown } })
+          .receipt_voucher?.attachments,
+    ),
     pendingFiles: [],
   };
+}
+
+export function resolveReceiptAttachmentUrl(path: string): string {
+  const raw = path.trim();
+  if (!raw) return "";
+  if (raw.startsWith("data:") || raw.startsWith("blob:")) return raw;
+
+  if (/^https?:\/\//i.test(raw)) {
+    try {
+      const parsed = new URL(raw);
+      if (parsed.pathname.includes("/uploads/")) {
+        return `${parsed.pathname}${parsed.search}`;
+      }
+      return raw;
+    } catch {
+      return raw;
+    }
+  }
+
+  const normalized = raw.startsWith("/") ? raw : `/${raw}`;
+  if (normalized.startsWith("/uploads/")) return normalized;
+  const idx = normalized.indexOf("/uploads/");
+  if (idx >= 0) return normalized.slice(idx);
+  return `/uploads/${normalized.replace(/^\//, "")}`;
+}
+
+function asTrimmedString(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
 }
 
 function normalizePersistedAttachments(
   value: unknown,
 ): ReceiptAttachmentMeta[] {
-  if (!Array.isArray(value)) return [];
+  let source: unknown = value;
+  if (typeof source === "string") {
+    const trimmed = source.trim();
+    if (!trimmed) return [];
+    try {
+      source = JSON.parse(trimmed) as unknown;
+    } catch {
+      return [];
+    }
+  }
+  if (source && typeof source === "object" && !Array.isArray(source)) {
+    source = [source];
+  }
+  if (!Array.isArray(source)) return [];
   const result: ReceiptAttachmentMeta[] = [];
-  for (const item of value) {
+  for (const item of source) {
+    if (typeof item === "string") {
+      const file_url = item.trim();
+      if (!file_url || file_url.startsWith("blob:") || file_url.startsWith("data:")) {
+        continue;
+      }
+      result.push({
+        file_name: decodeURIComponent(file_url.split("/").pop() || "attachment"),
+        file_url,
+      });
+      continue;
+    }
     if (!item || typeof item !== "object") continue;
     const row = item as Record<string, unknown>;
-    const file_url = typeof row.file_url === "string" ? row.file_url.trim() : "";
-    const file_name =
-      typeof row.file_name === "string" ? row.file_name.trim() : "";
+    const file_url = asTrimmedString(row.file_url ?? row.fileUrl ?? row.url);
+    const file_name = asTrimmedString(
+      row.file_name ?? row.fileName ?? row.name,
+    );
     if (!file_url || !file_name) continue;
     if (file_url.startsWith("blob:") || file_url.startsWith("data:")) continue;
     result.push({
       file_name,
       file_url,
-      file_type: typeof row.file_type === "string" ? row.file_type : null,
-      uploaded_at: typeof row.uploaded_at === "string" ? row.uploaded_at : null,
-      uploaded_by: typeof row.uploaded_by === "string" ? row.uploaded_by : null,
+      file_type: asTrimmedString(row.file_type ?? row.fileType) || null,
+      uploaded_at: asTrimmedString(row.uploaded_at ?? row.uploadedAt) || null,
+      uploaded_by: asTrimmedString(row.uploaded_by ?? row.uploadedBy) || null,
     });
   }
   return result;
@@ -447,6 +527,10 @@ export function validateReceiptForm(form: ReceiptFormState): string | null {
     if (form.receipt_treatment === "against_outstanding") {
       if (preview.totalAllocated <= 0 && preview.advance <= 0) {
         return "Allocate at least one outstanding item or enter a gross amount that creates advance.";
+      }
+      const grossInput = toMoneyNumber(form.gross_party_amount);
+      if (grossInput > 0 && preview.totalAllocated > grossInput + 0.01) {
+        return "Total allocated cannot exceed Gross Settlement Amount. Increase gross or reduce allocations.";
       }
       for (const row of selectedAllocations(form)) {
         const alloc = toMoneyNumber(row.allocated_amount);

@@ -23,6 +23,18 @@ export function isTdsReceivableGroup(node: ChartOfAccount): boolean {
   );
 }
 
+/** System posting ledger for customer TDS (Assets → Other Current Assets). */
+export function isTdsReceivablePostingLedger(node: ChartOfAccount): boolean {
+  if (node.nodeLevel !== "ledger") return false;
+  const name = (node.accountName ?? "").trim().toLowerCase();
+  const alias = (node.alias ?? "").trim().toLowerCase();
+  return (
+    name === "tds receivable" ||
+    alias === "sys:tds_receivable" ||
+    alias === "tds:receivable"
+  );
+}
+
 export function isTdsPayableGroup(node: ChartOfAccount): boolean {
   return (
     (node.nodeLevel === "account_group" || node.nodeLevel === "ledger") &&

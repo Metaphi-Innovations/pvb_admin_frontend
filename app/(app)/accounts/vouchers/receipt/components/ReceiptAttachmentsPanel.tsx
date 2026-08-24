@@ -9,6 +9,7 @@ import {
   RECEIPT_ATTACHMENT_MAX_FILES,
   formatReceiptFileSize,
 } from "../receipt-attachment-formdata";
+import { resolveReceiptAttachmentUrl } from "../receipt-voucher-utils";
 
 /**
  * Receipt-scoped attachments UI.
@@ -83,7 +84,13 @@ export function ReceiptAttachmentsPanel({
               <button
                 type="button"
                 className="p-1 rounded-md hover:bg-muted text-muted-foreground"
-                onClick={() => window.open(att.file_url, "_blank", "noopener,noreferrer")}
+                onClick={() =>
+                  window.open(
+                    resolveReceiptAttachmentUrl(att.file_url),
+                    "_blank",
+                    "noopener,noreferrer",
+                  )
+                }
                 aria-label="View attachment"
               >
                 <Eye className="w-3.5 h-3.5" />

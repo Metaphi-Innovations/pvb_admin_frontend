@@ -70,7 +70,7 @@ axiosInstance.interceptors.request.use(
     // Content-Type: application/json so the browser sets multipart boundary.
     // Use `false` (axios-recommended) instead of delete so other headers stay intact.
     if (typeof FormData !== "undefined" && config.data instanceof FormData) {
-      config.headers.set("Content-Type", false);
+      config.headers.delete("Content-Type");
     }
 
     const skipFy =
