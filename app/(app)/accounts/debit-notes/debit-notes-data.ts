@@ -35,9 +35,11 @@ import {
 
 export type DebitNoteCreationMode = "against_return" | "direct_adjustment";
 
-export type DebitNoteSource = "purchase_return" | "manual";
+export type DebitNoteSource = "direct" | "purchase_invoice" | "purchase_return" | "manual";
 
 export const DEBIT_NOTE_SOURCE_LABELS: Record<DebitNoteSource, string> = {
+  direct: "Direct",
+  purchase_invoice: "Purchase Invoice",
   purchase_return: "Purchase Return",
   manual: "Manual",
 };

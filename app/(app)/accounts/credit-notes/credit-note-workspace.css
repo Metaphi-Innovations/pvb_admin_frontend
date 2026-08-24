@@ -127,6 +127,7 @@
   width: 100%;
   min-width: 720px;
   border-collapse: collapse;
+  table-layout: fixed;
   font-size: 0.75rem;
 }
 
@@ -141,6 +142,11 @@
   background: hsl(var(--muted) / 0.35);
   border-bottom: 1px solid hsl(var(--border));
   white-space: nowrap;
+}
+
+.cn-ws__table thead th.text-right,
+.cn-ws__table thead th.cn-num {
+  text-align: right;
 }
 
 .cn-ws__table tbody td {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
@@ -11,7 +11,7 @@ import {
   AccountsViewAction,
   accountsActionColClass,
 } from "@/components/accounts/AccountsTableActions";
-import { FileText, XCircle } from "lucide-react";
+import { XCircle } from "lucide-react";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import {
   AccountsTable,
@@ -58,12 +58,13 @@ import {
   hasDocumentsListingFilters,
   parseDocumentsListingFiltersFromSearch,
 } from "@/lib/accounts/documents-listing-filter-query";
-import { DebitNoteService } from "@/services/debit-note.service";
+import { DebitNoteService, mapDebitNoteToRecord } from "@/services/debit-note.service";
 import { SupplierService, type SupplierDropdownItem } from "@/services/supplier.service";
 import { WarehouseService, type WarehouseDropdownItem } from "@/services/warehouse.service";
 import { showToast } from "@/lib/toast";
 import { usePermissions } from "@/lib/auth/permissions-context";
 import { canCreate, canEdit } from "@/lib/auth/permissions";
+import { useDebouncedValue } from "@/app/(app)/accounts/reports/pl/pl-hooks";
 
 const LIST_PATH = DEBIT_NOTES_LIST_PATH;
 
@@ -72,7 +73,7 @@ function getRowActions(status: string, approvalRequired: boolean): string[] {
   if (s === "DRAFT") {
     return approvalRequired
       ? ["edit", "submit", "cancel", "eway_bill"]
-      : ["edit", "post", "cancel", "eway_bill"];
+      : ["edit", "cancel", "eway_bill"];
   }
   if (s === "PENDING_APPROVAL") {
     return approvalRequired
@@ -80,12 +81,12 @@ function getRowActions(status: string, approvalRequired: boolean): string[] {
       : ["view", "cancel", "eway_bill"];
   }
   if (s === "APPROVED") {
-    return ["view", "post", "cancel", "eway_bill"];
+    return ["view", "cancel", "eway_bill"];
   }
   if (s === "REJECTED") {
     return approvalRequired
       ? ["view", "edit", "submit", "cancel", "eway_bill"]
-      : ["view", "edit", "post", "cancel", "eway_bill"];
+      : ["view", "edit", "cancel", "eway_bill"];
   }
   if (s === "POSTED") {
     return ["view", "reverse"];
@@ -130,7 +131,9 @@ function DebitNotesRecordsTable({
           <AccountsTableHeadRow>
             <SortTh label="DN No." colKey="debitNoteNo" />
             <SortTh label="Source" colKey="source" />
+            {/* Against PI — hidden while DN against Purchase Invoice is not used
             <SortTh label="Against PI" colKey="sourceInvoiceNo" />
+            */}
             <SortTh label="Supplier" colKey="vendorName" className="accounts-col-party" />
             <SortTh label="Warehouse" colKey="branch" />
             <SortTh label="Date" colKey="debitNoteDate" filterType="date" />
@@ -152,15 +155,14 @@ function DebitNotesRecordsTable({
         </AccountsTableHead>
         <AccountsTableBody>
           {!mounted ? (
-            <AccountsTableEmpty colSpan={13} message="Loading debit notes…" />
+            <AccountsTableEmpty colSpan={12} message="Loading debit notes…" />
           ) : toolbarFiltered.length === 0 ? (
-            <AccountsTableEmpty colSpan={13} message="No debit notes found." />
+            <AccountsTableEmpty colSpan={12} message="No debit notes found." />
           ) : (
             pagedRows.map((r) => {
               const badge = noteWorkflowStatusToBadge(r.status);
               const actions = getRowActions(r.status, approvalRequired);
               const canEditRow = actions.includes("edit") && hasUpdatePermission;
-              const canPostRow = actions.includes("post") && hasCreatePermission;
               const canCancelRow = actions.includes("cancel") && hasCreatePermission;
 
               return (
@@ -174,11 +176,13 @@ function DebitNotesRecordsTable({
                     </Link>
                   </AccountsTableCell>
                   <AccountsTableCell className="text-xs">
-                    {DEBIT_NOTE_SOURCE_LABELS[r.source]}
+                    {DEBIT_NOTE_SOURCE_LABELS[r.source] ?? "—"}
                   </AccountsTableCell>
+                  {/* Against PI cell — hidden while DN against Purchase Invoice is not used
                   <AccountsTableCell mono className="truncate text-xs">
                     {r.sourceInvoiceNo || "—"}
                   </AccountsTableCell>
+                  */}
                   <AccountsTableCell className="accounts-col-party font-medium truncate text-xs" title={r.vendorName}>
                     {r.vendorName}
                   </AccountsTableCell>
@@ -212,32 +216,14 @@ function DebitNotesRecordsTable({
                       {canEditRow && (
                         <AccountsEditAction href={`${LIST_PATH}/${r.id}/edit`} />
                       )}
-                      {(canPostRow || canCancelRow) && (
+                      {canCancelRow && (
                         <AccountsMoreActions contentClassName="w-44">
-                          {canPostRow && (
-                            <DropdownMenuItem
-                              className="text-xs gap-2"
-                              onClick={async () => {
-                                try {
-                                  await DebitNoteService.post(r.id);
-                                  showToast("Debit Note posted successfully.", "success");
-                                  onRefresh();
-                                } catch (e: any) {
-                                  showToast(e.message || "Unable to post Debit Note.", "error");
-                                }
-                              }}
-                            >
-                              <FileText className="w-4 h-4" /> Post
-                            </DropdownMenuItem>
-                          )}
-                          {canCancelRow && (
-                            <DropdownMenuItem
-                              className="text-xs gap-2 text-red-600"
-                              onClick={() => onCancel(r)}
-                            >
-                              <XCircle className="w-4 h-4" /> Cancel
-                            </DropdownMenuItem>
-                          )}
+                          <DropdownMenuItem
+                            className="text-xs gap-2 text-red-600"
+                            onClick={() => onCancel(r)}
+                          >
+                            <XCircle className="w-4 h-4" /> Cancel
+                          </DropdownMenuItem>
                         </AccountsMoreActions>
                       )}
                     </AccountsTableActionCell>
@@ -293,98 +279,176 @@ export default function DebitNotesListClient() {
 
   const [supplierList, setSupplierList] = useState<SupplierDropdownItem[]>([]);
   const [warehouseList, setWarehouseList] = useState<WarehouseDropdownItem[]>([]);
+  const [mastersLoaded, setMastersLoaded] = useState(false);
 
-  const sectionRefresh = useAccountsSectionRefresh("debit-notes");
+  const sectionRefresh = useAccountsSectionRefresh("debit-notes", { apiListing: true });
+  const [manualRefreshTick, setManualRefreshTick] = useState(0);
+  const listRefreshTick = sectionRefresh + manualRefreshTick;
+  const listFiltersKeyRef = useRef("");
 
-  // Load masters & config on mount
+  const debouncedSearch = useDebouncedValue(filters.search, 300);
+
+  // Masters & config only when All tab is used (or already cached)
   useEffect(() => {
-    if (!mounted) return;
-    SupplierService.dropdown().then(setSupplierList).catch(() => {});
-    WarehouseService.dropdown().then(setWarehouseList).catch(() => {});
-    DebitNoteService.getConfig()
-      .then((cfg) => setApprovalRequired(cfg.approval_required))
-      .catch(() => {});
-  }, [mounted]);
-
-  // Load pending list count
-  const loadPendingCount = useCallback(async () => {
-    try {
-      const res = await DebitNoteService.listPending({ page: 1, page_size: 1, status: "PENDING" });
-      setPendingCount(res.pagination.total);
-    } catch {}
-  }, []);
-
-  const refresh = useCallback(async () => {
-    if (!mounted) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const selectedSupplierId = supplierList.find(
-        (s) => filters.parties.includes(s.supplier_name)
-      )?.supplier_id;
-
-      const selectedWarehouseId = warehouseList.find(
-        (w) => filters.branches.includes(w.warehouse_name)
-      )?.warehouse_id;
-
-      let source_type: any = undefined;
-      if (filters.sources.includes("Direct")) source_type = "DIRECT";
-      else if (filters.sources.includes("Purchase Invoice")) source_type = "PURCHASE_INVOICE";
-      else if (filters.sources.includes("Purchase Return")) source_type = "PURCHASE_RETURN";
-
-      let statusParam: any = undefined;
-      if (statusTab !== "all") {
-        statusParam = statusTab.toUpperCase();
-      } else if (filters.status !== "all") {
-        statusParam = filters.status.toUpperCase();
+    if (!mounted || moduleTab !== "records" || mastersLoaded) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const [suppliers, warehouses, cfg] = await Promise.all([
+          SupplierService.dropdown(),
+          WarehouseService.dropdown(),
+          DebitNoteService.getConfig().catch(() => null),
+        ]);
+        if (cancelled) return;
+        setSupplierList(suppliers);
+        setWarehouseList(warehouses);
+        if (cfg) setApprovalRequired(cfg.approval_required);
+        setMastersLoaded(true);
+      } catch {
+        if (!cancelled) setMastersLoaded(true);
       }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [mounted, moduleTab, mastersLoaded]);
 
-      const res = await DebitNoteService.list({
-        page,
-        page_size: pageSize,
-        search: filters.search.trim() || undefined,
-        supplier_id: selectedSupplierId,
-        warehouse_id: selectedWarehouseId,
-        source_type,
-        status: statusParam,
-        dn_number: filters.voucherNo.trim() || undefined,
-        from_date: filters.dateFrom || undefined,
-        to_date: filters.dateTo || undefined,
-      });
+  const listFiltersKey = useMemo(
+    () =>
+      JSON.stringify({
+        search: debouncedSearch.trim(),
+        parties: filters.parties,
+        branches: filters.branches,
+        sources: filters.sources,
+        statusFilter: filters.status,
+        voucherNo: filters.voucherNo.trim(),
+        dateFrom: filters.dateFrom,
+        dateTo: filters.dateTo,
+        statusTab,
+        pageSize,
+      }),
+    [
+      debouncedSearch,
+      filters.parties,
+      filters.branches,
+      filters.sources,
+      filters.status,
+      filters.voucherNo,
+      filters.dateFrom,
+      filters.dateTo,
+      statusTab,
+      pageSize,
+    ],
+  );
 
-      const mapped = res.items.map((item) => {
-        const { mapDebitNoteToRecord } = require("@/services/debit-note.service");
-        return mapDebitNoteToRecord(item);
-      });
+  /** Avoid re-fetching All when masters finish loading unless party/branch filters need id mapping. */
+  const mastersGate =
+    filters.parties.length > 0 || filters.branches.length > 0
+      ? mastersLoaded
+        ? "ready"
+        : "wait"
+      : "na";
 
-      setRecords(mapped);
-      setTotalRecords(res.pagination.total);
-      loadPendingCount();
-    } catch (e: any) {
-      setError(e.message || "Failed to load Debit Notes.");
-      setRecords([]);
-      setTotalRecords(0);
-    } finally {
-      setLoading(false);
+  // Reset to page 1 when list filters change (not when page alone changes)
+  useEffect(() => {
+    setPage((p) => (p === 1 ? p : 1));
+  }, [listFiltersKey]);
+
+  // All-tab list: only while All is active
+  useEffect(() => {
+    if (!mounted || moduleTab !== "records") return;
+    if (mastersGate === "wait") return;
+    // Filter change resets page via the effect above; skip the stale page>1 request
+    if (page !== 1 && listFiltersKeyRef.current !== listFiltersKey) {
+      listFiltersKeyRef.current = listFiltersKey;
+      return;
     }
+    listFiltersKeyRef.current = listFiltersKey;
+
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const selectedSupplierIds = supplierList
+          .filter((s) => filters.parties.includes(s.supplier_name))
+          .map((s) => s.supplier_id)
+          .filter(Boolean);
+
+        const selectedWarehouseIds = warehouseList
+          .filter((w) => filters.branches.includes(w.warehouse_name))
+          .map((w) => w.warehouse_id)
+          .filter(Boolean);
+
+        const sourceTypes = filters.sources
+          .map((label) => {
+            if (label === "Direct") return "DIRECT" as const;
+            if (label === "Purchase Return") return "PURCHASE_RETURN" as const;
+            return null;
+          })
+          .filter((v): v is "DIRECT" | "PURCHASE_RETURN" => v != null);
+
+        let statusParam: string | undefined;
+        if (statusTab !== "all") {
+          statusParam = statusTab.toUpperCase();
+        } else if (filters.status !== "all") {
+          statusParam = filters.status.toUpperCase();
+        }
+
+        const res = await DebitNoteService.list({
+          page,
+          page_size: pageSize,
+          search: debouncedSearch.trim() || undefined,
+          supplier_ids: selectedSupplierIds.length ? selectedSupplierIds : undefined,
+          warehouse_ids: selectedWarehouseIds.length ? selectedWarehouseIds : undefined,
+          source_types: sourceTypes.length ? sourceTypes : undefined,
+          status: statusParam as any,
+          dn_number: filters.voucherNo.trim() || undefined,
+          from_date: filters.dateFrom || undefined,
+          to_date: filters.dateTo || undefined,
+        });
+        if (cancelled) return;
+        setRecords(res.items.map(mapDebitNoteToRecord));
+        setTotalRecords(res.pagination.total);
+      } catch (e: any) {
+        if (cancelled) return;
+        setError(e.message || "Failed to load Debit Notes.");
+        setRecords([]);
+        setTotalRecords(0);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     mounted,
+    moduleTab,
     page,
-    pageSize,
-    filters,
-    statusTab,
+    listFiltersKey,
+    listRefreshTick,
+    mastersGate,
     filters.parties.length > 0 ? supplierList : null,
     filters.branches.length > 0 ? warehouseList : null,
-    sectionRefresh,
-    loadPendingCount,
   ]);
 
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
+  const refreshRecords = useCallback(() => {
+    setManualRefreshTick((t) => t + 1);
+  }, []);
 
   useEffect(() => {
-    setFilters((prev) => ({ ...prev, dateFrom, dateTo, preset }));
+    setFilters((prev) => {
+      if (
+        prev.dateFrom === dateFrom &&
+        prev.dateTo === dateTo &&
+        prev.preset === preset
+      ) {
+        return prev;
+      }
+      return { ...prev, dateFrom, dateTo, preset };
+    });
   }, [dateFrom, dateTo, preset]);
 
   useEffect(() => {
@@ -425,12 +489,11 @@ export default function DebitNotesListClient() {
   );
   const sourceOptions: ReportMultiSelectOption[] = [
     { value: "Direct", label: "Direct" },
-    { value: "Purchase Invoice", label: "Purchase Invoice" },
     { value: "Purchase Return", label: "Purchase Return" },
   ];
 
   const getCellValue = useCallback((row: DebitNoteRecord, key: string) => {
-    if (key === "source") return DEBIT_NOTE_SOURCE_LABELS[row.source];
+    if (key === "source") return DEBIT_NOTE_SOURCE_LABELS[row.source] ?? "—";
     if (key === "branch") return row.branch;
     return (row as unknown as Record<string, unknown>)[key];
   }, []);
@@ -439,7 +502,7 @@ export default function DebitNotesListClient() {
     () => ({
       debitNoteNo: { type: "text" as const },
       source: { type: "text" as const },
-      sourceInvoiceNo: { type: "text" as const },
+      // sourceInvoiceNo: { type: "text" as const }, // Against PI — unused
       vendorName: { type: "text" as const },
       branch: { type: "text" as const },
       debitNoteDate: { type: "date" as const },
@@ -453,10 +516,6 @@ export default function DebitNotesListClient() {
     [],
   );
 
-  useEffect(() => {
-    setPage(1);
-  }, [filters, statusTab, pageSize]);
-
   const handleExport = async () => {
     setExporting(true);
     try {
@@ -469,10 +528,15 @@ export default function DebitNotesListClient() {
 
   const handleResetFilters = () => {
     setStatusTab("all");
+    setPage(1);
     setPreset("this_month");
     setDateFrom("");
     setDateTo("");
     setFilters(resetNotesListingFilters("this_month"));
+  };
+
+  const handleHeaderRefresh = () => {
+    setManualRefreshTick((t) => t + 1);
   };
 
   return (
@@ -484,7 +548,7 @@ export default function DebitNotesListClient() {
         hideDescription
         actions={
           <NotesListHeaderActions
-            onRefresh={refresh}
+            onRefresh={handleHeaderRefresh}
             onExportExcel={moduleTab === "records" ? handleExport : undefined}
             onExportPdf={moduleTab === "records" ? handleExport : undefined}
             exportDisabled={exporting || records.length === 0}
@@ -505,7 +569,10 @@ export default function DebitNotesListClient() {
           />
 
           {moduleTab === "pending" ? (
-            <PendingDebitNotesPanel />
+            <PendingDebitNotesPanel
+              onCountChange={setPendingCount}
+              refreshTick={listRefreshTick}
+            />
           ) : (
             <AccountsColumnFilterProvider
               rows={records}
@@ -519,7 +586,10 @@ export default function DebitNotesListClient() {
                   <SectionTabs
                     tabs={[...NOTES_STATUS_TABS]}
                     active={statusTab}
-                    onChange={setStatusTab}
+                    onChange={(tab) => {
+                      setPage(1);
+                      setStatusTab(tab);
+                    }}
                     counts={counts}
                     compact
                   />
@@ -534,7 +604,10 @@ export default function DebitNotesListClient() {
                       sourceOptions={sourceOptions}
                       statusOptions={NOTES_STATUS_FILTER_OPTIONS}
                       searchPlaceholder="Search DN no., supplier, invoice, return…"
-                      onChange={(patch) => setFilters((prev) => ({ ...prev, ...patch }))}
+                      onChange={(patch) => {
+                        setPage(1);
+                        setFilters((prev) => ({ ...prev, ...patch }));
+                      }}
                       onReset={handleResetFilters}
                     />
                   </AccountsListingFilterCard>
@@ -554,7 +627,7 @@ export default function DebitNotesListClient() {
                     onPageChange={setPage}
                     onPageSizeChange={setPageSize}
                     onCancel={setCancelTarget}
-                    onRefresh={refresh}
+                    onRefresh={refreshRecords}
                     approvalRequired={approvalRequired}
                     hasCreatePermission={hasCreatePermission}
                     hasUpdatePermission={hasUpdatePermission}
@@ -575,7 +648,7 @@ export default function DebitNotesListClient() {
           try {
             await DebitNoteService.cancel(cancelTarget.id, { reason });
             showToast("Debit Note cancelled successfully.", "success");
-            refresh();
+            refreshRecords();
           } catch (e: any) {
             showToast(e.message || "Failed to cancel Debit Note.", "error");
           }

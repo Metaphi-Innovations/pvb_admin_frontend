@@ -179,6 +179,18 @@ export interface PendingCreditNoteDetail {
   invoice_references?: CreditNoteFormReference[];
   receipt_references?: CreditNoteFormReference[];
   sales_return_references?: CreditNoteFormReference[];
+  /** Sales Invoice additional charges available when pending is from a Sales Return. */
+  sales_return_additional_charges?: Array<{
+    sales_invoice_additional_charge_id: string;
+    description: string;
+    ledger_id: string;
+    ledger_name?: string | null;
+    original_taxable_amount?: string | number | null;
+    original_total_amount?: string | number | null;
+    remaining_amount?: string | number | null;
+    gst_rate?: string | number | null;
+    gst_applicable?: boolean;
+  }>;
   credit_note?: {
     credit_note_id: string;
     cn_number?: string | null;
@@ -267,6 +279,8 @@ export interface CreateDirectCreditNotePayload {
   customer_id: string;
   narration?: string | null;
   remarks?: string | null;
+  /** Signed round-off override; when omitted, backend applies auto nearest-rupee. */
+  round_off_amount?: number | string | null;
   lines: DirectCnLineInput[];
   references?: CnReferenceInput[];
 }
@@ -275,6 +289,8 @@ export interface UpdateDraftCreditNotePayload {
   cn_date?: string;
   narration?: string | null;
   remarks?: string | null;
+  /** Signed round-off override; when omitted and lines rebuilt, backend auto-rounds. */
+  round_off_amount?: number | string | null;
   lines?: DirectCnLineInput[];
   references?: CnReferenceInput[];
 }
@@ -283,6 +299,21 @@ export interface CreateFromPendingPayload {
   cn_date?: string;
   narration?: string | null;
   remarks?: string | null;
+  /** Signed round-off override; when omitted, backend applies auto nearest-rupee. */
+  round_off_amount?: number | string | null;
+  /** @deprecated Prefer free-form extra_charges. Kept for older clients. */
+  additional_charges?: Array<{
+    sales_invoice_additional_charge_id: string;
+    ledger_id: string;
+    amount: number | string;
+  }>;
+  /** Free-form CN additional charges (Direct-style), posted as CN lines. */
+  extra_charges?: Array<{
+    description: string;
+    ledger_id: string;
+    taxable_amount: number | string;
+    gst_rate?: number | string;
+  }>;
 }
 
 export interface CreditNoteApprovalConfig {

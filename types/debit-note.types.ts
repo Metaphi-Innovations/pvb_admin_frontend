@@ -41,10 +41,20 @@ export interface CreateDebitNoteFromPendingPayload {
   dn_date?: string;
   narration?: string | null;
   remarks?: string | null;
+  /** Signed round-off; when omitted backend applies nearest-rupee auto round-off. */
+  round_off_amount?: number | string | null;
+  /** @deprecated Prefer free-form extra_charges. Kept for older clients. */
   additional_charges?: Array<{
     purchase_return_additional_charge_id: string;
     ledger_id: string;
     amount: number | string;
+  }>;
+  /** Free-form DN additional charges (Direct-style), posted as DN lines. */
+  extra_charges?: Array<{
+    description: string;
+    ledger_id: string;
+    taxable_amount: number | string;
+    gst_rate?: number | string;
   }>;
 }
 
@@ -75,8 +85,11 @@ export interface DebitNoteListQueryParams {
   page_size?: number;
   search?: string;
   supplier_id?: string;
+  supplier_ids?: string[];
   warehouse_id?: string;
+  warehouse_ids?: string[];
   source_type?: "DIRECT" | "PURCHASE_INVOICE" | "PURCHASE_RETURN";
+  source_types?: Array<"DIRECT" | "PURCHASE_INVOICE" | "PURCHASE_RETURN">;
   status?: string;
   dn_number?: string;
   from_date?: string;

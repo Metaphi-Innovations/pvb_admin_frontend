@@ -10,9 +10,36 @@ import type {
   DebitNoteConfig
 } from "@/types/debit-note.types";
 
+/** Share one in-flight GET when React Strict Mode (or overlapping effects) call the same list twice.
+ * Also reuses a successful response briefly so a remount after a fast 304 does not fire again.
+ */
+const inflightGets = new Map<string, Promise<unknown>>();
+const recentGets = new Map<string, { at: number; data: unknown }>();
+const RECENT_GET_TTL_MS = 300;
+
+function coalesceInflightGet<T>(key: string, run: () => Promise<T>): Promise<T> {
+  const recent = recentGets.get(key);
+  if (recent && Date.now() - recent.at < RECENT_GET_TTL_MS) {
+    return Promise.resolve(recent.data as T);
+  }
+  const existing = inflightGets.get(key);
+  if (existing) return existing as Promise<T>;
+  const promise = run()
+    .then((data) => {
+      recentGets.set(key, { at: Date.now(), data });
+      return data;
+    })
+    .finally(() => {
+      if (inflightGets.get(key) === promise) inflightGets.delete(key);
+    });
+  inflightGets.set(key, promise);
+  return promise;
+}
+
 export function mapDebitNoteToRecord(item: any): DebitNoteRecord {
+  const dnAmount = parseFloat(item.dn_amount ?? item.grand_total ?? "0");
   return {
-    id: item.pending_debit_note_id || item.debit_note_id || item.id,
+    id: item.debit_note_id || item.id,
     debitNoteNo: item.dn_number || item.debit_note_number || item.voucher_no || "—",
     debitNoteDate: item.dn_date ? new Date(item.dn_date).toISOString().split("T")[0] : "—",
     againstType: item.against_type || (item.purchase_invoice_id ? "purchase_invoice" : "standalone_adjustment"),
@@ -28,9 +55,9 @@ export function mapDebitNoteToRecord(item: any): DebitNoteRecord {
     alreadyAdjustedAmount: 0,
     taxableAmount: parseFloat(item.taxable_amount || "0"),
     gstAmount: parseFloat(item.cgst_amount || "0") + parseFloat(item.sgst_amount || "0") + parseFloat(item.igst_amount || "0"),
-    currentDebitAmount: parseFloat(item.grand_total || "0"),
+    currentDebitAmount: dnAmount,
     balanceAfterAdjustment: 0,
-    standaloneDebitAmount: parseFloat(item.grand_total || "0"),
+    standaloneDebitAmount: dnAmount,
     lineItems: item.lines?.map((line: any) => ({
       id: line.id,
       productName: line.description || "—",
@@ -55,7 +82,7 @@ export function mapDebitNoteToRecord(item: any): DebitNoteRecord {
     updatedBy: item.updated_by_name || "—",
     createdAt: item.created_at || new Date().toISOString(),
     updatedAt: item.updated_at || new Date().toISOString(),
-    source: item.source_type?.toLowerCase() || "manual",
+    source: (item.source_type?.toLowerCase() || "manual") as DebitNoteRecord["source"],
     sourceReturnId: item.purchase_return_id || undefined,
     sourceReturnNo: item.purchase_return?.return_no || undefined,
     referenceNo: item.remarks || "",
@@ -82,8 +109,26 @@ export const DebitNoteService = {
   },
 
   async list(params?: DebitNoteListQueryParams): Promise<{ items: any[]; pagination: any }> {
-    const response = await axiosInstance.get(API_ENDPOINTS.ACCOUNTS.DEBIT_NOTE.LIST, { params });
-    return response.data?.data || { items: [], pagination: { total: 0, page: 1, page_size: 25 } };
+    const query: Record<string, unknown> = { ...(params || {}) };
+    if (params?.supplier_ids?.length) {
+      query.supplier_ids = params.supplier_ids.join(",");
+      delete query.supplier_id;
+    }
+    if (params?.warehouse_ids?.length) {
+      query.warehouse_ids = params.warehouse_ids.join(",");
+      delete query.warehouse_id;
+    }
+    if (params?.source_types?.length) {
+      query.source_types = params.source_types.join(",");
+      delete query.source_type;
+    }
+    const key = `dn:list:${JSON.stringify(query)}`;
+    return coalesceInflightGet(key, async () => {
+      const response = await axiosInstance.get(API_ENDPOINTS.ACCOUNTS.DEBIT_NOTE.LIST, {
+        params: query,
+      });
+      return response.data?.data || { items: [], pagination: { total: 0, page: 1, page_size: 25 } };
+    });
   },
 
   async getById(id: string | number): Promise<any> {
@@ -137,8 +182,11 @@ export const DebitNoteService = {
   },
 
   async listPending(params?: { page?: number; page_size?: number; search?: string; status?: string }): Promise<{ items: any[]; pagination: any }> {
-    const response = await axiosInstance.get(API_ENDPOINTS.ACCOUNTS.DEBIT_NOTE.PENDING, { params });
-    return response.data?.data || { items: [], pagination: { total: 0, page: 1, page_size: 25 } };
+    const key = `dn:pending:${JSON.stringify(params || {})}`;
+    return coalesceInflightGet(key, async () => {
+      const response = await axiosInstance.get(API_ENDPOINTS.ACCOUNTS.DEBIT_NOTE.PENDING, { params });
+      return response.data?.data || { items: [], pagination: { total: 0, page: 1, page_size: 25 } };
+    });
   },
 
   async getPendingById(id: string | number): Promise<any> {
