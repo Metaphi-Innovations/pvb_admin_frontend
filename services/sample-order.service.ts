@@ -89,6 +89,7 @@ function mapBackendLineItem(raw: any, idx: number): SalesOrderLineItem {
     productName: asString(prodSnapshot.product_name || product.product_name || raw.product_name),
     availableStock: asNumber(raw.stock_available),
     quantity: totalQty,
+    generatedBaseQty: asNumber(raw.generated_base_qty),
     caseQuantity: caseQty,
     pieceQuantity: pieceQty,
     packSize: unitsPerPacking,
@@ -100,6 +101,9 @@ function mapBackendLineItem(raw: any, idx: number): SalesOrderLineItem {
     lineTotal: asNumber(raw.line_total),
     unit: asString(prodSnapshot.base_unit || product.unit || "Unit"),
     packingUnit: asString(prodSnapshot.packing_unit || product.packing_unit || "Unit"),
+    uom: asString(prodSnapshot.base_unit || product.unit || prodSnapshot.uom || ""),
+    unitPackSize: asNumber(prodSnapshot.pack_size ?? product.pack_size ?? prodSnapshot.unit_pack_size) || null,
+    netWeight: asNumber(prodSnapshot.net_weight ?? product.net_weight ?? prodSnapshot.netWeight) || null,
     batchNumber: asString(raw.batch_no),
     expiryDate: raw.expiry_date ? asDateOnly(raw.expiry_date) : undefined,
   };
@@ -154,6 +158,14 @@ export function mapBackendSampleOrder(raw: any): SalesOrder {
       : undefined,
     packingListId: Array.isArray(raw.packing_lists) && raw.packing_lists.length > 0 
       ? raw.packing_lists[0].packing_list_id 
+      : undefined,
+    packingLists: Array.isArray(raw.packing_lists)
+      ? raw.packing_lists.map((pl: any) => ({
+          packingListId: asString(pl.packing_list_id),
+          packingNumber: asString(pl.packing_number),
+          generatedAt: asDateOnly(pl.generated_at || pl.created_at),
+          status: asString(pl.status),
+        }))
       : undefined,
   };
 

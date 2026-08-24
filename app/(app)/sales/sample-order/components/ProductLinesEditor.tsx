@@ -575,7 +575,7 @@ export default function ProductLinesEditor({
 												return (
 													<div className="text-right space-y-0.5 leading-tight text-[10px] text-muted-foreground border-t border-slate-100 pt-1">
 														<p>
-															Total units: <span className="font-semibold text-foreground">{draftLine.quantity} {product?.uom || "Unit"}</span>
+															Total units: <span className="font-semibold text-foreground">{draftLine.quantity} </span>
 														</p>
 														{weightStr && (
 															<p>

@@ -15,6 +15,7 @@ import {
   IndianRupee,
   ListOrdered,
   Activity,
+  Download,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -36,6 +37,7 @@ import {
   canEditOrder,
   canCancelOrder,
   canGeneratePackingList,
+  canDownloadPackingList,
   formatApprovalStatus,
   resolveApprovalStatus,
   getSampleOrderDisplayRecipient,
@@ -48,6 +50,8 @@ import {
   useUpdateSampleOrderStatus,
 } from "@/hooks/sales/use-sample-orders";
 import { useCustomer } from "@/hooks/masters/use-customers";
+import { openPackingListPdfById } from "@/app/(app)/sales/orders/pl-pdf/packingListPdfGenerator";
+import { PackingListDownloadDialog, type PackingListDownloadOption } from "@/app/(app)/sales/shared/PackingListDownloadDialog";
 
 function orderStatusVariant(status: OrderStatus): "active" | "inactive" | "draft" | "blocked" | "neutral" {
   if (["approved", "confirmed", "packed", "delivered", "dispatched"].includes(status)) return "active";
@@ -76,6 +80,8 @@ export default function ViewSalesOrderPage() {
   const [cancelOpen, setCancelOpen] = useState(false);
   const [approveOpen, setApproveOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
+  const [plDownloadOpen, setPlDownloadOpen] = useState(false);
+  const [plDownloadOptions, setPlDownloadOptions] = useState<PackingListDownloadOption[]>([]);
 
   const { data: rawOrder, isLoading, refetch } = useSampleOrder(id);
   const { data: billingCustomer } = useCustomer(rawOrder?.customerId ? String(rawOrder.customerId) : null);
@@ -114,6 +120,7 @@ export default function ViewSalesOrderPage() {
   const editable = canEditOrder(order);
   const cancellable = canCancelOrder(order);
   const packingAllowed = canGeneratePackingList(order);
+  const packingDownloadAllowed = canDownloadPackingList(order);
   const pendingApproval = order.status === "pending_approval";
   const showApprovalActions = pendingApproval;
   const approvalStatus = resolveApprovalStatus(order);
@@ -205,6 +212,38 @@ export default function ViewSalesOrderPage() {
       label: "Generate Packing List",
       icon: Package,
       onClick: () => router.push(`/sales/sample-order/${order.id}/packing-list/new`),
+    });
+  }
+  if (!showApprovalActions) {
+    quickActions.push({
+      label: "Download Packing List",
+      icon: Download,
+      disabled: !packingDownloadAllowed,
+      onClick: () => {
+        const opts: PackingListDownloadOption[] =
+          order.packingLists && order.packingLists.length > 0
+            ? order.packingLists
+            : order.packingListId
+              ? [
+                  {
+                    packingListId: String(order.packingListId),
+                    packingNumber: order.packingListNumber || String(order.packingListId),
+                  },
+                ]
+              : [];
+        if (opts.length === 1) {
+          void openPackingListPdfById(opts[0].packingListId).catch((e: unknown) => {
+            const message =
+              e instanceof Error && e.message
+                ? e.message
+                : "Failed to download Packing List.";
+            window.alert(message);
+          });
+          return;
+        }
+        setPlDownloadOptions(opts);
+        setPlDownloadOpen(true);
+      },
     });
   }
 
@@ -482,6 +521,24 @@ export default function ViewSalesOrderPage() {
         open={rejectOpen}
         onClose={() => setRejectOpen(false)}
         onConfirm={handleReject}
+      />
+
+      <PackingListDownloadDialog
+        open={plDownloadOpen}
+        onOpenChange={setPlDownloadOpen}
+        options={plDownloadOptions}
+        onDownload={async (opt) => {
+          try {
+            await openPackingListPdfById(opt.packingListId);
+            setPlDownloadOpen(false);
+          } catch (e: unknown) {
+            const message =
+              e instanceof Error && e.message
+                ? e.message
+                : "Failed to download Packing List.";
+            window.alert(message);
+          }
+        }}
       />
 
       {toast && (

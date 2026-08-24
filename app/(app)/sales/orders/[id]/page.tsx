@@ -30,9 +30,9 @@ import CancelOrderDialog from "../components/CancelOrderDialog";
 import ApproveOrderDialog from "../components/ApproveOrderDialog";
 import RejectOrderDialog from "../components/RejectOrderDialog";
 import {
-  openPackingListPdfWindow,
-  downloadPackingListPdfForSalesOrder,
+  openPackingListPdfById,
 } from "../pl-pdf/packingListPdfGenerator";
+import { PackingListDownloadDialog, type PackingListDownloadOption } from "@/app/(app)/sales/shared/PackingListDownloadDialog";
 import { getPackingListById, PACKING_LIST_STATUS_LABELS } from "../packing-list-data";
 import {
   type SalesOrder,
@@ -44,6 +44,7 @@ import {
   canSplitOrder,
   canCancelOrder,
   canGeneratePackingList,
+  canDownloadPackingList,
   canApproveOrder,
   formatApprovalStatus,
   resolveApprovalStatus,
@@ -85,6 +86,7 @@ export default function ViewSalesOrderPage() {
   const [cancelOpen, setCancelOpen] = useState(false);
   const [approveOpen, setApproveOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
+  const [plDownloadOpen, setPlDownloadOpen] = useState(false);
 
   const approveRejectMutation = useApproveRejectSalesOrder();
 
@@ -115,12 +117,16 @@ export default function ViewSalesOrderPage() {
     order.lineItems,
     order.additionalExpenses ?? [],
   );
-  const packingList = order.packingListId ? getPackingListById(order.packingListId) : undefined;
+  const packingList =
+    typeof order.packingListId === "number"
+      ? getPackingListById(order.packingListId)
+      : undefined;
 
   const editable = canEditOrder(order);
   const splittable = canSplitOrder(order);
   const cancellable = canCancelOrder(order);
   const packingAllowed = canGeneratePackingList(order);
+  const packingDownloadAllowed = canDownloadPackingList(order);
   const showApprovalActions = approvalMode && canApproveOrder(order);
   const approvalStatus = resolveApprovalStatus(order);
 
@@ -166,17 +172,30 @@ export default function ViewSalesOrderPage() {
     quickActions.push({
       label: "Download Packing List",
       icon: Download,
-      onClick: async () => {
-        try {
-          await downloadPackingListPdfForSalesOrder(String(order.id));
-        } catch (e: unknown) {
-          console.error("Packing List download error", e);
-          const message =
-            e instanceof Error && e.message
-              ? e.message
-              : "Failed to download Packing List.";
-          window.alert(message);
+      disabled: !packingDownloadAllowed,
+      onClick: () => {
+        const opts: PackingListDownloadOption[] =
+          order.packingLists && order.packingLists.length > 0
+            ? order.packingLists
+            : order.packingListId
+              ? [
+                  {
+                    packingListId: String(order.packingListId),
+                    packingNumber: order.packingListNumber || String(order.packingListId),
+                  },
+                ]
+              : [];
+        if (opts.length === 1) {
+          void openPackingListPdfById(opts[0].packingListId).catch((e: unknown) => {
+            const message =
+              e instanceof Error && e.message
+                ? e.message
+                : "Failed to download Packing List.";
+            window.alert(message);
+          });
+          return;
         }
+        setPlDownloadOpen(true);
       },
     });
   }
@@ -486,6 +505,36 @@ export default function ViewSalesOrderPage() {
           onSuccess={handleRejectSuccess}
         />
       )}
+
+      <PackingListDownloadDialog
+        open={plDownloadOpen}
+        onOpenChange={setPlDownloadOpen}
+        options={
+          order.packingLists && order.packingLists.length > 0
+            ? order.packingLists
+            : order.packingListId
+              ? [
+                  {
+                    packingListId: String(order.packingListId),
+                    packingNumber:
+                      order.packingListNumber || String(order.packingListId),
+                  },
+                ]
+              : []
+        }
+        onDownload={async (opt) => {
+          try {
+            await openPackingListPdfById(opt.packingListId);
+            setPlDownloadOpen(false);
+          } catch (e: unknown) {
+            const message =
+              e instanceof Error && e.message
+                ? e.message
+                : "Failed to download Packing List.";
+            window.alert(message);
+          }
+        }}
+      />
 
       {toast && (
         <div

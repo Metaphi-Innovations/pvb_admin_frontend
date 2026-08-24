@@ -103,11 +103,12 @@ export function RecordDetailSidebar({
                   type="button"
                   variant={isPrimary ? "default" : "outline"}
                   size="sm"
+                  disabled={action.disabled}
                   className={cn(
                     "h-8 w-full justify-start text-xs gap-2",
                     isPrimary && "bg-brand-600 hover:bg-brand-700 text-white",
                   )}
-                  onClick={action.onClick}
+                  onClick={() => !action.disabled && action.onClick?.()}
                 >
                   {Icon && <Icon className="w-3.5 h-3.5" />}
                   {action.label}

@@ -95,6 +95,7 @@ function mapBackendLineItem(raw: any, idx: number): TransferLineItem {
     productName: asString(prod.product_name || raw.product_name),
     availableStock: asNumber(raw.available_base_qty),
     quantity: totalQty,
+    generatedBaseQty: asNumber(raw.generated_base_qty),
     caseQuantity: caseQty,
     pieceQuantity: pieceQty,
     quantityType: quantityType as "Case" | "Piece",
@@ -120,6 +121,10 @@ function mapBackendLineItem(raw: any, idx: number): TransferLineItem {
     packingUnit: asString(prod.packing_unit || "Unit"),
     baseUnit: asString(prod.base_unit || "Unit"),
     unitsPerPackingUnit: unitsPerPacking,
+    packSize: unitsPerPacking,
+    uom: asString(prod.base_unit || prod.unit || prod.uom || ""),
+    unitPackSize: asNumber(prod.pack_size ?? prod.unit_pack_size) || null,
+    netWeight: asNumber(prod.net_weight ?? prod.netWeight) || null,
     receivedQty: asNumber(raw.received_base_qty),
   };
 }
@@ -175,6 +180,22 @@ export function mapBackendStockTransfer(raw: any): StockTransfer {
     createdDate: asDateOnly(raw.created_at),
     updatedBy: raw.updated_by_user ? `${raw.updated_by_user.first_name || ""} ${raw.updated_by_user.last_name || ""}`.trim() : "Admin",
     updatedDate: asDateOnly(raw.updated_at),
+    packingListNumber:
+      Array.isArray(raw.packing_lists) && raw.packing_lists.length > 0
+        ? asString(raw.packing_lists[0].packing_number)
+        : undefined,
+    packingListId:
+      Array.isArray(raw.packing_lists) && raw.packing_lists.length > 0
+        ? raw.packing_lists[0].packing_list_id
+        : undefined,
+    packingLists: Array.isArray(raw.packing_lists)
+      ? raw.packing_lists.map((pl: any) => ({
+          packingListId: asString(pl.packing_list_id),
+          packingNumber: asString(pl.packing_number),
+          generatedAt: asDateOnly(pl.generated_at || pl.created_at),
+          status: asString(pl.status),
+        }))
+      : undefined,
   };
 }
 

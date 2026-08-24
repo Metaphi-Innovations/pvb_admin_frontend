@@ -74,9 +74,17 @@ export interface PackingListLine {
   baseUnit: string;
   unitsPerPackingUnit: number;
   orderedBaseQty: number;
+  /** Already included in prior packing lists (base units). */
+  generatedBaseQty?: number;
+  /** Remaining qty available to put on this packing list. */
+  remainingBaseQty?: number;
   hasPackingConfig: boolean;
   allocations: CartonAllocation[];
   quantityType?: "Case" | "Piece";
+  /** Optional weight meta for stacked Case / Unit / Kg-Ltr display */
+  uom?: string;
+  unitPackSize?: number | null;
+  netWeight?: number | null;
 }
 
 export interface PackingList {

@@ -35,6 +35,8 @@ import {
 	repriceOrderLineItems,
 	isProductDiscountSchemeApplied,
 	getEligibleSchemesForSalesOrderLine,
+	normalizeLineDiscountType,
+	LINE_DISCOUNT_TYPE_OPTIONS,
 	type TaxSupplyType,
 } from "../orders-data";
 import {
@@ -510,6 +512,8 @@ export default function ProductLinesEditor({
 			}
 		} else if (
 			patch.discount !== undefined ||
+			patch.discountValue !== undefined ||
+			patch.discountType !== undefined ||
 			patch.gstAmount !== undefined ||
 			patch.cgstAmount !== undefined ||
 			patch.sgstAmount !== undefined ||
@@ -528,6 +532,22 @@ export default function ProductLinesEditor({
 			} else {
 				next = recalculateLineItem(next);
 			}
+		}
+		return next;
+	};
+
+	const commitDraftLine = (original: SalesOrderLineItem, draft: SalesOrderLineItem): SalesOrderLineItem => {
+		// Commit the draft as-is (do not re-run quantity branching that can drop edits).
+		let next: SalesOrderLineItem = {
+			...original,
+			...draft,
+			discountType: normalizeLineDiscountType(draft.discountType ?? original.discountType),
+		};
+		const product = next.productId ? getProductById(next.productId) : undefined;
+		if (product) {
+			next = applyLineTaxFields(next, product.gstRate, taxSupplyType, zeroGst);
+		} else {
+			next = recalculateLineItem(next);
 		}
 		return next;
 	};
@@ -758,7 +778,7 @@ export default function ProductLinesEditor({
 							{ h: "Quantity", className: "w-[160px]" },
 							{ h: "DP", className: "min-w-[80px]" },
 							{ h: "Offer", className: "min-w-[130px]" },
-							{ h: "Discount", className: "min-w-[100px]" },
+							{ h: "Discount", className: "min-w-[180px]" },
 							{ h: "Final Rate", className: "min-w-[80px]" },
 						].map(({ h, className }) => (
 							<th
@@ -924,7 +944,7 @@ export default function ProductLinesEditor({
 												return (
 													<div className="text-right space-y-0.5 leading-tight text-[10px] text-muted-foreground border-t border-slate-100 pt-1">
 														<p>
-															Total units: <span className="font-semibold text-foreground">{draftLine.quantity} {product.uom || "Unit"}</span>
+															Total units: <span className="font-semibold text-foreground">{draftLine.quantity} </span>
 														</p>
 														{weightStr && (
 															<p>
@@ -1009,20 +1029,71 @@ export default function ProductLinesEditor({
 												<span className="text-[10px] text-muted-foreground">({formatSchemeRupee(line.schemeDiscountAmount)})</span>
 											</div>
 										) : (
-											<div className="flex items-center gap-1 justify-end">
-												<Input
-													type="number"
-													min={0}
-													max={100}
-													value={draftLine.discount === 0 ? "" : draftLine.discount}
-													onChange={(e) => {
-														const val = e.target.value.slice(0, 4);
-														updateDraft({ discount: Number(val) || 0 });
+											<div className="flex flex-col items-stretch gap-1 min-w-[160px]">
+												<Select
+													value={normalizeLineDiscountType(draftLine.discountType)}
+													onValueChange={(value) => {
+														const discountType = normalizeLineDiscountType(value);
+														updateDraft({
+															discountType,
+															// Keep current entry as the value for the new type.
+															...(discountType === "Flat"
+																? { discountValue: draftLine.discountValue || 0 }
+																: { discount: draftLine.discount || 0 }),
+														});
 													}}
-													className="h-7 text-xs w-14 text-right tabular-nums"
-													placeholder="0"
-												/>
-												<span className="text-xs text-muted-foreground">%</span>
+												>
+													<SelectTrigger className="h-7 text-[10px] rounded-md border-border bg-white w-full">
+														<SelectValue placeholder="Type" />
+													</SelectTrigger>
+													<SelectContent>
+														{LINE_DISCOUNT_TYPE_OPTIONS.map((opt) => (
+															<SelectItem key={opt.value} value={opt.value} className="text-xs">
+																{opt.label}
+															</SelectItem>
+														))}
+													</SelectContent>
+												</Select>
+												<div className="flex items-center gap-1 justify-end">
+													{normalizeLineDiscountType(draftLine.discountType) === "Flat" ? (
+														<>
+															<span className="text-xs text-muted-foreground">₹</span>
+															<Input
+																type="number"
+																min={0}
+																value={draftLine.discountValue === 0 ? "" : draftLine.discountValue}
+																onChange={(e) => {
+																	const raw = e.target.value;
+																	updateDraft({
+																		discountType: "Flat",
+																		discountValue: raw === "" ? 0 : Number(raw) || 0,
+																	});
+																}}
+																className="h-7 text-xs w-20 text-right tabular-nums"
+																placeholder="0"
+															/>
+														</>
+													) : (
+														<>
+															<Input
+																type="number"
+																min={0}
+																max={100}
+																value={draftLine.discount === 0 ? "" : draftLine.discount}
+																onChange={(e) => {
+																	const val = e.target.value.slice(0, 6);
+																	updateDraft({
+																		discountType: "Percentage",
+																		discount: val === "" ? 0 : Number(val) || 0,
+																	});
+																}}
+																className="h-7 text-xs w-16 text-right tabular-nums"
+																placeholder="0"
+															/>
+															<span className="text-xs text-muted-foreground">%</span>
+														</>
+													)}
+												</div>
 											</div>
 										)
 									) : (
@@ -1030,8 +1101,12 @@ export default function ProductLinesEditor({
 											{line.productId ? (
 												hasScheme ? (
 													`${line.schemeDiscountPercent}% (${formatSchemeRupee(line.schemeDiscountAmount)})`
-												) : line.discount > 0 ? (
-													`${line.discount}% (${formatSchemeRupee(line.discountValue / (line.quantity || 1))})`
+												) : line.discountValue > 0 || line.discount > 0 ? (
+													normalizeLineDiscountType(line.discountType) === "Flat" ? (
+														`Fixed · ${formatSchemeRupee(line.discountValue)}`
+													) : (
+														`${line.discount}% · ${formatSchemeRupee(line.discountValue)}`
+													)
 												) : (
 													"—"
 												)
@@ -1043,7 +1118,7 @@ export default function ProductLinesEditor({
 								</td>
 								<td className='px-2 py-1.5'>
 									<span className='text-xs font-medium tabular-nums whitespace-nowrap'>
-										{line.productId ? formatSchemeRupee(line.finalRate) : "—"}
+										{draftLine.productId ? formatSchemeRupee(draftLine.finalRate) : "—"}
 									</span>
 								</td>
 								{draftLine.productId && product && taxBreakdown ? (
@@ -1099,7 +1174,15 @@ export default function ProductLinesEditor({
 													type='button'
 													onClick={() => {
 														if (editDraft) {
-															updateLine(line.id, editDraft);
+															const committed = commitDraftLine(
+																line,
+																editDraft as SalesOrderLineItem,
+															);
+															onChange(
+																lines.map((entry) =>
+																	entry.id === line.id ? committed : entry,
+																),
+															);
 														}
 														setEditingId(null);
 														setEditDraft(null);
@@ -1127,7 +1210,10 @@ export default function ProductLinesEditor({
 													type='button'
 													onClick={() => {
 														setEditingId(line.id);
-														setEditDraft({ ...line });
+														setEditDraft({
+															...line,
+															discountType: normalizeLineDiscountType(line.discountType),
+														});
 													}}
 													className='p-1.5 hover:bg-muted rounded-md transition-colors'
 													title='Edit row'

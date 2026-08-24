@@ -96,14 +96,25 @@ export interface SalesOrderLineItem {
   caseQuantity?: number;
   pieceQuantity?: number;
   packSize?: number;
+  /** Product UOM / weight — used for stacked Case / Unit / Kg-Ltr */
+  uom?: string;
+  unitPackSize?: number | null;
+  netWeight?: number | null;
   quantity: number;
+  /** Qty already included in generated Packing Lists (base units). */
+  generatedBaseQty?: number;
   /** Dealer price (DP) from Pricing Master */
   dealerPrice: number;
   /** Unit price used for line totals — equals dealerPrice before scheme discount */
   unitPrice: number;
-  /** Discount percentage — set when user manually applies Product Discount Scheme */
+  /**
+   * Manual line discount type (not Scheme Master).
+   * Percentage = `discount` is %; Flat = `discountValue` is ₹ amount on the line.
+   */
+  discountType?: "Percentage" | "Flat";
+  /** Discount percentage — used when discountType is Percentage */
   discount: number;
-  /** Discount amount in ₹ (synced with discount %) */
+  /** Discount amount in ₹ — used when discountType is Flat; also synced from % */
   discountValue: number;
   /** Per-unit scheme discount % (display) */
   schemeDiscountPercent: number;
@@ -202,9 +213,16 @@ export interface SalesOrder {
   cancelledBy?: string;
   cancelledDate?: string;
   /** Packing list reference */
-  packingListId?: number;
+  packingListId?: number | string;
   packingListNumber?: string;
   packingStatus?: PackingStatus;
+  /** All packing lists for this order (multi-PL download). */
+  packingLists?: Array<{
+    packingListId: string;
+    packingNumber: string;
+    generatedAt?: string;
+    status?: string;
+  }>;
   warehouseId?: number;
   warehouseName?: string;
   billToAddressId?: string;
@@ -454,6 +472,24 @@ export function parseGstRate(gstRate: any): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+export const LINE_DISCOUNT_TYPE_OPTIONS: {
+  value: "Percentage" | "Flat";
+  label: string;
+}[] = [
+  { value: "Percentage", label: "Percentage (%)" },
+  { value: "Flat", label: "Fixed Amount (₹)" },
+];
+
+export function normalizeLineDiscountType(
+  value: unknown,
+): "Percentage" | "Flat" {
+  const raw = String(value ?? "").trim().toLowerCase();
+  if (raw === "flat" || raw === "fixed" || raw === "rupees" || raw === "amount") {
+    return "Flat";
+  }
+  return "Percentage";
+}
+
 export function calculateLineDiscountValue(quantity: number, unitPrice: number, discountPercent: number): number {
   const gross = quantity * unitPrice;
   return Math.round(gross * (discountPercent / 100) * 100) / 100;
@@ -464,6 +500,31 @@ export function calculateDiscountPercentFromValue(quantity: number, unitPrice: n
   if (gross <= 0) return 0;
   const pct = (discountValue / gross) * 100;
   return Math.round(Math.min(100, Math.max(0, pct)) * 100) / 100;
+}
+
+/** Sync manual discount % ↔ ₹ and final rate (does not touch Scheme Master fields). */
+export function syncManualLineDiscount(
+  line: SalesOrderLineItem,
+): Pick<SalesOrderLineItem, "discountType" | "discount" | "discountValue" | "finalRate"> {
+  const discountType = normalizeLineDiscountType(line.discountType);
+  const gross = Math.max(0, (line.quantity || 0) * (line.unitPrice || 0));
+  let discount = Math.max(0, Number(line.discount) || 0);
+  let discountValue = Math.max(0, Number(line.discountValue) || 0);
+
+  if (discountType === "Flat") {
+    discountValue = Math.min(discountValue, gross);
+    discount = calculateDiscountPercentFromValue(line.quantity, line.unitPrice, discountValue);
+  } else {
+    discount = Math.min(100, discount);
+    discountValue = calculateLineDiscountValue(line.quantity, line.unitPrice, discount);
+  }
+
+  const finalRate =
+    line.quantity > 0
+      ? Math.round(((gross - discountValue) / line.quantity) * 100) / 100
+      : Math.round((line.unitPrice || 0) * (1 - discount / 100) * 100) / 100;
+
+  return { discountType, discount, discountValue, finalRate };
 }
 
 export function calculateLineSubtotal(quantity: number, unitPrice: number, discountPercent: number): number {
@@ -668,13 +729,24 @@ export function applyLineTaxFields(
 
 export function recalculateLineItem(line: SalesOrderLineItem): SalesOrderLineItem {
   const hasScheme = isProductDiscountSchemeApplied(line);
-  const discountValue = hasScheme
-    ? Math.round(line.schemeDiscountAmount * line.quantity * 100) / 100
-    : calculateLineDiscountValue(line.quantity, line.unitPrice, line.discount);
-  const lineTotal = hasScheme
-    ? calculateLineTotalFromFinalRate(line.quantity, line.finalRate, line.gstAmount)
-    : calculateLineTotal(line.quantity, line.unitPrice, line.discount, line.gstAmount);
-  return { ...line, discountValue, lineTotal };
+  if (hasScheme) {
+    const discountValue = Math.round(line.schemeDiscountAmount * line.quantity * 100) / 100;
+    const lineTotal = calculateLineTotalFromFinalRate(
+      line.quantity,
+      line.finalRate,
+      line.gstAmount,
+    );
+    return { ...line, discountValue, lineTotal };
+  }
+
+  const synced = syncManualLineDiscount(line);
+  const lineTotal = calculateLineTotal(
+    line.quantity,
+    line.unitPrice,
+    synced.discount,
+    line.gstAmount,
+  );
+  return { ...line, ...synced, lineTotal };
 }
 
 export function calculateOrderTotal(lines: SalesOrderLineItem[]): number {
@@ -956,6 +1028,7 @@ export function createEmptyLineItem(): SalesOrderLineItem {
     quantity: 1,
     dealerPrice: 0,
     unitPrice: 0,
+    discountType: "Percentage",
     discount: 0,
     discountValue: 0,
     schemeDiscountPercent: 0,
@@ -1444,19 +1517,36 @@ export function canDownloadPI(order: SalesOrder): boolean {
 
 export function canGeneratePackingList(order: SalesOrder): boolean {
   if (isOrderCancelled(order)) return false;
-  if (order.packingListId || order.packingListNumber) return false;
 
-  // Approval must be APPROVED; only PENDING fulfillment can generate a packing list.
   const approvalOk =
     order.status === "APPROVED" ||
     order.status === "approved";
   if (!approvalOk) return false;
 
-  const fulfillment = order.fulfillmentStatus || "PENDING";
-  if (fulfillment !== "PENDING") return false;
+  const fulfillment = (order.fulfillmentStatus || "PENDING").toString();
+  const blocked = [
+    "Fully Dispatched",
+    "FULLY_DISPATCHED",
+    "DELIVERED",
+    "delivered",
+    "CANCELLED",
+    "cancelled",
+  ];
+  if (blocked.includes(fulfillment)) return false;
 
   const hydrated = hydrateOrderLineItems(order);
-  return hydrated.lineItems.some(l => l.productId && l.quantity > 0);
+  return hydrated.lineItems.some((l) => {
+    if (!l.productId || !(l.quantity > 0)) return false;
+    const generated = Number(l.generatedBaseQty || 0);
+    return l.quantity - generated > 1e-9;
+  });
+}
+
+/** Packing List PDF is only available after at least one packing list has been generated. */
+export function canDownloadPackingList(order: SalesOrder): boolean {
+  if (isOrderCancelled(order)) return false;
+  if (order.packingLists && order.packingLists.length > 0) return true;
+  return Boolean(order.packingListId || order.packingListNumber);
 }
 
 export interface SalesOrderFormValues {
@@ -1759,7 +1849,7 @@ export function cancelSalesOrder(orderId: number, reason: string): SalesOrder | 
 
 export function attachPackingListToOrder(
   orderId: number,
-  packingListId: number,
+  packingListId: number | string,
   packingListNumber: string,
   warehouseId: number,
   warehouseName: string,
