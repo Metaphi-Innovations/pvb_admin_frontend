@@ -109,8 +109,6 @@ export default function TransferProductLinesEditor({
   const [topSelectedBatch, setTopSelectedBatch] = useState<any | null>(null);
   const [topInputQty, setTopInputQty] = useState<string>("1");
   const [topQuantityType, setTopQuantityType] = useState<"Case" | "Piece">("Piece");
-  const [topCaseQuantity, setTopCaseQuantity] = useState<number>(0);
-  const [topPieceQuantity, setTopPieceQuantity] = useState<number>(0);
   const [localError, setLocalError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<Partial<TransferLineItem> | null>(null);
@@ -162,9 +160,11 @@ export default function TransferProductLinesEditor({
     const errors: string[] = [];
 
     for (const selectedProduct of topSelectedProducts) {
+      const qtyVal = Number(topInputQty) || 0;
+      const packSize = selectedProduct.packSize || 1;
       const qty = topQuantityType === "Case"
-        ? (topCaseQuantity * (selectedProduct.packSize || 1))
-        : (topCaseQuantity * (selectedProduct.packSize || 1)) + topPieceQuantity;
+        ? (qtyVal * packSize)
+        : qtyVal;
 
       if (qty <= 0) {
         errors.push(`Transfer Qty must be greater than zero for "${selectedProduct.name}".`);
@@ -189,8 +189,13 @@ export default function TransferProductLinesEditor({
       newLine.finalRate = costPrice;
       newLine.gstRate = selectedProduct.gstRate;
       newLine.quantityType = topQuantityType;
-      newLine.caseQuantity = topCaseQuantity;
-      newLine.pieceQuantity = topPieceQuantity;
+      if (topQuantityType === "Case") {
+        newLine.caseQuantity = qtyVal;
+        newLine.pieceQuantity = 0;
+      } else {
+        newLine.caseQuantity = 0;
+        newLine.pieceQuantity = qtyVal;
+      }
       newLine.quantity = qty;
       newLine.availableStock = selectedProduct.stock;
 
@@ -216,8 +221,7 @@ export default function TransferProductLinesEditor({
 
     onChange(nextLines);
     setTopSelectedProducts([]);
-    setTopCaseQuantity(0);
-    setTopPieceQuantity(0);
+    setTopInputQty("1");
     setLocalError(errors[0] || null);
   };
 
@@ -251,57 +255,30 @@ export default function TransferProductLinesEditor({
         customQuantityArea={
           <>
             <div className="space-y-1">
-              <Label className="text-xs font-medium">Type</Label>
-              <Select
-                value={topQuantityType}
-                onValueChange={(value) => {
-                  const type = value as "Case" | "Piece";
-                  setTopQuantityType(type);
-                  if (type === "Case") {
-                    setTopPieceQuantity(0);
-                  } else {
-                    setTopCaseQuantity(0);
-                  }
-                }}
-              >
-                <SelectTrigger className="h-8 text-xs rounded-lg border-border bg-white w-[90px]">
-                  <SelectValue placeholder="Type" />
-                </SelectTrigger>
-                <SelectContent className="min-w-[120px]">
-                  <SelectItem value="Case">Case</SelectItem>
-                  <SelectItem value="Piece">Piece</SelectItem>
-                </SelectContent>
-              </Select>
+              <Label className="text-xs font-medium">Qty</Label>
+              <div className="flex items-center gap-1.5">
+                <Input
+                  type="number"
+                  min={1}
+                  value={topInputQty}
+                  onChange={(e) => setTopInputQty(e.target.value)}
+                  className="h-8 text-xs w-20 bg-white"
+                  placeholder="1"
+                />
+                <Select
+                  value={topQuantityType}
+                  onValueChange={(value) => setTopQuantityType(value as "Case" | "Piece")}
+                >
+                  <SelectTrigger className="h-8 text-xs rounded-lg border-border bg-white w-[90px]">
+                    <SelectValue placeholder="Type" />
+                  </SelectTrigger>
+                  <SelectContent className="min-w-[120px]">
+                    <SelectItem value="Case">Case</SelectItem>
+                    <SelectItem value="Piece">Piece</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-            <div className="space-y-1">
-              <Label className="text-xs font-medium">Cases</Label>
-              <Input
-                type="number"
-                min={0}
-                disabled={topQuantityType === "Piece"}
-                value={topCaseQuantity || ""}
-                onChange={(e) => {
-                  const val = e.target.value.slice(0, 5);
-                  setTopCaseQuantity(Number(val) || 0);
-                }}
-                className="h-8 text-xs w-20 bg-white disabled:opacity-50"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs font-medium">Pieces</Label>
-              <Input
-                type="number"
-                min={0}
-                disabled={topQuantityType === "Case"}
-                value={topPieceQuantity || ""}
-                onChange={(e) => {
-                  const val = e.target.value.slice(0, 5);
-                  setTopPieceQuantity(Number(val) || 0);
-                }}
-                className="h-8 text-xs w-20 bg-white disabled:opacity-50"
-              />
-            </div>
-
           </>
         }
         customTableHead={
@@ -309,10 +286,7 @@ export default function TransferProductLinesEditor({
             {[
               { h: "Product", className: "w-[240px] text-left" },
               { h: "SKU", className: "text-left" },
-              { h: "Type", className: "w-[80px] text-left" },
-              { h: "Cases", className: "w-20 text-right" },
-              { h: "Pieces", className: "w-20 text-right" },
-              { h: "Total Unit Qty", className: "w-20 text-right" },
+              { h: "Quantity", className: "w-[160px] text-right" },
               { h: "CP", className: "text-right" },
             ].map(({ h, className }) => (
               <th
@@ -399,75 +373,89 @@ export default function TransferProductLinesEditor({
                 <td className="px-3 py-2 text-xs font-mono font-semibold text-brand-700">
                   {line.productCode || "—"}
                 </td>
-                <td className='px-2 py-1.5 w-[80px]'>
-                  {isEditing ? (
-                    <Select
-                      value={draftLine.quantityType || "Piece"}
-                      onValueChange={(value) => {
-                        const type = value as "Case" | "Piece";
-                        const resetUpdates = type === "Case" ? { pieceQuantity: 0 } : { caseQuantity: 0 };
-                        updateDraft({ quantityType: type, ...resetUpdates });
-                      }}
-                    >
-                      <SelectTrigger className="h-7 text-xs rounded border-border bg-white w-full px-2">
-                        <SelectValue placeholder="Type" />
-                      </SelectTrigger>
-                      <SelectContent className="min-w-[120px]">
-                        <SelectItem value="Case">Case</SelectItem>
-                        <SelectItem value="Piece">Piece</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <span className="text-xs">{line.quantityType || "Piece"}</span>
-                  )}
-                </td>
-                <td className='px-2 py-1.5 w-20 text-right'>
-                  {isEditing ? (
-                    <Input
-                      type="number"
-                      min={0}
-                      disabled={draftLine.quantityType === "Piece"}
-                      value={draftLine.caseQuantity === 0 && !draftLine.quantity ? "" : draftLine.caseQuantity}
-                      onChange={(e) => {
-                        const val = e.target.value.slice(0, 5);
-                        updateDraft({ caseQuantity: val ? Number(val) : 0 });
-                      }}
-                      className="h-7 text-xs w-full disabled:opacity-50 text-right"
-                    />
-                  ) : (
-                    <span className="text-xs tabular-nums">{line.caseQuantity || 0}</span>
-                  )}
-                </td>
-                <td className='px-2 py-1.5 w-20 text-right'>
-                  {isEditing ? (
-                    <Input
-                      type="number"
-                      min={0}
-                      disabled={draftLine.quantityType === "Case"}
-                      value={draftLine.pieceQuantity === 0 && !draftLine.quantity ? "" : draftLine.pieceQuantity}
-                      onChange={(e) => {
-                        const val = e.target.value.slice(0, 5);
-                        updateDraft({ pieceQuantity: val ? Number(val) : 0 });
-                      }}
-                      className="h-7 text-xs w-full disabled:opacity-50 text-right"
-                    />
-                  ) : (
-                    <span className="text-xs tabular-nums">{line.pieceQuantity || 0}</span>
-                  )}
-                </td>
-                <td className='px-2 py-1.5 w-20 text-right'>
-                  {isEditing ? (
-                    <Input
-                      type="number"
-                      disabled
-                      value={draftLine.quantity || ""}
-                      className="h-7 text-xs w-full font-semibold bg-muted text-muted-foreground text-right"
-                    />
-                  ) : (
-                    <span className="text-xs font-semibold tabular-nums text-foreground">
-                      {line.quantity || 0}
-                    </span>
-                  )}
+                <td className='px-2 py-1.5 min-w-[140px] align-top text-right'>
+                  <div className="flex flex-col gap-1 w-full text-right">
+                    {isEditing ? (
+                      <div className="flex items-center gap-1 justify-end">
+                        <Input
+                          type="number"
+                          min={0}
+                          value={
+                            draftLine.quantityType === "Case"
+                              ? (draftLine.caseQuantity === 0 && !draftLine.quantity ? "" : draftLine.caseQuantity)
+                              : (draftLine.pieceQuantity === 0 && !draftLine.quantity ? "" : draftLine.pieceQuantity)
+                          }
+                          onChange={(e) => {
+                            const val = e.target.value.slice(0, 5);
+                            const num = val ? Number(val) : 0;
+                            if (draftLine.quantityType === "Case") {
+                              updateDraft({ caseQuantity: num });
+                            } else {
+                              updateDraft({ pieceQuantity: num });
+                            }
+                          }}
+                          className="h-7 text-xs w-16 text-right tabular-nums"
+                        />
+                        <Select
+                          value={draftLine.quantityType || "Piece"}
+                          onValueChange={(value) => {
+                            const type = value as "Case" | "Piece";
+                            const currentVal = draftLine.quantityType === "Case" ? draftLine.caseQuantity : draftLine.pieceQuantity;
+                            if (type === "Case") {
+                              updateDraft({ quantityType: type, caseQuantity: currentVal || 0, pieceQuantity: 0 });
+                            } else {
+                              updateDraft({ quantityType: type, pieceQuantity: currentVal || 0, caseQuantity: 0 });
+                            }
+                          }}
+                        >
+                          <SelectTrigger className="h-7 text-[10px] rounded border-border bg-white w-[54px] px-1.5 shrink-0">
+                            <SelectValue placeholder="Type" />
+                          </SelectTrigger>
+                          <SelectContent className="min-w-[100px]">
+                            <SelectItem value="Case">Case</SelectItem>
+                            <SelectItem value="Piece">Piece</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    ) : (
+                      <span className="text-xs font-semibold text-foreground">
+                        {line.quantityType === "Case" ? line.caseQuantity : line.pieceQuantity} {line.quantityType || "Piece"}
+                      </span>
+                    )}
+
+                    {/* Stacked details */}
+                    {draftLine.productId && product && (
+                      (() => {
+                        const uomLower = (product.uom || "").toLowerCase();
+                        const unitSize = Number(product.unitPackSize) || 0;
+                        let weightStr = "";
+                        if (uomLower === "ml") {
+                          weightStr = `${((draftLine.quantity * unitSize) / 1000).toFixed(2)} Ltr`;
+                        } else if (uomLower === "gms" || uomLower === "gram" || uomLower === "grams") {
+                          weightStr = `${((draftLine.quantity * unitSize) / 1000).toFixed(2)} Kg`;
+                        } else if (uomLower === "ltr" || uomLower === "kg") {
+                          weightStr = `${(draftLine.quantity * (unitSize || 1)).toFixed(2)} ${product.uom}`;
+                        } else if (product.netWeight) {
+                          weightStr = `${(draftLine.quantity * product.netWeight).toFixed(2)} ${["ml", "ltr"].includes(uomLower) ? "Ltr" : "Kg"}`;
+                        }
+                        return (
+                          <div className="text-right space-y-0.5 leading-tight text-[10px] text-muted-foreground border-t border-slate-100 pt-1">
+                            <p>
+                              Total units: <span className="font-semibold text-foreground">{draftLine.quantity} {product.uom || "Unit"}</span>
+                            </p>
+                            {weightStr && (
+                              <p>
+                                Weight: <span className="font-semibold text-foreground">{weightStr}</span>
+                              </p>
+                            )}
+                            <p className="text-[9px] text-muted-foreground/80">
+                              Pack size: {product.packSize || 1}
+                            </p>
+                          </div>
+                        );
+                      })()
+                    )}
+                  </div>
                 </td>
                 <td className="px-3 py-2 text-xs tabular-nums whitespace-nowrap text-right">
                   {line.productId ? formatRupee(line.unitPrice ?? 0) : "—"}

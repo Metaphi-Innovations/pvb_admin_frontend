@@ -215,6 +215,9 @@ export interface ProductCatalogItem {
   category: string;
   segment: string;
   packSize?: number;
+  uom?: string;
+  netWeight?: number | null;
+  unitPackSize?: number;
 }
 
 export function todayStr(): string {

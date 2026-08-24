@@ -118,10 +118,6 @@ export function PurchaseReturnForm({
               <Label className="text-xs font-medium">Supplier Code</Label>
               <ReadOnlyField value={record.supplierCode} mono />
             </div>
-            <div className="space-y-1">
-              <Label className="text-xs font-medium">Initiated By</Label>
-              <ReadOnlyField value={record.initiatedBy} />
-            </div>
             {readOnly && record.packingListNo && (
               <div className="space-y-1">
                 <Label className="text-xs font-medium">Packing List</Label>

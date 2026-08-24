@@ -82,6 +82,8 @@ export interface ProductCatalogItem {
   status: "active" | "inactive" | "archived";
   packSize?: number;
   sku?: string;
+  netWeight?: number | null;
+  unitPackSize?: number;
 }
 
 export interface SalesOrderLineItem {

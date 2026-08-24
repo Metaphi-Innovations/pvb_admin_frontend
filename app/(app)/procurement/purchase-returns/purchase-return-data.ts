@@ -31,6 +31,8 @@ export interface PurchaseReturnItem {
   productId: string;
   productCode: string;
   productName: string;
+  /** Product master SKU (shown under product name). */
+  sku?: string;
   batchNumber: string;
   /** Origin purchase GRN (backward-compatible primary GRN display). */
   grnNo: string;
