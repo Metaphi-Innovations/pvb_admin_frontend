@@ -1,10 +1,10 @@
 "use client";
 
-import { VoucherDualEntryForm } from "@/components/accounts/VoucherDualEntryForm";
-import { isPaymentUuid } from "../payment/payment-voucher-utils";
-import { PaymentVoucherApiForm } from "../payment/PaymentVoucherApiForm";
+import { StandardVoucherForm } from "@/components/accounts/voucher-form/StandardVoucherForm";
+import { isJournalUuid } from "./journal-voucher-utils";
+import { JournalVoucherApiForm } from "./JournalVoucherApiForm";
 
-interface PaymentVoucherFormProps {
+interface JournalVoucherFormProps {
   onDone?: () => void;
   /** Legacy localStorage numeric id OR backend UUID string. */
   voucherId?: number | string;
@@ -13,18 +13,18 @@ interface PaymentVoucherFormProps {
 }
 
 /**
- * Payment entry point.
- * - New / UUID ids → API-backed PaymentVoucherApiForm
- * - Legacy numeric ids → existing dual-entry demo form (Receipt/Contra untouched)
+ * Journal entry point.
+ * - New / UUID ids → API-backed JournalVoucherApiForm (one Dr + one Cr)
+ * - Legacy numeric ids → existing StandardVoucherForm demo (isolated)
  */
-export function PaymentVoucherForm({
+export function JournalVoucherForm({
   onDone,
   voucherId,
   readOnly = false,
   onEdit,
-}: PaymentVoucherFormProps) {
+}: JournalVoucherFormProps) {
   const apiId =
-    typeof voucherId === "string" && isPaymentUuid(voucherId)
+    typeof voucherId === "string" && isJournalUuid(voucherId)
       ? voucherId
       : undefined;
   const legacyNumeric =
@@ -36,7 +36,7 @@ export function PaymentVoucherForm({
 
   if (apiId || voucherId == null || voucherId === "") {
     return (
-      <PaymentVoucherApiForm
+      <JournalVoucherApiForm
         voucherId={apiId}
         readOnly={readOnly}
         onDone={onDone}
@@ -47,11 +47,11 @@ export function PaymentVoucherForm({
 
   const cancelHref = legacyNumeric
     ? `/accounts/vouchers/view/${legacyNumeric}`
-    : "/accounts/vouchers?tab=payment";
+    : "/accounts/vouchers?tab=journal";
 
   return (
-    <VoucherDualEntryForm
-      voucherType="payment"
+    <StandardVoucherForm
+      voucherType="journal"
       cancelHref={cancelHref}
       voucherId={legacyNumeric}
       readOnly={readOnly}
