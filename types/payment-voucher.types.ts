@@ -53,10 +53,21 @@ export interface PaymentPendingFile {
   previewUrl: string;
 }
 
+/** Historical TDS Section snapshot returned on allocations (backend-built). */
+export interface PaymentTdsSectionSnapshot {
+  tds_id?: string | null;
+  tds_code?: string | null;
+  tds_section_name?: string | null;
+  tds_rate?: string | number | null;
+  description?: string | null;
+}
+
 export interface PaymentAllocationInput {
   open_item_id: string;
   allocated_amount: number | string;
   tds_amount?: number | string;
+  /** Required by backend when tds_amount > 0. Cleared when tds_amount = 0. */
+  tds_section_id?: string | null;
   discount_amount?: number | string;
   narration?: string | null;
 }
@@ -208,6 +219,8 @@ export interface PaymentAllocationRow {
   open_item_id: string;
   allocated_amount: string | number;
   tds_amount?: string | number;
+  tds_section_id?: string | null;
+  tds_section_snapshot?: PaymentTdsSectionSnapshot | null;
   discount_amount?: string | number;
   narration?: string | null;
   open_item_snapshot?: Record<string, unknown> | null;
