@@ -18,15 +18,16 @@ export type InventoryListRow = {
   sku: string;
   uom: string;
   available_qty: number;
-  reserved_qty: number;
   cp: string;
   stock_value: string;
-  warehouse_name: string;
-  batch_no: string;
   status: string;
   lifecycle_status?: string;
-  source_status?: string;
-  source_type?: string;
+  /** Packing meta for stacked Available Qty (Case / Unit · Kg|Ltr). */
+  unit_per_packing?: number | null;
+  quantity_type?: string | null;
+  pack_size?: number | null;
+  net_weight?: number | null;
+  unit?: string | null;
 };
 
 export type RejectedListRow = {
@@ -36,6 +37,7 @@ export type RejectedListRow = {
   batch_no: string;
   rejected_qty: number;
   reject_reason: string;
+  reject_type?: string;
   qc_number: string;
   inspection_date: string | null;
   status: string;
@@ -72,22 +74,23 @@ export type DailyLogListRow = {
   product_name: string;
   hsn: string;
   scientific_name: string;
-  category: string;
-  pack_size: string;
   opening_qty: number;
   day_in: number | string;
   day_out: number | string;
   closing_qty: number;
-  available_qty: number;
   batch_no: string;
+  manufacture_date: string | null;
   expiry_date: string | null;
   warehouse_name: string;
   cp: number;
   valuation: number;
   status: string;
   lifecycle_status?: string;
-  source_status?: string;
-  source_type?: string;
+  unit_per_packing?: number | null;
+  quantity_type?: string | null;
+  pack_size?: number | null;
+  net_weight?: number | null;
+  unit?: string | null;
 };
 
 export type DailyLogSummary = {
@@ -147,6 +150,7 @@ export type RejectedDetails = {
   batch_no: string;
   rejected_qty: number;
   reject_reason: string | null;
+  reject_type?: string;
   status: string;
   lifecycle_status?: string;
   source_status?: string;
@@ -245,6 +249,7 @@ export function buildStockOverviewFilters(filters: FilterState | undefined): Rec
     else if (key === "batchNumber" || key === "batch_no") mapped.batch_no = value;
     else if (key === "status") mapped.status = value;
     else if (key === "source_status" || key === "sourceStatus") mapped.source_status = value;
+    else if (key === "reject_type" || key === "rejectType") mapped.reject_type = value;
     else if (key === "source_type" || key === "sourceType") mapped.source_type = value;
     else if (key === "product_code" || key === "productCode") mapped.product_code = value;
     else if (key === "sku") mapped.sku = value;
@@ -300,6 +305,8 @@ export function toStockOrdering(key: string, direction: "asc" | "desc" | "none")
     status: "status",
     source_status: "source_status",
     sourceStatus: "source_status",
+    reject_type: "reject_type",
+    rejectType: "reject_type",
     rejectedQuantity: "rejected_qty",
     rejected_qty: "rejected_qty",
     rejectionReason: "reject_reason",
@@ -317,12 +324,11 @@ export function toStockOrdering(key: string, direction: "asc" | "desc" | "none")
     return_date: "return_date",
     expiryDate: "expiry_date",
     expiry_date: "expiry_date",
+    mfgDate: "manufacture_date",
+    manufacture_date: "manufacture_date",
     hsn: "hsn",
     scientificName: "scientific_name",
     scientific_name: "scientific_name",
-    category: "category",
-    packSize: "pack_size",
-    pack_size: "pack_size",
     openingQty: "opening_qty",
     opening_qty: "opening_qty",
     dayIn: "day_in",
@@ -528,6 +534,7 @@ export const StockOverviewApi = {
       batch_no: asString(data.batch_no),
       rejected_qty: toNumber(data.rejected_qty),
       reject_reason: asString(data.reject_reason) || "—",
+      reject_type: data.reject_type ? asString(data.reject_type) : "—",
       status: asString(data.status),
       lifecycle_status: data.lifecycle_status ? asString(data.lifecycle_status) : asString(data.status),
       source_status: data.source_status ? asString(data.source_status) : undefined,

@@ -253,6 +253,10 @@ function CreateQcForm() {
           }
         }
 
+        if ((updated.rejectedQty || 0) <= 0) {
+          updated.rejectType = "";
+        }
+
         return updated;
       })
     );
@@ -262,12 +266,25 @@ function CreateQcForm() {
     setItems((prev) => prev.map((item, i) => (i === idx ? { ...item, rejectionReason: val } : item)));
   };
 
+  const handleRejectTypeChange = (idx: number, val: string) => {
+    setItems((prev) =>
+      prev.map((item, i) =>
+        i === idx
+          ? { ...item, rejectType: (val as QcItem["rejectType"]) || "" }
+          : item,
+      ),
+    );
+  };
+
   const validationErrors = useMemo(() => {
     return items
       .map((item) => {
         const sum = item.acceptedQty + item.rejectedQty;
         if (sum !== item.receivedQty) {
           return `Batch ${item.batchNumber} (${item.productName}): Accepted (${item.acceptedQty}) + Rejected (${item.rejectedQty}) = ${sum}, but GRN Received Qty is ${item.receivedQty}.`;
+        }
+        if (item.rejectedQty > 0 && !item.rejectType) {
+          return `Batch ${item.batchNumber} (${item.productName}): select Reject Type (Damaged or Expired).`;
         }
         if (sum > item.receivedQty) {
           return `Batch ${item.batchNumber}: total allocated qty exceeds received qty.`;
@@ -331,6 +348,7 @@ function CreateQcForm() {
           rejectedQty: it.rejectedQty,
           case_size: it.unitPerPacking || 10,
           remarks: it.rejectionReason || "",
+          reject_type: it.rejectedQty > 0 ? it.rejectType || undefined : undefined,
         })),
       };
 
@@ -464,6 +482,7 @@ function CreateQcForm() {
           items={items}
           onQtyChange={handleQtyChange}
           onReasonChange={handleReasonChange}
+          onRejectTypeChange={handleRejectTypeChange}
         />
       </FormSection>
     </FormContainer>

@@ -2,6 +2,13 @@
 
 import React from "react";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import type { QcItem } from "../../types";
 import { ProductSkuCell, GRN_QTY_INPUT_CLASSNAME } from "@/app/(app)/warehouse/grn/shared/components/ProductSkuCell";
@@ -12,6 +19,11 @@ const TH =
   "px-3 py-2.5 text-left text-xs font-semibold text-foreground whitespace-nowrap";
 const TH_CENTER = cn(TH, "text-center");
 const TD = "px-3 py-2.5 align-top text-xs";
+
+const REJECT_TYPE_OPTIONS = [
+  { label: "Damaged", value: "DAMAGED" },
+  { label: "Expired", value: "EXPIRED" },
+] as const;
 
 type QtyField = "accepted" | "rejected";
 
@@ -24,6 +36,7 @@ interface QcBatchInspectionTableProps {
     raw: string,
   ) => void;
   onReasonChange: (idx: number, val: string) => void;
+  onRejectTypeChange: (idx: number, val: string) => void;
 }
 
 function QcQtyInputCell({
@@ -87,6 +100,7 @@ export function QcBatchInspectionTable({
   items,
   onQtyChange,
   onReasonChange,
+  onRejectTypeChange,
 }: QcBatchInspectionTableProps) {
   if (items.length === 0) {
     return (
@@ -99,7 +113,7 @@ export function QcBatchInspectionTable({
   return (
     <div className="border border-border rounded-lg overflow-hidden shadow-sm">
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[1040px]">
+        <table className="w-full min-w-[1180px]">
           <thead>
             <tr className="bg-muted/40 border-b border-border">
               <th className={cn(TH, "min-w-[160px]")}>Product</th>
@@ -109,6 +123,7 @@ export function QcBatchInspectionTable({
               <th className={cn(TH_CENTER, "w-36")}>Qty</th>
               <th className={cn(TH_CENTER, "w-40 text-emerald-800")}>Accepted</th>
               <th className={cn(TH_CENTER, "w-40 text-red-800")}>Rejected</th>
+              <th className={cn(TH, "w-36")}>Reject Type</th>
               <th className={cn(TH, "min-w-[140px]")}>Remarks</th>
             </tr>
           </thead>
@@ -116,6 +131,8 @@ export function QcBatchInspectionTable({
             {items.map((item, idx) => {
               const sum = item.acceptedQty + item.rejectedQty;
               const isRowValid = sum === item.receivedQty;
+              const needsRejectType = item.rejectedQty > 0;
+              const rejectTypeMissing = needsRejectType && !item.rejectType;
               const receivedStack = qcItemQtyStack(item.receivedQty, item);
 
               return (
@@ -123,7 +140,7 @@ export function QcBatchInspectionTable({
                   key={`${item.grnBatchId ?? item.batchNumber}-${idx}`}
                   className={cn(
                     "border-b border-border/60 bg-muted/5 transition-colors",
-                    !isRowValid && "bg-red-50/20",
+                    (!isRowValid || rejectTypeMissing) && "bg-red-50/20",
                   )}
                 >
                   <td className={cn(TD, "min-w-[160px]")}>
@@ -162,6 +179,31 @@ export function QcBatchInspectionTable({
                       isRowValid={isRowValid}
                       onQtyChange={onQtyChange}
                     />
+                  </td>
+                  <td className={TD}>
+                    <Select
+                      value={item.rejectType || undefined}
+                      onValueChange={(val) => onRejectTypeChange(idx, val)}
+                      disabled={!needsRejectType}
+                    >
+                      <SelectTrigger
+                        className={cn(
+                          "h-8 w-full min-w-[120px] rounded-input text-xs",
+                          rejectTypeMissing && "border-red-400",
+                        )}
+                      >
+                        <SelectValue
+                          placeholder={needsRejectType ? "Select…" : "—"}
+                        />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {REJECT_TYPE_OPTIONS.map((opt) => (
+                          <SelectItem key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </td>
                   <td className={TD}>
                     <Input

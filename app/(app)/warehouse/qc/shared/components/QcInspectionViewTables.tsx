@@ -154,6 +154,7 @@ export function QcRejectedStockTable({ items }: { items: QcItem[] }) {
               <th className={cn(TH, "text-red-800 w-28")}>MFG Date</th>
               <th className={cn(TH, "text-red-800 w-28")}>Expiry Date</th>
               <th className={cn(TH_CENTER, "text-red-800 w-36")}>Rejected Qty</th>
+              <th className={cn(TH, "text-red-800 w-32")}>Reject Type</th>
               <th className={cn(TH, "text-red-800 min-w-[140px]")}>Reason</th>
             </tr>
           </thead>
@@ -174,6 +175,13 @@ export function QcRejectedStockTable({ items }: { items: QcItem[] }) {
                 </td>
                 <td className={cn(TD, "text-center bg-red-50/10")}>
                   <QtyStackCell item={item} baseQty={item.rejectedQty} accent="red" />
+                </td>
+                <td className={cn(TD, "font-medium")}>
+                  {item.rejectType === "DAMAGED"
+                    ? "Damaged"
+                    : item.rejectType === "EXPIRED"
+                      ? "Expired"
+                      : "—"}
                 </td>
                 <td className={cn(TD, "text-red-800 italic font-medium")}>
                   {item.rejectionReason?.trim() ? item.rejectionReason : "No reason specified"}
