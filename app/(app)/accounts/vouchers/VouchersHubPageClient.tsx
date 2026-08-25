@@ -14,6 +14,7 @@ import { VoucherListClient } from "./components/VoucherListClient";
 import { ReceiptVoucherListClient } from "./receipt/ReceiptVoucherListClient";
 import { PaymentVoucherListClient } from "./payment/PaymentVoucherListClient";
 import { JournalVoucherListClient } from "./journal/JournalVoucherListClient";
+import { ContraVoucherListClient } from "./contra/ContraVoucherListClient";
 import { voucherTypeToUrl, parseVoucherTypeParam } from "./voucher-routes";
 
 const VoucherNewEntry = dynamic(
@@ -91,6 +92,8 @@ export default function VouchersHubPageClient() {
         <PaymentVoucherListClient />
       ) : activeTab === "journal" ? (
         <JournalVoucherListClient />
+      ) : activeTab === "contra" ? (
+        <ContraVoucherListClient />
       ) : (
         <VoucherListClient voucherType={activeTab} embedded />
       )}
