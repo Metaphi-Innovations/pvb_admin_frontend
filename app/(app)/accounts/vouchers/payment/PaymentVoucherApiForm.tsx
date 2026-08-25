@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { VoucherFormSectionCard } from "@/components/accounts/voucher-form/VoucherFormSectionCard";
@@ -68,7 +69,6 @@ import {
   PAYMENT_LIST_PATH,
   paymentEditPath,
   paymentViewPath,
-  reconcileSupplierAdjustments,
   sanitizeNonNegativeMoneyInput,
   validatePaymentForm,
   type PaymentFormState,
@@ -116,19 +116,17 @@ export function PaymentVoucherApiForm({
   const [rejectReason, setRejectReason] = useState("");
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
-  const [postOpen, setPostOpen] = useState(false);
   const [reverseOpen, setReverseOpen] = useState(false);
   const [reverseReason, setReverseReason] = useState("");
   const [reverseDate, setReverseDate] = useState("");
 
   const fieldsEditable = isDraftEditable(status) && !readOnlyProp;
+  const isPostedView = status === "POSTED" && !readOnlyProp;
+  const showViewChrome = readOnlyProp || isPostedView;
   const preview = useMemo(() => computePaymentPreview(form), [form]);
 
   const patch = useCallback((p: Partial<PaymentFormState>) => {
-    setForm((prev) => {
-      const next = { ...prev, ...p };
-      return { ...next, adjustments: reconcileSupplierAdjustments(next) };
-    });
+    setForm((prev) => ({ ...prev, ...p }));
   }, []);
 
   const hydrateFromDetail = useCallback((d: PaymentVoucherDetail) => {
@@ -285,16 +283,13 @@ export function PaymentVoucherApiForm({
       setOutstandingLoading(true);
       try {
         const res = await PaymentVoucherService.listSupplierOutstanding(supplierId);
-        setForm((prev) => {
-          const next = {
-            ...prev,
-            allocations: mapOpenItemsToAllocations(
-              res.items,
-              keepSelections ? prev.allocations : undefined,
-            ),
-          };
-          return { ...next, adjustments: reconcileSupplierAdjustments(next) };
-        });
+        setForm((prev) => ({
+          ...prev,
+          allocations: mapOpenItemsToAllocations(
+            res.items,
+            keepSelections ? prev.allocations : undefined,
+          ),
+        }));
       } catch (e) {
         showToast(
           e instanceof Error ? e.message : "Failed to load supplier outstanding.",
@@ -422,7 +417,10 @@ export function PaymentVoucherApiForm({
     });
   };
 
-  const saveDraft = async (): Promise<PaymentVoucherDetail | null> => {
+  const saveDraft = async (options?: {
+    skipToast?: boolean;
+    skipNavigate?: boolean;
+  }): Promise<PaymentVoucherDetail | null> => {
     const validationError = validatePaymentForm(form);
     if (validationError) {
       setError(validationError);
@@ -440,11 +438,13 @@ export function PaymentVoucherApiForm({
           })
         : await PaymentVoucherService.create(buildCreatePayload(form), pendingFiles);
       hydrateFromDetail(saved);
-      showToast(
-        currentId ? "Payment draft updated." : "Payment draft created.",
-        "success",
-      );
-      if (!currentId) {
+      if (!options?.skipToast) {
+        showToast(
+          currentId ? "Payment draft updated." : "Payment draft created.",
+          "success",
+        );
+      }
+      if (!currentId && !options?.skipNavigate) {
         router.replace(paymentEditPath(saved.payment_voucher_id));
       }
       return saved;
@@ -485,10 +485,36 @@ export function PaymentVoucherApiForm({
     else router.push(PAYMENT_LIST_PATH);
   };
 
+  const handleBack = () => {
+    if (readOnlyProp && onDone) onDone();
+    else router.push(PAYMENT_LIST_PATH);
+  };
+
+  /** Save current form then post immediately — no confirmation dialog. */
   const handleSaveAndPost = async () => {
-    const saved = await saveDraft();
-    if (!saved) return;
-    setPostOpen(true);
+    const saved = await saveDraft({ skipToast: true, skipNavigate: true });
+    if (!saved?.payment_voucher_id) return;
+    const posted = await runAction(
+      () => PaymentVoucherService.post(saved.payment_voucher_id),
+      "Payment posted successfully.",
+    );
+    if (posted?.payment_voucher_id) {
+      router.replace(paymentViewPath(posted.payment_voucher_id));
+      return;
+    }
+    router.replace(paymentEditPath(saved.payment_voucher_id));
+  };
+
+  /** Post an already-saved voucher without confirmation (approved flows). */
+  const handlePostDirect = async () => {
+    if (!currentId) return;
+    const posted = await runAction(
+      () => PaymentVoucherService.post(currentId),
+      "Payment posted successfully.",
+    );
+    if (posted?.payment_voucher_id) {
+      router.replace(paymentViewPath(posted.payment_voucher_id));
+    }
   };
 
   const title =
@@ -523,15 +549,18 @@ export function PaymentVoucherApiForm({
       title={title}
       description={subtitle}
       layout="form"
+      onBackClick={showViewChrome ? handleBack : undefined}
       actions={
-        readOnlyProp && onEdit && fieldsEditable === false && isDraftEditable(status) ? (
-          <button
+        readOnlyProp && onEdit && !fieldsEditable && isDraftEditable(status) ? (
+          <Button
             type="button"
-            className="h-8 px-3 text-xs rounded-lg border border-border hover:bg-muted"
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs"
             onClick={onEdit}
           >
             Edit
-          </button>
+          </Button>
         ) : null
       }
     >
@@ -748,16 +777,6 @@ export function PaymentVoucherApiForm({
                     other_ledger_id: "",
                     other_ledger_name: "",
                     allocations: [],
-                    adjustments:
-                      kind === "SUPPLIER"
-                        ? form.adjustments.filter(
-                            (a) => a.adjustment_type !== "SUPPLIER_TDS",
-                          )
-                        : form.adjustments.filter(
-                            (a) =>
-                              a.adjustment_type !== "SUPPLIER_TDS" &&
-                              a.adjustment_type !== "DISCOUNT_RECEIVED",
-                          ),
                     advance_amount: "0",
                     payment_treatment: "against_outstanding",
                   });
@@ -948,34 +967,28 @@ export function PaymentVoucherApiForm({
                     : "Select a supplier to load outstanding items."
                 }
                 onToggle={(id, selected) => {
-                  setForm((prev) => {
-                    const next = {
-                      ...prev,
-                      allocations: prev.allocations.map((a) =>
-                        a.open_item_id === id
-                          ? {
-                              ...a,
-                              selected,
-                              allocated_amount: selected
-                                ? a.allocated_amount || String(a.outstanding_amount)
-                                : "",
-                            }
-                          : a,
-                      ),
-                    };
-                    return { ...next, adjustments: reconcileSupplierAdjustments(next) };
-                  });
+                  setForm((prev) => ({
+                    ...prev,
+                    allocations: prev.allocations.map((a) =>
+                      a.open_item_id === id
+                        ? {
+                            ...a,
+                            selected,
+                            allocated_amount: selected
+                              ? a.allocated_amount || String(a.outstanding_amount)
+                              : "",
+                          }
+                        : a,
+                    ),
+                  }));
                 }}
                 onChangeAmount={(id, p) => {
-                  setForm((prev) => {
-                    const next = {
-                      ...prev,
-                      allocations: prev.allocations.map((a) =>
-                        a.open_item_id === id ? { ...a, ...p } : a,
-                      ),
-                    };
-                    return { ...next, adjustments: reconcileSupplierAdjustments(next) };
-                  });
+                  setForm((prev) => ({
+                    ...prev,
+                    allocations: prev.allocations.map((a) =>
+                      a.open_item_id === id ? { ...a, ...p } : a,
+                    ),
+                  }));
                 }}
               />
               <p className="text-[11px] text-muted-foreground">
@@ -1129,16 +1142,18 @@ export function PaymentVoucherApiForm({
         </VoucherFormSectionCard>
       </div>
 
+      {(!showViewChrome || status === "POSTED") ? (
       <div className="fixed bottom-0 inset-x-0 z-40 border-t border-border bg-white/95 backdrop-blur px-4 py-2.5">
         <div className="w-full">
           <PaymentFormActionBar
             status={status}
             busy={busy}
+            readOnly={showViewChrome}
             canCancel={canCancelStatus(status) && !!currentId}
             approvalRequired={approvalRequired}
             configReady={configReady}
             hasExistingId={!!currentId}
-            onDiscard={handleDiscard}
+            onDiscard={fieldsEditable ? handleDiscard : undefined}
             onSaveDraft={
               fieldsEditable && !readOnlyProp ? () => void saveDraft() : undefined
             }
@@ -1148,12 +1163,18 @@ export function PaymentVoucherApiForm({
                 : undefined
             }
             onSaveAndPost={
-              fieldsEditable && !readOnlyProp && !approvalRequired
+              fieldsEditable &&
+              !readOnlyProp &&
+              !approvalRequired &&
+              !currentId
                 ? () => void handleSaveAndPost()
                 : undefined
             }
             onApprove={
-              status === "PENDING_APPROVAL" && approvalRequired && currentId
+              !readOnlyProp &&
+              status === "PENDING_APPROVAL" &&
+              approvalRequired &&
+              currentId
                 ? () =>
                     void runAction(
                       () => PaymentVoucherService.approve(currentId!),
@@ -1162,18 +1183,31 @@ export function PaymentVoucherApiForm({
                 : undefined
             }
             onReject={
-              status === "PENDING_APPROVAL" && approvalRequired && currentId
+              !readOnlyProp &&
+              status === "PENDING_APPROVAL" &&
+              approvalRequired &&
+              currentId
                 ? () => setRejectOpen(true)
                 : undefined
             }
             onPost={
-              currentId &&
-              (status === "APPROVED" || (status === "DRAFT" && !approvalRequired))
-                ? () => setPostOpen(true)
+              !readOnlyProp && currentId
+                ? status === "APPROVED"
+                  ? () => void handlePostDirect()
+                  : !approvalRequired &&
+                      (status === "DRAFT" || status === "REJECTED" || !status) &&
+                      fieldsEditable
+                    ? () => void handleSaveAndPost()
+                    : undefined
                 : undefined
             }
             onCancel={
-              canCancelStatus(status) && currentId ? () => setCancelOpen(true) : undefined
+              !readOnlyProp &&
+              canCancelStatus(status) &&
+              currentId &&
+              !isDraftEditable(status)
+                ? () => setCancelOpen(true)
+                : undefined
             }
             onReverse={
               status === "POSTED" && currentId ? () => setReverseOpen(true) : undefined
@@ -1181,6 +1215,7 @@ export function PaymentVoucherApiForm({
           />
         </div>
       </div>
+      ) : null}
 
       <PaymentReasonDialog
         open={submitOpen}
@@ -1250,23 +1285,6 @@ export function PaymentVoucherApiForm({
                 reason: cancelReason.trim(),
               }),
             "Payment cancelled.",
-          );
-        }}
-      />
-
-      <PaymentReasonDialog
-        open={postOpen}
-        onOpenChange={setPostOpen}
-        title="Post Payment Voucher"
-        description="Posting creates the accounting voucher, settlements, supplier advance, and bank detail atomically."
-        confirmLabel="Post"
-        busy={busy}
-        onConfirm={() => {
-          if (!currentId) return;
-          setPostOpen(false);
-          void runAction(
-            () => PaymentVoucherService.post(currentId),
-            "Payment posted successfully.",
           );
         }}
       />

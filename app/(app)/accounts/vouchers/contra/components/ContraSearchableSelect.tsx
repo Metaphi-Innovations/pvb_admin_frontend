@@ -7,13 +7,14 @@ import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Check, ChevronsUpDown } from "lucide-react";
 
-export interface PaymentSearchableOption {
+export interface ContraSearchableOption {
   value: string;
   label: string;
   sub?: string;
+  disabled?: boolean;
 }
 
-export function PaymentSearchableSelect({
+export function ContraSearchableSelect({
   label,
   value,
   onChange,
@@ -21,38 +22,34 @@ export function PaymentSearchableSelect({
   placeholder = "Select…",
   required,
   disabled,
-  triggerClassName,
-  labelClassName,
-  allowClear,
-  className,
+  onSearchChange,
 }: {
   label?: string;
   value: string;
   onChange: (value: string) => void;
-  options: PaymentSearchableOption[];
+  options: ContraSearchableOption[];
   placeholder?: string;
   required?: boolean;
   disabled?: boolean;
-  triggerClassName?: string;
-  labelClassName?: string;
-  allowClear?: boolean;
-  className?: string;
+  onSearchChange?: (query: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
-  const filtered = q
-    ? options.filter(
-        (o) =>
-          o.label.toLowerCase().includes(q.toLowerCase()) ||
-          (o.sub?.toLowerCase().includes(q.toLowerCase()) ?? false),
-      )
-    : options;
+  const filtered = onSearchChange
+    ? options
+    : q
+      ? options.filter(
+          (o) =>
+            o.label.toLowerCase().includes(q.toLowerCase()) ||
+            (o.sub?.toLowerCase().includes(q.toLowerCase()) ?? false),
+        )
+      : options;
   const selected = options.find((o) => o.value === value);
 
   return (
-    <div className={cn(label ? "space-y-1" : undefined, className)}>
+    <div className={label ? "space-y-1" : undefined}>
       {label ? (
-        <Label className={cn("text-xs font-medium", labelClassName)}>
+        <Label className="text-xs font-medium">
           {label}
           {required ? <span className="text-red-500 ml-0.5">*</span> : null}
         </Label>
@@ -62,7 +59,10 @@ export function PaymentSearchableSelect({
         onOpenChange={(v) => {
           if (!disabled) {
             setOpen(v);
-            if (!v) setQ("");
+            if (!v) {
+              setQ("");
+              onSearchChange?.("");
+            }
           }
         }}
       >
@@ -75,7 +75,6 @@ export function PaymentSearchableSelect({
               disabled
                 ? "opacity-50 cursor-not-allowed bg-muted/30"
                 : "hover:bg-muted/30",
-              triggerClassName,
             )}
           >
             <span
@@ -97,25 +96,16 @@ export function PaymentSearchableSelect({
             <Input
               placeholder="Search…"
               value={q}
-              onChange={(e) => setQ(e.target.value)}
-              className="h-8 text-xs"
+              onChange={(e) => {
+                const next = e.target.value;
+                setQ(next);
+                onSearchChange?.(next);
+              }}
+              className="h-9 text-sm"
               autoFocus
             />
           </div>
           <div className="max-h-[220px] overflow-y-auto py-1">
-            {allowClear ? (
-              <button
-                type="button"
-                className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-left hover:bg-muted/60 text-muted-foreground"
-                onClick={() => {
-                  onChange("");
-                  setOpen(false);
-                  setQ("");
-                }}
-              >
-                All
-              </button>
-            ) : null}
             {filtered.length === 0 ? (
               <p className="px-3 py-4 text-center text-xs text-muted-foreground">
                 No results
@@ -125,14 +115,18 @@ export function PaymentSearchableSelect({
                 <button
                   key={o.value}
                   type="button"
+                  disabled={o.disabled}
                   className={cn(
                     "w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-muted/60",
                     value === o.value && "bg-brand-50",
+                    o.disabled && "opacity-40 cursor-not-allowed hover:bg-transparent",
                   )}
                   onClick={() => {
+                    if (o.disabled) return;
                     onChange(o.value);
                     setOpen(false);
                     setQ("");
+                    onSearchChange?.("");
                   }}
                 >
                   <span className="flex-1 min-w-0">
