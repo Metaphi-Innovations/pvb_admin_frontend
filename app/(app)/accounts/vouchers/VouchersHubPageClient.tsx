@@ -12,6 +12,8 @@ import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { VOUCHER_TYPE_LABELS, type VoucherTypeCode } from "../masters/masters-data";
 import { VoucherListClient } from "./components/VoucherListClient";
 import { ReceiptVoucherListClient } from "./receipt/ReceiptVoucherListClient";
+import { PaymentVoucherListClient } from "./payment/PaymentVoucherListClient";
+import { JournalVoucherListClient } from "./journal/JournalVoucherListClient";
 import { voucherTypeToUrl, parseVoucherTypeParam } from "./voucher-routes";
 
 const VoucherNewEntry = dynamic(
@@ -23,7 +25,7 @@ const VoucherNewEntry = dynamic(
 );
 
 const VOUCHER_DESCRIPTIONS: Record<VoucherTypeCode, string> = {
-  journal: "Record debit and credit entries. Total debit must equal total credit.",
+  journal: "One debit ledger, one credit ledger, one amount — GL adjustment only.",
   payment: "Record money paid from a bank or cash ledger to an expense or creditor.",
   receipt: "Record money received in bank or cash from a customer or income source.",
   contra: "Transfer between cash and bank accounts.",
@@ -85,6 +87,10 @@ export default function VouchersHubPageClient() {
     >
       {activeTab === "receipt" ? (
         <ReceiptVoucherListClient />
+      ) : activeTab === "payment" ? (
+        <PaymentVoucherListClient />
+      ) : activeTab === "journal" ? (
+        <JournalVoucherListClient />
       ) : (
         <VoucherListClient voucherType={activeTab} embedded />
       )}

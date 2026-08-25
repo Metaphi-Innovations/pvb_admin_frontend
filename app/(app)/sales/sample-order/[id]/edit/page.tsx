@@ -126,6 +126,9 @@ export default function EditSalesOrderPage() {
 				category: p.category?.categoryName || "",
 				segment: p.segment?.segment_name || "",
 				packSize: Number(p.unit_per_packing || 1),
+				uom: p.unit || "Unit",
+				netWeight: p.net_weight != null ? Number(p.net_weight) : null,
+				unitPackSize: Number(p.pack_size || 0),
 			}));
 			setProducts(mapped as any);
 			setDynamicProducts(mapped as any);

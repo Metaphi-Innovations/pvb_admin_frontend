@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import { AlertCircle, Package } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { formatCurrency, type TaxSupplyType } from "@/lib/procurement/utils";
-import type { PurchaseReturnItem, PurchaseReturnUnit } from "../purchase-return-data";
+import type { PurchaseReturnItem } from "../purchase-return-data";
 import {
   clampReturnDisplayValue,
   getReturnQtyError,
@@ -80,11 +80,33 @@ function SectionHead({ label, sub }: { label: string; sub?: string }) {
 
 function TaxPctAmountCell({ pct, amount }: { pct: number; amount: number }) {
   return (
-    <div className="space-y-0.5 text-right">
-      <p className="text-xs tabular-nums text-foreground">{pct}%</p>
-      <p className="text-[10px] tabular-nums font-medium text-muted-foreground">
+    <div className="space-y-0.5 text-right leading-tight">
+      <p className="text-xs tabular-nums font-medium text-foreground">
         {formatCurrency(amount)}
       </p>
+      <p className="text-[10px] tabular-nums text-muted-foreground">{pct}%</p>
+    </div>
+  );
+}
+
+function ProductCell({ item }: { item: PurchaseReturnItem }) {
+  const sku = (item.sku || "").trim();
+  const code = (item.productCode || "").trim();
+  return (
+    <div className="space-y-0.5 min-w-[140px] max-w-[220px]">
+      <p className="text-xs font-medium text-foreground leading-snug">
+        {item.productName || "—"}
+      </p>
+      {code ? (
+        <p className="text-[10px] font-mono font-semibold text-brand-700 leading-tight">
+          {code}
+        </p>
+      ) : null}
+      {sku ? (
+        <p className="text-[10px] font-mono text-muted-foreground leading-tight">
+          SKU: {sku}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -105,20 +127,6 @@ function rejectionSourceLabel(source?: string): string {
     default:
       return "QC Rejected";
   }
-}
-
-function QuantityTypeBadge({ quantityType }: { quantityType: PurchaseReturnUnit }) {
-  const isCase = quantityType === "CASE";
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap",
-        isCase ? "bg-sky-50 text-sky-800" : "bg-violet-50 text-violet-800",
-      )}
-    >
-      {quantityType}
-    </span>
-  );
 }
 
 function RejectionSourceBadge({ source }: { source?: string }) {
@@ -219,7 +227,7 @@ function ReturnItemsTable({
 
   return (
     <div className="overflow-x-auto rounded-xl border border-border shadow-sm">
-      <table className="w-full min-w-[1280px]">
+      <table className="w-full min-w-[1120px]">
         <thead>
           <tr className="border-b border-border bg-muted/40">
             {!readOnly ? (
@@ -235,18 +243,16 @@ function ReturnItemsTable({
               "Source",
               "Origin GRN",
               ...(showLatestGrn ? ["Latest GRN"] : []),
-              "Product Code",
-              "Product Name",
+              "Product",
               "Batch No.",
               "MFG Date",
               "Expiry",
-              "Qty Type",
               "QC Rejected",
-              "Returned",
+              "Previous Return",
               "Balance",
               "Return Qty",
               "Rate",
-              "GST %",
+              "GST",
               ...(taxSupplyType === "intra" ? ["CGST", "SGST"] : ["IGST"]),
               "Amount",
               "Line Remark",
@@ -257,11 +263,11 @@ function ReturnItemsTable({
                   "px-3 py-2.5 text-left text-xs font-semibold text-foreground whitespace-nowrap",
                   [
                     "QC Rejected",
-                    "Returned",
+                    "Previous Return",
                     "Balance",
                     "Return Qty",
                     "Rate",
-                    "GST %",
+                    "GST",
                     "CGST",
                     "SGST",
                     "IGST",
@@ -281,6 +287,10 @@ function ReturnItemsTable({
             const canEditQty = it.selected && !rowDisabled;
             const rowError = errors?.[it.id] ?? getReturnQtyError(it);
             const gstPct = gstPctFromLine(it);
+            const gstAmount =
+              Number(it.taxAmount) ||
+              Number(it.cgstAmount) + Number(it.sgstAmount) + Number(it.igstAmount) ||
+              0;
 
             const maxReturnBase = resolveMaxReturnBaseQty(it);
             const availableBase = resolveAvailableReturnBaseQty(it);
@@ -305,7 +315,7 @@ function ReturnItemsTable({
                   it.selected && !fullyReturned && "bg-brand-50/40",
                 )}
               >
-                <td className="px-3 py-2 text-center">
+                <td className="px-3 py-2 text-center align-top">
                   {readOnly ? (
                     <span className="text-xs text-muted-foreground">{it.selected ? "✓" : "—"}</span>
                   ) : (
@@ -319,25 +329,21 @@ function ReturnItemsTable({
                     />
                   )}
                 </td>
-                <td className="px-3 py-2">
+                <td className="px-3 py-2 align-top">
                   <RejectionSourceBadge source={it.rejectionSource} />
                 </td>
-                <td className="px-3 py-2 font-mono text-xs text-muted-foreground">{it.grnNo || "—"}</td>
+                <td className="px-3 py-2 font-mono text-xs text-muted-foreground align-top">{it.grnNo || "—"}</td>
                 {showLatestGrn && (
-                  <td className="px-3 py-2 font-mono text-xs text-amber-700">
+                  <td className="px-3 py-2 font-mono text-xs text-amber-700 align-top">
                     {it.latestGrnNo && it.latestGrnNo !== it.grnNo ? it.latestGrnNo : "—"}
                   </td>
                 )}
-                <td className="px-3 py-2 font-mono text-xs font-semibold text-brand-700">
-                  {it.productCode}
+                <td className="px-3 py-2 align-top">
+                  <ProductCell item={it} />
                 </td>
-                <td className="px-3 py-2 text-xs font-medium text-foreground">{it.productName}</td>
-                <td className="px-3 py-2 font-mono text-xs text-foreground">{it.batchNumber}</td>
-                <td className="px-3 py-2 text-xs text-muted-foreground">{it.mfgDate || "—"}</td>
-                <td className="px-3 py-2 text-xs text-muted-foreground">{it.expDate || "—"}</td>
-                <td className="px-3 py-2 text-center">
-                  <QuantityTypeBadge quantityType={it.quantityType} />
-                </td>
+                <td className="px-3 py-2 font-mono text-xs text-foreground align-top">{it.batchNumber}</td>
+                <td className="px-3 py-2 text-xs text-muted-foreground align-top">{it.mfgDate || "—"}</td>
+                <td className="px-3 py-2 text-xs text-muted-foreground align-top">{it.expDate || "—"}</td>
                 <td className="px-3 py-2 align-top">
                   <StackedQtyCell
                     stack={qcStack}
@@ -355,8 +361,8 @@ function ReturnItemsTable({
                 <td className="px-3 py-2 align-top">
                   <StackedQtyCell stack={balanceStack} emphasize={emphasize} />
                 </td>
-                <td className="px-3 py-2 align-top text-right">
-                  <div className="inline-flex flex-col items-end gap-1 min-w-[100px]">
+                <td className="w-[140px] px-3 py-2 align-top">
+                  <div className="flex w-full flex-col items-end gap-1">
                     {!canEditQty ? (
                       <span className="text-xs tabular-nums text-muted-foreground">
                         {it.returnValue > 0 || it.returnQty > 0
@@ -364,7 +370,7 @@ function ReturnItemsTable({
                           : "—"}
                       </span>
                     ) : (
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex w-full justify-end">
                         <Input
                           type="number"
                           min={0}
@@ -388,12 +394,12 @@ function ReturnItemsTable({
                               returnQty: resolveReturnBaseQtyFromItem(nextItem),
                             });
                           }}
-                          className={cn("h-8 w-20 text-xs tabular-nums", rowError && "border-red-400")}
+                          className={cn(
+                            "h-8 w-[5.5rem] shrink-0 text-right text-xs tabular-nums",
+                            rowError && "border-red-400",
+                          )}
                           placeholder={inputLabel}
                         />
-                        <span className="text-[10px] font-medium text-muted-foreground w-8 text-left">
-                          {inputLabel}
-                        </span>
                       </div>
                     )}
                     {(it.returnQty > 0 || canEditQty) && (
@@ -404,17 +410,17 @@ function ReturnItemsTable({
                       />
                     )}
                     {rowError && (
-                      <p className="text-[10px] leading-tight text-red-500 max-w-[160px] text-right">
+                      <p className="w-full text-right text-[10px] leading-tight text-red-500">
                         {rowError}
                       </p>
                     )}
                   </div>
                 </td>
-                <td className="px-3 py-2 text-right text-xs tabular-nums text-foreground">
+                <td className="px-3 py-2 text-right text-xs tabular-nums text-foreground align-top">
                   {formatCurrency(it.unitPrice)}
                 </td>
-                <td className="px-3 py-2 text-right text-xs tabular-nums text-muted-foreground">
-                  {gstPct}%
+                <td className="px-3 py-2 align-top">
+                  <TaxPctAmountCell pct={gstPct} amount={gstAmount} />
                 </td>
                 {taxSupplyType === "intra" ? (
                   <>
@@ -430,10 +436,10 @@ function ReturnItemsTable({
                     <TaxPctAmountCell pct={it.igstPct} amount={it.igstAmount} />
                   </td>
                 )}
-                <td className="px-3 py-2 text-right text-xs font-semibold tabular-nums font-mono text-foreground">
+                <td className="px-3 py-2 text-right text-xs font-semibold tabular-nums font-mono text-foreground align-top">
                   {it.selected && it.returnQty > 0 ? formatCurrency(it.netAmount) : "—"}
                 </td>
-                <td className="px-3 py-2">
+                <td className="px-3 py-2 align-top">
                   {!canEditQty ? (
                     <span className="text-xs text-muted-foreground">{it.lineRemark || "—"}</span>
                   ) : (

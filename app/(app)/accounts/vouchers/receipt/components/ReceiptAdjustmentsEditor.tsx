@@ -14,6 +14,7 @@ import {
 import {
   VOUCHER_INPUT_CLASS,
   VOUCHER_MONEY_INPUT_CLASS,
+  VoucherReadonlyValue,
 } from "@/components/accounts/voucher-simple-form-ui";
 import {
   RECEIPT_ADJUSTMENT_TYPE_LABELS,
@@ -134,13 +135,18 @@ export function ReceiptAdjustmentsEditor({
                 ) : (
                   <div className="space-y-1">
                     <Label className="text-xs font-medium">Ledger</Label>
-                    <p className="h-9 flex items-center text-xs text-muted-foreground">
+                    <VoucherReadonlyValue
+                      tone={
+                        row.adjustment_type === "CUSTOMER_TDS" ? "brand" : "muted"
+                      }
+                      className="h-9 min-h-9 max-h-9"
+                    >
                       {row.adjustment_type === "CUSTOMER_TDS"
                         ? "System TDS receivable (backend)"
                         : row.adjustment_type === "ROUND_OFF"
                           ? "System Round Off (backend)"
                           : "—"}
-                    </p>
+                    </VoucherReadonlyValue>
                   </div>
                 )}
               </div>
@@ -166,9 +172,9 @@ export function ReceiptAdjustmentsEditor({
                     </SelectContent>
                   </Select>
                 ) : (
-                  <p className="h-9 flex items-center text-xs text-muted-foreground">
+                  <VoucherReadonlyValue tone="muted" className="h-9 min-h-9 max-h-9">
                     Debit
-                  </p>
+                  </VoucherReadonlyValue>
                 )}
               </div>
 

@@ -65,6 +65,14 @@ export interface TdsLedgerUsageInfo {
   linkedMaster: string;
 }
 
+export function isTdsReceivableLedger(ledger: ChartOfAccount): boolean {
+  const alias = (ledger.alias ?? "").trim().toLowerCase();
+  if (alias === tdsLedgerKindAlias("receivable") || alias === "sys:tds_receivable") {
+    return true;
+  }
+  return ledger.accountName.trim().toLowerCase() === "tds receivable";
+}
+
 export function resolveTdsLedgerUsageInfo(ledger: ChartOfAccount): TdsLedgerUsageInfo | null {
   if (!isTdsCoaLedger(ledger)) return null;
 
@@ -76,8 +84,9 @@ export function resolveTdsLedgerUsageInfo(ledger: ChartOfAccount): TdsLedgerUsag
     master != null
       ? getTdsSectionCode(master)
       : parseTdsSectionCode(ledger.accountName) ?? "—";
-  const kind: "Payable" | "Receivable" =
-    ledger.alias === tdsLedgerKindAlias("receivable") ? "Receivable" : "Payable";
+  const kind: "Payable" | "Receivable" = isTdsReceivableLedger(ledger)
+    ? "Receivable"
+    : "Payable";
 
   return {
     section,

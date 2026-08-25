@@ -53,7 +53,7 @@ export default function AddStockTransferPage() {
         id: p.product_id,
         code: p.product_code,
         name: p.product_name,
-        uom: p.uom || "NOS",
+        uom: p.unit || "Unit",
         status: "active" as const,
         stock: Number(p.pack_size || 1000),
         sellingPrice: Number(p.mrp || 0),
@@ -61,6 +61,8 @@ export default function AddStockTransferPage() {
         gstRate: String(p.gst_rate?.gstPercentage || 18),
         packSize: Number(p.unit_per_packing || 1),
         sku: p.sku || "",
+        netWeight: p.net_weight != null ? Number(p.net_weight) : null,
+        unitPackSize: Number(p.pack_size || 0),
       }));
       setProducts(mapped);
     }

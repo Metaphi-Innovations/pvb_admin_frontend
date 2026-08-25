@@ -5,7 +5,7 @@ import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
-import { Pencil, CheckSquare } from "lucide-react";
+import { Pencil, CheckSquare, Truck } from "lucide-react";
 import { useRouter, useParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -291,6 +291,12 @@ export default function EditDispatchPage() {
   const [selectedOrderId, setSelectedOrderId] = useState("");
   const [selectedPackingDoneIds, setSelectedPackingDoneIds] = useState<string[]>([]);
 
+  // Transportation details (only for Purchase Return dispatch)
+  const [transporter, setTransporter] = useState("");
+  const [vehicleNumber, setVehicleNumber] = useState("");
+  const [lrNumber, setLrNumber] = useState("");
+  const [lrDate, setLrDate] = useState("");
+
   const orderField = SOURCE_FIELD_LABELS[sourceType];
   const listTab =
     sourceType === "normal_sales"
@@ -322,6 +328,13 @@ export default function EditDispatchPage() {
           setDispatchDate(
             new Date(data.dispatch_date || data.dispatchDate).toISOString().split("T")[0],
           );
+        }
+
+        setTransporter(data.transporter || "");
+        setVehicleNumber(data.vehicle_number || "");
+        setLrNumber(data.lr_number || "");
+        if (data.lr_date) {
+          setLrDate(new Date(data.lr_date).toISOString().split("T")[0]);
         }
 
         const packingDoneIds = Array.from(
@@ -492,6 +505,13 @@ export default function EditDispatchPage() {
         payload.packing_done_ids = selectedPackingDoneIds;
       }
 
+      if (sourceType === "purchase_return") {
+        payload.transporter = transporter || null;
+        payload.vehicle_number = vehicleNumber || null;
+        payload.lr_number = lrNumber || null;
+        payload.lr_date = lrDate ? new Date(lrDate).toISOString() : null;
+      }
+
       await updateDispatch(id, payload);
       await invalidatePurchaseOrderModuleListingQueries(queryClient);
       showToast("Dispatch updated successfully", "success");
@@ -611,6 +631,60 @@ export default function EditDispatchPage() {
             </div>
           </div>
         </div>
+
+        {sourceType === "purchase_return" && (
+          <div className="border-t border-border/80 pt-6 space-y-4">
+            <h2 className="text-xs font-bold text-foreground uppercase tracking-wider border-b pb-2 flex items-center gap-1.5">
+              <Truck className="w-4 h-4 text-brand-600" /> Transportation Details
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+              <div>
+                <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
+                  Transporter Name
+                </p>
+                <Input
+                  value={transporter}
+                  onChange={(e) => setTransporter(e.target.value)}
+                  placeholder="Transporter name..."
+                  className="h-8 text-xs mt-1.5"
+                />
+              </div>
+              <div>
+                <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
+                  Vehicle Number
+                </p>
+                <Input
+                  value={vehicleNumber}
+                  onChange={(e) => setVehicleNumber(e.target.value)}
+                  placeholder="Vehicle number..."
+                  className="h-8 text-xs mt-1.5"
+                />
+              </div>
+              <div>
+                <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
+                  LR Number
+                </p>
+                <Input
+                  value={lrNumber}
+                  onChange={(e) => setLrNumber(e.target.value)}
+                  placeholder="LR number..."
+                  className="h-8 text-xs mt-1.5"
+                />
+              </div>
+              <div>
+                <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
+                  LR Date
+                </p>
+                <Input
+                  type="date"
+                  value={lrDate}
+                  onChange={(e) => setLrDate(e.target.value)}
+                  className="h-8 text-xs mt-1.5"
+                />
+              </div>
+            </div>
+          </div>
+        )}
 
         {selectedPackings.length > 0 && (
           <div className="border-t border-border/80 pt-6 space-y-4">

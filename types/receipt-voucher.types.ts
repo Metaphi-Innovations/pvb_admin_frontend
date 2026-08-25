@@ -124,15 +124,35 @@ export interface ReceiptVoucherListQuery {
   search?: string;
   financial_year_id?: string;
   warehouse_id?: string;
-  status?: ReceiptVoucherStatus;
-  party_kind?: ReceiptPartyKind;
+  /** Single status or comma-separated list. */
+  status?: ReceiptVoucherStatus | string;
+  /** Single party kind or comma-separated list. */
+  party_kind?: ReceiptPartyKind | string;
   customer_id?: string;
   supplier_id?: string;
   cash_bank_ledger_id?: string;
-  transaction_mode?: BankTransactionMode;
+  /** Single mode or comma-separated list. */
+  transaction_mode?: BankTransactionMode | string;
   from_date?: string;
   to_date?: string;
   sr_no?: number;
+  sort_by?:
+    | "sr_no"
+    | "voucher_date"
+    | "party_kind"
+    | "transaction_mode"
+    | "status"
+    | "gross_party_amount"
+    | "net_bank_amount"
+    | "created_at";
+  sort_dir?: "asc" | "desc";
+  gross_min?: number;
+  gross_max?: number;
+  net_bank_min?: number;
+  net_bank_max?: number;
+  warehouse_names?: string;
+  party_names?: string;
+  cash_bank_names?: string;
 }
 
 export interface ReceiptOpenItemRow {

@@ -1,6 +1,6 @@
 import { axiosInstance } from "@/api/axios";
 import { API_ENDPOINTS } from "@/api/endpoints";
-import { calculateOrderTotalsSummary, resolveTaxSupplyType } from "@/app/(app)/sales/orders/orders-data";
+import { calculateOrderTotalsSummary, isProductDiscountSchemeApplied, normalizeLineDiscountType, resolveTaxSupplyType } from "@/app/(app)/sales/orders/orders-data";
 import type { SalesOrder, SalesOrderLineItem, SalesOrderAdditionalExpense } from "@/app/(app)/sales/orders/orders-data";
 import type { SalesOrderFormValues } from "@/app/(app)/sales/orders/components/SalesOrderForm";
 import { getCustomerAddressesForSalesOrder } from "@/app/(app)/sales/orders/sales-order-address-utils";
@@ -38,6 +38,28 @@ function toUuidOrNull(value: unknown): string | null {
   const raw = asString(value).trim();
   if (!raw || !UUID_RE.test(raw)) return null;
   return raw;
+}
+
+/** Map line discount for create/update — prefer scheme fields when scheme applied, else manual %. */
+function mapLineDiscountForApi(line: SalesOrderLineItem): {
+  discount_type: "Percentage" | "Flat";
+  discount_percentage: number;
+  discount_amount: number;
+} {
+  const hasScheme = isProductDiscountSchemeApplied(line);
+  if (hasScheme) {
+    const isFlat = line.schemeDiscountType === "Rupees";
+    return {
+      discount_type: isFlat ? "Flat" : "Percentage",
+      discount_percentage: line.schemeDiscountPercent || line.discount || 0,
+      discount_amount: line.discountValue || 0,
+    };
+  }
+  return {
+    discount_type: normalizeLineDiscountType(line.discountType),
+    discount_percentage: line.discount || 0,
+    discount_amount: line.discountValue || 0,
+  };
 }
 
 function toDisplayName(user: unknown): string {
@@ -104,6 +126,13 @@ function mapBackendLineItem(raw: Record<string, unknown>, idx: number): SalesOrd
   const cgstPercentage = asNumber(raw.cgst_percentage);
   const sgstPercentage = asNumber(raw.sgst_percentage);
   const igstPercentage = asNumber(raw.igst_percentage);
+  const unitPrice = asNumber(raw.unit_price);
+  const discountType = normalizeLineDiscountType(raw.discount_type);
+  const discountPct = asNumber(raw.discount_percentage ?? raw.discount);
+  const discountValue = asNumber(raw.discount_amount);
+  const perUnitDiscount =
+    quantity > 0 ? discountValue / quantity : unitPrice * (discountPct / 100);
+  const finalRate = Math.max(0, Math.round((unitPrice - perUnitDiscount) * 100) / 100);
 
   return {
     id: asString(raw.id || raw.sales_order_product_id || `line-${idx}`),
@@ -116,14 +145,23 @@ function mapBackendLineItem(raw: Record<string, unknown>, idx: number): SalesOrd
     pieceQuantity,
     packSize,
     quantity,
-    dealerPrice: asNumber(raw.unit_price),
-    unitPrice: asNumber(raw.unit_price),
-    discount: asNumber(raw.discount_percentage ?? raw.discount),
-    discountValue: asNumber(raw.discount_amount),
-    schemeDiscountPercent: asNumber(raw.discount_percentage ?? 0),
-    schemeDiscountAmount: asNumber(raw.discount_amount ?? 0),
-    finalRate: asNumber(raw.unit_price) - asNumber(raw.discount_amount ?? 0),
-    schemeApplied: (raw.discount_amount ? "Yes" : "No") as "Yes" | "No",
+    generatedBaseQty: asNumber(raw.generated_base_qty),
+    dealerPrice: unitPrice,
+    unitPrice,
+    discountType,
+    discount: discountPct,
+    discountValue,
+    // SO items have no scheme_id — keep scheme fields clear so manual discount stays editable.
+    schemeDiscountPercent: 0,
+    schemeDiscountAmount: 0,
+    finalRate,
+    schemeApplied: "No",
+    uom: asString(product.unit || snapshot.unit || snapshot.base_unit || snapshot.uom),
+    unitPackSize:
+      asNumber(product.pack_size ?? snapshot.pack_size ?? snapshot.unit_pack_size ?? product.unit_pack_size) ||
+      null,
+    netWeight:
+      asNumber(product.net_weight ?? snapshot.net_weight ?? snapshot.netWeight) || null,
     gstAmount: asNumber(raw.gst_amount),
     cgstAmount: asNumber(raw.cgst_amount),
     sgstAmount: asNumber(raw.sgst_amount),
@@ -191,6 +229,22 @@ export function mapBackendSalesOrder(raw: Record<string, unknown>): SalesOrder {
     remarks: asString(raw.remarks),
     warehouseId: toUuidOrNull(raw.source_warehouse_id) as any,
     warehouseName: raw.source_warehouse ? asString((raw.source_warehouse as any).warehouse_name) : "",
+    packingListNumber:
+      Array.isArray(raw.packing_lists) && raw.packing_lists.length > 0
+        ? asString(raw.packing_lists[0].packing_number)
+        : undefined,
+    packingListId:
+      Array.isArray(raw.packing_lists) && raw.packing_lists.length > 0
+        ? (raw.packing_lists[0].packing_list_id as any)
+        : undefined,
+    packingLists: Array.isArray(raw.packing_lists)
+      ? raw.packing_lists.map((pl: any) => ({
+          packingListId: asString(pl.packing_list_id),
+          packingNumber: asString(pl.packing_number),
+          generatedAt: asDateOnly(pl.generated_at || pl.created_at),
+          status: asString(pl.status),
+        }))
+      : undefined,
   };
 }
 
@@ -331,9 +385,7 @@ function buildBackendWriteBody(
       base_qty: line.quantity,
       quantity_type: line.quantityType,
       unit_price: line.unitPrice,
-      discount_type: line.schemeDiscountType === "Percentage" ? "Percentage" : "Flat",
-      discount_percentage: line.schemeDiscountPercent || 0,
-      discount_amount: line.discountValue || 0,
+      ...mapLineDiscountForApi(line),
       gst_percentage: line.gstPercentage ?? 0,
       gst_amount: line.gstAmount,
       cgst_percentage: line.cgstPercentage ?? 0,
@@ -561,9 +613,7 @@ export const SalesOrderService = {
         base_qty: line.quantity,
         quantity_type: line.quantityType,
         unit_price: line.unitPrice,
-        discount_type: line.schemeDiscountType === "Percentage" ? "Percentage" : "Flat",
-        discount_percentage: line.schemeDiscountPercent || 0,
-        discount_amount: line.discountValue || 0,
+        ...mapLineDiscountForApi(line),
         gst_percentage: line.gstPercentage ?? 0,
         gst_amount: line.gstAmount,
         cgst_percentage: line.cgstPercentage ?? 0,

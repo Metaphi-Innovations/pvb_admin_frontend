@@ -105,6 +105,21 @@ async function openPackingListServerPreview(params: {
 }
 
 /**
+ * Opens official server preview / download for a packing list by id.
+ */
+export async function openPackingListPdfById(packingListId: string): Promise<void> {
+  if (typeof window === "undefined") {
+    throw new Error("PDF download is only supported in the browser.");
+  }
+  const { html, fileName } = await fetchPackingListPreviewById(String(packingListId));
+  await openPackingListServerPreview({
+    html,
+    fileName,
+    onDownload: () => downloadPackingListPdfById(String(packingListId)),
+  });
+}
+
+/**
  * Opens official server preview / download for a sales order packing list.
  */
 export async function downloadPackingListPdfForSalesOrder(
@@ -123,6 +138,48 @@ export async function downloadPackingListPdfForSalesOrder(
     fileName,
     onDownload: () =>
       downloadPackingListPdfBySource("normal_sales", String(salesOrderId)),
+  });
+}
+
+/**
+ * Opens official server preview / download for a sample order packing list.
+ */
+export async function downloadPackingListPdfForSampleOrder(
+  sampleOrderId: string,
+): Promise<void> {
+  if (typeof window === "undefined") {
+    throw new Error("PDF download is only supported in the browser.");
+  }
+  const { html, fileName } = await fetchPackingListPreviewBySource(
+    "sample",
+    String(sampleOrderId),
+  );
+  await openPackingListServerPreview({
+    html,
+    fileName,
+    onDownload: () =>
+      downloadPackingListPdfBySource("sample", String(sampleOrderId)),
+  });
+}
+
+/**
+ * Opens official server preview / download for a stock transfer packing list.
+ */
+export async function downloadPackingListPdfForStockTransfer(
+  stockTransferId: string,
+): Promise<void> {
+  if (typeof window === "undefined") {
+    throw new Error("PDF download is only supported in the browser.");
+  }
+  const { html, fileName } = await fetchPackingListPreviewBySource(
+    "stock_transfer",
+    String(stockTransferId),
+  );
+  await openPackingListServerPreview({
+    html,
+    fileName,
+    onDownload: () =>
+      downloadPackingListPdfBySource("stock_transfer", String(stockTransferId)),
   });
 }
 

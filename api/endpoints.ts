@@ -624,6 +624,37 @@ export const API_ENDPOINTS = {
       CANCEL: (id: string) => `/accounts/receipt-voucher/${id}/cancel`,
       REVERSE: (id: string) => `/accounts/receipt-voucher/${id}/reverse`,
     },
+    PAYMENT_VOUCHER: {
+      CONFIG: "/accounts/payment-voucher/config",
+      LIST: "/accounts/payment-voucher",
+      CREATE: "/accounts/payment-voucher",
+      GET_BY_ID: (id: string) => `/accounts/payment-voucher/${id}`,
+      UPDATE: (id: string) => `/accounts/payment-voucher/${id}`,
+      SUPPLIER_OUTSTANDING: (supplierId: string) =>
+        `/accounts/payment-voucher/supplier/${supplierId}/outstanding`,
+      CUSTOMER_REFUNDABLE: (customerId: string) =>
+        `/accounts/payment-voucher/customer/${customerId}/refundable`,
+      SUBMIT: (id: string) => `/accounts/payment-voucher/${id}/submit`,
+      APPROVE: (id: string) => `/accounts/payment-voucher/${id}/approve`,
+      REJECT: (id: string) => `/accounts/payment-voucher/${id}/reject`,
+      POST: (id: string) => `/accounts/payment-voucher/${id}/post`,
+      CANCEL: (id: string) => `/accounts/payment-voucher/${id}/cancel`,
+      REVERSE: (id: string) => `/accounts/payment-voucher/${id}/reverse`,
+    },
+    JOURNAL_VOUCHER: {
+      CONFIG: "/accounts/journal-voucher/config",
+      ELIGIBLE_LEDGERS: "/accounts/journal-voucher/eligible-ledgers",
+      LIST: "/accounts/journal-voucher",
+      CREATE: "/accounts/journal-voucher",
+      GET_BY_ID: (id: string) => `/accounts/journal-voucher/${id}`,
+      UPDATE: (id: string) => `/accounts/journal-voucher/${id}`,
+      SUBMIT: (id: string) => `/accounts/journal-voucher/${id}/submit`,
+      APPROVE: (id: string) => `/accounts/journal-voucher/${id}/approve`,
+      REJECT: (id: string) => `/accounts/journal-voucher/${id}/reject`,
+      POST: (id: string) => `/accounts/journal-voucher/${id}/post`,
+      CANCEL: (id: string) => `/accounts/journal-voucher/${id}/cancel`,
+      REVERSE: (id: string) => `/accounts/journal-voucher/${id}/reverse`,
+    },
   },
   INVOICE_EXTRACTION: {
     EXTRACT: "/invoice-extraction/extract"
