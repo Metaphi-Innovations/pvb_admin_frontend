@@ -655,6 +655,20 @@ export const API_ENDPOINTS = {
       CANCEL: (id: string) => `/accounts/journal-voucher/${id}/cancel`,
       REVERSE: (id: string) => `/accounts/journal-voucher/${id}/reverse`,
     },
+    CONTRA_VOUCHER: {
+      CONFIG: "/accounts/contra-voucher/config",
+      ELIGIBLE_ACCOUNTS: "/accounts/contra-voucher/eligible-accounts",
+      LIST: "/accounts/contra-voucher",
+      CREATE: "/accounts/contra-voucher",
+      GET_BY_ID: (id: string) => `/accounts/contra-voucher/${id}`,
+      UPDATE: (id: string) => `/accounts/contra-voucher/${id}`,
+      SUBMIT: (id: string) => `/accounts/contra-voucher/${id}/submit`,
+      APPROVE: (id: string) => `/accounts/contra-voucher/${id}/approve`,
+      REJECT: (id: string) => `/accounts/contra-voucher/${id}/reject`,
+      POST: (id: string) => `/accounts/contra-voucher/${id}/post`,
+      CANCEL: (id: string) => `/accounts/contra-voucher/${id}/cancel`,
+      REVERSE: (id: string) => `/accounts/contra-voucher/${id}/reverse`,
+    },
   },
   INVOICE_EXTRACTION: {
     EXTRACT: "/invoice-extraction/extract"

@@ -22,6 +22,7 @@ export function ReceiptFormActionBar({
   approvalRequired = true,
   configReady = true,
   hasExistingId = false,
+  readOnly = false,
   onDiscard,
   onSaveDraft,
   onSubmitForApproval,
@@ -38,7 +39,8 @@ export function ReceiptFormActionBar({
   approvalRequired?: boolean;
   configReady?: boolean;
   hasExistingId?: boolean;
-  onDiscard: () => void;
+  readOnly?: boolean;
+  onDiscard?: () => void;
   onSaveDraft?: () => void;
   onSubmitForApproval?: () => void;
   onSaveAndPost?: () => void;
@@ -59,19 +61,39 @@ export function ReceiptFormActionBar({
   const bypass = configReady && approvalRequired === false;
   const allowPost = canPostStatus(st, approvalRequired);
 
+  if (readOnly) {
+    if (!posted || !onReverse) return null;
+    return (
+      <div className="flex items-center justify-end w-full">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className={cn(BTN, "text-red-600 border-red-200 hover:bg-red-50")}
+          onClick={onReverse}
+          disabled={busy}
+        >
+          Reverse Receipt
+        </Button>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between w-full">
       <div className="flex items-center gap-2 flex-wrap">
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className={cn(BTN, "text-muted-foreground")}
-          onClick={onDiscard}
-          disabled={busy}
-        >
-          {isEditDraft ? "Cancel (Discard changes)" : "Cancel"}
-        </Button>
+        {onDiscard ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className={cn(BTN, "text-muted-foreground")}
+            onClick={onDiscard}
+            disabled={busy}
+          >
+            {isEditDraft ? "Cancel (Discard changes)" : "Cancel"}
+          </Button>
+        ) : null}
         {/* Document cancel only after the voucher leaves draft-like states */}
         {canCancel && !draftLike && !posted && !cancelled && onCancel ? (
           <Button

@@ -3,18 +3,14 @@
 import { Eye, Paperclip, Trash2, Upload } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import type { PaymentAttachmentMeta, PaymentPendingFile } from "@/types/payment-voucher.types";
+import type { ContraAttachmentMeta, ContraPendingFile } from "@/types/contra-voucher.types";
 import {
-  PAYMENT_ATTACHMENT_ACCEPT,
-  PAYMENT_ATTACHMENT_MAX_FILES,
-  formatPaymentFileSize,
-} from "../payment-attachment-formdata";
-import {
-  paymentAttachmentDisplayName,
-  resolvePaymentAttachmentUrl,
-} from "../payment-voucher-utils";
+  CONTRA_ATTACHMENT_ACCEPT,
+  CONTRA_ATTACHMENT_MAX_FILES,
+  formatContraFileSize,
+} from "../contra-attachment-formdata";
 
-export function PaymentAttachmentsPanel({
+export function ContraAttachmentsPanel({
   persisted,
   pending,
   readOnly,
@@ -22,8 +18,8 @@ export function PaymentAttachmentsPanel({
   onRemovePersisted,
   onRemovePending,
 }: {
-  persisted: PaymentAttachmentMeta[];
-  pending: PaymentPendingFile[];
+  persisted: ContraAttachmentMeta[];
+  pending: ContraPendingFile[];
   readOnly?: boolean;
   onAddFiles: (files: File[]) => void;
   onRemovePersisted: (fileUrl: string) => void;
@@ -35,7 +31,7 @@ export function PaymentAttachmentsPanel({
     <div className="space-y-1 min-w-0">
       <Label className="text-xs font-medium">Attachments</Label>
       <p className="text-[11px] text-muted-foreground">
-        Max {PAYMENT_ATTACHMENT_MAX_FILES} files, 10MB each. JPEG, PNG, GIF, PDF, DOC,
+        Max {CONTRA_ATTACHMENT_MAX_FILES} files, 10MB each. JPEG, PNG, GIF, PDF, DOC,
         DOCX, XLS, XLSX, CSV.
       </p>
 
@@ -53,7 +49,7 @@ export function PaymentAttachmentsPanel({
             type="file"
             className="hidden"
             multiple
-            accept={PAYMENT_ATTACHMENT_ACCEPT}
+            accept={CONTRA_ATTACHMENT_ACCEPT}
             onChange={(e) => {
               const list = Array.from(e.target.files ?? []);
               if (list.length) onAddFiles(list);
@@ -65,44 +61,40 @@ export function PaymentAttachmentsPanel({
 
       {total > 0 ? (
         <ul className="space-y-1 mt-1">
-          {persisted.map((att) => {
-            const displayName = paymentAttachmentDisplayName(att);
-            const openUrl = resolvePaymentAttachmentUrl(att.file_url);
-            return (
-              <li
-                key={`p:${att.file_url}`}
-                className="flex items-center gap-2 h-8 px-2 rounded-lg border border-border bg-muted/15 text-[11px]"
-              >
-                <Paperclip className="w-3 h-3 text-muted-foreground flex-shrink-0" />
-                <span className="truncate flex-1 font-medium text-foreground" title={displayName}>
-                  {displayName}
+          {persisted.map((att) => (
+            <li
+              key={`p:${att.file_url}`}
+              className="flex items-center gap-2 h-8 px-2 rounded-lg border border-border bg-muted/15 text-[11px]"
+            >
+              <Paperclip className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+              <span className="truncate flex-1 font-medium text-foreground">
+                {att.file_name}
+              </span>
+              {att.file_type ? (
+                <span className="text-muted-foreground truncate max-w-[72px]">
+                  {att.file_type}
                 </span>
-                {att.file_type ? (
-                  <span className="text-muted-foreground truncate max-w-[72px]">
-                    {att.file_type}
-                  </span>
-                ) : null}
+              ) : null}
+              <button
+                type="button"
+                className="p-1 rounded-md hover:bg-muted text-muted-foreground"
+                onClick={() => window.open(att.file_url, "_blank", "noopener,noreferrer")}
+                aria-label="View attachment"
+              >
+                <Eye className="w-3.5 h-3.5" />
+              </button>
+              {!readOnly ? (
                 <button
                   type="button"
-                  className="p-1 rounded-md hover:bg-muted text-muted-foreground"
-                  onClick={() => window.open(openUrl, "_blank", "noopener,noreferrer")}
-                  aria-label="View attachment"
+                  className="p-1 rounded-md hover:bg-red-50 text-red-600"
+                  onClick={() => onRemovePersisted(att.file_url)}
+                  aria-label="Remove attachment"
                 >
-                  <Eye className="w-3.5 h-3.5" />
+                  <Trash2 className="w-3.5 h-3.5" />
                 </button>
-                {!readOnly ? (
-                  <button
-                    type="button"
-                    className="p-1 rounded-md hover:bg-red-50 text-red-600"
-                    onClick={() => onRemovePersisted(att.file_url)}
-                    aria-label="Remove attachment"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                ) : null}
-              </li>
-            );
-          })}
+              ) : null}
+            </li>
+          ))}
 
           {pending.map((item) => (
             <li
@@ -114,7 +106,7 @@ export function PaymentAttachmentsPanel({
                 {item.file.name}
               </span>
               <span className="text-muted-foreground whitespace-nowrap">
-                {formatPaymentFileSize(item.file.size)} · pending
+                {formatContraFileSize(item.file.size)} · pending
               </span>
               {item.previewUrl ? (
                 <button

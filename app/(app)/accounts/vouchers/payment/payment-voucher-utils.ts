@@ -283,6 +283,58 @@ export function mapDetailToForm(detail: PaymentVoucherDetail): PaymentFormState 
   };
 }
 
+function basenameFromAttachmentPath(pathOrUrl: string): string {
+  const raw = pathOrUrl.trim();
+  if (!raw) return "";
+  try {
+    if (/^https?:\/\//i.test(raw)) {
+      const parsed = new URL(raw);
+      const parts = parsed.pathname.split("/").filter(Boolean);
+      return parts[parts.length - 1] || "";
+    }
+  } catch {
+    /* fall through */
+  }
+  const normalized = raw.replace(/\\/g, "/");
+  const parts = normalized.split("/").filter(Boolean);
+  return parts[parts.length - 1] || "";
+}
+
+/** Open attachment via same-origin /uploads proxy (environment-safe). */
+export function resolvePaymentAttachmentUrl(path: string): string {
+  const raw = path.trim();
+  if (!raw) return "";
+  if (raw.startsWith("data:") || raw.startsWith("blob:")) return raw;
+
+  if (/^https?:\/\//i.test(raw)) {
+    try {
+      const parsed = new URL(raw);
+      if (parsed.pathname.includes("/uploads/")) {
+        return `${parsed.pathname}${parsed.search}`;
+      }
+      return raw;
+    } catch {
+      return raw;
+    }
+  }
+
+  const normalized = raw.startsWith("/") ? raw : `/${raw}`;
+  if (normalized.startsWith("/uploads/")) return normalized;
+  const idx = normalized.indexOf("/uploads/");
+  if (idx >= 0) return normalized.slice(idx);
+  return `/uploads/${normalized.replace(/^\//, "")}`;
+}
+
+/** Prefer generated/stored filename from the path over original upload name. */
+export function paymentAttachmentDisplayName(att: {
+  file_name: string;
+  file_url: string;
+}): string {
+  const fromPath = basenameFromAttachmentPath(att.file_url);
+  if (fromPath) return decodeURIComponent(fromPath);
+  return att.file_name;
+}
+
 function normalizePersistedAttachments(value: unknown): PaymentAttachmentMeta[] {
   if (!Array.isArray(value)) return [];
   const result: PaymentAttachmentMeta[] = [];
@@ -290,8 +342,11 @@ function normalizePersistedAttachments(value: unknown): PaymentAttachmentMeta[] 
     if (!item || typeof item !== "object") continue;
     const row = item as Record<string, unknown>;
     const file_url = typeof row.file_url === "string" ? row.file_url.trim() : "";
-    const file_name = typeof row.file_name === "string" ? row.file_name.trim() : "";
-    if (!file_url || !file_name) continue;
+    let file_name = typeof row.file_name === "string" ? row.file_name.trim() : "";
+    if (!file_url) continue;
+    const generatedName = basenameFromAttachmentPath(file_url);
+    if (generatedName) file_name = decodeURIComponent(generatedName);
+    if (!file_name) continue;
     if (file_url.startsWith("blob:") || file_url.startsWith("data:")) continue;
     result.push({
       file_name,
@@ -440,54 +495,6 @@ export function computePaymentPreview(form: PaymentFormState) {
 
 export function electronicModes(): PaymentBankTransactionMode[] {
   return ["NEFT", "RTGS", "IMPS", "UPI", "BANK_TRANSFER"];
-}
-
-export function reconcileSupplierAdjustments(
-  form: PaymentFormState,
-): PaymentUiAdjustment[] {
-  if (form.party_kind !== "SUPPLIER") return form.adjustments;
-  const { totalTds, totalDiscount } = computeAllocationTotals(form);
-  let next = [...form.adjustments];
-
-  const tdsIdx = next.findIndex((a) => a.adjustment_type === "SUPPLIER_TDS");
-  if (totalTds > 0) {
-    if (tdsIdx >= 0) {
-      if (toMoneyNumber(next[tdsIdx].amount) !== totalTds) {
-        next[tdsIdx] = { ...next[tdsIdx], amount: String(totalTds), entry_type: "CREDIT" };
-      }
-    } else {
-      next.push({
-        ...createEmptyAdjustment("SUPPLIER_TDS"),
-        amount: String(totalTds),
-        entry_type: "CREDIT",
-      });
-    }
-  } else if (tdsIdx >= 0) {
-    next = next.filter((_, i) => i !== tdsIdx);
-  }
-
-  const discIdx = next.findIndex((a) => a.adjustment_type === "DISCOUNT_RECEIVED");
-  if (totalDiscount > 0) {
-    if (discIdx >= 0) {
-      if (toMoneyNumber(next[discIdx].amount) !== totalDiscount) {
-        next[discIdx] = {
-          ...next[discIdx],
-          amount: String(totalDiscount),
-          entry_type: "CREDIT",
-        };
-      }
-    } else {
-      next.push({
-        ...createEmptyAdjustment("DISCOUNT_RECEIVED"),
-        amount: String(totalDiscount),
-        entry_type: "CREDIT",
-      });
-    }
-  } else if (discIdx >= 0) {
-    next = next.filter((_, i) => i !== discIdx);
-  }
-
-  return next;
 }
 
 export function validatePaymentForm(form: PaymentFormState): string | null {
