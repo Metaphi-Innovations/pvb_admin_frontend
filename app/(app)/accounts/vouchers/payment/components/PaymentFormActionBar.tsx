@@ -10,7 +10,10 @@ const BTN = "h-8 text-xs gap-1.5";
 
 /**
  * Payment lifecycle action bar.
- * PENDING_APPROVAL never shows Post — even when approval config is false.
+ *
+ * Create (no id): Cancel (Discard) · Save as Draft · Save & Post
+ * Edit draft: Cancel (Discard) · Save Changes · Post
+ * View (readOnly): Reverse Payment only when POSTED
  */
 export function PaymentFormActionBar({
   status,
@@ -19,6 +22,7 @@ export function PaymentFormActionBar({
   approvalRequired = true,
   configReady = true,
   hasExistingId = false,
+  readOnly = false,
   onDiscard,
   onSaveDraft,
   onSubmitForApproval,
@@ -35,7 +39,9 @@ export function PaymentFormActionBar({
   approvalRequired?: boolean;
   configReady?: boolean;
   hasExistingId?: boolean;
-  onDiscard: () => void;
+  /** View page — Reverse Payment only when eligible. */
+  readOnly?: boolean;
+  onDiscard?: () => void;
   onSaveDraft?: () => void;
   onSubmitForApproval?: () => void;
   onSaveAndPost?: () => void;
@@ -47,6 +53,8 @@ export function PaymentFormActionBar({
 }) {
   const st = (status || "DRAFT") as PaymentVoucherStatus;
   const draftLike = st === "DRAFT" || st === "REJECTED" || !status;
+  const isCreate = draftLike && !hasExistingId;
+  const isEditDraft = draftLike && hasExistingId;
   const pendingApproval = st === "PENDING_APPROVAL";
   const approved = st === "APPROVED";
   const posted = st === "POSTED";
@@ -54,20 +62,41 @@ export function PaymentFormActionBar({
   const bypass = configReady && approvalRequired === false;
   const allowPost = canPostStatus(st, approvalRequired);
 
+  if (readOnly) {
+    if (!posted || !onReverse) return null;
+    return (
+      <div className="flex items-center justify-end w-full">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className={cn(BTN, "text-red-600 border-red-200 hover:bg-red-50")}
+          onClick={onReverse}
+          disabled={busy}
+        >
+          Reverse Payment
+        </Button>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between w-full">
       <div className="flex items-center gap-2 flex-wrap">
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className={cn(BTN, "text-muted-foreground")}
-          onClick={onDiscard}
-          disabled={busy}
-        >
-          Discard Form
-        </Button>
-        {canCancel && !posted && !cancelled && onCancel ? (
+        {onDiscard ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className={cn(BTN, "text-muted-foreground")}
+            onClick={onDiscard}
+            disabled={busy}
+          >
+            Cancel (Discard)
+          </Button>
+        ) : null}
+        {/* Document cancel only after the voucher leaves draft-like states */}
+        {canCancel && !draftLike && !posted && !cancelled && onCancel ? (
           <Button
             type="button"
             variant="outline"
@@ -111,7 +140,8 @@ export function PaymentFormActionBar({
                   onClick={onSaveDraft}
                   disabled={busy}
                 >
-                  <Save className="w-3.5 h-3.5" /> Save Draft
+                  <Save className="w-3.5 h-3.5" />{" "}
+                  {isEditDraft ? "Save Changes" : "Save as Draft"}
                 </Button>
               ) : null}
               {!bypass && onSubmitForApproval ? (
@@ -125,7 +155,8 @@ export function PaymentFormActionBar({
                   <Send className="w-3.5 h-3.5" /> Submit for Approval
                 </Button>
               ) : null}
-              {bypass && onSaveAndPost ? (
+              {/* Create: Save & Post (save + post in one step, no confirm) */}
+              {bypass && isCreate && onSaveAndPost ? (
                 <Button
                   type="button"
                   size="sm"
@@ -136,15 +167,16 @@ export function PaymentFormActionBar({
                   <Save className="w-3.5 h-3.5" /> Save & Post
                 </Button>
               ) : null}
-              {bypass && !onSaveAndPost && allowPost && onPost ? (
+              {/* Edit draft: Post (persist latest edits then post, no confirm) */}
+              {bypass && isEditDraft && allowPost && (onPost || onSaveAndPost) ? (
                 <Button
                   type="button"
                   size="sm"
                   className={cn(BTN, "bg-brand-600 hover:bg-brand-700 text-white")}
-                  onClick={onPost}
+                  onClick={onPost ?? onSaveAndPost}
                   disabled={busy}
                 >
-                  <Save className="w-3.5 h-3.5" /> Post Payment
+                  <Save className="w-3.5 h-3.5" /> Post
                 </Button>
               ) : null}
             </>

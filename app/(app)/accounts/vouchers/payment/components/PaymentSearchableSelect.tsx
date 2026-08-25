@@ -21,6 +21,10 @@ export function PaymentSearchableSelect({
   placeholder = "Select…",
   required,
   disabled,
+  triggerClassName,
+  labelClassName,
+  allowClear,
+  className,
 }: {
   label?: string;
   value: string;
@@ -29,6 +33,10 @@ export function PaymentSearchableSelect({
   placeholder?: string;
   required?: boolean;
   disabled?: boolean;
+  triggerClassName?: string;
+  labelClassName?: string;
+  allowClear?: boolean;
+  className?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
@@ -42,9 +50,9 @@ export function PaymentSearchableSelect({
   const selected = options.find((o) => o.value === value);
 
   return (
-    <div className={label ? "space-y-1" : undefined}>
+    <div className={cn(label ? "space-y-1" : undefined, className)}>
       {label ? (
-        <Label className="text-xs font-medium">
+        <Label className={cn("text-xs font-medium", labelClassName)}>
           {label}
           {required ? <span className="text-red-500 ml-0.5">*</span> : null}
         </Label>
@@ -67,6 +75,7 @@ export function PaymentSearchableSelect({
               disabled
                 ? "opacity-50 cursor-not-allowed bg-muted/30"
                 : "hover:bg-muted/30",
+              triggerClassName,
             )}
           >
             <span
@@ -89,11 +98,24 @@ export function PaymentSearchableSelect({
               placeholder="Search…"
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              className="h-9 text-sm"
+              className="h-8 text-xs"
               autoFocus
             />
           </div>
           <div className="max-h-[220px] overflow-y-auto py-1">
+            {allowClear ? (
+              <button
+                type="button"
+                className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-left hover:bg-muted/60 text-muted-foreground"
+                onClick={() => {
+                  onChange("");
+                  setOpen(false);
+                  setQ("");
+                }}
+              >
+                All
+              </button>
+            ) : null}
             {filtered.length === 0 ? (
               <p className="px-3 py-4 text-center text-xs text-muted-foreground">
                 No results

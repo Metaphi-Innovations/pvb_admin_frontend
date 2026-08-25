@@ -78,11 +78,10 @@ function appendScalar(
   key: string,
   value: string | number | boolean | null | undefined,
 ): void {
-  if (value === undefined) return;
-  if (value === null) {
-    formData.append(key, "");
-    return;
-  }
+  // Omit null/undefined/"" so Zod optional().nullable() uuid/date fields do not
+  // receive empty strings from multipart (which fail with "Invalid uuid").
+  if (value === undefined || value === null) return;
+  if (typeof value === "string" && value.trim() === "") return;
   formData.append(key, String(value));
 }
 
@@ -135,7 +134,7 @@ export function buildPaymentMultipartFormData(
 
   const files = options?.pendingFiles ?? [];
   for (const file of files) {
-    formData.append("attachments", file);
+    formData.append("attachments", file, file.name || "attachment");
   }
 
   return formData;

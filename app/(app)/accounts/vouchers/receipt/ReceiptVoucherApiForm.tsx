@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { VoucherFormSectionCard } from "@/components/accounts/voucher-form/VoucherFormSectionCard";
@@ -123,6 +124,8 @@ export function ReceiptVoucherApiForm({
 
   const fieldsEditable = isDraftEditable(status) && !readOnlyProp;
   const isViewMode = readOnlyProp || !fieldsEditable;
+  const isPostedView = status === "POSTED" && !readOnlyProp;
+  const showViewChrome = readOnlyProp || isPostedView;
   const preview = useMemo(() => computeReceiptPreview(form), [form]);
 
   const patch = useCallback((p: Partial<ReceiptFormState>) => {
@@ -483,6 +486,11 @@ export function ReceiptVoucherApiForm({
     else router.push(RECEIPT_LIST_PATH);
   };
 
+  const handleBack = () => {
+    if (readOnlyProp && onDone) onDone();
+    else router.push(RECEIPT_LIST_PATH);
+  };
+
   /** Save current form then post immediately — no confirmation dialog. */
   const handleSaveAndPost = async () => {
     const saved = await saveDraft({ skipToast: true, skipNavigate: true });
@@ -492,7 +500,7 @@ export function ReceiptVoucherApiForm({
       "Receipt posted successfully.",
     );
     if (posted?.receipt_voucher_id) {
-      router.push(receiptViewPath(posted.receipt_voucher_id));
+      router.replace(receiptViewPath(posted.receipt_voucher_id));
       return;
     }
     router.replace(receiptEditPath(saved.receipt_voucher_id));
@@ -506,7 +514,7 @@ export function ReceiptVoucherApiForm({
       "Receipt posted successfully.",
     );
     if (posted?.receipt_voucher_id) {
-      router.push(receiptViewPath(posted.receipt_voucher_id));
+      router.replace(receiptViewPath(posted.receipt_voucher_id));
     }
   };
 
@@ -542,15 +550,18 @@ export function ReceiptVoucherApiForm({
       title={title}
       description={subtitle}
       layout="form"
+      onBackClick={showViewChrome ? handleBack : undefined}
       actions={
-        readOnlyProp && onEdit && fieldsEditable === false && isDraftEditable(status) ? (
-          <button
+        readOnlyProp && onEdit && !fieldsEditable && isDraftEditable(status) ? (
+          <Button
             type="button"
-            className="h-8 px-3 text-xs rounded-lg border border-border hover:bg-muted"
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs"
             onClick={onEdit}
           >
             Edit
-          </button>
+          </Button>
         ) : null
       }
     >
@@ -1134,16 +1145,18 @@ export function ReceiptVoucherApiForm({
       </div>
 
       {/* Sticky action bar: edit + view lifecycle actions */}
+      {(!showViewChrome || status === "POSTED") ? (
       <div className="fixed bottom-0 inset-x-0 z-40 border-t border-border bg-white/95 backdrop-blur px-4 py-2.5">
           <div className="w-full">
             <ReceiptFormActionBar
               status={status}
               busy={busy}
+              readOnly={showViewChrome}
               canCancel={canCancelStatus(status) && !!currentId}
               approvalRequired={approvalRequired}
               configReady={configReady}
               hasExistingId={!!currentId}
-              onDiscard={handleDiscard}
+              onDiscard={fieldsEditable ? handleDiscard : undefined}
               onSaveDraft={
                 fieldsEditable && !readOnlyProp ? () => void saveDraft() : undefined
               }
@@ -1201,6 +1214,7 @@ export function ReceiptVoucherApiForm({
             />
           </div>
         </div>
+      ) : null}
 
       <ReceiptReasonDialog
         open={submitOpen}

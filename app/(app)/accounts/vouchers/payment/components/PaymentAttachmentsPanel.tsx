@@ -9,6 +9,10 @@ import {
   PAYMENT_ATTACHMENT_MAX_FILES,
   formatPaymentFileSize,
 } from "../payment-attachment-formdata";
+import {
+  paymentAttachmentDisplayName,
+  resolvePaymentAttachmentUrl,
+} from "../payment-voucher-utils";
 
 export function PaymentAttachmentsPanel({
   persisted,
@@ -61,40 +65,44 @@ export function PaymentAttachmentsPanel({
 
       {total > 0 ? (
         <ul className="space-y-1 mt-1">
-          {persisted.map((att) => (
-            <li
-              key={`p:${att.file_url}`}
-              className="flex items-center gap-2 h-8 px-2 rounded-lg border border-border bg-muted/15 text-[11px]"
-            >
-              <Paperclip className="w-3 h-3 text-muted-foreground flex-shrink-0" />
-              <span className="truncate flex-1 font-medium text-foreground">
-                {att.file_name}
-              </span>
-              {att.file_type ? (
-                <span className="text-muted-foreground truncate max-w-[72px]">
-                  {att.file_type}
-                </span>
-              ) : null}
-              <button
-                type="button"
-                className="p-1 rounded-md hover:bg-muted text-muted-foreground"
-                onClick={() => window.open(att.file_url, "_blank", "noopener,noreferrer")}
-                aria-label="View attachment"
+          {persisted.map((att) => {
+            const displayName = paymentAttachmentDisplayName(att);
+            const openUrl = resolvePaymentAttachmentUrl(att.file_url);
+            return (
+              <li
+                key={`p:${att.file_url}`}
+                className="flex items-center gap-2 h-8 px-2 rounded-lg border border-border bg-muted/15 text-[11px]"
               >
-                <Eye className="w-3.5 h-3.5" />
-              </button>
-              {!readOnly ? (
+                <Paperclip className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+                <span className="truncate flex-1 font-medium text-foreground" title={displayName}>
+                  {displayName}
+                </span>
+                {att.file_type ? (
+                  <span className="text-muted-foreground truncate max-w-[72px]">
+                    {att.file_type}
+                  </span>
+                ) : null}
                 <button
                   type="button"
-                  className="p-1 rounded-md hover:bg-red-50 text-red-600"
-                  onClick={() => onRemovePersisted(att.file_url)}
-                  aria-label="Remove attachment"
+                  className="p-1 rounded-md hover:bg-muted text-muted-foreground"
+                  onClick={() => window.open(openUrl, "_blank", "noopener,noreferrer")}
+                  aria-label="View attachment"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
+                  <Eye className="w-3.5 h-3.5" />
                 </button>
-              ) : null}
-            </li>
-          ))}
+                {!readOnly ? (
+                  <button
+                    type="button"
+                    className="p-1 rounded-md hover:bg-red-50 text-red-600"
+                    onClick={() => onRemovePersisted(att.file_url)}
+                    aria-label="Remove attachment"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                ) : null}
+              </li>
+            );
+          })}
 
           {pending.map((item) => (
             <li

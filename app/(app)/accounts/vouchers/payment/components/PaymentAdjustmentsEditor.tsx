@@ -57,6 +57,9 @@ export function PaymentAdjustmentsEditor({
 
   return (
     <div className="space-y-2.5">
+      {rows.length === 0 ? (
+        <p className="text-xs text-muted-foreground py-1">No adjustments added.</p>
+      ) : null}
       {rows.map((row) => {
         const needsLedger =
           row.adjustment_type === "DISCOUNT_RECEIVED" ||

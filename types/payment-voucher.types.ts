@@ -120,15 +120,32 @@ export interface PaymentVoucherListQuery {
   search?: string;
   financial_year_id?: string;
   warehouse_id?: string;
-  status?: PaymentVoucherStatus;
-  party_kind?: PaymentPartyKind;
+  /** Single status or comma-separated list. */
+  status?: PaymentVoucherStatus | string;
+  /** Single party kind or comma-separated list. */
+  party_kind?: PaymentPartyKind | string;
   customer_id?: string;
   supplier_id?: string;
+  other_ledger_id?: string;
   cash_bank_ledger_id?: string;
-  transaction_mode?: PaymentBankTransactionMode;
+  /** Single mode or comma-separated list. */
+  transaction_mode?: PaymentBankTransactionMode | string;
   from_date?: string;
   to_date?: string;
   sr_no?: number;
+  sort_by?:
+    | "sr_no"
+    | "voucher_date"
+    | "party_kind"
+    | "transaction_mode"
+    | "status"
+    | "gross_party_amount"
+    | "net_bank_amount"
+    | "created_at";
+  sort_dir?: "asc" | "desc";
+  warehouse_names?: string;
+  party_names?: string;
+  cash_bank_names?: string;
 }
 
 export interface PaymentOpenItemRow {

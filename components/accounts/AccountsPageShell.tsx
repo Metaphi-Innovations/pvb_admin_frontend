@@ -2,7 +2,7 @@
 
 import React from "react";
 import Link from "next/link";
-import { ChevronRight } from "lucide-react";
+import { ArrowLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { BreadcrumbItem } from "@/lib/accounts/accounts-nav";
 import {
@@ -21,6 +21,8 @@ export interface AccountsPageShellProps {
   title: string;
   description: string;
   actions?: React.ReactNode;
+  /** Inline back control beside the page title (e.g. voucher view pages). */
+  onBackClick?: () => void;
   /** Search / filter / export toolbar — aligned top-right in title row */
   toolbar?: React.ReactNode;
   filters?: React.ReactNode;
@@ -40,6 +42,7 @@ export function AccountsPageShell({
   title,
   description,
   actions,
+  onBackClick,
   toolbar,
   filters,
   footer,
@@ -95,20 +98,32 @@ export function AccountsPageShell({
           !isSplit && "items-center",
         )}
       >
-        <div className="min-w-0 flex-1">
-          <h1 className={cn(ACCOUNTS_PAGE_TITLE_CLASS, isSplit && "leading-tight")}>
-            {title}
-          </h1>
-          {showDescription && (
-            <p
-              className={cn(
-                ACCOUNTS_PAGE_SUBTITLE_CLASS,
-                isSplit && "leading-snug line-clamp-1",
-              )}
+        <div className="min-w-0 flex-1 flex items-center gap-2.5">
+          {onBackClick ? (
+            <button
+              type="button"
+              onClick={onBackClick}
+              aria-label="Back"
+              className="w-7 h-7 flex items-center justify-center rounded-md border border-border/70 hover:bg-muted/40 flex-shrink-0"
             >
-              {description}
-            </p>
-          )}
+              <ArrowLeft className="w-3.5 h-3.5 text-muted-foreground" />
+            </button>
+          ) : null}
+          <div className="min-w-0 flex-1">
+            <h1 className={cn(ACCOUNTS_PAGE_TITLE_CLASS, isSplit && "leading-tight")}>
+              {title}
+            </h1>
+            {showDescription && (
+              <p
+                className={cn(
+                  ACCOUNTS_PAGE_SUBTITLE_CLASS,
+                  isSplit && "leading-snug line-clamp-1",
+                )}
+              >
+                {description}
+              </p>
+            )}
+          </div>
         </div>
         {(toolbar || actions) && (
           <div
