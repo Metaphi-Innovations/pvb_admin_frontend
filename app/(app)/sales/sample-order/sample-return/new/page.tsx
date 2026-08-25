@@ -33,6 +33,10 @@ function mapBackendDispatchToFrontend(backendDispatch: any): DispatchRecord {
   const packingNo = backendDispatch.packing_done?.packing_done_no || backendDispatch.packing_done_no || "PKG-2026-001";
   
   const products = (backendDispatch.items || []).map((item: any) => {
+    const snap = {
+      ...(item.product_snapshot || {}),
+      ...(item.product || {}),
+    };
     const unitPerPacking = Number(
       item.product?.conversion_qty ||
       item.product?.unit_per_packing ||
@@ -55,6 +59,11 @@ function mapBackendDispatchToFrontend(backendDispatch: any): DispatchRecord {
       batchExpiryDate: item.inventory_batch?.expiry_date || null,
       returnedQtyPieces: Number(item.returned_base_qty || 0),
       unitPerPacking: unitPerPacking,
+      quantityType: item.quantity_type || "Case",
+      uom: snap.base_unit || snap.unit || item.product?.unit || null,
+      unitPackSize: snap.pack_size || snap.unit_size || null,
+      netWeight: snap.net_weight || snap.netWeight || null,
+      productSnapshot: snap,
       batchAllocations: [
         {
           batchNumber: item.inventory_batch?.batch_no || item.batch_code || "",

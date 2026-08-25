@@ -1,3 +1,5 @@
+import type { QtyStackMeta } from "@/app/(app)/sales/shared/StackedQtyDisplay";
+
 export function getSnapshotField(snapshot: unknown, ...keys: string[]): string | null {
   if (!snapshot || typeof snapshot !== "object") return null;
   const record = snapshot as Record<string, unknown>;
@@ -75,6 +77,65 @@ export function resolveUnitsPerCase(product: {
   return 1;
 }
 
+export type DispatchQtyProduct = {
+  quantity_type?: string | null;
+  unit_per_packing?: number | null;
+  product_snapshot?: unknown;
+  product?: {
+    unit_per_packing?: number | null;
+    base_unit?: string | null;
+    unit?: string | null;
+    net_weight?: number | null;
+    pack_size?: number | null;
+  };
+};
+
+/** Map packing-done / dispatch product → StackedQtyDisplay meta (display only). */
+export function toDispatchQtyMeta(product: DispatchQtyProduct): QtyStackMeta {
+  const snap =
+    product.product_snapshot && typeof product.product_snapshot === "object"
+      ? (product.product_snapshot as Record<string, unknown>)
+      : {};
+  const nested = product.product || {};
+  const unitsPerPacking =
+    resolveUnitsPerCase(product) ||
+    Number(nested.unit_per_packing) ||
+    1;
+  const qtyType = String(product.quantity_type || "").trim().toLowerCase();
+  const quantityType =
+    qtyType === "piece" || qtyType === "pieces" || qtyType === "pcs" || qtyType === "unit"
+      ? "Piece"
+      : "Case";
+  const uom =
+    (typeof snap.base_unit === "string" && snap.base_unit) ||
+    (typeof snap.unit === "string" && snap.unit) ||
+    (typeof snap.uom === "string" && snap.uom) ||
+    nested.base_unit ||
+    nested.unit ||
+    null;
+  const unitPackSize =
+    Number(snap.pack_size) ||
+    Number(snap.packSize) ||
+    Number(snap.unit_size) ||
+    Number(nested.pack_size) ||
+    null;
+  const netWeight =
+    Number(snap.net_weight) ||
+    Number(snap.netWeight) ||
+    Number(snap.net_weight_per_pack) ||
+    Number(nested.net_weight) ||
+    null;
+
+  return {
+    unitsPerPacking: unitsPerPacking > 0 ? unitsPerPacking : 1,
+    quantityType,
+    uom,
+    unitPackSize: unitPackSize && unitPackSize > 0 ? unitPackSize : null,
+    netWeight: netWeight && netWeight > 0 ? netWeight : null,
+  };
+}
+
+/** @deprecated Prefer DispatchStackedQty / StackedQtyDisplay for UI. Kept for any string fallbacks. */
 export function formatDisplayQty(
   baseQty: number,
   product: {

@@ -17,16 +17,15 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { BatchDetailsReadOnlyTable } from "../shared/components/BatchDetailsReadOnlyTable";
+import { StackedQtyCell } from "../shared/components/StackedQtyCell";
+import { ProductSkuCell } from "../shared/components/ProductSkuCell";
 import { cn } from "@/lib/utils";
 import { useGrn } from "@/hooks/warehouse/use-grn";
 import { getGrnDocumentStatus } from "@/lib/warehouse/document-status";
 import {
-  formatDisplayQuantity,
-  fromBaseQuantity,
-  resolvePackingSize,
-  resolvePoGrnQuantityType,
+  formatQtyStackTotals,
+  resolveGrnQtyStack,
 } from "@/lib/warehouse/grn-quantity";
-import { round2 } from "@/lib/procurement/utils";
 
 const STATUS_CONFIG = {
   pending_qc: {
@@ -132,8 +131,22 @@ export function PurchaseView({ id }: { id: string }) {
     variant: "neutral" as const,
   };
   const docStatus = getGrnDocumentStatus(grn);
-  const totalReceived = grn.items.reduce((sum, it) => sum + it.receivedQty, 0);
-  const totalOrdered = grn.items.reduce((sum, it) => sum + it.orderedQty, 0);
+  const orderedStacks = grn.items.map((it) =>
+    resolveGrnQtyStack(it.orderedQty, {
+      packingSize: it.unitPerPacking || 1,
+      netWeightPerPack: it.netWeightPerPack,
+      weightUom: it.weightUom,
+    }),
+  );
+  const receivedStacks = grn.items.map((it) =>
+    resolveGrnQtyStack(it.receivedQty, {
+      packingSize: it.unitPerPacking || 1,
+      netWeightPerPack: it.netWeightPerPack,
+      weightUom: it.weightUom,
+    }),
+  );
+  const totalOrderedLabel = formatQtyStackTotals(orderedStacks);
+  const totalReceivedLabel = formatQtyStackTotals(receivedStacks);
   const canStartQc = grn.status !== "qc_completed";
   const canEdit = grn.status !== "qc_completed";
 
@@ -177,8 +190,8 @@ export function PurchaseView({ id }: { id: string }) {
           { label: "PO Number", value: grn.poNumber || "—", highlight: true },
           { label: "Supplier", value: grn.vendorName || "—" },
           { label: "Items", value: grn.items.length },
-          { label: "Total Ordered", value: totalOrdered },
-          { label: "Total Received", value: totalReceived },
+          { label: "Total Ordered", value: totalOrderedLabel },
+          { label: "Total Received", value: totalReceivedLabel },
           { label: "Batches", value: grn.batches.length },
         ],
         quickActions: [
@@ -278,11 +291,8 @@ export function PurchaseView({ id }: { id: string }) {
               <table className="w-full">
                 <thead>
                   <tr className="bg-muted/40 border-b border-border">
-                    <th className="px-4 py-2 text-left text-[11px] font-semibold text-muted-foreground">
+                    <th className="px-4 py-2 text-left text-[11px] font-semibold text-muted-foreground min-w-[180px]">
                       Product
-                    </th>
-                    <th className="px-4 py-2 text-left text-[11px] font-semibold text-muted-foreground w-28">
-                      SKU
                     </th>
                     <th className="px-4 py-2 text-center text-[11px] font-semibold text-muted-foreground w-28">
                       Ordered
@@ -294,74 +304,48 @@ export function PurchaseView({ id }: { id: string }) {
                       Pending
                     </th>
                     <th className="px-4 py-2 text-center text-[11px] font-semibold text-muted-foreground w-28">
-                      Quantity Type
-                    </th>
-                    <th className="px-4 py-2 text-center text-[11px] font-semibold text-muted-foreground w-28">
                       Current Received
                     </th>
                   </tr>
                 </thead>
                 <tbody>
                   {grn.items.map((it, idx) => {
-                    const packingSize =
-                      resolvePackingSize({
-                        unitPerPacking: it.unitPerPacking,
-                      }) || 1;
-                    const quantityType = resolvePoGrnQuantityType(it.quantityType);
-                    const display = formatDisplayQuantity({
-                      baseQty: it.receivedQty,
-                      quantityType,
-                      packingSize,
-                    });
-                    const displayOrdered = round2(
-                      fromBaseQuantity({
-                        baseQty: it.orderedQty,
-                        quantityType,
-                        packingSize,
-                      }),
-                    );
-                    const displayPrevReceived = round2(
-                      fromBaseQuantity({
-                        baseQty: it.alreadyReceivedQty ?? 0,
-                        quantityType,
-                        packingSize,
-                      }),
-                    );
-                    const displayPending = round2(
-                      fromBaseQuantity({
-                        baseQty: it.pendingQty ?? 0,
-                        quantityType,
-                        packingSize,
-                      }),
-                    );
+                    const meta = {
+                      packingSize: it.unitPerPacking || 1,
+                      netWeightPerPack: it.netWeightPerPack,
+                      weightUom: it.weightUom,
+                    };
+                    const orderedStack = resolveGrnQtyStack(it.orderedQty, meta);
+                    const prevStack = resolveGrnQtyStack(it.alreadyReceivedQty ?? 0, meta);
+                    const pendingStack = resolveGrnQtyStack(it.pendingQty ?? 0, meta);
+                    const receivedStack = resolveGrnQtyStack(it.receivedQty, meta);
                     return (
                     <tr
                       key={`${it.productId}-${it.poNumber}-${idx}`}
                       className="border-b border-border/50"
                     >
-                      <td className="px-4 py-2 text-xs font-bold text-foreground">
-                        {it.productName}
+                      <td className="px-4 py-2 align-middle min-w-[180px]">
+                        <ProductSkuCell name={it.productName} sku={it.productCode} />
                       </td>
-                      <td className="px-4 py-2 text-xs font-mono text-muted-foreground">
-                        {it.productCode || "—"}
+                      <td className="px-4 py-2 align-middle">
+                        <StackedQtyCell stack={orderedStack} empty={!(it.orderedQty > 0)} />
                       </td>
-                      <td className="px-4 py-2 text-xs text-center font-medium text-muted-foreground">
-                        {displayOrdered}
+                      <td className="px-4 py-2 align-middle">
+                        <StackedQtyCell stack={prevStack} empty={!(it.alreadyReceivedQty)} />
                       </td>
-                      <td className="px-4 py-2 text-xs text-center text-muted-foreground">
-                        {displayPrevReceived}
+                      <td className="px-4 py-2 align-middle">
+                        <StackedQtyCell
+                          stack={pendingStack}
+                          empty={!(it.pendingQty)}
+                          className="[&_p:first-child]:text-amber-700"
+                        />
                       </td>
-                      <td className="px-4 py-2 text-xs text-center font-medium text-amber-700">
-                        {displayPending}
-                      </td>
-                      <td className="px-4 py-2 text-xs text-center font-medium text-muted-foreground">
-                        {display.label}
-                      </td>
-                      <td className="px-4 py-2 text-xs text-center font-bold text-brand-700 bg-brand-50/20">
-                        {round2(display.quantity)}
-                        <span className="block text-[10px] font-normal text-muted-foreground">
-                          ({it.receivedQty} base)
-                        </span>
+                      <td className="px-4 py-2 align-middle bg-brand-50/20">
+                        <StackedQtyCell
+                          stack={receivedStack}
+                          empty={!(it.receivedQty > 0)}
+                          className="[&_p:first-child]:text-brand-700"
+                        />
                       </td>
                     </tr>
                     );

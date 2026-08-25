@@ -2,6 +2,7 @@ import { axiosInstance } from "@/api/axios";
 import { API_ENDPOINTS } from "@/api/endpoints";
 import type { FilterState } from "@/components/listing/types";
 import type { SalesOrderRecord } from "@/app/(app)/warehouse/packing/types";
+import { extractPackingProductDisplay } from "@/app/(app)/warehouse/packing/lib/packing-qty-stack";
 
 export interface PackingListListItem {
   id: string;
@@ -374,20 +375,21 @@ function mapDetailToSalesOrderRecord(raw: any): SalesOrderRecord {
     packingListNo: raw.packing_number,
     products: products.map((p: any) => {
       const snap = p.batch_snapshot && typeof p.batch_snapshot === "object" ? p.batch_snapshot : {};
-      const packSizeRaw = p.product?.unit_per_packing ?? p.product_snapshot?.unit_per_packing ?? p.product_snapshot?.conversion_rate ?? p.product_snapshot?.conversion_qty ?? p.product_snapshot?.conversion_factor ?? 1;
-      const packSize = Number(packSizeRaw) || 1;
+      const display = extractPackingProductDisplay(p);
+      const packSize = display.packSize;
       const orderBaseQty = Number(p.order_base_qty || 0);
       const packedBaseQty = Number(p.packed_base_qty || 0);
       const pendingBaseQty = Number(p.pending_base_qty || 0);
 
       return {
-        product: p.product?.product_name || "",
+        product: display.productName,
         productId: p.product_id || p.product?.product_id || "",
-        sku: p.product?.product_code || "",
+        sku: display.sku,
         orderBaseQty,
         packedBaseQty,
         pendingBaseQty,
         packSize,
+        productSnapshot: display.productSnapshot,
         ordered_cases: Math.floor(orderBaseQty / packSize),
         packedQty: Math.floor(packedBaseQty / packSize),
         pending_cases: Math.floor(pendingBaseQty / packSize),

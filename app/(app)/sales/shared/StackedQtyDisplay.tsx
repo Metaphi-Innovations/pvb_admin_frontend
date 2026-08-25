@@ -58,7 +58,7 @@ function resolveQtyParts(baseQty: number, meta?: QtyStackMeta) {
   const weightStr = resolveWeightLabel(qty, meta);
 
   const primary = isCase
-    ? `${formatStackNum(caseQty || qty / pack)} Case`
+    ? `${formatStackNum(caseQty)} Case`
     : `${formatStackNum(qty)} Unit`;
 
   const extras: string[] = [];
@@ -92,7 +92,11 @@ export function StackedQtyDisplay({
 }) {
   const { qty, pack, primary, extras } = resolveQtyParts(baseQty, meta);
   if (qty <= 0) {
-    return <span className={cn("text-xs text-muted-foreground", className)}>{emptyLabel}</span>;
+    return (
+      <span className={cn("block text-xs text-muted-foreground", className)}>
+        {emptyLabel}
+      </span>
+    );
   }
 
   if (layout === "inline") {
@@ -149,6 +153,7 @@ export function StackedQtyHeaderPair({
   insufficient,
   orderedLabel = "Ordered",
   allocatedLabel = "Allocated",
+  showPackSize = true,
 }: {
   orderedBaseQty: number;
   allocatedBaseQty: number;
@@ -156,6 +161,8 @@ export function StackedQtyHeaderPair({
   insufficient?: boolean;
   orderedLabel?: string;
   allocatedLabel?: string;
+  /** When true, appends "Pack N" on the ordered/pending chip. */
+  showPackSize?: boolean;
 }) {
   return (
     <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-1">
@@ -167,7 +174,7 @@ export function StackedQtyHeaderPair({
           baseQty={orderedBaseQty}
           meta={meta}
           layout="inline"
-          showPackSize
+          showPackSize={showPackSize}
         />
       </div>
       <div

@@ -24,6 +24,10 @@ export interface QcItem {
   holdCases?: number;
   holdLooseQty?: number;
   unitPerPacking?: number;
+  mfgDate?: string;
+  expDate?: string;
+  netWeightPerPack?: number;
+  weightUom?: "Kg" | "Ltr";
 
   qcResult?: QcResult;
   rejectionReason?: string;
