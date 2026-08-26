@@ -164,6 +164,7 @@ export default function ViewStockDetailsPage() {
             },
             { label: "QC No.", value: rejectedDetails.qc_number || "—" },
             { label: "Source", value: sourceCfg.label },
+            { label: "Reject Type", value: rejectedDetails.reject_type || "—" },
             { label: "Stock Status", value: statusCfg.label },
             { label: "Batch No.", value: rejectedDetails.batch_no || "—" },
           ],
@@ -203,6 +204,7 @@ export default function ViewStockDetailsPage() {
                   label="Rejected Qty"
                   value={rejectedDetails.rejected_qty.toLocaleString("en-IN")}
                 />
+                <RecordKvRow label="Reject Type" value={rejectedDetails.reject_type || "—"} />
                 <RecordKvRow label="Reject Reason" value={rejectedDetails.reject_reason || "—"} />
               </div>
             </RecordSectionCard>

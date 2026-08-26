@@ -104,7 +104,6 @@ export function computeStockPosition(
 
     const qty = Math.max(0, closingQty);
     const status = deriveInventoryStatus(batch.expiryDate, positionDate);
-    const availableQty = status === "Available" || status === "Near Expiry" ? qty : 0;
 
     return {
       id: lineKey(batch.productCode, batch.batchNumber, batch.warehouse),
@@ -112,9 +111,8 @@ export function computeStockPosition(
       productName: product.productName,
       hsn: product.hsn,
       scientificName: product.scientificName,
-      category: product.category,
-      packSize: product.packSize,
       batchNumber: batch.batchNumber,
+      mfgDate: batch.mfgDate,
       expiryDate: batch.expiryDate,
       warehouse: batch.warehouse,
       cp: product.cp,
@@ -123,7 +121,6 @@ export function computeStockPosition(
       dayIn,
       dayOut,
       closingQty: qty,
-      availableQty,
       stockValuation: qty * product.cp,
     };
   }).filter((l) => l.closingQty > 0 || l.openingQty > 0 || l.dayIn > 0 || l.dayOut > 0);

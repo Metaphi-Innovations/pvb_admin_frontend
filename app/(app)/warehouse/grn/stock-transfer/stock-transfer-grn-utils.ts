@@ -5,6 +5,7 @@ import {
   normalizeGrnQuantityType,
   type GrnQuantityType,
 } from "@/lib/warehouse/grn-quantity";
+import { enrichGrnProductSnapshot } from "../shared/grn-qty-stack";
 
 /** Pending ST GRN eligible dispatches use DELIVERED (distinct from DISPATCHED). */
 export const ST_DISPATCH_ELIGIBLE_STATUS = "DELIVERED";
@@ -402,12 +403,19 @@ export async function buildStockTransferLinesFromDispatch(
         asNumber(productSnapshot.cost_price) ||
         0,
       gstPct,
-      productSnapshot: {
-        ...productSnapshot,
-        product_id: asString(item.product_id || product.product_id),
-        product_name: asString(product.product_name) || asString(productSnapshot.product_name),
-        product_code: asString(product.product_code) || asString(productSnapshot.product_code),
-      },
+      productSnapshot: enrichGrnProductSnapshot(
+        {
+          ...productSnapshot,
+          product_id: asString(item.product_id || product.product_id),
+          product_name: asString(product.product_name) || asString(productSnapshot.product_name),
+          product_code: asString(product.product_code) || asString(productSnapshot.product_code),
+        },
+        {
+          product,
+          unitPerPacking: conversion > 0 ? conversion : 1,
+          unit: asString(productSnapshot.base_unit) || asString(product.base_unit) || "Unit",
+        },
+      ),
     };
   }).filter((line) => line.sourceItemId && line.maxQty > 0);
 

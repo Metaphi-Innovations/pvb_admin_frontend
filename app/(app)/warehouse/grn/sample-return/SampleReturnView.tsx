@@ -17,15 +17,12 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { BatchDetailsReadOnlyTable } from "../shared/components/BatchDetailsReadOnlyTable";
+import { StackedQtyCell } from "../shared/components/StackedQtyCell";
+import { ProductSkuCell } from "../shared/components/ProductSkuCell";
 import { cn } from "@/lib/utils";
 import { useGrn } from "@/hooks/warehouse/use-grn";
-import {
-  formatDisplayQuantity,
-  fromBaseQuantity,
-  resolveGrnQuantityType,
-  resolvePackingSize,
-} from "@/lib/warehouse/grn-quantity";
-import { round2 } from "@/lib/procurement/utils";
+import { formatQtyStackTotals } from "@/lib/warehouse/grn-quantity";
+import { stackGrnLineQty } from "../shared/grn-qty-stack";
 
 const STATUS_CONFIG = {
   pending_qc: {
@@ -129,6 +126,24 @@ export function SampleReturnView({ id }: { id: string }) {
 
   const totalReceived = grn.items.reduce((sum, it) => sum + it.receivedQty, 0);
   const totalOrdered = grn.items.reduce((sum, it) => sum + (it.orderedQty || 0), 0);
+  const orderedStacks = grn.items.map((it) =>
+    stackGrnLineQty(it.orderedQty || 0, {
+      packingSize: it.unitPerPacking || 1,
+      unit: it.unit,
+      netWeightPerPack: it.netWeightPerPack,
+      weightUom: it.weightUom,
+    }),
+  );
+  const receivedStacks = grn.items.map((it) =>
+    stackGrnLineQty(it.receivedQty, {
+      packingSize: it.unitPerPacking || 1,
+      unit: it.unit,
+      netWeightPerPack: it.netWeightPerPack,
+      weightUom: it.weightUom,
+    }),
+  );
+  const totalOrderedLabel = formatQtyStackTotals(orderedStacks);
+  const totalReceivedLabel = formatQtyStackTotals(receivedStacks);
   const canStartQc = grn.status !== "qc_completed";
   const canEdit = grn.status !== "qc_completed";
   const customerName = grn.customerName || grn.vendorName || "—";
@@ -163,8 +178,8 @@ export function SampleReturnView({ id }: { id: string }) {
           { label: "Warehouse", value: grn.warehouse || "—" },
           { label: "GRN Date", value: grn.grnDate || "—" },
           { label: "Items Received", value: grn.items.length },
-          { label: "Total Returned", value: totalOrdered },
-          { label: "Total Received", value: totalReceived },
+          { label: "Total Returned", value: totalOrderedLabel },
+          { label: "Total Received", value: totalReceivedLabel },
           { label: "Batches", value: grn.batches.length },
         ],
         quickActions: [
@@ -256,62 +271,45 @@ export function SampleReturnView({ id }: { id: string }) {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-border bg-muted/30">
-                  <th className="p-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                  <th className="p-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground min-w-[160px]">
                     Product
                   </th>
-                  <th className="p-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                    SKU
-                  </th>
-                  <th className="p-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-right">
+                  <th className="p-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-center">
                     Returned Qty
                   </th>
                   <th className="p-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-center">
-                    Quantity Type
-                  </th>
-                  <th className="p-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-right">
                     Received Qty
-                  </th>
-                  <th className="p-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                    Unit
                   </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
                 {grn.items.map((item, idx) => {
-                  const packingSize =
-                    resolvePackingSize({ unitPerPacking: item.unitPerPacking }) || 1;
-                  const quantityType = resolveGrnQuantityType(item.quantityType);
-                  const display = formatDisplayQuantity({
-                    baseQty: item.receivedQty,
-                    quantityType,
-                    packingSize,
-                  });
-                  const displayReturned = round2(
-                    fromBaseQuantity({
-                      baseQty: item.orderedQty || 0,
-                      quantityType,
-                      packingSize,
-                    }),
-                  );
+                  const stackOpts = {
+                    packingSize: item.unitPerPacking || 1,
+                    unit: item.unit,
+                    netWeightPerPack: item.netWeightPerPack,
+                    weightUom: item.weightUom,
+                  };
+                  const returnedStack = stackGrnLineQty(item.orderedQty || 0, stackOpts);
+                  const receivedStack = stackGrnLineQty(item.receivedQty, stackOpts);
                   return (
                     <tr key={idx} className="hover:bg-muted/10">
-                      <td className="p-2 text-xs font-semibold text-foreground">{item.productName}</td>
-                      <td className="p-2 text-xs font-mono text-muted-foreground">
-                        {item.productCode}
+                      <td className="p-2 align-middle min-w-[160px]">
+                        <ProductSkuCell name={item.productName} sku={item.productCode} />
                       </td>
-                      <td className="p-2 text-xs text-right tabular-nums">
-                        {displayReturned.toLocaleString()}
+                      <td className="p-2 align-middle">
+                        <StackedQtyCell
+                          stack={returnedStack}
+                          empty={!(item.orderedQty > 0)}
+                        />
                       </td>
-                      <td className="p-2 text-xs text-center text-muted-foreground">
-                        {display.label}
+                      <td className="p-2 align-middle">
+                        <StackedQtyCell
+                          stack={receivedStack}
+                          empty={!(item.receivedQty > 0)}
+                          className="[&_p:first-child]:text-brand-700"
+                        />
                       </td>
-                      <td className="p-2 text-xs font-semibold text-right tabular-nums text-brand-600">
-                        {round2(display.quantity).toLocaleString()}
-                        <span className="block text-[10px] font-normal text-muted-foreground">
-                          ({item.receivedQty} base)
-                        </span>
-                      </td>
-                      <td className="p-2 text-xs text-muted-foreground">{item.unit || "Unit"}</td>
                     </tr>
                   );
                 })}

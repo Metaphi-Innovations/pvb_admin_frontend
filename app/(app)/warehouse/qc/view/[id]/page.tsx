@@ -11,6 +11,11 @@ import {
   buildQcCreateHref,
   resolveQcReturnTo,
 } from "../../shared/qc-list-nav";
+import {
+  QcAcceptedStockTable,
+  QcInspectionSummaryTable,
+  QcRejectedStockTable,
+} from "../../shared/components/QcInspectionViewTables";
 
 const STATUS_CONFIG = {
   pending: { bg: "bg-amber-50 text-amber-700 border-amber-200", label: "Pending QC", variant: "draft" as const },
@@ -183,7 +188,7 @@ function ViewQcPageContent({ id }: { id: string }) {
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5">
             <p className="text-xs font-semibold text-amber-800">Awaiting inspection</p>
             <p className="text-[11px] text-amber-700 mt-1">
-              Start inspection to enter accepted, rejected, and hold quantities for this GRN.
+              Start inspection to enter accepted and rejected quantities for each batch.
             </p>
           </div>
         )}
@@ -197,44 +202,9 @@ function ViewQcPageContent({ id }: { id: string }) {
 
         <div className="bg-white rounded-xl border border-border p-4 shadow-sm space-y-4">
           <h2 className="text-xs font-bold text-foreground uppercase tracking-wider border-b pb-2">
-            Product QC Summary
+            Batch Inspection Summary
           </h2>
-          <div className="border border-border rounded-lg overflow-x-auto w-full">
-            <table className="w-full min-w-[800px]">
-              <thead>
-                <tr className="bg-muted/40 border-b border-border">
-                  <th className="px-4 py-2 text-left text-[11px] font-semibold text-muted-foreground">Product</th>
-                  <th className="px-4 py-2 text-center text-[11px] font-semibold text-muted-foreground w-28">Received Qty</th>
-                  <th className="px-4 py-2 text-center text-[11px] font-semibold text-muted-foreground w-24">Qty Type</th>
-                  <th className="px-4 py-2 text-center text-[11px] font-semibold text-emerald-800 w-28">Accepted Qty</th>
-                  <th className="px-4 py-2 text-center text-[11px] font-semibold text-red-800 w-28">Rejected Qty</th>
-                </tr>
-              </thead>
-              <tbody>
-                {qc.items.map((it, idx) => {
-                  const isCase = it.quantityType === "CASE";
-                  const divisor = it.unitPerPacking || 10;
-                  return (
-                    <tr key={idx} className="border-b border-border/50">
-                      <td className="px-4 py-2 text-xs font-bold text-foreground">{it.productName}</td>
-                      <td className="px-4 py-2 text-xs text-center tabular-nums">
-                        {isCase ? `${Number((it.receivedQty / divisor).toFixed(4))} Cs` : `${it.receivedQty} Pcs`}
-                      </td>
-                      <td className="px-4 py-2 text-xs text-center font-semibold text-muted-foreground uppercase">
-                        {it.quantityType || "PIECE"}
-                      </td>
-                      <td className="px-4 py-2 text-xs text-center tabular-nums text-emerald-700">
-                        {isCase ? `${Number((it.acceptedQty / divisor).toFixed(4))} Cs` : `${it.acceptedQty} Pcs`}
-                      </td>
-                      <td className="px-4 py-2 text-xs text-center tabular-nums text-red-700">
-                        {isCase ? `${Number((it.rejectedQty / divisor).toFixed(4))} Cs` : `${it.rejectedQty} Pcs`}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <QcInspectionSummaryTable items={qc.items} />
         </div>
 
         {qc.status === "completed" && (
@@ -244,28 +214,7 @@ function ViewQcPageContent({ id }: { id: string }) {
                 <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                 Accepted Stocks Allocation
               </h2>
-              {acceptedStock.length === 0 ? null : (
-                <div className="border border-border rounded-lg overflow-x-auto w-full">
-                  <table className="w-full min-w-[600px]">
-                    <thead>
-                      <tr className="bg-emerald-50/20 border-b border-border">
-                        <th className="px-4 py-2 text-left text-[11px] font-semibold text-emerald-800">Product</th>
-                        <th className="px-4 py-2 text-left text-[11px] font-semibold text-emerald-800 w-44">Batch/Lot No</th>
-                        <th className="px-4 py-2 text-center text-[11px] font-semibold text-emerald-800 w-36">Accepted Qty</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {acceptedStock.map((it, idx) => (
-                        <tr key={idx} className="border-b border-border/50">
-                          <td className="px-4 py-2 text-xs font-bold text-foreground">{it.productName}</td>
-                          <td className="px-4 py-2 text-xs font-mono font-medium text-muted-foreground">{it.batchNumber}</td>
-                          <td className="px-4 py-2 text-xs text-center font-bold text-emerald-700 bg-emerald-50/10">{it.acceptedQty}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+              <QcAcceptedStockTable items={acceptedStock} />
             </div>
 
             <div className="bg-white rounded-xl border border-border p-4 shadow-sm space-y-4">
@@ -273,30 +222,7 @@ function ViewQcPageContent({ id }: { id: string }) {
                 <XCircle className="w-4 h-4 text-red-600" />
                 Rejected Stocks Details
               </h2>
-              {rejectedStock.length === 0 ? null : (
-                <div className="border border-border rounded-lg overflow-x-auto w-full">
-                  <table className="w-full min-w-[600px]">
-                    <thead>
-                      <tr className="bg-red-50/10 border-b border-border">
-                        <th className="px-4 py-2 text-left text-[11px] font-semibold text-red-800">Product</th>
-                        <th className="px-4 py-2 text-left text-[11px] font-semibold text-red-800 w-44">Batch/Lot No</th>
-                        <th className="px-4 py-2 text-center text-[11px] font-semibold text-red-800 w-36">Rejected Qty</th>
-                        <th className="px-4 py-2 text-left text-[11px] font-semibold text-red-800">Reason</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {rejectedStock.map((it, idx) => (
-                        <tr key={idx} className="border-b border-border/50">
-                          <td className="px-4 py-2 text-xs font-bold text-foreground">{it.productName}</td>
-                          <td className="px-4 py-2 text-xs font-mono font-medium text-muted-foreground">{it.batchNumber}</td>
-                          <td className="px-4 py-2 text-xs text-center font-bold text-red-700 bg-red-50/10">{it.rejectedQty}</td>
-                          <td className="px-4 py-2 text-xs text-red-800 italic font-medium">{it.rejectionReason || "No reason specified"}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+              <QcRejectedStockTable items={rejectedStock} />
             </div>
           </>
         )}

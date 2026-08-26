@@ -21,6 +21,9 @@ export interface SalesOrderProduct {
   expDate?: string;
   lineId?: string;
   quantity_type?: string;
+  netWeightPerPack?: number;
+  weightUom?: string;
+  productSnapshot?: Record<string, unknown>;
 }
 
 export interface SalesOrderRecord {
@@ -63,6 +66,9 @@ export interface PackedProduct {
   mfgDate?: string;
   expDate?: string;
   quantity_type?: string;
+  netWeightPerPack?: number;
+  weightUom?: string;
+  productSnapshot?: Record<string, unknown>;
   batchAllocations?: PackedBatchAllocation[];
   nearExpirySchemeEligible?: boolean;
   lineId?: string;

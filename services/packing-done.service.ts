@@ -1,7 +1,8 @@
 import { axiosInstance } from "@/api/axios";
 import { API_ENDPOINTS } from "@/api/endpoints";
 import type { FilterState } from "@/components/listing/types";
-import type { PackingRecord, SalesOrderRecord } from "@/app/(app)/warehouse/packing/types";
+import type { PackingRecord } from "@/app/(app)/warehouse/packing/types";
+import { extractPackingProductDisplay } from "@/app/(app)/warehouse/packing/lib/packing-qty-stack";
 
 export interface PackingDoneParams {
   page: number;
@@ -211,12 +212,8 @@ function mapDetailToPackingRecord(raw: any): PackingRecord {
       asString(raw.packing_list?.customer_snapshot?.supplier_code) ||
       "",
     products: products.map((p: any) => {
-      const packSize =
-        Number(
-          p.product_snapshot?.unit_per_packing ||
-            p.product_snapshot?.conversion_rate ||
-            1,
-        ) || 1;
+      const display = extractPackingProductDisplay(p);
+      const packSize = display.packSize;
       const packedBaseQty = Number(p.packed_base_qty ?? p.base_qty ?? 0);
       const orderBaseQty = Number(
         p.order_base_qty ?? p.packing_list_product?.order_base_qty ?? 0,
@@ -255,24 +252,15 @@ function mapDetailToPackingRecord(raw: any): PackingRecord {
         : Math.floor(packedBaseQty / packSize);
 
       return {
-        product:
-          p.product_name || p.product_snapshot?.product_name || "Unknown",
-        sku:
-          asString(p.sku) ||
-          asString(p.product?.sku) ||
-          asString(p.product_snapshot?.sku) ||
-          asString(p.product_snapshot?.SKU) ||
-          "",
-        productCode:
-          asString(p.product_code) ||
-          asString(p.product?.product_code) ||
-          asString(p.product_snapshot?.product_code) ||
-          "",
+        product: display.productName || "Unknown",
+        sku: display.sku,
+        productCode: display.productCode || display.sku,
         ordered_cases: orderedDisplay,
         packedQty: packedDisplay,
         orderBaseQty,
         packedBaseQty,
         packSize,
+        productSnapshot: display.productSnapshot,
         lineId: p.packing_list_product_id,
         batchNumber: batchNumber || undefined,
         expDate: expDate || undefined,

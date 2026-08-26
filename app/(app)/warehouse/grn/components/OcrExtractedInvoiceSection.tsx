@@ -1,4 +1,5 @@
 import type { GrnOcrExtractedInvoice } from "../types";
+import { ProductSkuCell } from "../shared/components/ProductSkuCell";
 
 export function OcrExtractedInvoiceSection({
   invoices,
@@ -38,8 +39,7 @@ export function OcrExtractedInvoiceSection({
             <table className="w-full">
               <thead>
                 <tr className="bg-muted/40 border-b border-border">
-                  <th className="px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground min-w-[120px]">Product</th>
-                  <th className="px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground w-24">SKU</th>
+                  <th className="px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground min-w-[160px]">Product</th>
                   <th className="px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground w-28">Batch No.</th>
                   <th className="px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground w-28">MFG Date</th>
                   <th className="px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground w-28">Expiry Date</th>
@@ -52,8 +52,9 @@ export function OcrExtractedInvoiceSection({
               <tbody>
                 {inv.lineItems.map((line, li) => (
                   <tr key={li} className="border-b border-border/50 bg-muted/5">
-                    <td className="px-3 py-2 text-xs font-medium text-foreground">{line.productName}</td>
-                    <td className="px-3 py-2 text-xs font-mono text-muted-foreground">{line.sku}</td>
+                    <td className="px-3 py-2 align-middle min-w-[160px]">
+                      <ProductSkuCell name={line.productName} sku={line.sku} />
+                    </td>
                     <td className="px-3 py-2 text-xs font-mono font-semibold text-foreground">{line.batchNumber}</td>
                     <td className="px-3 py-2 text-xs text-muted-foreground">{line.mfgDate}</td>
                     <td className="px-3 py-2 text-xs text-muted-foreground">{line.expDate}</td>
