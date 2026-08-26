@@ -386,16 +386,17 @@ export default function PurchaseRequestsPage() {
         </span>
       ),
     },
-    {
-      key: "totalQty",
-      header: "Total Base Qty",
-      sortable: false,
-      render: (_val, row) => (
-        <span className="text-xs tabular-nums text-foreground py-1">
-          {row.totalQty}
-        </span>
-      ),
-    },
+    // Hidden from listing — restore if required later
+    // {
+    //   key: "totalQty",
+    //   header: "Total Base Qty",
+    //   sortable: false,
+    //   render: (_val, row) => (
+    //     <span className="text-xs tabular-nums text-foreground py-1">
+    //       {row.totalQty}
+    //     </span>
+    //   ),
+    // },
     {
       key: "approvalStatus",
       header: "Approval Status",
@@ -405,15 +406,16 @@ export default function PurchaseRequestsPage() {
       filterOptions: approvalStatusOptions,
       render: (_val, row) => <StatusPill status={row.status} />,
     },
-    {
-      key: "currentApprover",
-      header: "Current Approver",
-      render: (_val, row) => (
-        <span className="text-xs text-muted-foreground py-1">
-          {row.status === "pending_approval" ? row.currentApprover || "—" : "—"}
-        </span>
-      ),
-    },
+    // Hidden from listing — restore if required later
+    // {
+    //   key: "currentApprover",
+    //   header: "Current Approver",
+    //   render: (_val, row) => (
+    //     <span className="text-xs text-muted-foreground py-1">
+    //       {row.status === "pending_approval" ? row.currentApprover || "—" : "—"}
+    //     </span>
+    //   ),
+    // },
     {
       key: "poStatus",
       header: "PO Status",

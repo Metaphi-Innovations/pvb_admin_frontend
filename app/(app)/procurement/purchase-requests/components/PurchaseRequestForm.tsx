@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 import {
   CURRENT_USER,
   DEPARTMENT_OPTIONS,
-  PR_PRIORITY_OPTIONS,
+  // PR_PRIORITY_OPTIONS, // Priority UI removed — restore with Priority dropdown if needed
 } from "@/lib/procurement/config";
 import {
   calcPackingToBaseQty,
@@ -27,6 +27,7 @@ import {
 import type { PRPriority } from "@/lib/procurement/config";
 import { ProductItemDetailsSection } from "@/components/procurement/ProductItemDetailsSection";
 import { useProductDropdown } from "@/hooks/masters/use-products";
+import { useWarehouseDropdown } from "@/hooks/masters/use-warehouses";
 import type { ProductDropdownItem } from "@/services/product-dropdown.service";
 import {
   downloadPrAttachment,
@@ -36,6 +37,25 @@ import {
   type PRFormErrors,
   type PRFormFieldKey,
 } from "./pr-form-validation";
+
+/** Same state list as Purchase Order form. */
+const INDIAN_STATES = [
+  "Maharashtra",
+  "Gujarat",
+  "Karnataka",
+  "Tamil Nadu",
+  "Delhi",
+  "Telangana",
+  "Uttar Pradesh",
+  "West Bengal",
+  "Rajasthan",
+  "Madhya Pradesh",
+  "Punjab",
+  "Haryana",
+  "Bihar",
+  "Kerala",
+  "Andhra Pradesh",
+];
 
 export interface PRFormValues {
   prDate: string;
@@ -234,6 +254,9 @@ function lineFromProduct(
     ratePerSku: info.ratePerSku,
     uom: requestUom,
     remarks,
+    packSize: info.packSize,
+    netWeightPerPack: info.netWeightPerPack,
+    weightUom: info.weightUom,
   };
 }
 
@@ -256,6 +279,7 @@ export function PurchaseRequestForm({
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const { data: dbProducts } = useProductDropdown();
+  const { data: dbWarehouses } = useWarehouseDropdown(form.state || undefined);
 
   const productOptions = useMemo(
     () =>
@@ -266,14 +290,59 @@ export function PurchaseRequestForm({
     [dbProducts],
   );
 
+  const stateOptions = useMemo(
+    () => INDIAN_STATES.map((s) => ({ value: s, label: s })),
+    [],
+  );
+
+  const warehouseOptions = useMemo(
+    () =>
+      (dbWarehouses ?? []).map((w) => ({
+        value: String(w.warehouse_id),
+        label: w.warehouse_name,
+      })),
+    [dbWarehouses],
+  );
+
   const clearErr = (key: string) => onClearError?.(key);
 
   const set = <K extends keyof PRFormValues>(k: K, v: PRFormValues[K]) => {
     onChange({ ...form, [k]: v });
-    if (k === "prDate" || k === "department" || k === "priority" || k === "requiredByDate") {
+    if (
+      k === "prDate" ||
+      k === "department" ||
+      k === "priority" ||
+      k === "requiredByDate" ||
+      k === "state" ||
+      k === "warehouseId"
+    ) {
       clearErr(k);
     }
     if (k === "lines") clearErr("lines");
+  };
+
+  const onStateChange = (state: string) => {
+    onChange({
+      ...form,
+      state,
+      warehouseId: null,
+      warehouseName: "",
+    });
+    clearErr("state");
+    clearErr("warehouseId");
+  };
+
+  const onWarehouseChange = (val: string) => {
+    const wh =
+      (dbWarehouses || []).find((w) => String(w.warehouse_id) === val) ?? null;
+    onChange({
+      ...form,
+      warehouseId: wh ? String(wh.warehouse_id) : null,
+      warehouseName: wh?.warehouse_name || "",
+      state: wh?.state || form.state || "",
+    });
+    clearErr("warehouseId");
+    if (wh?.state) clearErr("state");
   };
 
   const blurField = (field: PRFormFieldKey) => onFieldBlur?.(field);
@@ -343,9 +412,10 @@ export function PurchaseRequestForm({
   const departmentLabel =
     DEPARTMENT_OPTIONS.find((d) => d.value === form.department)?.label ??
     form.department;
-  const priorityLabel =
-    PR_PRIORITY_OPTIONS.find((p) => p.value === form.priority)?.label ??
-    form.priority;
+  // Priority UI removed — restore with Priority dropdown if needed
+  // const priorityLabel =
+  //   PR_PRIORITY_OPTIONS.find((p) => p.value === form.priority)?.label ??
+  //   form.priority;
 
   const hasAttachments =
     form.existingAttachments.length > 0 || form.attachmentFiles.length > 0;
@@ -429,6 +499,7 @@ export function PurchaseRequestForm({
               )}
               <FieldError id="pr-err-department" msg={errors.department} />
             </div>
+            {/* Priority dropdown removed from UI — backend field retained.
             <div className="space-y-1">
               <FieldLabel required>Priority</FieldLabel>
               {readOnly ? (
@@ -451,6 +522,45 @@ export function PurchaseRequestForm({
                 />
               )}
               <FieldError id="pr-err-priority" msg={errors.priority} />
+            </div>
+            */}
+            <div className="space-y-1" data-pr-field="state">
+              <FieldLabel required>State</FieldLabel>
+              {readOnly ? (
+                <ReadOnlyField value={form.state} />
+              ) : (
+                <AutocompleteSelect
+                  options={stateOptions}
+                  value={form.state}
+                  onChange={(v) => onStateChange(String(v))}
+                  onBlur={() => blurField("state")}
+                  placeholder="Select state"
+                  error={Boolean(errors.state)}
+                  aria-invalid={Boolean(errors.state)}
+                  aria-describedby="pr-err-state"
+                  className={cn(inputCls, errors.state && errorInputCls)}
+                />
+              )}
+              <FieldError id="pr-err-state" msg={errors.state} />
+            </div>
+            <div className="space-y-1" data-pr-field="warehouseId">
+              <FieldLabel required>Warehouse</FieldLabel>
+              {readOnly ? (
+                <ReadOnlyField value={form.warehouseName} />
+              ) : (
+                <AutocompleteSelect
+                  options={warehouseOptions}
+                  value={form.warehouseId ? String(form.warehouseId) : ""}
+                  onChange={(v) => onWarehouseChange(String(v))}
+                  onBlur={() => blurField("warehouseId")}
+                  placeholder="Select warehouse"
+                  error={Boolean(errors.warehouseId)}
+                  aria-invalid={Boolean(errors.warehouseId)}
+                  aria-describedby="pr-err-warehouseId"
+                  className={cn(inputCls, errors.warehouseId && errorInputCls)}
+                />
+              )}
+              <FieldError id="pr-err-warehouseId" msg={errors.warehouseId} />
             </div>
             <div className="space-y-1">
               <FieldLabel required htmlFor="pr-requiredByDate">
@@ -499,7 +609,9 @@ export function PurchaseRequestForm({
             onRemoveItem={onRemoveItem}
             onUpdateItem={onUpdateItem}
             readOnly={readOnly}
-            title="Product / Item Details"
+            title="Product Details"
+            description="Qty in Case is entered; Qty in Unit and Qty in Kg/Ltr are auto-calculated from product master."
+            addButtonLabel="Add Product"
             sectionRequired
           />
           <FieldError

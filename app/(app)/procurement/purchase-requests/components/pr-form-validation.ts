@@ -3,7 +3,9 @@ import type { PRFormValues } from "./PurchaseRequestForm";
 export type PRFormFieldKey =
   | "prDate"
   | "department"
-  | "priority"
+  // | "priority" // Priority UI removed — restore with Priority dropdown if needed
+  | "state"
+  | "warehouseId"
   | "requiredByDate"
   | "lines";
 
@@ -12,7 +14,9 @@ export type PRFormErrors = Partial<Record<PRFormFieldKey | string, string>>;
 export const PR_FIELD_ORDER: PRFormFieldKey[] = [
   "prDate",
   "department",
-  "priority",
+  // "priority",
+  "state",
+  "warehouseId",
   "requiredByDate",
   "lines",
 ];
@@ -63,8 +67,20 @@ export function validatePRField(
       }
       return undefined;
     }
-    case "priority": {
-      if (!(form.priority?.trim() ?? "")) {
+    // case "priority": {
+    //   if (!(form.priority?.trim() ?? "")) {
+    //     return requireAll ? PR_MSG.select : undefined;
+    //   }
+    //   return undefined;
+    // }
+    case "state": {
+      if (!(form.state?.trim() ?? "")) {
+        return requireAll ? PR_MSG.select : undefined;
+      }
+      return undefined;
+    }
+    case "warehouseId": {
+      if (!form.warehouseId) {
         return requireAll ? PR_MSG.select : undefined;
       }
       return undefined;

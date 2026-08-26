@@ -46,6 +46,12 @@ export interface PRLineItem {
   /** @deprecated use requestUom */
   uom: string;
   remarks: string;
+  /** Pack size of one SKU unit (Gms/Ml/Kg/Ltr). */
+  packSize?: number;
+  /** Net Kg/Ltr per Case (packaging unit). */
+  netWeightPerPack?: number;
+  /** Display UOM for weight/volume qty — Kg or Ltr. */
+  weightUom?: string;
 }
 
 export interface PurchaseRequest {
@@ -102,6 +108,9 @@ function migrateLine(line: Partial<PRLineItem>): PRLineItem {
     ratePerSku: enriched?.ratePerSku ?? line.ratePerSku ?? 0,
     uom: line.uom ?? requestUom,
     remarks: line.remarks ?? "",
+    packSize: line.packSize ?? enriched?.packSize,
+    netWeightPerPack: line.netWeightPerPack ?? enriched?.netWeightPerPack,
+    weightUom: line.weightUom ?? enriched?.weightUom,
   };
 }
 
