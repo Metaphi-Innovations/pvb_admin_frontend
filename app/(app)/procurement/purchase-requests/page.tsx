@@ -9,6 +9,7 @@ import {
   ColumnConfig,
   FilterState,
   SortState,
+  DEFAULT_MASTER_LIST_SORT,
 } from "@/components/listing/types";
 import {
   DropdownMenu,
@@ -149,10 +150,7 @@ export default function PurchaseRequestsPage() {
 
   const [filters, setFilters] = useState<FilterState>({});
   const { debouncedFilters, debouncedSearch } = useDebouncedFilters(filters);
-  const [sort, setSort] = useState<SortState>({
-    key: "prDate",
-    direction: "desc",
-  });
+  const [sort, setSort] = useState<SortState>(DEFAULT_MASTER_LIST_SORT);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const { handleOpenFilter, isFilterOpen } = useLazyFilterColumns();
@@ -182,6 +180,9 @@ export default function PurchaseRequestsPage() {
 
   const listQuery = usePurchaseRequestList(listParams);
   const summaryQuery = usePurchaseRequestSummary();
+  const prNumberOptionsQuery = usePurchaseRequestFilterDropdown("pr_number", {
+    enabled: isFilterOpen("prNumber"),
+  });
   const statusOptionsQuery = usePurchaseRequestFilterDropdown("status", {
     enabled: isFilterOpen("approvalStatus"),
   });
@@ -240,7 +241,7 @@ export default function PurchaseRequestsPage() {
 
   useEffect(() => {
     setFilters({});
-    setSort({ key: "prDate", direction: "desc" });
+    setSort(DEFAULT_MASTER_LIST_SORT);
     setPage(1);
   }, [tab]);
 
@@ -324,6 +325,12 @@ export default function PurchaseRequestsPage() {
       key: "prNumber",
       header: "PR No.",
       sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: (prNumberOptionsQuery.data ?? []).map((o) => ({
+        label: o.label,
+        value: o.value,
+      })),
       render: (_val, row) => (
         <div>
           <p className="font-semibold text-brand-700 text-xs">
@@ -370,7 +377,7 @@ export default function PurchaseRequestsPage() {
     {
       key: "totalItems",
       header: "Items",
-      sortable: false,
+      sortable: true,
       render: (_val, row) => (
         <span className="text-xs tabular-nums text-foreground py-1">
           {row.totalItems}

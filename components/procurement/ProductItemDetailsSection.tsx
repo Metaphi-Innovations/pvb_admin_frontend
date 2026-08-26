@@ -509,14 +509,15 @@ export function ProductItemDetailsSection({
                 <tr className="border-b border-border bg-muted/40">
                   {mode === "purchase_request" ? (
                     <>
-                      <th className="w-[20%] px-4 py-2.5 text-left text-xs font-semibold text-foreground">Product</th>
-                      <th className="w-[9%] px-4 py-2.5 text-left text-xs font-semibold text-foreground">HSN Code</th>
+                      <th className="w-[18%] px-4 py-2.5 text-left text-xs font-semibold text-foreground">Product</th>
+                      <th className="w-[8%] px-4 py-2.5 text-left text-xs font-semibold text-foreground">HSN Code</th>
                       {/* <th className="w-[10%] px-4 py-2.5 text-left text-xs font-semibold text-foreground">Packaging Type</th> */}
-                      <th className="w-[9%] px-4 py-2.5 text-right text-xs font-semibold text-foreground">Qty in Case</th>
-                      <th className="w-[9%] px-4 py-2.5 text-right text-xs font-semibold text-foreground">Qty in Unit</th>
-                      <th className="w-[10%] px-4 py-2.5 text-right text-xs font-semibold text-foreground">Qty in Kg/Ltr</th>
-                      <th className="w-[10%] px-4 py-2.5 text-right text-xs font-semibold text-foreground">Rate / SKU</th>
-                      <th className="w-[12%] px-4 py-2.5 text-right text-xs font-semibold text-foreground">Total Amount</th>
+                      <th className="w-[8%] px-4 py-2.5 text-right text-xs font-semibold text-foreground">Qty in Case</th>
+                      <th className="w-[8%] px-4 py-2.5 text-right text-xs font-semibold text-foreground">Qty in Unit</th>
+                      <th className="w-[9%] px-4 py-2.5 text-right text-xs font-semibold text-foreground">Qty in Kg/Ltr</th>
+                      <th className="w-[9%] px-4 py-2.5 text-right text-xs font-semibold text-foreground">Rate / SKU</th>
+                      <th className="w-[11%] px-4 py-2.5 text-right text-xs font-semibold text-foreground">Total Amount</th>
+                      <th className="w-[12%] px-4 py-2.5 text-left text-xs font-semibold text-foreground">Remarks</th>
                       {!readOnly && <th className="w-16 px-4 py-2.5 text-right text-xs font-semibold text-foreground">Actions</th>}
                     </>
                   ) : (
@@ -681,6 +682,28 @@ export function ProductItemDetailsSection({
                         </td>
                         <td className="px-4 py-2 text-right text-xs font-semibold tabular-nums font-mono text-foreground">
                           {formatCurrency(displayAmount)}
+                        </td>
+                        <td className="px-4 py-2">
+                          {isEditing && draft ? (
+                            <Input
+                              value={draft.remarks}
+                              onChange={(e) =>
+                                setInlineEditDraft((prev) =>
+                                  prev ? { ...prev, remarks: e.target.value } : prev,
+                                )
+                              }
+                              placeholder="Optional"
+                              className={cn(inputCls, "min-w-[100px]")}
+                              disabled={disabled}
+                            />
+                          ) : (
+                            <span
+                              className="block max-w-[140px] truncate text-xs text-muted-foreground"
+                              title={line.remarks || undefined}
+                            >
+                              {line.remarks || "—"}
+                            </span>
+                          )}
                         </td>
                         {!readOnly && (
                           <td className="px-4 py-2 text-right">
