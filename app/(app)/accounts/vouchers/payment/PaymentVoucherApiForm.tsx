@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/select";
 import { showToast } from "@/lib/toast";
 import { useFY } from "@/lib/fy-store";
+import { useTdsDropdown } from "@/hooks/masters";
 import { PaymentVoucherService } from "@/services/payment-voucher.service";
 import { CustomerListService } from "@/services/customer-list.service";
 import { SupplierListService } from "@/services/supplier-list.service";
@@ -33,6 +34,7 @@ import { WarehouseService } from "@/services/warehouse.service";
 import { BankAccountsListService } from "@/services/bank-accounts-list.service";
 import { LedgerService } from "@/services/ledger.service";
 import { UserListService } from "@/services/user-list.service";
+import { formatTdsSectionLabel } from "@/services/tds-list.service";
 import {
   PAYMENT_BANK_TRANSACTION_MODE_LABELS,
   PAYMENT_BANK_TRANSACTION_MODES,
@@ -70,8 +72,10 @@ import {
   paymentEditPath,
   paymentViewPath,
   sanitizeNonNegativeMoneyInput,
+  toMoneyNumber,
   validatePaymentForm,
   type PaymentFormState,
+  type PaymentUiAllocation,
 } from "./payment-voucher-utils";
 
 export interface PaymentVoucherApiFormProps {
@@ -109,6 +113,9 @@ export function PaymentVoucherApiForm({
   const [cashLedgers, setCashLedgers] = useState<{ value: string; label: string; sub?: string }[]>([]);
   const [manualLedgers, setManualLedgers] = useState<{ value: string; label: string; sub?: string }[]>([]);
   const [approvers, setApprovers] = useState<{ value: string; label: string }[]>([]);
+  /** Supplier master TDS Section — default only when positive TDS is first entered. */
+  const [partyTdsSectionId, setPartyTdsSectionId] = useState<string | null>(null);
+  const tdsDropdownQuery = useTdsDropdown();
 
   const [submitOpen, setSubmitOpen] = useState(false);
   const [approverId, setApproverId] = useState("");
@@ -353,6 +360,82 @@ export function PaymentVoucherApiForm({
       void loadCustomerRefundable(form.customer_id);
     }
   }, [form.party_kind, form.customer_id, fieldsEditable, loadCustomerRefundable]);
+
+  useEffect(() => {
+    if (form.party_kind !== "SUPPLIER" || !form.supplier_id) {
+      setPartyTdsSectionId(null);
+      return;
+    }
+    let cancelled = false;
+    void SupplierListService.view(form.supplier_id)
+      .then((detail) => {
+        if (cancelled) return;
+        const id = detail.tdsSectionId?.trim() || null;
+        setPartyTdsSectionId(id || null);
+      })
+      .catch(() => {
+        if (!cancelled) setPartyTdsSectionId(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [form.party_kind, form.supplier_id]);
+
+  // Legacy drafts may have TDS without Section — prefill party default into empty slots only.
+  useEffect(() => {
+    if (!partyTdsSectionId || !fieldsEditable) return;
+    setForm((prev) => {
+      let changed = false;
+      const allocations = prev.allocations.map((a) => {
+        if (toMoneyNumber(a.tds_amount) > 0 && !a.tds_section_id.trim()) {
+          changed = true;
+          return { ...a, tds_section_id: partyTdsSectionId };
+        }
+        return a;
+      });
+      return changed ? { ...prev, allocations } : prev;
+    });
+  }, [partyTdsSectionId, fieldsEditable]);
+
+  const tdsSectionOptions = useMemo(
+    () =>
+      (tdsDropdownQuery.data ?? []).map((tds) => ({
+        value: tds.tdsUuid,
+        label: formatTdsSectionLabel(tds),
+        sub: [tds.sectionCode, tds.description].filter(Boolean).join(" · "),
+      })),
+    [tdsDropdownQuery.data],
+  );
+
+  const applyAllocationPatch = useCallback(
+    (
+      openItemId: string,
+      patchAmount: Partial<
+        Pick<
+          PaymentUiAllocation,
+          "allocated_amount" | "tds_amount" | "tds_section_id" | "discount_amount"
+        >
+      >,
+    ) => {
+      setForm((prev) => ({
+        ...prev,
+        allocations: prev.allocations.map((a) => {
+          if (a.open_item_id !== openItemId) return a;
+          const next: PaymentUiAllocation = { ...a, ...patchAmount };
+          if (patchAmount.tds_amount !== undefined) {
+            const tds = toMoneyNumber(patchAmount.tds_amount);
+            if (tds <= 0) {
+              next.tds_section_id = "";
+            } else if (!next.tds_section_id.trim() && partyTdsSectionId) {
+              next.tds_section_id = partyTdsSectionId;
+            }
+          }
+          return next;
+        }),
+      }));
+    },
+    [partyTdsSectionId],
+  );
 
   const warehouseName = warehouses.find((w) => w.value === form.warehouse_id)?.label || "";
 
@@ -898,6 +981,7 @@ export function PaymentVoucherApiForm({
                               selected: false,
                               allocated_amount: "",
                               tds_amount: "0",
+                              tds_section_id: "",
                               discount_amount: "0",
                             }))
                           : form.allocations,
@@ -961,6 +1045,7 @@ export function PaymentVoucherApiForm({
                 rows={form.allocations}
                 readOnly={!fieldsEditable}
                 showTdsDiscount
+                tdsSectionOptions={tdsSectionOptions}
                 emptyMessage={
                   form.supplier_id
                     ? "No outstanding open items for this supplier."
@@ -982,14 +1067,7 @@ export function PaymentVoucherApiForm({
                     ),
                   }));
                 }}
-                onChangeAmount={(id, p) => {
-                  setForm((prev) => ({
-                    ...prev,
-                    allocations: prev.allocations.map((a) =>
-                      a.open_item_id === id ? { ...a, ...p } : a,
-                    ),
-                  }));
-                }}
+                onChangeAmount={applyAllocationPatch}
               />
               <p className="text-[11px] text-muted-foreground">
                 Gross settlement {preview.gross.toFixed(2)} · Allocated{" "}

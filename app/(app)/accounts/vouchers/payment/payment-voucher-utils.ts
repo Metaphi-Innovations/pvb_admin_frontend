@@ -10,6 +10,7 @@ import type {
   PaymentOpenItemRow,
   PaymentPartyKind,
   PaymentPendingFile,
+  PaymentTdsSectionSnapshot,
   PaymentTreatmentUi,
   PaymentVoucherDetail,
   PaymentVoucherStatus,
@@ -102,6 +103,10 @@ export type PaymentUiAllocation = {
   selected: boolean;
   allocated_amount: string;
   tds_amount: string;
+  /** Active TDS master id when tds_amount > 0; cleared when TDS is zero. */
+  tds_section_id: string;
+  /** Historical snapshot for read-only / legacy display (not submitted). */
+  tds_section_snapshot?: PaymentTdsSectionSnapshot | null;
   discount_amount: string;
   document_number: string;
   open_item_type: string;
@@ -192,6 +197,8 @@ export function mapOpenItemsToAllocations(
       selected: prior?.selected ?? false,
       allocated_amount: prior?.allocated_amount ?? "",
       tds_amount: prior?.tds_amount ?? "0",
+      tds_section_id: prior?.tds_section_id ?? "",
+      tds_section_snapshot: prior?.tds_section_snapshot ?? null,
       discount_amount: prior?.discount_amount ?? "0",
       document_number: item.document_number || "—",
       open_item_type: item.open_item_type || "—",
@@ -220,6 +227,8 @@ export function mapDetailToForm(detail: PaymentVoucherDetail): PaymentFormState 
         selected: true,
         allocated_amount: String(toMoneyNumber(a.allocated_amount)),
         tds_amount: String(toMoneyNumber(a.tds_amount)),
+        tds_section_id: a.tds_section_id ? String(a.tds_section_id) : "",
+        tds_section_snapshot: a.tds_section_snapshot ?? null,
         discount_amount: String(toMoneyNumber(a.discount_amount)),
         document_number: String(snap.document_number ?? snap.documentNumber ?? "—"),
         open_item_type: String(snap.open_item_type ?? snap.openItemType ?? "—"),
@@ -544,6 +553,9 @@ export function validatePaymentForm(form: PaymentFormState): string | null {
         if (toMoneyNumber(row.tds_amount) < 0 || toMoneyNumber(row.discount_amount) < 0) {
           return "TDS and Discount cannot be negative.";
         }
+        if (toMoneyNumber(row.tds_amount) > 0 && !row.tds_section_id.trim()) {
+          return `Select TDS Section for this TDS amount (${row.document_number}).`;
+        }
       }
     } else if (preview.gross <= 0) {
       return "Gross supplier amount must be greater than zero for Supplier Advance.";
@@ -630,14 +642,18 @@ export function buildCreatePayload(form: PaymentFormState): CreatePaymentVoucher
   const allocations: PaymentAllocationInput[] =
     form.party_kind === "OTHER_LEDGER" || isAdvanceOnly || isDirectCustomerRefund
       ? []
-      : selectedAllocations(form).map((a) => ({
-          open_item_id: a.open_item_id,
-          allocated_amount: toMoneyNumber(a.allocated_amount),
-          tds_amount:
-            form.party_kind === "SUPPLIER" ? toMoneyNumber(a.tds_amount) : 0,
-          discount_amount:
-            form.party_kind === "SUPPLIER" ? toMoneyNumber(a.discount_amount) : 0,
-        }));
+      : selectedAllocations(form).map((a) => {
+          const tdsAmt =
+            form.party_kind === "SUPPLIER" ? toMoneyNumber(a.tds_amount) : 0;
+          return {
+            open_item_id: a.open_item_id,
+            allocated_amount: toMoneyNumber(a.allocated_amount),
+            tds_amount: tdsAmt,
+            tds_section_id: tdsAmt > 0 ? a.tds_section_id.trim() || null : null,
+            discount_amount:
+              form.party_kind === "SUPPLIER" ? toMoneyNumber(a.discount_amount) : 0,
+          };
+        });
 
   const adjustments: PaymentAdjustmentInput[] = form.adjustments.map((adj) => {
     const base: PaymentAdjustmentInput = {
