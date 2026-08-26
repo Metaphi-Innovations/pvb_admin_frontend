@@ -179,6 +179,13 @@ export interface LedgerDropdownQuery {
   allowManualPosting?: boolean;
 }
 
+export interface GenericLedgerDropdownQuery extends LedgerDropdownQuery {
+  process?: string;
+  role?: string;
+  financialYearId?: string;
+  branchId?: string;
+}
+
 function unwrapData<T>(response: { data?: ApiResponse<T> | T }): T {
   const body = response.data as ApiResponse<T> | T | undefined;
   if (
@@ -305,6 +312,25 @@ export const LedgerService = {
       };
     } catch (error) {
       throw new Error(extractErrorMessage(error, "Failed to load ledger dropdown."));
+    }
+  },
+
+  async getGenericDropdown(
+    query: GenericLedgerDropdownQuery = {},
+    signal?: AbortSignal,
+  ): Promise<LedgerDropdownResponse> {
+    try {
+      const response = await axiosInstance.get<ApiResponse<LedgerDropdownResponse>>(
+        API_ENDPOINTS.ACCOUNTS.LEDGERS.GENERIC_DROPDOWN,
+        { params: query, signal },
+      );
+      const data = unwrapData(response);
+      return {
+        tree: data?.tree ?? [],
+        ledgers: data?.ledgers ?? [],
+      };
+    } catch (error) {
+      throw new Error(extractErrorMessage(error, "Failed to load generic ledger dropdown."));
     }
   },
 
