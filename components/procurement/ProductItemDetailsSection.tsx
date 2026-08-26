@@ -18,6 +18,11 @@ import {
 } from "@/lib/procurement/procurement-line-utils";
 import type { PRLineItem } from "@/app/(app)/procurement/purchase-requests/pr-data";
 
+/** Digits only — blocks decimals and alphabetic characters for Qty in Case. */
+function sanitizeWholeNumberInput(value: string): string {
+  return value.replace(/\D/g, "");
+}
+
 interface InlineEditDraft {
   productId: string;
   packingQty: string;
@@ -215,9 +220,18 @@ export function ProductItemDetailsSection({
 
   const saveInlineEdit = () => {
     if (!inlineEditUid || !inlineEditDraft) return;
-    const packingQty = Number(inlineEditDraft.packingQty);
-    if (packingQty <= 0) {
+    const packingQtyRaw = inlineEditDraft.packingQty.trim();
+    if (mode === "purchase_request" && !/^\d+$/.test(packingQtyRaw)) {
+      setInlineEditError("Qty in Case must be a whole number");
+      return;
+    }
+    const packingQty = Number(packingQtyRaw);
+    if (!Number.isFinite(packingQty) || packingQty <= 0) {
       setInlineEditError("Qty in Case must be greater than 0");
+      return;
+    }
+    if (mode === "purchase_request" && !Number.isInteger(packingQty)) {
+      setInlineEditError("Qty in Case must be a whole number");
       return;
     }
     const productIdRaw = String(inlineEditDraft.productId || "").trim();
@@ -393,10 +407,18 @@ export function ProductItemDetailsSection({
                 {mode === "purchase_request" ? "Qty in Case" : "Return Qty"}
               </Label>
               <Input
-                type="number"
-                min={1}
+                type={mode === "purchase_request" ? "text" : "number"}
+                inputMode={mode === "purchase_request" ? "numeric" : undefined}
+                pattern={mode === "purchase_request" ? "[0-9]*" : undefined}
+                min={mode === "purchase_request" ? undefined : 1}
                 value={quickQty}
-                onChange={(e) => setQuickQty(e.target.value)}
+                onChange={(e) =>
+                  setQuickQty(
+                    mode === "purchase_request"
+                      ? sanitizeWholeNumberInput(e.target.value)
+                      : e.target.value,
+                  )
+                }
                 className={inputCls}
                 disabled={disabled}
               />
@@ -615,12 +637,20 @@ export function ProductItemDetailsSection({
                           {isEditing && draft ? (
                             <div className="space-y-0.5">
                               <Input
-                                type="number"
-                                min={1}
+                                type="text"
+                                inputMode="numeric"
+                                pattern="[0-9]*"
                                 value={draft.packingQty}
                                 onChange={(e) => {
                                   setInlineEditDraft((prev) =>
-                                    prev ? { ...prev, packingQty: e.target.value } : prev,
+                                    prev
+                                      ? {
+                                          ...prev,
+                                          packingQty: sanitizeWholeNumberInput(
+                                            e.target.value,
+                                          ),
+                                        }
+                                      : prev,
                                   );
                                   setInlineEditError(null);
                                 }}

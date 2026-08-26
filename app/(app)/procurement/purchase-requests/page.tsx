@@ -197,15 +197,6 @@ export default function PurchaseRequestsPage() {
   const totalRecords = listQuery.data?.total ?? 0;
   const summary = summaryQuery.data;
 
-  const tabCounts = useMemo(() => {
-    return {
-      all: summary?.total,
-      draft: summary?.draft,
-      approved: summary?.approved,
-      rejected: summary?.rejected,
-    } as Partial<Record<TabId, number>>;
-  }, [summary]);
-
   const prListingKpis = useMemo<PRListingKpis>(
     () => ({
       total: summary?.total ?? 0,
@@ -548,10 +539,7 @@ export default function PurchaseRequestsPage() {
     <ListingContainer
       title="Purchase Request"
       titleIcon={ShoppingCart}
-      tabs={TABS.map((t) => ({
-        value: t.value,
-        label: `${t.label}${tabCounts[t.value] != null ? ` (${tabCounts[t.value]})` : ""}`,
-      }))}
+      tabs={TABS}
       activeTab={tab}
       onTabChange={(id) => setTab(id as TabId)}
       metrics={<PRListingKpiRow kpis={prListingKpis} />}

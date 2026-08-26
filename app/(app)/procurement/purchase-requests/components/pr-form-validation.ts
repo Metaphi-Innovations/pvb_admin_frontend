@@ -26,6 +26,7 @@ export const PR_MSG = {
   select: "Please select an option.",
   invalidNumber: "Please enter a valid number.",
   greaterThanZero: "Value must be greater than 0.",
+  integerOnly: "Qty in Case must be a whole number.",
   invalidDate: "Please select a valid date.",
 } as const;
 
@@ -99,6 +100,7 @@ export function validatePRField(
         if (!line.productId || String(line.productId) === "0") continue;
         const qty = Number(line.requestedQty);
         if (!Number.isFinite(qty)) return PR_MSG.invalidNumber;
+        if (!Number.isInteger(qty)) return PR_MSG.integerOnly;
         if (qty <= 0) return PR_MSG.greaterThanZero;
       }
       return undefined;
@@ -124,6 +126,7 @@ export function validatePRForm(
     const qty = Number(line.requestedQty);
     const key = `lineQty:${line.uid}`;
     if (!Number.isFinite(qty)) errors[key] = PR_MSG.invalidNumber;
+    else if (!Number.isInteger(qty)) errors[key] = PR_MSG.integerOnly;
     else if (qty <= 0) errors[key] = PR_MSG.greaterThanZero;
   }
 

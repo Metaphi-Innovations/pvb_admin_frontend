@@ -400,11 +400,11 @@ export function PurchaseRequestForm({
   };
 
   const onFilePick = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = e.target.files;
+    if (!files?.length) return;
     onChange({
       ...form,
-      attachmentFiles: [...form.attachmentFiles, file],
+      attachmentFiles: [...form.attachmentFiles, ...Array.from(files)],
     });
     e.target.value = "";
   };
@@ -677,6 +677,7 @@ export function PurchaseRequestForm({
                 <input
                   ref={fileRef}
                   type="file"
+                  multiple
                   className="hidden"
                   onChange={onFilePick}
                 />
