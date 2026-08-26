@@ -12,7 +12,7 @@ type PreviewLine = { ledger: string; debit: number; credit: number };
 export function ReceiptAccountingPreview({
   form,
   partyLedgerName,
-  defaultOpen = false,
+  defaultOpen = true,
   vibrant = false,
 }: {
   form: ReceiptFormState;
@@ -38,7 +38,9 @@ export function ReceiptAccountingPreview({
           ? "TDS Receivable"
           : adj.adjustment_type === "ROUND_OFF"
             ? "Round Off"
-            : adj.ledger_name || adj.adjustment_type;
+            : adj.adjustment_type === "DISCOUNT_ALLOWED"
+              ? adj.ledger_name || "Discount Allowed"
+              : adj.ledger_name || adj.adjustment_type;
       const isCredit =
         adj.adjustment_type === "OTHER" || adj.adjustment_type === "ROUND_OFF"
           ? adj.entry_type === "CREDIT"
@@ -65,6 +67,9 @@ export function ReceiptAccountingPreview({
 
   const totalDebit = lines.reduce((s, l) => s + l.debit, 0);
   const totalCredit = lines.reduce((s, l) => s + l.credit, 0);
+  const difference =
+    Math.round((totalDebit - totalCredit) * 100) / 100;
+  const balanced = Math.abs(difference) < 0.01;
 
   return (
     <div
@@ -89,7 +94,7 @@ export function ReceiptAccountingPreview({
             vibrant ? "text-[#9A3412]" : "text-muted-foreground",
           )}
         >
-          Accounting Preview
+          Receipt Accounting
         </span>
         <ChevronDown
           className={cn(
@@ -100,80 +105,84 @@ export function ReceiptAccountingPreview({
         />
       </button>
       {open ? (
-        <div className={cn("px-3.5 py-2", vibrant && "bg-white")}>
+        <div className={cn("px-3.5 py-2.5 space-y-2", vibrant && "bg-white")}>
           <p
             className={cn(
-              "text-[11px] mb-2",
+              "text-[11px]",
               vibrant ? "text-brand-800/70" : "text-muted-foreground",
             )}
           >
             Preview only — backend posting remains authoritative.
           </p>
-          <table className="w-full">
-            <thead>
-              <tr
-                className={cn(
-                  "border-b",
-                  vibrant ? "border-brand-100 bg-brand-50/40" : "border-border",
-                )}
-              >
-                <th className="py-1.5 px-1 text-left text-xs font-semibold text-navy-800">
-                  Ledger
-                </th>
-                <th className="py-1.5 px-1 text-right text-xs font-semibold text-navy-800 w-[120px]">
-                  Debit
-                </th>
-                <th className="py-1.5 px-1 text-right text-xs font-semibold text-navy-800 w-[120px]">
-                  Credit
-                </th>
-              </tr>
-            </thead>
-            <tbody>
+
+          {lines.length === 0 ? (
+            <p className="text-xs text-muted-foreground py-2">
+              Enter settlement details to preview accounting impact.
+            </p>
+          ) : (
+            <ul className="space-y-1.5">
               {lines.map((line, idx) => (
-                <tr
+                <li
                   key={`${line.ledger}-${idx}`}
                   className={cn(
-                    "border-b",
-                    vibrant ? "border-brand-50" : "border-border/50",
-                    vibrant && idx % 2 === 1 && "bg-[#FFFBF6]",
+                    "flex items-center justify-between gap-3 rounded-lg px-2.5 py-1.5",
+                    line.debit > 0 ? "bg-emerald-50/70" : "bg-brand-50/50",
                   )}
                 >
-                  <td className="py-1.5 px-1 text-xs font-medium text-navy-900">
+                  <span className="text-xs font-medium text-navy-900 truncate">
                     {line.ledger}
-                  </td>
-                  <td
+                  </span>
+                  <span
                     className={cn(
-                      "py-1.5 px-1 text-xs text-right tabular-nums",
-                      line.debit > 0 && vibrant && "text-emerald-700 font-semibold",
+                      "text-xs tabular-nums font-bold flex-shrink-0",
+                      line.debit > 0 ? "text-emerald-800" : "text-brand-800",
                     )}
                   >
-                    {line.debit > 0 ? formatMoney(line.debit) : "—"}
-                  </td>
-                  <td
-                    className={cn(
-                      "py-1.5 px-1 text-xs text-right tabular-nums",
-                      line.credit > 0 && vibrant && "text-brand-700 font-semibold",
-                    )}
-                  >
-                    {line.credit > 0 ? formatMoney(line.credit) : "—"}
-                  </td>
-                </tr>
+                    {line.debit > 0
+                      ? `Dr ${formatMoney(line.debit)}`
+                      : `Cr ${formatMoney(line.credit)}`}
+                  </span>
+                </li>
               ))}
-            </tbody>
-            {vibrant && lines.length > 0 ? (
-              <tfoot>
-                <tr className="border-t border-brand-200 bg-brand-50/60">
-                  <td className="py-1.5 px-1 text-xs font-semibold text-navy-900">Total</td>
-                  <td className="py-1.5 px-1 text-xs text-right tabular-nums font-bold text-emerald-800">
-                    {formatMoney(totalDebit)}
-                  </td>
-                  <td className="py-1.5 px-1 text-xs text-right tabular-nums font-bold text-brand-800">
-                    {formatMoney(totalCredit)}
-                  </td>
-                </tr>
-              </tfoot>
-            ) : null}
-          </table>
+            </ul>
+          )}
+
+          <div className="grid grid-cols-3 gap-2 pt-1 border-t border-border/60">
+            <div className="rounded-lg bg-muted/30 px-2 py-1.5">
+              <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">
+                Total Debit
+              </p>
+              <p className="text-xs tabular-nums font-bold text-emerald-800 mt-0.5">
+                {formatMoney(totalDebit)}
+              </p>
+            </div>
+            <div className="rounded-lg bg-muted/30 px-2 py-1.5">
+              <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">
+                Total Credit
+              </p>
+              <p className="text-xs tabular-nums font-bold text-brand-800 mt-0.5">
+                {formatMoney(totalCredit)}
+              </p>
+            </div>
+            <div
+              className={cn(
+                "rounded-lg px-2 py-1.5",
+                balanced ? "bg-emerald-50" : "bg-amber-50",
+              )}
+            >
+              <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">
+                Difference
+              </p>
+              <p
+                className={cn(
+                  "text-xs tabular-nums font-bold mt-0.5",
+                  balanced ? "text-emerald-800" : "text-amber-800",
+                )}
+              >
+                {formatMoney(difference)}
+              </p>
+            </div>
+          </div>
         </div>
       ) : null}
     </div>
