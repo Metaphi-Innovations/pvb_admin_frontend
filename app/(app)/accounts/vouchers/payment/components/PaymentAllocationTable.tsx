@@ -3,19 +3,30 @@
 import { formatMoney } from "@/lib/accounts/money-format";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import {
+  formatTdsSectionSnapshotLabel,
+} from "@/services/tds-list.service";
 import type { PaymentUiAllocation } from "../payment-voucher-utils";
 import { sanitizeNonNegativeMoneyInput, toMoneyNumber } from "../payment-voucher-utils";
+import {
+  PaymentSearchableSelect,
+  type PaymentSearchableOption,
+} from "./PaymentSearchableSelect";
 
 const AMOUNT_TH =
   "px-2 py-2 text-right text-xs font-semibold text-foreground whitespace-nowrap w-[108px]";
 const AMOUNT_TD = "px-2 py-2 text-right text-xs tabular-nums whitespace-nowrap";
 const AMOUNT_INPUT = "h-8 text-xs w-[108px] ml-auto text-right tabular-nums";
+const SECTION_TH =
+  "px-2 py-2 text-left text-xs font-semibold text-foreground whitespace-nowrap min-w-[160px]";
+const SECTION_TD = "px-2 py-2 text-left text-xs align-middle min-w-[160px]";
 
 export function PaymentAllocationTable({
   rows,
   readOnly,
   emptyMessage,
   showTdsDiscount = true,
+  tdsSectionOptions = [],
   onToggle,
   onChangeAmount,
 }: {
@@ -23,11 +34,15 @@ export function PaymentAllocationTable({
   readOnly?: boolean;
   emptyMessage?: string;
   showTdsDiscount?: boolean;
+  tdsSectionOptions?: PaymentSearchableOption[];
   onToggle: (openItemId: string, selected: boolean) => void;
   onChangeAmount: (
     openItemId: string,
     patch: Partial<
-      Pick<PaymentUiAllocation, "allocated_amount" | "tds_amount" | "discount_amount">
+      Pick<
+        PaymentUiAllocation,
+        "allocated_amount" | "tds_amount" | "tds_section_id" | "discount_amount"
+      >
     >,
   ) => void;
 }) {
@@ -44,7 +59,7 @@ export function PaymentAllocationTable({
   return (
     <div className="border border-border rounded-xl overflow-hidden w-full">
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[960px]">
+        <table className="w-full min-w-[1120px]">
           <thead>
             <tr className="bg-muted/40 border-b border-border">
               <th className="px-2 py-2 text-left text-xs font-semibold w-8" />
@@ -63,6 +78,7 @@ export function PaymentAllocationTable({
               {showTdsDiscount ? (
                 <>
                   <th className={AMOUNT_TH}>TDS</th>
+                  <th className={SECTION_TH}>TDS Section</th>
                   <th className={AMOUNT_TH}>Discount Received</th>
                   <th className={AMOUNT_TH}>Net Bank Impact</th>
                 </>
@@ -75,6 +91,14 @@ export function PaymentAllocationTable({
                 row.selected &&
                 toMoneyNumber(row.allocated_amount) > row.outstanding_amount + 0.0001;
               const netImpact = roundNet(row);
+              const tdsAmt = toMoneyNumber(row.tds_amount);
+              const sectionRequired = row.selected && tdsAmt > 0;
+              const sectionMissing = sectionRequired && !row.tds_section_id.trim();
+              const sectionOptions = mergeSectionOption(
+                tdsSectionOptions,
+                row.tds_section_id,
+                row.tds_section_snapshot,
+              );
               return (
                 <tr
                   key={row.open_item_id}
@@ -139,6 +163,39 @@ export function PaymentAllocationTable({
                           />
                         )}
                       </td>
+                      <td className={SECTION_TD}>
+                        {readOnly || !row.selected ? (
+                          <SectionReadOnly
+                            tdsAmount={tdsAmt}
+                            sectionId={row.tds_section_id}
+                            options={sectionOptions}
+                            snapshot={row.tds_section_snapshot}
+                          />
+                        ) : (
+                          <div className="space-y-1 min-w-[148px]">
+                            <PaymentSearchableSelect
+                              value={row.tds_section_id}
+                              options={sectionOptions}
+                              placeholder={
+                                tdsAmt > 0 ? "Select TDS Section…" : "—"
+                              }
+                              disabled={tdsAmt <= 0}
+                              triggerClassName={cn(
+                                "h-8 text-xs",
+                                sectionMissing && "border-red-400",
+                              )}
+                              onChange={(tds_section_id) =>
+                                onChangeAmount(row.open_item_id, { tds_section_id })
+                              }
+                            />
+                            {sectionMissing ? (
+                              <p className="text-[11px] text-red-500 leading-tight">
+                                Select TDS Section for this TDS amount.
+                              </p>
+                            ) : null}
+                          </div>
+                        )}
+                      </td>
                       <td className={AMOUNT_TD}>
                         {readOnly ? (
                           formatMoney(toMoneyNumber(row.discount_amount))
@@ -171,6 +228,39 @@ export function PaymentAllocationTable({
       </div>
     </div>
   );
+}
+
+function SectionReadOnly({
+  tdsAmount,
+  sectionId,
+  options,
+  snapshot,
+}: {
+  tdsAmount: number;
+  sectionId: string;
+  options: PaymentSearchableOption[];
+  snapshot: PaymentUiAllocation["tds_section_snapshot"];
+}) {
+  if (tdsAmount <= 0) {
+    return <span className="text-muted-foreground">—</span>;
+  }
+  const fromOptions = options.find((o) => o.value === sectionId)?.label;
+  if (fromOptions) return <span className="font-medium">{fromOptions}</span>;
+  const fromSnap = formatTdsSectionSnapshotLabel(snapshot);
+  return <span className="font-medium">{fromSnap}</span>;
+}
+
+function mergeSectionOption(
+  options: PaymentSearchableOption[],
+  sectionId: string,
+  snapshot: PaymentUiAllocation["tds_section_snapshot"],
+): PaymentSearchableOption[] {
+  if (!sectionId || options.some((o) => o.value === sectionId)) return options;
+  const label = formatTdsSectionSnapshotLabel(snapshot);
+  if (label === "—") {
+    return [...options, { value: sectionId, label: "Previously selected section" }];
+  }
+  return [...options, { value: sectionId, label }];
 }
 
 function roundNet(row: PaymentUiAllocation): number {

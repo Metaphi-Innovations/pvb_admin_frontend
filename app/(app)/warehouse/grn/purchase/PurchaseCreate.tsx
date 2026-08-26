@@ -34,24 +34,28 @@ import type {
 import type { GrnRecord } from "../shared/types";
 import {
   DEFAULT_NEW_GRN_QUANTITY_TYPE,
-  GRN_QUANTITY_TYPE_OPTIONS,
+  formatQtyStackInline,
+  formatStackNum,
+  resolveGrnQtyStack,
+  sumGrnQtyStacks,
   type GrnQuantityType,
   fromBaseQuantity,
   resolvePoGrnQuantityType,
   resolvePackingSize,
   toBaseQuantity,
 } from "@/lib/warehouse/grn-quantity";
+import { formatWeightQty, resolveNetWeightPerPack } from "@/lib/procurement/procurement-line-utils";
+import { StackedQtyCell } from "../shared/components/StackedQtyCell";
+import {
+  GRN_QTY_INPUT_CLASSNAME,
+  GRN_QTY_PLACEHOLDER,
+  ProductSkuCell,
+} from "../shared/components/ProductSkuCell";
+import { PartialGrnConfirmDialog, type PartialGrnProductRow } from "../shared/components/PartialGrnConfirmDialog";
 import {
   exceedsMaxLineQty,
   maxLineQtyMessage,
 } from "@/lib/quantity-limits";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 
 interface ManualInvoiceRow {
   id: string;
@@ -272,6 +276,21 @@ interface ReceiptItem extends GrnItem {
   maxReceivableQty: number;
 }
 
+function itemQtyMeta(it: Pick<GrnItem, "unitPerPacking" | "netWeightPerPack" | "weightUom">) {
+  return {
+    packingSize: it.unitPerPacking || 1,
+    netWeightPerPack: it.netWeightPerPack,
+    weightUom: it.weightUom,
+  };
+}
+
+function itemQtyStack(
+  baseQty: number,
+  it: Pick<GrnItem, "unitPerPacking" | "netWeightPerPack" | "weightUom">,
+) {
+  return resolveGrnQtyStack(baseQty, itemQtyMeta(it));
+}
+
 function buildItemsFromPoLines(
   po: { poNumber: string; lines: POLineItem[] },
   options?: {
@@ -334,6 +353,15 @@ function buildItemsFromPoLines(
           : unitPerPacking > 0
             ? round2(receivedQty - Math.floor(receivedQty / unitPerPacking) * unitPerPacking)
             : 0;
+      const weightMeta =
+        line.netWeightPerPack && line.weightUom
+          ? { netWeightPerPack: line.netWeightPerPack, weightUom: line.weightUom }
+          : resolveNetWeightPerPack({
+              netWeight: line.netWeightPerPack ?? null,
+              packSize: line.packSize ?? null,
+              unitPerPacking,
+              baseUnit: line.baseUnit || line.uom || "Unit",
+            });
       return {
         sourceItemId,
         productId: String(line.productId || ""),
@@ -349,6 +377,9 @@ function buildItemsFromPoLines(
         receivedCases,
         receivedLooseQty,
         unitPerPacking,
+        packSize: line.packSize,
+        netWeightPerPack: weightMeta?.netWeightPerPack,
+        weightUom: weightMeta?.weightUom,
         unit: line.baseUnit || line.uom || "Unit",
         poNumber: po.poNumber,
       };
@@ -457,6 +488,8 @@ export function PurchaseCreate({
   const [itemWarnings, setItemWarnings] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [partialConfirmOpen, setPartialConfirmOpen] = useState(false);
+  const [partialProducts, setPartialProducts] = useState<PartialGrnProductRow[]>([]);
   const [editPrefillDone, setEditPrefillDone] = useState(false);
   const [editItemsSeeded, setEditItemsSeeded] = useState(false);
   const [invoiceFiles, setInvoiceFiles] = useState<File[]>([]);
@@ -534,9 +567,8 @@ export function PurchaseCreate({
 
   useEffect(() => {
     if (isEdit) return;
-    if (previewNumber) setGrnNo(previewNumber);
-    else if (!warehouseId) setGrnNo("Select warehouse…");
-  }, [isEdit, previewNumber, warehouseId]);
+    setGrnNo(previewNumber || "");
+  }, [isEdit, previewNumber]);
 
   // Prefill header fields from existing GRN (once)
   useEffect(() => {
@@ -858,7 +890,7 @@ export function PurchaseCreate({
           const copy = { ...w };
           if (target.receivedQty > maxReceivable) {
             copy[key] =
-              `Current received (${target.receivedQty} pcs) exceeds pending qty (${maxReceivable}).`;
+              `Current received (${formatQtyStackInline(itemQtyStack(target.receivedQty, target))}) exceeds pending (${formatQtyStackInline(itemQtyStack(maxReceivable, target))}).`;
           } else {
             delete copy[key];
           }
@@ -1208,7 +1240,7 @@ export function PurchaseCreate({
     }
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (options?: { skipPartialWarning?: boolean }) => {
     setFormError(null);
 
     if (grnDateError) {
@@ -1238,10 +1270,6 @@ export function PurchaseCreate({
     }
     if (!invoiceDate) {
       setFormError("Invoice Date is required.");
-      return;
-    }
-    if (!isEdit && invoiceFiles.length === 0) {
-      setFormError("Upload at least one invoice file before saving the GRN.");
       return;
     }
     if (supplierMatch === false) {
@@ -1275,7 +1303,7 @@ export function PurchaseCreate({
       const pending = it.maxReceivableQty ?? it.pendingQty ?? 0;
       if (it.receivedQty > pending) {
         setFormError(
-          `Received qty for ${it.productName} (${it.receivedQty}) exceeds pending qty (${pending}).`,
+          `Received qty for ${it.productName} (${formatQtyStackInline(itemQtyStack(it.receivedQty, it))}) exceeds pending (${formatQtyStackInline(itemQtyStack(pending, it))}).`,
         );
         return;
       }
@@ -1308,8 +1336,10 @@ export function PurchaseCreate({
     for (const row of filledRows) {
       const remainingForRow = getRemainingInvoiceQty(row.sourceItemId, row.id);
       if (round2(row.quantity) > round2(remainingForRow)) {
-        rowErrors[row.id] =
-          `Quantity exceeds remaining received qty (${remainingForRow}).`;
+        const item = items.find((it) => it.sourceItemId === row.sourceItemId);
+        rowErrors[row.id] = item
+          ? `Quantity exceeds remaining received (${formatQtyStackInline(itemQtyStack(remainingForRow, item))}).`
+          : `Quantity exceeds remaining received qty (${remainingForRow}).`;
       }
     }
 
@@ -1319,7 +1349,7 @@ export function PurchaseCreate({
         .reduce((sum, row) => sum + (Number(row.quantity) || 0), 0);
       if (round2(batchSum) !== round2(it.receivedQty)) {
         setFormError(
-          `Batch invoice qty for ${it.productName} (${batchSum}) must equal current received qty (${it.receivedQty}).`,
+          `Batch invoice qty for ${it.productName} (${formatQtyStackInline(itemQtyStack(batchSum, it))}) must equal current received qty (${formatQtyStackInline(itemQtyStack(it.receivedQty, it))}).`,
         );
         return;
       }
@@ -1331,6 +1361,32 @@ export function PurchaseCreate({
       return;
     }
     setItemErrors({});
+
+    // Warning only: product-wise partial GRN when GRN qty < applicable qty.
+    if (!options?.skipPartialWarning) {
+      const partialRows: PartialGrnProductRow[] = [];
+      for (const it of items) {
+        const applicableBase = round2(it.maxReceivableQty ?? 0);
+        const grnBase = round2(it.receivedQty || 0);
+        if (!(applicableBase > 0) || !(grnBase < applicableBase)) continue;
+        const pendingBase = round2(Math.max(0, applicableBase - grnBase));
+        partialRows.push({
+          productName: it.productName,
+          productCode: it.productCode || undefined,
+          orderedQtyLabel: formatQtyStackInline(itemQtyStack(applicableBase, it)),
+          grnQtyLabel: formatQtyStackInline(itemQtyStack(grnBase, it)),
+          pendingQtyLabel: formatQtyStackInline(itemQtyStack(pendingBase, it)),
+        });
+      }
+      if (partialRows.length > 0) {
+        setPartialProducts(partialRows);
+        setPartialConfirmOpen(true);
+        return;
+      }
+    }
+
+    setPartialConfirmOpen(false);
+    setPartialProducts([]);
 
     const payloadItems = receivedItems.map((it) => {
       const line = poLines.find((l) => l.purchaseOrderProductId === it.sourceItemId);
@@ -1367,9 +1423,13 @@ export function PurchaseCreate({
           product_id: String(line.productId || ""),
           product_code: line.productCode || line.sku,
           product_name: line.productName,
+          sku: line.sku || line.productCode,
           base_unit: line.baseUnit || line.uom,
           packing_unit: line.packagingUnit,
           unit_per_packing: it.unitPerPacking || line.conversionQty || 1,
+          conversion_qty: line.conversionQty || it.unitPerPacking || 1,
+          pack_size: line.packSize ?? it.packSize,
+          net_weight: it.netWeightPerPack ?? line.netWeightPerPack,
           gst_percent: getLineGstPct(line),
         },
         batches,
@@ -1397,6 +1457,9 @@ export function PurchaseCreate({
           input: updatePayload,
           invoiceFiles,
         });
+        setPartialConfirmOpen(false);
+        setPartialProducts([]);
+        showToast("GRN updated successfully.", "success");
         router.push(`/warehouse/grn/purchase/${grnId}`);
       } else {
         const payload: CreateGrnPayload = {
@@ -1415,12 +1478,15 @@ export function PurchaseCreate({
           ],
         };
         await createGrnMutation.mutateAsync({ input: payload, invoiceFiles });
+        setPartialConfirmOpen(false);
+        setPartialProducts([]);
+        showToast("GRN created successfully.", "success");
         router.push("/warehouse/grn/purchase");
       }
     } catch (err) {
       const message = getApiErrorMessage(
         err,
-        isEdit ? "Failed to update GRN." : "Failed to create GRN.",
+        isEdit ? "Failed to update GRN. Please try again." : "Failed to create GRN. Please try again.",
       );
 
       // Stale preview number: refresh from API so user can resubmit with a free number.
@@ -1432,9 +1498,9 @@ export function PurchaseCreate({
           const { data: nextNumber } = await refetchPreviewNumber();
           if (nextNumber) {
             setGrnNo(nextNumber);
-            setFormError(
-              `${message} A new GRN number (${nextNumber}) has been loaded. Please submit again.`,
-            );
+            const refreshedMsg = `${message} A new GRN number (${nextNumber}) has been loaded. Please submit again.`;
+            setFormError(refreshedMsg);
+            showToast(refreshedMsg, "error");
             return;
           }
         } catch {
@@ -1443,6 +1509,7 @@ export function PurchaseCreate({
       }
 
       setFormError(message);
+      showToast(message, "error");
     } finally {
       setIsSubmitting(false);
     }
@@ -1534,7 +1601,9 @@ export function PurchaseCreate({
       actions={
         <Button
           className="h-9 text-xs font-semibold bg-brand-600 hover:bg-brand-700 text-white rounded-lg gap-1.5"
-          onClick={handleSubmit}
+          onClick={() => {
+            void handleSubmit();
+          }}
           disabled={isBusy}
         >
           <Send className="w-3.5 h-3.5" />
@@ -1563,8 +1632,9 @@ export function PurchaseCreate({
           <TextField
             label="GRN Number"
             value={grnNo}
+            placeholder="Auto-generated"
             readOnly
-            className="h-9 text-xs font-mono font-bold bg-muted/30"
+            className="h-9 text-xs font-mono font-bold bg-muted/30 placeholder:text-muted-foreground/50 placeholder:font-normal"
           />
 
           <Field label="Supplier" required>
@@ -1634,7 +1704,7 @@ export function PurchaseCreate({
 
       <SectionCard
         title="Order Items Summary"
-        description="Quantity type is Case only. Enter cases; values convert to base quantity using packing size before save."
+        description="Qty in Case is entered; Qty in Unit and Qty in Kg/Ltr are auto-calculated from product packing size."
       >
         {!selectedPoId ? (
           <p className="text-xs text-muted-foreground text-center py-4">
@@ -1651,23 +1721,22 @@ export function PurchaseCreate({
         ) : (
           <div className="border border-border rounded-lg overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full">
+              <table className="w-full min-w-[1100px]">
                 <thead>
                   <tr className="bg-muted/40 border-b border-border">
                     <th className="px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground w-32">PO No.</th>
-                    <th className="px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground">Product Name</th>
-                    <th className="px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground w-40 min-w-[160px]">SKU</th>
-                    <th className="px-3 py-2 text-center text-[11px] font-semibold text-muted-foreground w-24">Ordered</th>
+                    <th className="px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground min-w-[180px]">Product</th>
+                    <th className="px-3 py-2 text-center text-[11px] font-semibold text-muted-foreground w-28">Ordered</th>
                     <th className="px-3 py-2 text-center text-[11px] font-semibold text-muted-foreground w-28">Prev. Received</th>
-                    <th className="px-3 py-2 text-center text-[11px] font-semibold text-muted-foreground w-24">Pending</th>
+                    <th className="px-3 py-2 text-center text-[11px] font-semibold text-muted-foreground w-28">Pending</th>
                     <th className="px-3 py-2.5 text-center text-xs font-semibold text-muted-foreground w-[120px] min-w-[120px]">
-                      Quantity Type
+                      Qty in Case
                     </th>
-                    <th className="px-3 py-2.5 text-center text-xs font-semibold text-muted-foreground w-[128px] min-w-[128px]">
-                      Quantity
+                    <th className="px-3 py-2.5 text-center text-xs font-semibold text-muted-foreground w-[100px] min-w-[100px]">
+                      Qty in Unit
                     </th>
-                    <th className="px-3 py-2.5 text-center text-xs font-semibold text-muted-foreground w-[128px] min-w-[128px]">
-                      Total Base Qty
+                    <th className="px-3 py-2.5 text-center text-xs font-semibold text-muted-foreground w-[110px] min-w-[110px]">
+                      Qty in Kg/Ltr
                     </th>
                   </tr>
                 </thead>
@@ -1676,82 +1745,46 @@ export function PurchaseCreate({
                     const key = itemKey(it.sourceItemId);
                     const err = itemErrors[key];
                     const warn = itemWarnings[key];
-                    const packingSize = it.unitPerPacking || 1;
-                    const qtyType = DEFAULT_NEW_GRN_QUANTITY_TYPE;
-                    const displayOrdered = round2(
-                      fromBaseQuantity({
-                        baseQty: it.orderedQty,
-                        quantityType: qtyType,
-                        packingSize,
-                      }),
-                    );
-                    const displayPrevReceived = round2(
-                      fromBaseQuantity({
-                        baseQty: it.alreadyReceivedQty ?? 0,
-                        quantityType: qtyType,
-                        packingSize,
-                      }),
-                    );
-                    const displayPending = round2(
-                      fromBaseQuantity({
-                        baseQty: it.pendingQty ?? 0,
-                        quantityType: qtyType,
-                        packingSize,
-                      }),
-                    );
+                    const orderedStack = itemQtyStack(it.orderedQty, it);
+                    const prevStack = itemQtyStack(it.alreadyReceivedQty ?? 0, it);
+                    const pendingStack = itemQtyStack(it.pendingQty ?? 0, it);
+                    const receivedStack = itemQtyStack(it.receivedQty, it);
                     return (
                       <tr key={`${key}-${idx}`} className="border-b border-border/50">
                         <td className="px-3 py-2 text-xs font-mono font-semibold text-brand-700 align-middle">{it.poNumber}</td>
-                        <td className="px-3 py-2 text-xs font-semibold text-foreground align-middle">{it.productName}</td>
-                        <td className="px-3 py-2 text-xs font-mono text-muted-foreground align-middle min-w-[160px]">{it.productCode || "—"}</td>
-                        <td className="px-3 py-2 text-xs text-center font-medium align-middle tabular-nums">{displayOrdered}</td>
-                        <td className="px-3 py-2 text-xs text-center text-muted-foreground align-middle tabular-nums">{displayPrevReceived}</td>
-                        <td className="px-3 py-2 text-xs text-center font-medium text-amber-700 align-middle tabular-nums">{displayPending}</td>
-                        <td className="px-3 py-2 align-middle w-[120px] min-w-[120px]">
-                          <Select value={qtyType} disabled>
-                            <SelectTrigger className="h-9 w-full text-xs rounded-lg bg-muted opacity-100">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {GRN_QUANTITY_TYPE_OPTIONS.map((opt) => (
-                                <SelectItem key={opt.value} value={opt.value} className="text-xs">
-                                  {opt.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                        <td className="px-3 py-2 align-middle min-w-[180px]">
+                          <ProductSkuCell name={it.productName} sku={it.productCode} />
                         </td>
-                        <td className="px-3 py-2 align-middle w-[128px] min-w-[128px]">
-                          <Input
-                            type="number"
-                            min={0}
-                            step="any"
-                            value={
-                              (it.displayQty ?? 0) === 0 ? "" : it.displayQty
-                            }
-                            placeholder="Cases"
-                            onChange={(e) =>
-                              handleItemQtyChange(it.sourceItemId, "quantity", e.target.value)
-                            }
-                            className={cn(
-                              "h-9 w-full text-xs text-center tabular-nums font-semibold rounded-lg",
-                              "bg-white focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:border-brand-400 border-border text-brand-700",
-                            )}
+                        <td className="px-3 py-2 align-middle">
+                          <StackedQtyCell stack={orderedStack} empty={!(it.orderedQty > 0)} />
+                        </td>
+                        <td className="px-3 py-2 align-middle">
+                          <StackedQtyCell stack={prevStack} empty={!(it.alreadyReceivedQty)} />
+                        </td>
+                        <td className="px-3 py-2 align-middle">
+                          <StackedQtyCell
+                            stack={pendingStack}
+                            empty={!(it.pendingQty)}
+                            className="[&_p:first-child]:text-amber-700"
                           />
                         </td>
-                        <td className="px-3 py-2 align-middle w-[128px] min-w-[128px]">
+                        <td className="px-3 py-2 align-middle w-[120px] min-w-[120px]">
                           <div className="space-y-1">
                             <Input
                               type="number"
-                              readOnly
-                              value={it.receivedQty === 0 ? "" : it.receivedQty}
-                              placeholder="0"
+                              min={0}
+                              step="any"
+                              value={
+                                (it.displayQty ?? 0) === 0 ? "" : it.displayQty
+                              }
+                              placeholder={GRN_QTY_PLACEHOLDER}
+                              onChange={(e) =>
+                                handleItemQtyChange(it.sourceItemId, "quantity", e.target.value)
+                              }
                               className={cn(
-                                "h-9 w-full text-xs text-center tabular-nums font-semibold rounded-lg",
-                                "bg-muted focus-visible:ring-0",
-                                !err && !warn && "border-border text-brand-700",
-                                err && "border-red-400 text-foreground",
-                                warn && !err && "border-amber-400 text-foreground",
+                                GRN_QTY_INPUT_CLASSNAME,
+                                err && "border-red-400",
+                                warn && !err && "border-amber-400",
                               )}
                             />
                             {err && (
@@ -1768,12 +1801,53 @@ export function PurchaseCreate({
                             )}
                           </div>
                         </td>
+                        <td className="px-3 py-2 text-center text-xs font-semibold tabular-nums align-middle">
+                          {it.receivedQty > 0 ? formatStackNum(receivedStack.unitQty) : "—"}
+                        </td>
+                        <td className="px-3 py-2 text-center text-xs font-semibold tabular-nums align-middle">
+                          {receivedStack.weightQty != null && receivedStack.weightUom
+                            ? formatWeightQty(receivedStack.weightQty, receivedStack.weightUom)
+                            : "—"}
+                        </td>
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
             </div>
+            {(() => {
+              const receivedTotals = sumGrnQtyStacks(
+                items.map((it) => itemQtyStack(it.receivedQty, it)),
+              );
+              const orderedTotals = sumGrnQtyStacks(
+                items.map((it) => itemQtyStack(it.orderedQty, it)),
+              );
+              return (
+                <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border bg-muted/20 px-4 py-2.5">
+                  <p className="text-[11px] text-muted-foreground">
+                    Showing <span className="font-medium text-foreground">{items.length}</span> items
+                  </p>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <p className="text-[11px] text-muted-foreground">
+                      Ordered:{" "}
+                      <span className="font-medium tabular-nums text-foreground">
+                        {formatStackNum(orderedTotals.caseQty)} Case · {formatStackNum(orderedTotals.unitQty)} Unit
+                        {orderedTotals.kg > 0 ? ` · ${formatStackNum(orderedTotals.kg)} Kg` : ""}
+                        {orderedTotals.ltr > 0 ? ` · ${formatStackNum(orderedTotals.ltr)} Ltr` : ""}
+                      </span>
+                    </p>
+                    <p className="text-[11px] text-muted-foreground">
+                      Received:{" "}
+                      <span className="font-medium tabular-nums text-brand-700">
+                        {formatStackNum(receivedTotals.caseQty)} Case · {formatStackNum(receivedTotals.unitQty)} Unit
+                        {receivedTotals.kg > 0 ? ` · ${formatStackNum(receivedTotals.kg)} Kg` : ""}
+                        {receivedTotals.ltr > 0 ? ` · ${formatStackNum(receivedTotals.ltr)} Ltr` : ""}
+                      </span>
+                    </p>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         )}
       </SectionCard>
@@ -1894,7 +1968,7 @@ export function PurchaseCreate({
 
       <SectionCard
         title="Manual Invoice Entry"
-        description="Enter invoice header and batch rows. Invoice Qty is in Case; Base Qty is calculated from packing size."
+        description="Enter invoice header and batch rows. Qty in Case is entered; Qty in Unit and Qty in Kg/Ltr are auto-calculated from packing size."
         action={
           <Button
             type="button"
@@ -1928,11 +2002,13 @@ export function PurchaseCreate({
             max={grnDate < todayStr ? grnDate : todayStr}
             error={invoiceDateError}
           />
-          <div className="flex items-end">
-            <p className="text-[11px] text-muted-foreground pb-2">
-              Supplier: <span className="font-medium text-foreground">{supplierLabel || "—"}</span>
-            </p>
-          </div>
+          <TextField
+            label="Supplier"
+            value={supplierLabel || "—"}
+            readOnly
+            className="h-9 text-xs bg-muted"
+            disabled={!selectedPoId}
+          />
         </div>
 
         {!selectedPoId ? (
@@ -1946,13 +2022,12 @@ export function PurchaseCreate({
                 <thead>
                   <tr className="bg-muted/40 border-b border-border">
                     <th className="px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground w-[320px] min-w-[300px]">Product</th>
-                    <th className="px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground w-[140px] min-w-[130px]">SKU</th>
                     <th className="px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground w-[160px] min-w-[140px]">Batch No.</th>
                     <th className="px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground w-[160px] min-w-[150px]">MFG Date</th>
                     <th className="px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground w-[160px] min-w-[150px]">Expiry Date</th>
-                    <th className="px-3 py-2 text-center text-[11px] font-semibold text-muted-foreground w-[110px] min-w-[100px]">Invoice Qty</th>
-                    <th className="px-3 py-2 text-center text-[11px] font-semibold text-muted-foreground w-[100px] min-w-[90px]">Base Qty</th>
-                    <th className="px-3 py-2 text-center text-[11px] font-semibold text-muted-foreground w-[110px] min-w-[100px]">Quantity Type</th>
+                    <th className="px-3 py-2 text-center text-[11px] font-semibold text-muted-foreground w-[110px] min-w-[100px]">Qty in Case</th>
+                    <th className="px-3 py-2 text-center text-[11px] font-semibold text-muted-foreground w-[100px] min-w-[90px]">Qty in Unit</th>
+                    <th className="px-3 py-2 text-center text-[11px] font-semibold text-muted-foreground w-[110px] min-w-[100px]">Qty in Kg/Ltr</th>
                     <th className="px-3 py-2 text-center text-[11px] font-semibold text-muted-foreground w-[110px] min-w-[100px]">Price</th>
                     <th className="px-3 py-2 text-center text-[11px] font-semibold text-muted-foreground w-[80px] min-w-[70px]">GST %</th>
                     <th className="px-3 py-2 text-center text-[11px] font-semibold text-muted-foreground w-[110px] min-w-[100px]">GST Amt</th>
@@ -1974,20 +2049,19 @@ export function PurchaseCreate({
                     const qtyMeta = row.sourceItemId
                       ? getItemQtyMeta(row.sourceItemId)
                       : { packingSize: 1, quantityType: "CASE" as const };
-                    const displayReceived =
-                      row.sourceItemId && received != null
-                        ? toInvoiceDisplayQty(row.sourceItemId, received)
-                        : undefined;
-                    const displayRemainingInvoice =
-                      row.sourceItemId && remainingInvoice != null
-                        ? toInvoiceDisplayQty(row.sourceItemId, remainingInvoice)
-                        : undefined;
-                    const displayRemainingPo =
-                      row.sourceItemId && remainingPo != null
-                        ? toInvoiceDisplayQty(row.sourceItemId, remainingPo)
-                        : undefined;
-                    const qtyUnitLabel =
-                      qtyMeta.quantityType === "CASE" ? "Case" : "Piece";
+                    const lineItem = items.find((it) => it.sourceItemId === row.sourceItemId);
+                    const receivedStack = lineItem && received != null
+                      ? itemQtyStack(received, lineItem)
+                      : null;
+                    const remainingInvoiceStack = lineItem && remainingInvoice != null
+                      ? itemQtyStack(remainingInvoice, lineItem)
+                      : null;
+                    const remainingPoStack = lineItem && remainingPo != null
+                      ? itemQtyStack(remainingPo, lineItem)
+                      : null;
+                    const rowQtyStack = lineItem
+                      ? itemQtyStack(row.quantity, lineItem)
+                      : resolveGrnQtyStack(row.quantity, { packingSize: qtyMeta.packingSize });
                     const err = itemErrors[row.id];
 
                     const rowMfgError = row.mfgDate && row.mfgDate > todayStr ? "Cannot be in the future" : undefined;
@@ -2010,23 +2084,19 @@ export function PurchaseCreate({
                             }
                             className="h-9 text-xs py-1.5 px-3 rounded-lg border-border focus:ring-1 focus:ring-brand-500 bg-white shadow-none focus:outline-none"
                           />
+                          <p className="text-[11px] font-mono text-muted-foreground mt-1 truncate">
+                            SKU: {row.productCode?.trim() ? row.productCode : "—"}
+                          </p>
                           {row.sourceItemId && (
                             <p className="text-[10px] text-amber-700 mt-1">
-                              Received: {displayReceived ?? 0} {qtyUnitLabel} · Left to allocate:{" "}
-                              {displayRemainingInvoice ?? 0} {qtyUnitLabel}
-                              {displayRemainingPo != null
-                                ? ` · PO pending: ${displayRemainingPo} ${qtyUnitLabel}`
+                              Received: {receivedStack ? formatQtyStackInline(receivedStack) : "—"}
+                              {" · "}Left to allocate:{" "}
+                              {remainingInvoiceStack ? formatQtyStackInline(remainingInvoiceStack) : "—"}
+                              {remainingPoStack
+                                ? ` · PO pending: ${formatQtyStackInline(remainingPoStack)}`
                                 : ""}
                             </p>
                           )}
-                        </td>
-                        <td className="px-3 py-2 w-[140px] min-w-[130px]">
-                          <Input
-                            readOnly
-                            value={row.productCode}
-                            placeholder="—"
-                            className="h-9 text-xs font-mono bg-muted w-full"
-                          />
                         </td>
                         <td className="px-3 py-2 w-[160px] min-w-[140px]">
                           <Input
@@ -2077,9 +2147,9 @@ export function PurchaseCreate({
                                 displayQty: Math.max(0, parseFloat(e.target.value) || 0),
                               })
                             }
-                            placeholder={qtyMeta.quantityType === "CASE" ? "Cases" : "Pieces"}
+                            placeholder={GRN_QTY_PLACEHOLDER}
                             className={cn(
-                              "h-9 text-xs text-center tabular-nums w-full",
+                              GRN_QTY_INPUT_CLASSNAME,
                               err && "border-red-400",
                             )}
                           />
@@ -2094,7 +2164,7 @@ export function PurchaseCreate({
                           <Input
                             type="number"
                             readOnly
-                            value={row.quantity === 0 ? "" : row.quantity}
+                            value={row.quantity === 0 ? "" : formatStackNum(rowQtyStack.unitQty)}
                             placeholder="0"
                             className="h-9 text-xs text-center tabular-nums bg-muted w-full"
                           />
@@ -2102,7 +2172,11 @@ export function PurchaseCreate({
                         <td className="px-3 py-2 w-[110px] min-w-[100px]">
                           <Input
                             readOnly
-                            value={qtyMeta.quantityType === "CASE" ? "Case" : row.unit || "—"}
+                            value={
+                              rowQtyStack.weightQty != null && rowQtyStack.weightUom
+                                ? formatWeightQty(rowQtyStack.weightQty, rowQtyStack.weightUom)
+                                : ""
+                            }
                             placeholder="—"
                             className="h-9 text-xs text-center bg-muted w-full"
                           />
@@ -2158,6 +2232,19 @@ export function PurchaseCreate({
           </div>
         )}
       </SectionCard>
+
+      <PartialGrnConfirmDialog
+        open={partialConfirmOpen}
+        products={partialProducts}
+        submitting={isBusy}
+        onCancel={() => {
+          setPartialConfirmOpen(false);
+          setPartialProducts([]);
+        }}
+        onContinue={() => {
+          void handleSubmit({ skipPartialWarning: true });
+        }}
+      />
     </FormContainer>
   );
 }

@@ -64,6 +64,46 @@ export interface TdsDropdownItem {
   description: string;
 }
 
+/** Display label for TDS Section selects — section identity + rate context only. */
+export function formatTdsSectionLabel(item: {
+  sectionName?: string | null;
+  sectionCode?: string | null;
+  tdsRate?: string | number | null;
+}): string {
+  const section =
+    String(item.sectionName ?? "").trim() ||
+    String(item.sectionCode ?? "").trim() ||
+    "TDS";
+  const rateRaw = item.tdsRate;
+  const rate =
+    rateRaw == null || rateRaw === ""
+      ? ""
+      : String(rateRaw).trim().replace(/%$/g, "");
+  return rate ? `${section} · ${rate}%` : section;
+}
+
+/** Snapshot-first label for historical allocation display. */
+export function formatTdsSectionSnapshotLabel(
+  snapshot: {
+    tds_section_name?: string | null;
+    tds_code?: string | null;
+    tds_rate?: string | number | null;
+  } | null | undefined,
+): string {
+  if (!snapshot) return "—";
+  const section =
+    String(snapshot.tds_section_name ?? "").trim() ||
+    String(snapshot.tds_code ?? "").trim();
+  const rateRaw = snapshot.tds_rate;
+  const rate =
+    rateRaw == null || rateRaw === ""
+      ? ""
+      : String(rateRaw).trim().replace(/%$/g, "");
+  if (!section && !rate) return "—";
+  if (section && rate) return `${section} · ${rate}%`;
+  return section || `${rate}%`;
+}
+
 export type TdsFilterField =
   | "tds_rate"
   | "tds_section_name"

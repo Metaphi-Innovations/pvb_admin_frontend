@@ -50,6 +50,12 @@ export interface GrnItem {
   receivedCases?: number;
   receivedLooseQty?: number;
   unitPerPacking?: number;
+  /** Pack size of one SKU unit (Gms/Ml/Kg/Ltr). */
+  packSize?: number;
+  /** Net Kg/Ltr per Case (packaging unit). */
+  netWeightPerPack?: number;
+  /** Display UOM for weight/volume — Kg or Ltr. */
+  weightUom?: "Kg" | "Ltr";
   balanceQty?: number;
   unit?: string;
   serialNumber?: string;

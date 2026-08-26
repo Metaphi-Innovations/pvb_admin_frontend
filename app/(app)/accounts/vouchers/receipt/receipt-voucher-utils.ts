@@ -10,6 +10,7 @@ import type {
   ReceiptOpenItemRow,
   ReceiptPartyKind,
   ReceiptPendingFile,
+  ReceiptTdsSectionSnapshot,
   ReceiptTreatmentUi,
   ReceiptVoucherDetail,
   ReceiptVoucherStatus,
@@ -120,6 +121,10 @@ export type ReceiptUiAllocation = {
   selected: boolean;
   allocated_amount: string;
   tds_amount: string;
+  /** Active TDS master id when tds_amount > 0; cleared when TDS is zero. */
+  tds_section_id: string;
+  /** Historical snapshot for read-only / legacy display (not submitted). */
+  tds_section_snapshot?: ReceiptTdsSectionSnapshot | null;
   discount_amount: string;
   document_number: string;
   open_item_type: string;
@@ -212,6 +217,8 @@ export function mapOpenItemsToAllocations(
       selected: prior?.selected ?? false,
       allocated_amount: prior?.allocated_amount ?? "",
       tds_amount: prior?.tds_amount ?? "",
+      tds_section_id: prior?.tds_section_id ?? "",
+      tds_section_snapshot: prior?.tds_section_snapshot ?? null,
       discount_amount: prior?.discount_amount ?? "",
       document_number: item.document_number || "—",
       open_item_type: item.open_item_type || "—",
@@ -240,6 +247,8 @@ export function mapDetailToForm(detail: ReceiptVoucherDetail): ReceiptFormState 
         selected: true,
         allocated_amount: moneyInputValue(a.allocated_amount),
         tds_amount: moneyInputValue(a.tds_amount),
+        tds_section_id: a.tds_section_id ? String(a.tds_section_id) : "",
+        tds_section_snapshot: a.tds_section_snapshot ?? null,
         discount_amount: moneyInputValue(a.discount_amount),
         document_number: String(
           snap.document_number ?? snap.documentNumber ?? "—",
@@ -560,6 +569,12 @@ export function validateReceiptForm(form: ReceiptFormState): string | null {
     }
   }
 
+  for (const row of selectedAllocations(form)) {
+    if (toMoneyNumber(row.tds_amount) > 0 && !row.tds_section_id.trim()) {
+      return `Select TDS Section for this TDS amount (${row.document_number}).`;
+    }
+  }
+
   const adjTds = form.adjustments
     .filter((a) => a.adjustment_type === "CUSTOMER_TDS")
     .reduce((s, a) => s + toMoneyNumber(a.amount), 0);
@@ -618,12 +633,16 @@ export function buildCreatePayload(form: ReceiptFormState): CreateReceiptVoucher
   const allocations: ReceiptAllocationInput[] =
     form.party_kind === "OTHER_LEDGER" || isAdvanceOnly
       ? []
-      : selectedAllocations(form).map((a) => ({
-          open_item_id: a.open_item_id,
-          allocated_amount: toMoneyNumber(a.allocated_amount),
-          tds_amount: toMoneyNumber(a.tds_amount),
-          discount_amount: toMoneyNumber(a.discount_amount),
-        }));
+      : selectedAllocations(form).map((a) => {
+          const tdsAmt = toMoneyNumber(a.tds_amount);
+          return {
+            open_item_id: a.open_item_id,
+            allocated_amount: toMoneyNumber(a.allocated_amount),
+            tds_amount: tdsAmt,
+            tds_section_id: tdsAmt > 0 ? a.tds_section_id.trim() || null : null,
+            discount_amount: toMoneyNumber(a.discount_amount),
+          };
+        });
 
   const adjustments: ReceiptAdjustmentInput[] = form.adjustments.map((adj) => {
     const base: ReceiptAdjustmentInput = {

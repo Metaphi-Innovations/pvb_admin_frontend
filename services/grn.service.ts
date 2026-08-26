@@ -12,6 +12,7 @@ import {
   normalizeGrnQuantityType,
   resolvePackingSize,
 } from "@/lib/warehouse/grn-quantity";
+import { resolveNetWeightPerPack } from "@/lib/procurement/procurement-line-utils";
 
 function asString(value: unknown): string {
   if (value === null || value === undefined) return "";
@@ -234,6 +235,19 @@ export function mapGrnDetail(raw: Record<string, unknown>): GrnRecord {
       normalizeGrnQuantityType(
         asString(item.quantity_type) || asString(item.quantityType),
       ) ?? DEFAULT_NEW_GRN_QUANTITY_TYPE;
+    const packSize =
+      asNumber(snapshot.pack_size) || asNumber(snapshot.packSize) || undefined;
+    const baseUnit = asString(snapshot.base_unit) || asString(snapshot.unit) || "Unit";
+    const weightMeta = resolveNetWeightPerPack({
+      netWeight:
+        asNumber(snapshot.net_weight) ||
+        asNumber(snapshot.netWeight) ||
+        asNumber(snapshot.net_weight_per_pack) ||
+        null,
+      packSize: packSize ?? null,
+      unitPerPacking: packingSize || 1,
+      baseUnit,
+    });
 
     items.push({
       productId,
@@ -246,7 +260,10 @@ export function mapGrnDetail(raw: Record<string, unknown>): GrnRecord {
       receivedQty,
       quantityType,
       unitPerPacking: packingSize || undefined,
-      unit: asString(snapshot.base_unit) || "Unit",
+      packSize,
+      netWeightPerPack: weightMeta?.netWeightPerPack,
+      weightUom: weightMeta?.weightUom,
+      unit: baseUnit,
       poNumber: poNumber || undefined,
       remarks: asString(item.remarks) || undefined,
     });

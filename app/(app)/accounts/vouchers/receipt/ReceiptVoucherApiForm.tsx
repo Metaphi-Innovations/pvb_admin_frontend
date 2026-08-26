@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/select";
 import { showToast } from "@/lib/toast";
 import { useFY } from "@/lib/fy-store";
+import { useTdsDropdown } from "@/hooks/masters";
 import { ReceiptVoucherService } from "@/services/receipt-voucher.service";
 import { CustomerListService } from "@/services/customer-list.service";
 import { SupplierListService } from "@/services/supplier-list.service";
@@ -34,6 +35,7 @@ import { WarehouseService } from "@/services/warehouse.service";
 import { BankAccountsListService } from "@/services/bank-accounts-list.service";
 import { LedgerService } from "@/services/ledger.service";
 import { UserListService } from "@/services/user-list.service";
+import { formatTdsSectionLabel } from "@/services/tds-list.service";
 import {
   BANK_TRANSACTION_MODE_LABELS,
   BANK_TRANSACTION_MODES,
@@ -71,8 +73,10 @@ import {
   RECEIPT_LIST_PATH,
   receiptEditPath,
   receiptViewPath,
+  toMoneyNumber,
   validateReceiptForm,
   type ReceiptFormState,
+  type ReceiptUiAllocation,
 } from "./receipt-voucher-utils";
 
 export interface ReceiptVoucherApiFormProps {
@@ -110,6 +114,9 @@ export function ReceiptVoucherApiForm({
   const [cashLedgers, setCashLedgers] = useState<{ value: string; label: string; sub?: string }[]>([]);
   const [manualLedgers, setManualLedgers] = useState<{ value: string; label: string; sub?: string }[]>([]);
   const [approvers, setApprovers] = useState<{ value: string; label: string }[]>([]);
+  /** Customer master TDS Section — default only when positive TDS is first entered. */
+  const [partyTdsSectionId, setPartyTdsSectionId] = useState<string | null>(null);
+  const tdsDropdownQuery = useTdsDropdown();
 
   const [submitOpen, setSubmitOpen] = useState(false);
   const [approverId, setApproverId] = useState("");
@@ -344,6 +351,82 @@ export function ReceiptVoucherApiForm({
       void loadSupplierRecoverable(form.supplier_id);
     }
   }, [form.party_kind, form.supplier_id, fieldsEditable, loadSupplierRecoverable]);
+
+  useEffect(() => {
+    if (form.party_kind !== "CUSTOMER" || !form.customer_id) {
+      setPartyTdsSectionId(null);
+      return;
+    }
+    let cancelled = false;
+    void CustomerListService.view(form.customer_id)
+      .then((detail) => {
+        if (cancelled) return;
+        const id = detail.tdsSectionId?.trim() || null;
+        setPartyTdsSectionId(id || null);
+      })
+      .catch(() => {
+        if (!cancelled) setPartyTdsSectionId(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [form.party_kind, form.customer_id]);
+
+  // Legacy drafts may have TDS without Section — prefill party default into empty slots only.
+  useEffect(() => {
+    if (!partyTdsSectionId || !fieldsEditable) return;
+    setForm((prev) => {
+      let changed = false;
+      const allocations = prev.allocations.map((a) => {
+        if (toMoneyNumber(a.tds_amount) > 0 && !a.tds_section_id.trim()) {
+          changed = true;
+          return { ...a, tds_section_id: partyTdsSectionId };
+        }
+        return a;
+      });
+      return changed ? { ...prev, allocations } : prev;
+    });
+  }, [partyTdsSectionId, fieldsEditable]);
+
+  const tdsSectionOptions = useMemo(
+    () =>
+      (tdsDropdownQuery.data ?? []).map((tds) => ({
+        value: tds.tdsUuid,
+        label: formatTdsSectionLabel(tds),
+        sub: [tds.sectionCode, tds.description].filter(Boolean).join(" · "),
+      })),
+    [tdsDropdownQuery.data],
+  );
+
+  const applyAllocationPatch = useCallback(
+    (
+      openItemId: string,
+      patchAmount: Partial<
+        Pick<
+          ReceiptUiAllocation,
+          "allocated_amount" | "tds_amount" | "tds_section_id" | "discount_amount"
+        >
+      >,
+    ) => {
+      setForm((prev) => ({
+        ...prev,
+        allocations: prev.allocations.map((a) => {
+          if (a.open_item_id !== openItemId) return a;
+          const next: ReceiptUiAllocation = { ...a, ...patchAmount };
+          if (patchAmount.tds_amount !== undefined) {
+            const tds = toMoneyNumber(patchAmount.tds_amount);
+            if (tds <= 0) {
+              next.tds_section_id = "";
+            } else if (!next.tds_section_id.trim() && partyTdsSectionId) {
+              next.tds_section_id = partyTdsSectionId;
+            }
+          }
+          return next;
+        }),
+      }));
+    },
+    [partyTdsSectionId],
+  );
 
   const warehouseName = warehouses.find((w) => w.value === form.warehouse_id)?.label || "";
 
@@ -923,6 +1006,9 @@ export function ReceiptVoucherApiForm({
                           ...a,
                           selected: false,
                           allocated_amount: "",
+                          tds_amount: "",
+                          tds_section_id: "",
+                          discount_amount: "",
                         })) : form.allocations,
                     })
                   }
@@ -959,6 +1045,8 @@ export function ReceiptVoucherApiForm({
               <ReceiptAllocationTable
                 rows={form.allocations}
                 readOnly={!fieldsEditable}
+                showTdsSection
+                tdsSectionOptions={tdsSectionOptions}
                 emptyMessage={
                   form.customer_id
                     ? "No outstanding open items for this customer."
@@ -980,14 +1068,7 @@ export function ReceiptVoucherApiForm({
                     ),
                   }));
                 }}
-                onChangeAmount={(id, p) => {
-                  setForm((prev) => ({
-                    ...prev,
-                    allocations: prev.allocations.map((a) =>
-                      a.open_item_id === id ? { ...a, ...p } : a,
-                    ),
-                  }));
-                }}
+                onChangeAmount={applyAllocationPatch}
               />
               <p className="text-[11px] text-muted-foreground">
                 Total allocated {preview.totalAllocated.toFixed(2)} · Remaining / Advance{" "}
@@ -1021,6 +1102,8 @@ export function ReceiptVoucherApiForm({
               <ReceiptAllocationTable
                 rows={form.allocations}
                 readOnly={!fieldsEditable}
+                showTdsSection
+                tdsSectionOptions={tdsSectionOptions}
                 emptyMessage={
                   form.supplier_id
                     ? "No eligible recoverable balance available for this supplier."
@@ -1042,14 +1125,7 @@ export function ReceiptVoucherApiForm({
                     ),
                   }));
                 }}
-                onChangeAmount={(id, p) => {
-                  setForm((prev) => ({
-                    ...prev,
-                    allocations: prev.allocations.map((a) =>
-                      a.open_item_id === id ? { ...a, ...p } : a,
-                    ),
-                  }));
-                }}
+                onChangeAmount={applyAllocationPatch}
               />
             </div>
           ) : null}

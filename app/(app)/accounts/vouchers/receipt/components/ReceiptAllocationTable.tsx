@@ -3,8 +3,13 @@
 import { formatMoney } from "@/lib/accounts/money-format";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { formatTdsSectionSnapshotLabel } from "@/services/tds-list.service";
 import type { ReceiptUiAllocation } from "../receipt-voucher-utils";
 import { sanitizeMoneyInput, toMoneyNumber } from "../receipt-voucher-utils";
+import {
+  ReceiptSearchableSelect,
+  type ReceiptSearchableOption,
+} from "./ReceiptSearchableSelect";
 
 const AMOUNT_TH =
   "px-2 py-2 text-right text-xs font-semibold text-foreground whitespace-nowrap";
@@ -12,6 +17,9 @@ const AMOUNT_TD = "px-2 py-2 text-right text-xs tabular-nums align-middle";
 const TEXT_TH =
   "px-3 py-2 text-left text-xs font-semibold text-foreground whitespace-nowrap";
 const TEXT_TD = "px-3 py-2 text-left text-xs align-middle";
+const SECTION_TH =
+  "px-2 py-2 text-left text-xs font-semibold text-foreground whitespace-nowrap";
+const SECTION_TD = "px-2 py-2 text-left text-xs align-middle";
 
 function MoneyCellInput({
   value,
@@ -52,17 +60,25 @@ export function ReceiptAllocationTable({
   rows,
   readOnly,
   emptyMessage,
+  showTdsSection = true,
+  tdsSectionOptions = [],
   onToggle,
   onChangeAmount,
 }: {
   rows: ReceiptUiAllocation[];
   readOnly?: boolean;
   emptyMessage?: string;
+  /** Customer receipts show TDS Section; hide for non-TDS contexts if needed. */
+  showTdsSection?: boolean;
+  tdsSectionOptions?: ReceiptSearchableOption[];
   onToggle: (openItemId: string, selected: boolean) => void;
   onChangeAmount: (
     openItemId: string,
     patch: Partial<
-      Pick<ReceiptUiAllocation, "allocated_amount" | "tds_amount" | "discount_amount">
+      Pick<
+        ReceiptUiAllocation,
+        "allocated_amount" | "tds_amount" | "tds_section_id" | "discount_amount"
+      >
     >,
   ) => void;
 }) {
@@ -79,7 +95,7 @@ export function ReceiptAllocationTable({
   return (
     <div className="border border-border rounded-xl overflow-hidden w-full">
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[1040px] table-fixed">
+        <table className="w-full min-w-[1180px] table-fixed">
           <colgroup>
             <col className="w-10" />
             <col className="w-[160px]" />
@@ -90,6 +106,7 @@ export function ReceiptAllocationTable({
             <col className="w-[108px]" />
             <col className="w-[116px]" />
             <col className="w-[116px]" />
+            {showTdsSection ? <col className="w-[168px]" /> : null}
             <col className="w-[116px]" />
           </colgroup>
           <thead>
@@ -103,6 +120,7 @@ export function ReceiptAllocationTable({
               <th className={AMOUNT_TH}>Outstanding</th>
               <th className={AMOUNT_TH}>Allocation</th>
               <th className={AMOUNT_TH}>TDS</th>
+              {showTdsSection ? <th className={SECTION_TH}>TDS Section</th> : null}
               <th className={AMOUNT_TH}>Discount</th>
             </tr>
           </thead>
@@ -111,6 +129,14 @@ export function ReceiptAllocationTable({
               const over =
                 row.selected &&
                 toMoneyNumber(row.allocated_amount) > row.outstanding_amount + 0.0001;
+              const tdsAmt = toMoneyNumber(row.tds_amount);
+              const sectionRequired = showTdsSection && row.selected && tdsAmt > 0;
+              const sectionMissing = sectionRequired && !row.tds_section_id.trim();
+              const sectionOptions = mergeSectionOption(
+                tdsSectionOptions,
+                row.tds_section_id,
+                row.tds_section_snapshot,
+              );
               return (
                 <tr
                   key={row.open_item_id}
@@ -168,6 +194,39 @@ export function ReceiptAllocationTable({
                       />
                     )}
                   </td>
+                  {showTdsSection ? (
+                    <td className={SECTION_TD}>
+                      {readOnly || !row.selected ? (
+                        <SectionReadOnly
+                          tdsAmount={tdsAmt}
+                          sectionId={row.tds_section_id}
+                          options={sectionOptions}
+                          snapshot={row.tds_section_snapshot}
+                        />
+                      ) : (
+                        <div className="space-y-1 min-w-[148px]">
+                          <ReceiptSearchableSelect
+                            value={row.tds_section_id}
+                            options={sectionOptions}
+                            placeholder={tdsAmt > 0 ? "Select TDS Section…" : "—"}
+                            disabled={tdsAmt <= 0}
+                            triggerClassName={cn(
+                              "h-8 text-xs",
+                              sectionMissing && "border-red-400",
+                            )}
+                            onChange={(tds_section_id) =>
+                              onChangeAmount(row.open_item_id, { tds_section_id })
+                            }
+                          />
+                          {sectionMissing ? (
+                            <p className="text-[11px] text-red-500 leading-tight">
+                              Select TDS Section for this TDS amount.
+                            </p>
+                          ) : null}
+                        </div>
+                      )}
+                    </td>
+                  ) : null}
                   <td className={AMOUNT_TD}>
                     {readOnly ? (
                       formatMoney(toMoneyNumber(row.discount_amount))
@@ -189,4 +248,38 @@ export function ReceiptAllocationTable({
       </div>
     </div>
   );
+}
+
+function SectionReadOnly({
+  tdsAmount,
+  sectionId,
+  options,
+  snapshot,
+}: {
+  tdsAmount: number;
+  sectionId: string;
+  options: ReceiptSearchableOption[];
+  snapshot: ReceiptUiAllocation["tds_section_snapshot"];
+}) {
+  if (tdsAmount <= 0) {
+    return <span className="text-muted-foreground">—</span>;
+  }
+  const fromOptions = options.find((o) => o.value === sectionId)?.label;
+  if (fromOptions) return <span className="font-medium">{fromOptions}</span>;
+  return (
+    <span className="font-medium">{formatTdsSectionSnapshotLabel(snapshot)}</span>
+  );
+}
+
+function mergeSectionOption(
+  options: ReceiptSearchableOption[],
+  sectionId: string,
+  snapshot: ReceiptUiAllocation["tds_section_snapshot"],
+): ReceiptSearchableOption[] {
+  if (!sectionId || options.some((o) => o.value === sectionId)) return options;
+  const label = formatTdsSectionSnapshotLabel(snapshot);
+  if (label === "—") {
+    return [...options, { value: sectionId, label: "Previously selected section" }];
+  }
+  return [...options, { value: sectionId, label }];
 }

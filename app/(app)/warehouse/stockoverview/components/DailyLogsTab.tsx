@@ -16,8 +16,9 @@ import {
   StockOverviewApi,
   toStockOrdering,
 } from "../services/stock-overview-api";
-import { QC_PASSED_STATUS_OPTIONS, INVENTORY_SOURCE_STATUS_OPTIONS, STATUS_BADGE_CONFIG } from "../constants";
+import { DAILY_LOG_STATUS_OPTIONS, STATUS_BADGE_CONFIG } from "../constants";
 import { formatMoney } from "@/lib/accounts/money-format";
+import { StackedQtyDisplay, type QtyStackMeta } from "@/app/(app)/sales/shared/StackedQtyDisplay";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -74,6 +75,34 @@ function toApiPeriod(filters: StockPositionFilters): {
   };
 }
 
+function toDailyLogQtyMeta(row: StockPositionLine): QtyStackMeta {
+  const unitsPerPacking = Number(row.unitPerPacking) || 1;
+  const qtyType = String(row.quantityType || "").trim().toLowerCase();
+  const quantityType =
+    qtyType === "piece" || qtyType === "pieces" || qtyType === "pcs" || qtyType === "unit"
+      ? "Piece"
+      : unitsPerPacking > 1
+        ? "Case"
+        : "Piece";
+
+  return {
+    unitsPerPacking: unitsPerPacking > 0 ? unitsPerPacking : 1,
+    quantityType,
+    uom: row.uom || null,
+    unitPackSize: row.unitPackSize != null && Number(row.unitPackSize) > 0 ? Number(row.unitPackSize) : null,
+    netWeight: row.netWeight != null && Number(row.netWeight) > 0 ? Number(row.netWeight) : null,
+  };
+}
+
+function formatDateOnly(value: string | null | undefined): string {
+  if (value == null || value === "" || value === "—") return "—";
+  const raw = String(value);
+  if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10);
+  const parsed = new Date(raw.includes("T") ? raw : `${raw}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return "—";
+  return parsed.toISOString().slice(0, 10);
+}
+
 function mapDailyLogRow(row: DailyLogListRow): StockPositionLine {
   const dayIn = row.day_in === "-" || row.day_in == null ? 0 : Number(row.day_in);
   const dayOut = row.day_out === "-" || row.day_out == null ? 0 : Number(row.day_out);
@@ -83,20 +112,22 @@ function mapDailyLogRow(row: DailyLogListRow): StockPositionLine {
     productName: row.product_name,
     hsn: String(row.hsn ?? "").trim() || "—",
     scientificName: row.scientific_name,
-    category: row.category,
-    packSize: row.pack_size,
     batchNumber: row.batch_no,
+    mfgDate: row.manufacture_date ? String(row.manufacture_date).slice(0, 10) : "—",
     expiryDate: row.expiry_date ? String(row.expiry_date).slice(0, 10) : "—",
     warehouse: row.warehouse_name,
     cp: Number(row.cp) || 0,
     status: (row.status || "Available") as StockLineStatus,
-    sourceStatus: row.source_status || undefined,
     openingQty: Number(row.opening_qty) || 0,
     dayIn: Number.isFinite(dayIn) ? dayIn : 0,
     dayOut: Number.isFinite(dayOut) ? dayOut : 0,
     closingQty: Number(row.closing_qty) || 0,
-    availableQty: Number(row.available_qty) || 0,
     stockValuation: Number(row.valuation) || 0,
+    unitPerPacking: Number(row.unit_per_packing) || 1,
+    quantityType: row.quantity_type || undefined,
+    unitPackSize: row.pack_size != null ? Number(row.pack_size) : null,
+    netWeight: row.net_weight != null ? Number(row.net_weight) : null,
+    uom: row.unit || null,
   };
 }
 
@@ -119,20 +150,16 @@ export function DailyLogsTab() {
     resetFilters: resetColFilters,
   } = useAppliedListFilters();
 
-  const [warehouses, setWarehouses] = useState<Array<{ value: string; label: string }>>([]);
-  const [products, setProducts] = useState<Array<{ value: string; label: string }>>([]);
   const [productMetaOptions, setProductMetaOptions] = useState<{
     productCode: Array<{ label: string; value: string }>;
     productName: Array<{ label: string; value: string }>;
     hsn: Array<{ label: string; value: string }>;
     scientificName: Array<{ label: string; value: string }>;
-    category: Array<{ label: string; value: string }>;
   }>({
     productCode: [],
     productName: [],
     hsn: [],
     scientificName: [],
-    category: [],
   });
   const [filterOptions, setFilterOptions] = useState<Record<string, Array<{ label: string; value: string }>>>({});
   const [loadingFilters, setLoadingFilters] = useState<Set<string>>(new Set());
@@ -162,20 +189,9 @@ export function DailyLogsTab() {
 
   useEffect(() => {
     let mounted = true;
-    Promise.all([
-      StockOverviewApi.warehouseDropdown(),
-      ProductDropdownService.dropdown(),
-      HsnListService.dropdown(),
-    ])
-      .then(([wh, prod, hsnList]) => {
+    Promise.all([ProductDropdownService.dropdown(), HsnListService.dropdown()])
+      .then(([prod, hsnList]) => {
         if (!mounted) return;
-        setWarehouses(wh);
-        setProducts(
-          prod.map((p) => ({
-            value: p.product_id,
-            label: `${p.product_name}${p.product_code ? ` (${p.product_code})` : ""}`,
-          })),
-        );
 
         const uniq = (values: Array<string | null | undefined>) =>
           [...new Set(values.map((v) => String(v ?? "").trim()).filter(Boolean))]
@@ -208,7 +224,6 @@ export function DailyLogsTab() {
           productName: uniq(prod.map((p) => p.product_name)),
           hsn: hsnFromMaster.length > 0 ? hsnFromMaster : hsnFromProducts,
           scientificName: uniq(prod.map((p) => p.scientific_name)),
-          category: uniq(prod.map((p) => p.category?.categoryName)),
         });
       })
       .catch(() => undefined);
@@ -233,8 +248,8 @@ export function DailyLogsTab() {
       page_size: pageSize,
       search: String(appliedColFilters.search ?? ""),
       ordering: toStockOrdering(sort.key, sort.direction),
-      warehouse_id: appliedTopFilters.warehouse === "All" ? "all" : appliedTopFilters.warehouse,
-      product_id: appliedTopFilters.product || "all",
+      warehouse_id: "all",
+      product_id: "all",
       period: periodParams.period,
       from_date: periodParams.from_date,
       to_date: periodParams.to_date,
@@ -244,12 +259,14 @@ export function DailyLogsTab() {
       .then((result) => {
         setRecords(result.items.map(mapDailyLogRow));
         setTotalRecords(result.total);
+        setKpis(result.summary);
       })
       .catch((err) => {
         if (controller.signal.aborted) return;
         setError(StockOverviewApi.getErrorMessage(err, "Failed to load daily log."));
         setRecords([]);
         setTotalRecords(0);
+        setKpis(EMPTY_KPIS);
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
@@ -257,38 +274,6 @@ export function DailyLogsTab() {
 
     return () => controller.abort();
   }, [appliedTopFilters, appliedColFilters, page, pageSize, sort.key, sort.direction, today, listNonce]);
-
-  useEffect(() => {
-    if (!today) return;
-    if (appliedTopFilters.datePreset === "custom" && (!appliedTopFilters.fromDate || !appliedTopFilters.toDate)) {
-      return;
-    }
-
-    const controller = new AbortController();
-    const periodParams = toApiPeriod(appliedTopFilters);
-
-    StockOverviewApi.dailyLogSummary({
-      search: String(appliedColFilters.search ?? ""),
-      ordering: toStockOrdering(sort.key, sort.direction),
-      warehouse_id: appliedTopFilters.warehouse === "All" ? "all" : appliedTopFilters.warehouse,
-      product_id: appliedTopFilters.product || "all",
-      period: periodParams.period,
-      from_date: periodParams.from_date,
-      to_date: periodParams.to_date,
-      filters: appliedColFilters,
-      signal: controller.signal,
-    })
-      .then((summary) => {
-        setKpis(summary);
-      })
-      .catch((err) => {
-        if (controller.signal.aborted) return;
-        setKpis(EMPTY_KPIS);
-        setError((prev) => prev || StockOverviewApi.getErrorMessage(err, "Failed to load daily log summary."));
-      });
-
-    return () => controller.abort();
-  }, [appliedTopFilters, appliedColFilters, sort.key, sort.direction, today, listNonce]);
 
   const handleApplyTopFilters = useCallback(() => {
     setAppliedTopFilters(draftFilters);
@@ -360,15 +345,13 @@ export function DailyLogsTab() {
       return;
     }
 
-    // Scope product / warehouse / batch / source options to real inventory stock
+    // Scope product / warehouse / batch options to stock lots
     const keyMap: Record<string, string> = {
       productCode: "inventory_detail__product__product_code",
       productName: "inventory_detail__product__product_name",
       scientificName: "inventory_detail__product__scientific_name",
-      category: "inventory_detail__product__category__categoryName",
       warehouse: "inventory_detail__warehouse__warehouse_name",
       batchNumber: "batch_no",
-      sourceStatus: "source_status",
     };
     const field = keyMap[columnKey];
     if (!field) return;
@@ -390,8 +373,8 @@ export function DailyLogsTab() {
     StockOverviewApi.exportDailyLog({
       search: String(appliedColFilters.search ?? ""),
       ordering: toStockOrdering(sort.key, sort.direction),
-      warehouse_id: appliedTopFilters.warehouse === "All" ? "all" : appliedTopFilters.warehouse,
-      product_id: appliedTopFilters.product || "all",
+      warehouse_id: "all",
+      product_id: "all",
       period: periodParams.period,
       from_date: periodParams.from_date,
       to_date: periodParams.to_date,
@@ -448,24 +431,71 @@ export function DailyLogsTab() {
       filterOptions: filterOptions.scientificName || [],
     },
     {
-      key: "category",
-      header: "Category",
+      key: "openingQty",
+      header: "Opening Qty",
       sortable: true,
-      filterable: true,
-      filterType: "dropdown",
-      filterOptions: filterOptions.category || [],
+      align: "right",
+      width: "140px",
+      render: (_v, row) => (
+        <StackedQtyDisplay
+          baseQty={Number(row.openingQty) || 0}
+          meta={toDailyLogQtyMeta(row)}
+          layout="compact"
+          className="ml-auto"
+        />
+      ),
     },
-    { key: "packSize", header: "Pack Size", sortable: true, width: "90px" },
-    { key: "openingQty", header: "Opening Qty", sortable: true, align: "right", width: "100px",
-      render: (v) => <span className="tabular-nums text-xs">{Number(v).toLocaleString("en-IN")}</span> },
-    { key: "dayIn", header: "Day In", sortable: true, align: "right", width: "90px",
-      render: (v) => <span className="tabular-nums text-xs text-emerald-700 font-medium">{Number(v) > 0 ? Number(v).toLocaleString("en-IN") : "—"}</span> },
-    { key: "dayOut", header: "Day Out", sortable: true, align: "right", width: "90px",
-      render: (v) => <span className="tabular-nums text-xs text-red-700 font-medium">{Number(v) > 0 ? Number(v).toLocaleString("en-IN") : "—"}</span> },
-    { key: "closingQty", header: "Closing Qty", sortable: true, align: "right", width: "100px",
-      render: (v) => <span className="tabular-nums text-xs font-semibold">{Number(v).toLocaleString("en-IN")}</span> },
-    { key: "availableQty", header: "Available", sortable: true, align: "right", width: "90px",
-      render: (v) => <span className="tabular-nums text-xs">{Number(v).toLocaleString("en-IN")}</span> },
+    {
+      key: "dayIn",
+      header: "Day In",
+      sortable: true,
+      align: "right",
+      width: "140px",
+      render: (_v, row) =>
+        Number(row.dayIn) > 0 ? (
+          <StackedQtyDisplay
+            baseQty={Number(row.dayIn) || 0}
+            meta={toDailyLogQtyMeta(row)}
+            layout="compact"
+            className="ml-auto [&_p:first-child]:text-emerald-700"
+          />
+        ) : (
+          <span className="text-xs text-muted-foreground">—</span>
+        ),
+    },
+    {
+      key: "dayOut",
+      header: "Day Out",
+      sortable: true,
+      align: "right",
+      width: "140px",
+      render: (_v, row) =>
+        Number(row.dayOut) > 0 ? (
+          <StackedQtyDisplay
+            baseQty={Number(row.dayOut) || 0}
+            meta={toDailyLogQtyMeta(row)}
+            layout="compact"
+            className="ml-auto [&_p:first-child]:text-red-700"
+          />
+        ) : (
+          <span className="text-xs text-muted-foreground">—</span>
+        ),
+    },
+    {
+      key: "closingQty",
+      header: "Closing Qty",
+      sortable: true,
+      align: "right",
+      width: "140px",
+      render: (_v, row) => (
+        <StackedQtyDisplay
+          baseQty={Number(row.closingQty) || 0}
+          meta={toDailyLogQtyMeta(row)}
+          layout="compact"
+          className="ml-auto"
+        />
+      ),
+    },
     {
       key: "batchNumber",
       header: "Batch No.",
@@ -476,7 +506,24 @@ export function DailyLogsTab() {
       width: "120px",
       render: (v) => <span className="font-mono text-xs font-semibold text-brand-700">{v}</span>,
     },
-    { key: "expiryDate", header: "Expiry", sortable: true, width: "100px" },
+    {
+      key: "mfgDate",
+      header: "Mfg Date",
+      sortable: true,
+      width: "110px",
+      render: (v) => (
+        <span className="text-xs text-muted-foreground tabular-nums">{formatDateOnly(v as string)}</span>
+      ),
+    },
+    {
+      key: "expiryDate",
+      header: "Expiry",
+      sortable: true,
+      width: "100px",
+      render: (v) => (
+        <span className="text-xs text-muted-foreground tabular-nums">{formatDateOnly(v as string)}</span>
+      ),
+    },
     {
       key: "warehouse",
       header: "Warehouse",
@@ -485,28 +532,21 @@ export function DailyLogsTab() {
       filterType: "dropdown",
       filterOptions: filterOptions.warehouse || [],
     },
-    { key: "cp", header: "CP", sortable: true, align: "right", width: "80px",
-      render: (v) => <span className="tabular-nums text-xs">{Number(v).toLocaleString("en-IN")}</span> },
-    { key: "stockValuation", header: "Valuation", sortable: true, align: "right", width: "110px",
-      render: (v) => <span className="tabular-nums text-xs font-medium">{formatMoney(Number(v))}</span> },
     {
-      key: "sourceStatus",
-      header: "Source",
+      key: "cp",
+      header: "CP",
       sortable: true,
-      filterable: true,
-      filterType: "dropdown",
-      filterOptions: filterOptions.sourceStatus?.length
-        ? filterOptions.sourceStatus
-        : INVENTORY_SOURCE_STATUS_OPTIONS,
-      width: "130px",
-      render: (val: string) => {
-        const cfg = STATUS_BADGE_CONFIG[val] || { bg: "bg-slate-100 text-slate-700 border-slate-200", label: val || "—" };
-        return (
-          <span className={`inline-flex items-center text-[11px] px-2.5 py-0.5 rounded-full font-medium border ${cfg.bg}`}>
-            {cfg.label}
-          </span>
-        );
-      },
+      align: "right",
+      width: "80px",
+      render: (v) => <span className="tabular-nums text-xs">{Number(v).toLocaleString("en-IN")}</span>,
+    },
+    {
+      key: "stockValuation",
+      header: "Valuation",
+      sortable: true,
+      align: "right",
+      width: "110px",
+      render: (v) => <span className="tabular-nums text-xs font-medium">{formatMoney(Number(v))}</span>,
     },
     {
       key: "status",
@@ -514,7 +554,7 @@ export function DailyLogsTab() {
       sortable: true,
       filterable: true,
       filterType: "dropdown",
-      filterOptions: QC_PASSED_STATUS_OPTIONS,
+      filterOptions: DAILY_LOG_STATUS_OPTIONS,
       width: "130px",
       render: (val: string) => {
         const cfg = STATUS_BADGE_CONFIG[val] || { bg: "bg-slate-100 text-slate-700 border-slate-200", label: val };
@@ -532,8 +572,6 @@ export function DailyLogsTab() {
       <StockPositionFiltersBar
         filters={draftFilters}
         onChange={(patch) => setDraftFilters((prev) => ({ ...prev, ...patch }))}
-        warehouses={warehouses}
-        products={products}
         onApply={handleApplyTopFilters}
         onReset={handleResetTopFilters}
         onExport={handleExport}

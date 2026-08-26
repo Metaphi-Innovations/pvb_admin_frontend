@@ -2,11 +2,9 @@
 
 import React, { useEffect, useState } from "react";
 import { MasterListing } from "@/components/listing/MasterListing";
-import { ColumnConfig, ActionItemConfig } from "@/components/listing/types";
-import { Eye } from "lucide-react";
-import { useRouter } from "next/navigation";
-import Link from "next/link";
-import { QC_PASSED_STATUS_OPTIONS, INVENTORY_SOURCE_STATUS_OPTIONS, STATUS_BADGE_CONFIG } from "../constants";
+import { ColumnConfig } from "@/components/listing/types";
+import { StackedQtyDisplay, type QtyStackMeta } from "@/app/(app)/sales/shared/StackedQtyDisplay";
+import { QC_PASSED_STATUS_OPTIONS, STATUS_BADGE_CONFIG } from "../constants";
 import { useStockOverviewListFilters } from "../hooks/use-stock-overview-list-filters";
 import {
   InventoryListRow,
@@ -19,8 +17,26 @@ interface QcPassedListingProps {
   onFiltersApplied?: () => void;
 }
 
+function toInventoryQtyMeta(row: InventoryListRow): QtyStackMeta {
+  const unitsPerPacking = Number(row.unit_per_packing) || 1;
+  const qtyType = String(row.quantity_type || "").trim().toLowerCase();
+  const quantityType =
+    qtyType === "piece" || qtyType === "pieces" || qtyType === "pcs" || qtyType === "unit"
+      ? "Piece"
+      : unitsPerPacking > 1
+        ? "Case"
+        : "Piece";
+
+  return {
+    unitsPerPacking: unitsPerPacking > 0 ? unitsPerPacking : 1,
+    quantityType,
+    uom: row.unit || row.uom || null,
+    unitPackSize: row.pack_size != null && Number(row.pack_size) > 0 ? Number(row.pack_size) : null,
+    netWeight: row.net_weight != null && Number(row.net_weight) > 0 ? Number(row.net_weight) : null,
+  };
+}
+
 export function QcPassedListing({ warehouseId, onFiltersApplied }: QcPassedListingProps) {
-  const router = useRouter();
   const {
     draftFilters,
     appliedFilters,
@@ -83,9 +99,6 @@ export function QcPassedListing({ warehouseId, onFiltersApplied }: QcPassedListi
       product_name: "inventory_detail__product__product_name",
       sku: "inventory_detail__product__sku",
       uom: "inventory_detail__product__unit",
-      warehouse_name: "inventory_detail__warehouse__warehouse_name",
-      batch_no: "batch_no",
-      source_status: "source_status",
     };
     const field = keyMap[columnKey];
     if (!field) return;
@@ -111,9 +124,7 @@ export function QcPassedListing({ warehouseId, onFiltersApplied }: QcPassedListi
       filterType: "dropdown",
       filterOptions: filterOptions.product_name || [],
       render: (_val, row) => (
-        <Link href={`/warehouse/stockoverview/view/${row.id}`} className="block group/name">
-          <span className="text-xs font-semibold text-foreground group-hover/name:text-brand-700">{row.product_name}</span>
-        </Link>
+        <span className="text-xs font-semibold text-foreground">{row.product_name}</span>
       ),
     },
     {
@@ -141,23 +152,14 @@ export function QcPassedListing({ warehouseId, onFiltersApplied }: QcPassedListi
       header: "Available Qty",
       sortable: true,
       align: "right",
-      width: "110px",
-      render: (val) => (
-        <span className="text-xs font-medium tabular-nums text-foreground">
-          {val != null ? Number(val).toLocaleString() : "—"}
-        </span>
-      ),
-    },
-    {
-      key: "reserved_qty",
-      header: "Reserved Qty",
-      sortable: true,
-      align: "right",
-      width: "110px",
-      render: (val) => (
-        <span className="text-xs font-medium tabular-nums text-foreground">
-          {val != null ? Number(val).toLocaleString() : "—"}
-        </span>
+      width: "150px",
+      render: (_val, row) => (
+        <StackedQtyDisplay
+          baseQty={Number(row.available_qty) || 0}
+          meta={toInventoryQtyMeta(row)}
+          layout="compact"
+          className="ml-auto"
+        />
       ),
     },
     {
@@ -193,44 +195,6 @@ export function QcPassedListing({ warehouseId, onFiltersApplied }: QcPassedListi
       },
     },
     {
-      key: "warehouse_name",
-      header: "Warehouse",
-      sortable: true,
-      filterable: true,
-      filterType: "dropdown",
-      filterOptions: filterOptions.warehouse_name || [],
-      render: (val) => <span className="text-xs text-foreground">{val}</span>,
-    },
-    {
-      key: "batch_no",
-      header: "Batch No",
-      sortable: true,
-      filterable: true,
-      filterType: "dropdown",
-      filterOptions: filterOptions.batch_no || [],
-      width: "130px",
-      render: (val) => <span className="font-mono text-xs text-foreground">{val}</span>,
-    },
-    {
-      key: "source_status",
-      header: "Source",
-      sortable: true,
-      filterable: true,
-      filterType: "dropdown",
-      filterOptions: filterOptions.source_status?.length
-        ? filterOptions.source_status
-        : INVENTORY_SOURCE_STATUS_OPTIONS,
-      width: "130px",
-      render: (val: string) => {
-        const cfg = STATUS_BADGE_CONFIG[val] || { bg: "bg-slate-100 text-slate-700 border-slate-200", label: val || "—" };
-        return (
-          <span className={`inline-flex items-center text-[11px] px-2.5 py-0.5 rounded-full font-medium border ${cfg.bg}`}>
-            {cfg.label}
-          </span>
-        );
-      },
-    },
-    {
       key: "status",
       header: "Stock Status",
       sortable: true,
@@ -249,15 +213,6 @@ export function QcPassedListing({ warehouseId, onFiltersApplied }: QcPassedListi
     },
   ];
 
-  const actions: ActionItemConfig<InventoryListRow>[] = [
-    {
-      label: "View Details",
-      action: "view",
-      icon: Eye,
-      onClick: (row) => router.push(`/warehouse/stockoverview/view/${row.id}`),
-    },
-  ];
-
   return (
     <div className="space-y-2">
       {error ? <p className="text-xs text-red-600">{error}</p> : null}
@@ -272,9 +227,8 @@ export function QcPassedListing({ warehouseId, onFiltersApplied }: QcPassedListi
         onPageSizeChange={handlePageSizeChange}
         onSortChange={setSort}
         onFilterChange={onFilterChange}
-        actions={actions}
         emptyMessage=""
-        searchPlaceholder="Search product or batch..."
+        searchPlaceholder="Search product or SKU..."
         currentFilters={draftFilters}
         currentSort={sort}
         onOpenFilter={handleOpenFilter}

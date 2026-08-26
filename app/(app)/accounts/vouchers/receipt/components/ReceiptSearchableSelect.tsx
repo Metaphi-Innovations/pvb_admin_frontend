@@ -22,6 +22,7 @@ export function ReceiptSearchableSelect({
   placeholder = "Select…",
   required,
   disabled,
+  triggerClassName,
 }: {
   label?: string;
   value: string;
@@ -30,6 +31,7 @@ export function ReceiptSearchableSelect({
   placeholder?: string;
   required?: boolean;
   disabled?: boolean;
+  triggerClassName?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
@@ -68,6 +70,7 @@ export function ReceiptSearchableSelect({
               disabled
                 ? "opacity-50 cursor-not-allowed bg-muted/30"
                 : "hover:bg-muted/30",
+              triggerClassName,
             )}
           >
             <span
