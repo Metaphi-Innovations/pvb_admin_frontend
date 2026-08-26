@@ -19,6 +19,10 @@ import {
   getProductPackingConfig,
   CartonAllocation,
   InventoryType,
+  mapBatchInventoryType,
+  formatInventoryTypeLabel,
+  inventoryTypeBadgeClass,
+  sortBatchesByExpiryAsc,
 } from "../../../packing-list-data";
 import {
   useSalesOrder,
@@ -108,8 +112,10 @@ export default function NewPackingListPage() {
         for (const line of order.lineItems) {
           if (!line.productId || line.quantity <= 0) continue;
 
-          // Fetch available inventory batches from the backend
-          const batches = await SalesOrderService.getBatches(line.productId, warehouseId, line.quantityType);
+          // Fetch available inventory batches from the backend (FEFO-ordered)
+          const batches = sortBatchesByExpiryAsc(
+            await SalesOrderService.getBatches(line.productId, warehouseId, line.quantityType),
+          );
 
           const config = getProductPackingConfig(Number(line.productId)) || {
             packingUnit: "Unit",
@@ -138,14 +144,14 @@ export default function NewPackingListPage() {
             return {
               cartonId: b.available_inventory_id,
               batchNumber: b.batch_code || "N/A",
-              expiryDate: b.expiry_date || "N/A",
+              expiryDate: b.expiry_date ? String(b.expiry_date).slice(0, 10) : "—",
               cartonNumber: b.batch_code || "N/A",
               packingUnit: config.packingUnit,
               baseUnit: config.baseUnit,
               unitsPerPackingUnit: unitsPerPacking,
               availablePackingQty: line.quantityType === "Case" ? Math.floor(availQty / unitsPerPacking) : availQty,
               availableBaseQty: availQty,
-              inventoryType: "original" as InventoryType,
+              inventoryType: mapBatchInventoryType(b),
               suggestedPackingQty: takePacking,
               suggestedBaseQty: takeBase,
               allocatedPackingQty: takePacking,
@@ -335,14 +341,7 @@ export default function NewPackingListPage() {
     );
   };
 
-  const formatInventoryType = (type: InventoryType) => {
-    switch (type) {
-      case "original": return "Original";
-      case "sales_return": return "Sales Return";
-      case "sample_return": return "Sample Return";
-      default: return type;
-    }
-  };
+  const formatInventoryType = (type: InventoryType) => formatInventoryTypeLabel(type);
 
   return (
     <div className="p-6 w-full space-y-6 pb-24">
@@ -432,12 +431,14 @@ export default function NewPackingListPage() {
 
               {isExpanded && (
                 <div className="overflow-x-auto bg-white">
-                  <table className="w-full min-w-[900px]">
+                  <table className="w-full min-w-[1040px]">
                     <thead>
                       <tr className="bg-muted/10 border-b border-border">
                         <th className="px-4 py-2.5 text-left w-12">Select</th>
                         <th className="px-3 py-2.5 text-left text-xs font-semibold">Quantity Type</th>
                         <th className="px-3 py-2.5 text-left text-xs font-semibold">Batch</th>
+                        <th className="px-3 py-2.5 text-left text-xs font-semibold whitespace-nowrap">Expiry</th>
+                        <th className="px-3 py-2.5 text-left text-xs font-semibold whitespace-nowrap">Inventory Type</th>
                         <th className="px-3 py-2.5 text-right text-xs font-semibold min-w-[100px]">Available Qty</th>
                         <th className="px-3 py-2.5 text-left text-xs font-semibold w-32">Pack Qty</th>
                         <th className="px-3 py-2.5 text-right text-xs font-semibold min-w-[100px]">Total</th>
@@ -462,6 +463,19 @@ export default function NewPackingListPage() {
                               </span>
                             </td>
                             <td className="px-3 py-2.5 text-xs font-mono text-brand-700">{alloc.batchNumber}</td>
+                            <td className="px-3 py-2.5 text-xs tabular-nums text-muted-foreground whitespace-nowrap">
+                              {alloc.expiryDate || "—"}
+                            </td>
+                            <td className="px-3 py-2.5">
+                              <span
+                                className={cn(
+                                  "inline-flex items-center text-[10px] px-2 py-0.5 rounded-full font-medium border whitespace-nowrap",
+                                  inventoryTypeBadgeClass(alloc.inventoryType),
+                                )}
+                              >
+                                {formatInventoryType(alloc.inventoryType)}
+                              </span>
+                            </td>
                             <td className="px-3 py-2.5 align-top">
                               <StackedQtyDisplay
                                 baseQty={alloc.availableBaseQty}

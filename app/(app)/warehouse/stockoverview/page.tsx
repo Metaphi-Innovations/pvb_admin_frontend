@@ -24,10 +24,8 @@ const EMPTY_SUMMARY: StockOverviewSummary = {
 
 export default function StockOverviewPage() {
   const [activeTab, setActiveTab] = useState("daily-logs");
-  const [selectedWarehouse, setSelectedWarehouse] = useState("All");
-  const [warehouseOptions, setWarehouseOptions] = useState<Array<{ label: string; value: string }>>([
-    { label: "All Warehouses", value: "All" },
-  ]);
+  const [selectedWarehouse, setSelectedWarehouse] = useState("");
+  const [warehouseOptions, setWarehouseOptions] = useState<Array<{ label: string; value: string }>>([]);
   const [summary, setSummary] = useState<StockOverviewSummary>(EMPTY_SUMMARY);
   const [summaryNonce, setSummaryNonce] = useState(0);
 
@@ -40,7 +38,12 @@ export default function StockOverviewPage() {
     StockOverviewApi.warehouseDropdown()
       .then((items) => {
         if (!mounted) return;
-        setWarehouseOptions([{ label: "All Warehouses", value: "All" }, ...items]);
+        setWarehouseOptions(items);
+        // Default to first warehouse (no "All") so list + view stay warehouse-scoped
+        setSelectedWarehouse((prev) => {
+          if (prev && items.some((w) => w.value === prev)) return prev;
+          return items[0]?.value || "";
+        });
       })
       .catch(() => undefined);
     return () => {
@@ -50,8 +53,12 @@ export default function StockOverviewPage() {
 
   useEffect(() => {
     if (activeTab === "daily-logs") return;
+    if (!selectedWarehouse) {
+      setSummary(EMPTY_SUMMARY);
+      return;
+    }
     let active = true;
-    StockOverviewApi.summary(selectedWarehouse === "All" ? undefined : selectedWarehouse)
+    StockOverviewApi.summary(selectedWarehouse)
       .then((data) => {
         if (!active) return;
         setSummary(data);
@@ -66,7 +73,7 @@ export default function StockOverviewPage() {
   }, [selectedWarehouse, activeTab, summaryNonce]);
 
   const showWarehouseFilter = activeTab !== "daily-logs";
-  const warehouseId = selectedWarehouse === "All" ? undefined : selectedWarehouse;
+  const warehouseId = selectedWarehouse || undefined;
 
   return (
     <ListingContainer

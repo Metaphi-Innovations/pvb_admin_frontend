@@ -14,13 +14,13 @@ export function getStockPositionTableHeaders(dateMode: StockDateMode): string[] 
     inLabel,
     outLabel,
     "Closing Qty",
-    "Batch No.",
+    "Batch No",
     "Mfg Date",
     "Expiry",
     "Warehouse",
     "CP",
-    "Valuation",
-    "Status",
+    "Stock Value",
+    "Stock Status",
   ];
 }
 

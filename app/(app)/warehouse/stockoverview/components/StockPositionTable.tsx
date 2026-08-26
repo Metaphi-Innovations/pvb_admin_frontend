@@ -263,7 +263,7 @@ export function StockPositionTable({
                 onChange={(v) => setColFilter("batchNumber", v)}
               />
               <th className={cn(STICKY_TH, "text-left w-24")}>Mfg Date</th>
-              <th className={cn(STICKY_TH, "text-left w-24")}>Expiry</th>
+              <th className={cn(STICKY_TH, "text-left w-28 min-w-[7rem]")}>Expiry</th>
               <FilterTh
                 label="Warehouse"
                 column={filterColumns.warehouse}
