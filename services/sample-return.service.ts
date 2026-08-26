@@ -4,6 +4,7 @@ import {
   normalizeGrnQuantityType,
   type GrnQuantityType,
 } from "@/lib/warehouse/grn-quantity";
+import { enrichGrnProductSnapshot } from "@/app/(app)/warehouse/grn/shared/grn-qty-stack";
 
 function asString(value: unknown): string {
   if (value === null || value === undefined) return "";
@@ -65,6 +66,8 @@ export interface SampleReturnLineItem {
   expDate: string;
   /** Returned quantity converted to base units (pieces). */
   returnedBaseQty: number;
+  /** Dispatched quantity in base units from dispatch item. */
+  dispatchedBaseQty: number;
   /** Cumulative GRN received qty in base units. */
   receivedBaseQty: number;
   /** From backend; missing → UI defaults to CASE. */
@@ -109,8 +112,29 @@ function mapDropdownOption(raw: Record<string, unknown>): SampleReturnDropdownOp
 
 function mapLineItem(raw: Record<string, unknown>): SampleReturnLineItem {
   const product = asRecord(raw.product);
-  const snapshot = asRecord(raw.product_snapshot);
+  const itemSnapshot = asRecord(raw.product_snapshot);
   const dispatchItem = asRecord(raw.dispatch_item);
+  const dispatchSnapshot = asRecord(dispatchItem.product_snapshot);
+  const snapshot = enrichGrnProductSnapshot(
+    { ...dispatchSnapshot, ...itemSnapshot },
+    {
+      product,
+      unitPerPacking:
+        asNumber(itemSnapshot.unit_per_packing) ||
+        asNumber(itemSnapshot.conversion_qty) ||
+        asNumber(dispatchSnapshot.unit_per_packing) ||
+        asNumber(dispatchSnapshot.conversion_qty) ||
+        asNumber(product.unit_per_packing) ||
+        1,
+      unit:
+        asString(itemSnapshot.base_unit) ||
+        asString(itemSnapshot.unit) ||
+        asString(dispatchSnapshot.base_unit) ||
+        asString(dispatchSnapshot.unit) ||
+        asString(product.unit) ||
+        "Unit",
+    },
+  );
   const inventoryBatch = asRecord(dispatchItem.inventory_batch);
   const batchSnapshot = {
     ...asRecord(raw.batch_snapshot),
@@ -118,6 +142,7 @@ function mapLineItem(raw: Record<string, unknown>): SampleReturnLineItem {
   };
   const unitPerPacking =
     asNumber(snapshot.unit_per_packing) ||
+    asNumber(snapshot.conversion_qty) ||
     asNumber(product.unit_per_packing) ||
     1;
   const packingFactor = unitPerPacking > 0 ? unitPerPacking : 1;
@@ -178,6 +203,8 @@ function mapLineItem(raw: Record<string, unknown>): SampleReturnLineItem {
       asDateOnly(batchSnapshot.exp_date) ||
       "",
     returnedBaseQty,
+    dispatchedBaseQty:
+      asNumber(dispatchItem.dispatched_base_qty) || asNumber(raw.dispatch_qty),
     receivedBaseQty: asNumber(raw.received_base_qty),
     quantityType: normalizeGrnQuantityType(
       asString(raw.quantity_type) ||
@@ -187,14 +214,7 @@ function mapLineItem(raw: Record<string, unknown>): SampleReturnLineItem {
       asString(snapshot.quantity_type) ||
       asString(snapshot.quantityType),
     ),
-    productSnapshot: Object.keys(snapshot).length > 0 ? snapshot : {
-      product_id: asString(product.product_id) || asString(raw.product_id),
-      product_code: asString(product.product_code),
-      product_name: asString(product.product_name),
-      base_unit: asString(product.unit),
-      packing_unit: asString(product.packing_unit),
-      sku: asString(product.sku),
-    },
+    productSnapshot: snapshot,
     packedQty: asNumber(raw.packed_qty) / packingFactor,
     dispatchQty: asNumber(raw.dispatch_qty) / packingFactor,
     returnedQty: returnedPackingQty,

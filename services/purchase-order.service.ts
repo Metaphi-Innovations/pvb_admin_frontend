@@ -5,6 +5,7 @@ import { COMPANY_BILLING } from "@/lib/procurement/config";
 import { amountInWords, round2 } from "@/lib/procurement/utils";
 import {
   calcPackingToBaseQty,
+  resolveNetWeightPerPack,
   type ProcurementAdditionalCharge,
 } from "@/lib/procurement/procurement-line-utils";
 import {
@@ -206,6 +207,16 @@ function mapLine(raw: Record<string, unknown>, index: number): POLineItem {
   const shortClosedBaseQty = asNumber(raw.short_closed_base_qty);
   const snapshot = asRecord(raw.product_snapshot);
   const snapshotHsn = asRecord(snapshot.hsn);
+  const baseUnit = asString(raw.base_unit) || asString(snapshot.unit) || "Unit";
+  const packSize =
+    asNumber(snapshot.pack_size) || asNumber(snapshot.packSize) || undefined;
+  const weightMeta = resolveNetWeightPerPack({
+    netWeight:
+      asNumber(snapshot.net_weight) || asNumber(snapshot.netWeight) || null,
+    packSize: packSize ?? null,
+    unitPerPacking: conversionQty,
+    baseUnit,
+  });
   const hsnCode =
     asString(raw.hsn_code) ||
     asString(raw.hsnCode) ||
@@ -240,9 +251,12 @@ function mapLine(raw: Record<string, unknown>, index: number): POLineItem {
         snapshot.category_name,
     ),
     hsnCode,
-    baseUnit: asString(raw.base_unit) || "Unit",
-    packagingUnit: asString(raw.packing_unit) || "Box",
+    baseUnit,
+    packagingUnit: asString(raw.packing_unit) || asString(snapshot.packing_unit) || "Box",
     conversionQty,
+    packSize,
+    netWeightPerPack: weightMeta?.netWeightPerPack,
+    weightUom: weightMeta?.weightUom,
     orderUom: "Unit",
     orderedQtyPack: packingQty,
     uom: asString(raw.base_unit) || "Unit",

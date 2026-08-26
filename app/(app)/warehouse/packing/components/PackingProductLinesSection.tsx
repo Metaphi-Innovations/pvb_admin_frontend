@@ -1,12 +1,16 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { Package, ChevronDown, ChevronRight } from "lucide-react";
+import { Package, ChevronDown, ChevronUp } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type { SalesOrderProduct, SalesOrderRecord } from "../types";
 import { getPackingQtyLabel, isPurchaseReturnDoc } from "../lib/packing-document-labels";
-import { getProductPackingConfig } from "@/app/(app)/sales/orders/packing-list-data";
+import { isPackingPieceQty, toQtyStackMeta } from "../lib/packing-qty-stack";
+import {
+  StackedQtyDisplay,
+  StackedQtyHeaderPair,
+} from "@/app/(app)/sales/shared/StackedQtyDisplay";
 
 interface PackingProductLinesSectionProps {
   order: SalesOrderRecord;
@@ -24,6 +28,13 @@ function getLineKey(p: SalesOrderProduct): string {
 
 function isPackableLine(p: SalesOrderProduct): boolean {
   return Number(p.pendingBaseQty) > 0;
+}
+
+function formatDateShort(value?: string | null): string {
+  if (!value) return "—";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  return d.toLocaleDateString();
 }
 
 export function PackingProductLinesSection({
@@ -47,7 +58,6 @@ export function PackingProductLinesSection({
   const orderedQtyLabel = getPackingQtyLabel(order.sourceDocumentType);
   const isPurchaseReturn = isPurchaseReturnDoc(order);
 
-  // Group products by SKU; keep full group for Ordered totals, show only pending lines
   const groupedProducts = useMemo(() => {
     const groups: Record<string, SalesOrderProduct[]> = {};
     order.products.forEach((p) => {
@@ -89,7 +99,7 @@ export function PackingProductLinesSection({
             <span className="text-xs font-semibold text-muted-foreground">Select All</span>
           </div>
 
-          <div className="border border-border rounded-xl overflow-hidden bg-white shadow-sm divide-y divide-border/60">
+          <div className="space-y-3">
             {groupedProducts.map((group) => (
               <PackingProductGroup
                 key={`${group.all[0].sku}-${group.all[0].quantity_type || "Case"}`}
@@ -134,19 +144,21 @@ function PackingProductGroup({
   const [isExpanded, setIsExpanded] = useState(true);
 
   const product = allProducts[0];
-  const quantityType = product.quantity_type?.toLowerCase() || "case";
-  const isPiece = quantityType === "piece" || quantityType === "pieces";
+  const qtyMeta = toQtyStackMeta(product);
 
-  const config = product.productId ? getProductPackingConfig(Number(product.productId)) : undefined;
-  const unitsPerCase = isPiece ? 1 : product.packSize || 1;
-  const displayLabel = isPiece ? "Pieces" : "Cases";
-
-  // Ordered from full allocation; Pending only from still-packable lines
   const totalOrderedQty = allProducts.reduce((sum, p) => sum + (p.orderBaseQty || 0), 0);
+  const totalPackedQty = allProducts.reduce((sum, p) => sum + (p.packedBaseQty || 0), 0);
   const totalPendingQty = packableProducts.reduce((sum, p) => sum + (p.pendingBaseQty || 0), 0);
+  const thisPackQty = packableProducts.reduce((sum, p) => {
+    const key = getLineKey(p);
+    if (!selectedLines[key]) return sum;
+    return sum + (packingQty[key] ?? 0);
+  }, 0);
 
+  const selectedCount = packableProducts.filter((p) => selectedLines[getLineKey(p)]).length;
   const allGroupSelected = packableProducts.every((p) => selectedLines[getLineKey(p)]);
   const someGroupSelected = packableProducts.some((p) => selectedLines[getLineKey(p)]);
+  const insufficient = thisPackQty <= 0 && totalPendingQty > 0;
 
   const handleGroupToggle = (checked: boolean) => {
     packableProducts.forEach((p) => {
@@ -155,134 +167,139 @@ function PackingProductGroup({
   };
 
   return (
-    <div className="flex flex-col">
-      {/* Product Header */}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 bg-white hover:bg-slate-50 transition-colors">
-        <button
-          type="button"
-          onClick={() => setIsExpanded(!isExpanded)}
-          className="p-1 -ml-1 rounded-md hover:bg-slate-100 text-slate-500 transition-colors"
-        >
-          {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-        </button>
-
-        <input
-          type="checkbox"
-          className="w-4 h-4 rounded accent-brand-600 flex-shrink-0"
-          checked={allGroupSelected}
-          ref={(el) => {
-            if (el) el.indeterminate = someGroupSelected && !allGroupSelected;
-          }}
-          onChange={(e) => handleGroupToggle(e.target.checked)}
-          aria-label={`Select all batches for ${product.product}`}
-        />
-
-        <div className="flex-1 min-w-[200px] flex flex-col">
-          <p className="text-[13px] font-bold text-slate-800">{product.product}</p>
-          <p className="font-mono text-[10px] text-slate-500 font-medium tracking-wide">{product.sku}</p>
-        </div>
-
-        <div className="flex items-center gap-2 text-xs">
-          <div className="text-slate-500">
-            {orderedQtyLabel}:{" "}
-            <span className="font-bold text-slate-700">
-              {isPiece ? totalOrderedQty : Math.floor(totalOrderedQty / unitsPerCase)} {displayLabel}
-            </span>
+    <div className="border border-border rounded-xl overflow-hidden shadow-sm bg-white">
+      <div className="w-full px-4 py-3 bg-muted/30 border-b border-border">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-start gap-2.5 min-w-0">
+            <input
+              type="checkbox"
+              className="w-4 h-4 rounded accent-brand-600 flex-shrink-0 mt-0.5"
+              checked={allGroupSelected}
+              ref={(el) => {
+                if (el) el.indeterminate = someGroupSelected && !allGroupSelected;
+              }}
+              onChange={(e) => handleGroupToggle(e.target.checked)}
+              aria-label={`Select all batches for ${product.product}`}
+            />
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-foreground truncate">{product.product}</p>
+              <p className="text-xs text-muted-foreground font-mono">
+                SKU: {product.sku?.trim() || "—"}
+              </p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                {orderedQtyLabel.replace(/ Qty$/i, "")} {totalOrderedQty}
+                {" · "}Packed {totalPackedQty}
+                {" · "}Pending {totalPendingQty}
+              </p>
+            </div>
           </div>
-          <div className="h-3.5 w-[1px] bg-border/80" />
-          <div className="text-slate-500">
-            Pending:{" "}
-            <span className="font-bold text-slate-700">
-              {isPiece ? totalPendingQty : Math.floor(totalPendingQty / unitsPerCase)} {displayLabel}
-            </span>
+
+          <div className="flex items-center gap-3 flex-shrink-0">
+            <StackedQtyHeaderPair
+              orderedBaseQty={totalPendingQty}
+              allocatedBaseQty={thisPackQty}
+              meta={qtyMeta}
+              orderedLabel="Pending"
+              allocatedLabel="This Pack"
+              insufficient={insufficient}
+              showPackSize={false}
+            />
+            {!isExpanded && selectedCount > 0 && (
+              <span className="text-xs text-muted-foreground whitespace-nowrap">
+                ({selectedCount} batch{selectedCount !== 1 ? "es" : ""} selected)
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={() => setIsExpanded(!isExpanded)}
+              className="p-1 rounded-md hover:bg-muted/60 text-muted-foreground transition-colors"
+              aria-label={isExpanded ? "Collapse" : "Expand"}
+            >
+              {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+            </button>
           </div>
         </div>
       </div>
 
-      {/* Batch Rows Table — only pending lines */}
       {isExpanded && (
-        <div className="bg-white border-t border-border/40 overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-[600px]">
+        <div className="overflow-x-auto bg-white">
+          <table className="w-full min-w-[900px]">
             <thead>
-              <tr className="border-b border-border/40 bg-white">
-                <th className="py-2.5 px-4 text-[11px] font-bold text-foreground w-12">Select</th>
-                <th className="py-2.5 px-2 text-[11px] font-bold text-foreground w-[120px]">Quantity Type</th>
-                <th className="py-2.5 px-2 text-[11px] font-bold text-foreground">Batch</th>
-                <th className="py-2.5 px-2 text-[11px] font-bold text-foreground w-[100px]">Pending Qty</th>
-                <th className="py-2.5 px-2 text-[11px] font-bold text-foreground w-[120px]">Pack Qty</th>
-                <th className="py-2.5 px-4 text-[11px] font-bold text-foreground w-[100px] text-right">Total (Base)</th>
+              <tr className="bg-muted/10 border-b border-border">
+                <th className="px-4 py-2.5 text-left w-12 text-xs font-semibold">Select</th>
+                <th className="px-3 py-2.5 text-left text-xs font-semibold">Quantity Type</th>
+                <th className="px-3 py-2.5 text-left text-xs font-semibold">Batch</th>
+                <th className="px-3 py-2.5 text-right text-xs font-semibold min-w-[100px]">
+                  Available Qty
+                </th>
+                <th className="px-3 py-2.5 text-left text-xs font-semibold w-32">Pack Qty</th>
+                <th className="px-3 py-2.5 text-right text-xs font-semibold min-w-[100px]">Total</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-border/30">
+            <tbody>
               {packableProducts.map((p) => {
                 const lineKey = getLineKey(p);
                 const isSelected = !!selectedLines[lineKey];
                 const qtyValue = packingQty[lineKey] ?? 0;
                 const error = validationErrors[lineKey];
-
                 const qtyType = (p.quantity_type || "case").toUpperCase();
-                const isPieceRow = qtyType === "PIECE" || qtyType === "PIECES";
+                const isPieceRow = isPackingPieceQty(p.quantity_type);
                 const rowUnitsPerCase = isPieceRow ? 1 : p.packSize || 1;
-
-                const packQtyDisplay = isPieceRow ? qtyValue : Math.floor(qtyValue / rowUnitsPerCase);
-                const pendingQtyDisplay = isPieceRow
-                  ? p.pendingBaseQty
-                  : Math.floor(p.pendingBaseQty / rowUnitsPerCase);
+                const packQtyDisplay = isPieceRow
+                  ? qtyValue
+                  : Math.floor(qtyValue / rowUnitsPerCase);
+                const lineMeta = toQtyStackMeta(p);
 
                 return (
                   <tr
                     key={lineKey}
                     className={cn(
-                      "hover:bg-muted/5 transition-colors",
-                      !isSelected && "opacity-60",
+                      "border-b border-border/60 transition-colors",
+                      isSelected && "bg-brand-50/30",
                     )}
                   >
-                    <td className="py-3 px-4">
+                    <td className="px-4 py-2.5 align-top">
                       <input
                         type="checkbox"
-                        className="w-4 h-4 rounded accent-brand-600"
+                        className="w-4 h-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500 cursor-pointer accent-brand-600"
                         checked={isSelected}
                         onChange={(e) => onToggleProduct(lineKey, e.target.checked)}
                         aria-label={`Select batch ${p.batchNumber} for ${p.product}`}
                       />
                     </td>
-                    <td className="py-3 px-2">
-                      <span className="inline-flex items-center rounded-full bg-orange-100 px-2.5 py-0.5 text-[10px] font-bold text-orange-700 tracking-wide">
+                    <td className="px-3 py-2.5 align-top">
+                      <span
+                        className={cn(
+                          "text-[10px] px-2 py-0.5 rounded-full font-medium whitespace-nowrap",
+                          isPieceRow
+                            ? "bg-slate-100 text-slate-700"
+                            : "bg-orange-100 text-orange-700",
+                        )}
+                      >
                         {qtyType}
                       </span>
                     </td>
-                    <td className="py-3 px-2">
+                    <td className="px-3 py-2.5 align-top">
                       <div className="flex flex-col gap-0.5">
-                        {p.batchNumber ? (
-                          <span className="font-mono text-xs font-semibold text-orange-600/90">
-                            {p.batchNumber}
-                          </span>
-                        ) : (
-                          <span className="text-xs text-muted-foreground italic">—</span>
-                        )}
-                        {p.grnNo && (
-                          <span className="font-mono text-[10px] text-purple-600/80">
+                        <span className="text-xs font-mono text-brand-700 font-semibold">
+                          {p.batchNumber?.trim() || "—"}
+                        </span>
+                        {p.grnNo ? (
+                          <span className="font-mono text-[10px] text-muted-foreground">
                             GRN: {p.grnNo}
                           </span>
-                        )}
-                        {(p.mfgDate || p.expDate) && (
-                          <div className="flex items-center gap-2 text-[9px] text-muted-foreground">
-                            {p.mfgDate && (
-                              <span>Mfg: {new Date(p.mfgDate).toLocaleDateString()}</span>
-                            )}
-                            {p.expDate && (
-                              <span>Exp: {new Date(p.expDate).toLocaleDateString()}</span>
-                            )}
-                          </div>
-                        )}
+                        ) : null}
+                        <span className="text-[10px] text-muted-foreground">
+                          Mfg: {formatDateShort(p.mfgDate)} · Exp: {formatDateShort(p.expDate)}
+                        </span>
                       </div>
                     </td>
-                    <td className="py-3 px-2">
-                      <span className="text-xs font-medium text-slate-600">{pendingQtyDisplay}</span>
+                    <td className="px-3 py-2.5 align-top">
+                      <StackedQtyDisplay baseQty={p.pendingBaseQty} meta={lineMeta} />
                     </td>
-                    <td className="py-3 px-2">
+                    <td className="px-3 py-2.5 align-top">
                       {isSelected ? (
-                        <div className="flex flex-col gap-1 w-20">
+                        <div className="flex flex-col gap-1 items-stretch w-full max-w-[7rem]">
                           <Input
                             type="number"
                             min={0}
@@ -296,27 +313,27 @@ function PackingProductGroup({
                               onQtyChange(lineKey, newBaseQty, p.pendingBaseQty);
                             }}
                             className={cn(
-                              "h-8 text-xs font-medium shadow-none border-border/80 focus-visible:ring-brand-500",
-                              error ? "border-red-500 focus-visible:ring-red-500" : "",
+                              "h-7 text-xs px-2 w-full bg-white",
+                              error && "border-red-500 focus-visible:ring-red-500",
                             )}
                             placeholder="0"
                           />
-                          {error && (
-                            <span className="text-[9px] text-red-500 leading-tight absolute mt-9 w-24">
-                              {error}
-                            </span>
-                          )}
+                          <span className="text-[10px] text-muted-foreground">
+                            {isPieceRow ? "Unit" : "Case"}
+                          </span>
+                          {error ? (
+                            <span className="text-[9px] text-red-500 leading-tight">{error}</span>
+                          ) : null}
                         </div>
                       ) : (
                         <span className="text-xs text-muted-foreground">—</span>
                       )}
                     </td>
-                    <td className="py-3 px-4 text-right">
-                      {isSelected ? (
-                        <span className="text-xs font-bold text-slate-700">{qtyValue}</span>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      )}
+                    <td className="px-3 py-2.5 align-top">
+                      <StackedQtyDisplay
+                        baseQty={isSelected ? qtyValue : 0}
+                        meta={lineMeta}
+                      />
                     </td>
                   </tr>
                 );

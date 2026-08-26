@@ -6,7 +6,7 @@ import { ColumnConfig, ActionItemConfig } from "@/components/listing/types";
 import { Eye } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { REJECTED_STATUS_OPTIONS, SOURCE_STATUS_OPTIONS, STATUS_BADGE_CONFIG } from "../constants";
+import { REJECTED_STATUS_OPTIONS, REJECT_TYPE_OPTIONS, SOURCE_STATUS_OPTIONS, STATUS_BADGE_CONFIG } from "../constants";
 import { useStockOverviewListFilters } from "../hooks/use-stock-overview-list-filters";
 import {
   RejectedListRow,
@@ -147,6 +147,26 @@ export function RejectedListing({ warehouseId, onFiltersApplied }: RejectedListi
       key: "reject_reason",
       header: "Reject Reason",
       sortable: true,
+    },
+    {
+      key: "reject_type",
+      header: "Reject Type",
+      sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: REJECT_TYPE_OPTIONS,
+      width: "120px",
+      render: (val: string) => {
+        const cfg = STATUS_BADGE_CONFIG[val] || {
+          bg: "bg-slate-100 text-slate-700 border-slate-200",
+          label: val || "—",
+        };
+        return (
+          <span className={`inline-flex items-center text-[11px] px-2.5 py-0.5 rounded-full font-medium border ${cfg.bg}`}>
+            {cfg.label}
+          </span>
+        );
+      },
     },
     {
       key: "qc_number",

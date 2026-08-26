@@ -2,13 +2,11 @@
 
 import React, { useState, useEffect, useMemo, Suspense } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { CheckCircle2, AlertTriangle } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { QcService } from "@/services/qc.service";
 import { QcItem, QcRecord, QcResult } from "../types";
-import { cn } from "@/lib/utils";
 import { TextField, FormSection } from "@/components/ui/FormFields";
 import { FormContainer } from "@/components/layout/FormContainer";
 import { onQcCompleted } from "@/lib/warehouse/inventory-movement";
@@ -28,6 +26,7 @@ import {
   qcListPathForSource,
   resolveQcReturnTo,
 } from "../shared/qc-list-nav";
+import { QcBatchInspectionTable } from "../shared/components/QcBatchInspectionTable";
 
 function deriveQcResult(items: QcItem[]): QcResult {
   const totalAccepted = items.reduce((s, it) => s + it.acceptedQty, 0);
@@ -254,6 +253,10 @@ function CreateQcForm() {
           }
         }
 
+        if ((updated.rejectedQty || 0) <= 0) {
+          updated.rejectType = "";
+        }
+
         return updated;
       })
     );
@@ -263,12 +266,25 @@ function CreateQcForm() {
     setItems((prev) => prev.map((item, i) => (i === idx ? { ...item, rejectionReason: val } : item)));
   };
 
+  const handleRejectTypeChange = (idx: number, val: string) => {
+    setItems((prev) =>
+      prev.map((item, i) =>
+        i === idx
+          ? { ...item, rejectType: (val as QcItem["rejectType"]) || "" }
+          : item,
+      ),
+    );
+  };
+
   const validationErrors = useMemo(() => {
     return items
       .map((item) => {
         const sum = item.acceptedQty + item.rejectedQty;
         if (sum !== item.receivedQty) {
           return `Batch ${item.batchNumber} (${item.productName}): Accepted (${item.acceptedQty}) + Rejected (${item.rejectedQty}) = ${sum}, but GRN Received Qty is ${item.receivedQty}.`;
+        }
+        if (item.rejectedQty > 0 && !item.rejectType) {
+          return `Batch ${item.batchNumber} (${item.productName}): select Reject Type (Damaged or Expired).`;
         }
         if (sum > item.receivedQty) {
           return `Batch ${item.batchNumber}: total allocated qty exceeds received qty.`;
@@ -332,6 +348,7 @@ function CreateQcForm() {
           rejectedQty: it.rejectedQty,
           case_size: it.unitPerPacking || 10,
           remarks: it.rejectionReason || "",
+          reject_type: it.rejectedQty > 0 ? it.rejectType || undefined : undefined,
         })),
       };
 
@@ -380,12 +397,8 @@ function CreateQcForm() {
 
   return (
     <FormContainer
-      title={isStockTransfer ? "Stock Transfer QC Inspection" : "QC Inspection"}
-      description={
-        isStockTransfer
-          ? "Enter accepted, rejected, and hold qty per batch. Only accepted qty is added to destination inventory after QC pass."
-          : "Enter accepted qty — rejected qty auto-fills as the balance. You can edit rejected if needed."
-      }
+      title="QC Inspection"
+      description="Enter accepted qty — rejected qty auto-fills as the balance. You can edit rejected if needed."
       onBack={goBackToList}
       onCancel={goBackToList}
       actions={
@@ -464,123 +477,13 @@ function CreateQcForm() {
 
       <hr className="border-border" />
 
-      <FormSection
-        title={
-          isStockTransfer
-            ? "Batch Inspection — Accepted + Rejected + Hold = Received Qty"
-            : "Batch Inspection — Accepted + Rejected = Received Qty"
-        }
-      >
-        {items.length === 0 ? (
-          <p className="text-xs text-muted-foreground text-center py-4">Referenced GRN contains no batch rows.</p>
-        ) : (
-          <div className="border border-border rounded-lg overflow-x-auto w-full">
-            <table className="w-full min-w-[800px]">
-              <thead>
-                <tr className="bg-muted/40 border-b border-border">
-                  <th className="px-4 py-2 text-left text-[11px] font-semibold text-muted-foreground">Product</th>
-                  <th className="px-4 py-2 text-left text-[11px] font-semibold text-muted-foreground w-36">Batch No.</th>
-                  <th className="px-4 py-2 text-center text-[11px] font-semibold text-muted-foreground w-32">Received</th>
-                  <th className="px-4 py-2 text-center text-[11px] font-semibold text-muted-foreground w-24">Qty Type</th>
-                  <th className="px-4 py-2 text-center text-[11px] font-semibold text-emerald-800 w-36">Accepted</th>
-                  <th className="px-4 py-2 text-center text-[11px] font-semibold text-red-800 w-36">Rejected</th>
-                  <th className="px-4 py-2 text-left text-[11px] font-semibold text-muted-foreground">Remarks</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((item, idx) => {
-                  const hold = item.holdQty ?? 0;
-                  const sum = item.acceptedQty + item.rejectedQty + (isStockTransfer ? hold : 0);
-                  const isRowValid = sum === item.receivedQty;
-                  const isCase = item.quantityType === "CASE";
-
-                  return (
-                    <tr key={idx} className={cn("border-b border-border/50 transition-colors", !isRowValid && "bg-red-50/20")}>
-                      <td className="px-4 py-2 text-xs font-bold text-foreground">
-                        {item.productName}
-                        <span className="block text-[10px] font-mono text-muted-foreground">{item.productCode}</span>
-                      </td>
-                      <td className="px-4 py-2 text-xs font-mono font-medium text-muted-foreground">{item.batchNumber}</td>
-                      <td className="px-4 py-2 text-xs text-center font-medium text-muted-foreground">
-                        {isCase ? (
-                          <>
-                            <div className="font-semibold text-foreground">
-                              {Number((item.receivedQty / (item.unitPerPacking || 10)).toFixed(4))} Cs
-                            </div>
-                            <div className="text-[10px] text-muted-foreground/80">Total: {item.receivedQty}</div>
-                          </>
-                        ) : (
-                          <div className="font-semibold text-foreground">
-                            {item.receivedQty} Pcs
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-4 py-2 text-xs text-center font-semibold text-muted-foreground uppercase">
-                        {item.quantityType || "PIECE"}
-                      </td>
-                      <td className="px-4 py-2 text-xs">
-                        {isCase ? (
-                          <Input
-                            type="text"
-                            inputMode="decimal"
-                            placeholder="Cases"
-                            value={item.acceptedInput ?? ""}
-                            onFocus={(e) => e.target.select()}
-                            onChange={(e) => handleQtyChange(idx, "accepted", "cases", e.target.value)}
-                            className={cn("h-8 text-xs text-center w-full", !isRowValid && "border-red-300")}
-                          />
-                        ) : (
-                          <Input
-                            type="text"
-                            inputMode="numeric"
-                            placeholder="Pieces"
-                            value={item.acceptedInput ?? ""}
-                            onFocus={(e) => e.target.select()}
-                            onChange={(e) => handleQtyChange(idx, "accepted", "loose", e.target.value)}
-                            className={cn("h-8 text-xs text-center w-full", !isRowValid && "border-red-300")}
-                          />
-                        )}
-                        <div className="text-center text-[10px] text-muted-foreground">Total: {item.acceptedQty}</div>
-                      </td>
-                      <td className="px-4 py-2 text-xs">
-                        {isCase ? (
-                          <Input
-                            type="text"
-                            inputMode="decimal"
-                            placeholder="Cases"
-                            value={item.rejectedInput ?? ""}
-                            onFocus={(e) => e.target.select()}
-                            onChange={(e) => handleQtyChange(idx, "rejected", "cases", e.target.value)}
-                            className={cn("h-8 text-xs text-center w-full", !isRowValid && "border-red-300")}
-                          />
-                        ) : (
-                          <Input
-                            type="text"
-                            inputMode="numeric"
-                            placeholder="Pieces"
-                            value={item.rejectedInput ?? ""}
-                            onFocus={(e) => e.target.select()}
-                            onChange={(e) => handleQtyChange(idx, "rejected", "loose", e.target.value)}
-                            className={cn("h-8 text-xs text-center w-full", !isRowValid && "border-red-300")}
-                          />
-                        )}
-                        <div className="text-center text-[10px] text-muted-foreground">Total: {item.rejectedQty}</div>
-                      </td>
-                      <td className="px-4 py-2 text-xs">
-                        <Input
-                          placeholder="Remarks…"
-                          value={item.rejectionReason ?? ""}
-                          onChange={(e) => handleReasonChange(idx, e.target.value)}
-                          className="h-8 text-xs w-full"
-                        />
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+      <FormSection title="Batch Inspection — Accepted + Rejected = Received Qty">
+        <QcBatchInspectionTable
+          items={items}
+          onQtyChange={handleQtyChange}
+          onReasonChange={handleReasonChange}
+          onRejectTypeChange={handleRejectTypeChange}
+        />
       </FormSection>
     </FormContainer>
   );

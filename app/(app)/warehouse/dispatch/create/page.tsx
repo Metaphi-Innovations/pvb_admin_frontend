@@ -17,13 +17,13 @@ import {
 import { invalidatePurchaseOrderModuleListingQueries } from "@/lib/procurement/invalidate-po-listing-queries";
 import {
   formatDateOnly,
-  formatDisplayQty,
   getLatestPackingDate,
   getSnapshotField,
   resolveProductSku,
   toDateInputValue,
   validateDispatchDateAgainstPacking,
 } from "../dispatch-display-utils";
+import { DispatchStackedQty } from "../components/DispatchStackedQty";
 import { showToast } from "@/lib/toast";
 
 type PackingDoneProductRow = NonNullable<
@@ -574,14 +574,25 @@ export default function CreateDispatchPage() {
                                 <td className="py-3 px-3 text-xs text-muted-foreground">
                                   {formatDateOnly(expiryDate)}
                                 </td>
-                                <td className="py-3 px-3 text-xs font-semibold text-center tabular-nums">
-                                  {formatDisplayQty(Number(product.order_base_qty || 0), product)}
+                                <td className="py-3 px-3 align-top">
+                                  <DispatchStackedQty
+                                    baseQty={Number(product.order_base_qty || 0)}
+                                    product={product}
+                                  />
                                 </td>
-                                <td className="py-3 px-3 text-xs font-bold text-center text-emerald-600 tabular-nums">
-                                  {formatDisplayQty(Number(product.base_qty || 0), product)}
+                                <td className="py-3 px-3 align-top">
+                                  <DispatchStackedQty
+                                    baseQty={Number(product.base_qty || 0)}
+                                    product={product}
+                                    accent="emerald"
+                                  />
                                 </td>
-                                <td className="py-3 px-3 text-xs font-bold text-center text-amber-600 tabular-nums">
-                                  {formatDisplayQty(Number(product.pending_base_qty || 0), product)}
+                                <td className="py-3 px-3 align-top">
+                                  <DispatchStackedQty
+                                    baseQty={Number(product.pending_base_qty || 0)}
+                                    product={product}
+                                    accent="amber"
+                                  />
                                 </td>
                               </tr>
                             );

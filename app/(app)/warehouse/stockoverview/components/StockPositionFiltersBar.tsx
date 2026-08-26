@@ -4,7 +4,6 @@ import React, { useMemo } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
-import { WAREHOUSE_OPTIONS } from "../constants";
 import type { StockPositionFilters } from "../types/stock-position";
 import {
   applyCustomStockDates,
@@ -13,14 +12,12 @@ import {
 } from "../lib/stock-position-date-presets";
 import { useFY } from "@/lib/fy-store";
 import { masterToday } from "@/lib/masters/common";
-import { SlidersHorizontal, X, Download } from "lucide-react";
+import { SlidersHorizontal, Download } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface StockPositionFiltersBarProps {
   filters: StockPositionFilters;
   onChange: (patch: Partial<StockPositionFilters>) => void;
-  warehouses?: { value: string; label: string }[];
-  products: { value: string; label: string }[];
   onApply?: () => void;
   onReset?: () => void;
   onExport: () => void;
@@ -35,8 +32,6 @@ const fieldClass =
 export function StockPositionFiltersBar({
   filters,
   onChange,
-  warehouses = WAREHOUSE_OPTIONS,
-  products,
   onApply,
   onReset,
   onExport,
@@ -51,24 +46,6 @@ export function StockPositionFiltersBar({
     () => buildStockDatePresetOptions(selectedFY, today, allFYs),
     [selectedFY, today, allFYs],
   );
-
-  const activeFilters: { key: string; label: string; clear: () => void }[] = [];
-
-  if (filters.warehouse !== "All") {
-    activeFilters.push({
-      key: "warehouse",
-      label: filters.warehouse,
-      clear: () => onChange({ warehouse: "All" }),
-    });
-  }
-  if (filters.product) {
-    const productLabel = products.find((p) => p.value === filters.product)?.label ?? filters.product;
-    activeFilters.push({
-      key: "product",
-      label: productLabel,
-      clear: () => onChange({ product: "" }),
-    });
-  }
 
   const handlePeriodChange = (presetId: string) => {
     const resolved = resolveStockDatePreset(presetId, today, selectedFY, allFYs);
@@ -100,11 +77,6 @@ export function StockPositionFiltersBar({
           </div>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
-          {activeFilters.length > 0 && (
-            <span className="text-[11px] font-semibold bg-brand-50 text-brand-700 border border-brand-200 px-2 py-0.5 rounded-full whitespace-nowrap">
-              {activeFilters.length} active
-            </span>
-          )}
           <Button
             type="button"
             variant="outline"
@@ -164,62 +136,12 @@ export function StockPositionFiltersBar({
               className={cn(fieldClass, "w-[160px]", !isCustom && "bg-muted/30 text-muted-foreground")}
             />
           </div>
-
-          <div className="space-y-1 min-w-[160px] flex-1">
-            <label className="text-xs font-medium text-foreground">Warehouse</label>
-            <AutocompleteSelect
-              options={[{ value: "All", label: "All Warehouses" }, ...warehouses]}
-              value={filters.warehouse}
-              onChange={(v) => onChange({ warehouse: v })}
-              placeholder="All Warehouses"
-              searchPlaceholder="Search…"
-              className={fieldClass}
-            />
-          </div>
-
-          <div className="space-y-1 min-w-[160px] flex-1">
-            <label className="text-xs font-medium text-foreground">Product</label>
-            <AutocompleteSelect
-              options={[{ value: "", label: "All Products" }, ...products]}
-              value={filters.product}
-              onChange={(v) => onChange({ product: v })}
-              placeholder="All Products"
-              searchPlaceholder="Search…"
-              className={fieldClass}
-            />
-          </div>
         </div>
 
         {!isCustom && (
           <p className="text-[11px] text-muted-foreground">
             From / To dates are set by the selected period. Choose <span className="font-medium text-foreground">Custom Date</span> to pick your own range.
           </p>
-        )}
-
-        {activeFilters.length > 0 && (
-          <div className="flex flex-wrap items-center gap-2">
-            {activeFilters.map((f) => (
-              <span
-                key={f.key}
-                className="inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-brand-50 border border-brand-200 text-brand-700 rounded-md font-medium"
-              >
-                {f.label}
-                <button type="button" onClick={f.clear} className="hover:text-brand-900 transition-colors">
-                  <X className="w-3 h-3" />
-                </button>
-              </span>
-            ))}
-            <button
-              type="button"
-              onClick={() => {
-                if (onReset) onReset();
-                else onChange({ warehouse: "All", product: "" });
-              }}
-              className={cn("text-xs text-brand-600 hover:underline font-medium ml-1")}
-            >
-              Clear all
-            </button>
-          </div>
         )}
       </div>
     </div>

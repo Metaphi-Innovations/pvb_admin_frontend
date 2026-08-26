@@ -1,5 +1,7 @@
 export type QcResult = "passed" | "failed" | "partial" | "hold";
 
+export type QcRejectType = "DAMAGED" | "EXPIRED";
+
 export interface QcItem {
   productId: string;
   productName: string;
@@ -24,9 +26,15 @@ export interface QcItem {
   holdCases?: number;
   holdLooseQty?: number;
   unitPerPacking?: number;
+  mfgDate?: string;
+  expDate?: string;
+  netWeightPerPack?: number;
+  weightUom?: "Kg" | "Ltr";
 
   qcResult?: QcResult;
   rejectionReason?: string;
+  /** Required when rejectedQty > 0 */
+  rejectType?: QcRejectType | "";
   grnBatchId?: string;
 }
 

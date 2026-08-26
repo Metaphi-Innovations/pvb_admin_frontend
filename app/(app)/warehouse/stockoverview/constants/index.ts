@@ -21,6 +21,12 @@ export const VENDOR_OPTIONS = [
   { label: "Aries Agro Industries", value: "Aries Agro Industries" },
 ];
 
+// Daily Log Stock Statuses (QC-accepted sellable only — matches getDailyLogStatus)
+export const DAILY_LOG_STATUS_OPTIONS = [
+  { label: "Available", value: "Available" },
+  { label: "Near Expiry", value: "Near Expiry" },
+];
+
 // QC Passed / Inventory Stock Statuses (matches backend StockOverviewService.getStatus)
 // Reserved qty is a separate column — not a line-level stock status.
 export const QC_PASSED_STATUS_OPTIONS = [
@@ -31,9 +37,15 @@ export const QC_PASSED_STATUS_OPTIONS = [
   { label: "Out Of Stock", value: "Out Of Stock" },
 ];
 
-// Rejected Stock Statuses (QC currently only creates Rejected rows)
+// Rejected Stock Statuses (lifecycle — PO return still uses REJECTED / PARTIALLY_RETURNED)
 export const REJECTED_STATUS_OPTIONS = [
   { label: "Rejected", value: "Rejected" },
+];
+
+/** QC reject category shown on Rejected tab (not lifecycle status) */
+export const REJECT_TYPE_OPTIONS = [
+  { label: "Damaged", value: "Damaged" },
+  { label: "Expired", value: "Expired" },
 ];
 
 // Sales Return Stock Statuses (post GRN+QC — same lifecycle as Inventory)
@@ -83,6 +95,7 @@ export const STATUS_BADGE_CONFIG: Record<string, { bg: string; label: string }> 
   "Low Stock": { bg: "bg-amber-50 text-amber-700 border-amber-200", label: "Low Stock" },
   Reserved: { bg: "bg-blue-50 text-blue-700 border-blue-200", label: "Reserved" },
   Expired: { bg: "bg-rose-50 text-rose-700 border-rose-200", label: "Expired" },
+  Damaged: { bg: "bg-orange-50 text-orange-700 border-orange-200", label: "Damaged" },
   "Near Expiry": { bg: "bg-orange-50 text-orange-700 border-orange-200", label: "Near Expiry" },
   "Out Of Stock": { bg: "bg-slate-100 text-slate-700 border-slate-200", label: "Out Of Stock" },
   Hold: { bg: "bg-navy-50 text-navy-700 border-navy-200", label: "Hold" },
