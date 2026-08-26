@@ -49,9 +49,9 @@ import {
 import { ReceiptSearchableSelect } from "./components/ReceiptSearchableSelect";
 import { ReceiptFormActionBar } from "./components/ReceiptFormActionBar";
 import { ReceiptAllocationTable } from "./components/ReceiptAllocationTable";
-import { ReceiptAdjustmentsEditor } from "./components/ReceiptAdjustmentsEditor";
-import { ReceiptSummaryCard } from "./components/ReceiptSummaryCard";
-import { ReceiptAccountingPreview } from "./components/ReceiptAccountingPreview";
+import { ReceiptInvoiceMultiSelect } from "./components/ReceiptInvoiceMultiSelect";
+import { ReceiptLedgerEntriesTable } from "./components/ReceiptLedgerEntriesTable";
+import { ReceiptFormSummary } from "./components/ReceiptFormSummary";
 import { ReceiptViewHero } from "./components/ReceiptViewHero";
 import { ReceiptReasonDialog } from "./components/ReceiptReasonDialog";
 import { ReceiptAttachmentsPanel } from "./components/ReceiptAttachmentsPanel";
@@ -65,6 +65,7 @@ import {
   buildUpdatePayload,
   canCancelStatus,
   computeReceiptPreview,
+  computeSettlementComponentTotal,
   emptyReceiptForm,
   formatSrNo,
   isDraftEditable,
@@ -73,9 +74,11 @@ import {
   RECEIPT_LIST_PATH,
   receiptEditPath,
   receiptViewPath,
+  syncTdsAdjustmentFromAllocations,
   toMoneyNumber,
   validateReceiptForm,
   type ReceiptFormState,
+  type ReceiptUiAdjustment,
   type ReceiptUiAllocation,
 } from "./receipt-voucher-utils";
 
@@ -134,10 +137,89 @@ export function ReceiptVoucherApiForm({
   const isPostedView = status === "POSTED" && !readOnlyProp;
   const showViewChrome = readOnlyProp || isPostedView;
   const preview = useMemo(() => computeReceiptPreview(form), [form]);
+  const ledgerTotal = useMemo(
+    () => computeSettlementComponentTotal(preview.netBank, form.adjustments),
+    [preview.netBank, form.adjustments],
+  );
+  const isCustomerAdvance =
+    form.party_kind === "CUSTOMER" &&
+    form.receipt_treatment === "advance_on_account";
+  const showInvoiceSettlement =
+    (form.party_kind === "CUSTOMER" &&
+      form.receipt_treatment === "against_outstanding") ||
+    form.party_kind === "SUPPLIER_REFUND";
+  const selectedInvoiceIds = useMemo(
+    () =>
+      form.allocations.filter((a) => a.selected).map((a) => a.open_item_id),
+    [form.allocations],
+  );
+  const selectedInvoiceRows = useMemo(
+    () => form.allocations.filter((a) => a.selected),
+    [form.allocations],
+  );
+
+  /** Auto-derive TDS Receivable adjustment from invoice TDS (enter TDS once). */
+  useEffect(() => {
+    setForm((prev) => {
+      const nextAdj = syncTdsAdjustmentFromAllocations(prev);
+      if (nextAdj === prev.adjustments) return prev;
+      const same =
+        nextAdj.length === prev.adjustments.length &&
+        nextAdj.every((a, i) => {
+          const b = prev.adjustments[i];
+          return (
+            a.id === b.id &&
+            a.adjustment_type === b.adjustment_type &&
+            a.amount === b.amount
+          );
+        });
+      if (same) return prev;
+      return { ...prev, adjustments: nextAdj };
+    });
+  }, [form.allocations]);
 
   const patch = useCallback((p: Partial<ReceiptFormState>) => {
     setForm((prev) => ({ ...prev, ...p }));
   }, []);
+
+  const handleInvoiceSelection = useCallback((ids: string[]) => {
+    const idSet = new Set(ids);
+    setForm((prev) => ({
+      ...prev,
+      allocations: prev.allocations.map((a) => {
+        const selected = idSet.has(a.open_item_id);
+        if (selected) {
+          return {
+            ...a,
+            selected: true,
+            allocated_amount:
+              a.allocated_amount || String(a.outstanding_amount),
+          };
+        }
+        return {
+          ...a,
+          selected: false,
+          allocated_amount: "",
+          tds_amount: "",
+          tds_section_id: "",
+          discount_amount: "",
+        };
+      }),
+    }));
+  }, []);
+
+  const handleLedgerEntriesChange = useCallback(
+    (rows: ReceiptUiAdjustment[]) => {
+      setForm((prev) => ({
+        ...prev,
+        adjustments: syncTdsAdjustmentFromAllocations({
+          ...prev,
+          adjustments: rows,
+        }),
+      }));
+    },
+    [],
+  );
 
   const hydrateFromDetail = useCallback((d: ReceiptVoucherDetail) => {
     setForm((prev) => {
@@ -762,10 +844,8 @@ export function ReceiptVoucherApiForm({
           </div>
         </VoucherFormSectionCard>
 
-        <VoucherFormSectionCard
-          title="Received In"
-          helper="Cash / Bank debit side only — no reference type."
-        >
+        {/* 2. Received In */}
+        <VoucherFormSectionCard title="Received In">
           <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5">
             <div className="md:col-span-5 min-w-0">
               {form.transaction_mode === "CASH" ? (
@@ -866,7 +946,7 @@ export function ReceiptVoucherApiForm({
           </div>
         </VoucherFormSectionCard>
 
-        {/* C. Received From */}
+        {/* 3. Received From */}
         <VoucherFormSectionCard title="Received From">
           <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5">
             <div className="md:col-span-3 min-w-0 space-y-1">
@@ -959,7 +1039,9 @@ export function ReceiptVoucherApiForm({
                 <VoucherFormField
                   label={
                     form.party_kind === "CUSTOMER"
-                      ? "Gross Settlement Amount"
+                      ? isCustomerAdvance
+                        ? "Advance Amount"
+                        : "Gross Amount"
                       : "Gross Refund Amount"
                   }
                 >
@@ -976,7 +1058,7 @@ export function ReceiptVoucherApiForm({
                   />
                 </VoucherFormField>
               ) : (
-                <VoucherFormField label="Gross Receipt Amount" required>
+                <VoucherFormField label="Amount" required>
                   <Input
                     className={cn(
                       VOUCHER_INPUT_CLASS,
@@ -1002,14 +1084,16 @@ export function ReceiptVoucherApiForm({
                     patch({
                       receipt_treatment: v as ReceiptFormState["receipt_treatment"],
                       allocations:
-                        v === "advance_on_account" ? form.allocations.map((a) => ({
-                          ...a,
-                          selected: false,
-                          allocated_amount: "",
-                          tds_amount: "",
-                          tds_section_id: "",
-                          discount_amount: "",
-                        })) : form.allocations,
+                        v === "advance_on_account"
+                          ? form.allocations.map((a) => ({
+                              ...a,
+                              selected: false,
+                              allocated_amount: "",
+                              tds_amount: "",
+                              tds_section_id: "",
+                              discount_amount: "",
+                            }))
+                          : form.allocations,
                     })
                   }
                 >
@@ -1028,146 +1112,137 @@ export function ReceiptVoucherApiForm({
               </div>
             ) : null}
           </div>
-
-          {form.party_kind === "CUSTOMER" &&
-          form.receipt_treatment === "against_outstanding" ? (
-            <div className="mt-3 space-y-2">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold text-foreground">
-                  Outstanding Allocations
-                </p>
-                {outstandingLoading ? (
-                  <span className="text-[11px] text-muted-foreground flex items-center gap-1">
-                    <Loader2 className="w-3 h-3 animate-spin" /> Loading…
-                  </span>
-                ) : null}
-              </div>
-              <ReceiptAllocationTable
-                rows={form.allocations}
-                readOnly={!fieldsEditable}
-                showTdsSection
-                tdsSectionOptions={tdsSectionOptions}
-                emptyMessage={
-                  form.customer_id
-                    ? "No outstanding open items for this customer."
-                    : "Select a customer to load outstanding items."
-                }
-                onToggle={(id, selected) => {
-                  setForm((prev) => ({
-                    ...prev,
-                    allocations: prev.allocations.map((a) =>
-                      a.open_item_id === id
-                        ? {
-                            ...a,
-                            selected,
-                            allocated_amount: selected
-                              ? a.allocated_amount || String(a.outstanding_amount)
-                              : "",
-                          }
-                        : a,
-                    ),
-                  }));
-                }}
-                onChangeAmount={applyAllocationPatch}
-              />
-              <p className="text-[11px] text-muted-foreground">
-                Total allocated {preview.totalAllocated.toFixed(2)} · Remaining / Advance{" "}
-                {preview.advance.toFixed(2)}
-              </p>
-            </div>
-          ) : null}
-
-          {form.party_kind === "CUSTOMER" &&
-          form.receipt_treatment === "advance_on_account" ? (
-            <div className="mt-3 rounded-lg border border-brand-200 bg-brand-50/50 px-3 py-2">
-              <p className="text-xs text-brand-800">
-                Full amount will be posted as Customer Advance / On Account
-                {preview.gross > 0 ? ` (${preview.gross.toFixed(2)})` : ""}.
-              </p>
-            </div>
-          ) : null}
-
-          {form.party_kind === "SUPPLIER_REFUND" ? (
-            <div className="mt-3 space-y-2">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold text-foreground">
-                  Eligible Recoverable Items
-                </p>
-                {outstandingLoading ? (
-                  <span className="text-[11px] text-muted-foreground flex items-center gap-1">
-                    <Loader2 className="w-3 h-3 animate-spin" /> Loading…
-                  </span>
-                ) : null}
-              </div>
-              <ReceiptAllocationTable
-                rows={form.allocations}
-                readOnly={!fieldsEditable}
-                showTdsSection
-                tdsSectionOptions={tdsSectionOptions}
-                emptyMessage={
-                  form.supplier_id
-                    ? "No eligible recoverable balance available for this supplier."
-                    : "Select a supplier to load recoverable items."
-                }
-                onToggle={(id, selected) => {
-                  setForm((prev) => ({
-                    ...prev,
-                    allocations: prev.allocations.map((a) =>
-                      a.open_item_id === id
-                        ? {
-                            ...a,
-                            selected,
-                            allocated_amount: selected
-                              ? a.allocated_amount || String(a.outstanding_amount)
-                              : "",
-                          }
-                        : a,
-                    ),
-                  }));
-                }}
-                onChangeAmount={applyAllocationPatch}
-              />
-            </div>
-          ) : null}
         </VoucherFormSectionCard>
 
-        <VoucherFormSectionCard title="Adjustments">
-          <ReceiptAdjustmentsEditor
+        {/* 4–5. Invoice multi-select + settlement table */}
+        {showInvoiceSettlement ? (
+          <VoucherFormSectionCard
+            title={
+              form.party_kind === "SUPPLIER_REFUND"
+                ? "Select Recoverable Item(s)"
+                : "Select Invoice(s)"
+            }
+            headerActions={
+              outstandingLoading ? (
+                <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                  <Loader2 className="w-3 h-3 animate-spin" /> Loading…
+                </span>
+              ) : null
+            }
+          >
+            <div className="space-y-3">
+              <ReceiptInvoiceMultiSelect
+                allocations={form.allocations}
+                selectedIds={selectedInvoiceIds}
+                onChange={handleInvoiceSelection}
+                disabled={!fieldsEditable}
+                loading={outstandingLoading}
+                emptyHint={
+                  form.party_kind === "SUPPLIER_REFUND"
+                    ? form.supplier_id
+                      ? "No recoverable items"
+                      : "Select a supplier first"
+                    : form.customer_id
+                      ? "No outstanding invoices"
+                      : "Select a customer first"
+                }
+                label={
+                  form.party_kind === "SUPPLIER_REFUND"
+                    ? "Select Item(s)"
+                    : "Select Invoice(s)"
+                }
+              />
+
+              {selectedInvoiceRows.length > 0 ? (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-semibold text-foreground">
+                      Settlement
+                    </p>
+                    <p className="text-xs tabular-nums text-muted-foreground">
+                      Total Invoice Settlement{" "}
+                      <span className="font-semibold text-foreground">
+                        {preview.totalAllocated.toFixed(2)}
+                      </span>
+                    </p>
+                  </div>
+                  <ReceiptAllocationTable
+                    rows={selectedInvoiceRows}
+                    readOnly={!fieldsEditable}
+                    showTdsSection
+                    showDiscount={false}
+                    showSelectColumn={false}
+                    settlementAmountLabel="Settlement"
+                    tdsSectionOptions={tdsSectionOptions}
+                    emptyMessage="Select invoice(s) above."
+                    onToggle={() => undefined}
+                    onChangeAmount={applyAllocationPatch}
+                  />
+                </div>
+              ) : (
+                <p className="text-[11px] text-muted-foreground">
+                  Selected invoices will appear here for settlement and TDS.
+                </p>
+              )}
+            </div>
+          </VoucherFormSectionCard>
+        ) : null}
+
+        {/* 6. Ledger Entries */}
+        <VoucherFormSectionCard title="Ledger Entries">
+          <ReceiptLedgerEntriesTable
+            bankLedgerName={form.cash_bank_ledger_name}
+            bankAmount={preview.netBank}
+            tdsAmount={preview.totalTds}
             rows={form.adjustments}
             ledgerOptions={manualLedgers}
             readOnly={!fieldsEditable}
-            onChange={(rows) => patch({ adjustments: rows })}
+            onChange={handleLedgerEntriesChange}
           />
-          {(preview.totalTds > 0 || preview.totalDiscount > 0) && (
-            <div className="mt-2 text-[11px] text-muted-foreground space-y-0.5">
-              <p>
-                Allocation TDS total: {preview.totalTds.toFixed(2)} (must match Customer
-                TDS adjustment)
-              </p>
-              <p>
-                Allocation Discount total: {preview.totalDiscount.toFixed(2)} (must match
-                Discount Allowed adjustment)
-              </p>
-            </div>
-          )}
         </VoucherFormSectionCard>
 
-        <div className="grid grid-cols-1 xl:grid-cols-[minmax(280px,360px)_1fr] gap-3 items-start">
-          <ReceiptSummaryCard
-            gross={preview.gross}
-            adjDebit={preview.adjDebit}
-            adjCredit={preview.adjCredit}
-            netBank={preview.netBank}
-            totalAllocated={preview.totalAllocated}
-            advance={preview.advance}
-            partyKind={form.party_kind}
-            vibrant={isViewMode}
-          />
-          <ReceiptAccountingPreview
-            form={form}
-            partyLedgerName={partyName}
-            defaultOpen={isViewMode}
-            vibrant={isViewMode}
+        {/* 7. Narration & Attachments */}
+        <VoucherFormSectionCard title="Narration & Attachments">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+            <div className="min-w-0 space-y-0.5">
+              <Label className="text-xs font-medium">Narration</Label>
+              <Textarea
+                className="resize-y rounded-lg border border-border min-h-[60px] max-h-36 h-[60px] py-1.5 text-sm focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:border-brand-400"
+                rows={2}
+                value={form.narration}
+                onChange={(e) => patch({ narration: e.target.value })}
+                placeholder="Optional narration…"
+                maxLength={2000}
+                disabled={!fieldsEditable}
+              />
+            </div>
+            <ReceiptAttachmentsPanel
+              persisted={form.persistedAttachments}
+              pending={form.pendingFiles}
+              readOnly={!fieldsEditable}
+              onAddFiles={handleAddAttachmentFiles}
+              onRemovePersisted={handleRemovePersistedAttachment}
+              onRemovePending={handleRemovePendingAttachment}
+            />
+          </div>
+        </VoucherFormSectionCard>
+
+        {/* 8. One Summary — bottom-right */}
+        <div className="flex justify-end">
+          <ReceiptFormSummary
+            invoiceSettlement={preview.gross}
+            ledgerTotal={ledgerTotal}
+            bankAmount={preview.netBank}
+            tdsAmount={preview.totalTds}
+            label={
+              isCustomerAdvance
+                ? "Advance Amount"
+                : form.party_kind === "OTHER_LEDGER"
+                  ? "Receipt Amount"
+                  : form.party_kind === "SUPPLIER_REFUND"
+                    ? "Refund Settlement"
+                    : "Invoice Settlement"
+            }
           />
         </div>
 
@@ -1193,31 +1268,6 @@ export function ReceiptVoucherApiForm({
             </div>
           </VoucherFormSectionCard>
         ) : null}
-
-        <VoucherFormSectionCard title="Narration and Attachments">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-            <div className="min-w-0 space-y-0.5">
-              <Label className="text-xs font-medium">Narration</Label>
-              <Textarea
-                className="resize-y rounded-lg border border-border min-h-[60px] max-h-36 h-[60px] py-1.5 text-sm focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:border-brand-400"
-                rows={2}
-                value={form.narration}
-                onChange={(e) => patch({ narration: e.target.value })}
-                placeholder="Optional narration…"
-                maxLength={2000}
-                disabled={!fieldsEditable}
-              />
-            </div>
-            <ReceiptAttachmentsPanel
-              persisted={form.persistedAttachments}
-              pending={form.pendingFiles}
-              readOnly={!fieldsEditable}
-              onAddFiles={handleAddAttachmentFiles}
-              onRemovePersisted={handleRemovePersistedAttachment}
-              onRemovePending={handleRemovePendingAttachment}
-            />
-          </div>
-        </VoucherFormSectionCard>
       </div>
 
       {/* Sticky action bar: edit + view lifecycle actions */}

@@ -69,6 +69,7 @@ import {
 } from "./components/GoodsInvoiceAdditionalChargesEditor";
 import { SalesInvoiceCustomerSection } from "./components/SalesInvoiceCustomerSection";
 import { CustomerPartyInfoButton } from "./components/CustomerPartyInfo";
+import { InvoiceWarehouseInfoButton } from "./components/InvoiceWarehouseInfoButton";
 import { SalesInvoiceDocumentInfoSection } from "./components/SalesInvoiceDocumentInfoSection";
 import {
   GoodsTransportStatutorySection,
@@ -763,6 +764,9 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
               row.warehouse ||
               "",
           );
+          const warehouseUuid = String(
+            warehouseSnap.warehouse_id || warehouseSnap.warehouseId || "",
+          );
 
           applySalesInvoicePrefill({
             invoiceType: "sales",
@@ -838,6 +842,8 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
             sourceWarehouseState: String(warehouseSnap.state || ""),
             destinationWarehouseState: customerState || placeOfSupplyValue,
           } as unknown as SalesInvoicePrefill);
+
+          setSourceWarehouseId(warehouseUuid || null);
 
           setTransport((prev) => ({
             ...prev,
@@ -1080,7 +1086,15 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
           };
 
           applySalesInvoicePrefill(prefill);
-          setSourceWarehouseId(stData?.from_warehouse?.warehouse_id ?? null);
+          setSourceWarehouseId(
+            isSTDispatch
+              ? (stData?.from_warehouse?.warehouse_id ?? null)
+              : (String(
+                  (warehouse as Record<string, unknown>).warehouse_id ||
+                    (warehouse as Record<string, unknown>).warehouseId ||
+                    "",
+                ) || null),
+          );
           setDestinationWarehouseId(stData?.to_warehouse?.warehouse_id ?? null);
           if (
             prepared.dispatch.transporter ||
@@ -1222,6 +1236,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     setDispatchQty(rec.lineItems.reduce((s, l) => s + (l.qty || 0), 0));
     setBranch(rec.branch ?? "Head Office");
     setWarehouse(rec.warehouse ?? "Central Warehouse");
+    setSourceWarehouseId(rec.warehouseUuid || null);
     setBankAccountId(rec.bankAccountId ?? null);
     setSalesperson(rec.salesperson ?? "");
     setSalesOrderId(rec.salesOrderId ?? null);
@@ -2375,6 +2390,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
       }
     >
       <div className={cn(compactGen ? "space-y-2.5" : "space-y-4")}>
+        {!soGen ? (
         <InvoiceFormCard title={stGen ? "Warehouse Transfer Details" : isStockTransferInvoice ? "Destination Warehouse" : "Customer"}>
           {stGen ? (
             <StockTransferWarehouseDetailsSection
@@ -2404,44 +2420,6 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
               customerType={sampleCustomerMeta.customerType}
               salesperson={sampleCustomerMeta.salesperson}
             />
-          ) : soGen ? (
-            <div className="so-goods-field-grid">
-              <div className="so-goods-field so-w-customer">
-                <p className="so-goods-field__label">Customer Name</p>
-                <div className="so-goods-field__control">
-                  <div className="so-goods-ro-with-info">
-                    <span className="so-goods-ro-with-info__value">{customerName || "—"}</span>
-                    {customerName ? (
-                      <CustomerPartyInfoButton
-                        className="so-goods-info-btn"
-                        customerId={customerId}
-                        customerName={customerName}
-                        customerCode={customerCode}
-                        branch={branch}
-                        gstin={customerGst}
-                        billingAddress={billingAddress}
-                        shippingAddress={shippingAddress}
-                        placeOfSupply={placeOfSupply}
-                        paymentTerms={paymentTerms}
-                        creditLimit={
-                          customerId
-                            ? customers.find((c) => c.id === Number(customerId))?.creditLimit
-                            : undefined
-                        }
-                      />
-                    ) : null}
-                  </div>
-                </div>
-                <p className="so-goods-field__helper">&nbsp;</p>
-              </div>
-              <div className="so-goods-field so-w-gstin">
-                <p className="so-goods-field__label">GSTIN</p>
-                <div className="so-goods-field__control">
-                  <div className="so-goods-ro so-goods-ro--mono">{customerGst?.trim() || "—"}</div>
-                </div>
-                <p className="so-goods-field__helper">&nbsp;</p>
-              </div>
-            </div>
           ) : (
             <SalesInvoiceCustomerSection
               customers={customers}
@@ -2460,6 +2438,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
             />
           )}
         </InvoiceFormCard>
+        ) : null}
 
         <InvoiceFormCard title="Invoice & Dispatch Details">
           <SalesInvoiceDocumentInfoSection
@@ -2498,6 +2477,38 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
               soGen && bankPrintDetails
                 ? `${bankPrintDetails.bankName} · ${bankPrintDetails.accountNumber}`
                 : undefined
+            }
+            customerName={soGen ? customerName : undefined}
+            customerInfoButton={
+              soGen ? (
+                <CustomerPartyInfoButton
+                  className="so-goods-info-btn"
+                  customerId={customerId}
+                  customerName={customerName}
+                  customerCode={customerCode}
+                  branch={branch}
+                  gstin={customerGst}
+                  billingAddress={billingAddress}
+                  shippingAddress={shippingAddress}
+                  placeOfSupply={placeOfSupply}
+                  paymentTerms={paymentTerms}
+                  linkedLedger={receivableLedger || undefined}
+                  creditLimit={
+                    customerId
+                      ? customers.find((c) => c.id === Number(customerId))?.creditLimit
+                      : undefined
+                  }
+                />
+              ) : undefined
+            }
+            warehouseName={soGen ? warehouse : undefined}
+            warehouseInfoButton={
+              soGen ? (
+                <InvoiceWarehouseInfoButton
+                  className="so-goods-info-btn"
+                  warehouseId={sourceWarehouseId}
+                />
+              ) : undefined
             }
             dispatchContext={
               soGen
@@ -2848,62 +2859,88 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
                     <span className="so-grand-total-value">{formatINR(summaryGrandTotal)}</span>
                   </div>
                 </>
+              ) : soGen ? (
+                <>
+                  <div className="flex items-center justify-between gap-4 py-0.5">
+                    <span className="so-summary-label">Gross Amount</span>
+                    <span className="so-summary-value">{formatINR(summaryGrossAmount)}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-4 py-0.5">
+                    <span className="so-summary-label">Discount</span>
+                    <span className="so-summary-value">{formatINR(summaryDiscountAmount)}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-4 py-0.5">
+                    <span className="so-summary-label">Taxable Amount</span>
+                    <span className="so-summary-value">{formatINR(summaryTaxableAmount)}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-4 py-0.5">
+                    <span className="so-summary-label">Additional Charges</span>
+                    <span className="so-summary-value">{formatINR(summaryAdditionalCharges)}</span>
+                  </div>
+                  {interstateGst ? (
+                    <div className="flex items-center justify-between gap-4 py-0.5">
+                      <span className="so-summary-label">Output IGST</span>
+                      <span className="so-summary-value">{formatINR(outputGstSplit.igst)}</span>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex items-center justify-between gap-4 py-0.5">
+                        <span className="so-summary-label">Output CGST</span>
+                        <span className="so-summary-value">{formatINR(outputGstSplit.cgst)}</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-4 py-0.5">
+                        <span className="so-summary-label">Output SGST</span>
+                        <span className="so-summary-value">{formatINR(outputGstSplit.sgst)}</span>
+                      </div>
+                    </>
+                  )}
+                  <div className="flex items-center justify-between gap-4 py-0.5">
+                    <Label className="so-summary-label">Round Off</Label>
+                    <AccountsMoneyInput
+                      className={CHARGE_INPUT_CLASS}
+                      value={roundOff || ""}
+                      onChange={(v) => setRoundOff(v)}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between gap-4 py-1.5 border-t border-border/60">
+                    <span className="so-grand-total-label">Grand Total</span>
+                    <span className="so-grand-total-value">{formatINR(summaryGrandTotal)}</span>
+                  </div>
+                </>
               ) : (
                 <>
               <div className="flex items-center justify-between gap-4 py-0.5">
-                <span className={soGen ? "so-summary-label" : "text-muted-foreground"}>Gross Amount</span>
-                <span className={soGen ? "so-summary-value" : "font-medium tabular-nums"}>
+                <span className="text-muted-foreground">Gross Amount</span>
+                <span className="font-medium tabular-nums">
                   {formatINR(summaryGrossAmount)}
                 </span>
               </div>
               <div className="flex items-center justify-between gap-4 py-0.5">
-                <span className={soGen ? "so-summary-label" : "text-muted-foreground"}>Discount</span>
-                <span className={soGen ? "so-summary-value" : "font-medium tabular-nums"}>
+                <span className="text-muted-foreground">Discount</span>
+                <span className="font-medium tabular-nums">
                   {formatINR(summaryDiscountAmount)}
                 </span>
               </div>
               <div className="flex items-center justify-between gap-4 py-0.5">
-                <span className={soGen ? "so-summary-label" : "text-muted-foreground"}>Taxable Amount</span>
-                <span className={soGen ? "so-summary-value" : "font-medium tabular-nums"}>
+                <span className="text-muted-foreground">Taxable Amount</span>
+                <span className="font-medium tabular-nums">
                   {formatINR(summaryTaxableAmount)}
                 </span>
               </div>
-              {soGen ? (
-                interstateGst ? (
-                  <div className="flex items-center justify-between gap-4 py-0.5 border-t border-border/60 pt-1.5">
-                    <span className="so-summary-label">Output IGST</span>
-                    <span className="so-summary-value">{formatINR(outputGstSplit.igst)}</span>
-                  </div>
-                ) : (
-                  <>
-                    <div className="flex items-center justify-between gap-4 py-0.5 border-t border-border/60 pt-1.5">
-                      <span className="so-summary-label">Output CGST</span>
-                      <span className="so-summary-value">{formatINR(outputGstSplit.cgst)}</span>
-                    </div>
-                    <div className="flex items-center justify-between gap-4 py-0.5">
-                      <span className="so-summary-label">Output SGST</span>
-                      <span className="so-summary-value">{formatINR(outputGstSplit.sgst)}</span>
-                    </div>
-                  </>
-                )
-              ) : (
-                <div className="flex items-center justify-between gap-4 py-0.5 border-t border-border/60 pt-1.5">
-                  <span className="text-muted-foreground">GST Total</span>
-                  <span className="font-medium tabular-nums">{formatINR(summaryTaxAmount)}</span>
-                </div>
-              )}
-              {(summaryAdditionalCharges > 0 || soGen) && (
+              <div className="flex items-center justify-between gap-4 py-0.5 border-t border-border/60 pt-1.5">
+                <span className="text-muted-foreground">GST Total</span>
+                <span className="font-medium tabular-nums">{formatINR(summaryTaxAmount)}</span>
+              </div>
+              {summaryAdditionalCharges > 0 && (
                 <div className="flex items-center justify-between gap-4 py-0.5">
-                  <span className={soGen ? "so-summary-label" : "text-muted-foreground"}>
-                    {soGen ? "Additional Charges" : "Additional Expenses"}
-                  </span>
-                  <span className={soGen ? "so-summary-value" : "font-medium tabular-nums"}>
+                  <span className="text-muted-foreground">Additional Expenses</span>
+                  <span className="font-medium tabular-nums">
                     {formatINR(summaryAdditionalCharges)}
                   </span>
                 </div>
               )}
               <div className="flex items-center justify-between gap-4 py-0.5">
-                <Label className={cn(soGen ? "so-summary-label" : "text-muted-foreground font-normal text-xs")}>
+                <Label className="text-muted-foreground font-normal text-xs">
                   Round Off
                 </Label>
                 <AccountsMoneyInput
@@ -2913,14 +2950,8 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
                 />
               </div>
               <div className="flex items-center justify-between gap-4 py-1.5 border-t border-border/60">
-                <span className={soGen ? "so-grand-total-label" : "font-semibold text-sm"}>Grand Total</span>
-                <span
-                  className={
-                    soGen
-                      ? "so-grand-total-value"
-                      : "font-bold text-sm tabular-nums text-brand-700"
-                  }
-                >
+                <span className="font-semibold text-sm">Grand Total</span>
+                <span className="font-bold text-sm tabular-nums text-brand-700">
                   {formatINR(summaryGrandTotal)}
                 </span>
               </div>
@@ -2930,7 +2961,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
           </div>
         </div>
 
-        {(soGen || stGen) && !isEdit ? (
+        {stGen && !isEdit ? (
           <InvoiceFormCard title="Statutory Generation">
             <GoodsStatutoryGenerationSection
               value={transport}
@@ -2955,10 +2986,12 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
           </Section>
         )}
 
+        {!soGen ? (
         <AccountingImpactSection
           docKey="sales_invoice"
           className={compactGen ? "mt-2" : undefined}
         />
+        ) : null}
       </div>
     </InvoiceFormLayout>
     {discardDialog}
