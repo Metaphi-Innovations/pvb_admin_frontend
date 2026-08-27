@@ -3,7 +3,9 @@ import type { PRFormValues } from "./PurchaseRequestForm";
 export type PRFormFieldKey =
   | "prDate"
   | "department"
-  | "priority"
+  // | "priority" // Priority UI removed — restore with Priority dropdown if needed
+  | "state"
+  | "warehouseId"
   | "requiredByDate"
   | "lines";
 
@@ -12,7 +14,9 @@ export type PRFormErrors = Partial<Record<PRFormFieldKey | string, string>>;
 export const PR_FIELD_ORDER: PRFormFieldKey[] = [
   "prDate",
   "department",
-  "priority",
+  // "priority",
+  "state",
+  "warehouseId",
   "requiredByDate",
   "lines",
 ];
@@ -22,6 +26,7 @@ export const PR_MSG = {
   select: "Please select an option.",
   invalidNumber: "Please enter a valid number.",
   greaterThanZero: "Value must be greater than 0.",
+  integerOnly: "Qty in Case must be a whole number.",
   invalidDate: "Please select a valid date.",
 } as const;
 
@@ -63,8 +68,20 @@ export function validatePRField(
       }
       return undefined;
     }
-    case "priority": {
-      if (!(form.priority?.trim() ?? "")) {
+    // case "priority": {
+    //   if (!(form.priority?.trim() ?? "")) {
+    //     return requireAll ? PR_MSG.select : undefined;
+    //   }
+    //   return undefined;
+    // }
+    case "state": {
+      if (!(form.state?.trim() ?? "")) {
+        return requireAll ? PR_MSG.select : undefined;
+      }
+      return undefined;
+    }
+    case "warehouseId": {
+      if (!form.warehouseId) {
         return requireAll ? PR_MSG.select : undefined;
       }
       return undefined;
@@ -83,6 +100,7 @@ export function validatePRField(
         if (!line.productId || String(line.productId) === "0") continue;
         const qty = Number(line.requestedQty);
         if (!Number.isFinite(qty)) return PR_MSG.invalidNumber;
+        if (!Number.isInteger(qty)) return PR_MSG.integerOnly;
         if (qty <= 0) return PR_MSG.greaterThanZero;
       }
       return undefined;
@@ -108,6 +126,7 @@ export function validatePRForm(
     const qty = Number(line.requestedQty);
     const key = `lineQty:${line.uid}`;
     if (!Number.isFinite(qty)) errors[key] = PR_MSG.invalidNumber;
+    else if (!Number.isInteger(qty)) errors[key] = PR_MSG.integerOnly;
     else if (qty <= 0) errors[key] = PR_MSG.greaterThanZero;
   }
 

@@ -61,6 +61,9 @@ export function ReceiptAllocationTable({
   readOnly,
   emptyMessage,
   showTdsSection = true,
+  showDiscount = false,
+  showSelectColumn = true,
+  settlementAmountLabel = "Settlement",
   tdsSectionOptions = [],
   onToggle,
   onChangeAmount,
@@ -70,6 +73,10 @@ export function ReceiptAllocationTable({
   emptyMessage?: string;
   /** Customer receipts show TDS Section; hide for non-TDS contexts if needed. */
   showTdsSection?: boolean;
+  showDiscount?: boolean;
+  /** When false, selection is controlled outside (e.g. multi-select). */
+  showSelectColumn?: boolean;
+  settlementAmountLabel?: string;
   tdsSectionOptions?: ReceiptSearchableOption[];
   onToggle: (openItemId: string, selected: boolean) => void;
   onChangeAmount: (
@@ -95,33 +102,29 @@ export function ReceiptAllocationTable({
   return (
     <div className="border border-border rounded-xl overflow-hidden w-full">
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[1180px] table-fixed">
+        <table className="w-full table-fixed min-w-[720px]">
           <colgroup>
-            <col className="w-10" />
+            {showSelectColumn ? <col className="w-10" /> : null}
             <col className="w-[160px]" />
-            <col className="w-[140px]" />
-            <col className="w-[108px]" />
-            <col className="w-[108px]" />
-            <col className="w-[108px]" />
-            <col className="w-[108px]" />
-            <col className="w-[116px]" />
-            <col className="w-[116px]" />
+            <col className="w-[110px]" />
+            <col className="w-[120px]" />
+            <col className="w-[120px]" />
+            <col className="w-[110px]" />
             {showTdsSection ? <col className="w-[168px]" /> : null}
-            <col className="w-[116px]" />
+            {showDiscount ? <col className="w-[110px]" /> : null}
           </colgroup>
           <thead>
             <tr className="bg-muted/40 border-b border-border">
-              <th className="px-2 py-2 text-left text-xs font-semibold" />
-              <th className={TEXT_TH}>Document No.</th>
-              <th className={TEXT_TH}>Type</th>
-              <th className={cn(TEXT_TH, "px-2")}>Date</th>
-              <th className={AMOUNT_TH}>Original</th>
-              <th className={AMOUNT_TH}>Settled</th>
+              {showSelectColumn ? (
+                <th className="px-2 py-2 text-left text-xs font-semibold" />
+              ) : null}
+              <th className={TEXT_TH}>Invoice No.</th>
+              <th className={cn(TEXT_TH, "px-2")}>Invoice Date</th>
               <th className={AMOUNT_TH}>Outstanding</th>
-              <th className={AMOUNT_TH}>Allocation</th>
+              <th className={AMOUNT_TH}>{settlementAmountLabel}</th>
               <th className={AMOUNT_TH}>TDS</th>
               {showTdsSection ? <th className={SECTION_TH}>TDS Section</th> : null}
-              <th className={AMOUNT_TH}>Discount</th>
+              {showDiscount ? <th className={AMOUNT_TH}>Discount</th> : null}
             </tr>
           </thead>
           <tbody>
@@ -137,6 +140,7 @@ export function ReceiptAllocationTable({
                 row.tds_section_id,
                 row.tds_section_snapshot,
               );
+              const amountEditable = row.selected || !showSelectColumn;
               return (
                 <tr
                   key={row.open_item_id}
@@ -145,24 +149,23 @@ export function ReceiptAllocationTable({
                     row.selected && "bg-brand-50/40",
                   )}
                 >
-                  <td className="px-2 py-2 align-middle">
-                    <input
-                      type="checkbox"
-                      className="w-4 h-4 rounded accent-brand-600"
-                      checked={row.selected}
-                      disabled={readOnly}
-                      onChange={(e) => onToggle(row.open_item_id, e.target.checked)}
-                    />
-                  </td>
+                  {showSelectColumn ? (
+                    <td className="px-2 py-2 align-middle">
+                      <input
+                        type="checkbox"
+                        className="w-4 h-4 rounded accent-brand-600"
+                        checked={row.selected}
+                        disabled={readOnly}
+                        onChange={(e) => onToggle(row.open_item_id, e.target.checked)}
+                      />
+                    </td>
+                  ) : null}
                   <td className={cn(TEXT_TD, "font-mono font-semibold text-brand-700")}>
                     {row.document_number}
                   </td>
-                  <td className={TEXT_TD}>{row.open_item_type}</td>
                   <td className={cn(TEXT_TD, "px-2 whitespace-nowrap")}>
                     {row.document_date || "—"}
                   </td>
-                  <td className={AMOUNT_TD}>{formatMoney(row.original_amount)}</td>
-                  <td className={AMOUNT_TD}>{formatMoney(row.settled_amount)}</td>
                   <td className={cn(AMOUNT_TD, "font-medium")}>
                     {formatMoney(row.outstanding_amount)}
                   </td>
@@ -172,7 +175,7 @@ export function ReceiptAllocationTable({
                     ) : (
                       <MoneyCellInput
                         value={row.allocated_amount}
-                        disabled={!row.selected}
+                        disabled={!amountEditable}
                         invalid={over}
                         placeholder="0.00"
                         onChange={(allocated_amount) =>
@@ -187,7 +190,7 @@ export function ReceiptAllocationTable({
                     ) : (
                       <MoneyCellInput
                         value={row.tds_amount}
-                        disabled={!row.selected}
+                        disabled={!amountEditable}
                         onChange={(tds_amount) =>
                           onChangeAmount(row.open_item_id, { tds_amount })
                         }
@@ -196,7 +199,7 @@ export function ReceiptAllocationTable({
                   </td>
                   {showTdsSection ? (
                     <td className={SECTION_TD}>
-                      {readOnly || !row.selected ? (
+                      {readOnly || !amountEditable ? (
                         <SectionReadOnly
                           tdsAmount={tdsAmt}
                           sectionId={row.tds_section_id}
@@ -220,26 +223,28 @@ export function ReceiptAllocationTable({
                           />
                           {sectionMissing ? (
                             <p className="text-[11px] text-red-500 leading-tight">
-                              Select TDS Section for this TDS amount.
+                              Required when TDS &gt; 0
                             </p>
                           ) : null}
                         </div>
                       )}
                     </td>
                   ) : null}
-                  <td className={AMOUNT_TD}>
-                    {readOnly ? (
-                      formatMoney(toMoneyNumber(row.discount_amount))
-                    ) : (
-                      <MoneyCellInput
-                        value={row.discount_amount}
-                        disabled={!row.selected}
-                        onChange={(discount_amount) =>
-                          onChangeAmount(row.open_item_id, { discount_amount })
-                        }
-                      />
-                    )}
-                  </td>
+                  {showDiscount ? (
+                    <td className={AMOUNT_TD}>
+                      {readOnly ? (
+                        formatMoney(toMoneyNumber(row.discount_amount))
+                      ) : (
+                        <MoneyCellInput
+                          value={row.discount_amount}
+                          disabled={!amountEditable}
+                          onChange={(discount_amount) =>
+                            onChangeAmount(row.open_item_id, { discount_amount })
+                          }
+                        />
+                      )}
+                    </td>
+                  ) : null}
                 </tr>
               );
             })}

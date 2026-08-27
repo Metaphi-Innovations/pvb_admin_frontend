@@ -21,10 +21,11 @@ export const VENDOR_OPTIONS = [
   { label: "Aries Agro Industries", value: "Aries Agro Industries" },
 ];
 
-// Daily Log Stock Statuses (QC-accepted sellable only — matches getDailyLogStatus)
+// Daily Log Stock Statuses (matches getDailyLogStatus / classifyExpiryBucket @ 60d)
 export const DAILY_LOG_STATUS_OPTIONS = [
   { label: "Available", value: "Available" },
   { label: "Near Expiry", value: "Near Expiry" },
+  { label: "Expired", value: "Expired" },
 ];
 
 // QC Passed / Inventory Stock Statuses (matches backend StockOverviewService.getStatus)
@@ -48,22 +49,18 @@ export const REJECT_TYPE_OPTIONS = [
   { label: "Expired", value: "Expired" },
 ];
 
-// Sales Return Stock Statuses (post GRN+QC — same lifecycle as Inventory)
+// Sales / Sample Return Stock Statuses (batch-wise expiry buckets — same as Inventory view)
 export const SALES_RETURN_STOCK_STATUS_OPTIONS = [
   { label: "Available", value: "Available" },
-  { label: "Low Stock", value: "Low Stock" },
   { label: "Near Expiry", value: "Near Expiry" },
   { label: "Expired", value: "Expired" },
-  { label: "Out Of Stock", value: "Out Of Stock" },
 ];
 
-// Sample Return Stock Statuses (post GRN+QC — same lifecycle as Inventory)
+// Sample Return Stock Statuses (post GRN+QC — same expiry buckets as Sales Return)
 export const SAMPLE_RETURN_STOCK_STATUS_OPTIONS = [
   { label: "Available", value: "Available" },
-  { label: "Low Stock", value: "Low Stock" },
   { label: "Near Expiry", value: "Near Expiry" },
   { label: "Expired", value: "Expired" },
-  { label: "Out Of Stock", value: "Out Of Stock" },
 ];
 
 // GRN Pending Stock Statuses

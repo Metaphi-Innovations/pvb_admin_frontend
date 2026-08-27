@@ -588,7 +588,7 @@ export function ProductForm({
 							}
 							placeholder='Auto-filled from supplier'
 							className={cn("font-mono", inputCls("supplierCode"))}
-							disabled={readOnly}
+							disabled={readOnly || Boolean(form.supplier)}
 						/>
 					</div>
 

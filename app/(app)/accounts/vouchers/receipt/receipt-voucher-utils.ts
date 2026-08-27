@@ -495,6 +495,89 @@ export function computeReceiptPreview(form: ReceiptFormState) {
   };
 }
 
+/**
+ * Keep CUSTOMER_TDS adjustment in sync with allocation TDS totals.
+ * UI design: user enters TDS once on invoices; breakdown shows TDS Receivable automatically.
+ * Does not change API payload shape — only ensures existing validation still passes.
+ */
+export function syncTdsAdjustmentFromAllocations(
+  form: ReceiptFormState,
+): ReceiptUiAdjustment[] {
+  const { totalTds } = computeAllocationTotals(form);
+  const withoutTds = form.adjustments.filter(
+    (a) => a.adjustment_type !== "CUSTOMER_TDS",
+  );
+  if (totalTds <= 0) return withoutTds;
+
+  const existing = form.adjustments.find((a) => a.adjustment_type === "CUSTOMER_TDS");
+  const amountStr = String(totalTds);
+  if (existing) {
+    if (toMoneyNumber(existing.amount) === totalTds) {
+      return form.adjustments;
+    }
+    return form.adjustments.map((a) =>
+      a.adjustment_type === "CUSTOMER_TDS" ? { ...a, amount: amountStr } : a,
+    );
+  }
+  return [
+    ...withoutTds,
+    { ...createEmptyAdjustment("CUSTOMER_TDS"), amount: amountStr },
+  ];
+}
+
+/**
+ * When Discount Allowed is edited in Settlement Breakdown, mirror the amount onto
+ * the first selected allocation so existing allocation↔adjustment validation still holds.
+ * Invoice-wise discount split remains a known backend/UX gap.
+ */
+export function mirrorDiscountAdjustmentOntoAllocations(
+  form: ReceiptFormState,
+  adjustments: ReceiptUiAdjustment[],
+): ReceiptUiAllocation[] {
+  const adjDiscount = roundMoney(
+    adjustments
+      .filter((a) => a.adjustment_type === "DISCOUNT_ALLOWED")
+      .reduce((s, a) => s + toMoneyNumber(a.amount), 0),
+  );
+  const selected = form.allocations.filter((a) => a.selected);
+  if (selected.length === 0) {
+    return form.allocations.map((a) => ({ ...a, discount_amount: "" }));
+  }
+  let applied = false;
+  return form.allocations.map((a) => {
+    if (!a.selected) return { ...a, discount_amount: "" };
+    if (!applied) {
+      applied = true;
+      return {
+        ...a,
+        discount_amount: adjDiscount > 0 ? String(adjDiscount) : "",
+      };
+    }
+    return { ...a, discount_amount: "" };
+  });
+}
+
+/** Display total for Settlement Breakdown = Bank + all settlement components (= party gross). */
+export function computeSettlementComponentTotal(
+  netBank: number,
+  adjustments: ReceiptUiAdjustment[],
+): number {
+  let total = Math.max(0, netBank);
+  for (const adj of adjustments) {
+    const amt = toMoneyNumber(adj.amount);
+    if (amt <= 0) continue;
+    if (
+      (adj.adjustment_type === "OTHER" || adj.adjustment_type === "ROUND_OFF") &&
+      adj.entry_type === "CREDIT"
+    ) {
+      total -= amt;
+    } else {
+      total += amt;
+    }
+  }
+  return roundMoney(total);
+}
+
 export function electronicModes(): BankTransactionMode[] {
   return ["NEFT", "RTGS", "IMPS", "UPI", "BANK_TRANSFER"];
 }

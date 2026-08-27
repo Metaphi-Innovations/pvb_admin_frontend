@@ -55,6 +55,10 @@ export interface SalesInvoiceDocumentInfoSectionProps {
     dispatchQty?: number;
     qtyUnit?: string;
   };
+  customerName?: string;
+  customerInfoButton?: React.ReactNode;
+  warehouseName?: string;
+  warehouseInfoButton?: React.ReactNode;
   /** @deprecated Goods narration is placed after Additional Charges. */
   narrationSlot?: React.ReactNode;
 }
@@ -81,6 +85,10 @@ function SalesInvoiceDocumentInfoSectionInner({
   bankAccountSlot,
   bankAccountHelper,
   dispatchContext,
+  customerName,
+  customerInfoButton,
+  warehouseName,
+  warehouseInfoButton,
 }: SalesInvoiceDocumentInfoSectionProps) {
   const [dispatchInfoOpen, setDispatchInfoOpen] = useState(false);
   const hasDispatch = Boolean(sourceDispatchId || dispatchRef);
@@ -91,13 +99,12 @@ function SalesInvoiceDocumentInfoSectionInner({
   if (goodsGenerateCompact) {
     return (
       <div className="space-y-2">
-        <div className="so-goods-field-grid">
+        <div className="so-goods-field-grid so-invoice-dispatch-grid">
           <div className="so-goods-field so-w-inv-no">
             <p className="so-goods-field__label">Invoice No.</p>
             <div className="so-goods-field__control">
               <div className="so-goods-ro so-goods-ro--mono w-full">{displayInvoiceNo}</div>
             </div>
-            <p className="so-goods-field__helper">&nbsp;</p>
           </div>
 
           <div className="so-goods-field so-w-date">
@@ -113,7 +120,6 @@ function SalesInvoiceDocumentInfoSectionInner({
                 required={invoiceDateRequired}
               />
             </div>
-            <p className="so-goods-field__helper">&nbsp;</p>
           </div>
 
           <div className="so-goods-field so-w-date">
@@ -129,12 +135,35 @@ function SalesInvoiceDocumentInfoSectionInner({
             <p className="so-goods-field__helper">Net {creditDays} days</p>
           </div>
 
+          {customerInfoButton != null ? (
+            <div className="so-goods-field so-w-customer">
+              <p className="so-goods-field__label">Customer</p>
+              <div className="so-goods-field__control">
+                <div className="so-goods-ro-with-info">
+                  <span className="so-goods-ro-with-info__value">{customerName || "—"}</span>
+                  {customerInfoButton}
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {warehouseInfoButton != null ? (
+            <div className="so-goods-field so-w-warehouse">
+              <p className="so-goods-field__label">Warehouse</p>
+              <div className="so-goods-field__control">
+                <div className="so-goods-ro-with-info">
+                  <span className="so-goods-ro-with-info__value">{warehouseName || "—"}</span>
+                  {warehouseInfoButton}
+                </div>
+              </div>
+            </div>
+          ) : null}
+
           <div className="so-goods-field so-w-so">
             <p className="so-goods-field__label">Sales Order No.</p>
             <div className="so-goods-field__control">
               <div className="so-goods-ro so-goods-ro--mono w-full">{salesOrderRef || "—"}</div>
             </div>
-            <p className="so-goods-field__helper">&nbsp;</p>
           </div>
 
           <div className="so-goods-field so-w-dispatch">
@@ -157,7 +186,6 @@ function SalesInvoiceDocumentInfoSectionInner({
                 ) : null}
               </div>
             </div>
-            <p className="so-goods-field__helper">&nbsp;</p>
           </div>
 
           {bankAccountSlot ? (
@@ -168,9 +196,11 @@ function SalesInvoiceDocumentInfoSectionInner({
               <div className="so-goods-field__control min-w-0 w-full">
                 {bankAccountSlot}
               </div>
-              <p className="so-goods-field__helper" title={bankAccountHelper || undefined}>
-                {bankAccountHelper?.trim() || "\u00a0"}
-              </p>
+              {bankAccountHelper?.trim() ? (
+                <p className="so-goods-field__helper" title={bankAccountHelper}>
+                  {bankAccountHelper}
+                </p>
+              ) : null}
             </div>
           ) : null}
         </div>
