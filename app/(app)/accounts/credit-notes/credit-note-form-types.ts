@@ -263,6 +263,11 @@ export interface DirectCnLineInput {
   narration?: string | null;
 }
 
+export interface ReverseCreditNotePayload {
+  reason: string;
+  reversal_date?: string;
+}
+
 export interface CnReferenceInput {
   reference_type: CreditNoteReferenceType;
   reference_id: string;
@@ -339,12 +344,49 @@ export interface DirectLineDraft {
   gst_rate: string;
 }
 
+export interface EligibleSalesInvoiceItem {
+  sales_invoice_id: string;
+  invoice_number: string;
+  invoice_date: string;
+  customer_id: string;
+  warehouse_id: string;
+  invoice_type: string;
+  invoice_amount: string | number;
+  outstanding_amount: string | number;
+  open_item_id: string;
+}
+
+export interface EligibleSalesInvoicePagination {
+  page: number;
+  page_size: number;
+  total: number;
+  total_pages: number;
+}
+
+export interface EligibleSalesInvoicesResponse {
+  customer_id: string;
+  party_ledger_id: string;
+  items: EligibleSalesInvoiceItem[];
+  pagination: EligibleSalesInvoicePagination;
+}
+
+export interface EligibleSalesInvoicesQuery {
+  search?: string;
+  page?: number;
+  page_size?: number;
+}
+
 export interface InvoiceOption {
   sales_invoice_id: string;
   invoice_number: string;
   invoice_date: string;
   invoice_amount: number;
+  /** Authoritative open-item outstanding from eligible-invoice API. Null if not from that API. */
   outstanding_amount?: number | null;
+  customer_id?: string;
+  warehouse_id?: string;
+  invoice_type?: string;
+  open_item_id?: string;
 }
 
 export type ParticularColumnKey =
