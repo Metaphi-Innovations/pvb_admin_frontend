@@ -253,6 +253,7 @@ export const NOTES_STATUS_TABS = [
   { id: "draft", label: "Draft" },
   { id: "posted", label: "Posted" },
   { id: "cancelled", label: "Cancelled" },
+  { id: "reversed", label: "Reversed" },
 ] as const;
 
 export const NOTES_STATUS_FILTER_OPTIONS = [
@@ -261,6 +262,7 @@ export const NOTES_STATUS_FILTER_OPTIONS = [
   { value: "pending_approval", label: "Pending Approval" },
   { value: "approved", label: "Posted" },
   { value: "cancelled", label: "Cancelled" },
+  { value: "reversed", label: "Reversed" },
   { value: "rejected", label: "Rejected" },
 ];
 

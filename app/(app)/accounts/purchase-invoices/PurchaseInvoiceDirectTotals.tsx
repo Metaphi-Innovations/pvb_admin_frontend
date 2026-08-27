@@ -20,7 +20,7 @@ export function PurchaseInvoiceDirectTotals({
   roundingAdjustment,
   onRoundingChange,
   readOnly,
-  additionalChargeTotal,
+  additionalChargeTotal = 0,
 }: {
   totals: DirectPurchaseTotals;
   roundingAdjustment: number;
@@ -37,9 +37,7 @@ export function PurchaseInvoiceDirectTotals({
       <SummaryRow label="SGST" value={formatMoney(totals.sgst)} />
       <SummaryRow label="IGST" value={formatMoney(totals.igst)} />
       <SummaryRow label="Total GST" value={formatMoney(totals.totalGst)} />
-      {additionalChargeTotal != null && additionalChargeTotal > 0 && (
-        <SummaryRow label="Additional Charges" value={formatMoney(additionalChargeTotal)} />
-      )}
+      <SummaryRow label="Additional Charges" value={formatMoney(additionalChargeTotal)} />
       {!readOnly && onRoundingChange ? (
         <div className="flex items-center justify-between gap-3 py-0.5">
           <span className="so-summary-label text-muted-foreground">Round Off</span>

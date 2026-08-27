@@ -68,7 +68,8 @@ export type NoteWorkflowStatus =
   | "approved"
   | "processed"
   | "rejected"
-  | "cancelled";
+  | "cancelled"
+  | "reversed";
 
 export interface DebitNoteAttachment {
   id: string;

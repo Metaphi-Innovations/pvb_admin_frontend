@@ -31,7 +31,7 @@ import {
   GoodsInvoiceAdditionalChargesEditor,
 } from "@/app/(app)/accounts/invoices/components/GoodsInvoiceAdditionalChargesEditor";
 import {
-  calcAdditionalExpenseRow,
+  calcAdditionalExpensesTotals,
   type InvoiceAdditionalExpense,
 } from "@/app/(app)/accounts/invoices/invoice-additional-expenses";
 import type { ItcClassification, PurchaseNature } from "./purchase-invoices-data";
@@ -47,6 +47,7 @@ import { PurchaseInvoiceDirectTotals } from "./PurchaseInvoiceDirectTotals";
 import { PurchaseInvoiceDirectLineTable } from "./PurchaseInvoiceDirectLineTable";
 import { DirectPurchaseSelectField } from "./DirectPurchaseSelectField";
 import { DP_FIELD_CLASS, DP_LABEL_CLASS } from "./direct-purchase-form-ui";
+import { roundMoney } from "@/lib/accounts/money-format";
 import "@/app/(app)/accounts/invoices/sales-order-invoice-form-compact.css";
 
 function selectedLedgerId(ledgerId: string | number | null | undefined): string | null {
@@ -113,12 +114,8 @@ export function PurchaseInvoiceDirectForm({
     [],
   );
 
-  const chargeTotal = useMemo(
-    () =>
-      additionalExpenses.reduce((s, row) => {
-        const calc = calcAdditionalExpenseRow(row, interstate);
-        return s + (calc.totalAmount > 0 ? calc.totalAmount : 0);
-      }, 0),
+  const chargeBreakdown = useMemo(
+    () => calcAdditionalExpensesTotals(additionalExpenses, interstate),
     [additionalExpenses, interstate],
   );
 
@@ -136,16 +133,18 @@ export function PurchaseInvoiceDirectForm({
     );
   }, [branchGstin, placeOfSupply, purchaseNature, interstate]);
 
-  const totals = useMemo(
-    () => {
-      const base = computeDirectPurchaseInvoiceTotals(lines, { roundingAdjustment });
-      return {
-        ...base,
-        netPayable: Math.round((base.netPayable + chargeTotal) * 100) / 100,
-      };
-    },
-    [lines, roundingAdjustment, chargeTotal],
-  );
+  const totals = useMemo(() => {
+    const base = computeDirectPurchaseInvoiceTotals(lines, { roundingAdjustment });
+    return {
+      ...base,
+      cgst: roundMoney(base.cgst + chargeBreakdown.cgst),
+      sgst: roundMoney(base.sgst + chargeBreakdown.sgst),
+      igst: roundMoney(base.igst + chargeBreakdown.igst),
+      totalGst: roundMoney(base.totalGst + chargeBreakdown.gstAmount),
+      invoiceTotal: roundMoney(base.invoiceTotal + chargeBreakdown.totalAmount),
+      netPayable: roundMoney(base.netPayable + chargeBreakdown.totalAmount),
+    };
+  }, [lines, roundingAdjustment, chargeBreakdown]);
 
   const purchaseNatureOptions = (Object.keys(PURCHASE_NATURE_LABELS) as PurchaseNature[]).map((k) => ({
     value: k,
@@ -412,7 +411,7 @@ export function PurchaseInvoiceDirectForm({
                 totals={totals}
                 roundingAdjustment={roundingAdjustment}
                 onRoundingChange={setRoundingAdjustment}
-                additionalChargeTotal={chargeTotal}
+                additionalChargeTotal={chargeBreakdown.taxableAmount}
               />
             </div>
           </div>
