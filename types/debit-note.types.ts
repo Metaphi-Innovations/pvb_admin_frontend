@@ -2,6 +2,44 @@ export interface DebitNoteConfig {
   approval_required: boolean;
 }
 
+/** Frontend-only Direct DN mode — not sent to the backend. */
+export type DirectDnMode = "on_account" | "against_invoice";
+
+/** Raw eligible Purchase Invoice row from GET …/supplier/:id/eligible-purchase-invoices */
+export interface EligiblePurchaseInvoiceItem {
+  purchase_invoice_id: string;
+  purchase_invoice_number: string;
+  purchase_invoice_date: string;
+  supplier_invoice_number?: string | null;
+  supplier_invoice_date?: string | null;
+  supplier_id: string;
+  warehouse_id: string;
+  invoice_type: string;
+  invoice_amount: string | number;
+  outstanding_amount: string | number;
+  open_item_id: string;
+}
+
+export interface EligiblePurchaseInvoicePagination {
+  page: number;
+  page_size: number;
+  total: number;
+  total_pages: number;
+}
+
+export interface EligiblePurchaseInvoicesResponse {
+  supplier_id: string;
+  party_ledger_id: string;
+  items: EligiblePurchaseInvoiceItem[];
+  pagination: EligiblePurchaseInvoicePagination;
+}
+
+export interface EligiblePurchaseInvoicesQuery {
+  search?: string;
+  page?: number;
+  page_size?: number;
+}
+
 export interface DebitNoteLineInput {
   description: string;
   ledger_id: string;

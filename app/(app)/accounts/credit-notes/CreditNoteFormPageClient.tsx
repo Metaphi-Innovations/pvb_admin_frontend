@@ -5,7 +5,6 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Textarea } from "@/components/ui/textarea";
 import { AccountsFormLayout } from "../expenses/components/AccountsFormLayout";
 import { AccountsDateInput } from "@/components/accounts/AccountsDateInput";
-import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
 import { AccountsToast, useAccountsToast } from "@/components/accounts/AccountsToast";
 import { useTransactionFormCancel } from "@/components/accounts/TransactionFormCancel";
 import { useFormDirtySnapshot } from "@/lib/accounts/use-form-dirty-snapshot";
@@ -162,7 +161,6 @@ export default function CreditNoteFormPageClient({
   const [approverId, setApproverId] = useState("");
   const [directMode, setDirectMode] = useState<DirectCnMode>("on_account");
   const [invoiceId, setInvoiceId] = useState("");
-  const [allocation, setAllocation] = useState("");
   const [invoices, setInvoices] = useState<InvoiceOption[]>([]);
   const [invoicesLoading, setInvoicesLoading] = useState(false);
   const [invoicesError, setInvoicesError] = useState<string | null>(null);
@@ -358,7 +356,6 @@ export default function CreditNoteFormPageClient({
       const invRef = (detail.references || []).find((r) => r.reference_type === "SALES_INVOICE");
       setDirectMode(invRef ? "against_invoice" : "on_account");
       setInvoiceId(invRef?.reference_id || "");
-      setAllocation(invRef?.allocated_amount != null ? String(invRef.allocated_amount) : "");
       setDirectLines(
         (detail.lines || []).length
           ? (detail.lines || []).map((line) => ({
@@ -707,7 +704,8 @@ export default function CreditNoteFormPageClient({
               reference_code: selectedInvoice?.invoice_number || null,
               reference_date: selectedInvoice?.invoice_date || null,
               relation_type: "INVOICE_AGAINST" as const,
-              allocated_amount: toNum(allocation) > 0 ? toNum(allocation) : null,
+              // Full CN amount (includes Round Off) settles the selected invoice.
+              allocated_amount: amountPreview.total > 0 ? amountPreview.total : null,
             },
           ]
         : [];
@@ -746,12 +744,13 @@ export default function CreditNoteFormPageClient({
     }
     if (directMode === "against_invoice") {
       if (!invoiceId) return "Select a Sales Invoice or switch to On-account.";
-      const alloc = toNum(allocation);
-      if (alloc > 0 && Math.abs(alloc - amountPreview.total) > 0.009) {
-        return "Allocation must equal the full Credit Note amount, or be left blank (no settlement).";
-      }
-      if (alloc > 0 && selectedInvoice?.outstanding_amount != null && alloc > selectedInvoice.outstanding_amount + 0.009) {
-        return "Allocation exceeds the invoice outstanding amount.";
+      const cnAmount = amountPreview.total;
+      if (cnAmount <= 0) return "Credit Note Amount must be greater than zero.";
+      if (
+        selectedInvoice?.outstanding_amount != null &&
+        cnAmount > selectedInvoice.outstanding_amount + 0.009
+      ) {
+        return `Credit Note Amount cannot exceed the selected invoice outstanding amount of ${formatCnMoney(selectedInvoice.outstanding_amount)}.`;
       }
     }
     return null;
@@ -1086,7 +1085,6 @@ export default function CreditNoteFormPageClient({
       narration,
       directMode,
       invoiceId,
-      allocation,
       directLines,
       approverId,
       roundOff,
@@ -1099,7 +1097,6 @@ export default function CreditNoteFormPageClient({
       narration,
       directMode,
       invoiceId,
-      allocation,
       directLines,
       approverId,
       roundOff,
@@ -1262,7 +1259,6 @@ export default function CreditNoteFormPageClient({
                       onChange={(id) => {
                         setCustomerId(id);
                         setInvoiceId("");
-                        setAllocation("");
                       }}
                       options={customers.map((c) => ({ value: c.id, label: c.name, sub: c.code }))}
                       placeholder="Select customer"
@@ -1282,7 +1278,6 @@ export default function CreditNoteFormPageClient({
                         onClick={() => {
                           setDirectMode("on_account");
                           setInvoiceId("");
-                          setAllocation("");
                         }}
                       >
                         On-account
@@ -1306,7 +1301,6 @@ export default function CreditNoteFormPageClient({
                         value={invoiceId}
                         onChange={(id) => {
                           setInvoiceId(id);
-                          setAllocation("");
                         }}
                         options={invoices.map((inv) => ({
                           value: inv.sales_invoice_id,
@@ -1348,28 +1342,6 @@ export default function CreditNoteFormPageClient({
                         </p>
                       ) : null}
                     </VoucherNoteField>
-                    <VoucherNoteField label="Allocation Amount" width="sm">
-                      <AccountsMoneyInput
-                        className="h-7 text-xs"
-                        value={allocation}
-                        onChange={(v) => setAllocation(String(v))}
-                        disabled={!fieldsEditable || !invoiceId}
-                      />
-                      <p className="text-[10px] text-muted-foreground mt-0.5 max-w-[14rem]">
-                        Leave blank for reference-only (no settlement). A value &gt; 0 settles the invoice.
-                      </p>
-                    </VoucherNoteField>
-                    {toNum(allocation) > 0 &&
-                    amountPreview.total > 0 &&
-                    Math.abs(toNum(allocation) - amountPreview.total) > 0.009 ? (
-                      <VoucherNoteField label="Allocation check" width="lg">
-                        <p className="text-[11px] text-amber-700">
-                          Allocation {formatCnMoney(toNum(allocation))} does not match CN total{" "}
-                          {formatCnMoney(amountPreview.total)}. Partial allocation is not supported by the
-                          backend.
-                        </p>
-                      </VoucherNoteField>
-                    ) : null}
                   </>
                 ) : null}
               </div>

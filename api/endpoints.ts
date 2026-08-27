@@ -612,6 +612,8 @@ export const API_ENDPOINTS = {
       PENDING: "/accounts/debit-note/pending",
       PENDING_BY_ID: (id: string | number) => `/accounts/debit-note/pending/${id}`,
       CREATE_FROM_PENDING: (pendingId: string | number) => `/accounts/debit-note/from-pending/${pendingId}`,
+      ELIGIBLE_PURCHASE_INVOICES: (supplierId: string | number) =>
+        `/accounts/debit-note/supplier/${supplierId}/eligible-purchase-invoices`,
     },
     RECEIPT_VOUCHER: {
       CONFIG: "/accounts/receipt-voucher/config",
