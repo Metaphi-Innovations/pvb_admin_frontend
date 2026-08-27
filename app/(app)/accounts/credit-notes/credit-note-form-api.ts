@@ -6,7 +6,10 @@ import type {
   CreateFromPendingPayload,
   CreditNoteApprovalConfig,
   CreditNoteDetail,
+  EligibleSalesInvoicesQuery,
+  EligibleSalesInvoicesResponse,
   PendingCreditNoteDetail,
+  ReverseCreditNotePayload,
   SchemeTypeLedgerMapping,
   UpdateDraftCreditNotePayload,
 } from "./credit-note-form-types";
@@ -177,6 +180,45 @@ export const CreditNoteFormApi = {
       { reason },
     );
     return unwrapData(response);
+  },
+
+  async reverse(id: string, payload: ReverseCreditNotePayload): Promise<CreditNoteDetail> {
+    const body: ReverseCreditNotePayload = { reason: payload.reason.trim() };
+    if (payload.reversal_date?.trim()) body.reversal_date = payload.reversal_date.trim();
+    const response = await axiosInstance.post<
+      ApiResponse<CreditNoteDetail | { credit_note?: CreditNoteDetail }>
+    >(`${CN}/${id}/reverse`, body);
+    return unwrapCreditNoteDetail(unwrapData(response));
+  },
+
+  async listEligibleSalesInvoices(
+    customerId: string,
+    query: EligibleSalesInvoicesQuery = {},
+  ): Promise<EligibleSalesInvoicesResponse> {
+    const response = await axiosInstance.get<ApiResponse<EligibleSalesInvoicesResponse>>(
+      `${CN}/customer/${customerId}/eligible-sales-invoices`,
+      {
+        params: {
+          search: query.search?.trim() || undefined,
+          page: query.page ?? 1,
+          page_size: query.page_size ?? 100,
+        },
+      },
+    );
+    const data = unwrapData(response) as EligibleSalesInvoicesResponse | undefined;
+    const items = Array.isArray(data?.items) ? data.items : [];
+    const pagination = data?.pagination;
+    return {
+      customer_id: String(data?.customer_id ?? customerId),
+      party_ledger_id: String(data?.party_ledger_id ?? ""),
+      items,
+      pagination: {
+        page: Number(pagination?.page) || 1,
+        page_size: Number(pagination?.page_size) || items.length,
+        total: Number(pagination?.total) || items.length,
+        total_pages: Number(pagination?.total_pages) || 1,
+      },
+    };
   },
 
   async listSchemeTypeLedgerMappings(): Promise<SchemeTypeLedgerMapping[]> {

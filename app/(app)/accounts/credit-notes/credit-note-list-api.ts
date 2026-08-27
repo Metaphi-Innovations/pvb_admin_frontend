@@ -137,6 +137,11 @@ export type CreditNoteListPage<T> = {
   };
 };
 
+export type ReverseCreditNotePayload = {
+  reason: string;
+  reversal_date?: string;
+};
+
 export type CreditNoteDetailApi = CreditNoteListApiRow & {
   warehouse_id?: string;
   customer_id?: string;
@@ -147,6 +152,16 @@ export type CreditNoteDetailApi = CreditNoteListApiRow & {
   is_interstate?: boolean;
   pending_credit_note_id?: string | null;
 };
+
+function unwrapCreditNoteDetail(data: unknown): CreditNoteDetailApi {
+  if (data && typeof data === "object") {
+    const rec = data as { credit_note?: CreditNoteDetailApi; credit_note_id?: string };
+    if (rec.credit_note && typeof rec.credit_note === "object" && rec.credit_note.credit_note_id) {
+      return rec.credit_note;
+    }
+  }
+  return data as CreditNoteDetailApi;
+}
 
 export const CreditNoteListApi = {
   async listPending(
@@ -180,5 +195,14 @@ export const CreditNoteListApi = {
       { reason },
     );
     return unwrapData(response);
+  },
+
+  async reverse(id: string, payload: ReverseCreditNotePayload): Promise<CreditNoteDetailApi> {
+    const body: ReverseCreditNotePayload = { reason: payload.reason.trim() };
+    if (payload.reversal_date?.trim()) body.reversal_date = payload.reversal_date.trim();
+    const response = await axiosInstance.post<
+      ApiResponse<CreditNoteDetailApi | { credit_note?: CreditNoteDetailApi }>
+    >(`${CN}/${id}/reverse`, body);
+    return unwrapCreditNoteDetail(unwrapData(response));
   },
 };

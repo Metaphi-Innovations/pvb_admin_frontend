@@ -517,3 +517,46 @@
   opacity: 0.55;
   cursor: not-allowed;
 }
+
+/* Basic Details — content-based widths, wrap instead of equal columns */
+.credit-debit-note-form .cn-basic-details-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  align-items: flex-start;
+}
+
+.credit-debit-note-form .cn-basic-details-grid > * {
+  flex: 0 0 auto;
+  max-width: 100%;
+}
+
+@media (max-width: 640px) {
+  .credit-debit-note-form .cn-basic-details-grid > * {
+    flex-basis: 100%;
+  }
+
+  .credit-debit-note-form .cn-basic-details-grid .cdn-w-xs,
+  .credit-debit-note-form .cn-basic-details-grid .cdn-w-sm,
+  .credit-debit-note-form .cn-basic-details-grid .cdn-w-md,
+  .credit-debit-note-form .cn-basic-details-grid .cdn-w-lg,
+  .credit-debit-note-form .cn-basic-details-grid .cdn-w-ref {
+    width: 100%;
+    max-width: 100%;
+  }
+}
+
+/* Narration left / Amount Summary right */
+.credit-debit-note-form .cn-narration-summary-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.625rem;
+  align-items: start;
+}
+
+@media (min-width: 1024px) {
+  .credit-debit-note-form .cn-narration-summary-grid {
+    grid-template-columns: minmax(0, 1fr) 300px;
+    gap: 0.625rem;
+  }
+}
