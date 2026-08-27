@@ -376,6 +376,46 @@ export interface EligibleSalesInvoicesQuery {
   page_size?: number;
 }
 
+/** Direct CN Supporting Ledger — raw backend eligible-ledger row. */
+export interface CreditNoteEligibleLedger {
+  ledger_id: string;
+  ledger_code: string | null;
+  ledger_name: string;
+  alias_name?: string | null;
+  allow_manual_posting: boolean;
+  source_type?: string | null;
+  source_entity_type?: string | null;
+  system_ledger_type?: string | null;
+  account_sub_group?: {
+    account_sub_group_id?: string;
+    code?: string | null;
+    name?: string | null;
+    account_group?: {
+      account_group_id?: string;
+      code?: string | null;
+      name?: string | null;
+    } | null;
+  } | null;
+}
+
+export interface CreditNoteEligibleLedgersPagination {
+  page: number;
+  page_size: number;
+  total: number;
+  total_pages: number;
+}
+
+export interface CreditNoteEligibleLedgersResponse {
+  items: CreditNoteEligibleLedger[];
+  pagination: CreditNoteEligibleLedgersPagination;
+}
+
+export interface CreditNoteEligibleLedgersQuery {
+  search?: string;
+  page?: number;
+  page_size?: number;
+}
+
 export interface InvoiceOption {
   sales_invoice_id: string;
   invoice_number: string;
