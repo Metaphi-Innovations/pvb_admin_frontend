@@ -170,12 +170,39 @@ function matchExtractedItemToPoLine(
   const sku = normalizeSkuMatchText(item.sku);
   if (!sku) return null;
 
-  return (
-    lines.find((line) => {
-      const code = getPoLineSku(line);
-      return code.length > 0 && code === sku;
-    }) ?? null
-  );
+  const skuMatchedLines = lines.filter((line) => {
+    const code = getPoLineSku(line);
+    return code.length > 0 && code === sku;
+  });
+
+  if (skuMatchedLines.length === 0) return null;
+  if (skuMatchedLines.length === 1) return skuMatchedLines[0];
+
+  // If there are multiple PO lines sharing the same SKU, differentiate using product name keywords.
+  const itemWords = (item.product_name || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, "")
+    .split(/\s+/)
+    .filter((w) => w.length > 2);
+
+  let bestLine: POLineItem | null = null;
+  let maxMatchedWords = 0;
+
+  for (const line of skuMatchedLines) {
+    const lineWords = (line.productName || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, "")
+      .split(/\s+/)
+      .filter((w) => w.length > 2);
+
+    const overlap = lineWords.filter((w) => itemWords.includes(w)).length;
+    if (overlap > maxMatchedWords) {
+      maxMatchedWords = overlap;
+      bestLine = line;
+    }
+  }
+
+  return bestLine || skuMatchedLines[0];
 }
 
 /**
@@ -188,17 +215,12 @@ function buildExtractedInvoiceItemsSnapshot(
 ): CreateGrnExtractedInvoiceItemPayload[] {
   if (!result.items.length) return [];
 
-  const usedLineIds = new Set<string>();
   const snapshot: CreateGrnExtractedInvoiceItemPayload[] = [];
 
   for (const item of result.items) {
-    const availableLines = poLines.filter((line) => {
-      const id = getPoLineId(line);
-      return id ? !usedLineIds.has(id) : true;
-    });
-    const matched = matchExtractedItemToPoLine(item, availableLines);
+    const matched = matchExtractedItemToPoLine(item, poLines);
     const lineId = matched ? getPoLineId(matched) : "";
-    if (lineId) usedLineIds.add(lineId);
+
 
     const qty =
       item.total_quantity != null && Number.isFinite(item.total_quantity)
@@ -334,12 +356,12 @@ function buildItemsFromPoLines(
       const displayQty =
         receivedQty > 0
           ? round2(
-              fromBaseQuantity({
-                baseQty: receivedQty,
-                quantityType,
-                packingSize: unitPerPacking,
-              }),
-            )
+            fromBaseQuantity({
+              baseQty: receivedQty,
+              quantityType,
+              packingSize: unitPerPacking,
+            }),
+          )
           : 0;
       const receivedCases =
         quantityType === "CASE"
@@ -357,11 +379,11 @@ function buildItemsFromPoLines(
         line.netWeightPerPack && line.weightUom
           ? { netWeightPerPack: line.netWeightPerPack, weightUom: line.weightUom }
           : resolveNetWeightPerPack({
-              netWeight: line.netWeightPerPack ?? null,
-              packSize: line.packSize ?? null,
-              unitPerPacking,
-              baseUnit: line.baseUnit || line.uom || "Unit",
-            });
+            netWeight: line.netWeightPerPack ?? null,
+            packSize: line.packSize ?? null,
+            unitPerPacking,
+            baseUnit: line.baseUnit || line.uom || "Unit",
+          });
       return {
         sourceItemId,
         productId: String(line.productId || ""),
@@ -661,11 +683,11 @@ export function PurchaseCreate({
     const fromPo =
       selectedPo?.warehouseId && selectedPo.warehouseName
         ? [
-            {
-              value: String(selectedPo.warehouseId),
-              label: selectedPo.warehouseName,
-            },
-          ]
+          {
+            value: String(selectedPo.warehouseId),
+            label: selectedPo.warehouseName,
+          },
+        ]
         : [];
     const fromApi = warehouseOptions.map((w) => ({
       value: w.value,
@@ -725,7 +747,7 @@ export function PurchaseCreate({
     (sourceItemId: string, displayQty: number) => {
       const { packingSize, quantityType } = getItemQtyMeta(sourceItemId);
       try {
-        return round2(
+        return Math.round(
           toBaseQuantity({
             quantity: displayQty,
             quantityType,
@@ -947,9 +969,10 @@ export function PurchaseCreate({
     const usedByOthers = allRows
       .filter((r) => r.sourceItemId === lineId && r.id !== row.id)
       .reduce((sum, r) => sum + (Number(r.quantity) || 0), 0);
-    const autofillQty = Math.max(0, round2(received - usedByOthers));
-    const displayQty = toInvoiceDisplayQty(lineId, autofillQty);
-    const amounts = calcAmounts(autofillQty, line.unitPrice, gstPct);
+    const autofillQty = row.quantity > 0 ? row.quantity : Math.max(0, round2(received - usedByOthers));
+    const displayQty = row.displayQty > 0 ? row.displayQty : toInvoiceDisplayQty(lineId, autofillQty);
+    const unitPrice = row.unitPrice > 0 ? row.unitPrice : line.unitPrice;
+    const amounts = calcAmounts(autofillQty, unitPrice, gstPct);
     const qtyMeta = getItemQtyMeta(lineId);
 
     return {
@@ -962,7 +985,7 @@ export function PurchaseCreate({
         qtyMeta.quantityType === "CASE"
           ? line.packagingUnit || "Case"
           : line.baseUnit || line.uom || "Unit",
-      unitPrice: line.unitPrice,
+      unitPrice,
       gstPct,
       displayQty,
       quantity: autofillQty,
@@ -1048,78 +1071,91 @@ export function PurchaseCreate({
     (result: InvoiceExtractionResult): ManualInvoiceRow[] => {
       const sourceItems =
         result.items.length > 0 ? result.items : [null];
-      const usedLineIds = new Set<string>();
 
       // Match each extracted item to a PO line by SKU only (never by row order).
       const matchedLineIds: Array<string | null> = sourceItems.map((item) => {
         if (!item) return null;
-        const availableLines = poLines.filter((line) => {
-          const id = getPoLineId(line);
-          return id ? !usedLineIds.has(id) : true;
-        });
-        const matched = matchExtractedItemToPoLine(item, availableLines);
+        const matched = matchExtractedItemToPoLine(item, poLines);
         const lineId = matched ? getPoLineId(matched) : "";
-        if (lineId) usedLineIds.add(lineId);
         return lineId || null;
       });
 
+      const isKanBiosys = /kan\s*biosys/i.test(result.supplier_name || "");
+
       return sourceItems.map((item, index) => {
         const lineId = matchedLineIds[index] || "";
+        const line = poLines.find((l) => getPoLineId(l) === lineId);
 
         const baseRow = createEmptyRow();
         const withProduct = lineId
           ? applyProductToRow(baseRow, lineId, [])
           : {
-              ...baseRow,
-              productName: item?.product_name || "",
-              productCode: item?.sku || "",
-            };
+            ...baseRow,
+            productName: item?.product_name || "",
+            productCode: item?.sku || "",
+          };
 
-        // Invoice gives us both numbers directly — trust them instead of deriving
-        // via packing-size conversion which may not match the invoice exactly.
-        //
-        // displayQty (Cases/Qty input) = bag_case_quantity if present, else total_quantity
-        // quantity   (Base Qty)        = total_quantity if present, else derive from displayQty
-        const displayQtyRaw =
-          item?.bag_case_quantity ?? item?.total_quantity ?? withProduct.displayQty;
-        const displayQty = Math.max(0, Number(displayQtyRaw) || 0);
+        let displayQty = 0;
+        let quantity = 0;
+        let unitPrice = 0;
+        let gstPct = 0;
+        let amounts;
 
-        const quantity =
-          item?.total_quantity != null && Number.isFinite(item.total_quantity)
-            ? Math.max(0, item.total_quantity)
-            : lineId
-              ? toInvoiceBaseQty(lineId, displayQty)
-              : displayQty;
+        if (isKanBiosys) {
+          const displayQtyRaw =
+            item?.bag_case_quantity ?? item?.total_quantity ?? 0;
+          displayQty = Math.max(0, Number(displayQtyRaw) || 0);
 
-        const extractedTaxable =
-          item?.amount != null && Number.isFinite(item.amount)
-            ? Math.max(0, item.amount)
-            : null;
-        const derivedUnitPrice =
-          extractedTaxable != null &&
-          quantity > 0 &&
-          Number.isFinite(quantity)
-            ? round2(extractedTaxable / quantity)
-            : null;
-        const unitPrice =
-          derivedUnitPrice != null
-            ? derivedUnitPrice
-            : item?.price != null && Number.isFinite(item.price)
-              ? item.price
-              : withProduct.unitPrice;
-        const gstPct =
-          item?.gst_percentage != null && Number.isFinite(item.gst_percentage)
-            ? item.gst_percentage
-            : withProduct.gstPct;
-        const amounts =
-          extractedTaxable != null
-            ? {
+          quantity = lineId
+            ? toInvoiceBaseQty(lineId, displayQty)
+            : displayQty;
+
+          unitPrice = line ? line.unitPrice : withProduct.unitPrice;
+          gstPct = line ? getLineGstPct(line) : withProduct.gstPct;
+          amounts = calcAmounts(quantity, unitPrice, gstPct);
+        } else {
+          // Trust invoice numbers directly for other suppliers
+          const displayQtyRaw =
+            item?.bag_case_quantity ?? item?.total_quantity ?? withProduct.displayQty;
+          displayQty = Math.max(0, Number(displayQtyRaw) || 0);
+
+          quantity =
+            item?.total_quantity != null && Number.isFinite(item.total_quantity)
+              ? Math.max(0, item.total_quantity)
+              : lineId
+                ? toInvoiceBaseQty(lineId, displayQty)
+                : displayQty;
+
+          const extractedTaxable =
+            item?.amount != null && Number.isFinite(item.amount)
+              ? Math.max(0, item.amount)
+              : null;
+          const derivedUnitPrice =
+            extractedTaxable != null &&
+              quantity > 0 &&
+              Number.isFinite(quantity)
+              ? round2(extractedTaxable / quantity)
+              : null;
+          unitPrice =
+            derivedUnitPrice != null
+              ? derivedUnitPrice
+              : item?.price != null && Number.isFinite(item.price)
+                ? item.price
+                : withProduct.unitPrice;
+          gstPct =
+            item?.gst_percentage != null && Number.isFinite(item.gst_percentage)
+              ? item.gst_percentage
+              : withProduct.gstPct;
+          amounts =
+            extractedTaxable != null
+              ? {
                 gstAmount: round2((extractedTaxable * gstPct) / 100),
                 totalAmount: round2(
                   extractedTaxable + (extractedTaxable * gstPct) / 100,
                 ),
               }
-            : calcAmounts(quantity, unitPrice, gstPct);
+              : calcAmounts(quantity, unitPrice, gstPct);
+        }
 
         return {
           ...withProduct,
@@ -1154,9 +1190,9 @@ export function PurchaseCreate({
           ? result.errors
           : blocked
             ? [
-                result.warnings?.[0] ||
-                  "Supplier on invoice does not match the selected Purchase Order.",
-              ]
+              result.warnings?.[0] ||
+              "Supplier on invoice does not match the selected Purchase Order.",
+            ]
             : [],
       );
       setSupplierMatch(
@@ -1171,8 +1207,8 @@ export function PurchaseCreate({
         setExtractedInvoiceItems([]);
         setFormError(
           result.errors?.[0] ||
-            result.warnings?.[0] ||
-            "Supplier on invoice does not match the selected Purchase Order.",
+          result.warnings?.[0] ||
+          "Supplier on invoice does not match the selected Purchase Order.",
         );
         return;
       }
@@ -1221,8 +1257,8 @@ export function PurchaseCreate({
       if (result.success === false || result.supplier_match === false) {
         showToast(
           result.errors?.[0] ||
-            result.warnings?.[0] ||
-            "Supplier on invoice does not match the selected Purchase Order.",
+          result.warnings?.[0] ||
+          "Supplier on invoice does not match the selected Purchase Order.",
           "error",
         );
       } else {
@@ -1275,7 +1311,7 @@ export function PurchaseCreate({
     if (supplierMatch === false) {
       setFormError(
         extractionErrors[0] ||
-          "Supplier on invoice does not match the selected Purchase Order.",
+        "Supplier on invoice does not match the selected Purchase Order.",
       );
       return;
     }
