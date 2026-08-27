@@ -607,21 +607,8 @@ export function DispatchListing({ selectedWarehouse = "All" }: DispatchListingPr
           console.error(err);
         }
       },
-      hide: (row) => {
-        const status = String(row.status || row.dispatch_status || "").toUpperCase();
-        const isDispatched =
-          status === "DISPATCHED" || status === "DELIVERED" || status === "CLOSED";
-        const orderType = resolveWarehouseOrderType({
-          sourceDocumentType: row.sourceDocumentType,
-          source_type: row.source_type,
-          salesOrderNo: row.salesOrderNumber,
-          source_document_no: row.source_document_no,
-        });
-        const isStockTransfer =
-          orderType === "stock_transfer" ||
-          String(row.source_type || "").toLowerCase() === "stock_transfer";
-        return !isDispatched || !isStockTransfer;
-      },
+      // Hidden for now — restore previous visibility logic when re-enabling
+      hide: () => true,
     },
     {
       label: "Sample Issue Note",
@@ -632,13 +619,8 @@ export function DispatchListing({ selectedWarehouse = "All" }: DispatchListingPr
         const order = getSampleOrderByDocumentNo(docNo);
         if (order) downloadProformaInvoice(order);
       },
-      hide: (row) =>
-        resolveWarehouseOrderType({
-          sourceDocumentType: row.sourceDocumentType,
-          source_type: row.source_type,
-          salesOrderNo: row.salesOrderNumber,
-          source_document_no: row.source_document_no,
-        }) !== "sample_order",
+      // Hidden for now — restore previous visibility logic when re-enabling
+      hide: () => true,
     },
     {
       label: "Delivery Done",

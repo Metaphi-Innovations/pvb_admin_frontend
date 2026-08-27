@@ -75,6 +75,88 @@ function asRecord(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
+function warehouseIdFromAddressOptionId(id: unknown): string | null {
+  const raw = asString(id).trim();
+  const matched = raw.match(/^(?:bill|ship)-wh-(.+)$/i);
+  if (matched?.[1] && UUID_RE.test(matched[1])) return matched[1];
+  return toUuidOrNull(raw);
+}
+
+function joinAddressParts(...parts: unknown[]): string {
+  return parts
+    .map((part) => asString(part).trim())
+    .filter(Boolean)
+    .join(", ");
+}
+
+function primaryWarehouseContact(source: Record<string, unknown>): {
+  person: string;
+  mobile: string;
+  email: string;
+} {
+  const contacts = Array.isArray(source.contacts) ? source.contacts : [];
+  const primary =
+    contacts.find((row) => Boolean(asRecord(row).is_primary)) ?? contacts[0];
+  const contact = asRecord(primary);
+  return {
+    person:
+      asString(source.contact_person) ||
+      asString(contact.contact_person) ||
+      "",
+    mobile:
+      asString(source.mobile_number) ||
+      asString(source.mobile) ||
+      asString(contact.mobile_number) ||
+      "",
+    email:
+      asString(source.email) ||
+      asString(source.email_address) ||
+      asString(contact.email_address) ||
+      "",
+  };
+}
+
+function mapBillingFromRaw(raw: Record<string, unknown>) {
+  const billing = asRecord(raw.billing_address);
+  if (!Object.keys(billing).length) {
+    return { ...COMPANY_BILLING };
+  }
+  const address =
+    joinAddressParts(billing.address, billing.address_1, billing.address_2) ||
+    asString(billing.registered_gst_address);
+  return {
+    companyName:
+      asString(billing.registered_legal_name) ||
+      asString(billing.warehouse_name) ||
+      COMPANY_BILLING.companyName,
+    billingAddress: address || COMPANY_BILLING.billingAddress,
+    gstNumber: asString(billing.gst_number) || COMPANY_BILLING.gstNumber,
+    state: asString(billing.state) || COMPANY_BILLING.state,
+    city: asString(billing.city) || COMPANY_BILLING.city,
+    pincode: asString(billing.pincode) || COMPANY_BILLING.pincode,
+  };
+}
+
+function mapShippingFromRaw(raw: Record<string, unknown>) {
+  const shipping = asRecord(raw.shipping_address);
+  const warehouse = asRecord(raw.warehouse_snapshot);
+  const source = Object.keys(shipping).length ? shipping : warehouse;
+  const contact = primaryWarehouseContact(source);
+  return {
+    shipToLocation:
+      asString(raw.warehouse_name) ||
+      asString(source.warehouse_name) ||
+      "",
+    branch: asString(raw.state) || asString(source.state) || "",
+    address:
+      asString(raw.delivery_address) ||
+      joinAddressParts(source.address, source.address_1, source.address_2),
+    contactPerson: contact.person,
+    contactNumber: contact.mobile,
+    sameAsBilling: false,
+  };
+}
+
 function triggerBlobDownload(blob: Blob, fileName: string): void {
   const url = window.URL.createObjectURL(blob);
   const link = document.createElement("a");
@@ -435,15 +517,19 @@ export function mapDetail(raw: Record<string, unknown>): PurchaseOrder {
     notes: asString(raw.remarks),
     sourcePrId: toUuidOrNull(raw.purchase_requisition_id ?? pr.id),
     sourcePrNumber: asString(pr.pr_number),
-    billing: COMPANY_BILLING,
-    shipping: {
-      shipToLocation: asString(raw.warehouse_name),
-      branch: asString(raw.state),
-      address: asString(raw.delivery_address),
-      contactPerson: "",
-      contactNumber: "",
-      sameAsBilling: false,
-    },
+    billToAddressId: (() => {
+      const billing = asRecord(raw.billing_address);
+      const billingWhId =
+        toUuidOrNull(billing.warehouse_id) ||
+        toUuidOrNull(raw.billing_warehouse_id);
+      return billingWhId ? `bill-wh-${billingWhId}` : "";
+    })(),
+    shipToAddressId: (() => {
+      const whId = toUuidOrNull(raw.warehouse_id);
+      return whId ? `ship-wh-${whId}` : "";
+    })(),
+    billing: mapBillingFromRaw(raw),
+    shipping: mapShippingFromRaw(raw),
     lines,
     terms: [],
     attachments: mapAttachments(raw.attachment_urls),
@@ -569,6 +655,9 @@ function buildWriteBody(
     credit_days: form.creditDays ?? null,
     state: form.state?.trim() || "Maharashtra",
     warehouse_id: toUuidOrNull(form.warehouseId),
+    billing_warehouse_id:
+      warehouseIdFromAddressOptionId(form.billToAddressId) ||
+      toUuidOrNull(form.warehouseId),
     warehouse_name: form.warehouseName || null,
     delivery_address: form.deliveryAddress || null,
     additional_charges: (form.additionalCharges ?? []).map((c) => ({
@@ -769,7 +858,12 @@ export const PurchaseOrderService = {
   ): Promise<{ html: string; fileName: string }> {
     const response = await axiosInstance.get(
       API_ENDPOINTS.PROCUREMENT.PURCHASE_ORDER.PREVIEW(id),
-      { signal },
+      {
+        signal,
+        // Bust browser/proxy caches that were returning stale 304 PDF HTML.
+        params: { _ts: Date.now() },
+        headers: { "Cache-Control": "no-cache", Pragma: "no-cache" },
+      },
     );
     const data = (response.data as Record<string, any>)?.data || {};
     return {
