@@ -103,6 +103,7 @@ export type CreateDirectServicePayload = {
       charge_source?: "INVOICE";
     }
   >;
+  round_off_amount?: number | string | null;
 };
 
 export type CancelSalesInvoicePayload = {

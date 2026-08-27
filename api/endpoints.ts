@@ -557,6 +557,7 @@ export const API_ENDPOINTS = {
       VIEW: (id: string) => `/accounts/ledgers/${id}`,
       UPDATE: (id: string) => `/accounts/ledgers/${id}`,
       DROPDOWN: "/accounts/ledgers/dropdown",
+      GENERIC_DROPDOWN: "/accounts/ledgers/generic-dropdown",
       BALANCES: "/accounts/ledgers/balances",
       EXPORT: "/accounts/ledgers/export",
       PREVIEW_NUMBER: "/accounts/ledgers/preview-number",

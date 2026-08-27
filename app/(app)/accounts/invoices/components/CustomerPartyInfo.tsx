@@ -33,6 +33,7 @@ export interface CustomerPartyInfo {
   creditLimit?: number | null;
   customerType?: string;
   salesperson?: string;
+  linkedLedger?: string;
 }
 
 function formatBranchAddress(addr: {
@@ -88,6 +89,7 @@ export function resolveCustomerPartyInfo(
           : null,
     customerType: extras?.customerType || match?.customerType || undefined,
     salesperson: extras?.salesperson || match?.salesManName || undefined,
+    linkedLedger: extras?.linkedLedger || undefined,
   };
 }
 
@@ -172,6 +174,7 @@ export function CustomerPartyInfoDialog({
               creditLimit: res.credit_limit ? Number(res.credit_limit) : initialInfo.creditLimit,
               customerType: res.customer_type?.customer_type_name || initialInfo.customerType,
               salesperson: initialInfo.salesperson,
+              linkedLedger: initialInfo.linkedLedger,
             });
           }
         } catch (err) {
@@ -207,6 +210,9 @@ export function CustomerPartyInfoDialog({
           {info.salesperson ? (
             <InfoRow label="Sales Person" value={info.salesperson} />
           ) : null}
+          {info.linkedLedger ? (
+            <InfoRow label="Linked Ledger" value={info.linkedLedger} />
+          ) : null}
           <InfoRow label="Payment Terms" value={info.paymentTerms || "—"} />
           <InfoRow
             label="Credit Limit"
@@ -241,6 +247,7 @@ export function CustomerPartyInfoButton({
   creditLimit,
   customerType,
   salesperson,
+  linkedLedger,
   className,
 }: {
   customerId?: string;
@@ -255,6 +262,7 @@ export function CustomerPartyInfoButton({
   creditLimit?: number | null;
   customerType?: string;
   salesperson?: string;
+  linkedLedger?: string;
   className?: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -272,6 +280,7 @@ export function CustomerPartyInfoButton({
         creditLimit,
         customerType,
         salesperson,
+        linkedLedger,
       }),
     [
       customerId,
@@ -286,6 +295,7 @@ export function CustomerPartyInfoButton({
       creditLimit,
       customerType,
       salesperson,
+      linkedLedger,
     ],
   );
   if (!customerName?.trim()) return null;

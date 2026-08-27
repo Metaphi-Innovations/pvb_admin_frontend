@@ -590,7 +590,7 @@ div:has(> .accounts-module-shell):has(.invoice-form-shell) {
 }
 
 /* Generate form only — single-row column-flow grid with width tokens */
-.sales-order-invoice-form-compact .so-goods-field-grid:not(.so-invoice-view-grid) {
+.sales-order-invoice-form-compact .so-goods-field-grid:not(.so-invoice-view-grid):not(.so-invoice-dispatch-grid) {
   display: grid;
   grid-auto-flow: column;
   grid-auto-columns: max-content;
@@ -615,6 +615,58 @@ div:has(> .accounts-module-shell):has(.invoice-form-shell) {
 .sales-order-invoice-form-compact .so-w-so { width: 170px; }
 .sales-order-invoice-form-compact .so-w-dispatch { width: 180px; }
 .sales-order-invoice-form-compact .so-w-bank { width: 320px; max-width: 100%; }
+.sales-order-invoice-form-compact .so-w-warehouse { width: 220px; }
+
+/* Invoice & Dispatch Details — content-based widths, wrap instead of equal columns */
+.sales-order-invoice-form-compact .so-invoice-dispatch-grid {
+  display: flex !important;
+  flex-wrap: wrap;
+  grid-auto-flow: unset !important;
+  grid-template-columns: unset !important;
+  width: 100%;
+  gap: 0.5rem 0.75rem;
+  align-items: start;
+  justify-content: flex-start;
+}
+
+.sales-order-invoice-form-compact .so-invoice-dispatch-grid .so-goods-field {
+  flex: 0 0 auto;
+  min-width: 0;
+  max-width: 100%;
+  grid-template-rows: auto var(--so-ctrl-h);
+}
+
+.sales-order-invoice-form-compact .so-invoice-dispatch-grid .so-goods-field:has(.so-goods-field__helper) {
+  grid-template-rows: auto var(--so-ctrl-h) var(--so-helper-h);
+}
+
+.sales-order-invoice-form-compact .so-invoice-dispatch-grid .so-w-inv-no {
+  width: 230px;
+  flex-basis: 230px;
+  max-width: 100%;
+}
+.sales-order-invoice-form-compact .so-invoice-dispatch-grid .so-w-date {
+  width: 175px;
+  flex-basis: 175px;
+  max-width: 100%;
+}
+.sales-order-invoice-form-compact .so-invoice-dispatch-grid .so-w-customer,
+.sales-order-invoice-form-compact .so-invoice-dispatch-grid .so-w-warehouse {
+  width: 300px;
+  flex-basis: 300px;
+  max-width: 100%;
+}
+.sales-order-invoice-form-compact .so-invoice-dispatch-grid .so-w-so,
+.sales-order-invoice-form-compact .so-invoice-dispatch-grid .so-w-dispatch {
+  width: 220px;
+  flex-basis: 220px;
+  max-width: 100%;
+}
+.sales-order-invoice-form-compact .so-invoice-dispatch-grid .so-w-bank {
+  width: 320px;
+  flex-basis: 320px;
+  max-width: 100%;
+}
 
 /* Additional Charge column ≈ 300px */
 .sales-order-invoice-form-compact .so-charge-col {
@@ -670,7 +722,7 @@ div:has(> .accounts-module-shell):has(.invoice-form-shell) {
 }
 
 @media (max-width: 1280px) {
-  .sales-order-invoice-form-compact .so-goods-field-grid:not(.so-invoice-view-grid) {
+  .sales-order-invoice-form-compact .so-goods-field-grid:not(.so-invoice-view-grid):not(.so-invoice-dispatch-grid) {
     grid-auto-flow: row;
     grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
     gap: var(--so-field-gap);
@@ -683,9 +735,38 @@ div:has(> .accounts-module-shell):has(.invoice-form-shell) {
   .sales-order-invoice-form-compact .so-w-date,
   .sales-order-invoice-form-compact .so-w-so,
   .sales-order-invoice-form-compact .so-w-dispatch,
-  .sales-order-invoice-form-compact .so-w-bank {
+  .sales-order-invoice-form-compact .so-w-bank,
+  .sales-order-invoice-form-compact .so-w-warehouse {
     width: 100%;
     max-width: none;
+  }
+
+  .sales-order-invoice-form-compact .so-invoice-dispatch-grid .so-w-inv-no {
+    width: 230px;
+    flex-basis: 230px;
+    max-width: 100%;
+  }
+  .sales-order-invoice-form-compact .so-invoice-dispatch-grid .so-w-date {
+    width: 175px;
+    flex-basis: 175px;
+    max-width: 100%;
+  }
+  .sales-order-invoice-form-compact .so-invoice-dispatch-grid .so-w-customer,
+  .sales-order-invoice-form-compact .so-invoice-dispatch-grid .so-w-warehouse {
+    width: 300px;
+    flex-basis: 300px;
+    max-width: 100%;
+  }
+  .sales-order-invoice-form-compact .so-invoice-dispatch-grid .so-w-so,
+  .sales-order-invoice-form-compact .so-invoice-dispatch-grid .so-w-dispatch {
+    width: 220px;
+    flex-basis: 220px;
+    max-width: 100%;
+  }
+  .sales-order-invoice-form-compact .so-invoice-dispatch-grid .so-w-bank {
+    width: 320px;
+    flex-basis: 320px;
+    max-width: 100%;
   }
 }
 
@@ -695,20 +776,26 @@ div:has(> .accounts-module-shell):has(.invoice-form-shell) {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .sales-order-invoice-form-compact .so-goods-field-grid:not(.so-invoice-view-grid) {
+  .sales-order-invoice-form-compact .so-goods-field-grid:not(.so-invoice-view-grid):not(.so-invoice-dispatch-grid) {
     grid-auto-flow: row;
     grid-template-columns: repeat(auto-fill, minmax(160px, max-content));
   }
 }
 
 @media (max-width: 768px) {
-  .sales-order-invoice-form-compact .so-goods-field-grid:not(.so-invoice-view-grid) {
+  .sales-order-invoice-form-compact .so-goods-field-grid:not(.so-invoice-view-grid):not(.so-invoice-dispatch-grid) {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .sales-order-invoice-form-compact .so-w-customer,
   .sales-order-invoice-form-compact .so-w-bank {
     grid-column: 1 / -1;
+  }
+
+  .sales-order-invoice-form-compact .so-invoice-dispatch-grid .so-w-customer,
+  .sales-order-invoice-form-compact .so-invoice-dispatch-grid .so-w-warehouse,
+  .sales-order-invoice-form-compact .so-invoice-dispatch-grid .so-w-bank {
+    grid-column: auto;
   }
 
   .sales-order-invoice-form-compact .invoice-form-header,
@@ -719,7 +806,14 @@ div:has(> .accounts-module-shell):has(.invoice-form-shell) {
 }
 
 @media (max-width: 640px) {
-  .sales-order-invoice-form-compact .so-goods-field-grid:not(.so-invoice-view-grid) {
+  .sales-order-invoice-form-compact .so-invoice-dispatch-grid .so-goods-field {
+    width: 100% !important;
+    flex-basis: 100% !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .sales-order-invoice-form-compact .so-goods-field-grid:not(.so-invoice-view-grid):not(.so-invoice-dispatch-grid) {
     grid-template-columns: minmax(0, 1fr);
   }
 
