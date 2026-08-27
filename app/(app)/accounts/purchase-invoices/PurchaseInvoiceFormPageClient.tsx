@@ -6,7 +6,7 @@ import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { AccountsToast, useAccountsToast } from "@/components/accounts/AccountsToast";
 import { PurchaseInvoiceDirectForm } from "./PurchaseInvoiceDirectForm";
 import { PurchaseInvoicePageShell } from "./PurchaseInvoicePageShell";
-import { PurchaseInvoiceGrnForm, SourceTypeSelector } from "./PurchaseInvoiceGrnForm";
+import { PurchaseInvoiceGrnForm } from "./PurchaseInvoiceGrnForm";
 import type { PurchaseSourceType } from "./purchase-invoice-types";
 
 export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId?: string }) {
@@ -55,27 +55,10 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
   if (sourceType === "direct_purchase") {
     return (
       <>
-        <PurchaseInvoicePageShell
-          breadcrumbs={accountsBreadcrumb("Transactions", "New Direct Purchase")}
-          title="New Direct Purchase Invoice"
-          description="Manual invoice entry for expenses and services. Posts to the selected expense ledger, GST, supplier, and Round Off Adjustment."
-        >
-          <div className="mb-2">
-            <SourceTypeSelector
-              value={sourceType}
-              onChange={(v) => {
-                setSourceType(v);
-                if (v === "from_grn") {
-                  router.replace("/accounts/purchase-invoices/new?mode=grn");
-                }
-              }}
-            />
-          </div>
-          <PurchaseInvoiceDirectForm
-            onCancel={() => router.push("/accounts/purchase-invoices")}
-            showToast={(msg) => showToast(msg)}
-          />
-        </PurchaseInvoicePageShell>
+        <PurchaseInvoiceDirectForm
+          onCancel={() => router.push("/accounts/purchase-invoices")}
+          showToast={(msg) => showToast(msg)}
+        />
         <AccountsToast toast={toast} onDismiss={dismissToast} />
       </>
     );
