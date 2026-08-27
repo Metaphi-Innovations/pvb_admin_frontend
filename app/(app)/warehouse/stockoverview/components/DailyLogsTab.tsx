@@ -172,6 +172,7 @@ export function DailyLogsTab() {
   const [pageSize, setPageSize] = useState(25);
   const [sort, setSort] = useState<SortState>({ key: "", direction: "none" });
   const [listNonce, setListNonce] = useState(0);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     const t = masterToday();
@@ -369,7 +370,10 @@ export function DailyLogsTab() {
   };
 
   const handleExport = useCallback(() => {
+    if (exporting) return;
     const periodParams = toApiPeriod(appliedTopFilters);
+    setExporting(true);
+    setError(null);
     StockOverviewApi.exportDailyLog({
       search: String(appliedColFilters.search ?? ""),
       ordering: toStockOrdering(sort.key, sort.direction),
@@ -379,10 +383,12 @@ export function DailyLogsTab() {
       from_date: periodParams.from_date,
       to_date: periodParams.to_date,
       filters: appliedColFilters,
-    }).catch((err) => {
-      setError(StockOverviewApi.getErrorMessage(err, "Failed to export daily log."));
-    });
-  }, [appliedTopFilters, appliedColFilters, sort.key, sort.direction]);
+    })
+      .catch((err) => {
+        setError(StockOverviewApi.getErrorMessage(err, "Failed to export daily log."));
+      })
+      .finally(() => setExporting(false));
+  }, [appliedTopFilters, appliedColFilters, exporting, sort.key, sort.direction]);
 
   const dateLabel = useMemo(() => dateLabelFor(appliedTopFilters), [appliedTopFilters]);
 
@@ -498,7 +504,7 @@ export function DailyLogsTab() {
     },
     {
       key: "batchNumber",
-      header: "Batch No.",
+      header: "Batch No",
       sortable: true,
       filterable: true,
       filterType: "dropdown",
@@ -519,9 +525,12 @@ export function DailyLogsTab() {
       key: "expiryDate",
       header: "Expiry",
       sortable: true,
-      width: "100px",
+      width: "120px",
+      truncate: false,
       render: (v) => (
-        <span className="text-xs text-muted-foreground tabular-nums">{formatDateOnly(v as string)}</span>
+        <span className="text-xs text-muted-foreground tabular-nums whitespace-nowrap">
+          {formatDateOnly(v as string)}
+        </span>
       ),
     },
     {
@@ -542,7 +551,7 @@ export function DailyLogsTab() {
     },
     {
       key: "stockValuation",
-      header: "Valuation",
+      header: "Stock Value",
       sortable: true,
       align: "right",
       width: "110px",
@@ -555,11 +564,14 @@ export function DailyLogsTab() {
       filterable: true,
       filterType: "dropdown",
       filterOptions: DAILY_LOG_STATUS_OPTIONS,
-      width: "130px",
+      width: "150px",
+      truncate: false,
       render: (val: string) => {
         const cfg = STATUS_BADGE_CONFIG[val] || { bg: "bg-slate-100 text-slate-700 border-slate-200", label: val };
         return (
-          <span className={`inline-flex items-center text-[11px] px-2.5 py-0.5 rounded-full font-medium border ${cfg.bg}`}>
+          <span
+            className={`inline-flex items-center whitespace-nowrap text-[11px] px-2.5 py-0.5 rounded-full font-medium border ${cfg.bg}`}
+          >
             {cfg.label}
           </span>
         );
@@ -575,7 +587,7 @@ export function DailyLogsTab() {
         onApply={handleApplyTopFilters}
         onReset={handleResetTopFilters}
         onExport={handleExport}
-        exportDisabled={loading || totalRecords === 0}
+        exportDisabled={loading || exporting || totalRecords === 0}
         dateLabel={dateLabel}
         today={today}
       />

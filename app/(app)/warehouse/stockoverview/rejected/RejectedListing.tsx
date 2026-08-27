@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { MasterListing } from "@/components/listing/MasterListing";
 import { ColumnConfig, ActionItemConfig } from "@/components/listing/types";
 import { Eye } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { StackedQtyDisplay, type QtyStackMeta } from "@/app/(app)/sales/shared/StackedQtyDisplay";
 import { REJECTED_STATUS_OPTIONS, REJECT_TYPE_OPTIONS, SOURCE_STATUS_OPTIONS, STATUS_BADGE_CONFIG } from "../constants";
 import { useStockOverviewListFilters } from "../hooks/use-stock-overview-list-filters";
 import {
@@ -22,6 +23,25 @@ interface RejectedListingProps {
 function formatDate(value: string | null): string {
   if (!value) return "—";
   return String(value).slice(0, 10);
+}
+
+function toRejectedQtyMeta(row: RejectedListRow): QtyStackMeta {
+  const unitsPerPacking = Number(row.unit_per_packing) || 1;
+  const qtyType = String(row.quantity_type || "").trim().toLowerCase();
+  const quantityType =
+    qtyType === "piece" || qtyType === "pieces" || qtyType === "pcs" || qtyType === "unit"
+      ? "Piece"
+      : qtyType === "case" || unitsPerPacking > 1
+        ? "Case"
+        : "Piece";
+
+  return {
+    unitsPerPacking: unitsPerPacking > 0 ? unitsPerPacking : 1,
+    quantityType,
+    uom: row.unit || row.uom || null,
+    unitPackSize: row.pack_size != null && Number(row.pack_size) > 0 ? Number(row.pack_size) : null,
+    netWeight: row.net_weight != null && Number(row.net_weight) > 0 ? Number(row.net_weight) : null,
+  };
 }
 
 export function RejectedListing({ warehouseId, onFiltersApplied }: RejectedListingProps) {
@@ -44,6 +64,7 @@ export function RejectedListing({ warehouseId, onFiltersApplied }: RejectedListi
   const [error, setError] = useState<string | null>(null);
   const [filterOptions, setFilterOptions] = useState<Record<string, Array<{ label: string; value: string }>>>({});
   const [loadingFilters, setLoadingFilters] = useState<Set<string>>(new Set());
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     setPage(1);
@@ -81,9 +102,27 @@ export function RejectedListing({ warehouseId, onFiltersApplied }: RejectedListi
     onFiltersApplied?.();
   };
 
+  const handleExport = useCallback(() => {
+    if (exporting) return;
+    setExporting(true);
+    setError(null);
+    StockOverviewApi.exportRejected({
+      search: String(appliedFilters.search ?? ""),
+      ordering: toStockOrdering(sort.key, sort.direction),
+      warehouse_id: warehouseId,
+      filters: appliedFilters,
+    })
+      .catch((err) => {
+        setError(StockOverviewApi.getErrorMessage(err, "Failed to export rejected inventory."));
+      })
+      .finally(() => setExporting(false));
+  }, [appliedFilters, exporting, sort.direction, sort.key, warehouseId]);
+
   const handleOpenFilter = (columnKey: string) => {
     const keyMap: Record<string, string> = {
       product_name: "inventory_detail__product__product_name",
+      sku: "inventory_detail__product__sku",
+      uom: "inventory_detail__product__unit",
       warehouse_name: "inventory_detail__warehouse__warehouse_name",
       batch_no: "batch_no",
       source_status: "source_status",
@@ -103,6 +142,7 @@ export function RejectedListing({ warehouseId, onFiltersApplied }: RejectedListi
       });
   };
 
+  // Core order matches Inventory: Product → SKU → UOM → Qty → … → Status
   const columns: ColumnConfig<RejectedListRow>[] = [
     {
       key: "product_name",
@@ -115,6 +155,42 @@ export function RejectedListing({ warehouseId, onFiltersApplied }: RejectedListi
         <Link href={`/warehouse/stockoverview/view/${row.id}?type=rejected`} className="block group/name">
           <span className="text-xs font-semibold text-foreground group-hover/name:text-brand-700">{row.product_name}</span>
         </Link>
+      ),
+    },
+    {
+      key: "sku",
+      header: "SKU",
+      sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: filterOptions.sku || [],
+      width: "120px",
+      render: (val) => <span className="font-mono text-xs text-foreground">{val || "—"}</span>,
+    },
+    {
+      key: "uom",
+      header: "UOM",
+      sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: filterOptions.uom || [],
+      width: "72px",
+      render: (val) => <span className="text-xs text-foreground">{val || "—"}</span>,
+    },
+    {
+      key: "rejected_qty",
+      header: "Rejected Qty",
+      sortable: true,
+      align: "right",
+      width: "150px",
+      truncate: false,
+      render: (_val, row) => (
+        <StackedQtyDisplay
+          baseQty={Number(row.rejected_qty) || 0}
+          meta={toRejectedQtyMeta(row)}
+          layout="compact"
+          className="ml-auto"
+        />
       ),
     },
     {
@@ -136,14 +212,6 @@ export function RejectedListing({ warehouseId, onFiltersApplied }: RejectedListi
       render: (val) => <span className="font-mono text-xs">{val}</span>,
     },
     {
-      key: "rejected_qty",
-      header: "Rejected Qty",
-      sortable: true,
-      align: "right",
-      width: "110px",
-      render: (val) => <span className="text-xs font-medium tabular-nums">{Number(val).toLocaleString()}</span>,
-    },
-    {
       key: "reject_reason",
       header: "Reject Reason",
       sortable: true,
@@ -156,13 +224,14 @@ export function RejectedListing({ warehouseId, onFiltersApplied }: RejectedListi
       filterType: "dropdown",
       filterOptions: REJECT_TYPE_OPTIONS,
       width: "120px",
+      truncate: false,
       render: (val: string) => {
         const cfg = STATUS_BADGE_CONFIG[val] || {
           bg: "bg-slate-100 text-slate-700 border-slate-200",
           label: val || "—",
         };
         return (
-          <span className={`inline-flex items-center text-[11px] px-2.5 py-0.5 rounded-full font-medium border ${cfg.bg}`}>
+          <span className={`inline-flex items-center whitespace-nowrap text-[11px] px-2.5 py-0.5 rounded-full font-medium border ${cfg.bg}`}>
             {cfg.label}
           </span>
         );
@@ -180,7 +249,8 @@ export function RejectedListing({ warehouseId, onFiltersApplied }: RejectedListi
       header: "Inspection Date",
       sortable: true,
       width: "130px",
-      render: (val) => <span className="text-xs">{formatDate(val as string | null)}</span>,
+      truncate: false,
+      render: (val) => <span className="text-xs whitespace-nowrap">{formatDate(val as string | null)}</span>,
     },
     {
       key: "source_status",
@@ -191,11 +261,12 @@ export function RejectedListing({ warehouseId, onFiltersApplied }: RejectedListi
       filterOptions: filterOptions.source_status?.length
         ? filterOptions.source_status
         : SOURCE_STATUS_OPTIONS,
-      width: "130px",
+      width: "140px",
+      truncate: false,
       render: (val: string) => {
         const cfg = STATUS_BADGE_CONFIG[val] || { bg: "bg-slate-100 text-slate-700 border-slate-200", label: val || "—" };
         return (
-          <span className={`inline-flex items-center text-[11px] px-2.5 py-0.5 rounded-full font-medium border ${cfg.bg}`}>
+          <span className={`inline-flex items-center whitespace-nowrap text-[11px] px-2.5 py-0.5 rounded-full font-medium border ${cfg.bg}`}>
             {cfg.label}
           </span>
         );
@@ -208,11 +279,12 @@ export function RejectedListing({ warehouseId, onFiltersApplied }: RejectedListi
       filterable: true,
       filterType: "dropdown",
       filterOptions: REJECTED_STATUS_OPTIONS,
-      width: "150px",
+      width: "140px",
+      truncate: false,
       render: (val: string) => {
         const cfg = STATUS_BADGE_CONFIG[val] || { bg: "bg-slate-100 text-slate-700 border-slate-200", label: val };
         return (
-          <span className={`inline-flex items-center text-[11px] px-2.5 py-0.5 rounded-full font-medium border ${cfg.bg}`}>
+          <span className={`inline-flex items-center whitespace-nowrap text-[11px] px-2.5 py-0.5 rounded-full font-medium border ${cfg.bg}`}>
             {cfg.label}
           </span>
         );
@@ -249,6 +321,7 @@ export function RejectedListing({ warehouseId, onFiltersApplied }: RejectedListi
         currentFilters={draftFilters}
         currentSort={sort}
         onOpenFilter={handleOpenFilter}
+        onExport={handleExport}
       />
     </div>
   );

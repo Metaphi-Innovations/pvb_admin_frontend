@@ -43,6 +43,10 @@ export interface RecordDetailLayoutProps {
   typeBadge?: React.ReactNode;
   statusLabel: string;
   statusVariant?: "active" | "inactive" | "draft" | "blocked" | "neutral";
+  /** Hide status pill in the header (default: show). */
+  hideStatus?: boolean;
+  /** Hide entity avatar initials circle (default: show). */
+  hideAvatar?: boolean;
   metaItems?: RecordMetaItem[];
   kpis?: RecordKpiItem[];
   tabs?: RecordDetailTab[];
@@ -71,6 +75,8 @@ export function RecordDetailLayout({
   typeBadge,
   statusLabel,
   statusVariant = "active",
+  hideStatus = false,
+  hideAvatar = false,
   metaItems = [],
   kpis,
   tabs,
@@ -117,10 +123,12 @@ export function RecordDetailLayout({
 
         <div className="flex items-start justify-between gap-4 px-5 py-3">
           <div className="flex items-start gap-3 min-w-0 flex-1">
-            <RecordEntityAvatar
-              name={recordName}
-              className={isProfileHeader ? "h-14 w-14 text-lg" : undefined}
-            />
+            {!hideAvatar && (
+              <RecordEntityAvatar
+                name={recordName}
+                className={isProfileHeader ? "h-14 w-14 text-lg" : undefined}
+              />
+            )}
             <div className="min-w-0 flex-1">
               <div className="flex items-center flex-wrap gap-2.5">
                 <h1
@@ -132,7 +140,9 @@ export function RecordDetailLayout({
                   {recordName}
                 </h1>
                 {typeBadge}
-                <RecordStatusPill label={statusLabel} variant={statusVariant} />
+                {!hideStatus && (
+                  <RecordStatusPill label={statusLabel} variant={statusVariant} />
+                )}
               </div>
               {allMeta.length > 0 && (
                 <div

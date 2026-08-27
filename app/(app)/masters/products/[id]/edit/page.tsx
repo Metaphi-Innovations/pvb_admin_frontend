@@ -73,6 +73,7 @@ export default function EditProductPage() {
       productId: apiProduct.productUuid,
       productCode: apiProduct.productCode,
       productName: apiProduct.productName,
+      scientificName: apiProduct.scientificName || undefined,
       sku: apiProduct.sku,
       supplier: apiProduct.supplierId || "",
       supplierCode: apiProduct.supplierCode || undefined,
