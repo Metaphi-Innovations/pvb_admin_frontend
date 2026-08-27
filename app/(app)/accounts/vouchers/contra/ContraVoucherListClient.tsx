@@ -3,14 +3,18 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { Loader2, XCircle } from "lucide-react";
 import {
   AccountsEditAction,
+  AccountsMoreActions,
   AccountsTableActionCell,
   AccountsViewAction,
   accountsActionColClass,
 } from "@/components/accounts/AccountsTableActions";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { MoneyAmount } from "@/components/accounts/MoneyAmount";
+import { showToast } from "@/lib/toast";
+import { ContraReasonDialog } from "./components/ContraReasonDialog";
 import {
   AccountsTable,
   AccountsTableBody,
@@ -68,6 +72,7 @@ import {
   type ContraVoucherStatus,
 } from "@/types/contra-voucher.types";
 import {
+  canCancelStatus,
   contraEditPath,
   contraViewPath,
   formatEligibleBankLabel,
@@ -99,7 +104,7 @@ type AccountFilterOption = {
 
 function statusKey(
   status: ContraVoucherStatus,
-): "active" | "pending" | "approved" | "rejected" | "draft" | "inactive" | "closed" {
+): "active" | "pending" | "approved" | "rejected" | "draft" | "inactive" | "closed" | "partial" {
   switch (status) {
     case "POSTED":
     case "APPROVED":
@@ -107,10 +112,10 @@ function statusKey(
     case "PENDING_APPROVAL":
       return "pending";
     case "REJECTED":
-      return "rejected";
     case "CANCELLED":
+      return "rejected";
     case "REVERSED":
-      return "closed";
+      return "partial";
     case "DRAFT":
       return "draft";
     default:
@@ -149,6 +154,62 @@ function eligibleToFilterOptions(rows: ContraEligibleAccount[]): AccountFilterOp
     }
   }
   return out;
+}
+
+/** Build Transfer From/To filter options from loaded list rows (no warehouse gate). */
+function listRowsToAccountOptions(
+  rows: ContraVoucherListItem[],
+  side: "from" | "to",
+  accountTypeFilter?: ContraAccountType,
+): AccountFilterOption[] {
+  const map = new Map<string, AccountFilterOption>();
+  for (const row of rows) {
+    const accountType = side === "from" ? row.from_account_type : row.to_account_type;
+    if (accountTypeFilter && accountType !== accountTypeFilter) continue;
+
+    const label =
+      (side === "from" ? row.from_ledger?.ledger_name : row.to_ledger?.ledger_name)?.trim() ||
+      "";
+    if (!label) continue;
+
+    let id = "";
+    if (accountType === "CASH") {
+      id =
+        (side === "from" ? row.from_cash_ledger_id : row.to_cash_ledger_id) ||
+        (side === "from" ? row.from_ledger_id : row.to_ledger_id) ||
+        "";
+    } else {
+      id =
+        (side === "from" ? row.from_bank_account_id : row.to_bank_account_id) ||
+        "";
+      // Fallback when bank account id is missing from older payloads
+      if (!id) {
+        id = (side === "from" ? row.from_ledger_id : row.to_ledger_id) || "";
+      }
+    }
+    if (!id || map.has(id)) continue;
+    map.set(id, { id, label, accountType });
+  }
+  return [...map.values()].sort((a, b) => a.label.localeCompare(b.label));
+}
+
+function accountFilterIdFromRow(
+  row: ContraVoucherListItem,
+  side: "from" | "to",
+): string {
+  const accountType = side === "from" ? row.from_account_type : row.to_account_type;
+  if (accountType === "CASH") {
+    return (
+      (side === "from" ? row.from_cash_ledger_id : row.to_cash_ledger_id) ||
+      (side === "from" ? row.from_ledger_id : row.to_ledger_id) ||
+      ""
+    );
+  }
+  return (
+    (side === "from" ? row.from_bank_account_id : row.to_bank_account_id) ||
+    (side === "from" ? row.from_ledger_id : row.to_ledger_id) ||
+    ""
+  );
 }
 
 const STATUS_FILTER_OPTIONS = toValueOptions(Object.keys(CONTRA_STATUS_LABELS));
@@ -199,6 +260,8 @@ function ContraListTable({
   branchOptions,
   fromAccountOptions,
   toAccountOptions,
+  onCancel,
+  actionBusy,
 }: {
   rows: ContraVoucherListItem[];
   loading: boolean;
@@ -206,6 +269,8 @@ function ContraListTable({
   branchOptions: { value: string; count: number }[];
   fromAccountOptions: { value: string; count: number }[];
   toAccountOptions: { value: string; count: number }[];
+  onCancel: (row: ContraVoucherListItem) => void;
+  actionBusy?: boolean;
 }) {
   const router = useRouter();
 
@@ -298,6 +363,8 @@ function ContraListTable({
           rows.map((row) => {
             const id = row.contra_voucher_id;
             const canEdit = isDraftEditable(row.status);
+            const canCancelRow =
+              canCancelStatus(row.status) || row.status === "POSTED";
             return (
               <AccountsTableRow key={id} className="group">
                 <AccountsTableCell mono>
@@ -360,6 +427,17 @@ function ContraListTable({
                         onClick={() => router.push(contraEditPath(id))}
                       />
                     ) : null}
+                    {canCancelRow ? (
+                      <AccountsMoreActions contentClassName="w-44">
+                        <DropdownMenuItem
+                          className="text-xs gap-2 text-red-600"
+                          disabled={actionBusy}
+                          onClick={() => onCancel(row)}
+                        >
+                          <XCircle className="w-4 h-4" /> Cancel
+                        </DropdownMenuItem>
+                      </AccountsMoreActions>
+                    ) : null}
                   </AccountsTableActionCell>
                 </AccountsTableCell>
               </AccountsTableRow>
@@ -398,8 +476,13 @@ export function ContraVoucherListClient() {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [columnFilters, setColumnFilters] = useState<AccountsColumnFilters>({});
   const [warehouses, setWarehouses] = useState<{ id: string; name: string }[]>([]);
-  const [fromAccountOpts, setFromAccountOpts] = useState<AccountFilterOption[]>([]);
-  const [toAccountOpts, setToAccountOpts] = useState<AccountFilterOption[]>([]);
+  const [cancelTarget, setCancelTarget] = useState<ContraVoucherListItem | null>(
+    null,
+  );
+  const [cancelReason, setCancelReason] = useState("");
+  const [reverseDate, setReverseDate] = useState("");
+  const [actionBusy, setActionBusy] = useState(false);
+  const [listRefreshKey, setListRefreshKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -480,11 +563,24 @@ export function ContraVoucherListClient() {
     });
   }, [resolvedToWh, toType]);
 
+  const fromAccountOptsFromRows = useMemo(
+    () => listRowsToAccountOptions(rows, "from", fromType),
+    [rows, fromType],
+  );
+  const toAccountOptsFromRows = useMemo(
+    () => listRowsToAccountOptions(rows, "to", toType),
+    [rows, toType],
+  );
+
+  const [fromEligibleOpts, setFromEligibleOpts] = useState<AccountFilterOption[]>([]);
+  const [toEligibleOpts, setToEligibleOpts] = useState<AccountFilterOption[]>([]);
+
+  // Optional enrichment: when a branch is selected, merge warehouse-eligible accounts.
   useEffect(() => {
     let cancelled = false;
     (async () => {
       if (!resolvedFromWh) {
-        setFromAccountOpts([]);
+        if (!cancelled) setFromEligibleOpts([]);
         return;
       }
       try {
@@ -494,10 +590,11 @@ export function ContraVoucherListClient() {
           page: 1,
           page_size: 100,
         });
-        if (cancelled) return;
-        setFromAccountOpts(eligibleToFilterOptions(res.data ?? []));
+        if (!cancelled) {
+          setFromEligibleOpts(eligibleToFilterOptions(res.data ?? []));
+        }
       } catch {
-        if (!cancelled) setFromAccountOpts([]);
+        if (!cancelled) setFromEligibleOpts([]);
       }
     })();
     return () => {
@@ -509,7 +606,7 @@ export function ContraVoucherListClient() {
     let cancelled = false;
     (async () => {
       if (!resolvedToWh) {
-        setToAccountOpts([]);
+        if (!cancelled) setToEligibleOpts([]);
         return;
       }
       try {
@@ -519,16 +616,31 @@ export function ContraVoucherListClient() {
           page: 1,
           page_size: 100,
         });
-        if (cancelled) return;
-        setToAccountOpts(eligibleToFilterOptions(res.data ?? []));
+        if (!cancelled) {
+          setToEligibleOpts(eligibleToFilterOptions(res.data ?? []));
+        }
       } catch {
-        if (!cancelled) setToAccountOpts([]);
+        if (!cancelled) setToEligibleOpts([]);
       }
     })();
     return () => {
       cancelled = true;
     };
   }, [resolvedToWh, toType]);
+
+  const fromAccountOpts = useMemo(() => {
+    const merged = new Map<string, AccountFilterOption>();
+    for (const o of fromAccountOptsFromRows) merged.set(o.id, o);
+    for (const o of fromEligibleOpts) merged.set(o.id, o);
+    return [...merged.values()].sort((a, b) => a.label.localeCompare(b.label));
+  }, [fromAccountOptsFromRows, fromEligibleOpts]);
+
+  const toAccountOpts = useMemo(() => {
+    const merged = new Map<string, AccountFilterOption>();
+    for (const o of toAccountOptsFromRows) merged.set(o.id, o);
+    for (const o of toEligibleOpts) merged.set(o.id, o);
+    return [...merged.values()].sort((a, b) => a.label.localeCompare(b.label));
+  }, [toAccountOptsFromRows, toEligibleOpts]);
 
   const fromAccountById = useMemo(() => {
     const map = new Map<string, AccountFilterOption>();
@@ -604,6 +716,15 @@ export function ContraVoucherListClient() {
     setPage(1);
   }, []);
 
+  const fromAccountId = firstSelected(columnFilters.from_account);
+  const toAccountId = firstSelected(columnFilters.to_account);
+  const fromOptAccountType = fromAccountId
+    ? fromAccountById.get(fromAccountId)?.accountType
+    : undefined;
+  const toOptAccountType = toAccountId
+    ? toAccountById.get(toAccountId)?.accountType
+    : undefined;
+
   const listQuery = useMemo((): ContraVoucherListQuery => {
     const dateFilter = columnFilters.voucher_date;
     const from = dateFilter?.dateFrom || dateFrom || undefined;
@@ -614,15 +735,9 @@ export function ContraVoucherListClient() {
 
     const apiSort = SORT_KEY_TO_API[sortKey];
 
-    const fromAccountId = firstSelected(columnFilters.from_account);
-    const toAccountId = firstSelected(columnFilters.to_account);
-
-    const fromOpt = fromAccountId ? fromAccountById.get(fromAccountId) : undefined;
-    const toOpt = toAccountId ? toAccountById.get(toAccountId) : undefined;
-
     // Prefer explicit type filter; fall back to selected option's type
-    const effectiveFromType = fromType || fromOpt?.accountType;
-    const effectiveToType = toType || toOpt?.accountType;
+    const effectiveFromType = fromType || fromOptAccountType;
+    const effectiveToType = toType || toOptAccountType;
 
     const query: ContraVoucherListQuery = {
       page,
@@ -639,20 +754,16 @@ export function ContraVoucherListClient() {
       sort_dir: apiSort ? sortDir : undefined,
     };
 
-    if (fromAccountId && fromOpt) {
-      if (effectiveFromType === "CASH") {
-        query.from_cash_ledger_id = fromAccountId;
-      } else if (effectiveFromType === "BANK") {
-        query.from_bank_account_id = fromAccountId;
-      }
+    if (fromAccountId && effectiveFromType === "CASH") {
+      query.from_cash_ledger_id = fromAccountId;
+    } else if (fromAccountId && effectiveFromType === "BANK") {
+      query.from_bank_account_id = fromAccountId;
     }
 
-    if (toAccountId && toOpt) {
-      if (effectiveToType === "CASH") {
-        query.to_cash_ledger_id = toAccountId;
-      } else if (effectiveToType === "BANK") {
-        query.to_bank_account_id = toAccountId;
-      }
+    if (toAccountId && effectiveToType === "CASH") {
+      query.to_cash_ledger_id = toAccountId;
+    } else if (toAccountId && effectiveToType === "BANK") {
+      query.to_bank_account_id = toAccountId;
     }
 
     return query;
@@ -670,8 +781,10 @@ export function ContraVoucherListClient() {
     sortKey,
     sortDir,
     columnFilters,
-    fromAccountById,
-    toAccountById,
+    fromAccountId,
+    toAccountId,
+    fromOptAccountType,
+    toOptAccountType,
   ]);
 
   useEffect(() => {
@@ -694,7 +807,63 @@ export function ContraVoucherListClient() {
       }
     })();
     return () => ac.abort();
-  }, [listQuery]);
+  }, [listQuery, listRefreshKey]);
+
+  const closeCancelDialog = useCallback(() => {
+    if (actionBusy) return;
+    setCancelTarget(null);
+    setCancelReason("");
+    setReverseDate("");
+  }, [actionBusy]);
+
+  const openCancelDialog = useCallback((row: ContraVoucherListItem) => {
+    setCancelReason("");
+    setReverseDate(String(row.voucher_date || "").slice(0, 10));
+    setCancelTarget(row);
+  }, []);
+
+  const confirmCancelOrReverse = useCallback(async () => {
+    if (!cancelTarget || actionBusy) return;
+    const id = cancelTarget.contra_voucher_id;
+    const isPosted = cancelTarget.status === "POSTED";
+    const reason = cancelReason.trim();
+    if (!reason) return;
+
+    setActionBusy(true);
+    try {
+      if (isPosted) {
+        const resolvedDate =
+          reverseDate.trim() ||
+          String(cancelTarget.voucher_date || "").slice(0, 10) ||
+          null;
+        await ContraVoucherService.reverse(id, {
+          reason,
+          reversal_date: resolvedDate,
+        });
+        showToast("Contra reversed.", "success");
+      } else {
+        await ContraVoucherService.cancel(id, { reason });
+        showToast("Contra cancelled.", "success");
+      }
+      setCancelTarget(null);
+      setCancelReason("");
+      setReverseDate("");
+      setListRefreshKey((k) => k + 1);
+    } catch (e) {
+      showToast(
+        e instanceof Error
+          ? e.message
+          : isPosted
+            ? "Failed to reverse Contra Voucher."
+            : "Failed to cancel Contra Voucher.",
+        "error",
+      );
+    } finally {
+      setActionBusy(false);
+    }
+  }, [cancelTarget, cancelReason, reverseDate, actionBusy]);
+
+  const isPostedCancelTarget = cancelTarget?.status === "POSTED";
 
   const getCellValue = useCallback((row: ContraVoucherListItem, key: string) => {
     switch (key) {
@@ -707,13 +876,10 @@ export function ContraVoucherListClient() {
       case "to_warehouse":
         return row.to_warehouse?.warehouse_name || "";
       case "from_account":
-        // Prefer cash/bank identity IDs for filter matching when present on list rows
-        return (
-          row.from_ledger?.ledger_name ||
-          ""
-        );
+        // Must match filter option values (cash ledger / bank account ids).
+        return accountFilterIdFromRow(row, "from");
       case "to_account":
-        return row.to_ledger?.ledger_name || "";
+        return accountFilterIdFromRow(row, "to");
       case "from_account_type":
         return row.from_account_type;
       case "to_account_type":
@@ -730,6 +896,7 @@ export function ContraVoucherListClient() {
   }, []);
 
   return (
+    <>
     <AccountsTableListing
       toolbar={
         <AccountsTableToolbar
@@ -910,8 +1077,37 @@ export function ContraVoucherListClient() {
           branchOptions={branchOptions}
           fromAccountOptions={fromAccountValueOptions}
           toAccountOptions={toAccountValueOptions}
+          onCancel={openCancelDialog}
+          actionBusy={actionBusy}
         />
       </AccountsColumnFilterProvider>
     </AccountsTableListing>
+
+    <ContraReasonDialog
+      open={!!cancelTarget}
+      onOpenChange={(open) => {
+        if (!open) closeCancelDialog();
+      }}
+      title={isPostedCancelTarget ? "Reverse Voucher" : "Discard Voucher"}
+      description={
+        isPostedCancelTarget
+          ? "This voucher has already been posted. Continuing will create reversal entries for the ledgers impacted by this voucher. Do you want to continue?"
+          : "Are you sure you want to discard this voucher entry?"
+      }
+      reason={cancelReason}
+      onReasonChange={setCancelReason}
+      showDate={isPostedCancelTarget}
+      dateValue={reverseDate}
+      onDateChange={setReverseDate}
+      confirmLabel={
+        isPostedCancelTarget ? "Continue / Reverse Voucher" : "Discard Voucher"
+      }
+      destructive
+      busy={actionBusy}
+      onConfirm={() => {
+        void confirmCancelOrReverse();
+      }}
+    />
+    </>
   );
 }

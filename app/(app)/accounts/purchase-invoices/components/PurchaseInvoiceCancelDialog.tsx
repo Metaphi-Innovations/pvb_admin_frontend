@@ -25,15 +25,17 @@ function todayDateInputValue(): string {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-export function CreditNoteReverseDialog({
+export function PurchaseInvoiceCancelDialog({
   open,
   onClose,
+  invoiceNo,
   onConfirm,
   busy,
 }: {
   open: boolean;
   onClose: () => void;
-  onConfirm: (payload: { reason: string; reversal_date?: string }) => void | Promise<void>;
+  invoiceNo?: string;
+  onConfirm: (payload: { reason: string; reversal_date: string }) => void | Promise<void>;
   busy?: boolean;
 }) {
   const [reason, setReason] = useState("");
@@ -61,16 +63,17 @@ export function CreditNoteReverseDialog({
           <DialogTitle className="text-sm font-bold">Reverse Voucher</DialogTitle>
           <DialogDescription className="text-xs">
             This voucher has already been posted. Continuing will create reversal entries for the
-            ledgers impacted by this voucher. Do you want to continue?
+            ledgers impacted by this voucher
+            {invoiceNo ? ` (${invoiceNo})` : ""}. Do you want to continue?
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-3 py-2 text-xs">
           <div className="space-y-1.5">
-            <Label htmlFor="cn-rev-date" className="text-xs font-medium">
+            <Label htmlFor="pi-cancel-date" className="text-xs font-medium">
               Reversal Date
             </Label>
             <Input
-              id="cn-rev-date"
+              id="pi-cancel-date"
               type="date"
               className="h-9 text-xs"
               value={reversalDate}
@@ -79,11 +82,11 @@ export function CreditNoteReverseDialog({
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="cn-rev-reason" className="text-xs font-medium">
+            <Label htmlFor="pi-cancel-reason" className="text-xs font-medium">
               Reason <span className="text-red-500">*</span>
             </Label>
             <Textarea
-              id="cn-rev-reason"
+              id="pi-cancel-reason"
               className="text-xs min-h-[72px] resize-none"
               placeholder="Enter reason…"
               value={reason}

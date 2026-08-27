@@ -270,11 +270,11 @@ export default function CreditNoteViewPageClient({ creditNoteId }: { creditNoteI
                   <Button
                     variant="outline"
                     size="sm"
-                    className="h-8 text-xs text-purple-700 hover:bg-purple-50"
+                    className="h-8 text-xs text-red-600"
                     onClick={() => setReverseOpen(true)}
                     disabled={reverseBusy}
                   >
-                    Reverse
+                    Cancel
                   </Button>
                 ) : null}
               </div>
@@ -468,11 +468,11 @@ export default function CreditNoteViewPageClient({ creditNoteId }: { creditNoteI
             const next = await CreditNoteListApi.reverse(record.credit_note_id, payload);
             setRecord(next);
             setReverseOpen(false);
-            showToast("Credit Note reversed.");
+            showToast("Credit Note cancelled.");
             await refresh({ silent: true });
           } catch (e) {
             showToast(
-              creditNoteListApiError(e, "Could not reverse this Credit Note."),
+              creditNoteListApiError(e, "Could not cancel this Credit Note."),
               "error",
             );
           } finally {

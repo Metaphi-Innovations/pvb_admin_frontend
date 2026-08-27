@@ -22,6 +22,7 @@ import { ReportMoreFilters } from "@/components/accounts/ReportMoreFilters";
 import { ReportMultiSelect } from "@/components/accounts/ReportMultiSelect";
 import { ACCOUNTS_FILTER_LABEL_CLASS } from "@/lib/accounts/accounts-typography";
 import type { DateRangePresetId } from "@/lib/accounts/report-date-presets";
+import { resolveDateRangePreset } from "@/lib/accounts/report-date-presets";
 import type { ReportMultiSelectOption } from "@/lib/accounts/report-multi-filter-utils";
 import { cn } from "@/lib/utils";
 
@@ -161,7 +162,14 @@ export function NotesListingFilterBar({
         preset={filters.preset}
         dateFrom={filters.dateFrom}
         dateTo={filters.dateTo}
-        onPresetChange={(preset) => onChange({ preset })}
+        onPresetChange={(preset) => {
+          if (preset === "custom") {
+            onChange({ preset });
+            return;
+          }
+          const { from, to } = resolveDateRangePreset(preset);
+          onChange({ preset, dateFrom: from, dateTo: to });
+        }}
         onDateFromChange={(dateFrom) => onChange({ dateFrom, preset: "custom" })}
         onDateToChange={(dateTo) => onChange({ dateTo, preset: "custom" })}
       />
@@ -240,7 +248,13 @@ export function NotesListingFilterBar({
 }
 
 export function resetNotesListingFilters(defaultPreset: DateRangePresetId = "this_month"): NotesListingFilterState {
-  return { ...EMPTY_NOTES_FILTERS, preset: defaultPreset };
+  const { from, to } = resolveDateRangePreset(defaultPreset);
+  return {
+    ...EMPTY_NOTES_FILTERS,
+    preset: defaultPreset,
+    dateFrom: from,
+    dateTo: to,
+  };
 }
 
 export const NOTES_MODULE_TABS = [

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
+import { InvoiceFormLayout } from "@/app/(app)/accounts/components/InvoiceFormLayout";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { VoucherFormSectionCard } from "@/components/accounts/voucher-form/VoucherFormSectionCard";
 import {
@@ -42,7 +43,6 @@ import {
 } from "@/types/contra-voucher.types";
 import { ContraSearchableSelect } from "./components/ContraSearchableSelect";
 import { ContraFormActionBar } from "./components/ContraFormActionBar";
-import { ContraAccountingPreview } from "./components/ContraAccountingPreview";
 import { ContraReasonDialog } from "./components/ContraReasonDialog";
 import { ContraAttachmentsPanel } from "./components/ContraAttachmentsPanel";
 import {
@@ -117,7 +117,6 @@ export function ContraVoucherApiForm({
   const [rejectReason, setRejectReason] = useState("");
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
-  const [postOpen, setPostOpen] = useState(false);
   const [reverseOpen, setReverseOpen] = useState(false);
   const [reverseReason, setReverseReason] = useState("");
   const [reverseDate, setReverseDate] = useState("");
@@ -319,11 +318,6 @@ export function ContraVoucherApiForm({
     [loadEligible, form.to_warehouse_id, form.to_account_type],
   );
 
-  const warehouseName = useCallback(
-    (id: string) => warehouses.find((w) => w.value === id)?.label || "",
-    [warehouses],
-  );
-
   const fromAccountOptions = useMemo(() => {
     if (form.from_account_type === "CASH") {
       const opts = fromEligible.filter(isCashEligible).map((a) => ({
@@ -503,7 +497,10 @@ export function ContraVoucherApiForm({
     });
   };
 
-  const saveDraft = async (): Promise<ContraVoucherDetail | null> => {
+  const saveDraft = async (options?: {
+    skipToast?: boolean;
+    skipNavigate?: boolean;
+  }): Promise<ContraVoucherDetail | null> => {
     const validationError = validateContraForm(form);
     if (validationError) {
       setError(validationError);
@@ -521,11 +518,13 @@ export function ContraVoucherApiForm({
           })
         : await ContraVoucherService.create(buildCreatePayload(form), pendingFiles);
       hydrateFromDetail(saved);
-      showToast(
-        currentId ? "Contra draft updated." : "Contra draft created.",
-        "success",
-      );
-      if (!currentId) {
+      if (!options?.skipToast) {
+        showToast(
+          currentId ? "Contra draft updated." : "Contra draft created.",
+          "success",
+        );
+      }
+      if (!currentId && !options?.skipNavigate) {
         router.replace(contraEditPath(saved.contra_voucher_id));
       }
       return saved;
@@ -566,10 +565,36 @@ export function ContraVoucherApiForm({
     else router.push(CONTRA_LIST_PATH);
   };
 
+  const handleBack = () => {
+    if (onDone) onDone();
+    else router.push(CONTRA_LIST_PATH);
+  };
+
+  /** Save current form then post immediately — no confirmation dialog. */
   const handleSaveAndPost = async () => {
-    const saved = await saveDraft();
-    if (!saved) return;
-    setPostOpen(true);
+    const saved = await saveDraft({ skipToast: true, skipNavigate: true });
+    if (!saved?.contra_voucher_id) return;
+    const posted = await runAction(
+      () => ContraVoucherService.post(saved.contra_voucher_id),
+      "Contra posted successfully.",
+    );
+    if (posted?.contra_voucher_id) {
+      router.replace(contraViewPath(posted.contra_voucher_id));
+      return;
+    }
+    router.replace(contraEditPath(saved.contra_voucher_id));
+  };
+
+  /** Post an already-saved voucher without confirmation (approved flows). */
+  const handlePostDirect = async () => {
+    if (!currentId) return;
+    const posted = await runAction(
+      () => ContraVoucherService.post(currentId),
+      "Contra posted successfully.",
+    );
+    if (posted?.contra_voucher_id) {
+      router.replace(contraViewPath(posted.contra_voucher_id));
+    }
   };
 
   const title =
@@ -583,40 +608,17 @@ export function ContraVoucherApiForm({
     ? `Contra No. ${formatSrNo(detail.sr_no)} · ${CONTRA_STATUS_LABELS[status]}`
     : "Transfer between cash and bank accounts.";
 
-  if (loading) {
-    return (
-      <AccountsPageShell
-        breadcrumbs={accountsBreadcrumb("Vouchers", "Contra Voucher", CONTRA_LIST_PATH)}
-        title="Contra Voucher"
-        description="Loading…"
-        layout="form"
-      >
-        <div className="flex items-center gap-2 text-sm text-muted-foreground py-10 justify-center">
-          <Loader2 className="w-4 h-4 animate-spin" /> Loading contra…
-        </div>
-      </AccountsPageShell>
-    );
-  }
+  const breadcrumb = accountsBreadcrumb(
+    "Vouchers",
+    currentId ? (fieldsEditable ? "Edit Contra" : "Contra Voucher") : "New Contra",
+    CONTRA_LIST_PATH,
+  );
 
-  return (
-    <AccountsPageShell
-      breadcrumbs={accountsBreadcrumb("Vouchers", "Contra Voucher", CONTRA_LIST_PATH)}
-      title={title}
-      description={subtitle}
-      layout="form"
-      actions={
-        readOnlyProp && onEdit && !fieldsEditable && isDraftEditable(status) ? (
-          <button
-            type="button"
-            className="h-8 px-3 text-xs rounded-lg border border-border hover:bg-muted"
-            onClick={onEdit}
-          >
-            Edit
-          </button>
-        ) : null
-      }
-    >
-      <div className="w-full space-y-3 pb-24">
+  const showViewChrome = readOnlyProp || !fieldsEditable;
+  const useInvoiceChrome = !showViewChrome;
+
+  const formBody = (
+    <>
         {error ? <div className={VOUCHER_ERROR_CLASS}>{error}</div> : null}
 
         {crossCashBlocked ? (
@@ -967,12 +969,6 @@ export function ContraVoucherApiForm({
           </div>
         </VoucherFormSectionCard>
 
-        <ContraAccountingPreview
-          form={form}
-          fromWarehouseName={warehouseName(form.from_warehouse_id)}
-          toWarehouseName={warehouseName(form.to_warehouse_id)}
-        />
-
         {detail?.accounting_voucher ? (
           <VoucherFormSectionCard title="Posted Accounting Voucher">
             <div className="text-xs space-y-1">
@@ -989,61 +985,77 @@ export function ContraVoucherApiForm({
             </div>
           </VoucherFormSectionCard>
         ) : null}
-      </div>
+    </>
+  );
 
-      <div className="fixed bottom-0 inset-x-0 z-40 border-t border-border bg-white/95 backdrop-blur px-4 py-2.5">
-        <div className="w-full">
-          <ContraFormActionBar
-            status={status}
-            busy={busy}
-            canCancel={canCancelStatus(status) && !!currentId}
-            approvalRequired={approvalRequired}
-            configReady={configReady}
-            hasExistingId={!!currentId}
-            onDiscard={handleDiscard}
-            onSaveDraft={
-              fieldsEditable && !readOnlyProp ? () => void saveDraft() : undefined
+  const actionBar = (
+    <ContraFormActionBar
+      status={status}
+      busy={busy}
+      readOnly={showViewChrome}
+      canCancel={canCancelStatus(status) && !!currentId}
+      approvalRequired={approvalRequired}
+      configReady={configReady}
+      hasExistingId={!!currentId}
+      onDiscard={fieldsEditable ? handleDiscard : undefined}
+      onSaveDraft={
+        fieldsEditable && !readOnlyProp ? () => void saveDraft() : undefined
+      }
+      onSubmitForApproval={
+        fieldsEditable && !readOnlyProp && approvalRequired
+          ? () => setSubmitOpen(true)
+          : undefined
+      }
+      onSaveAndPost={
+        fieldsEditable && !readOnlyProp && !approvalRequired && !currentId
+          ? () => void handleSaveAndPost()
+          : undefined
+      }
+      onApprove={
+        status === "PENDING_APPROVAL" && approvalRequired && currentId
+          ? () =>
+              void runAction(
+                () => ContraVoucherService.approve(currentId!),
+                "Contra approved.",
+              )
+          : undefined
+      }
+      onReject={
+        status === "PENDING_APPROVAL" && approvalRequired && currentId
+          ? () => setRejectOpen(true)
+          : undefined
+      }
+      onPost={
+        !approvalRequired &&
+        currentId &&
+        (status === "APPROVED" ||
+          ((status === "DRAFT" || status === "REJECTED" || !status) &&
+            fieldsEditable &&
+            !readOnlyProp))
+          ? status === "APPROVED"
+            ? () => void handlePostDirect()
+            : () => void handleSaveAndPost()
+          : undefined
+      }
+      onCancel={
+        canCancelStatus(status) && currentId && !isDraftEditable(status)
+          ? () => setCancelOpen(true)
+          : undefined
+      }
+      onReverse={
+        status === "POSTED" && currentId
+          ? () => {
+              setReverseReason("");
+              setReverseDate(form.voucher_date || "");
+              setReverseOpen(true);
             }
-            onSubmitForApproval={
-              fieldsEditable && !readOnlyProp && approvalRequired
-                ? () => setSubmitOpen(true)
-                : undefined
-            }
-            onSaveAndPost={
-              fieldsEditable && !readOnlyProp && !approvalRequired
-                ? () => void handleSaveAndPost()
-                : undefined
-            }
-            onApprove={
-              status === "PENDING_APPROVAL" && approvalRequired && currentId
-                ? () =>
-                    void runAction(
-                      () => ContraVoucherService.approve(currentId!),
-                      "Contra approved.",
-                    )
-                : undefined
-            }
-            onReject={
-              status === "PENDING_APPROVAL" && approvalRequired && currentId
-                ? () => setRejectOpen(true)
-                : undefined
-            }
-            onPost={
-              currentId &&
-              (status === "APPROVED" || (status === "DRAFT" && !approvalRequired))
-                ? () => setPostOpen(true)
-                : undefined
-            }
-            onCancel={
-              canCancelStatus(status) && currentId ? () => setCancelOpen(true) : undefined
-            }
-            onReverse={
-              status === "POSTED" && currentId ? () => setReverseOpen(true) : undefined
-            }
-          />
-        </div>
-      </div>
+          : undefined
+      }
+    />
+  );
 
+  const dialogs = (
+    <>
       <ContraReasonDialog
         open={submitOpen}
         onOpenChange={setSubmitOpen}
@@ -1096,15 +1108,15 @@ export function ContraVoucherApiForm({
       <ContraReasonDialog
         open={cancelOpen}
         onOpenChange={setCancelOpen}
-        title="Cancel Contra"
-        description="Cancellation keeps the record — it does not delete it."
+        title="Discard Voucher"
+        description="Are you sure you want to discard this voucher entry?"
         reason={cancelReason}
         onReasonChange={setCancelReason}
-        confirmLabel="Cancel Contra"
+        confirmLabel="Discard Voucher"
         destructive
         busy={busy}
         onConfirm={() => {
-          if (!currentId) return;
+          if (!currentId || busy) return;
           setCancelOpen(false);
           void runAction(
             () =>
@@ -1117,48 +1129,95 @@ export function ContraVoucherApiForm({
       />
 
       <ContraReasonDialog
-        open={postOpen}
-        onOpenChange={setPostOpen}
-        title="Post Contra Voucher"
-        description="Posting creates Transfer To (Debit) and Transfer From (Credit) lines through the Common Accounting Engine."
-        confirmLabel="Post"
-        busy={busy}
-        onConfirm={() => {
-          if (!currentId) return;
-          setPostOpen(false);
-          void runAction(
-            () => ContraVoucherService.post(currentId),
-            "Contra posted successfully.",
-          );
-        }}
-      />
-
-      <ContraReasonDialog
         open={reverseOpen}
         onOpenChange={setReverseOpen}
-        title="Reverse Contra"
-        description="Reversal is owned by the backend Accounting Engine. Bank detail rows are not recreated on reverse."
+        title="Reverse Voucher"
+        description="This voucher has already been posted. Continuing will create reversal entries for the ledgers impacted by this voucher. Do you want to continue?"
         reason={reverseReason}
         onReasonChange={setReverseReason}
         showDate
         dateValue={reverseDate}
         onDateChange={setReverseDate}
-        confirmLabel="Reverse"
+        confirmLabel="Continue / Reverse Voucher"
         destructive
         busy={busy}
         onConfirm={() => {
-          if (!currentId) return;
+          if (!currentId || busy) return;
+          const resolvedDate =
+            reverseDate.trim() || form.voucher_date.trim() || null;
           setReverseOpen(false);
           void runAction(
             () =>
               ContraVoucherService.reverse(currentId, {
                 reason: reverseReason.trim(),
-                reversal_date: reverseDate || null,
+                reversal_date: resolvedDate,
               }),
             "Contra reversed.",
           );
         }}
       />
+    </>
+  );
+
+  if (loading) {
+    return (
+      <AccountsPageShell
+        breadcrumbs={accountsBreadcrumb("Vouchers", "Contra Voucher", CONTRA_LIST_PATH)}
+        title="Contra Voucher"
+        description="Loading…"
+        layout="form"
+      >
+        <div className="flex items-center gap-2 text-sm text-muted-foreground py-10 justify-center">
+          <Loader2 className="w-4 h-4 animate-spin" /> Loading contra…
+        </div>
+      </AccountsPageShell>
+    );
+  }
+
+  if (useInvoiceChrome) {
+    return (
+      <div className="h-full min-h-0 flex flex-col w-full">
+        <InvoiceFormLayout
+          title={title}
+          subtitle={subtitle}
+          breadcrumb={breadcrumb}
+          backHref={CONTRA_LIST_PATH}
+          onBackClick={handleDiscard}
+          stickyFooter={actionBar}
+        >
+          {formBody}
+        </InvoiceFormLayout>
+        {dialogs}
+      </div>
+    );
+  }
+
+  return (
+    <AccountsPageShell
+      breadcrumbs={breadcrumb}
+      title={title}
+      description={subtitle}
+      layout="form"
+      onBackClick={showViewChrome ? handleBack : undefined}
+      actions={
+        readOnlyProp && onEdit && isDraftEditable(status) ? (
+          <button
+            type="button"
+            className="h-8 px-3 text-xs rounded-lg border border-border hover:bg-muted"
+            onClick={onEdit}
+          >
+            Edit
+          </button>
+        ) : null
+      }
+    >
+      <div className="w-full space-y-3 pb-24">{formBody}</div>
+      {(!showViewChrome || status === "POSTED") ? (
+        <div className="fixed bottom-0 inset-x-0 z-40 border-t border-border bg-white/95 backdrop-blur px-4 py-2.5">
+          <div className="w-full">{actionBar}</div>
+        </div>
+      ) : null}
+      {dialogs}
     </AccountsPageShell>
   );
 }

@@ -1471,13 +1471,13 @@ export default function CreditNoteFormPageClient({
       <CreditNoteReasonDialog
         open={reasonDialog != null}
         onClose={() => setReasonDialog(null)}
-        title={reasonDialog === "reject" ? "Reject Credit Note" : "Cancel Credit Note"}
+        title={reasonDialog === "reject" ? "Reject Credit Note" : "Discard Voucher"}
         description={
           reasonDialog === "reject"
             ? "Provide a rejection reason. The document returns to REJECTED and can be edited."
-            : "Provide a cancellation reason. Posted Credit Notes cannot be cancelled from this form."
+            : "Are you sure you want to discard this voucher entry?"
         }
-        confirmLabel={reasonDialog === "reject" ? "Reject" : "Cancel Credit Note"}
+        confirmLabel={reasonDialog === "reject" ? "Reject" : "Discard Voucher"}
         destructive
         busy={busy}
         onConfirm={onReasonConfirm}

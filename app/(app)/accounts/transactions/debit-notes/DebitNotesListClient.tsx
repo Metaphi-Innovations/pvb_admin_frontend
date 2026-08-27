@@ -529,10 +529,11 @@ export default function DebitNotesListClient() {
   const handleResetFilters = () => {
     setStatusTab("all");
     setPage(1);
-    setPreset("this_month");
-    setDateFrom("");
-    setDateTo("");
-    setFilters(resetNotesListingFilters("this_month"));
+    const reset = resetNotesListingFilters("this_month");
+    setPreset(reset.preset);
+    setDateFrom(reset.dateFrom);
+    setDateTo(reset.dateTo);
+    setFilters(reset);
   };
 
   const handleHeaderRefresh = () => {
