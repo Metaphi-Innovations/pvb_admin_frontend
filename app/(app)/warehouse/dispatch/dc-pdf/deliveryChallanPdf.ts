@@ -169,23 +169,59 @@ export function formatDispatchQtyLabel(
   return `${baseQty} Units`;
 }
 
-function formatMonthYear(value: unknown): string {
-  const raw = String(value ?? "").trim();
+const MONTHS_SHORT = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+] as const;
+
+/** Full date as DD-MMM-YYYY (timezone-safe for YYYY-MM-DD). */
+function formatFullDate(value: unknown): string {
+  if (value == null || value === "") return "";
+
+  const raw =
+    value instanceof Date
+      ? `${value.getUTCFullYear()}-${String(value.getUTCMonth() + 1).padStart(2, "0")}-${String(value.getUTCDate()).padStart(2, "0")}`
+      : String(value).trim();
   if (!raw) return "";
-  const parsed = new Date(raw);
-  if (Number.isNaN(parsed.getTime())) {
-    // Already like "Jun-2025" / "Jun 2025"
-    return raw.replace(/\s+/g, "-");
+
+  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) {
+    const monthIdx = Number(iso[2]) - 1;
+    if (monthIdx >= 0 && monthIdx < 12) {
+      return `${iso[3]}-${MONTHS_SHORT[monthIdx]}-${iso[1]}`;
+    }
   }
+
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return "";
   return parsed
-    .toLocaleDateString("en-GB", { month: "short", year: "numeric" })
+    .toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    })
     .replaceAll(" ", "-");
 }
 
 function pickFirst(...values: unknown[]): string {
   for (const value of values) {
+    if (value instanceof Date && !Number.isNaN(value.getTime())) {
+      return value.toISOString();
+    }
     const text = String(value ?? "").trim();
-    if (text && text !== "-" && text !== "—") return text;
+    if (text && text !== "-" && text !== "—" && text !== "null" && text !== "undefined") {
+      return text;
+    }
   }
   return "";
 }
@@ -215,7 +251,7 @@ function buildChallanProductSubLines(item: any): string[] {
     inventoryBatch.batch_no,
   );
 
-  const mfg = formatMonthYear(
+  const mfg = formatFullDate(
     pickFirst(
       batchSnap.mfg_date,
       batchSnap.manufacture_date,
@@ -230,7 +266,7 @@ function buildChallanProductSubLines(item: any): string[] {
     ),
   );
 
-  const exp = formatMonthYear(
+  const exp = formatFullDate(
     pickFirst(
       batchSnap.expiry_date,
       batchSnap.expiryDate,
@@ -239,7 +275,12 @@ function buildChallanProductSubLines(item: any): string[] {
       batchSnap.expiry,
       batchSnap.batchExpiryDate,
       inventoryBatch.expiry_date,
+      inventoryBatch.expiryDate,
+      packingProduct.expiry_date,
+      packingProduct.expiryDate,
+      packingListProduct.expiry_date,
       item?.expiry_date,
+      item?.expiryDate,
     ),
   );
 

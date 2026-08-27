@@ -500,11 +500,36 @@ export default function CustomerDetailPage() {
             <RecordSectionCard title="Business Registrations" icon={CheckCircle} accent="green">
               <RecordKvRow label="MSME Registered" value={customer.msmeApplicable ? "Yes" : "No"} />
               {customer.msmeApplicable && (
-                <RecordKvRow label="MSME Number" value={customer.msmeRegNo || "—"} mono copy />
+                <>
+                  <RecordKvRow label="MSME Number" value={customer.msmeRegNo || "—"} mono copy />
+                  <RecordKvRow label="MSME Expiry Date" value={customer.msmeExpiryDate || "—"} />
+                </>
               )}
               <RecordKvRow label="FSSAI Applicable" value={customer.fssaiApplicable ? "Yes" : "No"} />
+              {customer.fssaiApplicable && (
+                <>
+                  <RecordKvRow label="FSSAI Number" value={customer.fssaiNo || "—"} mono copy />
+                  <RecordKvRow label="FSSAI Expiry Date" value={customer.fssaiExpiryDate || "—"} />
+                </>
+              )}
               <RecordKvRow label="CIB Applicable" value={customer.cibApplicable ? "Yes" : "No"} />
-              <RecordKvRow label="FCO Applicable" value={customer.fcoApplicable ? "Yes" : "No"} isLast />
+              {customer.cibApplicable && (
+                <>
+                  <RecordKvRow label="CIB Number" value={customer.cibRegNo || "—"} mono copy />
+                  <RecordKvRow label="CIB Expiry Date" value={customer.cibExpiryDate || "—"} />
+                </>
+              )}
+              <RecordKvRow
+                label="FCO Applicable"
+                value={customer.fcoApplicable ? "Yes" : "No"}
+                isLast={!customer.fcoApplicable}
+              />
+              {customer.fcoApplicable && (
+                <>
+                  <RecordKvRow label="FCO Number" value={customer.fcoRegNo || "—"} mono copy />
+                  <RecordKvRow label="FCO Expiry Date" value={customer.fcoExpiryDate || "—"} isLast />
+                </>
+              )}
             </RecordSectionCard>
           </div>
         );

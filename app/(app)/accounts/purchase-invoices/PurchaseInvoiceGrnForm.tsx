@@ -21,7 +21,7 @@ import { Badge } from "@/components/ui/badge";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { useFormDirtySnapshot } from "@/lib/accounts/use-form-dirty-snapshot";
 import { useTransactionFormCancel } from "@/components/accounts/TransactionFormCancel";
-import { formatMoney } from "@/lib/accounts/money-format";
+import { formatMoney, roundMoney } from "@/lib/accounts/money-format";
 import { normalizeGstAmounts } from "@/lib/accounts/gst-accounting";
 import { AccountsDateInput } from "@/components/accounts/AccountsDateInput";
 import { VoucherFormActionBar } from "@/components/accounts/voucher-form/VoucherFormActionBar";
@@ -40,7 +40,7 @@ import {
 } from "@/services/purchase-invoice.service";
 import { GoodsInvoiceAdditionalChargesEditor } from "@/app/(app)/accounts/invoices/components/GoodsInvoiceAdditionalChargesEditor";
 import {
-  calcAdditionalExpenseRow,
+  calcAdditionalExpensesTotals,
   type InvoiceAdditionalExpense,
 } from "@/app/(app)/accounts/invoices/invoice-additional-expenses";
 import { PurchaseInvoiceDirectTotals } from "./PurchaseInvoiceDirectTotals";
@@ -367,22 +367,19 @@ export function PurchaseInvoiceGrnForm({
     },
     { cgst: 0, sgst: 0, igst: 0 },
   );
-  const chargeTotal = additionalExpenses.reduce((s, row) => {
-    const calc = calcAdditionalExpenseRow(row, false);
-    return s + (calc.totalAmount > 0 ? calc.totalAmount : 0);
-  }, 0);
-  const grandTotal = subtotal + totalGst + chargeTotal;
+  const chargeBreakdown = calcAdditionalExpensesTotals(additionalExpenses, interstate);
+  const grandTotal = subtotal + totalGst + chargeBreakdown.totalAmount;
   const finalTotal = grandTotal + roundOff;
   const amountSummaryTotals: DirectPurchaseTotals = {
     grossAmount: Math.round(grossAmount * 100) / 100,
     discountTotal,
     taxableAmount: Math.round(subtotal * 100) / 100,
-    cgst: Math.round(gstSplit.cgst * 100) / 100,
-    sgst: Math.round(gstSplit.sgst * 100) / 100,
-    igst: Math.round(gstSplit.igst * 100) / 100,
-    totalGst: Math.round(totalGst * 100) / 100,
+    cgst: roundMoney(gstSplit.cgst + chargeBreakdown.cgst),
+    sgst: roundMoney(gstSplit.sgst + chargeBreakdown.sgst),
+    igst: roundMoney(gstSplit.igst + chargeBreakdown.igst),
+    totalGst: roundMoney(totalGst + chargeBreakdown.gstAmount),
     tdsDeduction: 0,
-    invoiceTotal: Math.round((subtotal + totalGst) * 100) / 100,
+    invoiceTotal: roundMoney(subtotal + totalGst + chargeBreakdown.totalAmount),
     netPayable: Math.round(finalTotal * 100) / 100,
   };
   const poSuggestedCharges = prepared?.suggested_additional_charges || [];
@@ -758,7 +755,7 @@ export function PurchaseInvoiceGrnForm({
                   expenses={additionalExpenses}
                   onChange={handleExpensesChange}
                   disabled={saving}
-                  interstate={false}
+                  interstate={interstate}
                 />
               </Section>
 
@@ -769,6 +766,7 @@ export function PurchaseInvoiceGrnForm({
                     totals={amountSummaryTotals}
                     roundingAdjustment={roundOff}
                     onRoundingChange={setRoundOff}
+                    additionalChargeTotal={chargeBreakdown.taxableAmount}
                     readOnly={saving}
                   />
                 </div>

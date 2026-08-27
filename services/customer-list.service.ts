@@ -52,17 +52,21 @@ export interface CustomerCreatePayload {
 
     cib_applicable: boolean;
     cib_reg_no?: string;
+    cib_expiry_date?: string | null;
 
     fco_applicable: boolean;
     fco_reg_no?: string;
+    fco_expiry_date?: string | null;
 
     tan_no?: string;
 
     fssai_applicable: boolean;
     fssai_no?: string;
+    fssai_expiry_date?: string | null;
 
     msme_applicable: boolean;
     msme_reg_no?: string;
+    msme_expiry_date?: string | null;
 
     gst_applicable: boolean;
     registration_type?: string;
@@ -112,17 +116,21 @@ export interface CustomerListRecord {
 
     cibApplicable: boolean;
     cibRegNo?: string;
+    cibExpiryDate?: string;
 
     fcoApplicable: boolean;
     fcoRegNo?: string;
+    fcoExpiryDate?: string;
 
     tanNo?: string;
 
     fssaiApplicable: boolean;
     fssaiNo?: string;
+    fssaiExpiryDate?: string;
 
     msmeApplicable: boolean;
     msmeRegNo?: string;
+    msmeExpiryDate?: string;
 
     gstApplicable: boolean;
     registrationType?: string;
@@ -469,17 +477,21 @@ function mapItem(
 
         cibApplicable: Boolean(raw.cib_applicable),
         cibRegNo: asString(raw.cib_reg_no),
+        cibExpiryDate: formatDate(raw.cib_expiry_date),
 
         fcoApplicable: Boolean(raw.fco_applicable),
         fcoRegNo: asString(raw.fco_reg_no),
+        fcoExpiryDate: formatDate(raw.fco_expiry_date),
 
         tanNo: asString(raw.tan_no),
 
         fssaiApplicable: Boolean(raw.fssai_applicable),
         fssaiNo: asString(raw.fssai_no),
+        fssaiExpiryDate: formatDate(raw.fssai_expiry_date),
 
         msmeApplicable: Boolean(raw.msme_applicable),
         msmeRegNo: asString(raw.msme_reg_no),
+        msmeExpiryDate: formatDate(raw.msme_expiry_date),
         address: asString(raw.address),
         gstApplicable: Boolean(raw.gst_applicable),
         registrationType: asString(raw.registration_type),

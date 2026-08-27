@@ -33,11 +33,18 @@ export function payableStatusToBadge(status: PayableStatus): { status: StatusKey
 export function noteWorkflowStatusToBadge(
   status: string,
 ): { status: StatusKey; label: string } {
-  switch (status) {
+  switch (status.toLowerCase()) {
     case "posted":
-      return { status: "approved", label: "Posted" };
+    case "approved":
+      return { status: "approved", label: status.toLowerCase() === "approved" ? "Approved" : "Posted" };
+    case "pending_approval":
+      return { status: "pending", label: "Pending Approval" };
+    case "rejected":
+      return { status: "rejected", label: "Rejected" };
     case "cancelled":
       return { status: "rejected", label: "Cancelled" };
+    case "reversed":
+      return { status: "partial", label: "Reversed" };
     case "draft":
     default:
       return { status: "draft", label: "Draft" };

@@ -2,33 +2,27 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { AccountsFormLayout } from "../expenses/components/AccountsFormLayout";
 import { AccountsDateInput } from "@/components/accounts/AccountsDateInput";
+import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
 import { AccountsToast, useAccountsToast } from "@/components/accounts/AccountsToast";
 import { useTransactionFormCancel } from "@/components/accounts/TransactionFormCancel";
 import { useFormDirtySnapshot } from "@/lib/accounts/use-form-dirty-snapshot";
-import { AccountingImpactSection } from "@/components/accounts/AccountingImpactSection";
-import { VoucherAccountingPostingSummary } from "@/components/accounts/voucher-form/VoucherAccountingPostingSummary";
 import { VoucherFormSectionCard } from "@/components/accounts/voucher-form/VoucherFormSectionCard";
-import { VoucherNarrationAttachmentsSection } from "@/components/accounts/voucher-form/VoucherNarrationAttachmentsSection";
 import { VoucherSignedRoundOffInput } from "@/components/accounts/voucher-form/VoucherSignedRoundOffInput";
 import {
   VoucherNoteField,
-  VoucherNoteFieldGrid,
   VoucherNoteReadOnly,
 } from "@/components/accounts/voucher-form/VoucherNoteFieldGrid";
-import { defaultVisibilityForType } from "@/components/accounts/voucher-form/voucher-form-shell";
-import type { VoucherAttachmentFile } from "@/components/accounts/voucher-form/VoucherAttachmentSection";
 import { SearchableSelect } from "./components/SearchableSelect";
 import { CreditNoteFormActionBar } from "./components/CreditNoteFormActionBar";
 import { CreditNoteAmountSummary } from "./components/CreditNoteAmountSummary";
-import { CreditNoteInvoiceAllocationSection } from "./components/CreditNoteInvoiceAllocationSection";
 import { CreditNoteParticularsEditor } from "./components/CreditNoteParticularsEditor";
 import { CreditNoteReasonDialog } from "./components/CreditNoteReasonDialog";
 import { CreditNoteSourceEntitlementSection } from "./components/CreditNoteSourceEntitlementSection";
-import { CreditNoteLedgerSelect } from "./components/CreditNoteLedgerSelect";
+import { CreditNoteCustomerInfoButton } from "./components/CreditNoteCustomerInfoButton";
+import { CreditNoteWarehouseInfoButton } from "./components/CreditNoteWarehouseInfoButton";
 import { CREDIT_NOTES_BREADCRUMB, CREDIT_NOTES_LIST_PATH } from "./note-utils";
 import { CreditNoteFormApi, creditNoteApiError, creditNoteErrorIncludes } from "./credit-note-form-api";
 import type {
@@ -37,6 +31,7 @@ import type {
   CreditNoteFormLine,
   DirectCnMode,
   DirectLineDraft,
+  EligibleSalesInvoiceItem,
   InvoiceOption,
   PendingCreditNoteDetail,
   SchemeTypeLedgerMapping,
@@ -52,7 +47,6 @@ import {
   newDirectLine,
   pageTitleFor,
   snapshotStr,
-  SOURCE_TYPE_LABELS,
   statusChipClass,
   STATUS_LABELS,
   toDateInput,
@@ -60,7 +54,6 @@ import {
   todayIso,
 } from "./credit-note-form-utils";
 import { useCustomersDropdown, useCustomerDetails, useWarehousesDropdown } from "@/hooks/sales/use-sales-orders";
-import { SalesInvoiceService } from "@/services/sales-invoice.service";
 import { LedgerService } from "@/services/ledger.service";
 import { UserListService } from "@/services/user-list.service";
 import { AuthService } from "@/services/auth.service";
@@ -78,8 +71,54 @@ type DirectExtraCharge = {
   gstPct: string;
 };
 
-function newDirectExtraChargeId() {
-  return `cn-xch-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+function nestedRecord(value: unknown): Record<string, unknown> | null {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  return null;
+}
+
+function detailString(
+  obj: Record<string, unknown> | null | undefined,
+  ...keys: string[]
+): string {
+  if (!obj) return "";
+  for (const key of keys) {
+    const value = obj[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return "";
+}
+
+function formatPaymentTerms(paymentType?: string, creditDays?: number | string): string {
+  if (!paymentType) return "";
+  const type = paymentType.toLowerCase();
+  if (type === "advance") return "Advance";
+  if (type === "credit") {
+    const days = creditDays ? Number(creditDays) : 30;
+    return `Net ${days}`;
+  }
+  return paymentType;
+}
+
+function parseOutstandingAmount(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  const n = toNum(value, Number.NaN);
+  return Number.isFinite(n) ? n : null;
+}
+
+function mapEligibleInvoice(item: EligibleSalesInvoiceItem): InvoiceOption {
+  return {
+    sales_invoice_id: String(item.sales_invoice_id ?? ""),
+    invoice_number: String(item.invoice_number ?? ""),
+    invoice_date: toDateInput(item.invoice_date),
+    invoice_amount: toNum(item.invoice_amount),
+    outstanding_amount: parseOutstandingAmount(item.outstanding_amount),
+    customer_id: String(item.customer_id ?? ""),
+    warehouse_id: String(item.warehouse_id ?? ""),
+    invoice_type: String(item.invoice_type ?? ""),
+    open_item_id: String(item.open_item_id ?? ""),
+  };
 }
 
 export default function CreditNoteFormPageClient({
@@ -125,12 +164,17 @@ export default function CreditNoteFormPageClient({
   const [invoiceId, setInvoiceId] = useState("");
   const [allocation, setAllocation] = useState("");
   const [invoices, setInvoices] = useState<InvoiceOption[]>([]);
+  const [invoicesLoading, setInvoicesLoading] = useState(false);
+  const [invoicesError, setInvoicesError] = useState<string | null>(null);
+  const invoiceIdRef = useRef(invoiceId);
+  const cnReferencesRef = useRef(cn?.references);
+  invoiceIdRef.current = invoiceId;
+  cnReferencesRef.current = cn?.references;
   const [directLines, setDirectLines] = useState<DirectLineDraft[]>([newDirectLine()]);
   const [arLedgerName, setArLedgerName] = useState("");
   const [arLedgerCode, setArLedgerCode] = useState("");
   const [schemeMappings, setSchemeMappings] = useState<SchemeTypeLedgerMapping[]>([]);
   const [approvers, setApprovers] = useState<{ value: string; label: string }[]>([]);
-  const [attachments, setAttachments] = useState<VoucherAttachmentFile[]>([]);
   const [fyLabel, setFyLabel] = useState("");
   const [reasonDialog, setReasonDialog] = useState<"reject" | "cancel" | null>(null);
   const [directExtraCharges, setDirectExtraCharges] = useState<DirectExtraCharge[]>([]);
@@ -147,8 +191,6 @@ export default function CreditNoteFormPageClient({
   const fieldsEditable = canEditDocument(status) && !readOnly;
   const pendingEntitlementLocked = isPendingFlow;
   const linesEditable = fieldsEditable && !pendingEntitlementLocked;
-  /** Free-form charges editable on Direct always; on SR pending only until converted to a CN. */
-  const chargesEditable = fieldsEditable && (!pendingEntitlementLocked || !cnId);
 
   const customers = useMemo(() => {
     if (!Array.isArray(customerData)) return [];
@@ -228,6 +270,73 @@ export default function CreditNoteFormPageClient({
     "";
 
   const selectedInvoice = invoices.find((i) => i.sales_invoice_id === invoiceId) || null;
+  const invoiceOutstanding =
+    typeof selectedInvoice?.outstanding_amount === "number"
+      ? selectedInvoice.outstanding_amount
+      : null;
+
+  const customerCode =
+    customers.find((c) => c.id === customerId)?.code ||
+    snapshotStr(cn?.customer_snapshot, "customer_code") ||
+    snapshotStr(pending?.customer_snapshot, "customer_code") ||
+    cn?.customer?.customer_code ||
+    pending?.customer?.customer_code ||
+    "";
+
+  const customerInfo = useMemo(() => {
+    const details = nestedRecord(customerDetails);
+    const branches = Array.isArray(details?.branches)
+      ? (details.branches as Array<Record<string, unknown>>)
+      : [];
+    const mainBranch = branches.find((b) => b.is_main_branch) || branches[0] || null;
+    const billingFromBranch = mainBranch
+      ? [
+          mainBranch.billing_address_line_1,
+          mainBranch.billing_address_line_2,
+          mainBranch.billing_city,
+          mainBranch.billing_state,
+          mainBranch.billing_pincode,
+        ]
+          .filter(Boolean)
+          .join(", ")
+      : "";
+    const billing =
+      billingFromBranch ||
+      snapshotStr(cn?.customer_snapshot, "billing_address", "registered_gst_address") ||
+      detailString(details, "registered_gst_address");
+    const typeObj = nestedRecord(details?.customer_type);
+    const customerType =
+      detailString(typeObj, "customer_type_name", "name") ||
+      detailString(details, "customer_type_name");
+    const paymentTerms = formatPaymentTerms(
+      detailString(details, "payment_type"),
+      details?.credit_days as number | string | undefined,
+    );
+    const linkedLedger = arLedgerName
+      ? `${arLedgerCode ? `${arLedgerCode} · ` : ""}${arLedgerName}`
+      : "";
+    return {
+      customerName,
+      customerCode,
+      gstin: customerGstin,
+      billingAddress: billing,
+      state: customerBillingState,
+      linkedLedger,
+      customerType,
+      paymentTerms,
+      salesperson,
+    };
+  }, [
+    arLedgerCode,
+    arLedgerName,
+    cn?.customer_snapshot,
+    customerBillingState,
+    customerCode,
+    customerDetails,
+    customerGstin,
+    customerName,
+    salesperson,
+  ]);
 
   const pendingLines: CreditNoteFormLine[] = cn?.lines?.length
     ? cn.lines
@@ -373,35 +482,48 @@ export default function CreditNoteFormPageClient({
   }, [customerId, pendingEntitlementLocked]);
 
   useEffect(() => {
-    if (!customerId || pendingEntitlementLocked) {
+    if (pendingEntitlementLocked || directMode !== "against_invoice" || !customerId) {
       setInvoices([]);
+      setInvoicesLoading(false);
+      setInvoicesError(null);
       return;
     }
     let cancelled = false;
-    SalesInvoiceService.list({ customer_id: customerId, page: 1, page_size: 50, status: "POSTED" })
+    setInvoices([]);
+    setInvoicesLoading(true);
+    setInvoicesError(null);
+    CreditNoteFormApi.listEligibleSalesInvoices(customerId, { page: 1, page_size: 100 })
       .then((res) => {
         if (cancelled) return;
-        const items = Array.isArray(res?.results) ? res.results : [];
-        setInvoices(
-          items.map((inv) => ({
-            sales_invoice_id: String(inv.sales_invoice_id ?? ""),
-            invoice_number: String(inv.invoice_number ?? ""),
-            invoice_date: toDateInput(inv.invoice_date),
-            invoice_amount: toNum(inv.invoice_amount),
-            outstanding_amount:
-              "outstanding_amount" in inv && inv.outstanding_amount != null
-                ? toNum(inv.outstanding_amount)
-                : null,
-          })),
-        );
+        const mapped = res.items.map(mapEligibleInvoice).filter((inv) => inv.sales_invoice_id);
+        const selectedId = invoiceIdRef.current;
+        if (selectedId && !mapped.some((inv) => inv.sales_invoice_id === selectedId)) {
+          const ref = (cnReferencesRef.current || []).find(
+            (r) => r.reference_type === "SALES_INVOICE" && r.reference_id === selectedId,
+          );
+          mapped.unshift({
+            sales_invoice_id: selectedId,
+            invoice_number: ref?.reference_code || selectedId,
+            invoice_date: toDateInput(ref?.reference_date),
+            invoice_amount: 0,
+            outstanding_amount: null,
+          });
+        }
+        setInvoices(mapped);
+        setInvoicesLoading(false);
       })
-      .catch(() => {
-        if (!cancelled) setInvoices([]);
+      .catch((e) => {
+        if (cancelled) return;
+        setInvoices([]);
+        setInvoicesLoading(false);
+        const msg = creditNoteApiError(e, "Could not load eligible Sales Invoices.");
+        setInvoicesError(msg);
+        showToast(msg, "error");
       });
     return () => {
       cancelled = true;
     };
-  }, [customerId, pendingEntitlementLocked]);
+  }, [customerId, pendingEntitlementLocked, directMode, showToast]);
 
   useEffect(() => {
     if (pendingEntitlementLocked) return;
@@ -990,39 +1112,6 @@ export default function CreditNoteFormPageClient({
     isDirty,
   });
 
-  const debitLedger =
-    supportingLedgerName ||
-    directLines.find((l) => l.ledger_name)?.ledger_name ||
-    "Not selected";
-  const creditLedger = arLedgerName || customerName || "Not selected";
-  const showGst = amountPreview.gst > 0.004;
-
-  const postingSummary = (
-    <VoucherAccountingPostingSummary
-      compact
-      voucherTypeLabel="Credit Note"
-      debitLedgerLabel="Debit"
-      debitLedgerName={debitLedger}
-      creditLedgerLabel="Credit"
-      creditLedgerName={creditLedger}
-      voucherAmount={amountPreview.total}
-      voucherAmountLabel="Credit Note Amount"
-      gstAdjustments={
-        showGst
-          ? {
-              cgstLabel: "Output CGST",
-              cgstAmount: amountPreview.cgst,
-              sgstLabel: "Output SGST",
-              sgstAmount: amountPreview.sgst,
-              igstLabel: "Output IGST",
-              igstAmount: amountPreview.igst,
-            }
-          : undefined
-      }
-      visibilityItems={defaultVisibilityForType("credit_note", { gstApplicable: showGst })}
-    />
-  );
-
   const currentUserId = AuthService.getUserData()?.user_id;
   const canActAsApprover =
     status === "PENDING_APPROVAL" &&
@@ -1114,7 +1203,7 @@ export default function CreditNoteFormPageClient({
             ) : null}
 
             <VoucherFormSectionCard title="Basic Details" compact>
-              <VoucherNoteFieldGrid columns={4}>
+              <div className="cn-basic-details-grid">
                 <VoucherNoteField label="Credit Note Number" width="sm">
                   <VoucherNoteReadOnly mono>{cn?.cn_number || "Assigned on save"}</VoucherNoteReadOnly>
                 </VoucherNoteField>
@@ -1127,16 +1216,19 @@ export default function CreditNoteFormPageClient({
                     className="h-[30px] text-xs cdn-control"
                   />
                 </VoucherNoteField>
-                <VoucherNoteField label="Source Type" width="md">
-                  <VoucherNoteReadOnly>
-                    {SOURCE_TYPE_LABELS[String(sourceType)] || sourceType}
-                    {isPendingFlow ? " · from Pending CN" : directMode === "against_invoice" ? " · against invoice" : " · on-account"}
-                  </VoucherNoteReadOnly>
-                </VoucherNoteField>
-                <VoucherNoteField label="Financial Year" width="md">
+                <VoucherNoteField label="Financial Year" width="sm">
                   <VoucherNoteReadOnly>{fyLabel || "Working FY on save"}</VoucherNoteReadOnly>
                 </VoucherNoteField>
-                <VoucherNoteField label="Warehouse / Branch" required width="md">
+                <VoucherNoteField
+                  label={
+                    <span className="inline-flex items-center gap-1">
+                      Warehouse / Branch
+                      <CreditNoteWarehouseInfoButton warehouseId={warehouseId || null} />
+                    </span>
+                  }
+                  required
+                  width="lg"
+                >
                   {pendingEntitlementLocked ? (
                     <VoucherNoteReadOnly>
                       {pending?.warehouse?.warehouse_name || selectedWarehouse?.name || "—"}
@@ -1152,7 +1244,16 @@ export default function CreditNoteFormPageClient({
                     />
                   )}
                 </VoucherNoteField>
-                <VoucherNoteField label="Customer" required width="md">
+                <VoucherNoteField
+                  label={
+                    <span className="inline-flex items-center gap-1">
+                      Customer
+                      <CreditNoteCustomerInfoButton enabled={Boolean(customerId)} info={customerInfo} />
+                    </span>
+                  }
+                  required
+                  width="lg"
+                >
                   {pendingEntitlementLocked ? (
                     <VoucherNoteReadOnly>{customerName || "—"}</VoucherNoteReadOnly>
                   ) : (
@@ -1170,31 +1271,108 @@ export default function CreditNoteFormPageClient({
                     />
                   )}
                 </VoucherNoteField>
-                <VoucherNoteField label="Customer GSTIN" width="md">
-                  <VoucherNoteReadOnly mono>{customerGstin || "—"}</VoucherNoteReadOnly>
-                </VoucherNoteField>
-                <VoucherNoteField label="AR / Party Ledger" width="md">
-                  <VoucherNoteReadOnly>
-                    {arLedgerName ? `${arLedgerCode ? `${arLedgerCode} · ` : ""}${arLedgerName}` : "Derived from customer"}
-                  </VoucherNoteReadOnly>
-                </VoucherNoteField>
-                {salesperson ? (
-                  <VoucherNoteField label="Salesperson" width="md">
-                    <VoucherNoteReadOnly>{salesperson}</VoucherNoteReadOnly>
+                {!pendingEntitlementLocked ? (
+                  <VoucherNoteField label="Direct Mode" width="ref">
+                    <div className="cnz-gst-toggle" role="group" aria-label="Direct credit note mode">
+                      <button
+                        type="button"
+                        data-active={directMode === "on_account"}
+                        aria-pressed={directMode === "on_account"}
+                        disabled={!fieldsEditable}
+                        onClick={() => {
+                          setDirectMode("on_account");
+                          setInvoiceId("");
+                          setAllocation("");
+                        }}
+                      >
+                        On-account
+                      </button>
+                      <button
+                        type="button"
+                        data-active={directMode === "against_invoice"}
+                        aria-pressed={directMode === "against_invoice"}
+                        disabled={!fieldsEditable}
+                        onClick={() => setDirectMode("against_invoice")}
+                      >
+                        Against Sales Invoice
+                      </button>
+                    </div>
                   </VoucherNoteField>
                 ) : null}
-                {approvalRequired && fieldsEditable && (status === "DRAFT" || status === "REJECTED" || !status) ? (
-                  <VoucherNoteField label="Approver" width="md">
-                    <SearchableSelect
-                      value={approverId}
-                      onChange={setApproverId}
-                      options={approvers}
-                      placeholder="Required to submit"
-                      disabled={!fieldsEditable}
-                    />
-                  </VoucherNoteField>
+                {!pendingEntitlementLocked && directMode === "against_invoice" ? (
+                  <>
+                    <VoucherNoteField label="Sales Invoice" required width="lg">
+                      <SearchableSelect
+                        value={invoiceId}
+                        onChange={(id) => {
+                          setInvoiceId(id);
+                          setAllocation("");
+                        }}
+                        options={invoices.map((inv) => ({
+                          value: inv.sales_invoice_id,
+                          label: inv.invoice_date
+                            ? `${inv.invoice_number} · ${inv.invoice_date}`
+                            : inv.invoice_number,
+                          selectedLabel: inv.invoice_number,
+                          sub:
+                            typeof inv.outstanding_amount === "number"
+                              ? formatCnMoney(inv.outstanding_amount)
+                              : undefined,
+                        }))}
+                        placeholder={
+                          invoicesLoading
+                            ? "Loading invoices…"
+                            : !customerId
+                              ? "Select customer first"
+                              : "Select invoice…"
+                        }
+                        disabled={!fieldsEditable || invoicesLoading || !customerId}
+                        required
+                      />
+                      {!invoicesLoading && !invoicesError && customerId && invoices.length === 0 ? (
+                        <p className="text-[10px] text-muted-foreground mt-0.5">
+                          No outstanding Sales Invoices available for this customer.
+                        </p>
+                      ) : null}
+                      {invoicesError ? (
+                        <p className="text-[10px] text-red-600 mt-0.5">{invoicesError}</p>
+                      ) : null}
+                    </VoucherNoteField>
+                    <VoucherNoteField label="Outstanding" width="sm">
+                      <VoucherNoteReadOnly>
+                        {invoiceOutstanding != null ? formatCnMoney(invoiceOutstanding) : "—"}
+                      </VoucherNoteReadOnly>
+                      {invoiceId && invoiceOutstanding == null && !invoicesLoading ? (
+                        <p className="text-[10px] text-muted-foreground mt-0.5">
+                          This invoice is no longer in the eligible outstanding list.
+                        </p>
+                      ) : null}
+                    </VoucherNoteField>
+                    <VoucherNoteField label="Allocation Amount" width="sm">
+                      <AccountsMoneyInput
+                        className="h-7 text-xs"
+                        value={allocation}
+                        onChange={(v) => setAllocation(String(v))}
+                        disabled={!fieldsEditable || !invoiceId}
+                      />
+                      <p className="text-[10px] text-muted-foreground mt-0.5 max-w-[14rem]">
+                        Leave blank for reference-only (no settlement). A value &gt; 0 settles the invoice.
+                      </p>
+                    </VoucherNoteField>
+                    {toNum(allocation) > 0 &&
+                    amountPreview.total > 0 &&
+                    Math.abs(toNum(allocation) - amountPreview.total) > 0.009 ? (
+                      <VoucherNoteField label="Allocation check" width="lg">
+                        <p className="text-[11px] text-amber-700">
+                          Allocation {formatCnMoney(toNum(allocation))} does not match CN total{" "}
+                          {formatCnMoney(amountPreview.total)}. Partial allocation is not supported by the
+                          backend.
+                        </p>
+                      </VoucherNoteField>
+                    ) : null}
+                  </>
                 ) : null}
-              </VoucherNoteFieldGrid>
+              </div>
             </VoucherFormSectionCard>
 
             <CreditNoteSourceEntitlementSection
@@ -1255,203 +1433,37 @@ export default function CreditNoteFormPageClient({
               </VoucherFormSectionCard>
             ) : null}
 
-            <VoucherFormSectionCard title="Additional Charges" compact>
-              <div className="flex items-center justify-between px-3 py-1.5 border-b bg-muted/20">
-                <p className="text-[10px] text-muted-foreground">
-                  Optional freight, packing, or other charges. These post as extra credit note lines.
-                </p>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-7 text-[11px]"
-                  disabled={!chargesEditable || busy}
-                  onClick={() =>
-                    setDirectExtraCharges((prev) => [
-                      ...prev,
-                      {
-                        id: newDirectExtraChargeId(),
-                        description: "",
-                        ledgerId: "",
-                        ledgerName: "",
-                        amount: "",
-                        gstPct: "0",
-                      },
-                    ])
-                  }
-                >
-                  + Add charge
-                </Button>
-              </div>
-              {directExtraCharges.length === 0 ? (
-                <p className="px-3 py-2 text-[11px] text-muted-foreground">No additional charges.</p>
-              ) : (
-                <table className="w-full text-[11px]">
-                  <thead>
-                    <tr className="border-b bg-muted/20">
-                      <th className="p-1.5 text-left font-medium">Description</th>
-                      <th className="p-1.5 text-left font-medium">Ledger</th>
-                      <th className="p-1.5 text-right font-medium w-24">Taxable</th>
-                      <th className="p-1.5 text-right font-medium w-16">GST %</th>
-                      <th className="p-1.5 text-right font-medium w-10" />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {directExtraCharges.map((row) => (
-                      <tr key={row.id} className="border-b last:border-0">
-                        <td className="p-1.5">
-                          <Input
-                            className="h-7 text-xs"
-                            value={row.description}
-                            placeholder="e.g. Freight"
-                            disabled={!chargesEditable || busy}
-                            onChange={(e) =>
-                              setDirectExtraCharges((prev) =>
-                                prev.map((c) =>
-                                  c.id === row.id
-                                    ? { ...c, description: e.target.value }
-                                    : c,
-                                ),
-                              )
-                            }
-                          />
-                        </td>
-                        <td className="p-1.5 min-w-[160px]">
-                          <CreditNoteLedgerSelect
-                            value={row.ledgerId}
-                            fallbackLabel={row.ledgerName}
-                            placeholder="Select ledger"
-                            disabled={!chargesEditable || busy}
-                            onChange={(ledgerId, ledgerName) =>
-                              setDirectExtraCharges((prev) =>
-                                prev.map((c) =>
-                                  c.id === row.id
-                                    ? { ...c, ledgerId, ledgerName }
-                                    : c,
-                                ),
-                              )
-                            }
-                          />
-                        </td>
-                        <td className="p-1.5">
-                          <Input
-                            className="h-7 text-xs text-right"
-                            value={row.amount}
-                            placeholder="0.00"
-                            disabled={!chargesEditable || busy}
-                            onChange={(e) =>
-                              setDirectExtraCharges((prev) =>
-                                prev.map((c) =>
-                                  c.id === row.id ? { ...c, amount: e.target.value } : c,
-                                ),
-                              )
-                            }
-                          />
-                        </td>
-                        <td className="p-1.5">
-                          <Input
-                            className="h-7 text-xs text-right"
-                            value={row.gstPct}
-                            placeholder="0"
-                            disabled={!chargesEditable || busy}
-                            onChange={(e) =>
-                              setDirectExtraCharges((prev) =>
-                                prev.map((c) =>
-                                  c.id === row.id ? { ...c, gstPct: e.target.value } : c,
-                                ),
-                              )
-                            }
-                          />
-                        </td>
-                        <td className="p-1.5 text-right">
-                          <button
-                            type="button"
-                            className="text-[11px] text-red-600 hover:underline"
-                            disabled={!chargesEditable || busy}
-                            onClick={() =>
-                              setDirectExtraCharges((prev) =>
-                                prev.filter((c) => c.id !== row.id),
-                              )
-                            }
-                          >
-                            Remove
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </VoucherFormSectionCard>
-
-            <CreditNoteInvoiceAllocationSection
-              visible={!pendingEntitlementLocked}
-              mode={directMode}
-              onModeChange={(mode) => {
-                setDirectMode(mode);
-                if (mode === "on_account") {
-                  setInvoiceId("");
-                  setAllocation("");
-                }
-              }}
-              invoices={invoices}
-              invoiceId={invoiceId}
-              onInvoiceChange={(id) => {
-                setInvoiceId(id);
-                setAllocation("");
-              }}
-              selected={selectedInvoice}
-              allocation={allocation}
-              onAllocationChange={setAllocation}
-              cnAmount={amountPreview.total}
-              disabled={!fieldsEditable}
-            />
-
-            <CreditNoteAmountSummary
-              taxable={amountPreview.taxable}
-              cgst={amountPreview.cgst}
-              sgst={amountPreview.sgst}
-              igst={amountPreview.igst}
-              gst={amountPreview.gst}
-              roundOff={amountPreview.roundOff}
-              total={amountPreview.total}
-              interstate={interstate}
-              locked={!fieldsEditable}
-              roundOffSlot={
-                fieldsEditable ? (
-                  <VoucherSignedRoundOffInput value={roundOff} onChange={setRoundOff} />
-                ) : undefined
-              }
-            />
-
-            <VoucherNarrationAttachmentsSection
-              compact
-              narration={narration}
-              onNarrationChange={setNarration}
-              readOnly={!fieldsEditable}
-              maxLength={2000}
-              attachmentFiles={attachments}
-              singleAttachment
-              onAddAttachmentFiles={(files) => {
-                const file = files[0];
-                if (!file) return;
-                setAttachments([{ id: `att-${Date.now()}`, fileName: file.name }]);
-              }}
-              onRemoveAttachment={() => setAttachments([])}
-            />
-
-            <AccountingImpactSection
-              docKey="credit_note"
-              compact
-              entryPreview={
-                <div className="space-y-1">
-                  <p className="text-[10px] text-muted-foreground">
-                    Informational preview only. It does not post or control accounting.
-                  </p>
-                  {postingSummary}
+            <div className="cn-narration-summary-grid">
+              <VoucherFormSectionCard title="Narration" compact>
+                <div className="px-3 pb-3 pt-1">
+                  <Textarea
+                    className="cdn-control min-h-[64px] resize-y text-xs"
+                    value={narration}
+                    onChange={(e) => setNarration(e.target.value)}
+                    placeholder="Optional narration…"
+                    maxLength={2000}
+                    disabled={!fieldsEditable}
+                  />
                 </div>
-              }
-            />
+              </VoucherFormSectionCard>
+
+              <CreditNoteAmountSummary
+                taxable={amountPreview.taxable}
+                cgst={amountPreview.cgst}
+                sgst={amountPreview.sgst}
+                igst={amountPreview.igst}
+                gst={amountPreview.gst}
+                roundOff={amountPreview.roundOff}
+                total={amountPreview.total}
+                interstate={interstate}
+                locked={!fieldsEditable}
+                roundOffSlot={
+                  fieldsEditable ? (
+                    <VoucherSignedRoundOffInput value={roundOff} onChange={setRoundOff} />
+                  ) : undefined
+                }
+              />
+            </div>
           </div>
         </AccountsFormLayout>
       </div>
