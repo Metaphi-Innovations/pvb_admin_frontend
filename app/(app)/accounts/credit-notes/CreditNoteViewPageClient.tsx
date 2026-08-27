@@ -5,7 +5,7 @@
  * Same workspace chrome as Create/Edit so the header never overlays the document.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { AccountsFormLayout } from "../expenses/components/AccountsFormLayout";
@@ -18,7 +18,9 @@ import {
   VoucherNoteReadOnly,
 } from "@/components/accounts/voucher-form/VoucherNoteFieldGrid";
 import { defaultVisibilityForType } from "@/components/accounts/voucher-form/voucher-form-shell";
+import { AccountsToast, useAccountsToast } from "@/components/accounts/AccountsToast";
 import { CreditNoteCancelDialog } from "./components/CreditNoteCancelDialog";
+import { CreditNoteReverseDialog } from "./components/CreditNoteReverseDialog";
 import { CreditNoteAmountSummary } from "./components/CreditNoteAmountSummary";
 import { CREDIT_NOTES_BREADCRUMB, CREDIT_NOTES_LIST_PATH } from "./note-utils";
 import {
@@ -102,26 +104,32 @@ function mapLines(record: CreditNoteDetailApi): ViewLine[] {
 
 export default function CreditNoteViewPageClient({ creditNoteId }: { creditNoteId: string }) {
   const router = useRouter();
+  const { toast, showToast, dismissToast } = useAccountsToast();
+  const reverseBusyRef = useRef(false);
   const [record, setRecord] = useState<CreditNoteDetailApi | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [cancelOpen, setCancelOpen] = useState(false);
+  const [reverseOpen, setReverseOpen] = useState(false);
+  const [reverseBusy, setReverseBusy] = useState(false);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (opts?: { silent?: boolean }) => {
     if (!creditNoteId || creditNoteId === "new" || !isUuid(creditNoteId)) {
       setError("Invalid credit note id.");
       setRecord(null);
       setLoading(false);
       return;
     }
-    setLoading(true);
+    if (!opts?.silent) setLoading(true);
     setError(null);
     try {
       const next = await CreditNoteListApi.getById(creditNoteId);
       setRecord(next);
     } catch (e) {
-      setRecord(null);
-      setError(creditNoteListApiError(e, "Credit note not found."));
+      if (!opts?.silent) {
+        setRecord(null);
+        setError(creditNoteListApiError(e, "Credit note not found."));
+      }
     } finally {
       setLoading(false);
     }
@@ -184,6 +192,7 @@ export default function CreditNoteViewPageClient({ creditNoteId }: { creditNoteI
   const status = String(record.status || "");
   const canEdit = status === "DRAFT" || status === "REJECTED";
   const canCancel = status !== "POSTED" && status !== "CANCELLED" && status !== "REVERSED";
+  const canReverse = status === "POSTED";
   const isQty = String(record.source_type) === "SALES_RETURN" || String(record.source_type) === "NEAR_EXPIRY";
   const lines = mapLines(record);
   const cgst = toNum(record.cgst_amount);
@@ -255,6 +264,17 @@ export default function CreditNoteViewPageClient({ creditNoteId }: { creditNoteI
                     onClick={() => setCancelOpen(true)}
                   >
                     Cancel
+                  </Button>
+                ) : null}
+                {canReverse ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 text-xs text-purple-700 hover:bg-purple-50"
+                    onClick={() => setReverseOpen(true)}
+                    disabled={reverseBusy}
+                  >
+                    Reverse
                   </Button>
                 ) : null}
               </div>
@@ -433,6 +453,36 @@ export default function CreditNoteViewPageClient({ creditNoteId }: { creditNoteI
           }
         }}
       />
+
+      <CreditNoteReverseDialog
+        open={reverseOpen}
+        onClose={() => {
+          if (!reverseBusy) setReverseOpen(false);
+        }}
+        busy={reverseBusy}
+        onConfirm={async (payload) => {
+          if (reverseBusyRef.current) return;
+          reverseBusyRef.current = true;
+          setReverseBusy(true);
+          try {
+            const next = await CreditNoteListApi.reverse(record.credit_note_id, payload);
+            setRecord(next);
+            setReverseOpen(false);
+            showToast("Credit Note reversed.");
+            await refresh({ silent: true });
+          } catch (e) {
+            showToast(
+              creditNoteListApiError(e, "Could not reverse this Credit Note."),
+              "error",
+            );
+          } finally {
+            reverseBusyRef.current = false;
+            setReverseBusy(false);
+          }
+        }}
+      />
+
+      <AccountsToast toast={toast} onDismiss={dismissToast} />
     </>
   );
 }

@@ -228,6 +228,9 @@ export interface InvoiceAdditionalExpenseCalc {
 export interface InvoiceAdditionalExpensesTotals {
 	taxableAmount: number;
 	gstAmount: number;
+	cgst: number;
+	sgst: number;
+	igst: number;
 	totalAmount: number;
 }
 
@@ -272,22 +275,32 @@ export function calcAdditionalExpenseRow(
 
 export function calcAdditionalExpensesTotals(
 	rows: InvoiceAdditionalExpense[],
+	interstate = false,
 ): InvoiceAdditionalExpensesTotals {
 	let taxableAmount = 0;
 	let gstAmount = 0;
+	let cgst = 0;
+	let sgst = 0;
+	let igst = 0;
 	let totalAmount = 0;
 
 	for (const row of rows) {
 		if (!row.expenseHead?.trim() && row.amount <= 0) continue;
-		const calc = calcAdditionalExpenseRow(row);
+		const calc = calcAdditionalExpenseRow(row, interstate);
 		taxableAmount += calc.amount;
 		gstAmount += calc.gstAmount;
+		cgst += calc.cgst;
+		sgst += calc.sgst;
+		igst += calc.igst;
 		totalAmount += calc.totalAmount;
 	}
 
 	return {
 		taxableAmount: roundMoney(taxableAmount),
 		gstAmount: roundMoney(gstAmount),
+		cgst: roundMoney(cgst),
+		sgst: roundMoney(sgst),
+		igst: roundMoney(igst),
 		totalAmount: roundMoney(totalAmount),
 	};
 }
