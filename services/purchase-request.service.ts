@@ -10,7 +10,7 @@ import {
   type PRListStatus,
   type PRPoStatus,
 } from "@/lib/procurement/pr-status";
-import { calcPackingToBaseQty } from "@/lib/procurement/procurement-line-utils";
+import { calcPackingToBaseQty, resolveNetWeightPerPack } from "@/lib/procurement/procurement-line-utils";
 
 function asString(value: unknown): string {
   return typeof value === "string" ? value : value == null ? "" : String(value);
@@ -184,6 +184,25 @@ function mapLine(raw: Record<string, unknown>, index: number): PRLineItem {
   const ratePerSku =
     asNumber(product.cost_price) || asNumber(snapshot.cost_price) || 0;
 
+  const baseUnit = asString(product.unit ?? snapshot.unit) || "Unit";
+  const packagingUnit =
+    asString(product.packing_unit ?? snapshot.packing_unit) || "Box";
+  const packSizeRaw = product.pack_size ?? snapshot.pack_size;
+  const packSize =
+    packSizeRaw != null && packSizeRaw !== ""
+      ? Number(packSizeRaw)
+      : undefined;
+  const netWeightRaw = product.net_weight ?? snapshot.net_weight;
+  const weight = resolveNetWeightPerPack({
+    netWeight:
+      netWeightRaw != null && netWeightRaw !== ""
+        ? Number(netWeightRaw)
+        : null,
+    packSize: packSize != null && Number.isFinite(packSize) ? packSize : null,
+    unitPerPacking: conversionQty,
+    baseUnit,
+  });
+
   return {
     uid: asString(raw.id) || `line-${index}`,
     productId: productId || 0,
@@ -195,9 +214,8 @@ function mapLine(raw: Record<string, unknown>, index: number): PRLineItem {
     ),
     description: asString(product.scientific_name ?? snapshot.scientific_name),
     sku: asString(product.sku ?? snapshot.sku),
-    baseUnit: asString(product.unit ?? snapshot.unit) || "Unit",
-    packagingUnit:
-      asString(product.packing_unit ?? snapshot.packing_unit) || "Box",
+    baseUnit,
+    packagingUnit,
     conversionQty,
     requestUom: "Unit",
     requestedQty,
@@ -209,6 +227,9 @@ function mapLine(raw: Record<string, unknown>, index: number): PRLineItem {
     ratePerSku,
     uom: "Unit",
     remarks: asString(raw.remarks),
+    packSize: packSize != null && Number.isFinite(packSize) ? packSize : undefined,
+    netWeightPerPack: weight?.netWeightPerPack,
+    weightUom: weight?.weightUom,
   };
 }
 
@@ -225,6 +246,9 @@ export interface PurchaseRequestDetail {
   poStatus: PRPoStatus;
   currentApproverId: string;
   currentApprover: string;
+  state: string;
+  warehouseId: string | null;
+  warehouseName: string;
   lines: PRLineItem[];
   existingAttachments: Array<PRAttachment & { url?: string }>;
   createdBy: string;
@@ -253,6 +277,9 @@ export function mapDetail(raw: Record<string, unknown>): PurchaseRequestDetail {
     poStatus: mapBackendPoStatusToFrontend(raw.po_status),
     currentApproverId: asString(raw.current_approver_id),
     currentApprover: userDisplayName(raw.current_approver),
+    state: asString(raw.state) || "Maharashtra",
+    warehouseId: toUuidOrNull(raw.warehouse_id),
+    warehouseName: asString(raw.warehouse_name),
     lines: items.map((row, i) =>
       mapLine((row ?? {}) as Record<string, unknown>, i),
     ),
@@ -272,9 +299,9 @@ export function detailToFormValues(
     requestedBy: detail.requestedBy,
     department: "procurement",
     priority: (detail.priority as PRPriority) || "medium",
-    state: "Maharashtra",
-    warehouseId: null,
-    warehouseName: "",
+    state: detail.state || "Maharashtra",
+    warehouseId: detail.warehouseId,
+    warehouseName: detail.warehouseName || "",
     requiredByDate: detail.requiredByDate,
     purpose: "",
     remarks: detail.remarks,
@@ -309,6 +336,8 @@ function buildWriteBody(
     priority: form.priority || null,
     remarks: buildRemarks(form),
     state: (options.state || form.state || "Maharashtra").trim(),
+    warehouse_id: toUuidOrNull(form.warehouseId),
+    warehouse_name: form.warehouseName?.trim() || null,
     items: form.lines
       .filter((l) => l.productId && String(l.productId) !== "0")
       .map((line) => ({

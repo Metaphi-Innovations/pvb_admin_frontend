@@ -1,10 +1,12 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { Eye } from "lucide-react";
 import { MasterListing } from "@/components/listing/MasterListing";
-import { ColumnConfig } from "@/components/listing/types";
+import { ActionItemConfig, ColumnConfig } from "@/components/listing/types";
 import { StackedQtyDisplay, type QtyStackMeta } from "@/app/(app)/sales/shared/StackedQtyDisplay";
-import { QC_PASSED_STATUS_OPTIONS, STATUS_BADGE_CONFIG } from "../constants";
 import { useStockOverviewListFilters } from "../hooks/use-stock-overview-list-filters";
 import {
   InventoryListRow,
@@ -36,7 +38,13 @@ function toInventoryQtyMeta(row: InventoryListRow): QtyStackMeta {
   };
 }
 
+function inventoryViewHref(productId: string, warehouseId?: string) {
+  if (!warehouseId) return `/warehouse/stockoverview/view/${productId}`;
+  return `/warehouse/stockoverview/view/${productId}?warehouse_id=${encodeURIComponent(warehouseId)}`;
+}
+
 export function QcPassedListing({ warehouseId, onFiltersApplied }: QcPassedListingProps) {
+  const router = useRouter();
   const {
     draftFilters,
     appliedFilters,
@@ -55,12 +63,20 @@ export function QcPassedListing({ warehouseId, onFiltersApplied }: QcPassedListi
   const [error, setError] = useState<string | null>(null);
   const [filterOptions, setFilterOptions] = useState<Record<string, Array<{ label: string; value: string }>>>({});
   const [loadingFilters, setLoadingFilters] = useState<Set<string>>(new Set());
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     setPage(1);
   }, [warehouseId, setPage]);
 
   useEffect(() => {
+    if (!warehouseId) {
+      setRecords([]);
+      setTotalRecords(0);
+      setLoading(false);
+      return;
+    }
+
     const controller = new AbortController();
     setLoading(true);
     setError(null);
@@ -91,6 +107,22 @@ export function QcPassedListing({ warehouseId, onFiltersApplied }: QcPassedListi
     handleFilterChange(next);
     onFiltersApplied?.();
   };
+
+  const handleExport = useCallback(() => {
+    if (!warehouseId || exporting) return;
+    setExporting(true);
+    setError(null);
+    StockOverviewApi.exportInventory({
+      search: String(appliedFilters.search ?? ""),
+      ordering: toStockOrdering(sort.key, sort.direction),
+      warehouse_id: warehouseId,
+      filters: appliedFilters,
+    })
+      .catch((err) => {
+        setError(StockOverviewApi.getErrorMessage(err, "Failed to export inventory."));
+      })
+      .finally(() => setExporting(false));
+  }, [appliedFilters, exporting, sort.direction, sort.key, warehouseId]);
 
   const handleOpenFilter = (columnKey: string) => {
     if (filterOptions[columnKey] || loadingFilters.has(columnKey)) return;
@@ -124,7 +156,11 @@ export function QcPassedListing({ warehouseId, onFiltersApplied }: QcPassedListi
       filterType: "dropdown",
       filterOptions: filterOptions.product_name || [],
       render: (_val, row) => (
-        <span className="text-xs font-semibold text-foreground">{row.product_name}</span>
+        <Link href={inventoryViewHref(row.id, warehouseId)} className="block group/name">
+          <span className="text-xs font-semibold text-foreground group-hover/name:text-brand-700">
+            {row.product_name}
+          </span>
+        </Link>
       ),
     },
     {
@@ -163,6 +199,27 @@ export function QcPassedListing({ warehouseId, onFiltersApplied }: QcPassedListi
       ),
     },
     {
+      key: "expired_qty",
+      header: "Expired Qty",
+      sortable: true,
+      align: "right",
+      width: "150px",
+      render: (_val, row) => {
+        const n = Number(row.expired_qty) || 0;
+        if (n <= 0) {
+          return <span className="text-xs text-muted-foreground">—</span>;
+        }
+        return (
+          <StackedQtyDisplay
+            baseQty={n}
+            meta={toInventoryQtyMeta(row)}
+            layout="compact"
+            className="ml-auto [&_p:first-child]:text-rose-700"
+          />
+        );
+      },
+    },
+    {
       key: "cp",
       header: "CP",
       sortable: true,
@@ -194,22 +251,14 @@ export function QcPassedListing({ warehouseId, onFiltersApplied }: QcPassedListi
         );
       },
     },
+  ];
+
+  const actions: ActionItemConfig<InventoryListRow>[] = [
     {
-      key: "status",
-      header: "Stock Status",
-      sortable: true,
-      filterable: true,
-      filterType: "dropdown",
-      filterOptions: QC_PASSED_STATUS_OPTIONS,
-      width: "135px",
-      render: (val: string) => {
-        const cfg = STATUS_BADGE_CONFIG[val] || { bg: "bg-slate-100 text-slate-700 border-slate-200", label: val };
-        return (
-          <span className={`inline-flex items-center text-[11px] px-2.5 py-0.5 rounded-full font-medium border ${cfg.bg}`}>
-            {cfg.label}
-          </span>
-        );
-      },
+      label: "View Details",
+      action: "view",
+      icon: Eye,
+      onClick: (row) => router.push(inventoryViewHref(row.id, warehouseId)),
     },
   ];
 
@@ -227,11 +276,13 @@ export function QcPassedListing({ warehouseId, onFiltersApplied }: QcPassedListi
         onPageSizeChange={handlePageSizeChange}
         onSortChange={setSort}
         onFilterChange={onFilterChange}
+        actions={actions}
         emptyMessage=""
         searchPlaceholder="Search product or SKU..."
         currentFilters={draftFilters}
         currentSort={sort}
         onOpenFilter={handleOpenFilter}
+        onExport={handleExport}
       />
     </div>
   );

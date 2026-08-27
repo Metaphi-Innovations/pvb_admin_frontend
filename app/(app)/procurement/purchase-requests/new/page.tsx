@@ -133,7 +133,7 @@ export default function NewPRPage() {
           onSaveDraft={() => persist(false)}
           onSubmit={() => persist(true)}
           saveLabel={
-            createMutation.isPending ? "Saving…" : "Save Purchase Request"
+            createMutation.isPending ? "Saving…" : "Draft"
           }
         />
       }

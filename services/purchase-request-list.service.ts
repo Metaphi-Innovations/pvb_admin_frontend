@@ -60,6 +60,7 @@ export interface PurchaseRequestFilterOption {
 }
 
 export type PurchaseRequestFilterField =
+  | "pr_number"
   | "status"
   | "priority"
   | "requested_by_id"
@@ -173,6 +174,11 @@ export function buildPurchaseRequestApiFilters(
 ): Record<string, unknown> {
   const apiFilters: Record<string, unknown> = {};
 
+  const prNumber = firstFilterValue(filters.prNumber);
+  if (prNumber) {
+    apiFilters.pr_number = prNumber;
+  }
+
   const columnStatus = firstFilterValue(filters.approvalStatus);
   if (columnStatus) {
     const backendStatus = mapFrontendStatusToBackend(columnStatus);
@@ -218,8 +224,10 @@ export function buildPurchaseRequestOrdering(
     prDate: "pr_date",
     requestedBy: "requested_by__first_name",
     requiredByDate: "required_by_date",
+    totalItems: "items__count",
     approvalStatus: "status",
     poStatus: "po_status",
+    createdAt: "created_at",
   };
 
   const backendKey = fieldMap[sortKey];
@@ -242,6 +250,7 @@ function buildListQueryString(params: PurchaseRequestListParams): string {
     "pr_date_from",
     "pr_date_to",
     "requested_by_name",
+    "pr_number",
     "status",
     "po_status",
     "priority",
@@ -264,6 +273,7 @@ function bodyFilters(
     "status",
     "priority",
     "requested_by_id",
+    "pr_number",
     "po_status",
     "required_by_date_from",
     "required_by_date_to",

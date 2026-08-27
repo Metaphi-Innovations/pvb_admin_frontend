@@ -10,11 +10,18 @@ import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/procurement/utils";
 import {
   calcPackingToBaseQty,
+  calcPackingToWeightQty,
   calcPrLineAmount,
   enrichProductForProcurement,
+  formatWeightQty,
   type PackagingUom,
 } from "@/lib/procurement/procurement-line-utils";
 import type { PRLineItem } from "@/app/(app)/procurement/purchase-requests/pr-data";
+
+/** Digits only — blocks decimals and alphabetic characters for Qty in Case. */
+function sanitizeWholeNumberInput(value: string): string {
+  return value.replace(/\D/g, "");
+}
 
 interface InlineEditDraft {
   productId: string;
@@ -103,13 +110,13 @@ export function ProductItemDetailsSection({
   readOnly = false,
   hideQuickAdd = false,
   noBorder = false,
-  title = "Product / Item Details",
-  description = "Enter packaging quantity — total SKU qty and amount are auto-calculated from product master.",
+  title = "Product Details",
+  description = "Qty in Case is entered; Qty in Unit and Qty in Kg/Ltr are auto-calculated from product master.",
   sectionRequired = false,
-  addButtonLabel = "Add Item",
+  addButtonLabel = "Add Product",
   showCasePieceBreakdown,
   piecesPerCase = 10,
-  quantityLabel = "Quantity",
+  quantityLabel = "Qty in Case",
   quantityUnitLabel,
   packedQtyUnitLabel,
   dispatchQtyUnitLabel,
@@ -158,6 +165,19 @@ export function ProductItemDetailsSection({
     ? (totalQuantity !== undefined ? totalQuantity : 0)
     : items.reduce((sum, l) => sum + (l.requestedQty || 0), 0);
   const totalSkuQty = items.reduce((sum, l) => sum + (l.totalQtyBase || 0), 0);
+  const totalWeightByUom = items.reduce(
+    (acc: Record<string, number>, l) => {
+      const weightQty = calcPackingToWeightQty(
+        l.requestedQty || 0,
+        l.netWeightPerPack,
+      );
+      const uom = l.weightUom || "";
+      if (!(weightQty > 0) || !uom) return acc;
+      acc[uom] = (acc[uom] || 0) + weightQty;
+      return acc;
+    },
+    {} as Record<string, number>,
+  );
   const totalAmountVal = (mode === "sales-order" || mode === "sales-order-grid" || mode === "stock-transfer")
     ? (totalAmount !== undefined ? totalAmount : 0)
     : mode === "purchase_request"
@@ -168,6 +188,9 @@ export function ProductItemDetailsSection({
   const previewProductInfo = previewProductId ? enrichProductForProcurement(previewProductId) : null;
   const previewSkuQty = previewProductInfo
     ? calcPackingToBaseQty(Number(quickQty) || 0, previewProductInfo.conversionQty)
+    : 0;
+  const previewWeightQty = previewProductInfo
+    ? calcPackingToWeightQty(Number(quickQty) || 0, previewProductInfo.netWeightPerPack)
     : 0;
   const previewAmount = previewProductInfo
     ? calcPrLineAmount(previewProductInfo.ratePerSku, previewSkuQty)
@@ -197,18 +220,49 @@ export function ProductItemDetailsSection({
 
   const saveInlineEdit = () => {
     if (!inlineEditUid || !inlineEditDraft) return;
-    const packingQty = Number(inlineEditDraft.packingQty);
-    if (packingQty <= 0) {
-      setInlineEditError("Packing qty must be greater than 0");
+    const packingQtyRaw = inlineEditDraft.packingQty.trim();
+    if (mode === "purchase_request" && !/^\d+$/.test(packingQtyRaw)) {
+      setInlineEditError("Qty in Case must be a whole number");
       return;
     }
-    const productId = Number(inlineEditDraft.productId);
-    if (!productId) {
+    const packingQty = Number(packingQtyRaw);
+    if (!Number.isFinite(packingQty) || packingQty <= 0) {
+      setInlineEditError("Qty in Case must be greater than 0");
+      return;
+    }
+    if (mode === "purchase_request" && !Number.isInteger(packingQty)) {
+      setInlineEditError("Qty in Case must be a whole number");
+      return;
+    }
+    const productIdRaw = String(inlineEditDraft.productId || "").trim();
+    if (!productIdRaw || productIdRaw === "0") {
       setInlineEditError("Product is required");
       return;
     }
 
-    const info = enrichProductForProcurement(productId);
+    const existingLine = items.find((l) => l.uid === inlineEditUid);
+    const info =
+      enrichProductForProcurement(productIdRaw) ||
+      (existingLine && String(existingLine.productId) === productIdRaw
+        ? {
+            productId: existingLine.productId,
+            productCode: existingLine.productCode,
+            productName: existingLine.productName,
+            description: existingLine.description,
+            sku: existingLine.sku,
+            baseUnit: existingLine.baseUnit,
+            packagingUnit: existingLine.packagingUnit,
+            conversionQty: existingLine.conversionQty,
+            segment: existingLine.segment,
+            category: existingLine.category,
+            hsnCode: existingLine.hsnCode,
+            mrp: existingLine.mrp,
+            ratePerSku: existingLine.ratePerSku,
+            packSize: existingLine.packSize,
+            netWeightPerPack: existingLine.netWeightPerPack,
+            weightUom: existingLine.weightUom,
+          }
+        : null);
     if (!info) return;
 
     const requestUom = packagingUnitToRequestUom(info.packagingUnit);
@@ -231,6 +285,9 @@ export function ProductItemDetailsSection({
         requestUom: requestUom,
         requestedQty: packingQty,
         remarks: inlineEditDraft.remarks,
+        packSize: info.packSize,
+        netWeightPerPack: info.netWeightPerPack,
+        weightUom: info.weightUom,
       });
     }
     cancelInlineEdit();
@@ -347,13 +404,21 @@ export function ProductItemDetailsSection({
             </div>
             <div className="space-y-1">
               <Label className="text-xs font-medium">
-                {mode === "purchase_request" ? "Quantity" : "Return Qty"}
+                {mode === "purchase_request" ? "Qty in Case" : "Return Qty"}
               </Label>
               <Input
-                type="number"
-                min={1}
+                type={mode === "purchase_request" ? "text" : "number"}
+                inputMode={mode === "purchase_request" ? "numeric" : undefined}
+                pattern={mode === "purchase_request" ? "[0-9]*" : undefined}
+                min={mode === "purchase_request" ? undefined : 1}
                 value={quickQty}
-                onChange={(e) => setQuickQty(e.target.value)}
+                onChange={(e) =>
+                  setQuickQty(
+                    mode === "purchase_request"
+                      ? sanitizeWholeNumberInput(e.target.value)
+                      : e.target.value,
+                  )
+                }
                 className={inputCls}
                 disabled={disabled}
               />
@@ -396,8 +461,14 @@ export function ProductItemDetailsSection({
                 </span>
               </span>
               <span>
-                <span className="text-muted-foreground">Total SKU Qty: </span>
+                <span className="text-muted-foreground">Qty in Unit: </span>
                 <span className="font-semibold text-brand-700 tabular-nums">{previewSkuQty}</span>
+              </span>
+              <span>
+                <span className="text-muted-foreground">Qty in Kg/Ltr: </span>
+                <span className="font-semibold text-brand-700 tabular-nums">
+                  {formatWeightQty(previewWeightQty, previewProductInfo.weightUom)}
+                </span>
               </span>
               <span>
                 <span className="text-muted-foreground">Rate/SKU: </span>
@@ -418,7 +489,7 @@ export function ProductItemDetailsSection({
         <div className="rounded-lg border border-dashed border-border bg-muted/10 px-4 py-10 text-center">
           <Package className="mx-auto mb-2 h-10 w-10 text-muted-foreground/70" />
           <p className="text-sm font-semibold text-foreground">
-            {mode === "purchase_request" ? "No items added yet" : (mode === "sales-order" || mode === "stock-transfer") ? "No products added yet" : "No return products added yet"}
+            {mode === "purchase_request" ? "No products added yet" : (mode === "sales-order" || mode === "stock-transfer") ? "No products added yet" : "No return products added yet"}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
             {mode === "purchase_request"
@@ -438,13 +509,15 @@ export function ProductItemDetailsSection({
                 <tr className="border-b border-border bg-muted/40">
                   {mode === "purchase_request" ? (
                     <>
-                      <th className="w-[22%] px-4 py-2.5 text-left text-xs font-semibold text-foreground">Product</th>
-                      <th className="w-[10%] px-4 py-2.5 text-left text-xs font-semibold text-foreground">HSN Code</th>
-                      <th className="w-[12%] px-4 py-2.5 text-left text-xs font-semibold text-foreground">Packaging Type</th>
-                      <th className="w-[10%] px-4 py-2.5 text-right text-xs font-semibold text-foreground">Quantity</th>
-                      <th className="w-[12%] px-4 py-2.5 text-right text-xs font-semibold text-foreground">Total SKU Qty</th>
-                      <th className="w-[12%] px-4 py-2.5 text-right text-xs font-semibold text-foreground">Rate / SKU</th>
-                      <th className="w-[14%] px-4 py-2.5 text-right text-xs font-semibold text-foreground">Total Amount</th>
+                      <th className="w-[18%] px-4 py-2.5 text-left text-xs font-semibold text-foreground">Product</th>
+                      <th className="w-[8%] px-4 py-2.5 text-left text-xs font-semibold text-foreground">HSN Code</th>
+                      {/* <th className="w-[10%] px-4 py-2.5 text-left text-xs font-semibold text-foreground">Packaging Type</th> */}
+                      <th className="w-[8%] px-4 py-2.5 text-right text-xs font-semibold text-foreground">Qty in Case</th>
+                      <th className="w-[8%] px-4 py-2.5 text-right text-xs font-semibold text-foreground">Qty in Unit</th>
+                      <th className="w-[9%] px-4 py-2.5 text-right text-xs font-semibold text-foreground">Qty in Kg/Ltr</th>
+                      <th className="w-[9%] px-4 py-2.5 text-right text-xs font-semibold text-foreground">Rate / SKU</th>
+                      <th className="w-[11%] px-4 py-2.5 text-right text-xs font-semibold text-foreground">Total Amount</th>
+                      <th className="w-[12%] px-4 py-2.5 text-left text-xs font-semibold text-foreground">Remarks</th>
                       {!readOnly && <th className="w-16 px-4 py-2.5 text-right text-xs font-semibold text-foreground">Actions</th>}
                     </>
                   ) : (
@@ -495,7 +568,7 @@ export function ProductItemDetailsSection({
                 const isEditing = inlineEditUid === line.uid;
                 const draft = isEditing ? inlineEditDraft : null;
                 const draftInfo = draft?.productId
-                  ? enrichProductForProcurement(Number(draft.productId))
+                  ? enrichProductForProcurement(draft.productId)
                   : null;
                 const displayHsn = draftInfo?.hsnCode ?? line.hsnCode;
                 const displayPackaging = draftInfo?.packagingUnit ?? line.packagingUnit;
@@ -505,6 +578,20 @@ export function ProductItemDetailsSection({
                   isEditing && draft
                     ? calcPackingToBaseQty(Number(draft.packingQty) || 0, displayConversionQty)
                     : line.totalQtyBase;
+                const displayNetWeight =
+                  draftInfo?.netWeightPerPack ?? line.netWeightPerPack;
+                const displayWeightUom =
+                  draftInfo?.weightUom ?? line.weightUom;
+                const displayWeightQty =
+                  isEditing && draft
+                    ? calcPackingToWeightQty(
+                        Number(draft.packingQty) || 0,
+                        displayNetWeight,
+                      )
+                    : calcPackingToWeightQty(
+                        line.requestedQty || 0,
+                        displayNetWeight,
+                      );
                 const displayAmount = calcPrLineAmount(displayRatePerSku, displaySkuQty);
 
                 return (
@@ -546,17 +633,25 @@ export function ProductItemDetailsSection({
                           )}
                         </td>
                         <td className="px-4 py-2 font-mono text-xs text-foreground">{displayHsn || "—"}</td>
-                        <td className="px-4 py-2 text-xs text-foreground">{displayPackaging}</td>
+                        {/* <td className="px-4 py-2 text-xs text-foreground">{displayPackaging}</td> */}
                         <td className="px-4 py-2 text-right">
                           {isEditing && draft ? (
                             <div className="space-y-0.5">
                               <Input
-                                type="number"
-                                min={1}
+                                type="text"
+                                inputMode="numeric"
+                                pattern="[0-9]*"
                                 value={draft.packingQty}
                                 onChange={(e) => {
                                   setInlineEditDraft((prev) =>
-                                    prev ? { ...prev, packingQty: e.target.value } : prev,
+                                    prev
+                                      ? {
+                                          ...prev,
+                                          packingQty: sanitizeWholeNumberInput(
+                                            e.target.value,
+                                          ),
+                                        }
+                                      : prev,
                                   );
                                   setInlineEditError(null);
                                 }}
@@ -580,10 +675,35 @@ export function ProductItemDetailsSection({
                           )}
                         </td>
                         <td className="px-4 py-2 text-right text-xs tabular-nums text-foreground">
+                          {formatWeightQty(displayWeightQty, displayWeightUom)}
+                        </td>
+                        <td className="px-4 py-2 text-right text-xs tabular-nums text-foreground">
                           {formatCurrency(displayRatePerSku)}
                         </td>
                         <td className="px-4 py-2 text-right text-xs font-semibold tabular-nums font-mono text-foreground">
                           {formatCurrency(displayAmount)}
+                        </td>
+                        <td className="px-4 py-2">
+                          {isEditing && draft ? (
+                            <Input
+                              value={draft.remarks}
+                              onChange={(e) =>
+                                setInlineEditDraft((prev) =>
+                                  prev ? { ...prev, remarks: e.target.value } : prev,
+                                )
+                              }
+                              placeholder="Optional"
+                              className={cn(inputCls, "min-w-[100px]")}
+                              disabled={disabled}
+                            />
+                          ) : (
+                            <span
+                              className="block max-w-[140px] truncate text-xs text-muted-foreground"
+                              title={line.remarks || undefined}
+                            >
+                              {line.remarks || "—"}
+                            </span>
+                          )}
                         </td>
                         {!readOnly && (
                           <td className="px-4 py-2 text-right">
@@ -746,7 +866,7 @@ export function ProductItemDetailsSection({
                   <>
                     Showing{" "}
                     <span className="font-medium text-foreground">{filledLines.length}</span> of{" "}
-                    <span className="font-medium text-foreground">{filledLines.length}</span> items
+                    <span className="font-medium text-foreground">{filledLines.length}</span> products
                   </>
                 ) : (
                   <>
@@ -756,7 +876,7 @@ export function ProductItemDetailsSection({
               </p>
               <div className="flex flex-wrap items-center gap-3">
                 <p className="text-[11px] text-muted-foreground">
-                  {mode === "purchase_request" ? "Total quantity: " : "Total return qty: "}
+                  {mode === "purchase_request" ? "Total Qty in Case: " : "Total return qty: "}
                   <span className="font-medium text-foreground tabular-nums">{totalPackingQty}</span>
                   {shouldShowBreakdown && (
                     <span className="ml-1 text-muted-foreground text-[10px]">
@@ -771,10 +891,20 @@ export function ProductItemDetailsSection({
                   )}
                 </p>
                 {mode === "purchase_request" && (
-                  <p className="text-[11px] text-muted-foreground">
-                    Total SKU qty:{" "}
-                    <span className="font-medium text-foreground tabular-nums">{totalSkuQty}</span>
-                  </p>
+                  <>
+                    <p className="text-[11px] text-muted-foreground">
+                      Total Qty in Unit:{" "}
+                      <span className="font-medium text-foreground tabular-nums">{totalSkuQty}</span>
+                    </p>
+                    {Object.entries(totalWeightByUom).map(([uom, qty]) => (
+                      <p key={uom} className="text-[11px] text-muted-foreground">
+                        Total Qty in {uom}:{" "}
+                        <span className="font-medium text-foreground tabular-nums">
+                          {formatWeightQty(qty, uom)}
+                        </span>
+                      </p>
+                    ))}
+                  </>
                 )}
                 <p className="text-[11px] text-muted-foreground">
                   {mode === "purchase_request" ? "Total amount: " : "Sales Return Amount: "}

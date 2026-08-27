@@ -10,7 +10,7 @@ export function PRFormFooter({
   onSaveDraft,
   onSubmit,
   showSubmit = true,
-  saveLabel = "Save Purchase Request",
+  saveLabel = "Draft",
 }: {
   readOnly?: boolean;
   onCancel: () => void;
