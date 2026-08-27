@@ -103,7 +103,7 @@ export function ComplianceCertificationsGrid({
 	onFieldBlur?: (fieldKey: string) => void;
 	/** Subset of rows to render; defaults to all registrations. */
 	rows?: RowId[];
-	/** Show License Validity Date column (Accounts customer ledger flow). */
+	/** Show Expiry Date column. */
 	showValidityDates?: boolean;
 }) {
 	const setToggle = (
@@ -155,7 +155,7 @@ export function ComplianceCertificationsGrid({
 				</span>
 				{showValidityDates ? (
 					<span className={cn(ERP.label, "text-muted-foreground")}>
-						License Validity Date
+						Expiry Date
 					</span>
 				) : null}
 			</div>
