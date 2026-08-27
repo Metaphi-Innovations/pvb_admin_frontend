@@ -99,7 +99,7 @@ export default function GSTPage() {
     appliedSearch,
   } = useAppliedListFilters();
   const { handleOpenFilter, isFilterOpen } = useLazyFilterColumns();
-  const [sort, setSort] = useState<SortState>({ key: "gstPercentage", direction: "asc" });
+  const [sort, setSort] = useState<SortState>({ key: "", direction: "none" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [toast, setToast] = useState<ToastState | null>(null);
@@ -151,12 +151,6 @@ export default function GSTPage() {
   });
   const remarkOptionsQuery = useGstFilterDropdown("remark", { enabled: isFilterOpen("remarks") });
   const statusOptionsQuery = useGstFilterDropdown("is_active", { enabled: isFilterOpen("status") });
-  const createdByOptionsQuery = useGstFilterDropdown("created_by_user__username", {
-    enabled: isFilterOpen("createdBy"),
-  });
-  const updatedByOptionsQuery = useGstFilterDropdown("updated_by_user__username", {
-    enabled: isFilterOpen("updatedBy"),
-  });
 
   const gstPercentageOptions = useMemo(
     () => gstPercentageOptionsQuery.data ?? [],
@@ -181,14 +175,6 @@ export default function GSTPage() {
     }
     return merged;
   }, [statusOptionsQuery.data]);
-  const createdByOptions = useMemo(
-    () => createdByOptionsQuery.data ?? [],
-    [createdByOptionsQuery.data],
-  );
-  const updatedByOptions = useMemo(
-    () => updatedByOptionsQuery.data ?? [],
-    [updatedByOptionsQuery.data],
-  );
 
   const records = useMemo(
     () => (listQuery.data?.items ?? []).map(toGstRow),
@@ -319,8 +305,7 @@ export default function GSTPage() {
       header: "Created",
       sortable: true,
       filterable: true,
-      filterType: "audit",
-      auditUserOptions: createdByOptions,
+      filterType: "date",
       width: "120px",
       render: (val, row) => <ListingAuditCell name={row.createdBy} date={row.createdDate} variant="created" />,
     },
@@ -329,8 +314,7 @@ export default function GSTPage() {
       header: "Updated",
       sortable: true,
       filterable: true,
-      filterType: "audit",
-      auditUserOptions: updatedByOptions,
+      filterType: "date",
       width: "120px",
       render: (val, row) => <ListingAuditCell name={row.updatedBy} date={row.updatedDate} variant="updated" />,
     },
@@ -354,6 +338,7 @@ export default function GSTPage() {
 
   const displayRecords = useMemo(() => {
     if (!sort.key || sort.direction === "none") return records;
+    if (sort.key === "createdBy" || sort.key === "updatedBy") return records;
     return [...records].sort((a, b) => {
       let cmp = 0;
       if (sort.key === "gstPercentage") {

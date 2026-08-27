@@ -35,6 +35,7 @@ export type AdditionalChargeDropdownItem = {
   default_gst_rate_id: string | null;
   /** GST % as string from API, e.g. "18.00" */
   default_gst_rate: string | null;
+  hsn_id: string | null;
   hsn_sac_code: string | null;
   description: string | null;
 };
@@ -67,6 +68,7 @@ function mapDropdownItem(
       ? asString(raw.default_gst_rate_id)
       : null,
     default_gst_rate: raw.default_gst_rate != null ? asString(raw.default_gst_rate) : null,
+    hsn_id: raw.hsn_id ? asString(raw.hsn_id) : null,
     hsn_sac_code: raw.hsn_sac_code ? asString(raw.hsn_sac_code) : null,
     description: raw.description ? asString(raw.description) : null,
   };

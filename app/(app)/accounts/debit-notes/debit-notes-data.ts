@@ -35,9 +35,11 @@ import {
 
 export type DebitNoteCreationMode = "against_return" | "direct_adjustment";
 
-export type DebitNoteSource = "purchase_return" | "manual";
+export type DebitNoteSource = "direct" | "purchase_invoice" | "purchase_return" | "manual";
 
 export const DEBIT_NOTE_SOURCE_LABELS: Record<DebitNoteSource, string> = {
+  direct: "Direct",
+  purchase_invoice: "Purchase Invoice",
   purchase_return: "Purchase Return",
   manual: "Manual",
 };
@@ -97,7 +99,7 @@ export interface DebitNoteLine {
   taxPct: number;
   sourceTaxPct?: number;
   gstApplicable?: boolean;
-  adjustmentLedgerId?: number | null;
+  adjustmentLedgerId?: any;
   adjustmentLedgerName?: string;
   gstAmount: number;
   lineAmount: number;
@@ -137,7 +139,7 @@ export interface NoteActivityEntry {
 }
 
 export interface DebitNoteRecord {
-  id: number;
+  id: any;
   debitNoteNo: string;
   debitNoteDate: string;
   againstType: DebitNoteAgainst;
@@ -147,7 +149,7 @@ export interface DebitNoteRecord {
   sourcePoNo: string;
   sourceGrnNo: string;
   sourceQcNo: string;
-  vendorId: number | null;
+  vendorId: any;
   vendorName: string;
   originalAmount: number;
   alreadyAdjustedAmount: number;
@@ -176,14 +178,20 @@ export interface DebitNoteRecord {
   sourcePackingNo?: string;
   sourceDispatchNo?: string;
   referenceNo?: string;
-  adjustmentLedgerId?: number | null;
+  adjustmentLedgerId?: any;
   adjustmentLedgerName?: string;
   freshGstPct?: number;
   cgstAmount: number;
   sgstAmount: number;
   igstAmount: number;
   warehouse?: string;
-  bankAccountId?: number | null;
+  branch?: string;
+  bankAccountId?: any;
+  round_off?: number;
+  reversal_voucher_number?: string | null;
+  reversed_at?: string | null;
+  reversed_by?: string | null;
+  reversal_reason?: string | null;
 }
 
 const STORAGE_KEY = "ds_accounts_debit_notes_v3";

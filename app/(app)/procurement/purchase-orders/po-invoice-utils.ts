@@ -7,20 +7,13 @@ import type { POListStatus } from "@/lib/procurement/po-status";
 
 export type POInvoiceListingStatus = "not_uploaded" | "uploaded";
 
-const UPLOADABLE_PO_STATUSES: POListStatus[] = [
-  "approved",
-  "invoice_uploaded",
-  "partially_received",
-  "received",
-];
-
-export function canUploadPOInvoiceForStatus(status: POListStatus): boolean {
-  if (["cancelled", "short_closed", "closed"].includes(status)) return false;
-  return UPLOADABLE_PO_STATUSES.includes(status);
+export function canUploadPOInvoiceForStatus(_status: POListStatus): boolean {
+  // Invoice upload is only allowed from GRN, never from PO.
+  return false;
 }
 
-export function canUploadPOInvoice(po: PurchaseOrder): boolean {
-  return canUploadPOInvoiceForStatus(po.status);
+export function canUploadPOInvoice(_po: PurchaseOrder): boolean {
+  return false;
 }
 
 export function getPOVendorInvoice(poId: string | number): PurchaseInvoiceRecord | null {

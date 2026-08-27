@@ -18,30 +18,40 @@ export type InventoryListRow = {
   sku: string;
   uom: string;
   available_qty: number;
-  reserved_qty: number;
+  /** Qty on lots past expiry (excluded from available_qty). */
+  expired_qty: number;
   cp: string;
   stock_value: string;
-  warehouse_name: string;
-  batch_no: string;
-  status: string;
-  lifecycle_status?: string;
-  source_status?: string;
-  source_type?: string;
+  /** Packing meta for stacked Available Qty (Case / Unit · Kg|Ltr). */
+  unit_per_packing?: number | null;
+  quantity_type?: string | null;
+  pack_size?: number | null;
+  net_weight?: number | null;
+  unit?: string | null;
 };
 
 export type RejectedListRow = {
   id: string;
   product_name: string;
+  sku: string;
+  uom: string;
   warehouse_name: string;
   batch_no: string;
   rejected_qty: number;
   reject_reason: string;
+  reject_type?: string;
   qc_number: string;
   inspection_date: string | null;
   status: string;
   lifecycle_status?: string;
   source_status?: string;
   source_type?: string;
+  /** Packing meta for stacked Rejected Qty (same as Inventory / Returns). */
+  unit_per_packing?: number | null;
+  quantity_type?: string | null;
+  pack_size?: number | null;
+  net_weight?: number | null;
+  unit?: string | null;
 };
 
 export type ReturnStockListRow = {
@@ -49,12 +59,19 @@ export type ReturnStockListRow = {
   product_name: string;
   sku: string;
   uom: string;
+  /** Original accepted qty into sellable (base_qty). */
+  received_qty: number;
   available_qty: number;
+  /** Packed case rows with available > 0 (CASE lots only). */
+  available_cases?: number | null;
   reserved_qty: number;
   cp: string;
   stock_value: string;
   warehouse_name: string;
+  warehouse_id?: string;
+  product_id?: string;
   batch_no: string;
+  manufacture_date?: string | null;
   expiry_date: string | null;
   /** Return document reference */
   return_no: string;
@@ -64,6 +81,36 @@ export type ReturnStockListRow = {
   lifecycle_status?: string;
   source_status?: string;
   source_type?: string;
+  /** Packing meta for stacked Available Qty (same as Inventory). */
+  unit_per_packing?: number | null;
+  quantity_type?: string | null;
+  pack_size?: number | null;
+  net_weight?: number | null;
+  unit?: string | null;
+};
+
+export type MoveToRejectedPayload = {
+  sellable_item_id?: string;
+  product_id?: string;
+  warehouse_id?: string;
+  batch_no?: string;
+  expiry_date?: string | null;
+  /** Base/unit qty for PIECE lots. */
+  qty?: number;
+  /** Whole case count for CASE lots. */
+  cases?: number;
+  reject_reason?: string;
+};
+
+export type MoveToRejectedResult = {
+  rejected_id: string;
+  reject_type: string;
+  qty: number;
+  cases?: number | null;
+  batch_no: string;
+  product_name: string;
+  warehouse_name: string;
+  document_no: string;
 };
 
 export type DailyLogListRow = {
@@ -72,22 +119,23 @@ export type DailyLogListRow = {
   product_name: string;
   hsn: string;
   scientific_name: string;
-  category: string;
-  pack_size: string;
   opening_qty: number;
   day_in: number | string;
   day_out: number | string;
   closing_qty: number;
-  available_qty: number;
   batch_no: string;
+  manufacture_date: string | null;
   expiry_date: string | null;
   warehouse_name: string;
   cp: number;
   valuation: number;
   status: string;
   lifecycle_status?: string;
-  source_status?: string;
-  source_type?: string;
+  unit_per_packing?: number | null;
+  quantity_type?: string | null;
+  pack_size?: number | null;
+  net_weight?: number | null;
+  unit?: string | null;
 };
 
 export type DailyLogSummary = {
@@ -108,12 +156,61 @@ type ListBaseParams = {
   signal?: AbortSignal;
 };
 
+export type InventoryBatchBreakdownRow = {
+  sku: string;
+  warehouse_id: string;
+  warehouse_name: string;
+  batch_no: string;
+  manufacture_date: string | null;
+  expiry_date: string | null;
+  received_qty: number;
+  available_qty: number;
+  near_expiry_qty: number;
+  expired_qty: number;
+  /** Packed case rows with remaining available (CASE lots only). */
+  available_cases?: number | null;
+  quantity_type?: string | null;
+  status: "Available" | "Near Expiry" | "Expired" | string;
+  /** @deprecated use status */
+  condition?: string;
+};
+
+/** Product-level inventory view (Inventory tab). Present when `batches` is set. */
+export type InventoryProductDetails = {
+  id: string;
+  product: {
+    product_name: string;
+    product_code: string;
+    sku: string | null;
+    uom?: string;
+  };
+  warehouse: {
+    warehouse_name: string;
+    warehouse_code: string;
+  };
+  available_qty: number;
+  fresh_available_qty: number;
+  near_expiry_qty: number;
+  expired_qty: number;
+  cp: string;
+  stock_value: string;
+  near_expiry_days: number;
+  unit_per_packing?: number | null;
+  quantity_type?: string | null;
+  pack_size?: number | null;
+  net_weight?: number | null;
+  unit?: string | null;
+  batches: InventoryBatchBreakdownRow[];
+};
+
+/** Legacy single-batch detail (Sales/Sample Return view links). */
 export type InventoryDetails = {
   id: string;
   product: {
     product_name: string;
     product_code: string;
     sku: string | null;
+    uom?: string;
   };
   warehouse: {
     warehouse_name: string;
@@ -132,6 +229,19 @@ export type InventoryDetails = {
   updated_at?: string | null;
   created_by?: string | null;
   updated_by?: string | null;
+  /** Set for product breakdown responses. */
+  batches?: InventoryBatchBreakdownRow[];
+  fresh_available_qty?: number;
+  near_expiry_qty?: number;
+  expired_qty?: number;
+  cp?: string;
+  stock_value?: string;
+  near_expiry_days?: number;
+  unit_per_packing?: number | null;
+  quantity_type?: string | null;
+  pack_size?: number | null;
+  net_weight?: number | null;
+  unit?: string | null;
 };
 
 export type RejectedDetails = {
@@ -147,6 +257,7 @@ export type RejectedDetails = {
   batch_no: string;
   rejected_qty: number;
   reject_reason: string | null;
+  reject_type?: string;
   status: string;
   lifecycle_status?: string;
   source_status?: string;
@@ -186,6 +297,51 @@ function parseFilenameFromDisposition(disposition: string | undefined, fallback:
   }
   const plainMatch = disposition.match(/filename="?([^";]+)"?/i);
   return plainMatch?.[1]?.trim() || fallback;
+}
+
+async function downloadCsvBlob(
+  response: { data: Blob; headers?: { [key: string]: unknown } },
+  fallback: string,
+): Promise<void> {
+  const blob = response.data;
+  const contentType = String(blob.type || response.headers?.["content-type"] || "");
+  if (contentType.includes("application/json")) {
+    const text = await blob.text();
+    let message = "Export failed.";
+    try {
+      const json = JSON.parse(text) as { message?: string };
+      if (json.message) message = json.message;
+    } catch {
+      /* ignore parse errors */
+    }
+    throw new Error(message);
+  }
+
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  const disposition = String(response.headers?.["content-disposition"] || "");
+  link.download = parseFilenameFromDisposition(disposition, fallback);
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+}
+
+function listExportQuery(params: {
+  search?: string;
+  ordering?: string;
+  warehouse_id?: string;
+}): { warehouseId: string; query: string } {
+  const warehouseId = params.warehouse_id && params.warehouse_id !== "All" ? params.warehouse_id : "all";
+  return {
+    warehouseId,
+    query: buildQuery({
+      search: params.search || "",
+      ordering: params.ordering || "",
+      warehouse_id: warehouseId,
+    }),
+  };
 }
 
 function asDisplayName(user: unknown): string {
@@ -245,6 +401,7 @@ export function buildStockOverviewFilters(filters: FilterState | undefined): Rec
     else if (key === "batchNumber" || key === "batch_no") mapped.batch_no = value;
     else if (key === "status") mapped.status = value;
     else if (key === "source_status" || key === "sourceStatus") mapped.source_status = value;
+    else if (key === "reject_type" || key === "rejectType") mapped.reject_type = value;
     else if (key === "source_type" || key === "sourceType") mapped.source_type = value;
     else if (key === "product_code" || key === "productCode") mapped.product_code = value;
     else if (key === "sku") mapped.sku = value;
@@ -285,6 +442,10 @@ export function toStockOrdering(key: string, direction: "asc" | "desc" | "none")
     availableQuantity: "available_qty",
     availableQty: "available_qty",
     available_qty: "available_qty",
+    received_qty: "received_qty",
+    receivedQty: "received_qty",
+    expired_qty: "expired_qty",
+    expiredQty: "expired_qty",
     reservedQuantity: "reserved_qty",
     reserved_qty: "reserved_qty",
     costPrice: "cp",
@@ -300,6 +461,8 @@ export function toStockOrdering(key: string, direction: "asc" | "desc" | "none")
     status: "status",
     source_status: "source_status",
     sourceStatus: "source_status",
+    reject_type: "reject_type",
+    rejectType: "reject_type",
     rejectedQuantity: "rejected_qty",
     rejected_qty: "rejected_qty",
     rejectionReason: "reject_reason",
@@ -317,12 +480,11 @@ export function toStockOrdering(key: string, direction: "asc" | "desc" | "none")
     return_date: "return_date",
     expiryDate: "expiry_date",
     expiry_date: "expiry_date",
+    mfgDate: "manufacture_date",
+    manufacture_date: "manufacture_date",
     hsn: "hsn",
     scientificName: "scientific_name",
     scientific_name: "scientific_name",
-    category: "category",
-    packSize: "pack_size",
-    pack_size: "pack_size",
     openingQty: "opening_qty",
     opening_qty: "opening_qty",
     dayIn: "day_in",
@@ -466,15 +628,88 @@ export const StockOverviewApi = {
     return parseListResponse<ReturnStockListRow>(response.data as Record<string, unknown>);
   },
 
-  async getInventoryDetails(id: string, signal?: AbortSignal): Promise<InventoryDetails> {
-    const response = await axiosInstance.get(
-      API_ENDPOINTS.WAREHOUSE.STOCK_OVERVIEW.INVENTORY_DETAILS(id),
-      { signal },
+  async moveToRejected(payload: MoveToRejectedPayload): Promise<MoveToRejectedResult> {
+    const body: Record<string, unknown> = {};
+    if (payload.reject_reason) body.reject_reason = payload.reject_reason;
+    if (payload.cases != null) body.cases = payload.cases;
+    if (payload.qty != null) body.qty = payload.qty;
+    if (payload.sellable_item_id) {
+      body.sellable_item_id = payload.sellable_item_id;
+    } else {
+      body.product_id = payload.product_id;
+      body.warehouse_id = payload.warehouse_id;
+      body.batch_no = payload.batch_no;
+      if (payload.expiry_date !== undefined) body.expiry_date = payload.expiry_date;
+    }
+
+    const response = await axiosInstance.post(
+      API_ENDPOINTS.WAREHOUSE.STOCK_OVERVIEW.MOVE_TO_REJECTED,
+      body,
     );
+    const data = ((response.data as Record<string, unknown>)?.data ?? {}) as Record<string, unknown>;
+    return {
+      rejected_id: asString(data.rejected_id),
+      reject_type: asString(data.reject_type),
+      qty: toNumber(data.qty),
+      cases: data.cases != null ? toNumber(data.cases) : null,
+      batch_no: asString(data.batch_no),
+      product_name: asString(data.product_name),
+      warehouse_name: asString(data.warehouse_name),
+      document_no: asString(data.document_no),
+    };
+  },
+
+  async getInventoryDetails(
+    id: string,
+    signalOrOpts?: AbortSignal | { signal?: AbortSignal; warehouse_id?: string },
+  ): Promise<InventoryDetails> {
+    const opts =
+      signalOrOpts && typeof signalOrOpts === "object" && "aborted" in signalOrOpts
+        ? { signal: signalOrOpts as AbortSignal }
+        : (signalOrOpts as { signal?: AbortSignal; warehouse_id?: string } | undefined);
+
+    const qs = new URLSearchParams();
+    if (opts?.warehouse_id) qs.set("warehouse_id", opts.warehouse_id);
+    const query = qs.toString();
+    const url = query
+      ? `${API_ENDPOINTS.WAREHOUSE.STOCK_OVERVIEW.INVENTORY_DETAILS(id)}?${query}`
+      : API_ENDPOINTS.WAREHOUSE.STOCK_OVERVIEW.INVENTORY_DETAILS(id);
+
+    const response = await axiosInstance.get(url, { signal: opts?.signal });
     const payload = response.data as Record<string, unknown>;
     const data = (payload.data ?? {}) as Record<string, unknown>;
     const product = (data.product ?? {}) as Record<string, unknown>;
     const warehouse = (data.warehouse ?? {}) as Record<string, unknown>;
+
+    const rawBatches = Array.isArray(data.batches) ? data.batches : null;
+    const batches: InventoryBatchBreakdownRow[] | undefined = rawBatches
+      ? rawBatches.map((row) => {
+          const r = row as Record<string, unknown>;
+          const status =
+            asString(r.status) || asString(r.condition) || "Available";
+          return {
+            sku: asString(r.sku) || asString(product.sku) || "—",
+            warehouse_id: asString(r.warehouse_id),
+            warehouse_name: asString(r.warehouse_name),
+            batch_no: asString(r.batch_no),
+            manufacture_date: r.manufacture_date
+              ? asString(r.manufacture_date).slice(0, 10)
+              : null,
+            expiry_date: r.expiry_date ? asString(r.expiry_date).slice(0, 10) : null,
+            received_qty: toNumber(r.received_qty),
+            available_qty: toNumber(r.available_qty),
+            near_expiry_qty: toNumber(r.near_expiry_qty),
+            expired_qty: toNumber(r.expired_qty),
+            available_cases:
+              r.available_cases != null && r.available_cases !== ""
+                ? toNumber(r.available_cases)
+                : null,
+            quantity_type: r.quantity_type != null ? asString(r.quantity_type) : null,
+            status,
+            condition: status,
+          };
+        })
+      : undefined;
 
     return {
       id: asString(data.id),
@@ -482,6 +717,7 @@ export const StockOverviewApi = {
         product_name: asString(product.product_name),
         product_code: asString(product.product_code),
         sku: product.sku == null ? null : asString(product.sku),
+        uom: product.uom != null ? asString(product.uom) : undefined,
       },
       warehouse: {
         warehouse_name: asString(warehouse.warehouse_name),
@@ -502,6 +738,21 @@ export const StockOverviewApi = {
       updated_at: data.updated_at ? asString(data.updated_at) : null,
       created_by: asDisplayName(data.created_by_user) || null,
       updated_by: asDisplayName(data.updated_by_user) || null,
+      batches,
+      fresh_available_qty:
+        data.fresh_available_qty != null ? toNumber(data.fresh_available_qty) : undefined,
+      near_expiry_qty: data.near_expiry_qty != null ? toNumber(data.near_expiry_qty) : undefined,
+      expired_qty: data.expired_qty != null ? toNumber(data.expired_qty) : undefined,
+      cp: data.cp != null ? asString(data.cp) : undefined,
+      stock_value: data.stock_value != null ? asString(data.stock_value) : undefined,
+      near_expiry_days:
+        data.near_expiry_days != null ? toNumber(data.near_expiry_days) : undefined,
+      unit_per_packing:
+        data.unit_per_packing != null ? toNumber(data.unit_per_packing) : null,
+      quantity_type: data.quantity_type != null ? asString(data.quantity_type) : null,
+      pack_size: data.pack_size != null ? toNumber(data.pack_size) : null,
+      net_weight: data.net_weight != null ? toNumber(data.net_weight) : null,
+      unit: data.unit != null ? asString(data.unit) : null,
     };
   },
 
@@ -528,6 +779,7 @@ export const StockOverviewApi = {
       batch_no: asString(data.batch_no),
       rejected_qty: toNumber(data.rejected_qty),
       reject_reason: asString(data.reject_reason) || "—",
+      reject_type: data.reject_type ? asString(data.reject_type) : "—",
       status: asString(data.status),
       lifecycle_status: data.lifecycle_status ? asString(data.lifecycle_status) : asString(data.status),
       source_status: data.source_status ? asString(data.source_status) : undefined,
@@ -633,17 +885,60 @@ export const StockOverviewApi = {
         product_id: productId,
         filters: buildStockOverviewFilters(params.filters),
       },
-      { responseType: "blob" },
+      { responseType: "blob", timeout: 120000 },
     );
-    const blob = response.data as Blob;
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    const disposition = String(response.headers?.["content-disposition"] || "");
-    link.download = parseFilenameFromDisposition(disposition, "daily_log.csv");
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.URL.revokeObjectURL(url);
+    await downloadCsvBlob(response, "daily_log.csv");
+  },
+
+  async exportInventory(params: Omit<ListBaseParams, "page" | "page_size" | "signal">): Promise<void> {
+    const { warehouseId, query } = listExportQuery(params);
+    const response = await axiosInstance.post(
+      `${API_ENDPOINTS.WAREHOUSE.STOCK_OVERVIEW.INVENTORY_EXPORT}?${query}`,
+      {
+        warehouse_id: warehouseId,
+        filters: buildStockOverviewFilters(params.filters),
+      },
+      { responseType: "blob", timeout: 120000 },
+    );
+    await downloadCsvBlob(response, "inventory_stock.csv");
+  },
+
+  async exportRejected(params: Omit<ListBaseParams, "page" | "page_size" | "signal">): Promise<void> {
+    const { warehouseId, query } = listExportQuery(params);
+    const response = await axiosInstance.post(
+      `${API_ENDPOINTS.WAREHOUSE.STOCK_OVERVIEW.REJECTED_EXPORT}?${query}`,
+      {
+        warehouse_id: warehouseId,
+        filters: buildStockOverviewFilters(params.filters),
+      },
+      { responseType: "blob", timeout: 120000 },
+    );
+    await downloadCsvBlob(response, "rejected_inventory.csv");
+  },
+
+  async exportSalesReturn(params: Omit<ListBaseParams, "page" | "page_size" | "signal">): Promise<void> {
+    const { warehouseId, query } = listExportQuery(params);
+    const response = await axiosInstance.post(
+      `${API_ENDPOINTS.WAREHOUSE.STOCK_OVERVIEW.SALES_RETURN_EXPORT}?${query}`,
+      {
+        warehouse_id: warehouseId,
+        filters: buildStockOverviewFilters(params.filters),
+      },
+      { responseType: "blob", timeout: 120000 },
+    );
+    await downloadCsvBlob(response, "sales_return_stock.csv");
+  },
+
+  async exportSampleReturn(params: Omit<ListBaseParams, "page" | "page_size" | "signal">): Promise<void> {
+    const { warehouseId, query } = listExportQuery(params);
+    const response = await axiosInstance.post(
+      `${API_ENDPOINTS.WAREHOUSE.STOCK_OVERVIEW.SAMPLE_RETURN_EXPORT}?${query}`,
+      {
+        warehouse_id: warehouseId,
+        filters: buildStockOverviewFilters(params.filters),
+      },
+      { responseType: "blob", timeout: 120000 },
+    );
+    await downloadCsvBlob(response, "sample_return_stock.csv");
   },
 };

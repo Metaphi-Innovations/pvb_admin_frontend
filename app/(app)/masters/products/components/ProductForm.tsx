@@ -335,39 +335,6 @@ export function ProductForm({
 	isNew?: boolean;
 }) {
 
-	/** Digits only: {pack size in g/ml}{4-digit serial}. Gms/Ml as-is; Kg/Ltr × 1000. */
-	const computeProductCode = (
-		packSize: string,
-		baseUnit: string,
-		lastProductCode?: string | null,
-	) => {
-		const pack = parseFloat(packSize);
-		if (isNaN(pack) || pack <= 0) return "";
-
-		const unit = normalizeProductUnit(baseUnit);
-
-		let weight: number;
-		if (unit === "Gms" || unit === "Ml") {
-			weight = pack;
-		} else if (unit === "Kg" || unit === "Ltr") {
-			weight = pack * 1000;
-		} else {
-			return "";
-		}
-
-		let nextSerial = 1;
-		if (lastProductCode) {
-			const digitsOnly = String(lastProductCode).replace(/\D/g, "");
-			if (digitsOnly.length >= 4) {
-				const lastSerial = parseInt(digitsOnly.slice(-4), 10);
-				if (!isNaN(lastSerial)) nextSerial = lastSerial + 1;
-			}
-		}
-
-		const serial = String(nextSerial).padStart(4, "0");
-		return `${Math.round(weight)}${serial}`;
-	};
-
 	const set = <K extends keyof ProductFormValues>(
 		key: K,
 		value: ProductFormValues[K],
@@ -376,38 +343,19 @@ export function ProductForm({
 
 		if (key === "packSize" || key === "unitPerCase" || key === "baseUnit") {
 			next = applyPackagingCalculations(next);
-
-			if (isNew && (key === "packSize" || key === "baseUnit")) {
-				const generated = computeProductCode(
-					next.packSize,
-					next.baseUnit,
-					previewNumber,
-				);
-				if (generated) {
-					next.productCode = generated;
-					onClearError("productCode");
-				}
-			}
 		}
 
 		onChange(next);
 		onClearError(key);
 	};
 
+	// Backend POST preview returns full next code for this pack size + unit.
 	useEffect(() => {
-		if (!isNew) return;
-
-		const generated = computeProductCode(
-			form.packSize,
-			form.baseUnit,
-			previewNumber,
-		);
-
-		if (generated && generated !== form.productCode) {
-			onChange({ ...form, productCode: generated });
-			onClearError("productCode");
-		}
-	}, [previewNumber, form.packSize, form.baseUnit]);
+		if (!previewNumber) return;
+		if (previewNumber === form.productCode) return;
+		onChange({ ...form, productCode: previewNumber });
+		onClearError("productCode");
+	}, [previewNumber]);
 
 	const handleSupplierChange = (supplierId: string) => {
 		const supplierItem = suppliersData?.find((s) => s.supplier_id === supplierId);
@@ -640,7 +588,7 @@ export function ProductForm({
 							}
 							placeholder='Auto-filled from supplier'
 							className={cn("font-mono", inputCls("supplierCode"))}
-							disabled={readOnly}
+							disabled={readOnly || Boolean(form.supplier)}
 						/>
 					</div>
 

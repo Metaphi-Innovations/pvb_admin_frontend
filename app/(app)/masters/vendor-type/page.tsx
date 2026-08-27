@@ -75,7 +75,7 @@ export default function VendorTypeMasterPage() {
     appliedSearch,
   } = useAppliedListFilters();
   const { handleOpenFilter, isFilterOpen } = useLazyFilterColumns();
-  const [sort, setSort] = useState<SortState>({ key: "supplierTypeName", direction: "asc" });
+  const [sort, setSort] = useState<SortState>({ key: "", direction: "none" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [toast, setToast] = useState<ToastState | null>(null);
@@ -123,12 +123,6 @@ export default function VendorTypeMasterPage() {
   const statusOptionsQuery = useSupplierTypeFilterDropdown("is_active", {
     enabled: isFilterOpen("status"),
   });
-  const createdByOptionsQuery = useSupplierTypeFilterDropdown("created_by_user__username", {
-    enabled: isFilterOpen("createdBy"),
-  });
-  const updatedByOptionsQuery = useSupplierTypeFilterDropdown("updated_by_user__username", {
-    enabled: isFilterOpen("updatedBy"),
-  });
 
   const supplierTypeNameOptions = useMemo(
     () => supplierTypeNameOptionsQuery.data ?? [],
@@ -151,14 +145,6 @@ export default function VendorTypeMasterPage() {
             { label: "Inactive", value: "inactive" },
           ],
     [statusOptionsQuery.data],
-  );
-  const createdByOptions = useMemo(
-    () => createdByOptionsQuery.data ?? [],
-    [createdByOptionsQuery.data],
-  );
-  const updatedByOptions = useMemo(
-    () => updatedByOptionsQuery.data ?? [],
-    [updatedByOptionsQuery.data],
   );
 
   const records = listQuery.data?.items ?? [];
@@ -283,8 +269,7 @@ export default function VendorTypeMasterPage() {
         header: "Created By",
         sortable: true,
         filterable: true,
-        filterType: "audit",
-        auditUserOptions: createdByOptions,
+        filterType: "date",
         width: "150px",
         render: (_val, row) => (
           <ListingAuditCell name={row.createdBy} date={row.createdAt} variant="created" />
@@ -295,8 +280,7 @@ export default function VendorTypeMasterPage() {
         header: "Updated By",
         sortable: true,
         filterable: true,
-        filterType: "audit",
-        auditUserOptions: updatedByOptions,
+        filterType: "date",
         width: "150px",
         render: (_val, row) => (
           <ListingAuditCell name={row.updatedBy} date={row.updatedAt} variant="updated" />
@@ -308,8 +292,6 @@ export default function VendorTypeMasterPage() {
       initialCodeOptions,
       descriptionOptions,
       statusOptions,
-      createdByOptions,
-      updatedByOptions,
     ],
   );
 

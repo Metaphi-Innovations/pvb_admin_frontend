@@ -45,7 +45,6 @@ type ColKey =
   | "productName"
   | "hsn"
   | "scientificName"
-  | "category"
   | "batchNumber"
   | "warehouse"
   | "status";
@@ -112,10 +111,9 @@ export function StockPositionTable({
   const [colFilters, setColFilters] = useState<Partial<Record<ColKey, FilterValue>>>({});
 
   const filterOptions = useMemo(() => {
-    const categories = [...new Set(lines.map((l) => l.category))].sort();
     const warehouses = [...new Set(lines.map((l) => l.warehouse))].sort();
     const statuses = [...new Set(lines.map((l) => l.status))].sort();
-    return { categories, warehouses, statuses };
+    return { warehouses, statuses };
   }, [lines]);
 
   const filterColumns: Partial<Record<ColKey, ColumnConfig>> = useMemo(
@@ -124,13 +122,6 @@ export function StockPositionTable({
       productName: { key: "productName", header: "Product Name", filterable: true, filterType: "text" },
       hsn: { key: "hsn", header: "HSN", filterable: true, filterType: "text" },
       scientificName: { key: "scientificName", header: "Scientific Name", filterable: true, filterType: "text" },
-      category: {
-        key: "category",
-        header: "Category",
-        filterable: true,
-        filterType: "dropdown",
-        filterOptions: filterOptions.categories.map((c) => ({ label: c, value: c })),
-      },
       batchNumber: { key: "batchNumber", header: "Batch No.", filterable: true, filterType: "text" },
       warehouse: {
         key: "warehouse",
@@ -261,25 +252,18 @@ export function StockPositionTable({
                 value={colFilters.scientificName}
                 onChange={(v) => setColFilter("scientificName", v)}
               />
-              <FilterTh
-                label="Category"
-                column={filterColumns.category}
-                value={colFilters.category}
-                onChange={(v) => setColFilter("category", v)}
-              />
-              <th className={cn(STICKY_TH, "text-left w-16")}>Pack Size</th>
               <th className={cn(STICKY_TH, "text-right w-20")}>Opening Qty</th>
               <th className={cn(STICKY_TH, "text-right w-20 text-emerald-700")}>{inColLabel}</th>
               <th className={cn(STICKY_TH, "text-right w-20 text-red-700")}>{outColLabel}</th>
               <th className={cn(STICKY_TH, "text-right w-20")}>Closing Qty</th>
-              <th className={cn(STICKY_TH, "text-right w-20")}>Available</th>
               <FilterTh
                 label="Batch No."
                 column={filterColumns.batchNumber}
                 value={colFilters.batchNumber}
                 onChange={(v) => setColFilter("batchNumber", v)}
               />
-              <th className={cn(STICKY_TH, "text-left w-24")}>Expiry</th>
+              <th className={cn(STICKY_TH, "text-left w-24")}>Mfg Date</th>
+              <th className={cn(STICKY_TH, "text-left w-28 min-w-[7rem]")}>Expiry</th>
               <FilterTh
                 label="Warehouse"
                 column={filterColumns.warehouse}
@@ -307,8 +291,6 @@ export function StockPositionTable({
                   <td className={cn(tdClass, "font-medium text-foreground")}>{row.productName}</td>
                   <td className={cn(tdClass, "font-mono text-muted-foreground")}>{row.hsn}</td>
                   <td className={cn(tdClass, "text-muted-foreground max-w-[120px] truncate")}>{row.scientificName}</td>
-                  <td className={cn(tdClass, "text-foreground")}>{row.category}</td>
-                  <td className={cn(tdClass, "text-foreground")}>{row.packSize}</td>
                   <td className={cn(tdClass, "text-right tabular-nums")}>{row.openingQty.toLocaleString("en-IN")}</td>
                   <td className={cn(tdClass, "text-right tabular-nums text-emerald-700 font-medium")}>
                     {row.dayIn > 0 ? row.dayIn.toLocaleString("en-IN") : "—"}
@@ -319,8 +301,8 @@ export function StockPositionTable({
                   <td className={cn(tdClass, "text-right tabular-nums font-semibold")}>
                     {row.closingQty.toLocaleString("en-IN")}
                   </td>
-                  <td className={cn(tdClass, "text-right tabular-nums")}>{row.availableQty.toLocaleString("en-IN")}</td>
                   <td className={cn(tdClass, "font-mono font-semibold text-brand-700")}>{row.batchNumber}</td>
+                  <td className={cn(tdClass, "text-muted-foreground")}>{row.mfgDate}</td>
                   <td className={cn(tdClass, "text-muted-foreground")}>{row.expiryDate}</td>
                   <td className={cn(tdClass, "text-foreground")}>{row.warehouse}</td>
                   <td className={cn(tdClass, "text-right tabular-nums")}>{row.cp.toLocaleString("en-IN")}</td>

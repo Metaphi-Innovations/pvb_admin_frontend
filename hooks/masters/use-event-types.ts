@@ -10,6 +10,7 @@ import {
   type EventTypeUpdatePayload,
 } from "@/services/event-type-list.service";
 import { masterKeys, type MasterListKeyParams } from "@/lib/masters/master-query-keys";
+import type { FilterDropdownQueryOptions } from "@/lib/masters/use-lazy-filter-columns";
 
 function toListParams(params: MasterListKeyParams): EventTypeListParams {
   return {
@@ -98,10 +99,14 @@ export function useExportEventTypes() {
   });
 }
 
-export function useEventTypeFilterDropdown(fieldName: EventTypeFilterField) {
+export function useEventTypeFilterDropdown(
+  fieldName: EventTypeFilterField,
+  options?: FilterDropdownQueryOptions,
+) {
   return useQuery({
     queryKey: masterKeys.eventTypes.filterDropdown(fieldName),
     queryFn: ({ signal }) => EventTypeListService.getFilterDropdown(fieldName, signal),
     staleTime: 5 * 60 * 1000,
+    enabled: options?.enabled ?? true,
   });
 }

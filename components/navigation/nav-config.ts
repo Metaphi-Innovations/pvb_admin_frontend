@@ -72,6 +72,7 @@ export const NAV_ITEMS: NavItem[] = [
     label: "Masters",
     icon: BookOpen,
     children: [
+      { label: "Additional Charges", href: "/masters/additional-charges" },
       { label: "Category", href: "/masters/categories" },
       { label: "Crop", href: "/masters/crops" },
       { label: "Brand", href: "/masters/brands" },

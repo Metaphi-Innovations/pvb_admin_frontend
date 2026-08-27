@@ -14,11 +14,30 @@ import {
   type PackingListLine,
   CartonAllocation,
   InventoryType,
+  mapBatchInventoryType,
+  formatInventoryTypeLabel,
+  inventoryTypeBadgeClass,
+  sortBatchesByExpiryAsc,
 } from "../../../../orders/packing-list-data";
 import { useStockTransfer } from "@/hooks/sales/use-stock-transfers";
 import { useCreatePackingList } from "@/hooks/sales/use-sales-orders";
 import { SalesOrderService } from "@/services/sales-order.service";
 import { StockTransferService } from "@/services/stock-transfer.service";
+import {
+  StackedQtyDisplay,
+  StackedQtyHeaderPair,
+  type QtyStackMeta,
+} from "@/app/(app)/sales/shared/StackedQtyDisplay";
+
+function lineQtyMeta(line: PackingListLine): QtyStackMeta {
+  return {
+    unitsPerPacking: line.unitsPerPackingUnit,
+    quantityType: line.quantityType,
+    uom: line.uom,
+    unitPackSize: line.unitPackSize,
+    netWeight: line.netWeight,
+  };
+}
 
 export default function TransferNewPackingListPage() {
   const params = useParams();
@@ -64,8 +83,16 @@ export default function TransferNewPackingListPage() {
         for (const line of transfer.lineItems) {
           if (!line.productId || line.quantity <= 0) continue;
 
-          // Fetch available inventory batches from the backend
-          const batches = await StockTransferService.getBatches(line.productId, warehouseId, line.quantityType);
+          const remainingCap = Math.max(
+            0,
+            Number(line.quantity || 0) - Number(line.generatedBaseQty || 0),
+          );
+          if (remainingCap <= 0) continue;
+
+          // Fetch available inventory batches from the backend (FEFO-ordered)
+          const batches = sortBatchesByExpiryAsc(
+            await StockTransferService.getBatches(line.productId, warehouseId, line.quantityType),
+          );
 
           const config = {
             packingUnit: line.packingUnit || "Unit",
@@ -73,7 +100,7 @@ export default function TransferNewPackingListPage() {
             unitsPerPackingUnit: line.unitsPerPackingUnit || line.packSize || 1,
           };
 
-          let remaining = line.quantity;
+          let remaining = remainingCap;
           const unitsPerPacking = config.unitsPerPackingUnit;
 
           const allocations = batches.map((b: any) => {
@@ -91,14 +118,14 @@ export default function TransferNewPackingListPage() {
             return {
               cartonId: b.available_inventory_id,
               batchNumber: b.batch_code || "N/A",
-              expiryDate: b.expiry_date || "N/A",
+              expiryDate: b.expiry_date ? String(b.expiry_date).slice(0, 10) : "—",
               cartonNumber: b.batch_code || "N/A",
               packingUnit: config.packingUnit,
               baseUnit: config.baseUnit,
               unitsPerPackingUnit: unitsPerPacking,
               availablePackingQty: line.quantityType === "Case" ? Math.floor(availQty / unitsPerPacking) : availQty,
               availableBaseQty: availQty,
-              inventoryType: "original" as InventoryType,
+              inventoryType: mapBatchInventoryType(b),
               suggestedPackingQty: takePacking,
               suggestedBaseQty: takeBase,
               allocatedPackingQty: takePacking,
@@ -114,12 +141,17 @@ export default function TransferNewPackingListPage() {
             productCode: line.productCode,
             productName: line.productName,
             orderedBaseQty: line.quantity,
+            generatedBaseQty: Number(line.generatedBaseQty || 0),
+            remainingBaseQty: remainingCap,
             baseUnit: config.baseUnit,
             packingUnit: config.packingUnit,
             unitsPerPackingUnit: unitsPerPacking,
             hasPackingConfig: true,
             allocations,
             quantityType: line.quantityType,
+            uom: (line as { uom?: string }).uom || config.baseUnit,
+            unitPackSize: (line as { unitPackSize?: number | null }).unitPackSize ?? null,
+            netWeight: (line as { netWeight?: number | null }).netWeight ?? null,
           });
         }
 
@@ -158,7 +190,7 @@ export default function TransferNewPackingListPage() {
             .filter(x => x.cartonId !== cartonId && checkedAllocations[`${lineItemId}-${x.cartonId}`])
             .reduce((sum, x) => sum + x.allocatedBaseQty, 0);
 
-          const pending = Math.max(0, line.orderedBaseQty - totalAlreadyAllocated);
+          const pending = Math.max(0, (line.remainingBaseQty ?? line.orderedBaseQty) - totalAlreadyAllocated);
           const availBase = a.availableBaseQty;
 
           const takeBase = Math.min(pending, availBase);
@@ -246,7 +278,7 @@ export default function TransferNewPackingListPage() {
           });
         }
       }
-      if (productSelectedTotal > line.orderedBaseQty) {
+      if (productSelectedTotal > (line.remainingBaseQty ?? line.orderedBaseQty)) {
         setError(`Selected batch quantity cannot exceed pending product quantity for ${line.productName}.`);
         return;
       }
@@ -276,14 +308,7 @@ export default function TransferNewPackingListPage() {
     );
   };
 
-  const formatInventoryType = (type: InventoryType) => {
-    switch (type) {
-      case "original": return "Original";
-      case "sales_return": return "Sales Return";
-      case "sample_return": return "Sample Return";
-      default: return type;
-    }
-  };
+  const formatInventoryType = (type: InventoryType) => formatInventoryTypeLabel(type);
 
   return (
     <div className="p-6 w-full space-y-6 pb-24">
@@ -326,7 +351,8 @@ export default function TransferNewPackingListPage() {
             const isChecked = !!checkedAllocations[`${line.lineItemId}-${a.cartonId}`];
             return sum + (isChecked ? a.allocatedBaseQty : 0);
           }, 0);
-          const insufficient = allocated < line.orderedBaseQty;
+          const remainingCap = line.remainingBaseQty ?? line.orderedBaseQty;
+          const insufficient = allocated < remainingCap;
 
           const isExpanded = !!expandedSections[line.lineItemId];
           const selectedCount = line.allocations.filter(a => !!checkedAllocations[`${line.lineItemId}-${a.cartonId}`]).length;
@@ -342,20 +368,26 @@ export default function TransferNewPackingListPage() {
                   <div>
                     <p className="text-sm font-semibold">{line.productName}</p>
                     <p className="text-xs text-muted-foreground font-mono">{line.productCode}</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      Ordered {line.orderedBaseQty}
+                      {" · "}Generated {line.generatedBaseQty ?? 0}
+                      {" · "}Remaining {remainingCap}
+                    </p>
                   </div>
                   <div className="flex items-center gap-4">
-                    <div className="text-right text-sm">
-                      <span className="text-muted-foreground">Required: </span>
-                      <span className="font-semibold">{line.orderedBaseQty} {line.baseUnit}</span>
-                      <span className="mx-3 text-muted-foreground">|</span>
-                      <span className="text-muted-foreground">Allocated: </span>
-                      <span className={cn("font-semibold", insufficient && "text-amber-600")}>
-                        {allocated} {line.baseUnit}
+                    <StackedQtyHeaderPair
+                      orderedBaseQty={remainingCap}
+                      allocatedBaseQty={allocated}
+                      meta={lineQtyMeta(line)}
+                      insufficient={insufficient}
+                      orderedLabel="Remaining"
+                      allocatedLabel="This PL"
+                    />
+                    {!isExpanded && selectedCount > 0 && (
+                      <span className="text-xs text-muted-foreground">
+                        ({selectedCount} batch{selectedCount !== 1 ? "es" : ""} selected)
                       </span>
-                      {!isExpanded && selectedCount > 0 && (
-                        <span className="ml-2 text-muted-foreground">({selectedCount} batch{selectedCount !== 1 ? "es" : ""} selected)</span>
-                      )}
-                    </div>
+                    )}
                     {isExpanded ? <ChevronUp className="w-5 h-5 text-muted-foreground flex-shrink-0" /> : <ChevronDown className="w-5 h-5 text-muted-foreground flex-shrink-0" />}
                   </div>
                 </div>
@@ -368,15 +400,17 @@ export default function TransferNewPackingListPage() {
 
               {isExpanded && (
                 <div className="overflow-x-auto bg-white">
-                  <table className="w-full min-w-[900px]">
+                  <table className="w-full min-w-[1040px]">
                     <thead>
                       <tr className="bg-muted/10 border-b border-border">
                         <th className="px-4 py-2.5 text-left w-12">Select</th>
                         <th className="px-3 py-2.5 text-left text-xs font-semibold">Quantity Type</th>
                         <th className="px-3 py-2.5 text-left text-xs font-semibold">Batch</th>
-                        <th className="px-3 py-2.5 text-left text-xs font-semibold w-24">Available Qty</th>
+                        <th className="px-3 py-2.5 text-left text-xs font-semibold whitespace-nowrap">Expiry</th>
+                        <th className="px-3 py-2.5 text-left text-xs font-semibold whitespace-nowrap">Inventory Type</th>
+                        <th className="px-3 py-2.5 text-right text-xs font-semibold min-w-[100px]">Available Qty</th>
                         <th className="px-3 py-2.5 text-left text-xs font-semibold w-32">Pack Qty</th>
-                        <th className="px-3 py-2.5 text-left text-xs font-semibold w-20">Total (Base)</th>
+                        <th className="px-3 py-2.5 text-right text-xs font-semibold min-w-[100px]">Total</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -398,25 +432,47 @@ export default function TransferNewPackingListPage() {
                               </span>
                             </td>
                             <td className="px-3 py-2.5 text-xs font-mono text-brand-700">{alloc.batchNumber}</td>
-                            <td className="px-3 py-2.5 text-xs text-left tabular-nums text-muted-foreground">
-                              {line.quantityType === "Case"
-                                ? Math.floor(alloc.availableBaseQty / alloc.unitsPerPackingUnit)
-                                : alloc.availableBaseQty}
+                            <td className="px-3 py-2.5 text-xs tabular-nums text-muted-foreground whitespace-nowrap">
+                              {alloc.expiryDate || "—"}
                             </td>
                             <td className="px-3 py-2.5">
-                              <Input
-                                type="number"
-                                min="0"
-                                max={line.quantityType === "Case" ? Math.floor(alloc.availableBaseQty / alloc.unitsPerPackingUnit) : alloc.availableBaseQty}
-                                value={isChecked && alloc.allocatedPackingQty > 0 ? alloc.allocatedPackingQty : (isChecked ? 0 : "")}
-                                onChange={(e) => updateAllocation(line.lineItemId, alloc.cartonId, e.target.value)}
-                                className={cn("h-7 text-xs px-2 w-full", isChecked && "bg-white")}
-                                placeholder="0"
-                                disabled={!isChecked}
+                              <span
+                                className={cn(
+                                  "inline-flex items-center text-[10px] px-2 py-0.5 rounded-full font-medium border whitespace-nowrap",
+                                  inventoryTypeBadgeClass(alloc.inventoryType),
+                                )}
+                              >
+                                {formatInventoryType(alloc.inventoryType)}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2.5 align-top">
+                              <StackedQtyDisplay
+                                baseQty={alloc.availableBaseQty}
+                                meta={lineQtyMeta(line)}
                               />
                             </td>
-                            <td className="px-3 py-2.5 text-xs font-semibold tabular-nums text-muted-foreground">
-                              {isChecked ? alloc.allocatedBaseQty : 0}
+                            <td className="px-3 py-2.5">
+                              <div className="flex flex-col gap-1 items-stretch">
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  max={line.quantityType === "Case" ? Math.floor(alloc.availableBaseQty / alloc.unitsPerPackingUnit) : alloc.availableBaseQty}
+                                  value={isChecked && alloc.allocatedPackingQty > 0 ? alloc.allocatedPackingQty : (isChecked ? 0 : "")}
+                                  onChange={(e) => updateAllocation(line.lineItemId, alloc.cartonId, e.target.value)}
+                                  className={cn("h-7 text-xs px-2 w-full", isChecked && "bg-white")}
+                                  placeholder="0"
+                                  disabled={!isChecked}
+                                />
+                                <span className="text-[10px] text-muted-foreground">
+                                  {line.quantityType === "Case" ? "Case" : "Unit"}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="px-3 py-2.5 align-top">
+                              <StackedQtyDisplay
+                                baseQty={isChecked ? alloc.allocatedBaseQty : 0}
+                                meta={lineQtyMeta(line)}
+                              />
                             </td>
                           </tr>
                         );

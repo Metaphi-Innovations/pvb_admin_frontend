@@ -1,7 +1,7 @@
 import { formatMoney } from "@/lib/accounts/money-format";
 import type { StockDateMode, StockPositionLine } from "../types/stock-position";
 
-/** Column headers — must match StockPositionTable thead labels exactly. */
+/** Column headers — must match Daily Log / export columns. */
 export function getStockPositionTableHeaders(dateMode: StockDateMode): string[] {
   const inLabel = dateMode === "single" ? "Day In" : "Period In";
   const outLabel = dateMode === "single" ? "Day Out" : "Period Out";
@@ -10,19 +10,17 @@ export function getStockPositionTableHeaders(dateMode: StockDateMode): string[] 
     "Product Name",
     "HSN",
     "Scientific Name",
-    "Category",
-    "Pack Size",
     "Opening Qty",
     inLabel,
     outLabel,
     "Closing Qty",
-    "Available",
-    "Batch No.",
+    "Batch No",
+    "Mfg Date",
     "Expiry",
     "Warehouse",
     "CP",
-    "Valuation",
-    "Status",
+    "Stock Value",
+    "Stock Status",
   ];
 }
 
@@ -43,14 +41,12 @@ export function stockPositionLineToExportRow(
     row.productName,
     row.hsn,
     row.scientificName,
-    row.category,
-    row.packSize,
     fmtQty(row.openingQty),
     fmtMovementQty(row.dayIn),
     fmtMovementQty(row.dayOut),
     fmtQty(row.closingQty),
-    fmtQty(row.availableQty),
     row.batchNumber,
+    row.mfgDate,
     row.expiryDate,
     row.warehouse,
     fmtQty(row.cp),
@@ -70,7 +66,6 @@ export function filterStockPositionLinesForSearch(
       l.productCode.toLowerCase().includes(q) ||
       l.productName.toLowerCase().includes(q) ||
       l.batchNumber.toLowerCase().includes(q) ||
-      l.warehouse.toLowerCase().includes(q) ||
-      l.category.toLowerCase().includes(q),
+      l.warehouse.toLowerCase().includes(q),
   );
 }

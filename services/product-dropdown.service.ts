@@ -35,6 +35,9 @@ export interface ProductDropdownItem {
   packing_unit?: string | null;
   unit_per_packing?: string | number | null;
   pack_size?: string | number | null;
+  /** Net weight/volume per packaging unit (Case), in MoU (Kg/Ltr). */
+  net_weight?: string | number | null;
+  mou?: string | null;
   cost_price?: string | number | null;
 }
 

@@ -8,7 +8,6 @@ import {
   formatCurrency,
   formatNumber,
   formatQty,
-  loadNavbarLogoDataUrl,
   openEditablePdfPreview,
   renderMetaGrid,
   renderParamverseFooter,
@@ -24,7 +23,10 @@ import {
   type PdfTableColumn,
   type PdfTableRow,
 } from "@/lib/pdf/paramverse";
-import { allocateDeliveryChallanNumber, getDispatchById } from "../services";
+import {
+  downloadDeliveryChallan,
+  fetchDeliveryChallanPreview,
+} from "../services";
 
 const DEFAULT_DC_DECLARATION =
   "Goods covered under this challan are not sold and are being transported for the purpose mentioned above. This challan is not a tax invoice and no GST liability arises on account of this document.";
@@ -414,8 +416,12 @@ export function mapDispatchToDeliveryChallan(
     placeOfSupply: placeOfSupply || "—",
     driverName: asText(dispatch?.driver_name),
     driverMobile: asText(dispatch?.driver_mobile),
-    ewayBillNo: asText(dispatch?.eway_bill_number),
-    ewayBillDate: asText(dispatch?.eway_bill_date),
+    ewayBillNo: asText(
+      dispatch?.sales_invoice?.eway_bill_number || dispatch?.eway_bill_number,
+    ),
+    ewayBillDate: asText(
+      dispatch?.sales_invoice?.eway_bill_date || dispatch?.eway_bill_date,
+    ),
     deliverTo: customerName,
     sourceDocument: asText(
       dispatch?.source_document_no || packingDone.packing_done_no,
@@ -676,41 +682,30 @@ export function openDeliveryChallanPrintWindow(
   );
 }
 
-export async function openEditableDeliveryChallanPreview(
-  data: DeliveryChallanViewModel,
-  options: DeliveryChallanPdfOptions = {},
-): Promise<void> {
-  const withGoodsValue = options.withGoodsValue !== false;
-  const logoSrc = data.logoSrc || (await loadNavbarLogoDataUrl());
-  await openEditablePdfPreview({
-    title: withGoodsValue
-      ? "Delivery Challan PDF Preview (With Goods Value)"
-      : "Delivery Challan PDF Preview (Without Goods Value)",
-    initialData: { ...data, logoSrc } as unknown as Record<string, unknown>,
-    renderHtml: (edited) =>
-      buildDeliveryChallanHtml(
-        edited as unknown as DeliveryChallanViewModel,
-        options,
-      ),
-    printButtonLabel: withGoodsValue
-      ? "Download Delivery Challan PDF"
-      : "Download Challan Without Goods Value",
-    outputFileName: `${sanitizePdfFileName(
-      data.challanNo || data.dispatchNo,
-      withGoodsValue ? "DELIVERY_CHALLAN" : "DELIVERY_CHALLAN_WO_VALUE",
-    )}.pdf`,
-  });
-}
-
-/** Allocate DC number, load dispatch detail, and open editable preview. */
+/** Open the same overlay; HTML and PDF come from the backend template. */
 export async function openDeliveryChallanPreviewForDispatch(
   dispatchId: string,
   options: DeliveryChallanPdfOptions = {},
 ): Promise<void> {
-  const challanNumber = await allocateDeliveryChallanNumber(dispatchId);
-  const detail = await getDispatchById(dispatchId);
-  await openEditableDeliveryChallanPreview(
-    mapDispatchToDeliveryChallan(detail, challanNumber),
-    options,
-  );
+  const withGoodsValue = options.withGoodsValue !== false;
+  const { html, fileName } = await fetchDeliveryChallanPreview(dispatchId, {
+    withGoodsValue,
+  });
+  if (!html.trim()) {
+    throw new Error("Empty Delivery Challan preview received from server.");
+  }
+
+  await openEditablePdfPreview({
+    title: withGoodsValue
+      ? "Delivery Challan PDF Preview (With Goods Value)"
+      : "Delivery Challan PDF Preview (Without Goods Value)",
+    initialData: { html },
+    renderHtml: (data) => String(data.html || ""),
+    enableDirectPreviewEditing: false,
+    printButtonLabel: withGoodsValue
+      ? "Download Delivery Challan PDF"
+      : "Download Challan Without Goods Value",
+    outputFileName: fileName,
+    onDownload: () => downloadDeliveryChallan(dispatchId, { withGoodsValue }),
+  });
 }

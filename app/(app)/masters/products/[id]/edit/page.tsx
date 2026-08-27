@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { CheckCircle2, Save, XCircle } from "lucide-react";
@@ -26,7 +26,7 @@ import {
   type ProductFormValues,
   validateProductForm,
 } from "../../components/ProductForm";
-import { useProduct, useUpdateProduct, useProductPreviewNumber } from "@/hooks/masters";
+import { useProduct, useProductPreviewNumber, useUpdateProduct } from "@/hooks/masters";
 import { ProductListService } from "@/services/product-list.service";
 
 const UUID_RE =
@@ -46,9 +46,25 @@ export default function EditProductPage() {
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
   const [productImages, setProductImages] = useState<ProductImage[]>([]);
   const [productUrls, setProductUrls] = useState<ProductUrl[]>([]);
-  const { data: previewNumber } = useProductPreviewNumber();
   const { data: apiProduct, isLoading, isError } = useProduct(id);
   const updateMutation = useUpdateProduct();
+  const initialPackRef = useRef<{ packSize: string; baseUnit: string } | null>(
+    null,
+  );
+
+  const packOrUnitChanged = useMemo(() => {
+    if (!form || !initialPackRef.current) return false;
+    return (
+      form.packSize !== initialPackRef.current.packSize ||
+      form.baseUnit !== initialPackRef.current.baseUnit
+    );
+  }, [form?.packSize, form?.baseUnit]);
+
+  const { data: previewNumber } = useProductPreviewNumber(
+    packOrUnitChanged ? form?.packSize : undefined,
+    packOrUnitChanged ? form?.baseUnit : undefined,
+    apiProduct?.productUuid,
+  );
 
   useEffect(() => {
     if (!apiProduct) return;
@@ -57,6 +73,7 @@ export default function EditProductPage() {
       productId: apiProduct.productUuid,
       productCode: apiProduct.productCode,
       productName: apiProduct.productName,
+      scientificName: apiProduct.scientificName || undefined,
       sku: apiProduct.sku,
       supplier: apiProduct.supplierId || "",
       supplierCode: apiProduct.supplierCode || undefined,
@@ -103,6 +120,10 @@ export default function EditProductPage() {
     if (apiProduct.costPrice != null) {
       nextForm.costPrice = String(apiProduct.costPrice);
     }
+    initialPackRef.current = {
+      packSize: nextForm.packSize,
+      baseUnit: nextForm.baseUnit,
+    };
     setForm(nextForm);
     setProductImages(getProductImages(mappedProduct));
     setProductUrls(getProductUrls(mappedProduct));

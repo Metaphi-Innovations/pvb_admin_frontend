@@ -1,285 +1,145 @@
 /**
- * Pending credit notes — sales returns, legacy Near Expiry settlements,
- * and Accounts scheme entitlements (ERP-confirmed deferred claims).
- * Reads sales return + invoice data (read-only); does not modify non-Accounts modules.
+ * Pending Credit Notes — list-local mapping from GET /accounts/credit-note/pending.
+ * Identity is pending_credit_note_id. No demo returnId / schemeKey navigation.
  */
 
-import {
-  getSalesReturnRecords,
-  getReturnTotalAmount,
-  type SalesReturnRecord,
-} from "@/app/(app)/sales/orders/sales-return-data";
-import {
-  listPendingSchemeSettlementOptions,
-  type PendingSchemeSettlementOption,
-} from "@/lib/accounts/scheme-settlement-data";
-import {
-  hasCreditNoteForEntitlement,
-  listPendingSchemeEntitlements,
-  type SchemeEntitlement,
-  type SchemeEntitlementStatus,
-} from "@/lib/accounts/scheme-entitlement-demo";
-import {
-  buildReferenceFromSalesReturn,
-  computeCreditNoteGstSplit,
-  recalcAllCreditLines,
-} from "./credit-notes-data";
+import type { PendingCreditNoteListApiRow } from "./credit-note-list-api";
 
-const CREDIT_NOTES_STORAGE_KEY = "ds_accounts_credit_notes_v2";
+export type PendingCreditNoteSourceType =
+  | "SALES_RETURN"
+  | "SPECIAL_SCHEME"
+  | "NEAR_EXPIRY"
+  | "CASH_DISCOUNT"
+  | "TURNOVER_DISCOUNT"
+  | "SALES_INVOICE"
+  | "DIRECT";
 
-type CreditNoteLink = {
-  sourceReturnId?: string;
-  sourceReturnNo?: string;
-  schemeSettlementKey?: string;
-  schemeEntitlementId?: string;
-  status: string;
-};
+export type PendingCreditNoteStatus = "PENDING" | "CONVERTED" | "CANCELLED";
 
-function loadCreditNoteLinks(): CreditNoteLink[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem(CREDIT_NOTES_STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as CreditNoteLink[]) : [];
-  } catch {
-    return [];
-  }
-}
-
-export type PendingCreditNoteSourceType = "sales_return" | "scheme";
-
-export type PendingSchemeClaimKind = "entitlement" | "legacy_near_expiry";
+export type PendingSourceFilter = "all" | "sales_return" | "scheme";
 
 export interface PendingCreditNoteRow {
-  /** Unique row key — return id, scheme settlement key, or entitlement id */
   id: string;
-  sourceType: PendingCreditNoteSourceType;
+  pending_credit_note_id: string;
+  sourceType: PendingCreditNoteSourceType | string;
+  status: PendingCreditNoteStatus | string;
   customerName: string;
-  customerId: number | null;
   referenceNo: string;
   linkedInvoiceNos: string[];
-  linkedInvoiceIds: number[];
   eligibleCreditAmount: number;
   gstAmount: number;
-  cgstAmount: number;
-  sgstAmount: number;
-  igstAmount: number;
   totalAmount: number;
-  /** Display status — entitlements use ERP claim status; others "Pending" */
-  status: "Pending" | SchemeEntitlementStatus;
-  returnId?: string;
-  returnDate?: string;
-  schemeSettlementKey?: string;
   schemeName?: string;
-  /** Entitlement-based deferred scheme claim */
-  schemeEntitlementId?: string;
-  schemeClaimKind?: PendingSchemeClaimKind;
   schemeType?: string;
   schemeCode?: string;
   schemePeriod?: string;
   eligibleDate?: string;
   eligibleBaseAmount?: number;
+  credit_note_id?: string | null;
+  credit_note_number?: string | null;
+  referenceCount?: number;
 }
 
-export function hasCreditNoteForReturn(ret: SalesReturnRecord): boolean {
-  if (ret.creditNoteId) return true;
-  const notes = loadCreditNoteLinks();
-  return notes.some(
-    (cn) =>
-      cn.status !== "cancelled" &&
-      (cn.sourceReturnId === ret.id ||
-        cn.sourceReturnNo === ret.returnNumber),
-  );
+function toNum(value: unknown, fallback = 0): number {
+  if (value == null || value === "") return fallback;
+  if (typeof value === "number") return Number.isFinite(value) ? value : fallback;
+  const n = parseFloat(String(value));
+  return Number.isFinite(n) ? n : fallback;
 }
 
-export function hasCreditNoteForScheme(key: string): boolean {
-  const notes = loadCreditNoteLinks();
-  return notes.some(
-    (cn) =>
-      cn.status !== "cancelled" &&
-      (cn.schemeSettlementKey === key || cn.schemeEntitlementId === key),
-  );
+function toDate(value: unknown): string {
+  if (!value) return "";
+  const s = String(value);
+  return /^\d{4}-\d{2}-\d{2}/.test(s) ? s.slice(0, 10) : s;
 }
 
-function computeSalesReturnPendingAmounts(ret: SalesReturnRecord): {
-  eligibleCreditAmount: number;
-  gstAmount: number;
-  cgstAmount: number;
-  sgstAmount: number;
-  igstAmount: number;
-  totalAmount: number;
-  linkedInvoiceNos: string[];
-  linkedInvoiceIds: number[];
-} {
-  const preview = buildReferenceFromSalesReturn(ret.id);
-  if (preview) {
-    const lines = preview.lineItems.map((l) => ({
-      ...l,
-      returnQty: l.eligibleReturnQty ?? l.salesReturnQty ?? 0,
-    }));
-    const recalced = recalcAllCreditLines(lines, preview.alreadyAdjustedAmount);
-    const split = computeCreditNoteGstSplit(recalced);
-    const gst = split.taxAmount;
-    return {
-      eligibleCreditAmount: split.taxable,
-      gstAmount: gst,
-      cgstAmount: Math.round((gst / 2) * 100) / 100,
-      sgstAmount: Math.round((gst / 2) * 100) / 100,
-      igstAmount: 0,
-      totalAmount: split.grandTotal,
-      linkedInvoiceNos: preview.sourceInvoiceNo ? [preview.sourceInvoiceNo] : [],
-      linkedInvoiceIds: preview.sourceInvoiceId ? [preview.sourceInvoiceId] : [],
-    };
+export const PENDING_CREDIT_SOURCE_LABELS: Record<string, string> = {
+  SALES_RETURN: "Sales Return",
+  SPECIAL_SCHEME: "Special Scheme",
+  NEAR_EXPIRY: "Near Expiry",
+  CASH_DISCOUNT: "Cash Discount",
+  TURNOVER_DISCOUNT: "Turnover Discount",
+  SALES_INVOICE: "Sales Invoice",
+  DIRECT: "Direct",
+  sales_return: "Sales Return",
+  scheme: "Scheme",
+};
+
+const SCHEME_SOURCES = new Set([
+  "SPECIAL_SCHEME",
+  "NEAR_EXPIRY",
+  "CASH_DISCOUNT",
+  "TURNOVER_DISCOUNT",
+]);
+
+export function isSchemePendingSource(source: string): boolean {
+  return SCHEME_SOURCES.has(source);
+}
+
+const UUID_TAIL =
+  /(?:^|:)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function codesForType(
+  refs: PendingCreditNoteListApiRow["references"],
+  type: string,
+): string[] {
+  const seen = new Set<string>();
+  const codes: string[] = [];
+  for (const ref of refs ?? []) {
+    if (ref.reference_type !== type) continue;
+    const code = ref.reference_code?.trim();
+    if (!code || seen.has(code)) continue;
+    seen.add(code);
+    codes.push(code);
   }
+  return codes;
+}
 
-  const total = getReturnTotalAmount(ret);
-  const gstRate = 0.18;
-  const taxable = Math.round((total / (1 + gstRate)) * 100) / 100;
-  const gst = Math.round((total - taxable) * 100) / 100;
-  const invoiceNos = ret.sourceInvoiceNo ? [ret.sourceInvoiceNo] : [];
-  const invoiceIds = ret.sourceInvoiceId ? [ret.sourceInvoiceId] : [];
+function pickDisplayReference(raw: PendingCreditNoteListApiRow): string {
+  const returnNos = codesForType(raw.references, "SALES_RETURN");
+  if (returnNos.length) return returnNos.join(", ");
 
+  const schemeCode = raw.scheme?.scheme_code?.trim();
+  if (schemeCode) return schemeCode;
+
+  const invoiceNos = codesForType(raw.references, "SALES_INVOICE");
+  if (invoiceNos.length) return invoiceNos.join(", ");
+
+  const key = raw.eligibility_key?.trim();
+  if (key && !UUID_TAIL.test(key)) return key;
+
+  return "—";
+}
+
+export function mapPendingListRow(raw: PendingCreditNoteListApiRow): PendingCreditNoteRow {
+  const from = toDate(raw.eligibility_from);
+  const to = toDate(raw.eligibility_to);
+  const linkedInvoiceNos = codesForType(raw.references, "SALES_INVOICE");
   return {
-    eligibleCreditAmount: taxable,
-    gstAmount: gst,
-    cgstAmount: Math.round((gst / 2) * 100) / 100,
-    sgstAmount: Math.round((gst / 2) * 100) / 100,
-    igstAmount: 0,
-    totalAmount: total,
-    linkedInvoiceNos: invoiceNos,
-    linkedInvoiceIds: invoiceIds,
+    id: raw.pending_credit_note_id,
+    pending_credit_note_id: raw.pending_credit_note_id,
+    sourceType: raw.source_type || "",
+    status: raw.status || "PENDING",
+    customerName: raw.customer?.customer_name || "",
+    referenceNo: pickDisplayReference(raw),
+    linkedInvoiceNos,
+    eligibleCreditAmount: toNum(raw.taxable_credit_amount ?? raw.eligible_base_amount),
+    gstAmount: toNum(raw.gst_amount),
+    totalAmount: toNum(raw.eligible_cn_amount),
+    schemeName: raw.scheme?.scheme_name || undefined,
+    schemeType: raw.scheme?.scheme_type || undefined,
+    schemeCode: raw.scheme?.scheme_code || undefined,
+    schemePeriod: from && to ? `${from} → ${to}` : from || to || undefined,
+    eligibleDate: toDate(raw.eligibility_date),
+    eligibleBaseAmount: toNum(raw.eligible_base_amount),
+    credit_note_id: raw.credit_note?.credit_note_id || null,
+    credit_note_number: raw.credit_note?.cn_number || null,
+    referenceCount: raw._count?.references ?? 0,
   };
 }
 
-function resolveSalesReturnCustomerId(ret: SalesReturnRecord): number | null {
-  const preview = buildReferenceFromSalesReturn(ret.id);
-  return preview?.customerId ?? null;
-}
-
-function salesReturnToPendingRow(ret: SalesReturnRecord): PendingCreditNoteRow {
-  const amounts = computeSalesReturnPendingAmounts(ret);
-  return {
-    id: ret.id,
-    sourceType: "sales_return",
-    customerName: ret.customer,
-    customerId: resolveSalesReturnCustomerId(ret),
-    referenceNo: ret.returnNumber,
-    linkedInvoiceNos: amounts.linkedInvoiceNos,
-    linkedInvoiceIds: amounts.linkedInvoiceIds,
-    eligibleCreditAmount: amounts.eligibleCreditAmount,
-    gstAmount: amounts.gstAmount,
-    cgstAmount: amounts.cgstAmount,
-    sgstAmount: amounts.sgstAmount,
-    igstAmount: amounts.igstAmount,
-    totalAmount: amounts.totalAmount,
-    status: "Pending",
-    returnId: ret.id,
-    returnDate: ret.returnDate,
-  };
-}
-
-function schemeToPendingRow(opt: PendingSchemeSettlementOption): PendingCreditNoteRow {
-  const total = opt.estimatedBenefitAmount;
-  const gstRate = 0.18;
-  const taxable = Math.round((total / (1 + gstRate)) * 100) / 100;
-  const gst = Math.round((total - taxable) * 100) / 100;
-
-  return {
-    id: opt.key,
-    sourceType: "scheme",
-    customerName: opt.customerName,
-    customerId: opt.customerId,
-    referenceNo: opt.schemeCode,
-    linkedInvoiceNos: [opt.invoiceNo],
-    linkedInvoiceIds: [opt.invoiceId],
-    eligibleCreditAmount: taxable,
-    gstAmount: gst,
-    cgstAmount: Math.round((gst / 2) * 100) / 100,
-    sgstAmount: Math.round((gst / 2) * 100) / 100,
-    igstAmount: 0,
-    totalAmount: total,
-    status: "Pending",
-    schemeSettlementKey: opt.key,
-    schemeName: opt.schemeName,
-    schemeClaimKind: "legacy_near_expiry",
-    schemeType: opt.schemeType || "Near Expiry Discount",
-    schemeCode: opt.schemeCode,
-    schemePeriod: opt.batchExpiryDate ? `Batch EXP ${opt.batchExpiryDate}` : undefined,
-    eligibleBaseAmount: taxable,
-  };
-}
-
-function entitlementToPendingRow(ent: SchemeEntitlement): PendingCreditNoteRow {
-  const total = ent.creditNoteAmount ?? ent.calculatedBenefit;
-  const included = ent.includedRecords?.length
-    ? ent.includedRecords.filter((r) => r.eligibilityStatus === "Eligible")
-    : ent.invoiceBreakdown.filter((b) => b.includedInCalculation);
-
-  return {
-    id: ent.id,
-    sourceType: "scheme",
-    customerName: ent.customerName,
-    customerId: ent.customerId,
-    referenceNo: ent.claimNumber || ent.schemeCode,
-    linkedInvoiceNos: included.map((b) =>
-      "invoiceNumber" in b && b.invoiceNumber
-        ? b.invoiceNumber
-        : (b as { invoiceNo: string }).invoiceNo,
-    ),
-    linkedInvoiceIds: included.map((b) => b.invoiceId),
-    eligibleCreditAmount: ent.eligibleBaseAmount,
-    gstAmount: 0,
-    cgstAmount: 0,
-    sgstAmount: 0,
-    igstAmount: 0,
-    totalAmount: total,
-    status: ent.status,
-    schemeEntitlementId: ent.id,
-    schemeClaimKind: "entitlement",
-    schemeName: ent.schemeName,
-    schemeType: ent.schemeType,
-    schemeCode: ent.schemeCode,
-    schemePeriod: ent.periodReference || `${ent.periodStart} – ${ent.periodEnd}`,
-    eligibleDate: ent.eligibleDate,
-    eligibleBaseAmount: ent.eligibleBaseAmount,
-  };
-}
-
-export function listPendingCreditNotes(): PendingCreditNoteRow[] {
-  const rows: PendingCreditNoteRow[] = [];
-
-  for (const ret of getSalesReturnRecords()) {
-    if (ret.status === "rejected") continue;
-    if (hasCreditNoteForReturn(ret)) continue;
-    if (ret.status !== "approved" && ret.status !== "pending_approval") continue;
-    rows.push(salesReturnToPendingRow(ret));
-  }
-
-  for (const ent of listPendingSchemeEntitlements()) {
-    if (ent.status === "Credit Note Generated") continue;
-    if (hasCreditNoteForEntitlement(ent.id)) continue;
-    rows.push(entitlementToPendingRow(ent));
-  }
-
-  for (const opt of listPendingSchemeSettlementOptions()) {
-    if (hasCreditNoteForScheme(opt.key)) continue;
-    rows.push(schemeToPendingRow(opt));
-  }
-
-  return rows.sort((a, b) => {
-    const da = a.eligibleDate || a.returnDate || "";
-    const db = b.eligibleDate || b.returnDate || "";
-    if (da && db && da !== db) return db.localeCompare(da);
-    return b.referenceNo.localeCompare(a.referenceNo);
-  });
-}
-
-export function getPendingCreditNoteRow(
-  id: string,
-  sourceType?: PendingCreditNoteSourceType,
-): PendingCreditNoteRow | undefined {
-  return listPendingCreditNotes().find(
-    (r) => r.id === id && (!sourceType || r.sourceType === sourceType),
-  );
+export function canGeneratePendingCreditNote(row: PendingCreditNoteRow): boolean {
+  return row.status === "PENDING" && Boolean(row.pending_credit_note_id);
 }
 
 export function filterPendingCreditNotes(
@@ -288,8 +148,10 @@ export function filterPendingCreditNotes(
   sourceFilter: string,
 ): PendingCreditNoteRow[] {
   let r = rows;
-  if (sourceFilter && sourceFilter !== "all") {
-    r = r.filter((x) => x.sourceType === sourceFilter);
+  if (sourceFilter === "sales_return") {
+    r = r.filter((x) => x.sourceType === "SALES_RETURN");
+  } else if (sourceFilter === "scheme") {
+    r = r.filter((x) => isSchemePendingSource(String(x.sourceType)));
   }
   if (search.trim()) {
     const q = search.toLowerCase();
@@ -297,16 +159,12 @@ export function filterPendingCreditNotes(
       (x) =>
         x.referenceNo.toLowerCase().includes(q) ||
         x.customerName.toLowerCase().includes(q) ||
-        x.linkedInvoiceNos.some((inv) => inv.toLowerCase().includes(q)) ||
         x.schemeName?.toLowerCase().includes(q) ||
         x.schemeCode?.toLowerCase().includes(q) ||
-        x.schemeType?.toLowerCase().includes(q),
+        x.schemeType?.toLowerCase().includes(q) ||
+        x.linkedInvoiceNos.some((n) => n.toLowerCase().includes(q)) ||
+        PENDING_CREDIT_SOURCE_LABELS[x.sourceType]?.toLowerCase().includes(q),
     );
   }
   return r;
 }
-
-export const PENDING_CREDIT_SOURCE_LABELS: Record<PendingCreditNoteSourceType, string> = {
-  sales_return: "Sales Return",
-  scheme: "Scheme",
-};

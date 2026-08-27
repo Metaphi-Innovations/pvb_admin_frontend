@@ -5,7 +5,7 @@ import { useAccountsColumnFilters, type UseAccountsColumnFiltersOptions } from "
 
 type ColumnFilterContextValue = ReturnType<typeof useAccountsColumnFilters> | null;
 
-const AccountsColumnFilterContext = createContext<ColumnFilterContextValue>(null);
+export const AccountsColumnFilterContext = createContext<ColumnFilterContextValue>(null);
 
 export type AccountsColumnFilterProviderProps<T> = UseAccountsColumnFiltersOptions<T> & {
   children: React.ReactNode;

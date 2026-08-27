@@ -63,7 +63,14 @@ axiosInstance.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     const token = resolveAccessToken();
     if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+      config.headers.set("Authorization", `Bearer ${token}`);
+    }
+
+    // When the request body is FormData, opt out of the instance-level
+    // Content-Type: application/json so the browser sets multipart boundary.
+    // Use `false` (axios-recommended) instead of delete so other headers stay intact.
+    if (typeof FormData !== "undefined" && config.data instanceof FormData) {
+      config.headers.delete("Content-Type");
     }
 
     const skipFy =
@@ -73,7 +80,7 @@ axiosInstance.interceptors.request.use(
     if (!skipFy) {
       const fyId = getStoredFYId();
       if (fyId) {
-        config.headers["x-financial-year-id"] = fyId;
+        config.headers.set("x-financial-year-id", fyId);
       }
     }
 
@@ -105,6 +112,10 @@ axiosInstance.interceptors.response.use(
     return response;
   },
   async (error: AxiosError) => {
+    if (axios.isCancel(error)) {
+      return Promise.reject(error);
+    }
+
     const originalRequest = error.config as any;
 
     if (!originalRequest) {

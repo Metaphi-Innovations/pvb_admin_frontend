@@ -124,6 +124,7 @@ export interface SalesOrderLineItem {
   pieceQuantity?: number;
   packSize?: number;
   quantity: number;
+  generatedBaseQty?: number;
   unitPrice: number;
   discount: number;
   discountValue: number;
@@ -131,6 +132,10 @@ export interface SalesOrderLineItem {
   lineTotal: number;
   unit?: string;
   packingUnit?: string;
+  /** Product UOM / weight — used for stacked Case / Unit / Kg-Ltr */
+  uom?: string;
+  unitPackSize?: number | null;
+  netWeight?: number | null;
   batchNumber?: string;
   expiryDate?: string;
 }
@@ -186,6 +191,12 @@ export interface SalesOrder {
   cancelledDate?: string;
   packingListId?: string | number;
   packingListNumber?: string;
+  packingLists?: Array<{
+    packingListId: string;
+    packingNumber: string;
+    generatedAt?: string;
+    status?: string;
+  }>;
   packingStatus?: PackingStatus;
   warehouseId?: string | number;
   warehouseName?: string;
@@ -215,6 +226,9 @@ export interface ProductCatalogItem {
   category: string;
   segment: string;
   packSize?: number;
+  uom?: string;
+  netWeight?: number | null;
+  unitPackSize?: number;
 }
 
 export function todayStr(): string {
@@ -444,8 +458,39 @@ export function canCancelOrder(order: SalesOrder): boolean {
 }
 
 export function canGeneratePackingList(order: SalesOrder): boolean {
-  if (order.packingListNumber || order.packingListId) return false;
-  return order.status === "approved" || order.status === "confirmed";
+  if (!["approved", "confirmed"].includes(order.status)) return false;
+
+  const fulfillment = (order.fulfillmentStatus || "PENDING").toString();
+  const blocked = [
+    "Fully Dispatched",
+    "FULLY_DISPATCHED",
+    "DELIVERED",
+    "delivered",
+    "CANCELLED",
+    "cancelled",
+  ];
+  if (blocked.includes(fulfillment)) return false;
+
+  const lines = order.lineItems ?? [];
+  if (lines.length > 0) {
+    return lines.some((l) => {
+      if (!l.productId || !(l.quantity > 0)) return false;
+      const generated = Number(l.generatedBaseQty || 0);
+      return l.quantity - generated > 1e-9;
+    });
+  }
+
+  // Listing without lines: allow first generate when order has items and no PL yet
+  if (order.packingListId || order.packingListNumber || (order.packingLists?.length ?? 0) > 0) {
+    return false;
+  }
+  return (order.items ?? 0) > 0;
+}
+
+/** Packing List PDF is only available after at least one packing list has been generated. */
+export function canDownloadPackingList(order: SalesOrder): boolean {
+  if (order.packingLists && order.packingLists.length > 0) return true;
+  return Boolean(order.packingListNumber || order.packingListId);
 }
 
 export function canDownloadPI(order: SalesOrder): boolean {

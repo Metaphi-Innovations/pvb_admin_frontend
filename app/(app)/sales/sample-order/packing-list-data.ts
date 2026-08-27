@@ -30,7 +30,77 @@ export interface ProductPackingConfig {
   unitsPerPackingUnit: number;
 }
 
-export type InventoryType = "original" | "sales_return" | "sample_return";
+export type InventoryType = "original" | "stock_transfer" | "sales_return" | "sample_return";
+
+/** Map packing-batch API source → UI inventory type. */
+export function mapBatchInventoryType(batch: {
+  inventory_type?: string | null;
+  source_type?: string | null;
+  source_status?: string | null;
+}): InventoryType {
+  const typed = String(batch.inventory_type || "").toLowerCase();
+  if (
+    typed === "original" ||
+    typed === "stock_transfer" ||
+    typed === "sales_return" ||
+    typed === "sample_return"
+  ) {
+    return typed;
+  }
+  switch (String(batch.source_type || "").toUpperCase()) {
+    case "STOCK_TRANSFER_GRN":
+      return "stock_transfer";
+    case "SALES_RETURN_GRN":
+      return "sales_return";
+    case "SAMPLE_RETURN_GRN":
+      return "sample_return";
+    case "PURCHASE_GRN":
+    default:
+      return "original";
+  }
+}
+
+export function formatInventoryTypeLabel(type: InventoryType): string {
+  switch (type) {
+    case "original":
+      return "Purchase";
+    case "stock_transfer":
+      return "Stock Transfer";
+    case "sales_return":
+      return "Sales Return";
+    case "sample_return":
+      return "Sample Return";
+    default:
+      return type;
+  }
+}
+
+export function inventoryTypeBadgeClass(type: InventoryType): string {
+  switch (type) {
+    case "sales_return":
+      return "bg-teal-50 text-teal-700 border-teal-200";
+    case "sample_return":
+      return "bg-cyan-50 text-cyan-700 border-cyan-200";
+    case "stock_transfer":
+      return "bg-violet-50 text-violet-700 border-violet-200";
+    default:
+      return "bg-sky-50 text-sky-700 border-sky-200";
+  }
+}
+
+/** FEFO: earliest expiry first; missing dates last. */
+export function sortBatchesByExpiryAsc<T extends { expiry_date?: string | null; expiryDate?: string | null }>(
+  batches: T[],
+): T[] {
+  return [...batches].sort((a, b) => {
+    const ae = String(a.expiry_date ?? a.expiryDate ?? "").slice(0, 10);
+    const be = String(b.expiry_date ?? b.expiryDate ?? "").slice(0, 10);
+    if (!ae && !be) return 0;
+    if (!ae) return 1;
+    if (!be) return -1;
+    return ae.localeCompare(be);
+  });
+}
 
 export interface InventoryCarton {
   id: string;
@@ -74,9 +144,15 @@ export interface PackingListLine {
   baseUnit: string;
   unitsPerPackingUnit: number;
   orderedBaseQty: number;
+  generatedBaseQty?: number;
+  remainingBaseQty?: number;
   hasPackingConfig: boolean;
   quantityType?: "Case" | "Piece";
   allocations: CartonAllocation[];
+  /** Optional weight meta for stacked Case / Unit / Kg-Ltr display */
+  uom?: string;
+  unitPackSize?: number | null;
+  netWeight?: number | null;
 }
 
 export interface PackingList {

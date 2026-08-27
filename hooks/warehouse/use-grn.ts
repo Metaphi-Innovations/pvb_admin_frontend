@@ -60,7 +60,13 @@ export function useGrn(id: string | null | undefined, enabled = true) {
 export function useCreateGrn() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: CreateGrnPayload) => GrnService.create(input),
+    mutationFn: ({
+      input,
+      invoiceFiles = [],
+    }: {
+      input: CreateGrnPayload;
+      invoiceFiles?: File[];
+    }) => GrnService.create(input, invoiceFiles),
     onSuccess: async (data) => {
       const createdId = typeof data?.id === "string" ? data.id : undefined;
       await Promise.all([
@@ -81,8 +87,15 @@ export function useCreateGrn() {
 export function useUpdateGrn() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, input }: { id: string; input: UpdateGrnPayload }) =>
-      GrnService.update(id, input),
+    mutationFn: ({
+      id,
+      input,
+      invoiceFiles = [],
+    }: {
+      id: string;
+      input: UpdateGrnPayload;
+      invoiceFiles?: File[];
+    }) => GrnService.update(id, input, invoiceFiles),
     onSuccess: async (data, variables) => {
       const updatedId =
         (typeof data?.id === "string" ? data.id : undefined) || variables.id;

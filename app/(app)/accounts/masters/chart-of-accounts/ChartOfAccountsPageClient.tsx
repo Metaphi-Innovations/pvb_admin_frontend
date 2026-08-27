@@ -10,7 +10,7 @@ import { isGroupingLedger, isPostingLedger } from "@/lib/accounts/coa-hierarchy"
 import { useCanCoa } from "@/lib/accounts/use-can-coa";
 import { defaultLedgerDateRangeState } from "@/lib/accounts/ledger-transaction-date-filter";
 import { type DateRangePresetId } from "@/lib/accounts/report-date-presets";
-import { isTdsCoaNode } from "@/lib/accounts/tds-coa-utils";
+import { isTdsCoaNode, isTdsReceivablePostingLedger } from "@/lib/accounts/tds-coa-utils";
 import {
   isStatutoryTaxPayableParent,
   isStatutoryTaxSectionProjection,
@@ -35,7 +35,13 @@ import {
   buildCoaListingRows,
   computeCoaLedgerListingSummary,
   computeCoaListingSummary,
+  computeCoaListingSummaryFromRows,
   computeCoaGroupDetailSummary,
+  overlayApiBalancesOnGroupSummary,
+  overlayApiBalancesOnLedgerRows,
+  overlayApiBalancesOnListingRows,
+  toCoaApiLedgerBalance,
+  type CoaApiLedgerBalance,
 } from "./coa-listing-data";
 import {
   exportCoaLedgerListingToExcel,
@@ -80,7 +86,12 @@ import {
   chartOfAccountsKeys,
 } from "@/hooks/accounts/use-chart-of-accounts";
 import { useLedgerDetail } from "@/hooks/accounts/use-ledger-detail";
+import { useLedgerBalances } from "@/hooks/accounts/use-ledger-balances";
+import { collectDescendantLedgers } from "@/lib/accounts/coa-accounting-view";
 import { LedgerService } from "@/services/ledger.service";
+import { isStockInHandLedger } from "@/lib/accounts/coa-stock-in-hand";
+import { InventoryProductWisePanel, CogsProductWisePanel, SalesProductWisePanel } from "@/components/accounts/InventoryProductWisePanels";
+import { MANDATORY_SYSTEM_LEDGERS } from "./coa-statutory-ledgers";
 import { ChartOfAccountsService } from "@/services/chart-of-accounts.service";
 import { mapCoaApiTreeToRecords } from "@/lib/accounts/coa-api-mapper";
 import { dispatchCoaChanged } from "@/lib/accounts/coa-events";
@@ -122,10 +133,10 @@ const BankAccountFormClient = dynamic(
 
 const HIGHLIGHT_MS = 4000;
 
-/** Ledger detail view for posting ledgers only (TDS/TCS statutory nodes excluded). */
+/** Ledger statement for posting ledgers, including TDS Receivable. */
 function isCoaLedgerDetailView(node: ChartOfAccount, records: ChartOfAccount[]): boolean {
+  if (isTdsReceivablePostingLedger(node)) return true;
   if (!isPostingLedger(node, records)) return false;
-  if (isTdsCoaNode(node, records)) return false;
   if (isStatutoryTaxPayableParent(node)) return false;
   if (isStatutoryTaxSectionProjection(node)) return false;
   return true;
@@ -147,6 +158,10 @@ export default function ChartOfAccountsPageClient() {
   const deferredRecords = useDeferredValue(records);
   const ledgerDataTick = useAccountsSectionRefresh([
     "ledgers",
+    "sales-invoices",
+    "purchase-invoices",
+    "credit-notes",
+    "debit-notes",
     "receipt-vouchers",
     "payment-vouchers",
     "contra-vouchers",
@@ -156,8 +171,20 @@ export default function ChartOfAccountsPageClient() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [datesReady, setDatesReady] = useState(false);
+  const [showRoot, setShowRoot] = useState(false);
 
-  const selectedLedgerApiId = selectedNode?.apiNodeId ?? null;
+  const selectedLedgerApiId = selectedNode?.apiNodeId
+    ? String(selectedNode.apiNodeId)
+    : null;
+
+  const groupLedgerApiIds = useMemo(() => {
+    if (!selectedNode || showRoot || isCoaLedgerDetailView(selectedNode, records)) {
+      return [];
+    }
+    return collectDescendantLedgers(records, selectedNode.id)
+      .filter((ledger) => !ledger.bankGroupFlag && ledger.apiNodeId)
+      .map((ledger) => String(ledger.apiNodeId));
+  }, [selectedNode, showRoot, records]);
 
   const {
     data: selectedLedgerDetail,
@@ -173,7 +200,22 @@ export default function ChartOfAccountsPageClient() {
     ),
   });
 
-  const [showRoot, setShowRoot] = useState(false);
+  const { data: groupLedgerBalanceRows } = useLedgerBalances({
+    ledgerIds: groupLedgerApiIds,
+    dateFrom,
+    dateTo,
+    refreshTick: ledgerDataTick,
+    enabled: Boolean(datesReady && groupLedgerApiIds.length > 0),
+  });
+
+  const groupLedgerBalanceMap = useMemo(() => {
+    const map = new Map<string, CoaApiLedgerBalance>();
+    for (const row of groupLedgerBalanceRows ?? []) {
+      map.set(row.ledgerId, toCoaApiLedgerBalance(row));
+    }
+    return map;
+  }, [groupLedgerBalanceRows]);
+
   const [contentSearch, setContentSearch] = useState("");
   const debouncedSearch = useDebouncedValue(contentSearch, 300);
   const [exporting, setExporting] = useState(false);
@@ -313,7 +355,7 @@ export default function ChartOfAccountsPageClient() {
   const isTdsLedgerSummaryView = Boolean(
     !showRoot &&
       selectedNode &&
-      selectedNode.nodeLevel === "ledger" &&
+      selectedNode.nodeLevel === "account_group" &&
       isTdsCoaNode(selectedNode, records),
   );
 
@@ -324,8 +366,10 @@ export default function ChartOfAccountsPageClient() {
 
   const groupDetailSummary = useMemo(() => {
     if (!isGroupView || !selectedNode || !datesReady) return null;
-    return computeCoaGroupDetailSummary(deferredRecords, selectedNode.id, dateFrom, dateTo);
-  }, [isGroupView, selectedNode, deferredRecords, dateFrom, dateTo, datesReady, ledgerDataTick]);
+    const summary = computeCoaGroupDetailSummary(deferredRecords, selectedNode.id, dateFrom, dateTo);
+    if (!summary) return null;
+    return overlayApiBalancesOnGroupSummary(summary, deferredRecords, groupLedgerBalanceMap);
+  }, [isGroupView, selectedNode, deferredRecords, dateFrom, dateTo, datesReady, ledgerDataTick, groupLedgerBalanceMap]);
   /** Parent whose immediate children are shown in the hierarchy listing table */
   const tableParentId =
     showEmptyState || isLedgerStatementView || isAccountingGroupLedgerListing
@@ -441,14 +485,15 @@ export default function ChartOfAccountsPageClient() {
     const rows = buildCoaLedgerListingRows(effectiveRecords, selectedNode.id, {
       search: debouncedSearch,
     });
-    return rows;
-  }, [effectiveRecords, selectedNode, debouncedSearch, isAccountingGroupLedgerListing]);
+    return overlayApiBalancesOnLedgerRows(rows, groupLedgerBalanceMap);
+  }, [effectiveRecords, selectedNode, debouncedSearch, isAccountingGroupLedgerListing, groupLedgerBalanceMap]);
 
   const listingRows = useMemo(() => {
     if (!datesReady || isLedgerStatementView || isAccountingGroupLedgerListing) return [];
-    return buildCoaListingRows(effectiveRecords, tableParentId, dateFrom, dateTo, {
+    const rows = buildCoaListingRows(effectiveRecords, tableParentId, dateFrom, dateTo, {
       search: debouncedSearch,
     });
+    return overlayApiBalancesOnListingRows(effectiveRecords, rows, groupLedgerBalanceMap);
   }, [
     effectiveRecords,
     tableParentId,
@@ -459,6 +504,7 @@ export default function ChartOfAccountsPageClient() {
     isLedgerStatementView,
     isAccountingGroupLedgerListing,
     ledgerDataTick,
+    groupLedgerBalanceMap,
   ]);
 
   const ledgerListingSummary = useMemo(() => {
@@ -480,6 +526,10 @@ export default function ChartOfAccountsPageClient() {
         closingAmount: ledgerAccounting.currentBalance,
         closingSide: ledgerAccounting.balanceType,
       };
+    }
+
+    if (groupLedgerBalanceMap.size > 0) {
+      return computeCoaListingSummaryFromRows(listingRows);
     }
 
     return computeCoaListingSummary(
@@ -505,6 +555,7 @@ export default function ChartOfAccountsPageClient() {
     filteredTransactions,
     isAccountingGroupLedgerListing,
     ledgerDataTick,
+    groupLedgerBalanceMap,
   ]);
 
   const pageBreadcrumbs = useMemo(() => {
@@ -826,7 +877,6 @@ export default function ChartOfAccountsPageClient() {
                   ? "Search ledger name, code, source…"
                   : "Search accounts in this view…"
             }
-            hideDateRange={isAccountingGroupLedgerListing}
             preset={preset}
             dateFrom={dateFrom}
             dateTo={dateTo}
@@ -890,6 +940,13 @@ export default function ChartOfAccountsPageClient() {
                   </p>
                 </div>
               ) : datesReady && ledgerDataReady ? (
+                isStockInHandLedger(selectedNode!) ? (
+                  <InventoryProductWisePanel dateFrom={dateFrom} dateTo={dateTo} />
+                ) : selectedNode && ["cost of goods sold", "cogs"].includes((selectedNode.accountName ?? "").trim().toLowerCase()) ? (
+                  <CogsProductWisePanel dateFrom={dateFrom} dateTo={dateTo} />
+                ) : selectedNode && (selectedNode.accountName ?? "").trim().toLowerCase() === MANDATORY_SYSTEM_LEDGERS.productSales.name.toLowerCase() ? (
+                  <SalesProductWisePanel dateFrom={dateFrom} dateTo={dateTo} />
+                ) : (
                 <CoaLedgerDetailTable
                   rows={filteredTransactions}
                   onVoucherClick={handleLedgerStatementVoucherClick}
@@ -901,6 +958,7 @@ export default function ChartOfAccountsPageClient() {
                   }}
                   emptyLabel="No transactions found for this ledger."
                 />
+                )
               ) : (
                 <div className="flex flex-1 items-center justify-center py-12">
                   <p className="text-sm text-muted-foreground">Loading ledger transactions…</p>

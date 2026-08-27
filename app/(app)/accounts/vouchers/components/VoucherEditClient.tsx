@@ -13,6 +13,7 @@ import { voucherTypeToUrl } from "../voucher-routes";
 import { ReceiptVoucherForm } from "./ReceiptVoucherForm";
 import { PaymentVoucherForm } from "./PaymentVoucherForm";
 import { ContraVoucherForm } from "./ContraVoucherForm";
+import { JournalVoucherForm } from "../journal/JournalVoucherForm";
 import { VoucherEntryClient } from "./VoucherEntryClient";
 
 interface VoucherEditClientProps {
@@ -77,6 +78,9 @@ export function VoucherEditClient({ voucherId, onDone }: VoucherEditClientProps)
   }
   if (voucher.voucherType === "contra") {
     return <ContraVoucherForm voucherId={voucherId} onDone={handleDone} />;
+  }
+  if (voucher.voucherType === "journal") {
+    return <JournalVoucherForm voucherId={voucherId} onDone={handleDone} />;
   }
 
   return (

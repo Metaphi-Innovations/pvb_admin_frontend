@@ -45,6 +45,25 @@ function asString(value: unknown): string {
   return typeof value === "string" ? value : String(value ?? "");
 }
 
+const SORT_KEY_TO_ORDERING: Record<string, string> = {
+  customerType: "customer_type_name",
+  initialCode: "customer_initial_code",
+  description: "description",
+  status: "is_active",
+  createdBy: "created_at",
+  updatedBy: "updated_at",
+};
+
+export function sortStateToOrdering(
+  key: string,
+  direction: "asc" | "desc" | "none",
+): string {
+  if (!key || direction === "none") return "";
+  const field = SORT_KEY_TO_ORDERING[key];
+  if (!field) return "";
+  return direction === "desc" ? `-${field}` : field;
+}
+
 function toStatus(value: unknown): "active" | "inactive" {
   return value === true ? "active" : "inactive";
 }

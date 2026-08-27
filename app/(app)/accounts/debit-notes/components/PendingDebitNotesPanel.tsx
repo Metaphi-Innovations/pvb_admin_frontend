@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   AccountsGenerateAction,
@@ -26,13 +26,7 @@ import {
   AccountsColumnFilterProvider,
   AccountsColumnHeader,
   SortTh,
-  useAccountsFilteredRows,
 } from "@/app/(app)/accounts/components/AccountsUI";
-import {
-  filterPendingDebitNotes,
-  listPendingDebitNoteReturns,
-  type PendingDebitNoteRow,
-} from "../pending-debit-notes-data";
 import { DEBIT_NOTES_LIST_PATH, formatINR } from "../note-utils";
 import {
   Select,
@@ -43,26 +37,43 @@ import {
 } from "@/components/ui/select";
 import { ACCOUNTS_FILTER_LABEL_CLASS } from "@/lib/accounts/accounts-typography";
 import { Label } from "@/components/ui/label";
+import { DebitNoteService } from "@/services/debit-note.service";
+import { showToast } from "@/lib/toast";
+import { useDebouncedValue } from "@/app/(app)/accounts/reports/pl/pl-hooks";
+
+interface PendingDebitNoteRow {
+  returnId: string;
+  returnNumber: string;
+  returnDate: string;
+  supplierName: string;
+  poNumber: string;
+  grnNo: string;
+  dispatchNo: string;
+  totalReturnQty: number;
+  taxableAmount: number;
+  gstAmount: number;
+  totalAmount: number;
+}
 
 function PendingDebitNotesTable({
   toolbarFiltered,
   page,
   pageSize,
+  totalRecords,
   onPageChange,
   onPageSizeChange,
+  onCreate,
 }: {
   toolbarFiltered: PendingDebitNoteRow[];
   page: number;
   pageSize: number;
+  totalRecords: number;
   onPageChange: (p: number) => void;
   onPageSizeChange: (s: number) => void;
+  onCreate: (row: PendingDebitNoteRow) => void;
 }) {
-  const router = useRouter();
-  const visible = useAccountsFilteredRows(toolbarFiltered);
-  const pagedRows = useMemo(
-    () => visible.slice((page - 1) * pageSize, page * pageSize),
-    [visible, page, pageSize],
-  );
+  const visible = toolbarFiltered;
+  const pagedRows = toolbarFiltered;
 
   return (
     <>
@@ -95,22 +106,33 @@ function PendingDebitNotesTable({
               colSpan={11}
               message="No purchase returns pending debit note."
             />
-          ) : visible.length === 0 ? (
-            <AccountsTableEmpty colSpan={11} message="No records match the column filters." />
           ) : (
             pagedRows.map((row) => (
               <AccountsTableRow key={row.returnId}>
                 <AccountsTableCell mono className="font-semibold text-brand-700 truncate text-xs">
                   {row.returnNumber}
                 </AccountsTableCell>
-                <AccountsTableCell className="tabular-nums text-xs whitespace-nowrap">{row.returnDate}</AccountsTableCell>
-                <AccountsTableCell className="accounts-col-party font-medium truncate text-xs" title={row.supplierName}>
+                <AccountsTableCell className="tabular-nums text-xs whitespace-nowrap">
+                  {row.returnDate}
+                </AccountsTableCell>
+                <AccountsTableCell
+                  className="accounts-col-party font-medium truncate text-xs"
+                  title={row.supplierName}
+                >
                   {row.supplierName}
                 </AccountsTableCell>
-                <AccountsTableCell mono className="truncate text-xs">{row.poNumber}</AccountsTableCell>
-                <AccountsTableCell mono className="truncate text-xs">{row.grnNo || "—"}</AccountsTableCell>
-                <AccountsTableCell mono className="truncate text-xs">{row.dispatchNo || row.packingNo || "—"}</AccountsTableCell>
-                <AccountsTableCell align="right" className="tabular-nums text-xs">{row.totalReturnQty}</AccountsTableCell>
+                <AccountsTableCell mono className="truncate text-xs">
+                  {row.poNumber}
+                </AccountsTableCell>
+                <AccountsTableCell mono className="truncate text-xs">
+                  {row.grnNo || "—"}
+                </AccountsTableCell>
+                <AccountsTableCell mono className="truncate text-xs">
+                  {row.dispatchNo || "—"}
+                </AccountsTableCell>
+                <AccountsTableCell align="right" className="tabular-nums text-xs">
+                  {row.totalReturnQty}
+                </AccountsTableCell>
                 <AccountsTableCell align="right" money className="text-xs tabular-nums">
                   {formatINR(row.taxableAmount)}
                 </AccountsTableCell>
@@ -124,7 +146,7 @@ function PendingDebitNotesTable({
                   <AccountsTableActionCell variant="single">
                     <AccountsGenerateAction
                       title="Create Debit Note"
-                      onClick={() => router.push(`${DEBIT_NOTES_LIST_PATH}/new?returnId=${row.returnId}`)}
+                      onClick={() => onCreate(row)}
                     />
                   </AccountsTableActionCell>
                 </AccountsTableCell>
@@ -137,7 +159,7 @@ function PendingDebitNotesTable({
         <AccountsTablePagination
           page={page}
           pageSize={pageSize}
-          totalRecords={visible.length}
+          totalRecords={totalRecords}
           onPageChange={onPageChange}
           onPageSizeChange={onPageSizeChange}
           recordLabel="pending returns"
@@ -147,25 +169,110 @@ function PendingDebitNotesTable({
   );
 }
 
-export function PendingDebitNotesPanel() {
+export function PendingDebitNotesPanel({
+  onCountChange,
+  refreshTick = 0,
+}: {
+  onCountChange?: (count: number) => void;
+  /** Bump to re-fetch (header refresh / accounts data changed). */
+  refreshTick?: number;
+}) {
+  const router = useRouter();
   const [rows, setRows] = useState<PendingDebitNoteRow[]>([]);
+  const [totalRecords, setTotalRecords] = useState(0);
+  const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [dispatchFilter, setDispatchFilter] = useState("all");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
+  const debouncedSearch = useDebouncedValue(search, 300);
+  const onCountChangeRef = useRef(onCountChange);
+  onCountChangeRef.current = onCountChange;
+  const pendingQueryKeyRef = useRef("");
+  const pendingQueryKey = `${page}|${pageSize}|${debouncedSearch.trim()}`;
 
-  const refresh = useCallback(() => setRows(listPendingDebitNoteReturns()), []);
   useEffect(() => {
-    refresh();
-  }, [refresh]);
+    setPage((p) => (p === 1 ? p : 1));
+  }, [debouncedSearch, dispatchFilter, pageSize]);
 
-  const toolbarFiltered = useMemo(
-    () => filterPendingDebitNotes(rows, search, dispatchFilter),
-    [rows, search, dispatchFilter],
-  );
+  useEffect(() => {
+    if (page !== 1 && pendingQueryKeyRef.current !== pendingQueryKey) {
+      pendingQueryKeyRef.current = pendingQueryKey;
+      return;
+    }
+    pendingQueryKeyRef.current = pendingQueryKey;
+
+    let cancelled = false;
+    setLoading(true);
+    (async () => {
+      try {
+        const res = await DebitNoteService.listPending({
+          page,
+          page_size: pageSize,
+          search: debouncedSearch.trim() || undefined,
+          status: "PENDING",
+        });
+        if (cancelled) return;
+
+        const mapped = res.items.map((raw: any) => {
+          const refs: Array<{ reference_type?: string; reference_code?: string | null }> =
+            raw.references || [];
+          const poFromRef = refs.find((r) => r.reference_type === "PURCHASE_ORDER")?.reference_code;
+          const grnCodes = refs
+            .filter((r) => r.reference_type === "GRN" && r.reference_code)
+            .map((r) => r.reference_code as string);
+          const returnDateRaw =
+            raw.purchase_return?.return_date || raw.eligibility_date || null;
+          const lines: Array<{ quantity?: string | number }> = raw.lines || [];
+          const qtySum = lines.reduce(
+            (acc, line) => acc + parseFloat(String(line.quantity || "0")),
+            0,
+          );
+          const gstFromSplit =
+            parseFloat(raw.cgst_amount || "0") +
+            parseFloat(raw.sgst_amount || "0") +
+            parseFloat(raw.igst_amount || "0");
+
+          return {
+            returnId: raw.pending_debit_note_id,
+            returnNumber:
+              raw.purchase_return_number || raw.purchase_return?.return_no || "—",
+            returnDate: returnDateRaw
+              ? new Date(returnDateRaw).toLocaleDateString()
+              : "—",
+            supplierName: raw.supplier_name || raw.supplier?.supplier_name || "—",
+            poNumber: raw.purchase_return?.purchase_order?.po_no || poFromRef || "—",
+            grnNo: grnCodes.length ? grnCodes.join(", ") : "—",
+            dispatchNo:
+              raw.dispatch?.dispatch_number || raw.dispatch?.challan_number || "—",
+            totalReturnQty: qtySum,
+            taxableAmount: parseFloat(raw.taxable_amount || "0"),
+            gstAmount:
+              parseFloat(raw.gst_amount || "0") > 0
+                ? parseFloat(raw.gst_amount || "0")
+                : gstFromSplit,
+            totalAmount: parseFloat(raw.eligible_dn_amount || "0"),
+          };
+        });
+
+        setRows(mapped);
+        setTotalRecords(res.pagination.total);
+        onCountChangeRef.current?.(res.pagination.total);
+      } catch (e: any) {
+        if (cancelled) return;
+        showToast(e.message || "Failed to load pending debit notes.", "error");
+        onCountChangeRef.current?.(0);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [page, pageSize, debouncedSearch, refreshTick, pendingQueryKey]);
 
   const getCellValue = useCallback((row: PendingDebitNoteRow, key: string) => {
-    if (key === "dispatchNo") return row.dispatchNo || row.packingNo || "";
+    if (key === "dispatchNo") return row.dispatchNo || "";
     return (row as unknown as Record<string, unknown>)[key];
   }, []);
 
@@ -185,9 +292,9 @@ export function PendingDebitNotesPanel() {
     [],
   );
 
-  useEffect(() => {
-    setPage(1);
-  }, [search, dispatchFilter, pageSize]);
+  const handleCreate = (row: PendingDebitNoteRow) => {
+    router.push(`${DEBIT_NOTES_LIST_PATH}/new?pendingId=${encodeURIComponent(row.returnId)}`);
+  };
 
   return (
     <AccountsTableListing
@@ -206,30 +313,44 @@ export function PendingDebitNotesPanel() {
                 <SelectValue placeholder="All statuses" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all" className="text-xs">All statuses</SelectItem>
-                <SelectItem value="Ready for Dispatch" className="text-xs">Ready for Dispatch</SelectItem>
-                <SelectItem value="Dispatched" className="text-xs">Dispatched</SelectItem>
+                <SelectItem value="all" className="text-xs">
+                  All statuses
+                </SelectItem>
+                <SelectItem value="Ready for Dispatch" className="text-xs">
+                  Ready for Dispatch
+                </SelectItem>
+                <SelectItem value="Dispatched" className="text-xs">
+                  Dispatched
+                </SelectItem>
               </SelectContent>
             </Select>
           </div>
         </AccountsListingFilterCard>
       }
     >
-      <AccountsColumnFilterProvider
-        rows={toolbarFiltered}
-        getCellValue={getCellValue}
-        columnConfig={columnConfig}
-        defaultSortKey="returnDate"
-        defaultSortDir="desc"
-      >
-        <PendingDebitNotesTable
-          toolbarFiltered={toolbarFiltered}
-          page={page}
-          pageSize={pageSize}
-          onPageChange={setPage}
-          onPageSizeChange={setPageSize}
-        />
-      </AccountsColumnFilterProvider>
+      {loading ? (
+        <div className="p-8 text-center text-xs text-muted-foreground">
+          Loading pending returns...
+        </div>
+      ) : (
+        <AccountsColumnFilterProvider
+          rows={rows}
+          getCellValue={getCellValue}
+          columnConfig={columnConfig}
+          defaultSortKey="returnDate"
+          defaultSortDir="desc"
+        >
+          <PendingDebitNotesTable
+            toolbarFiltered={rows}
+            page={page}
+            pageSize={pageSize}
+            totalRecords={totalRecords}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+            onCreate={handleCreate}
+          />
+        </AccountsColumnFilterProvider>
+      )}
     </AccountsTableListing>
   );
 }

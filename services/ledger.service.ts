@@ -1,3 +1,4 @@
+import axios from "axios";
 import { axiosInstance } from "@/api/axios";
 import { API_ENDPOINTS } from "@/api/endpoints";
 import type { ApiResponse } from "@/types/api.types";
@@ -9,6 +10,16 @@ export interface LedgerOpeningBalanceDto {
   balanceType: "DEBIT" | "CREDIT" | string;
   effectiveDate: string;
   narration?: string | null;
+}
+
+export interface LedgerPeriodBalanceDto {
+  ledgerId: string;
+  openingAmount: number;
+  openingBalanceType: "Debit" | "Credit" | string;
+  currentBalance: number;
+  balanceType: "Debit" | "Credit" | string;
+  totalDebit: number;
+  totalCredit: number;
 }
 
 export interface LedgerTransactionDto {
@@ -117,6 +128,64 @@ export interface FinancialYearDto {
   endDate?: string;
 }
 
+export type LedgerDropdownNodeType =
+  | "PRIMARY_HEAD"
+  | "ACCOUNT_GROUP"
+  | "ACCOUNT_SUB_GROUP"
+  | "LEDGER";
+
+export interface LedgerDropdownNode {
+  id: string;
+  code: string;
+  name: string;
+  type: LedgerDropdownNodeType;
+  parentPath: string;
+  selectable: boolean;
+  aliasName?: string | null;
+  allowManualPosting?: boolean;
+  isSystemGenerated?: boolean;
+  status?: string;
+  sourceType?: string;
+  children: LedgerDropdownNode[];
+}
+
+export interface LedgerDropdownItem {
+  ledgerId: string;
+  ledgerCode: string;
+  ledgerName: string;
+  aliasName?: string | null;
+  parentPath: string;
+  allowManualPosting: boolean;
+  isSystemGenerated: boolean;
+  status: string;
+  sourceType: string;
+  primaryHead: { id: string; code: string; name: string };
+  accountGroup: { id: string; code: string; name: string };
+  accountSubGroup: { id: string; code: string; name: string };
+}
+
+export interface LedgerDropdownResponse {
+  tree: LedgerDropdownNode[];
+  ledgers: LedgerDropdownItem[];
+}
+
+export interface LedgerDropdownQuery {
+  search?: string;
+  status?: string;
+  sourceType?: string;
+  primaryHeadId?: string;
+  accountGroupId?: string;
+  accountSubGroupId?: string;
+  allowManualPosting?: boolean;
+}
+
+export interface GenericLedgerDropdownQuery extends LedgerDropdownQuery {
+  process?: string;
+  role?: string;
+  financialYearId?: string;
+  branchId?: string;
+}
+
 function unwrapData<T>(response: { data?: ApiResponse<T> | T }): T {
   const body = response.data as ApiResponse<T> | T | undefined;
   if (
@@ -143,7 +212,128 @@ function extractErrorMessage(error: unknown, fallback: string): string {
   );
 }
 
+export interface InventoryProductWiseRow {
+  productId: string;
+  productCode: string | null;
+  productName: string;
+  uom: string | null;
+  netQuantityConsumed: number;
+  netInventoryValue: number;
+  totalCreditAmount: number;
+  totalDebitAmount: number;
+  averageUnitCost: number;
+}
+
+export interface CogsProductWiseRow {
+  productId: string;
+  productCode: string | null;
+  productName: string;
+  uom: string | null;
+  netQuantitySold: number;
+  netCogsValue: number;
+  totalDebitAmount: number;
+  totalCreditAmount: number;
+  averageUnitCost: number;
+}
+
+export interface InventoryProductWiseLedger {
+  ledger_id: string;
+  ledger_name: string;
+  ledger_code: string;
+}
+
+export interface InventoryProductWiseResponse {
+  ledger: InventoryProductWiseLedger | null;
+  data: InventoryProductWiseRow[];
+  pagination: { page: number; limit: number; total: number; totalPages: number };
+  summary: { totalProducts: number; totalInventoryValue: number };
+}
+
+export interface CogsProductWiseResponse {
+  ledger: InventoryProductWiseLedger | null;
+  data: CogsProductWiseRow[];
+  pagination: { page: number; limit: number; total: number; totalPages: number };
+  summary: { totalProducts: number; totalCogsValue: number };
+}
+
+export interface SalesProductWiseRow {
+  productId: string;
+  productCode: string | null;
+  productName: string;
+  uom: string | null;
+  netSalesQty: number;
+  netSalesValue: number;
+  totalCreditAmount: number;
+  totalDebitAmount: number;
+  averageUnitCost: number;
+}
+
+export interface SalesProductWiseResponse {
+  ledger: InventoryProductWiseLedger | null;
+  data: SalesProductWiseRow[];
+  pagination: { page: number; limit: number; total: number; totalPages: number };
+  summary: { totalProducts: number; totalSalesValue: number };
+}
+
+export interface ProductTransactionRow {
+  lineId: string;
+  date: string;
+  voucherNo: string;
+  voucherType: string;
+  narration: string | null;
+  sourceModule: string | null;
+  referenceNo: string | null;
+  quantity: number | null;
+  unitRate: number | null;
+  debit: number;
+  credit: number;
+}
+
+export interface ProductTransactionsResponse {
+  ledger: InventoryProductWiseLedger | null;
+  data: ProductTransactionRow[];
+  pagination: { page: number; limit: number; total: number; totalPages: number };
+}
+
 export const LedgerService = {
+  async getDropdown(
+    query: LedgerDropdownQuery = {},
+    signal?: AbortSignal,
+  ): Promise<LedgerDropdownResponse> {
+    try {
+      const response = await axiosInstance.get<ApiResponse<LedgerDropdownResponse>>(
+        API_ENDPOINTS.ACCOUNTS.LEDGERS.DROPDOWN,
+        { params: query, signal },
+      );
+      const data = unwrapData(response);
+      return {
+        tree: data?.tree ?? [],
+        ledgers: data?.ledgers ?? [],
+      };
+    } catch (error) {
+      throw new Error(extractErrorMessage(error, "Failed to load ledger dropdown."));
+    }
+  },
+
+  async getGenericDropdown(
+    query: GenericLedgerDropdownQuery = {},
+    signal?: AbortSignal,
+  ): Promise<LedgerDropdownResponse> {
+    try {
+      const response = await axiosInstance.get<ApiResponse<LedgerDropdownResponse>>(
+        API_ENDPOINTS.ACCOUNTS.LEDGERS.GENERIC_DROPDOWN,
+        { params: query, signal },
+      );
+      const data = unwrapData(response);
+      return {
+        tree: data?.tree ?? [],
+        ledgers: data?.ledgers ?? [],
+      };
+    } catch (error) {
+      throw new Error(extractErrorMessage(error, "Failed to load generic ledger dropdown."));
+    }
+  },
+
   async previewNumber(signal?: AbortSignal): Promise<string> {
     const response = await axiosInstance.get<ApiResponse<{ previewNumber: string }>>(
       API_ENDPOINTS.ACCOUNTS.LEDGERS.PREVIEW_NUMBER,
@@ -163,6 +353,36 @@ export const LedgerService = {
       { params, signal },
     );
     return unwrapData(response);
+  },
+
+  async getBalances(
+    payload: { ledgerIds: string[]; dateFrom?: string; dateTo?: string },
+    signal?: AbortSignal,
+  ): Promise<LedgerPeriodBalanceDto[]> {
+    const ids = [...new Set(payload.ledgerIds.filter(Boolean))];
+    if (ids.length === 0) return [];
+
+    const chunks: string[][] = [];
+    for (let i = 0; i < ids.length; i += 500) {
+      chunks.push(ids.slice(i, i + 500));
+    }
+
+    const results = await Promise.all(
+      chunks.map(async (ledgerIds) => {
+        const response = await axiosInstance.post<ApiResponse<LedgerPeriodBalanceDto[]>>(
+          API_ENDPOINTS.ACCOUNTS.LEDGERS.BALANCES,
+          {
+            ledgerIds,
+            ...(payload.dateFrom ? { dateFrom: payload.dateFrom } : {}),
+            ...(payload.dateTo ? { dateTo: payload.dateTo } : {}),
+          },
+          { signal },
+        );
+        return unwrapData(response) ?? [];
+      }),
+    );
+
+    return results.flat();
   },
 
   async create(payload: CreateLedgerPayload): Promise<LedgerDetailDto> {
@@ -253,6 +473,106 @@ export const LedgerService = {
       return unwrapData(response) ?? null;
     } catch {
       return null;
+    }
+  },
+
+  async getStockInHandProductWise(params?: {
+    dateFrom?: string;
+    dateTo?: string;
+    warehouseId?: string;
+    page?: number;
+    limit?: number;
+    sortBy?: string;
+    sortDir?: "asc" | "desc";
+    search?: string;
+    minValue?: number;
+    maxValue?: number;
+    minQty?: number;
+    maxQty?: number;
+  }, signal?: AbortSignal): Promise<InventoryProductWiseResponse> {
+    try {
+      const response = await axiosInstance.get<ApiResponse<InventoryProductWiseResponse>>(
+        API_ENDPOINTS.ACCOUNTS.LEDGERS.STOCK_IN_HAND,
+        { params, signal },
+      );
+      return unwrapData(response) ?? { ledger: null, data: [], pagination: { page: 1, limit: 50, total: 0, totalPages: 0 }, summary: { totalProducts: 0, totalInventoryValue: 0 } };
+    } catch (error) {
+      if (axios.isCancel(error)) throw error;
+      throw new Error(extractErrorMessage(error, "Failed to load Stock in Hand product-wise listing."));
+    }
+  },
+
+  async getCogsProductWise(params?: {
+    dateFrom?: string;
+    dateTo?: string;
+    warehouseId?: string;
+    page?: number;
+    limit?: number;
+    sortBy?: string;
+    sortDir?: "asc" | "desc";
+    search?: string;
+    minValue?: number;
+    maxValue?: number;
+    minQty?: number;
+    maxQty?: number;
+  }, signal?: AbortSignal): Promise<CogsProductWiseResponse> {
+    try {
+      const response = await axiosInstance.get<ApiResponse<CogsProductWiseResponse>>(
+        API_ENDPOINTS.ACCOUNTS.LEDGERS.COGS,
+        { params, signal },
+      );
+      return unwrapData(response) ?? { ledger: null, data: [], pagination: { page: 1, limit: 50, total: 0, totalPages: 0 }, summary: { totalProducts: 0, totalCogsValue: 0 } };
+    } catch (error) {
+      if (axios.isCancel(error)) throw error;
+      throw new Error(extractErrorMessage(error, "Failed to load COGS product-wise listing."));
+    }
+  },
+
+  async getSalesProductWise(params?: {
+    dateFrom?: string;
+    dateTo?: string;
+    warehouseId?: string;
+    page?: number;
+    limit?: number;
+    sortBy?: string;
+    sortDir?: "asc" | "desc";
+    search?: string;
+    minValue?: number;
+    maxValue?: number;
+    minQty?: number;
+    maxQty?: number;
+  }, signal?: AbortSignal): Promise<SalesProductWiseResponse> {
+    try {
+      const response = await axiosInstance.get<ApiResponse<SalesProductWiseResponse>>(
+        API_ENDPOINTS.ACCOUNTS.LEDGERS.SALES_PRODUCT_WISE,
+        { params, signal },
+      );
+      return unwrapData(response) ?? { ledger: null, data: [], pagination: { page: 1, limit: 50, total: 0, totalPages: 0 }, summary: { totalProducts: 0, totalSalesValue: 0 } };
+    } catch (error) {
+      if (axios.isCancel(error)) throw error;
+      throw new Error(extractErrorMessage(error, "Failed to load Sales product-wise listing."));
+    }
+  },
+
+  async getProductTransactions(
+    ledgerType: "stock-in-hand" | "cogs" | "sales",
+    params: { productId: string; dateFrom?: string; dateTo?: string; warehouseId?: string; page?: number; limit?: number },
+    signal?: AbortSignal,
+  ): Promise<ProductTransactionsResponse> {
+    const endpointMap = {
+      "stock-in-hand": API_ENDPOINTS.ACCOUNTS.LEDGERS.STOCK_IN_HAND_PRODUCT_TRANSACTIONS,
+      "cogs": API_ENDPOINTS.ACCOUNTS.LEDGERS.COGS_PRODUCT_TRANSACTIONS,
+      "sales": API_ENDPOINTS.ACCOUNTS.LEDGERS.SALES_PRODUCT_TRANSACTIONS,
+    };
+    try {
+      const response = await axiosInstance.get<ApiResponse<ProductTransactionsResponse>>(
+        endpointMap[ledgerType],
+        { params, signal },
+      );
+      return unwrapData(response) ?? { ledger: null, data: [], pagination: { page: 1, limit: 50, total: 0, totalPages: 0 } };
+    } catch (error) {
+      if (axios.isCancel(error)) throw error;
+      throw new Error(extractErrorMessage(error, "Failed to load product transactions."));
     }
   },
 

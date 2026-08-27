@@ -1,7 +1,8 @@
 "use client";
 
 /**
- * Pending Credit Notes panel — Sales Return + Scheme (entitlement Review / legacy Generate).
+ * Pending Credit Notes panel — GET /accounts/credit-note/pending.
+ * Generate navigates with pendingId=<UUID> only.
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -34,38 +35,44 @@ import {
   AccountsColumnFilterProvider,
   AccountsColumnHeader,
   SortTh,
+  useAccountsColumnFilterContext,
   useAccountsFilteredRows,
 } from "@/app/(app)/accounts/components/AccountsUI";
 import type { AccountsColumnFilterConfig } from "@/lib/accounts/column-filter-types";
 import {
+  canGeneratePendingCreditNote,
   filterPendingCreditNotes,
-  listPendingCreditNotes,
+  mapPendingListRow,
   PENDING_CREDIT_SOURCE_LABELS,
   type PendingCreditNoteRow,
-  type PendingCreditNoteSourceType,
 } from "../pending-credit-notes-data";
 import { CREDIT_NOTES_LIST_PATH, formatINR } from "../note-utils";
-import { ReportMoreFilters } from "@/components/accounts/ReportMoreFilters";
-import { X } from "lucide-react";
-import { schemeClaimReviewHref } from "@/lib/accounts/scheme-entitlement-demo";
+import { CreditNoteListApi, creditNoteListApiError } from "../credit-note-list-api";
+import { AccountsToast, useAccountsToast } from "@/components/accounts/AccountsToast";
 
-const SOURCE_FILTER_OPTIONS: { value: PendingCreditNoteSourceType; label: string }[] = [
+/* Toolbar Source options — restore with ReportMoreFilters when needed.
+const SOURCE_FILTER_OPTIONS: { value: Exclude<PendingSourceFilter, "all">; label: string }[] = [
   { value: "sales_return", label: "Sales Return" },
   { value: "scheme", label: "Scheme" },
 ];
+*/
 
-const SOURCE_COLUMN_OPTIONS = ["sales_return", "scheme"];
+const SOURCE_COLUMN_OPTIONS = [
+  "SALES_RETURN",
+  "SPECIAL_SCHEME",
+  "NEAR_EXPIRY",
+  "CASH_DISCOUNT",
+  "TURNOVER_DISCOUNT",
+];
 
 function statusBadgeClass(status: string): string {
   switch (status) {
-    case "Approved":
-      return "bg-emerald-50 text-emerald-700";
-    case "Sent Back":
+    case "PENDING":
       return "bg-amber-50 text-amber-700";
-    case "Rejected":
+    case "CONVERTED":
+      return "bg-emerald-50 text-emerald-700";
+    case "CANCELLED":
       return "bg-red-50 text-red-700";
-    case "Pending Review":
-      return "bg-navy-50 text-navy-700";
     default:
       return "bg-slate-100 text-slate-600";
   }
@@ -78,8 +85,9 @@ function PendingCreditNotesTable({
   onPageChange,
   onPageSizeChange,
   onGenerate,
-  onReview,
+  onViewCreditNote,
   schemeFocused,
+  loading,
 }: {
   toolbarFiltered: PendingCreditNoteRow[];
   page: number;
@@ -87,14 +95,20 @@ function PendingCreditNotesTable({
   onPageChange: (p: number) => void;
   onPageSizeChange: (s: number) => void;
   onGenerate: (row: PendingCreditNoteRow) => void;
-  onReview: (row: PendingCreditNoteRow) => void;
+  onViewCreditNote: (row: PendingCreditNoteRow) => void;
   schemeFocused: boolean;
+  loading: boolean;
 }) {
   const visible = useAccountsFilteredRows(toolbarFiltered);
+  const ctx = useAccountsColumnFilterContext();
   const pagedRows = useMemo(
     () => visible.slice((page - 1) * pageSize, page * pageSize),
     [visible, page, pageSize],
   );
+
+  useEffect(() => {
+    onPageChange(1);
+  }, [ctx?.columnFilters, ctx?.sortKey, ctx?.sortDir, onPageChange]);
 
   const colSpan = schemeFocused ? 11 : 8;
 
@@ -118,12 +132,7 @@ function PendingCreditNotesTable({
                   colKey="status"
                   filterType="status"
                   sortable={false}
-                  statusOptions={[
-                    "Pending",
-                    "Pending Review",
-                    "Sent Back",
-                    "Approved",
-                  ]}
+                  statusOptions={["PENDING", "CONVERTED", "CANCELLED"]}
                 />
               </>
             ) : (
@@ -132,8 +141,9 @@ function PendingCreditNotesTable({
                   label="Source"
                   colKey="sourceType"
                   filterType="status"
-                  sortable={false}
-                  statusOptions={SOURCE_COLUMN_OPTIONS}
+                  statusOptions={SOURCE_COLUMN_OPTIONS.map(
+                    (k) => PENDING_CREDIT_SOURCE_LABELS[k] || k,
+                  )}
                 />
                 <SortTh label="Customer" colKey="customerName" className="accounts-col-party" />
                 <SortTh label="Reference" colKey="referenceNo" />
@@ -154,22 +164,22 @@ function PendingCreditNotesTable({
           </AccountsTableHeadRow>
         </AccountsTableHead>
         <AccountsTableBody>
-          {toolbarFiltered.length === 0 ? (
-            <AccountsTableEmpty
-              colSpan={colSpan}
-              message="No pending credit notes. Sales returns and scheme claims appear here until a credit note is generated."
-            />
+          {loading ? (
+            <AccountsTableEmpty colSpan={colSpan} message="Loading pending credit notes…" />
+          ) : toolbarFiltered.length === 0 ? (
+            <AccountsTableEmpty colSpan={colSpan} message="No pending credit notes found." />
           ) : visible.length === 0 ? (
             <AccountsTableEmpty colSpan={colSpan} message="No records match the column filters." />
           ) : (
             pagedRows.map((row) => {
-              const isEntitlement = row.schemeClaimKind === "entitlement" && Boolean(row.schemeEntitlementId);
+              const generate = canGeneratePendingCreditNote(row);
+              const viewConverted = row.status === "CONVERTED" && Boolean(row.credit_note_id);
               return (
-                <AccountsTableRow key={row.id}>
+                <AccountsTableRow key={row.pending_credit_note_id}>
                   {schemeFocused ? (
                     <>
                       <AccountsTableCell className="text-xs tabular-nums whitespace-nowrap">
-                        {row.eligibleDate || row.returnDate || "—"}
+                        {row.eligibleDate || "—"}
                       </AccountsTableCell>
                       <AccountsTableCell
                         className="accounts-col-party font-medium truncate text-xs"
@@ -212,12 +222,12 @@ function PendingCreditNotesTable({
                         <span
                           className={cn(
                             "inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded-full font-medium whitespace-nowrap",
-                            row.sourceType === "sales_return"
+                            row.sourceType === "SALES_RETURN"
                               ? "bg-brand-50 text-brand-700"
                               : "bg-purple-50 text-purple-700",
                           )}
                         >
-                          {PENDING_CREDIT_SOURCE_LABELS[row.sourceType]}
+                          {PENDING_CREDIT_SOURCE_LABELS[row.sourceType] || row.sourceType}
                         </span>
                       </AccountsTableCell>
                       <AccountsTableCell
@@ -229,8 +239,10 @@ function PendingCreditNotesTable({
                       <AccountsTableCell mono className="font-semibold text-brand-700 truncate text-xs">
                         {row.referenceNo}
                       </AccountsTableCell>
-                      <AccountsTableCell mono className="truncate text-xs">
-                        {row.linkedInvoiceNos.length ? row.linkedInvoiceNos.join(", ") : "—"}
+                      <AccountsTableCell mono className="truncate text-xs" title={row.linkedInvoiceNos.join(", ") || undefined}>
+                        {row.linkedInvoiceNos.length
+                          ? row.linkedInvoiceNos.join(", ")
+                          : "—"}
                       </AccountsTableCell>
                       <AccountsTableCell align="right" money className="text-xs tabular-nums">
                         {formatINR(row.eligibleCreditAmount)}
@@ -245,21 +257,21 @@ function PendingCreditNotesTable({
                   )}
                   <AccountsTableCell align="right" className={accountsActionColClass("single")}>
                     <AccountsTableActionCell variant="single">
-                      {isEntitlement ? (
-                        <button
-                          type="button"
-                          title="Review"
-                          className={ACCOUNTS_ACTION_BTN_CLASS}
-                          onClick={() => onReview(row)}
-                        >
-                          <Eye className={ACCOUNTS_ACTION_ICON_CLASS} />
-                        </button>
-                      ) : (
+                      {generate ? (
                         <AccountsGenerateAction
                           title="Generate Credit Note"
                           onClick={() => onGenerate(row)}
                         />
-                      )}
+                      ) : viewConverted ? (
+                        <button
+                          type="button"
+                          title="View Credit Note"
+                          className={ACCOUNTS_ACTION_BTN_CLASS}
+                          onClick={() => onViewCreditNote(row)}
+                        >
+                          <Eye className={ACCOUNTS_ACTION_ICON_CLASS} />
+                        </button>
+                      ) : null}
                     </AccountsTableActionCell>
                   </AccountsTableCell>
                 </AccountsTableRow>
@@ -282,30 +294,38 @@ function PendingCreditNotesTable({
   );
 }
 
-export function PendingCreditNotesPanel() {
+export function PendingCreditNotesPanel({
+  onCountChange,
+}: {
+  onCountChange?: (count: number) => void;
+}) {
   const router = useRouter();
+  const { toast, showToast, dismissToast } = useAccountsToast();
   const [rows, setRows] = useState<PendingCreditNoteRow[]>([]);
   const [search, setSearch] = useState("");
   const [sourceFilter, setSourceFilter] = useState<string>("all");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
+  const [loading, setLoading] = useState(true);
 
-  const refresh = useCallback(() => setRows(listPendingCreditNotes()), []);
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    try {
+      const result = await CreditNoteListApi.listPending({ page: 1, page_size: 100 });
+      const next = (result.items ?? []).map(mapPendingListRow);
+      setRows(next);
+      onCountChange?.(result.pagination?.total ?? next.length);
+    } catch (e) {
+      setRows([]);
+      onCountChange?.(0);
+      showToast(creditNoteListApiError(e, "Failed to load pending credit notes."), "error");
+    } finally {
+      setLoading(false);
+    }
+  }, [onCountChange, showToast]);
 
   useEffect(() => {
-    refresh();
-  }, [refresh]);
-
-  useEffect(() => {
-    const onVisible = () => {
-      if (document.visibilityState === "visible") refresh();
-    };
-    window.addEventListener("focus", refresh);
-    document.addEventListener("visibilitychange", onVisible);
-    return () => {
-      window.removeEventListener("focus", refresh);
-      document.removeEventListener("visibilitychange", onVisible);
-    };
+    void refresh();
   }, [refresh]);
 
   const toolbarFiltered = useMemo(
@@ -316,10 +336,10 @@ export function PendingCreditNotesPanel() {
   const schemeFocused = sourceFilter === "scheme";
 
   const getCellValue = useCallback((row: PendingCreditNoteRow, key: string) => {
-    if (key === "sourceType") return PENDING_CREDIT_SOURCE_LABELS[row.sourceType];
+    if (key === "sourceType") return PENDING_CREDIT_SOURCE_LABELS[row.sourceType] || row.sourceType;
     if (key === "linkedInvoices") return row.linkedInvoiceNos.join(", ");
     if (key === "schemeCode") return row.schemeCode || row.referenceNo;
-    if (key === "eligibleDate") return row.eligibleDate || row.returnDate || "";
+    if (key === "eligibleDate") return row.eligibleDate || "";
     if (key === "eligibleBaseAmount") return row.eligibleBaseAmount ?? row.eligibleCreditAmount;
     return (row as unknown as Record<string, unknown>)[key];
   }, []);
@@ -349,28 +369,16 @@ export function PendingCreditNotesPanel() {
     };
   }, [schemeFocused]);
 
-  const activeSourceCount = sourceFilter !== "all" ? 1 : 0;
-
-  const toggleSourceFilter = (value: PendingCreditNoteSourceType) => {
-    setSourceFilter((cur) => (cur === value ? "all" : value));
-  };
-
   const handleGenerate = (row: PendingCreditNoteRow) => {
-    if (row.sourceType === "sales_return" && row.returnId) {
-      router.push(`${CREDIT_NOTES_LIST_PATH}/new?returnId=${encodeURIComponent(row.returnId)}&mode=return`);
-      return;
-    }
-    if (row.schemeSettlementKey) {
-      router.push(
-        `${CREDIT_NOTES_LIST_PATH}/new?schemeKey=${encodeURIComponent(row.schemeSettlementKey)}&mode=scheme`,
-      );
-    }
+    if (!canGeneratePendingCreditNote(row)) return;
+    router.push(
+      `${CREDIT_NOTES_LIST_PATH}/new?pendingId=${encodeURIComponent(row.pending_credit_note_id)}`,
+    );
   };
 
-  const handleReview = (row: PendingCreditNoteRow) => {
-    if (row.schemeEntitlementId) {
-      router.push(schemeClaimReviewHref(row.schemeEntitlementId));
-    }
+  const handleViewCreditNote = (row: PendingCreditNoteRow) => {
+    if (!row.credit_note_id) return;
+    router.push(`${CREDIT_NOTES_LIST_PATH}/${row.credit_note_id}`);
   };
 
   useEffect(() => {
@@ -378,60 +386,66 @@ export function PendingCreditNotesPanel() {
   }, [search, sourceFilter, pageSize]);
 
   return (
-    <AccountsTableListing
-      toolbar={
-        <AccountsListingFilterCard>
-          <ReportSearchFilter
-            value={search}
-            onChange={setSearch}
-            placeholder="Search reference, customer, invoice, scheme…"
-            className="min-w-[180px] flex-1 max-w-sm"
-          />
-          <ReportMoreFilters activeCount={activeSourceCount}>
-            <div className="px-1 space-y-2">
-              <p className="text-xs font-semibold text-foreground">Source</p>
-              {SOURCE_FILTER_OPTIONS.map((opt) => (
-                <label key={opt.value} className="flex items-center gap-2.5 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    className="w-4 h-4 rounded accent-brand-600"
-                    checked={sourceFilter === opt.value}
-                    onChange={() => toggleSourceFilter(opt.value)}
-                  />
-                  <span className="text-xs text-foreground">{opt.label}</span>
-                </label>
-              ))}
-            </div>
-          </ReportMoreFilters>
-          {sourceFilter !== "all" && (
-            <span className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-brand-50 border border-brand-200 text-brand-700 rounded-md font-medium">
-              {PENDING_CREDIT_SOURCE_LABELS[sourceFilter as PendingCreditNoteSourceType]}
-              <button type="button" onClick={() => setSourceFilter("all")}>
-                <X className="w-3 h-3" />
-              </button>
-            </span>
-          )}
-        </AccountsListingFilterCard>
-      }
-    >
-      <AccountsColumnFilterProvider
-        rows={toolbarFiltered}
-        getCellValue={getCellValue}
-        columnConfig={columnConfig}
-        defaultSortKey={schemeFocused ? "eligibleDate" : "referenceNo"}
-        defaultSortDir="desc"
+    <>
+      <AccountsTableListing
+        toolbar={
+          <AccountsListingFilterCard>
+            <ReportSearchFilter
+              value={search}
+              onChange={setSearch}
+              placeholder="Search reference, customer, invoice, scheme…"
+              className="min-w-[180px] flex-1 max-w-sm"
+            />
+            {/* Toolbar Source / More Filters — same filter lives on the Source column.
+            <ReportMoreFilters activeCount={activeSourceCount}>
+              <div className="px-1 space-y-2">
+                <p className="text-xs font-semibold text-foreground">Source</p>
+                {SOURCE_FILTER_OPTIONS.map((opt) => (
+                  <label key={opt.value} className="flex items-center gap-2.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="w-4 h-4 rounded accent-brand-600"
+                      checked={sourceFilter === opt.value}
+                      onChange={() => toggleSourceFilter(opt.value)}
+                    />
+                    <span className="text-xs text-foreground">{opt.label}</span>
+                  </label>
+                ))}
+              </div>
+            </ReportMoreFilters>
+            {sourceFilter !== "all" && (
+              <span className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-brand-50 border border-brand-200 text-brand-700 rounded-md font-medium">
+                {PENDING_CREDIT_SOURCE_LABELS[sourceFilter] || sourceFilter}
+                <button type="button" onClick={() => setSourceFilter("all")}>
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+            */}
+          </AccountsListingFilterCard>
+        }
       >
-        <PendingCreditNotesTable
-          toolbarFiltered={toolbarFiltered}
-          page={page}
-          pageSize={pageSize}
-          onPageChange={setPage}
-          onPageSizeChange={setPageSize}
-          onGenerate={handleGenerate}
-          onReview={handleReview}
-          schemeFocused={schemeFocused}
-        />
-      </AccountsColumnFilterProvider>
-    </AccountsTableListing>
+        <AccountsColumnFilterProvider
+          rows={toolbarFiltered}
+          getCellValue={getCellValue}
+          columnConfig={columnConfig}
+          defaultSortKey={schemeFocused ? "eligibleDate" : "referenceNo"}
+          defaultSortDir="desc"
+        >
+          <PendingCreditNotesTable
+            toolbarFiltered={toolbarFiltered}
+            page={page}
+            pageSize={pageSize}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+            onGenerate={handleGenerate}
+            onViewCreditNote={handleViewCreditNote}
+            schemeFocused={schemeFocused}
+            loading={loading}
+          />
+        </AccountsColumnFilterProvider>
+      </AccountsTableListing>
+      <AccountsToast toast={toast} onDismiss={dismissToast} />
+    </>
   );
 }

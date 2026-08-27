@@ -5,17 +5,69 @@ import { cn } from "@/lib/utils";
 import { AlertCircle, Package } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { formatCurrency, type TaxSupplyType } from "@/lib/procurement/utils";
-import type { PurchaseReturnItem, PurchaseReturnUnit } from "../purchase-return-data";
+import type { PurchaseReturnItem } from "../purchase-return-data";
 import {
   clampReturnDisplayValue,
   getReturnQtyError,
   resolveAvailableReturnBaseQty,
   resolveDisplayQtyFromBase,
   resolveMaxReturnBaseQty,
+  resolveQtyStack,
   resolveReturnBaseQtyFromItem,
+  type QtyStackParts,
 } from "../purchase-return-utils";
 
 const inputCls = "h-8 rounded-lg text-xs";
+
+function formatStackNum(n: number): string {
+  if (!Number.isFinite(n) || n <= 0) return "0";
+  return Number.isInteger(n)
+    ? String(n)
+    : n.toLocaleString("en-IN", { maximumFractionDigits: 3 });
+}
+
+/** Stacked Case / Unit / Kg-Ltr display for a base qty. */
+function StackedQtyCell({
+  stack,
+  emphasize = "case",
+  empty = false,
+}: {
+  stack: QtyStackParts;
+  emphasize?: "case" | "unit";
+  empty?: boolean;
+}) {
+  if (empty) {
+    return <span className="text-xs text-muted-foreground">—</span>;
+  }
+  const caseCls =
+    emphasize === "case"
+      ? "text-xs tabular-nums font-semibold text-foreground"
+      : "text-[10px] tabular-nums text-muted-foreground";
+  const unitCls =
+    emphasize === "unit"
+      ? "text-xs tabular-nums font-semibold text-foreground"
+      : "text-[10px] tabular-nums text-muted-foreground";
+  return (
+    <div className="space-y-0.5 text-right leading-tight min-w-[72px]">
+      <p className={caseCls}>{formatStackNum(stack.caseQty)} Case</p>
+      <p className={unitCls}>{formatStackNum(stack.unitQty)} Unit</p>
+      {stack.weightQty != null && stack.weightUom ? (
+        <p className="text-[10px] tabular-nums text-muted-foreground">
+          {formatStackNum(stack.weightQty)} {stack.weightUom}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function itemQtyStack(baseQty: number, item: PurchaseReturnItem): QtyStackParts {
+  return resolveQtyStack(
+    baseQty,
+    item.caseSize,
+    item.netWeightPerPack,
+    item.weightUom,
+  );
+}
 
 function SectionHead({ label, sub }: { label: string; sub?: string }) {
   return (
@@ -28,11 +80,33 @@ function SectionHead({ label, sub }: { label: string; sub?: string }) {
 
 function TaxPctAmountCell({ pct, amount }: { pct: number; amount: number }) {
   return (
-    <div className="space-y-0.5 text-right">
-      <p className="text-xs tabular-nums text-foreground">{pct}%</p>
-      <p className="text-[10px] tabular-nums font-medium text-muted-foreground">
+    <div className="space-y-0.5 text-right leading-tight">
+      <p className="text-xs tabular-nums font-medium text-foreground">
         {formatCurrency(amount)}
       </p>
+      <p className="text-[10px] tabular-nums text-muted-foreground">{pct}%</p>
+    </div>
+  );
+}
+
+function ProductCell({ item }: { item: PurchaseReturnItem }) {
+  const sku = (item.sku || "").trim();
+  const code = (item.productCode || "").trim();
+  return (
+    <div className="space-y-0.5 min-w-[140px] max-w-[220px]">
+      <p className="text-xs font-medium text-foreground leading-snug">
+        {item.productName || "—"}
+      </p>
+      {code ? (
+        <p className="text-[10px] font-mono font-semibold text-brand-700 leading-tight">
+          {code}
+        </p>
+      ) : null}
+      {sku ? (
+        <p className="text-[10px] font-mono text-muted-foreground leading-tight">
+          SKU: {sku}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -53,20 +127,6 @@ function rejectionSourceLabel(source?: string): string {
     default:
       return "QC Rejected";
   }
-}
-
-function QuantityTypeBadge({ quantityType }: { quantityType: PurchaseReturnUnit }) {
-  const isCase = quantityType === "CASE";
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap",
-        isCase ? "bg-sky-50 text-sky-800" : "bg-violet-50 text-violet-800",
-      )}
-    >
-      {quantityType}
-    </span>
-  );
 }
 
 function RejectionSourceBadge({ source }: { source?: string }) {
@@ -127,12 +187,14 @@ function ReturnItemsTable({
   errors,
   taxSupplyType,
   onItemChange,
+  loading = false,
 }: {
   items: PurchaseReturnItem[];
   readOnly?: boolean;
   errors?: Record<string, string>;
   taxSupplyType: TaxSupplyType;
   onItemChange: (id: string, patch: Partial<PurchaseReturnItem>) => void;
+  loading?: boolean;
 }) {
   const showLatestGrn = useMemo(
     () => items.some((it) => it.latestGrnNo && it.latestGrnNo !== it.grnNo),
@@ -151,15 +213,21 @@ function ReturnItemsTable({
     return (
       <div className="rounded-lg border border-dashed border-border bg-muted/10 px-4 py-8 text-center">
         <Package className="mx-auto mb-2 h-8 w-8 text-muted-foreground/70" />
-        <p className="text-sm font-semibold text-foreground">No batches</p>
-        <p className="mt-1 text-xs text-muted-foreground">No line items in this section.</p>
+        <p className="text-sm font-semibold text-foreground">
+          {loading ? "Loading batches…" : "No batches"}
+        </p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {loading
+            ? "Fetching returnable rejected stock for this purchase order."
+            : "No line items in this section."}
+        </p>
       </div>
     );
   }
 
   return (
     <div className="overflow-x-auto rounded-xl border border-border shadow-sm">
-      <table className="w-full min-w-[1680px]">
+      <table className="w-full min-w-[1120px]">
         <thead>
           <tr className="border-b border-border bg-muted/40">
             {!readOnly ? (
@@ -175,22 +243,16 @@ function ReturnItemsTable({
               "Source",
               "Origin GRN",
               ...(showLatestGrn ? ["Latest GRN"] : []),
-              "Product Code",
-              "Product Name",
+              "Product",
               "Batch No.",
               "MFG Date",
               "Expiry",
-              "Qty Type",
-              "GRN Rcvd",
               "QC Rejected",
-              "Returned",
-              "Balance (Case)",
-              "Balance (Pcs)",
-              "Return (Case)",
-              "Return (Piece)",
-              "Total (Pcs)",
+              "Previous Return",
+              "Balance",
+              "Return Qty",
               "Rate",
-              "GST %",
+              "GST",
               ...(taxSupplyType === "intra" ? ["CGST", "SGST"] : ["IGST"]),
               "Amount",
               "Line Remark",
@@ -200,16 +262,12 @@ function ReturnItemsTable({
                 className={cn(
                   "px-3 py-2.5 text-left text-xs font-semibold text-foreground whitespace-nowrap",
                   [
-                    "GRN Rcvd",
                     "QC Rejected",
-                    "Returned",
-                    "Balance (UOM)",
-                    "Balance (Pcs)",
-                    "Return Qty (Case)",
-                    "Return Qty (Piece)",
-                    "Total Qty (Pcs)",
+                    "Previous Return",
+                    "Balance",
+                    "Return Qty",
                     "Rate",
-                    "GST %",
+                    "GST",
                     "CGST",
                     "SGST",
                     "IGST",
@@ -229,34 +287,24 @@ function ReturnItemsTable({
             const canEditQty = it.selected && !rowDisabled;
             const rowError = errors?.[it.id] ?? getReturnQtyError(it);
             const gstPct = gstPctFromLine(it);
+            const gstAmount =
+              Number(it.taxAmount) ||
+              Number(it.cgstAmount) + Number(it.sgstAmount) + Number(it.igstAmount) ||
+              0;
 
             const maxReturnBase = resolveMaxReturnBaseQty(it);
             const availableBase = resolveAvailableReturnBaseQty(it);
-            const balanceDisplayQty = resolveDisplayQtyFromBase(
-              availableBase,
-              it.quantityType,
-              it.caseSize,
-            );
             const maxReturnDisplayQty = resolveDisplayQtyFromBase(
               maxReturnBase,
               it.quantityType,
               it.caseSize,
             );
-            const grnReceivedDisplayQty = resolveDisplayQtyFromBase(
-              it.grnReceivedQty,
-              it.quantityType,
-              it.caseSize,
-            );
-            const qcRejectedDisplayQty = resolveDisplayQtyFromBase(
-              it.qcRejectedQty,
-              it.quantityType,
-              it.caseSize,
-            );
-            const alreadyReturnedDisplayQty = resolveDisplayQtyFromBase(
-              it.alreadyReturnedQty,
-              it.quantityType,
-              it.caseSize,
-            );
+            const emphasize = it.quantityType === "CASE" ? "case" : "unit";
+            const qcStack = itemQtyStack(it.qcRejectedQty, it);
+            const returnedStack = itemQtyStack(it.alreadyReturnedQty, it);
+            const balanceStack = itemQtyStack(availableBase, it);
+            const returnStack = itemQtyStack(it.returnQty || 0, it);
+            const inputLabel = it.quantityType === "CASE" ? "Case" : "Unit";
 
             return (
               <tr
@@ -267,7 +315,7 @@ function ReturnItemsTable({
                   it.selected && !fullyReturned && "bg-brand-50/40",
                 )}
               >
-                <td className="px-3 py-2 text-center">
+                <td className="px-3 py-2 text-center align-top">
                   {readOnly ? (
                     <span className="text-xs text-muted-foreground">{it.selected ? "✓" : "—"}</span>
                   ) : (
@@ -281,143 +329,98 @@ function ReturnItemsTable({
                     />
                   )}
                 </td>
-                <td className="px-3 py-2">
+                <td className="px-3 py-2 align-top">
                   <RejectionSourceBadge source={it.rejectionSource} />
                 </td>
-                <td className="px-3 py-2 font-mono text-xs text-muted-foreground">{it.grnNo || "—"}</td>
+                <td className="px-3 py-2 font-mono text-xs text-muted-foreground align-top">{it.grnNo || "—"}</td>
                 {showLatestGrn && (
-                  <td className="px-3 py-2 font-mono text-xs text-amber-700">
+                  <td className="px-3 py-2 font-mono text-xs text-amber-700 align-top">
                     {it.latestGrnNo && it.latestGrnNo !== it.grnNo ? it.latestGrnNo : "—"}
                   </td>
                 )}
-                <td className="px-3 py-2 font-mono text-xs font-semibold text-brand-700">
-                  {it.productCode}
+                <td className="px-3 py-2 align-top">
+                  <ProductCell item={it} />
                 </td>
-                <td className="px-3 py-2 text-xs font-medium text-foreground">{it.productName}</td>
-                <td className="px-3 py-2 font-mono text-xs text-foreground">{it.batchNumber}</td>
-                <td className="px-3 py-2 text-xs text-muted-foreground">{it.mfgDate || "—"}</td>
-                <td className="px-3 py-2 text-xs text-muted-foreground">{it.expDate || "—"}</td>
-                <td className="px-3 py-2 text-center">
-                  <QuantityTypeBadge quantityType={it.quantityType} />
+                <td className="px-3 py-2 font-mono text-xs text-foreground align-top">{it.batchNumber}</td>
+                <td className="px-3 py-2 text-xs text-muted-foreground align-top">{it.mfgDate || "—"}</td>
+                <td className="px-3 py-2 text-xs text-muted-foreground align-top">{it.expDate || "—"}</td>
+                <td className="px-3 py-2 align-top">
+                  <StackedQtyCell
+                    stack={qcStack}
+                    emphasize={emphasize}
+                    empty={!it.qcRejectedQty}
+                  />
                 </td>
-                <td className="px-3 py-2 text-right text-xs tabular-nums text-foreground">
-                  {grnReceivedDisplayQty}
+                <td className="px-3 py-2 align-top">
+                  <StackedQtyCell
+                    stack={returnedStack}
+                    emphasize={emphasize}
+                    empty={!it.alreadyReturnedQty}
+                  />
                 </td>
-                <td className="px-3 py-2 text-right text-xs tabular-nums font-medium text-red-600">
-                  {it.qcRejectedQty ? qcRejectedDisplayQty : "—"}
+                <td className="px-3 py-2 align-top">
+                  <StackedQtyCell stack={balanceStack} emphasize={emphasize} />
                 </td>
-                <td className="px-3 py-2 text-right text-xs tabular-nums text-muted-foreground">
-                  {alreadyReturnedDisplayQty}
-                </td>
-                <td className="px-3 py-2 text-right text-xs tabular-nums font-semibold text-foreground">
-                  {balanceDisplayQty}
-                </td>
-                <td className="px-3 py-2 text-right text-xs tabular-nums font-medium text-foreground">
-                  {availableBase}
-                </td>
-                <td className="px-3 py-2 text-right">
-                  {!canEditQty ? (
-                    <span className="text-xs tabular-nums text-muted-foreground">
-                      {it.quantityType === "CASE"
-                        ? it.returnValue > 0
-                          ? it.returnValue
-                          : it.returnQty > 0
-                            ? resolveDisplayQtyFromBase(it.returnQty, "CASE", it.caseSize)
-                            : "—"
-                        : "—"}
-                    </span>
-                  ) : (
-                    it.quantityType === "CASE" ? (
-                      <Input
-                        type="number"
-                        min={0}
-                        value={it.returnValue || ""}
-                        onChange={(e) => {
-                          const raw = e.target.value === "" ? 0 : Number(e.target.value);
-                          const displayValue = clampReturnDisplayValue(
-                            raw,
-                            maxReturnDisplayQty,
-                            it.quantityType,
-                            it.caseSize,
-                          );
-                          const nextItem = {
-                            ...it,
-                            returnValue: displayValue,
-                            returnUnit: it.quantityType,
-                          };
-                          onItemChange(it.id, {
-                            returnValue: displayValue,
-                            returnUnit: it.quantityType,
-                            returnQty: resolveReturnBaseQtyFromItem(nextItem),
-                          });
-                        }}
-                        className={cn("h-8 w-20 text-xs tabular-nums", rowError && "border-red-400")}
-                        placeholder="Cases"
-                      />
+                <td className="w-[140px] px-3 py-2 align-top">
+                  <div className="flex w-full flex-col items-end gap-1">
+                    {!canEditQty ? (
+                      <span className="text-xs tabular-nums text-muted-foreground">
+                        {it.returnValue > 0 || it.returnQty > 0
+                          ? `${it.returnValue > 0 ? it.returnValue : resolveDisplayQtyFromBase(it.returnQty, it.quantityType, it.caseSize)} ${inputLabel}`
+                          : "—"}
+                      </span>
                     ) : (
-                      <span className="text-xs tabular-nums text-muted-foreground">—</span>
-                    )
-                  )}
-                </td>
-                <td className="px-3 py-2 text-right">
-                  {!canEditQty ? (
-                    <span className="text-xs tabular-nums text-muted-foreground">
-                      {it.quantityType === "PIECE"
-                        ? it.returnValue > 0
-                          ? it.returnValue
-                          : it.returnQty > 0
-                            ? it.returnQty
-                            : "—"
-                        : "—"}
-                    </span>
-                  ) : (
-                    it.quantityType === "PIECE" ? (
-                      <Input
-                        type="number"
-                        min={0}
-                        value={it.returnValue || ""}
-                        onChange={(e) => {
-                          const raw = e.target.value === "" ? 0 : Number(e.target.value);
-                          const displayValue = clampReturnDisplayValue(
-                            raw,
-                            maxReturnDisplayQty,
-                            it.quantityType,
-                            it.caseSize,
-                          );
-                          const nextItem = {
-                            ...it,
-                            returnValue: displayValue,
-                            returnUnit: it.quantityType,
-                          };
-                          onItemChange(it.id, {
-                            returnValue: displayValue,
-                            returnUnit: it.quantityType,
-                            returnQty: resolveReturnBaseQtyFromItem(nextItem),
-                          });
-                        }}
-                        className={cn("h-8 w-20 text-xs tabular-nums", rowError && "border-red-400")}
-                        placeholder="Pieces"
+                      <div className="flex w-full justify-end">
+                        <Input
+                          type="number"
+                          min={0}
+                          value={it.returnValue || ""}
+                          onChange={(e) => {
+                            const raw = e.target.value === "" ? 0 : Number(e.target.value);
+                            const displayValue = clampReturnDisplayValue(
+                              raw,
+                              maxReturnDisplayQty,
+                              it.quantityType,
+                              it.caseSize,
+                            );
+                            const nextItem = {
+                              ...it,
+                              returnValue: displayValue,
+                              returnUnit: it.quantityType,
+                            };
+                            onItemChange(it.id, {
+                              returnValue: displayValue,
+                              returnUnit: it.quantityType,
+                              returnQty: resolveReturnBaseQtyFromItem(nextItem),
+                            });
+                          }}
+                          className={cn(
+                            "h-8 w-[5.5rem] shrink-0 text-right text-xs tabular-nums",
+                            rowError && "border-red-400",
+                          )}
+                          placeholder={inputLabel}
+                        />
+                      </div>
+                    )}
+                    {(it.returnQty > 0 || canEditQty) && (
+                      <StackedQtyCell
+                        stack={returnStack}
+                        emphasize={emphasize}
+                        empty={!(it.returnQty > 0)}
                       />
-                    ) : (
-                      <span className="text-xs tabular-nums text-muted-foreground">—</span>
-                    )
-                  )}
+                    )}
+                    {rowError && (
+                      <p className="w-full text-right text-[10px] leading-tight text-red-500">
+                        {rowError}
+                      </p>
+                    )}
+                  </div>
                 </td>
-                <td className="px-3 py-2 text-right">
-                  <span className="text-xs tabular-nums text-foreground">
-                    {it.returnQty || "—"}
-                  </span>
-                  {rowError && (
-                    <p className="mt-1 text-[10px] leading-tight text-red-500 max-w-[160px]">
-                      {rowError}
-                    </p>
-                  )}
-                </td>
-                <td className="px-3 py-2 text-right text-xs tabular-nums text-foreground">
+                <td className="px-3 py-2 text-right text-xs tabular-nums text-foreground align-top">
                   {formatCurrency(it.unitPrice)}
                 </td>
-                <td className="px-3 py-2 text-right text-xs tabular-nums text-muted-foreground">
-                  {gstPct}%
+                <td className="px-3 py-2 align-top">
+                  <TaxPctAmountCell pct={gstPct} amount={gstAmount} />
                 </td>
                 {taxSupplyType === "intra" ? (
                   <>
@@ -433,10 +436,10 @@ function ReturnItemsTable({
                     <TaxPctAmountCell pct={it.igstPct} amount={it.igstAmount} />
                   </td>
                 )}
-                <td className="px-3 py-2 text-right text-xs font-semibold tabular-nums font-mono text-foreground">
+                <td className="px-3 py-2 text-right text-xs font-semibold tabular-nums font-mono text-foreground align-top">
                   {it.selected && it.returnQty > 0 ? formatCurrency(it.netAmount) : "—"}
                 </td>
-                <td className="px-3 py-2">
+                <td className="px-3 py-2 align-top">
                   {!canEditQty ? (
                     <span className="text-xs text-muted-foreground">{it.lineRemark || "—"}</span>
                   ) : (
@@ -513,6 +516,7 @@ export function PReturnLineItemsSection({
   onItemChange,
   editMode = false,
   warehouseName,
+  loading = false,
 }: {
   items: PurchaseReturnItem[];
   readOnly?: boolean;
@@ -521,6 +525,7 @@ export function PReturnLineItemsSection({
   onItemChange: (id: string, patch: Partial<PurchaseReturnItem>) => void;
   editMode?: boolean;
   warehouseName?: string;
+  loading?: boolean;
 }) {
   const existingItems = useMemo(
     () => (editMode ? items.filter((it) => Boolean(it.isExistingOnReturn)) : items),
@@ -591,6 +596,7 @@ export function PReturnLineItemsSection({
           errors={errors}
           taxSupplyType={taxSupplyType}
           onItemChange={onItemChange}
+          loading={loading}
         />
       </div>
     );
@@ -638,6 +644,7 @@ export function PReturnLineItemsSection({
           errors={errors}
           taxSupplyType={taxSupplyType}
           onItemChange={onItemChange}
+          loading={loading}
         />
       </div>
     </div>

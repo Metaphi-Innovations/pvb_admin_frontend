@@ -12,7 +12,7 @@ export default async function PurchaseInvoiceViewPage({ params }: Props) {
   const { id } = await params;
   return (
     <Suspense>
-      <PurchaseInvoiceViewClient invoiceId={Number(id)} />
+      <PurchaseInvoiceViewClient invoiceId={id} />
     </Suspense>
   );
 }

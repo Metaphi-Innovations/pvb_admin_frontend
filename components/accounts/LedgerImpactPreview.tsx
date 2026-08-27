@@ -15,10 +15,12 @@ export function LedgerImpactPreview({
   title = "Ledger Impact Preview",
   lines,
   className,
+  description,
 }: {
   title?: string;
   lines: LedgerImpactLine[];
   className?: string;
+  description?: string;
 }) {
   if (!lines.length) return null;
 
@@ -28,8 +30,8 @@ export function LedgerImpactPreview({
         {title}
       </h2>
       <p className="text-xs text-muted-foreground leading-relaxed">
-        Preview of accounting entries when this document is posted. No actual posting until you
-        confirm.
+        {description ??
+          "Preview of accounting entries when this document is posted. No actual posting until you confirm."}
       </p>
       <div className="overflow-x-auto rounded-md border border-border/50">
         <table className="w-full text-xs min-w-[320px]">

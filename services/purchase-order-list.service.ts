@@ -31,6 +31,8 @@ export interface PurchaseOrderListItem {
   threeWayMatchStatus: ThreeWayMatchStatus;
   threeWayMatchReasons: string[];
   threeWayMatchReasonLabels: string[];
+  /** True when QC-rejected stock still remains returnable for this PO. */
+  hasReturnableQty: boolean;
   createdAt: string;
   updatedAt: string;
   createdBy: string;
@@ -172,6 +174,7 @@ function mapItem(raw: Record<string, unknown>): PurchaseOrderListItem {
     threeWayMatchStatus: mapThreeWayMatchStatus(raw.three_way_match_status),
     threeWayMatchReasons: reasons,
     threeWayMatchReasonLabels: reasonLabels,
+    hasReturnableQty: raw.has_returnable_qty === true,
     createdAt: asString(raw.created_at),
     updatedAt: asString(raw.updated_at),
     createdBy: toDisplayName(raw.created_by_user),

@@ -43,8 +43,10 @@ export default function NewProductPage() {
   const [productImages, setProductImages] = useState<ProductImage[]>([]);
   const [productUrls, setProductUrls] = useState<ProductUrl[]>([]);
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
-  const { data: previewNumber } = useProductPreviewNumber();
-  // console.log("Asdadsd", previewNumber);
+  const { data: previewNumber } = useProductPreviewNumber(
+    form.packSize,
+    form.baseUnit,
+  );
   const clearErr = (key: string) =>
     setErrors((prev) => {
       const next = { ...prev };

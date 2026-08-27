@@ -109,3 +109,89 @@ export function formatDisplayQuantity(input: {
     label: quantityType === "CASE" ? "Case" : "Piece",
   };
 }
+
+export type GrnWeightUom = "Kg" | "Ltr";
+
+export type GrnQtyStackMeta = {
+  packingSize?: number | null;
+  netWeightPerPack?: number | null;
+  weightUom?: string | null;
+};
+
+export type GrnQtyStackParts = {
+  caseQty: number;
+  unitQty: number;
+  weightQty: number | null;
+  weightUom: GrnWeightUom | null;
+};
+
+export function formatStackNum(n: number): string {
+  if (!Number.isFinite(n) || n < 0) return "0";
+  if (Number.isInteger(n)) return String(n);
+  return n.toLocaleString("en-IN", { maximumFractionDigits: 3 });
+}
+
+function normalizeWeightUom(value?: string | null): GrnWeightUom | null {
+  const uom = String(value || "").trim().toLowerCase();
+  if (uom === "kg") return "Kg";
+  if (uom === "ltr" || uom === "liter" || uom === "litre" || uom === "l") return "Ltr";
+  return null;
+}
+
+/** Convert stored base/SKU qty into Case + Unit + optional Kg/Ltr. */
+export function resolveGrnQtyStack(
+  baseQty: number,
+  meta?: GrnQtyStackMeta,
+): GrnQtyStackParts {
+  const unitQty = Math.max(0, Number(baseQty) || 0);
+  const packingSize = Number(meta?.packingSize) || 0;
+  const caseQty =
+    packingSize > 0 ? Math.round((unitQty / packingSize) * 1000) / 1000 : 0;
+  const net = Number(meta?.netWeightPerPack) || 0;
+  const weightUom = normalizeWeightUom(meta?.weightUom);
+  const weightQty =
+    caseQty > 0 && net > 0 && weightUom
+      ? Math.round(caseQty * net * 1000) / 1000
+      : null;
+  return { caseQty, unitQty, weightQty, weightUom };
+}
+
+export function formatQtyStackInline(stack: GrnQtyStackParts): string {
+  const parts = [
+    `${formatStackNum(stack.caseQty)} Case`,
+    `${formatStackNum(stack.unitQty)} Unit`,
+  ];
+  if (stack.weightQty != null && stack.weightUom) {
+    parts.push(`${formatStackNum(stack.weightQty)} ${stack.weightUom}`);
+  }
+  return parts.join(" · ");
+}
+
+export function sumGrnQtyStacks(stacks: GrnQtyStackParts[]): {
+  caseQty: number;
+  unitQty: number;
+  kg: number;
+  ltr: number;
+} {
+  return stacks.reduce(
+    (acc, stack) => {
+      acc.caseQty += stack.caseQty || 0;
+      acc.unitQty += stack.unitQty || 0;
+      if (stack.weightQty != null && stack.weightUom === "Kg") acc.kg += stack.weightQty;
+      if (stack.weightQty != null && stack.weightUom === "Ltr") acc.ltr += stack.weightQty;
+      return acc;
+    },
+    { caseQty: 0, unitQty: 0, kg: 0, ltr: 0 },
+  );
+}
+
+export function formatQtyStackTotals(stacks: GrnQtyStackParts[]): string {
+  const totals = sumGrnQtyStacks(stacks);
+  const parts = [
+    `${formatStackNum(totals.caseQty)} Case`,
+    `${formatStackNum(totals.unitQty)} Unit`,
+  ];
+  if (totals.kg > 0) parts.push(`${formatStackNum(totals.kg)} Kg`);
+  if (totals.ltr > 0) parts.push(`${formatStackNum(totals.ltr)} Ltr`);
+  return parts.join(" · ");
+}

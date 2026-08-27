@@ -17,7 +17,6 @@ import {
   MoreVertical,
   Eye,
   Edit2,
-  Upload,
   ShoppingCart,
   Scissors,
   MessageSquare,
@@ -53,7 +52,6 @@ import {
   usePurchaseOrderFilterDropdown,
   usePurchaseOrderList,
   usePurchaseOrderSummary,
-  useUploadPOInvoice,
 } from "@/hooks/procurement";
 import { useDebouncedFilters } from "@/lib/masters/use-debounced-filters";
 import { useLazyFilterColumns } from "@/lib/masters/use-lazy-filter-columns";
@@ -65,7 +63,6 @@ import type { PurchaseOrderListKeyParams } from "@/lib/procurement/purchase-orde
 import type { POListingKpis } from "@/lib/procurement/listing-kpis";
 import { POListingKpiRow } from "../components/listing/ListingKpiRows";
 import { PurchaseReturnListing } from "./components/PurchaseReturnListing";
-import { UploadVendorInvoiceDialog } from "./components/UploadVendorInvoiceDialog";
 import { AddFollowUpModal } from "./components/AddFollowUpModal";
 import {
   POActionConfirmModal,
@@ -77,7 +74,12 @@ import {
 } from "@/services/purchase-order.service";
 import type { POFollowUpEntry } from "./po-followup-data";
 import type { PurchaseOrder } from "./po-data";
-import { canUploadPOInvoiceForStatus } from "./po-invoice-utils";
+import {
+  canCancelPOStatus,
+  canClosePOStatus,
+  canCreatePurchaseReturnPO,
+  canShortClosePOStatus,
+} from "./po-actions";
 import { COMPANY_BILLING } from "@/lib/procurement/config";
 import { purchaseReturnRoutes } from "../purchase-returns/purchase-return-utils";
 
@@ -139,7 +141,6 @@ export default function PurchaseOrdersPageClient() {
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
   const [modalPoId, setModalPoId] = useState<string | null>(null);
   const [modalListItem, setModalListItem] = useState<PurchaseOrderListItem | null>(null);
-  const [uploadOpen, setUploadOpen] = useState(false);
   const [followUpOpen, setFollowUpOpen] = useState(false);
   const [actionConfirmOpen, setActionConfirmOpen] = useState(false);
   const [actionConfirmType, setActionConfirmType] = useState<POActionConfirmType>("close");
@@ -198,7 +199,6 @@ export default function PurchaseOrdersPageClient() {
   });
   const exportMutation = useExportPurchaseOrders();
   const modalPoQuery = usePurchaseOrder(modalPoId);
-  const uploadMutation = useUploadPOInvoice();
   const followupMutation = useCreatePOFollowup();
   const closeMutation = useClosePurchaseOrder();
   const cancelMutation = useCancelPurchaseOrder();
@@ -268,7 +268,6 @@ export default function PurchaseOrdersPageClient() {
   }, [modalPoQuery.data, modalListItem]);
 
   const closeModals = () => {
-    setUploadOpen(false);
     setFollowUpOpen(false);
     setActionConfirmOpen(false);
     setModalPoId(null);
@@ -276,18 +275,9 @@ export default function PurchaseOrdersPageClient() {
     setModalFollowups([]);
   };
 
-  const openUploadModal = (row: PurchaseOrderListItem) => {
-    setModalPoId(row.id);
-    setModalListItem(row);
-    setFollowUpOpen(false);
-    setActionConfirmOpen(false);
-    setUploadOpen(true);
-  };
-
   const openFollowUpModal = (row: PurchaseOrderListItem) => {
     setModalPoId(row.id);
     setModalListItem(row);
-    setUploadOpen(false);
     setActionConfirmOpen(false);
     setFollowUpOpen(true);
   };
@@ -295,7 +285,6 @@ export default function PurchaseOrdersPageClient() {
   const openActionConfirm = (row: PurchaseOrderListItem, action: POActionConfirmType) => {
     setModalPoId(row.id);
     setModalListItem(row);
-    setUploadOpen(false);
     setFollowUpOpen(false);
     setActionConfirmType(action);
     setActionConfirmOpen(true);
@@ -530,9 +519,7 @@ export default function PurchaseOrdersPageClient() {
         <InvoiceListingCell
           hasInvoice={row.invoiceCount > 0 || row.status === "invoice_uploaded"}
           invoiceCount={row.invoiceCount}
-          canUpload={canUploadPOInvoiceForStatus(row.status)}
           onView={() => router.push(`/procurement/purchase-orders/${row.id}#vendor-invoice`)}
-          onUpload={() => openUploadModal(row)}
         />
       ),
     },
@@ -612,15 +599,6 @@ export default function PurchaseOrdersPageClient() {
             {/* Approve / Reject — temporarily hidden from listing actions
             {row.status === "pending_approval" && ( ... )}
             */}
-            {(["approved", "invoice_uploaded", "partially_received", "received"] as POListStatus[]).includes(row.status) && (
-              <button
-                type="button"
-                onClick={() => openUploadModal(row)}
-                className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted/60 transition-colors rounded-sm"
-              >
-                <Upload className="w-3.5 h-3.5" /> Upload Invoice
-              </button>
-            )}
             {!["draft", "cancelled"].includes(row.status) && (
               <button
                 type="button"
@@ -630,7 +608,7 @@ export default function PurchaseOrdersPageClient() {
                 <MessageSquare className="w-3.5 h-3.5" /> Add Follow-up
               </button>
             )}
-            {(["approved", "invoice_uploaded", "partially_received", "received"] as POListStatus[]).includes(row.status) && (
+            {canShortClosePOStatus(row.status) && (
               <button
                 type="button"
                 onClick={() => router.push(`/procurement/purchase-orders/${row.id}?shortClose=1`)}
@@ -639,7 +617,7 @@ export default function PurchaseOrdersPageClient() {
                 <Scissors className="w-3.5 h-3.5" /> Short Close PO
               </button>
             )}
-            {(["approved", "invoice_uploaded", "partially_received", "received"] as POListStatus[]).includes(row.status) && (
+            {canClosePOStatus(row.status) && (
               <button
                 type="button"
                 onClick={() => openActionConfirm(row, "close")}
@@ -648,15 +626,17 @@ export default function PurchaseOrdersPageClient() {
                 Close PO
               </button>
             )}
-            {!["closed", "cancelled", "short_closed"].includes(row.status) && (
+            {canCreatePurchaseReturnPO(row) && (
+              <button
+                type="button"
+                onClick={() => router.push(purchaseReturnRoutes.new(row.id, "po"))}
+                className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted/60 transition-colors rounded-sm"
+              >
+                Purchase Return
+              </button>
+            )}
+            {canCancelPOStatus(row.status) && (
               <>
-                <button
-                  type="button"
-                  onClick={() => router.push(purchaseReturnRoutes.new(row.id, "po"))}
-                  className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted/60 transition-colors rounded-sm"
-                >
-                  Purchase Return
-                </button>
                 <DropdownMenuSeparator />
                 <button
                   type="button"
@@ -716,43 +696,6 @@ export default function PurchaseOrdersPageClient() {
             currentSort={sort}
           />
         </>
-      )}
-
-      {uploadOpen && modalPo && (
-        <UploadVendorInvoiceDialog
-          open={uploadOpen}
-          onClose={closeModals}
-          po={modalPo}
-          submitting={uploadMutation.isPending || modalPoQuery.isFetching}
-          onSaved={(input) => {
-            uploadMutation.mutate(
-              {
-                purchaseOrderId: modalPo.id,
-                supplierInvoiceNo: input.supplierInvoiceNo,
-                supplierInvoiceDate: input.supplierInvoiceDate,
-                invoiceAmount: input.invoiceAmount,
-                gstAmount: input.gstAmount,
-                totalInvoiceAmount: input.totalInvoiceAmount,
-                remarks: input.remarks,
-                file: input.file,
-              },
-              {
-                onSuccess: () => {
-                  closeModals();
-                  setToast({ msg: "Vendor invoice saved.", type: "success" });
-                  void listQuery.refetch();
-                  void summaryQuery.refetch();
-                },
-                onError: (error) => {
-                  setToast({
-                    msg: getErrorMessage(error, "Failed to upload invoice."),
-                    type: "error",
-                  });
-                },
-              },
-            );
-          }}
-        />
       )}
 
       {followUpOpen && modalPo && (

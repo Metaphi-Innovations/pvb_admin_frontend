@@ -87,8 +87,14 @@ export interface StockTransfer {
   createdDate: string;
   updatedBy: string;
   updatedDate: string;
-  packingListId?: number;
+  packingListId?: number | string;
   packingListNumber?: string;
+  packingLists?: Array<{
+    packingListId: string;
+    packingNumber: string;
+    generatedAt?: string;
+    status?: string;
+  }>;
   packingStatus?: string;
   cancellationReason?: string;
   cancelledBy?: string;
@@ -574,7 +580,7 @@ export function canDownloadNote(transfer: StockTransfer): boolean {
 
 export function attachPackingListToTransfer(
   transferId: number,
-  packingListId: number,
+  packingListId: number | string,
   packingListNumber: string,
   packingStatus: string = "generated",
 ): StockTransfer | { error: string } {
@@ -639,18 +645,41 @@ export function canGeneratePackingList(transfer: StockTransfer): boolean {
   const status = normalizeTransferStatus(transfer.status);
   if (status === "cancelled" || status === "rejected") return false;
   if (status === "draft" || status === "pending_approval") return false;
-  if (transfer.packingListId) return false;
-  if (transfer.packingStatus === "Completed" || transfer.packingStatus === "packed" || transfer.packingStatus === "generated" || transfer.packingStatus === "Pending") {
+  if (!transfer.sourceWarehouseId || !transfer.targetWarehouseId) return false;
+
+  const fulfillment = (transfer.fulfillmentStatus || "PENDING").toString();
+  const blocked = [
+    "Fully Dispatched",
+    "FULLY_DISPATCHED",
+    "DELIVERED",
+    "delivered",
+    "CANCELLED",
+    "cancelled",
+  ];
+  if (blocked.includes(fulfillment)) return false;
+
+  const lines = transfer.lineItems ?? [];
+  if (lines.length > 0) {
+    return lines.some((l) => {
+      if (!l.productId || !(l.quantity > 0)) return false;
+      const generated = Number(l.generatedBaseQty || 0);
+      return l.quantity - generated > 1e-9;
+    });
+  }
+
+  // Listing may omit lines; fall back to totals when no packing list exists yet
+  if (transfer.packingListId || transfer.packingListNumber || (transfer.packingLists?.length ?? 0) > 0) {
     return false;
   }
-  const fulfillment = transfer.fulfillmentStatus || "PENDING";
-  if (fulfillment !== "PENDING") return false;
-  if (!transfer.sourceWarehouseId || !transfer.targetWarehouseId) return false;
-  
-  const hasItems = (transfer.lineItems && transfer.lineItems.length > 0)
-    ? transfer.lineItems.some(l => l.productId && l.quantity > 0)
-    : (transfer.totalItems ?? 0) > 0 || (transfer.totalQuantity ?? 0) > 0;
-  return hasItems;
+  return (transfer.totalItems ?? 0) > 0 || (transfer.totalQuantity ?? 0) > 0;
+}
+
+/** Packing List PDF is only available after at least one packing list has been generated. */
+export function canDownloadPackingList(transfer: StockTransfer): boolean {
+  const status = normalizeTransferStatus(transfer.status);
+  if (status === "cancelled" || status === "rejected") return false;
+  if (transfer.packingLists && transfer.packingLists.length > 0) return true;
+  return Boolean(transfer.packingListId || transfer.packingListNumber);
 }
 
 export function generatePackingListForTransfer(id: number): StockTransfer | { error: string } {

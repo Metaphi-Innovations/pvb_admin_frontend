@@ -91,12 +91,8 @@ export function AccountsColumnHeader({
   const sorted = sortable && sortKey === colKey;
   const filtered = isColumnFilterActive(filterValue);
 
-  const handleSortClick = (e: React.MouseEvent) => {
+  const handleSortClick = () => {
     if (!sortable || !onSort) return;
-    if (e.detail === 2 && onRemoveSort) {
-      onRemoveSort();
-      return;
-    }
     onSort(colKey);
   };
 
@@ -123,7 +119,7 @@ export function AccountsColumnHeader({
             sortable && "cursor-pointer hover:text-brand-700",
             align === "right" && "text-right",
           )}
-          title={sortable ? "Click to sort · Double-click to remove sort" : undefined}
+          title={sortable ? "Click: A→Z · again: Z→A · again: default order" : undefined}
         >
           <span className="truncate min-w-0">{label}</span>
           {sortable && (

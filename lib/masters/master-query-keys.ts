@@ -141,7 +141,17 @@ export const masterKeys = {
 
   additionalCharges: {
     all: () => [...masterKeys.all, "additional-charges"] as const,
+    lists: () => [...masterKeys.additionalCharges.all(), "list"] as const,
+    list: (params: MasterListKeyParams) =>
+      [...masterKeys.additionalCharges.lists(), params] as const,
+    details: () => [...masterKeys.additionalCharges.all(), "detail"] as const,
+    detail: (id: string) =>
+      [...masterKeys.additionalCharges.details(), id] as const,
     dropdown: () => [...masterKeys.additionalCharges.all(), "dropdown"] as const,
+    filterDropdowns: () =>
+      [...masterKeys.additionalCharges.all(), "filter-dropdown"] as const,
+    filterDropdown: (fieldName: string) =>
+      [...masterKeys.additionalCharges.filterDropdowns(), fieldName] as const,
   },
 
   documentTypes: {
@@ -234,6 +244,9 @@ export const masterKeys = {
     previewNumber: () => [...masterKeys.customers.all(), "preview-number"] as const,
     export: () => [...masterKeys.customers.all(), "export"] as const,
     cfDropdown: () => [...masterKeys.customers.all(), "cf-dropdown"] as const,
+    summary: () => [...masterKeys.customers.all(), "summary"] as const,
+    filterDropdown: (field: string) =>
+      [...masterKeys.customers.all(), "filter-dropdown", field] as const,
   },
 
   warehouses: {

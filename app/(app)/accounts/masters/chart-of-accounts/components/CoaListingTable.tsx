@@ -328,7 +328,7 @@ function CoaHierarchyTableContent({
                   </>
                 )}
                 <AccountsTableCell align="right">
-                  {row.openingAmount > 0 ? (
+                  {row.balanceFromApi || row.openingAmount > 0 ? (
                     <MoneyAmount amount={row.openingAmount} side={row.openingSide} className="text-xs" />
                   ) : (
                     <span className="text-xs text-muted-foreground">—</span>
@@ -341,7 +341,7 @@ function CoaHierarchyTableContent({
                   {formatMoney(row.periodCredit)}
                 </AccountsTableCell>
                 <AccountsTableCell align="right">
-                  {row.closingAmount > 0 ? (
+                  {row.balanceFromApi || row.closingAmount > 0 ? (
                     <MoneyAmount
                       amount={row.closingAmount}
                       side={row.closingSide}
@@ -507,14 +507,14 @@ function CoaLedgerTableContent({
                     {ledger.accountCode}
                   </AccountsTableCell>
                   <AccountsTableCell align="right" className="w-[18%] min-w-[150px]">
-                    {row.openingAmount > 0 ? (
+                    {row.balanceFromApi || row.openingAmount > 0 ? (
                       <MoneyAmount amount={row.openingAmount} side={row.openingSide} className="text-xs" />
                     ) : (
                       <span className="text-xs text-muted-foreground">—</span>
                     )}
                   </AccountsTableCell>
                   <AccountsTableCell align="right" className="w-[18%] min-w-[150px]">
-                    {row.currentAmount > 0 ? (
+                    {row.balanceFromApi || row.currentAmount > 0 ? (
                       <MoneyAmount
                         amount={row.currentAmount}
                         side={row.currentSide}

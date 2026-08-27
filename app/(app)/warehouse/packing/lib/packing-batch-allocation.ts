@@ -23,6 +23,9 @@ export interface PackingSummaryLine {
   sku: string;
   product: string;
   packingQty: number;
+  packSize?: number;
+  quantityType?: string;
+  productSnapshot?: Record<string, unknown>;
   allocations: BatchAllocation[];
 }
 
@@ -347,6 +350,9 @@ export function buildPackingSummaryLines(
       sku: p.sku,
       product: p.product,
       packingQty: packingQty[p.sku] ?? 0,
+      packSize: p.packSize,
+      quantityType: p.quantity_type,
+      productSnapshot: p.productSnapshot,
       allocations: batchAllocationMap[p.sku] ?? [],
     }));
 }

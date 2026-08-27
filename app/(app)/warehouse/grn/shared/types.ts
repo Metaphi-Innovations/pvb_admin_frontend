@@ -50,6 +50,12 @@ export interface GrnItem {
   receivedCases?: number;
   receivedLooseQty?: number;
   unitPerPacking?: number;
+  /** Pack size of one SKU unit (Gms/Ml/Kg/Ltr). */
+  packSize?: number;
+  /** Net Kg/Ltr per Case (packaging unit). */
+  netWeightPerPack?: number;
+  /** Display UOM for weight/volume — Kg or Ltr. */
+  weightUom?: "Kg" | "Ltr";
   balanceQty?: number;
   unit?: string;
   serialNumber?: string;
@@ -91,7 +97,10 @@ export interface GrnBatch {
 
 export interface GrnSupplierInvoice {
   id: string;
+  /** Display name (invoice number or original file name). */
   fileName: string;
+  /** Public URL to the stored invoice file (opens in new tab). */
+  fileUrl?: string;
   uploadedAt: string;
 }
 

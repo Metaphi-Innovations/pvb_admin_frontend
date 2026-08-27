@@ -27,6 +27,8 @@ export interface CoaStatutoryLedgerSeed {
   tdsApplicable?: boolean;
   /** Stable posting identity — never use display name as primary key. */
   systemKey?: ApprovedSystemLedgerKey;
+  /** Explicit system alias (e.g. sys:TDS_RECEIVABLE) when not covered by systemKey. */
+  alias?: string;
   /** Reserved component used only to preserve legacy system ID allocation. */
   optional?: boolean;
 }
@@ -49,6 +51,17 @@ export const DUTIES_LIABILITY_STATUTORY_LEDGERS: CoaStatutoryLedgerSeed[] = [
   ...GST_OUTPUT_STATUTORY_LEDGERS,
   { name: "TDS Payable", code: "23112", balanceType: "Credit", tdsApplicable: true },
   { name: "TCS Payable", code: "23113", balanceType: "Credit" },
+];
+
+/** Assets → Current Assets → Other Current Assets */
+export const OTHER_CURRENT_ASSETS_STATUTORY_LEDGERS: CoaStatutoryLedgerSeed[] = [
+  {
+    name: "TDS Receivable",
+    code: "12181",
+    balanceType: "Debit",
+    tdsApplicable: true,
+    alias: "sys:TDS_RECEIVABLE",
+  },
 ];
 
 /** @deprecated Use DUTIES_LIABILITY_STATUTORY_LEDGERS */
@@ -89,10 +102,15 @@ export const DUTIES_DIRECT_STATUTORY_LEDGER_NAMES = new Set(
   DUTIES_LIABILITY_STATUTORY_LEDGERS.map((l) => l.name.toLowerCase()),
 );
 
+export const OTHER_CURRENT_ASSETS_LEDGER_NAMES = new Set(
+  OTHER_CURRENT_ASSETS_STATUTORY_LEDGERS.map((l) => l.name.toLowerCase()),
+);
+
 /** All locked Level-4 system ledger names (case-insensitive). */
 export const MANDATORY_SYSTEM_LEDGER_NAMES = new Set([
   ...GST_INPUT_LEDGER_NAMES,
   ...DUTIES_DIRECT_STATUTORY_LEDGER_NAMES,
+  ...OTHER_CURRENT_ASSETS_LEDGER_NAMES,
   MANDATORY_SYSTEM_LEDGERS.stockInHand.name.toLowerCase(),
   MANDATORY_SYSTEM_LEDGERS.productSales.name.toLowerCase(),
   MANDATORY_SYSTEM_LEDGERS.purchaseAccount.name.toLowerCase(),
@@ -109,6 +127,7 @@ export const LOCKED_COA_SYSTEM_LEDGER_NAMES = new Set([
   ...GST_INPUT_LEDGER_NAMES,
   ...GST_OUTPUT_LEDGER_NAMES,
   "tds payable",
+  "tds receivable",
   "tcs payable",
 ]);
 
@@ -116,6 +135,7 @@ export const LOCKED_COA_SYSTEM_LEDGER_NAMES = new Set([
 const LOCKED_SYSTEM_LEDGER_ALIASES = new Set([
   systemLedgerAlias(APPROVED_SYSTEM_LEDGER_KEYS.STOCK_IN_HAND).toLowerCase(),
   systemLedgerAlias(APPROVED_SYSTEM_LEDGER_KEYS.PRODUCT_SALES).toLowerCase(),
+  "sys:tds_receivable",
 ]);
 
 export function isLockedSystemLedger(ledger: {

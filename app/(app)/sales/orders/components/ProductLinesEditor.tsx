@@ -35,6 +35,8 @@ import {
 	repriceOrderLineItems,
 	isProductDiscountSchemeApplied,
 	getEligibleSchemesForSalesOrderLine,
+	normalizeLineDiscountType,
+	LINE_DISCOUNT_TYPE_OPTIONS,
 	type TaxSupplyType,
 } from "../orders-data";
 import {
@@ -509,11 +511,42 @@ export default function ProductLinesEditor({
 				next = recalculateLineItem(next);
 			}
 		} else if (
+			patch.discount !== undefined ||
+			patch.discountValue !== undefined ||
+			patch.discountType !== undefined ||
 			patch.gstAmount !== undefined ||
 			patch.cgstAmount !== undefined ||
 			patch.sgstAmount !== undefined ||
 			patch.igstAmount !== undefined
 		) {
+			const product = next.productId
+				? getProductById(next.productId)
+				: undefined;
+			if (product) {
+				next = applyLineTaxFields(
+					next,
+					product.gstRate,
+					taxSupplyType,
+					zeroGst,
+				);
+			} else {
+				next = recalculateLineItem(next);
+			}
+		}
+		return next;
+	};
+
+	const commitDraftLine = (original: SalesOrderLineItem, draft: SalesOrderLineItem): SalesOrderLineItem => {
+		// Commit the draft as-is (do not re-run quantity branching that can drop edits).
+		let next: SalesOrderLineItem = {
+			...original,
+			...draft,
+			discountType: normalizeLineDiscountType(draft.discountType ?? original.discountType),
+		};
+		const product = next.productId ? getProductById(next.productId) : undefined;
+		if (product) {
+			next = applyLineTaxFields(next, product.gstRate, taxSupplyType, zeroGst);
+		} else {
 			next = recalculateLineItem(next);
 		}
 		return next;
@@ -711,57 +744,30 @@ export default function ProductLinesEditor({
 				customQuantityArea={
 					<>
 						<div className="space-y-1">
-							<Label className="text-xs font-medium">Type</Label>
-							<Select
-								value={topQuantityType}
-								onValueChange={(value) => {
-									const type = value as "Case" | "Piece";
-									setTopQuantityType(type);
-									if (type === "Case") {
-										setTopPieceQuantity(0);
-									} else {
-										setTopCaseQuantity(0);
-									}
-								}}
-							>
-								<SelectTrigger className="h-8 text-xs rounded-lg border-border bg-white w-[90px]">
-									<SelectValue placeholder="Type" />
-								</SelectTrigger>
-								<SelectContent className="min-w-[120px]">
-									<SelectItem value="Case">Case</SelectItem>
-									<SelectItem value="Piece">Piece</SelectItem>
-								</SelectContent>
-							</Select>
+							<Label className="text-xs font-medium">Qty</Label>
+							<div className="flex items-center gap-1.5">
+								<Input
+									type="number"
+									min={1}
+									value={topInputQty}
+									onChange={(e) => setTopInputQty(e.target.value)}
+									className="h-8 text-xs w-20 bg-white"
+									placeholder="1"
+								/>
+								<Select
+									value={topQuantityType}
+									onValueChange={(value) => setTopQuantityType(value as "Case" | "Piece")}
+								>
+									<SelectTrigger className="h-8 text-xs rounded-lg border-border bg-white w-[90px]">
+										<SelectValue placeholder="Type" />
+									</SelectTrigger>
+									<SelectContent className="min-w-[120px]">
+										<SelectItem value="Case">Case</SelectItem>
+										<SelectItem value="Piece">Piece</SelectItem>
+									</SelectContent>
+								</Select>
+							</div>
 						</div>
-						<div className="space-y-1">
-							<Label className="text-xs font-medium">Cases</Label>
-							<Input
-								type="number"
-								min={0}
-								disabled={topQuantityType === "Piece"}
-								value={topCaseQuantity || ""}
-								onChange={(e) => {
-									const val = e.target.value.slice(0, 5);
-									setTopCaseQuantity(Number(val) || 0);
-								}}
-								className="h-8 text-xs w-20 bg-white disabled:opacity-50"
-							/>
-						</div>
-						<div className="space-y-1">
-							<Label className="text-xs font-medium">Pieces</Label>
-							<Input
-								type="number"
-								min={0}
-								disabled={topQuantityType === "Case"}
-								value={topPieceQuantity || ""}
-								onChange={(e) => {
-									const val = e.target.value.slice(0, 5);
-									setTopPieceQuantity(Number(val) || 0);
-								}}
-								className="h-8 text-xs w-20 bg-white disabled:opacity-50"
-							/>
-						</div>
-
 					</>
 				}
 				customTableHead={
@@ -769,13 +775,10 @@ export default function ProductLinesEditor({
 						{[
 							{ h: "Product", className: "w-[240px]" },
 							{ h: "Stock", className: "w-16" },
-							{ h: "Type", className: "w-[80px]" },
-							{ h: "Cases", className: "w-20" },
-							{ h: "Pieces", className: "w-20" },
-							{ h: "Total Unit Qty", className: "w-24" },
+							{ h: "Quantity", className: "w-[160px]" },
 							{ h: "DP", className: "min-w-[80px]" },
 							{ h: "Offer", className: "min-w-[130px]" },
-							{ h: "Disc. Amt", className: "min-w-[80px]" },
+							{ h: "Discount", className: "min-w-[180px]" },
 							{ h: "Final Rate", className: "min-w-[80px]" },
 						].map(({ h, className }) => (
 							<th
@@ -873,79 +876,89 @@ export default function ProductLinesEditor({
 										{line.productId != null ? line.availableStock : "—"}
 									</span>
 								</td>
-								<td className='px-2 py-1.5 w-[80px]'>
-									{isEditing ? (
-										<Select
-											value={draftLine.quantityType || "Piece"}
-											onValueChange={(value) => updateDraft({ quantityType: value as "Case" | "Piece" })}
-										>
-											<SelectTrigger className="h-7 text-xs rounded border-border bg-white w-full px-2">
-												<SelectValue placeholder="Type" />
-											</SelectTrigger>
-											<SelectContent className="min-w-[120px]">
-												<SelectItem value="Case">Case</SelectItem>
-												<SelectItem value="Piece">Piece</SelectItem>
-											</SelectContent>
-										</Select>
-									) : (
-										<span className="text-xs">{line.quantityType}</span>
-									)}
-								</td>
-								<td className='px-2 py-1.5 w-20'>
-									{isEditing ? (
-										<Input
-											type="number"
-											min={0}
-											disabled={draftLine.quantityType === "Piece"}
-											value={draftLine.caseQuantity === 0 && !draftLine.quantity ? "" : draftLine.caseQuantity}
-											onChange={(e) => {
-												const val = e.target.value.slice(0, 5);
-												updateDraft({ caseQuantity: val ? Number(val) : 0 });
-											}}
-											className="h-7 text-xs w-full disabled:opacity-50"
-										/>
-									) : (
-										<span className="text-xs">{line.quantityType === "Piece" ? "—" : (line.caseQuantity || 0)}</span>
-									)}
-								</td>
-								<td className='px-2 py-1.5 w-20'>
-									{isEditing ? (
-										<Input
-											type="number"
-											min={0}
-											disabled={draftLine.quantityType === "Case"}
-											value={draftLine.pieceQuantity === 0 && !draftLine.quantity ? "" : draftLine.pieceQuantity}
-											onChange={(e) => {
-												const val = e.target.value.slice(0, 5);
-												updateDraft({ pieceQuantity: val ? Number(val) : 0 });
-											}}
-											className="h-7 text-xs w-full disabled:opacity-50"
-										/>
-									) : (
-										<span className="text-xs">{line.quantityType === "Case" ? "—" : (line.pieceQuantity || 0)}</span>
-									)}
-								</td>
-								<td className='px-2 py-1.5 w-20'>
-									{isEditing ? (
-										<Input
-											type="number"
-											disabled
-											value={draftLine.quantity || ""}
-											className={cn(
-												"h-7 text-xs w-full font-semibold bg-muted text-muted-foreground",
-												localError && draftLine.quantity <= 0 && "border-red-400"
-											)}
-										/>
-									) : (
-										<div className="flex flex-col">
-											<span className={cn("text-xs font-semibold", localError && line.quantity <= 0 && "text-red-500")}>
-												{line.quantity}
+								<td className='px-2 py-1.5 min-w-[140px] align-top'>
+									<div className="flex flex-col gap-1 w-full text-right">
+										{isEditing ? (
+											<div className="flex items-center gap-1 justify-end">
+												<Input
+													type="number"
+													min={0}
+													value={
+														draftLine.quantityType === "Case"
+															? (draftLine.caseQuantity === 0 && !draftLine.quantity ? "" : draftLine.caseQuantity)
+															: (draftLine.pieceQuantity === 0 && !draftLine.quantity ? "" : draftLine.pieceQuantity)
+													}
+													onChange={(e) => {
+														const val = e.target.value.slice(0, 5);
+														const num = val ? Number(val) : 0;
+														if (draftLine.quantityType === "Case") {
+															updateDraft({ caseQuantity: num });
+														} else {
+															updateDraft({ pieceQuantity: num });
+														}
+													}}
+													className="h-7 text-xs w-16 text-right tabular-nums"
+												/>
+												<Select
+													value={draftLine.quantityType || "Piece"}
+													onValueChange={(value) => {
+														const type = value as "Case" | "Piece";
+														const currentVal = draftLine.quantityType === "Case" ? draftLine.caseQuantity : draftLine.pieceQuantity;
+														if (type === "Case") {
+															updateDraft({ quantityType: type, caseQuantity: currentVal || 0, pieceQuantity: 0 });
+														} else {
+															updateDraft({ quantityType: type, pieceQuantity: currentVal || 0, caseQuantity: 0 });
+														}
+													}}
+												>
+													<SelectTrigger className="h-7 text-[10px] rounded border-border bg-white w-[54px] px-1.5 shrink-0">
+														<SelectValue placeholder="Type" />
+													</SelectTrigger>
+													<SelectContent className="min-w-[100px]">
+														<SelectItem value="Case">Case</SelectItem>
+														<SelectItem value="Piece">Piece</SelectItem>
+													</SelectContent>
+												</Select>
+											</div>
+										) : (
+											<span className="text-xs font-semibold text-foreground">
+												{line.quantityType === "Case" ? line.caseQuantity : line.pieceQuantity} {line.quantityType || "Piece"}
 											</span>
-											<span className="text-[9px] text-muted-foreground">
-												Pk: {product?.packSize || 1}
-											</span>
-										</div>
-									)}
+										)}
+
+										{/* Stacked details */}
+										{draftLine.productId && product && (
+											(() => {
+												const uomLower = (product.uom || "").toLowerCase();
+												const unitSize = Number(product.unitPackSize) || 0;
+												let weightStr = "";
+												if (uomLower === "ml") {
+													weightStr = `${((draftLine.quantity * unitSize) / 1000).toFixed(2)} Ltr`;
+												} else if (uomLower === "gms" || uomLower === "gram" || uomLower === "grams") {
+													weightStr = `${((draftLine.quantity * unitSize) / 1000).toFixed(2)} Kg`;
+												} else if (uomLower === "ltr" || uomLower === "kg") {
+													weightStr = `${(draftLine.quantity * (unitSize || 1)).toFixed(2)} ${product.uom}`;
+												} else if (product.netWeight) {
+													weightStr = `${(draftLine.quantity * product.netWeight).toFixed(2)} ${["ml", "ltr"].includes(uomLower) ? "Ltr" : "Kg"}`;
+												}
+												return (
+													<div className="text-right space-y-0.5 leading-tight text-[10px] text-muted-foreground border-t border-slate-100 pt-1">
+														<p>
+															Total units: <span className="font-semibold text-foreground">{draftLine.quantity} </span>
+														</p>
+														{weightStr && (
+															<p>
+																Weight: <span className="font-semibold text-foreground">{weightStr}</span>
+															</p>
+														)}
+														<p className="text-[9px] text-muted-foreground/80">
+															Pack size: {product.packSize || 1}
+														</p>
+													</div>
+												);
+											})()
+										)}
+									</div>
 								</td>
 								<td className='px-2 py-1.5'>
 									<span className='text-xs tabular-nums whitespace-nowrap'>
@@ -1009,15 +1022,103 @@ export default function ProductLinesEditor({
 									)}
 								</td>
 								<td className='px-2 py-1.5'>
-									<span className='text-xs tabular-nums whitespace-nowrap'>
-										{line.productId && hasScheme
-											? formatSchemeRupee(line.schemeDiscountAmount)
-											: "—"}
-									</span>
+									{isEditing ? (
+										hasScheme ? (
+											<div className="flex flex-col text-right pr-2">
+												<span className="text-xs font-semibold">{line.schemeDiscountPercent}%</span>
+												<span className="text-[10px] text-muted-foreground">({formatSchemeRupee(line.schemeDiscountAmount)})</span>
+											</div>
+										) : (
+											<div className="flex flex-col items-stretch gap-1 min-w-[160px]">
+												<Select
+													value={normalizeLineDiscountType(draftLine.discountType)}
+													onValueChange={(value) => {
+														const discountType = normalizeLineDiscountType(value);
+														updateDraft({
+															discountType,
+															// Keep current entry as the value for the new type.
+															...(discountType === "Flat"
+																? { discountValue: draftLine.discountValue || 0 }
+																: { discount: draftLine.discount || 0 }),
+														});
+													}}
+												>
+													<SelectTrigger className="h-7 text-[10px] rounded-md border-border bg-white w-full">
+														<SelectValue placeholder="Type" />
+													</SelectTrigger>
+													<SelectContent>
+														{LINE_DISCOUNT_TYPE_OPTIONS.map((opt) => (
+															<SelectItem key={opt.value} value={opt.value} className="text-xs">
+																{opt.label}
+															</SelectItem>
+														))}
+													</SelectContent>
+												</Select>
+												<div className="flex items-center gap-1 justify-end">
+													{normalizeLineDiscountType(draftLine.discountType) === "Flat" ? (
+														<>
+															<span className="text-xs text-muted-foreground">₹</span>
+															<Input
+																type="number"
+																min={0}
+																value={draftLine.discountValue === 0 ? "" : draftLine.discountValue}
+																onChange={(e) => {
+																	const raw = e.target.value;
+																	updateDraft({
+																		discountType: "Flat",
+																		discountValue: raw === "" ? 0 : Number(raw) || 0,
+																	});
+																}}
+																className="h-7 text-xs w-20 text-right tabular-nums"
+																placeholder="0"
+															/>
+														</>
+													) : (
+														<>
+															<Input
+																type="number"
+																min={0}
+																max={100}
+																value={draftLine.discount === 0 ? "" : draftLine.discount}
+																onChange={(e) => {
+																	const val = e.target.value.slice(0, 6);
+																	updateDraft({
+																		discountType: "Percentage",
+																		discount: val === "" ? 0 : Number(val) || 0,
+																	});
+																}}
+																className="h-7 text-xs w-16 text-right tabular-nums"
+																placeholder="0"
+															/>
+															<span className="text-xs text-muted-foreground">%</span>
+														</>
+													)}
+												</div>
+											</div>
+										)
+									) : (
+										<span className='text-xs tabular-nums whitespace-nowrap block text-right pr-2'>
+											{line.productId ? (
+												hasScheme ? (
+													`${line.schemeDiscountPercent}% (${formatSchemeRupee(line.schemeDiscountAmount)})`
+												) : line.discountValue > 0 || line.discount > 0 ? (
+													normalizeLineDiscountType(line.discountType) === "Flat" ? (
+														`Fixed · ${formatSchemeRupee(line.discountValue)}`
+													) : (
+														`${line.discount}% · ${formatSchemeRupee(line.discountValue)}`
+													)
+												) : (
+													"—"
+												)
+											) : (
+												"—"
+											)}
+										</span>
+									)}
 								</td>
 								<td className='px-2 py-1.5'>
 									<span className='text-xs font-medium tabular-nums whitespace-nowrap'>
-										{line.productId ? formatSchemeRupee(line.finalRate) : "—"}
+										{draftLine.productId ? formatSchemeRupee(draftLine.finalRate) : "—"}
 									</span>
 								</td>
 								{draftLine.productId && product && taxBreakdown ? (
@@ -1073,7 +1174,15 @@ export default function ProductLinesEditor({
 													type='button'
 													onClick={() => {
 														if (editDraft) {
-															updateLine(line.id, editDraft);
+															const committed = commitDraftLine(
+																line,
+																editDraft as SalesOrderLineItem,
+															);
+															onChange(
+																lines.map((entry) =>
+																	entry.id === line.id ? committed : entry,
+																),
+															);
 														}
 														setEditingId(null);
 														setEditDraft(null);
@@ -1101,7 +1210,10 @@ export default function ProductLinesEditor({
 													type='button'
 													onClick={() => {
 														setEditingId(line.id);
-														setEditDraft({ ...line });
+														setEditDraft({
+															...line,
+															discountType: normalizeLineDiscountType(line.discountType),
+														});
 													}}
 													className='p-1.5 hover:bg-muted rounded-md transition-colors'
 													title='Edit row'

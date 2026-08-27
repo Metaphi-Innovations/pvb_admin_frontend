@@ -47,6 +47,14 @@ import {
   ACCOUNTS_ACTION_ICON_CLASS,
 } from "@/components/accounts/AccountsTableActions";
 import { cn } from "@/lib/utils";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { loadFinancialYears } from "@/app/(app)/accounts/masters/masters-data";
 import { resolveDateRangePreset } from "@/lib/accounts/report-date-presets";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
@@ -71,6 +79,11 @@ import {
   mapSalesInvoiceDetailToRecord,
 } from "@/services/sales-invoice.service";
 import { downloadInvoicePdf } from "@/app/(app)/accounts/invoices/invoice-pdf";
+import {
+  openProformaInvoicePreview,
+  openTaxInvoicePreview,
+  TAX_INVOICE_COPY_LABELS,
+} from "./sales-invoice-official-pdf";
 import { InvoiceCancelDialog } from "@/app/(app)/accounts/invoices/components/InvoiceCancelDialog";
 import { InvoiceStatusBadge } from "@/app/(app)/accounts/invoices/components/InvoiceStatusBadge";
 import { CustomerPartyNameCell } from "@/app/(app)/accounts/invoices/components/CustomerPartyInfo";
@@ -461,10 +474,62 @@ function RowActions({
   onCancel: (row: SalesInvoiceListRow) => void;
   onPrint: (row: SalesInvoiceListRow) => void;
 }) {
+  const invoiceId = String(row.salesInvoiceId || row.invoiceId);
+  const showOfficialDownloads = row.canDownloadPi || row.canDownloadTaxInvoice;
+
+  const handleOfficialError = (error: unknown, fallback: string) => {
+    const err = error as { response?: { data?: { message?: string } }; message?: string };
+    alert(err?.response?.data?.message || err?.message || fallback);
+  };
+
   return (
     <AccountsTableActionCell variant="multi">
       <AccountsViewAction href={row.viewHref} title="View Invoice" />
-      {row.canPdf ? (
+      {showOfficialDownloads ? (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              title="Download invoice PDFs"
+              aria-label="Download invoice PDFs"
+              className={cn(ACCOUNTS_ACTION_BTN_CLASS)}
+            >
+              <Download className={ACCOUNTS_ACTION_ICON_CLASS} />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56">
+            {row.canDownloadPi ? (
+              <DropdownMenuItem
+                onClick={() => {
+                  void openProformaInvoicePreview(invoiceId).catch((error) =>
+                    handleOfficialError(error, "Failed to open Proforma Invoice."),
+                  );
+                }}
+              >
+                Download Proforma Invoice
+              </DropdownMenuItem>
+            ) : null}
+            {row.canDownloadTaxInvoice ? (
+              <>
+                {row.canDownloadPi ? <DropdownMenuSeparator /> : null}
+                <DropdownMenuLabel>Tax Invoice</DropdownMenuLabel>
+                {TAX_INVOICE_COPY_LABELS.map((copyLabel) => (
+                  <DropdownMenuItem
+                    key={copyLabel}
+                    onClick={() => {
+                      void openTaxInvoicePreview(invoiceId, copyLabel).catch((error) =>
+                        handleOfficialError(error, "Failed to open Tax Invoice."),
+                      );
+                    }}
+                  >
+                    {copyLabel}
+                  </DropdownMenuItem>
+                ))}
+              </>
+            ) : null}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : row.canPdf ? (
         <button
           type="button"
           title="Print / Download Invoice"
@@ -822,10 +887,19 @@ export default function SalesInvoicesPageClient() {
   const tabStateRef = useRef(tabState);
   tabStateRef.current = tabState;
 
+  // Stable ref so we always read the current active tab inside event handlers.
+  const activeTabRef = useRef(activeTab);
+  activeTabRef.current = activeTab;
+
   const filterKey = `${financialYearId}|${dateFrom}|${dateTo}|${branches.join(",")}`;
-  const prevFilterKey = useRef(filterKey);
+  const prevFilterKey = useRef<string | null>(null);
+
+  // Keep a stable ref to the latest filter params so callbacks never go stale.
+  const filterParamsRef = useRef({ dateFrom, dateTo, financialYearId });
+  filterParamsRef.current = { dateFrom, dateTo, financialYearId };
 
   const fetchTab = useCallback(async (tab: SalesInvoiceTabId) => {
+    const { dateFrom: df, dateTo: dt, financialYearId: fy } = filterParamsRef.current;
     setTabState((prev) => ({
       ...prev,
       [tab]: { ...prev[tab], loading: true, error: null },
@@ -834,9 +908,9 @@ export default function SalesInvoicesPageClient() {
       accountsDataService.invalidate();
       const { rows } = await fetchSalesInvoicesByTab(tab, {
         search: tabStateRef.current[tab]?.search,
-        dateFrom,
-        dateTo,
-        financialYearId,
+        dateFrom: df,
+        dateTo: dt,
+        financialYearId: fy,
         page: 1,
         pageSize: 100,
       });
@@ -862,54 +936,68 @@ export default function SalesInvoicesPageClient() {
         },
       }));
     }
-  }, [dateFrom, dateTo, financialYearId]);
+  }, []);
 
-  const fetchVisibleTabs = useCallback(async () => {
-    await Promise.all(SALES_INVOICE_VISIBLE_TABS.map((tab) => fetchTab(tab)));
-  }, [fetchTab]);
+  // Stable ref so focus/visibility handlers always call the latest fetchTab.
+  const fetchTabRef = useRef(fetchTab);
+  fetchTabRef.current = fetchTab;
 
-  useEffect(() => {
-    if (!mounted) return;
-    void fetchVisibleTabs();
-  }, [mounted, fetchVisibleTabs]);
-
-  useEffect(() => {
-    if (!mounted) return;
-    const refresh = () => void fetchVisibleTabs();
-    const onVisibility = () => {
-      if (document.visibilityState === "visible") refresh();
-    };
-    window.addEventListener("focus", refresh);
-    document.addEventListener("visibilitychange", onVisibility);
-    return () => {
-      window.removeEventListener("focus", refresh);
-      document.removeEventListener("visibilitychange", onVisibility);
-    };
-  }, [mounted, fetchVisibleTabs]);
-
+  // Single effect: fires only when the filter key genuinely changes (or on first mount).
+  // Always fetches only the currently active tab; other tabs load lazily on click.
   useEffect(() => {
     if (!mounted) return;
     if (prevFilterKey.current === filterKey) return;
     prevFilterKey.current = filterKey;
+
+    // Invalidate all tab caches so stale data isn't shown when switching tabs.
     setTabState((prev) => {
       const next = { ...prev };
       (Object.keys(next) as SalesInvoiceTabId[]).forEach((tab) => {
-        next[tab] = {
-          ...next[tab],
-          loaded: false,
-          rows: [],
-          page: 1,
-        };
+        next[tab] = { ...next[tab], loaded: false, rows: [], page: 1 };
       });
       return next;
     });
-    void fetchVisibleTabs();
-  }, [filterKey, mounted, fetchVisibleTabs]);
+
+    // Only fetch the active tab immediately.
+    void fetchTabRef.current(activeTabRef.current);
+  }, [filterKey, mounted]);
+
+  // Refresh only the active tab when the user returns to this window/browser tab.
+  useEffect(() => {
+    if (!mounted) return;
+    let wasBlurred = false;
+
+    const onBlur = () => { wasBlurred = true; };
+    const onFocus = () => {
+      if (wasBlurred) {
+        wasBlurred = false;
+        void fetchTabRef.current(activeTabRef.current);
+      }
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "visible" && wasBlurred) {
+        wasBlurred = false;
+        void fetchTabRef.current(activeTabRef.current);
+      } else if (document.visibilityState === "hidden") {
+        wasBlurred = true;
+      }
+    };
+
+    window.addEventListener("blur", onBlur);
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("blur", onBlur);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [mounted]);
 
   const handleTabChange = (tab: SalesInvoiceTabId) => {
     setActiveTab(tab);
+    // Fetch lazily — only if this tab hasn't been loaded yet.
     if (!tabState[tab].loaded && !tabState[tab].loading) {
-      fetchTab(tab);
+      void fetchTab(tab);
     }
   };
 
@@ -1048,13 +1136,13 @@ export default function SalesInvoicesPageClient() {
           await SalesInvoiceService.cancel(id, { reason });
         }
         setCancelTarget(null);
-        void fetchVisibleTabs();
+        void fetchTabRef.current(activeTabRef.current);
       } catch (e) {
         setCancelTarget(null);
         alert(e instanceof Error ? e.message : "Failed to cancel invoice.");
       }
     },
-    [cancelTarget, fetchVisibleTabs],
+    [cancelTarget],
   );
 
   const getCellValue = useCallback((row: SalesInvoiceListRow, key: string) => {

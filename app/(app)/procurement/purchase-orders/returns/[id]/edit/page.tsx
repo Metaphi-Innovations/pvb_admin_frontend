@@ -47,7 +47,7 @@ function EditPurchaseReturnContent() {
 
   const eligibleItemsQuery = useEligiblePurchaseReturnItems(
     detail?.poId ? String(detail.poId) : null,
-    undefined,
+    detail?.warehouseId ? String(detail.warehouseId) : undefined,
     id,
   );
   const updateMutation = useUpdatePurchaseReturn();
@@ -67,6 +67,12 @@ function EditPurchaseReturnContent() {
       return;
     }
 
+    // Show existing return immediately; merge extra eligible lines when ready.
+    if (!mergedOnce && !eligibleItemsQuery.data) {
+      setRecord(detail);
+      return;
+    }
+
     if (!eligibleItemsQuery.data || mergedOnce) return;
 
     const mergedItems = mergeReturnItemsForEdit(detail.items, eligibleItemsQuery.data);
@@ -79,7 +85,7 @@ function EditPurchaseReturnContent() {
     setRecord(null);
   }, [id]);
 
-  if (detailQuery.isLoading || (!record && eligibleItemsQuery.isFetching)) {
+  if (detailQuery.isLoading && !record) {
     return <div className="p-4 text-sm text-muted-foreground">Loading…</div>;
   }
 
@@ -146,6 +152,9 @@ function EditPurchaseReturnContent() {
         readOnly={readOnly}
         errors={errors}
         editMode={!readOnly}
+        linesLoading={
+          !readOnly && !mergedOnce && (eligibleItemsQuery.isLoading || eligibleItemsQuery.isFetching)
+        }
       />
     </PReturnFormLayout>
   );

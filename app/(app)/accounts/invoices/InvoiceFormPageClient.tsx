@@ -69,6 +69,7 @@ import {
 } from "./components/GoodsInvoiceAdditionalChargesEditor";
 import { SalesInvoiceCustomerSection } from "./components/SalesInvoiceCustomerSection";
 import { CustomerPartyInfoButton } from "./components/CustomerPartyInfo";
+import { InvoiceWarehouseInfoButton } from "./components/InvoiceWarehouseInfoButton";
 import { SalesInvoiceDocumentInfoSection } from "./components/SalesInvoiceDocumentInfoSection";
 import {
   GoodsTransportStatutorySection,
@@ -86,6 +87,8 @@ import {
   readTransportDistanceKm,
   readWarehouseGstin,
   resolvePreparePlaceOfSupply,
+  type DispatchInvoiceTotalsPreview,
+  type PrepareDispatchInvoiceDto,
 } from "@/services/sales-invoice.service";
 import {
   calculateInvoiceTotals,
@@ -246,7 +249,14 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
   const [additionalExpenses, setAdditionalExpenses] = useState<InvoiceAdditionalExpense[]>([
     createEmptyAdditionalExpense(),
   ]);
+  /** SO/order charges from prepare — display only; not posted (CN/DN / PI-GRN pattern). */
+  const [orderSuggestedCharges, setOrderSuggestedCharges] = useState<
+    PrepareDispatchInvoiceDto["suggested_additional_charges"]
+  >([]);
   const [roundOff, setRoundOff] = useState(0);
+  const [backendTotals, setBackendTotals] = useState<DispatchInvoiceTotalsPreview | null>(
+    null,
+  );
   const [salesOrderId, setSalesOrderId] = useState<number | string | null>(null);
   const [invoiceType, setInvoiceType] = useState<InvoiceDocumentType>("sales");
   const [sourceType, setSourceType] = useState<SalesInvoiceSourceType | "">("");
@@ -286,6 +296,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
   }, []);
 
   const statutoryFingerprintRef = useRef<string | null>(null);
+  const dispatchTotalsReadyRef = useRef(false);
 
   const searchParams = useSearchParams();
   const routeSourceType = searchParams.get("sourceType");
@@ -596,9 +607,38 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
         ),
       );
     }
-    if (prefill.sourceType === "sample_order") {
+    if (
+      prefill.sourceType === "sample_order" ||
+      prefill.sourceType === "sales_order" ||
+      prefill.sourceType === "stock_transfer"
+    ) {
+      // Editable charges start empty; SO/order charges are shown read-only separately.
       setAdditionalExpenses([]);
-      setRoundOff(0);
+      if (prefill.sourceType === "sample_order") {
+        setOrderSuggestedCharges([]);
+        setRoundOff(0);
+      } else if (prefill.additionalExpenses?.length) {
+        // Local bridge path: surface SO expenses as display-only suggestions.
+        setOrderSuggestedCharges(
+          prefill.additionalExpenses.map((e, idx) => {
+            const gstPct = Number(e.gstPct || 0);
+            return {
+              sales_order_expense_id: String(e.id || `bridge-${idx}`),
+              charge_name: e.expenseHead || "Additional charge",
+              amount: String(e.amount || 0),
+              gst_percent: gstPct > 0 ? String(gstPct) : null,
+              charge_source: "ORDER" as const,
+              matched_additional_charge_id: e.chargeMasterId || null,
+              matched_ledger_id: null,
+              matched_ledger_code: null,
+              matched_ledger_name: null,
+              gst_applicable: e.gstApplicable ?? gstPct > 0,
+              default_gst_rate: gstPct > 0 ? String(gstPct) : null,
+              mapping_ok: Boolean(e.chargeMasterId),
+            };
+          }),
+        );
+      }
     } else if (prefill.additionalExpenses?.length) {
       setAdditionalExpenses(enrichExpensesFromChargeMaster(prefill.additionalExpenses));
     }
@@ -624,6 +664,8 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     setBranch("Head Office");
     setTransport(EMPTY_TRANSPORT_STATUTORY);
     setLines([createEmptyLine()]);
+    setAdditionalExpenses([]);
+    setOrderSuggestedCharges([]);
     setError(null);
     setSchemeSettlementEntries([]);
   };
@@ -672,6 +714,8 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
         setWarehouse("Central Warehouse");
         setBranch("Head Office");
         setLines([createEmptyLine()]);
+        setAdditionalExpenses([]);
+        setOrderSuggestedCharges([]);
         setError(null);
         setSchemeSettlementEntries([]);
         return;
@@ -709,21 +753,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
             salespersonName,
           );
 
-          const additionalExpenses = (prepared.suggested_additional_charges || [])
-            .filter((c) => c.mapping_ok && c.matched_additional_charge_id)
-            .map((c) => {
-              const gstPct = Number(c.gst_percent ?? c.default_gst_rate ?? 0);
-              return {
-                id: c.sales_order_expense_id,
-                expenseHead: c.charge_name || "",
-                amount: Number(c.amount || 0),
-                gstApplicable: c.gst_applicable ?? gstPct > 0,
-                gstPct,
-                remarks: "",
-                origin: "sales_order" as const,
-                chargeMasterId: c.matched_additional_charge_id,
-              };
-            });
+          setOrderSuggestedCharges(prepared.suggested_additional_charges || []);
 
           const customerName = String(
             customer.customer_name || customer.customerName || row.customerName || "",
@@ -733,6 +763,9 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
               warehouseSnap.warehouseName ||
               row.warehouse ||
               "",
+          );
+          const warehouseUuid = String(
+            warehouseSnap.warehouse_id || warehouseSnap.warehouseId || "",
           );
 
           applySalesInvoicePrefill({
@@ -777,18 +810,28 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
             billTo: customerName,
             shipTo: customerName,
             dispatchQty: lineItems.reduce((acc, l) => acc + (l.qty || 0), 0),
-            transportMode: "",
+            transportMode: prepared.dispatch.transport_mode || "",
             transporterName: prepared.dispatch.transporter || "",
-            transporterId: "",
+            transporterId: prepared.dispatch.transporter_id || "",
             vehicleNo: prepared.dispatch.vehicle_number || "",
             lrNo: prepared.dispatch.lr_number || "",
-            lrDate: "",
-            transportDocNo: "",
-            transportDocDate: "",
-            distanceKm: null,
+            lrDate: String(prepared.dispatch.lr_date || "").slice(0, 10),
+            transportDocNo:
+              prepared.dispatch.transport_doc_number ||
+              prepared.dispatch.lr_number ||
+              "",
+            transportDocDate: String(
+              prepared.dispatch.transport_doc_date ||
+                prepared.dispatch.lr_date ||
+                "",
+            ).slice(0, 10),
+            distanceKm:
+              prepared.dispatch.approx_distance != null
+                ? Number(prepared.dispatch.approx_distance)
+                : null,
             lineItems,
             lineErrors: [],
-            additionalExpenses,
+            additionalExpenses: [],
             nearExpirySchemes: [],
             sourceWarehouseGstin: String(
               (prepared.warehouse_gst as Record<string, unknown> | null)?.gst_number ||
@@ -800,12 +843,38 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
             destinationWarehouseState: customerState || placeOfSupplyValue,
           } as unknown as SalesInvoicePrefill);
 
+          setSourceWarehouseId(warehouseUuid || null);
+
           setTransport((prev) => ({
             ...prev,
+            transportMode: prepared.dispatch.transport_mode || prev.transportMode,
             transporterName: prepared.dispatch.transporter || prev.transporterName,
+            transporterId: prepared.dispatch.transporter_id || prev.transporterId,
             vehicleNo: prepared.dispatch.vehicle_number || prev.vehicleNo,
             lrNo: prepared.dispatch.lr_number || prev.lrNo,
+            lrDate:
+              String(prepared.dispatch.lr_date || "").slice(0, 10) || prev.lrDate,
+            transportDocNo:
+              prepared.dispatch.transport_doc_number ||
+              prepared.dispatch.lr_number ||
+              prev.transportDocNo,
+            transportDocDate:
+              String(
+                prepared.dispatch.transport_doc_date ||
+                  prepared.dispatch.lr_date ||
+                  "",
+              ).slice(0, 10) || prev.transportDocDate,
+            distanceKm:
+              prepared.dispatch.approx_distance != null &&
+              Number(prepared.dispatch.approx_distance) > 0
+                ? String(prepared.dispatch.approx_distance)
+                : prev.distanceKm,
           }));
+          if (prepared.totals) {
+            dispatchTotalsReadyRef.current = true;
+            setBackendTotals(prepared.totals);
+            setRoundOff(Number(prepared.totals.round_off_amount) || 0);
+          }
         } catch (err) {
           setError(
             err instanceof Error
@@ -818,6 +887,13 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
+
+  useEffect(() => {
+    if (!sourceDispatchId) {
+      dispatchTotalsReadyRef.current = false;
+      setBackendTotals(null);
+    }
+  }, [sourceDispatchId]);
 
   useEffect(() => {
     if (isEdit) return;
@@ -861,21 +937,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
             salespersonName,
           );
 
-          const additionalExpenses = (prepared.suggested_additional_charges || [])
-            .filter((c) => c.mapping_ok && c.matched_additional_charge_id)
-            .map((c) => {
-              const gstPct = Number(c.gst_percent ?? c.default_gst_rate ?? 0);
-              return {
-                id: c.sales_order_expense_id,
-                expenseHead: c.charge_name || "",
-                amount: Number(c.amount || 0),
-                gstApplicable: c.gst_applicable ?? gstPct > 0,
-                gstPct,
-                remarks: "",
-                origin: "sales_order" as const,
-                chargeMasterId: c.matched_additional_charge_id,
-              };
-            });
+          setOrderSuggestedCharges(prepared.suggested_additional_charges || []);
 
           const customerName = String(
             customer.customer_name || customer.customerName || "",
@@ -989,18 +1051,31 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
             billTo: isSTDispatch ? destWhName : customerName,
             shipTo: isSTDispatch ? destWhName : customerName,
             dispatchQty: lineItems.reduce((acc, l) => acc + (l.qty || 0), 0),
-            transportMode: transportDistanceKm != null ? "Road" : "",
+            transportMode:
+              prepared.dispatch.transport_mode ||
+              (transportDistanceKm != null ? "Road" : ""),
             transporterName: prepared.dispatch.transporter || "",
-            transporterId: "",
+            transporterId: prepared.dispatch.transporter_id || "",
             vehicleNo: prepared.dispatch.vehicle_number || "",
             lrNo: prepared.dispatch.lr_number || "",
-            lrDate: "",
-            transportDocNo: prepared.dispatch.lr_number || "",
-            transportDocDate: String(prepared.dispatch.dispatch_date || "").slice(0, 10),
-            distanceKm: transportDistanceKm,
+            lrDate: String(prepared.dispatch.lr_date || "").slice(0, 10),
+            transportDocNo:
+              prepared.dispatch.transport_doc_number ||
+              prepared.dispatch.lr_number ||
+              "",
+            transportDocDate: String(
+              prepared.dispatch.transport_doc_date ||
+                prepared.dispatch.lr_date ||
+                prepared.dispatch.dispatch_date ||
+                "",
+            ).slice(0, 10),
+            distanceKm:
+              prepared.dispatch.approx_distance != null
+                ? Number(prepared.dispatch.approx_distance)
+                : transportDistanceKm,
             lineItems,
             lineErrors: [],
-            additionalExpenses,
+            additionalExpenses: [],
             nearExpirySchemes: [],
             sourceWarehouseGstin: sourceWhGstin,
             destinationWarehouseGstin: destWhGstin,
@@ -1011,27 +1086,58 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
           };
 
           applySalesInvoicePrefill(prefill);
-          setSourceWarehouseId(stData?.from_warehouse?.warehouse_id ?? null);
+          setSourceWarehouseId(
+            isSTDispatch
+              ? (stData?.from_warehouse?.warehouse_id ?? null)
+              : (String(
+                  (warehouse as Record<string, unknown>).warehouse_id ||
+                    (warehouse as Record<string, unknown>).warehouseId ||
+                    "",
+                ) || null),
+          );
           setDestinationWarehouseId(stData?.to_warehouse?.warehouse_id ?? null);
           if (
             prepared.dispatch.transporter ||
             prepared.dispatch.vehicle_number ||
+            prepared.dispatch.transport_mode ||
             transportDistanceKm != null
           ) {
             setTransport((prev) => ({
               ...prev,
+              transportMode:
+                prepared.dispatch.transport_mode || prev.transportMode,
               transporterName: prepared.dispatch.transporter || prev.transporterName,
+              transporterId:
+                prepared.dispatch.transporter_id || prev.transporterId,
               vehicleNo: prepared.dispatch.vehicle_number || prev.vehicleNo,
               lrNo: prepared.dispatch.lr_number || prev.lrNo,
-              transportDocNo: prepared.dispatch.lr_number || prev.transportDocNo,
+              lrDate:
+                String(prepared.dispatch.lr_date || "").slice(0, 10) ||
+                prev.lrDate,
+              transportDocNo:
+                prepared.dispatch.transport_doc_number ||
+                prepared.dispatch.lr_number ||
+                prev.transportDocNo,
               transportDocDate:
-                String(prepared.dispatch.dispatch_date || "").slice(0, 10) ||
-                prev.transportDocDate,
+                String(
+                  prepared.dispatch.transport_doc_date ||
+                    prepared.dispatch.lr_date ||
+                    prepared.dispatch.dispatch_date ||
+                    "",
+                ).slice(0, 10) || prev.transportDocDate,
               distanceKm:
-                transportDistanceKm != null && transportDistanceKm > 0
-                  ? String(transportDistanceKm)
-                  : prev.distanceKm,
+                prepared.dispatch.approx_distance != null &&
+                Number(prepared.dispatch.approx_distance) > 0
+                  ? String(prepared.dispatch.approx_distance)
+                  : transportDistanceKm != null && transportDistanceKm > 0
+                    ? String(transportDistanceKm)
+                    : prev.distanceKm,
             }));
+          }
+          if (prepared.totals) {
+            dispatchTotalsReadyRef.current = true;
+            setBackendTotals(prepared.totals);
+            setRoundOff(Number(prepared.totals.round_off_amount) || 0);
           }
         } catch (err) {
           console.error("Failed to load prefill from backend:", err);
@@ -1130,6 +1236,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     setDispatchQty(rec.lineItems.reduce((s, l) => s + (l.qty || 0), 0));
     setBranch(rec.branch ?? "Head Office");
     setWarehouse(rec.warehouse ?? "Central Warehouse");
+    setSourceWarehouseId(rec.warehouseUuid || null);
     setBankAccountId(rec.bankAccountId ?? null);
     setSalesperson(rec.salesperson ?? "");
     setSalesOrderId(rec.salesOrderId ?? null);
@@ -1290,6 +1397,68 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
       grandTotal,
     };
   }, [lineTotals, expenseTotals, roundOff]);
+
+  const isDispatchGenerationPreview =
+    !isEdit &&
+    Boolean(sourceDispatchId) &&
+    (isSalesOrderGeneration || isStockTransferGeneration);
+
+  const dispatchTotalsPreview = useMemo(() => {
+    if (!backendTotals) return null;
+    const n = (value: string) => Number(value) || 0;
+    return {
+      roundOff: n(backendTotals.round_off_amount),
+      grandTotal: n(backendTotals.invoice_amount),
+      gstAmount: n(backendTotals.gst_amount),
+      cgst: n(backendTotals.cgst_amount),
+      sgst: n(backendTotals.sgst_amount),
+      igst: n(backendTotals.igst_amount),
+      grossAmount: n(backendTotals.gross_amount),
+      discountAmount: n(backendTotals.product_discount_amount),
+      additionalChargeAmount: n(backendTotals.additional_charge_amount),
+      taxableAmount: n(backendTotals.taxable_amount),
+    };
+  }, [backendTotals]);
+
+  useEffect(() => {
+    if (
+      !isDispatchGenerationPreview ||
+      !sourceDispatchId ||
+      !dispatchTotalsReadyRef.current
+    ) {
+      return;
+    }
+
+    const charges = additionalExpenses
+      .filter((e) => (e.expenseHead.trim() || e.amount > 0) && e.chargeMasterId)
+      .map((e) => ({
+        additional_charge_id: String(e.chargeMasterId),
+        amount: e.amount,
+        charge_source: "INVOICE" as const,
+        gst_applicable: e.gstApplicable,
+        gst_rate: e.gstPct,
+      }));
+
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      SalesInvoiceService.previewDispatchTotals(sourceDispatchId, {
+        additional_charges: charges,
+        round_off_amount: roundOff,
+      })
+        .then((previewTotals) => {
+          if (cancelled) return;
+          setBackendTotals(previewTotals);
+        })
+        .catch(() => {
+          /* keep last good preview while charge rows are edited */
+        });
+    }, 300);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [isDispatchGenerationPreview, sourceDispatchId, additionalExpenses, roundOff]);
 
   const accountingPreview = useMemo(() => {
     if (isSalesOrderInvoice) return null;
@@ -1529,10 +1698,21 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
 
   const isStockTransferInvoice = invoiceType === "stock_transfer";
 
-  const outputGstSplit = useMemo(
-    () => splitInvoiceGst(totals.taxAmount, interstateGst),
-    [totals.taxAmount, interstateGst],
-  );
+  const outputGstSplit = useMemo(() => {
+    if (isDispatchGenerationPreview && dispatchTotalsPreview) {
+      return {
+        cgst: dispatchTotalsPreview.cgst,
+        sgst: dispatchTotalsPreview.sgst,
+        igst: dispatchTotalsPreview.igst,
+      };
+    }
+    return splitInvoiceGst(totals.taxAmount, interstateGst);
+  }, [
+    isDispatchGenerationPreview,
+    dispatchTotalsPreview,
+    totals.taxAmount,
+    interstateGst,
+  ]);
 
   /** Fingerprint of values that invalidate generated statutory docs when changed. */
   const statutoryValueFingerprint = useMemo(
@@ -1955,8 +2135,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
           .map((e) => ({
             additional_charge_id: String(e.chargeMasterId),
             amount: e.amount,
-            charge_source:
-              e.origin === "sales_order" ? ("ORDER" as const) : ("INVOICE" as const),
+            charge_source: "INVOICE" as const,
             gst_applicable: e.gstApplicable,
             gst_rate: e.gstPct,
             remarks: e.remarks || undefined,
@@ -1968,10 +2147,30 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
           narration: remarks.trim() || undefined,
           remarks: remarks.trim() || undefined,
           transporter: transport.transporterName.trim() || undefined,
+          transporter_id: transport.transporterId.trim() || undefined,
+          transport_mode: transport.transportMode.trim() || undefined,
           vehicle_number: transport.vehicleNo.trim() || undefined,
           lr_number: transport.lrNo.trim() || undefined,
+          lr_date: transport.lrDate.trim() || undefined,
+          transport_doc_number:
+            transport.transportDocNo.trim() || transport.lrNo.trim() || undefined,
+          transport_doc_date:
+            transport.transportDocDate.trim() || transport.lrDate.trim() || undefined,
+          approx_distance: transport.distanceKm.trim()
+            ? Number(transport.distanceKm)
+            : undefined,
+          irn_number: transport.irn.trim() || undefined,
+          acknowledgement_number:
+            transport.acknowledgementNo.trim() ||
+            transport.eInvoiceNo.trim() ||
+            undefined,
+          acknowledgement_date: transport.acknowledgementDate.trim() || undefined,
+          einvoice_status: transport.eInvoiceStatus || undefined,
           eway_bill_number: transport.ewayBillNo?.trim() || undefined,
-          additional_charges: charges,
+          eway_bill_valid_upto: transport.ewayBillExpiryDate.trim() || undefined,
+          eway_bill_status: transport.ewayBillStatus || undefined,
+          additional_charges: charges.length > 0 ? charges : undefined,
+          round_off_amount: roundOff,
         });
 
         dispatchAccountsDataChanged("sales-invoices");
@@ -2043,6 +2242,35 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
   const stGen = isStockTransferGeneration || (isStockTransferInvoice && !isEdit);
   const smGen = isSampleOrderGeneration || (isSampleOrderInvoice && !isEdit);
   const compactGen = soGen || stGen || smGen;
+
+  const summaryRoundOff =
+    isDispatchGenerationPreview && dispatchTotalsPreview
+      ? dispatchTotalsPreview.roundOff
+      : roundOff;
+  const summaryGrandTotal =
+    isDispatchGenerationPreview && dispatchTotalsPreview
+      ? dispatchTotalsPreview.grandTotal
+      : totals.grandTotal;
+  const summaryTaxAmount =
+    isDispatchGenerationPreview && dispatchTotalsPreview
+      ? dispatchTotalsPreview.gstAmount
+      : totals.taxAmount;
+  const summaryGrossAmount =
+    isDispatchGenerationPreview && dispatchTotalsPreview
+      ? dispatchTotalsPreview.grossAmount
+      : totals.productSubtotal;
+  const summaryDiscountAmount =
+    isDispatchGenerationPreview && dispatchTotalsPreview
+      ? dispatchTotalsPreview.discountAmount
+      : totals.discountTotal;
+  const summaryAdditionalCharges =
+    isDispatchGenerationPreview && dispatchTotalsPreview
+      ? dispatchTotalsPreview.additionalChargeAmount
+      : totals.expenseTaxable;
+  const summaryTaxableAmount =
+    isDispatchGenerationPreview && dispatchTotalsPreview
+      ? dispatchTotalsPreview.taxableAmount
+      : Math.max(0, totals.productSubtotal - totals.discountTotal + totals.expenseTaxable);
 
   const sampleCustomerMeta = useMemo(() => {
     if (!smGen || !customerName.trim()) return { customerType: "", salesperson: "" };
@@ -2162,6 +2390,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
       }
     >
       <div className={cn(compactGen ? "space-y-2.5" : "space-y-4")}>
+        {!soGen ? (
         <InvoiceFormCard title={stGen ? "Warehouse Transfer Details" : isStockTransferInvoice ? "Destination Warehouse" : "Customer"}>
           {stGen ? (
             <StockTransferWarehouseDetailsSection
@@ -2191,44 +2420,6 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
               customerType={sampleCustomerMeta.customerType}
               salesperson={sampleCustomerMeta.salesperson}
             />
-          ) : soGen ? (
-            <div className="so-goods-field-grid">
-              <div className="so-goods-field so-w-customer">
-                <p className="so-goods-field__label">Customer Name</p>
-                <div className="so-goods-field__control">
-                  <div className="so-goods-ro-with-info">
-                    <span className="so-goods-ro-with-info__value">{customerName || "—"}</span>
-                    {customerName ? (
-                      <CustomerPartyInfoButton
-                        className="so-goods-info-btn"
-                        customerId={customerId}
-                        customerName={customerName}
-                        customerCode={customerCode}
-                        branch={branch}
-                        gstin={customerGst}
-                        billingAddress={billingAddress}
-                        shippingAddress={shippingAddress}
-                        placeOfSupply={placeOfSupply}
-                        paymentTerms={paymentTerms}
-                        creditLimit={
-                          customerId
-                            ? customers.find((c) => c.id === Number(customerId))?.creditLimit
-                            : undefined
-                        }
-                      />
-                    ) : null}
-                  </div>
-                </div>
-                <p className="so-goods-field__helper">&nbsp;</p>
-              </div>
-              <div className="so-goods-field so-w-gstin">
-                <p className="so-goods-field__label">GSTIN</p>
-                <div className="so-goods-field__control">
-                  <div className="so-goods-ro so-goods-ro--mono">{customerGst?.trim() || "—"}</div>
-                </div>
-                <p className="so-goods-field__helper">&nbsp;</p>
-              </div>
-            </div>
           ) : (
             <SalesInvoiceCustomerSection
               customers={customers}
@@ -2247,6 +2438,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
             />
           )}
         </InvoiceFormCard>
+        ) : null}
 
         <InvoiceFormCard title="Invoice & Dispatch Details">
           <SalesInvoiceDocumentInfoSection
@@ -2285,6 +2477,38 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
               soGen && bankPrintDetails
                 ? `${bankPrintDetails.bankName} · ${bankPrintDetails.accountNumber}`
                 : undefined
+            }
+            customerName={soGen ? customerName : undefined}
+            customerInfoButton={
+              soGen ? (
+                <CustomerPartyInfoButton
+                  className="so-goods-info-btn"
+                  customerId={customerId}
+                  customerName={customerName}
+                  customerCode={customerCode}
+                  branch={branch}
+                  gstin={customerGst}
+                  billingAddress={billingAddress}
+                  shippingAddress={shippingAddress}
+                  placeOfSupply={placeOfSupply}
+                  paymentTerms={paymentTerms}
+                  linkedLedger={receivableLedger || undefined}
+                  creditLimit={
+                    customerId
+                      ? customers.find((c) => c.id === Number(customerId))?.creditLimit
+                      : undefined
+                  }
+                />
+              ) : undefined
+            }
+            warehouseName={soGen ? warehouse : undefined}
+            warehouseInfoButton={
+              soGen ? (
+                <InvoiceWarehouseInfoButton
+                  className="so-goods-info-btn"
+                  warehouseId={sourceWarehouseId}
+                />
+              ) : undefined
             }
             dispatchContext={
               soGen
@@ -2384,13 +2608,78 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
         </Section>
 
         {!smGen ? (
+        <>
+        {soGen || stGen ? (
+          orderSuggestedCharges.length > 0 ? (
+            <Section title="Sales Order Additional Charges">
+              <p className={cn(INVOICE_FORM_HELPER_CLASS, "-mt-1")}>
+                Charges from the sales order (display only — not posted).
+              </p>
+              <div className="border rounded-md overflow-hidden">
+                <table className="w-full text-[11px]">
+                  <thead>
+                    <tr className="border-b bg-muted/20">
+                      <th className="p-1.5 text-left font-medium">Charge</th>
+                      <th className="p-1.5 text-right font-medium w-28">Amount</th>
+                      <th className="p-1.5 text-right font-medium w-20">GST %</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {orderSuggestedCharges.map((charge, idx) => {
+                      const gstPct = Number(
+                        charge.gst_percent ?? charge.default_gst_rate ?? 0,
+                      );
+                      return (
+                        <tr
+                          key={`so-charge-${charge.sales_order_expense_id || charge.charge_name}-${idx}`}
+                          className="border-b last:border-0"
+                        >
+                          <td className="p-1.5">
+                            {charge.charge_name}
+                            {!charge.mapping_ok ? (
+                              <span className="ml-1 text-[10px] text-amber-700">
+                                (unmapped)
+                              </span>
+                            ) : null}
+                          </td>
+                          <td className="p-1.5 text-right tabular-nums">
+                            {formatINR(Number(charge.amount || 0))}
+                          </td>
+                          <td className="p-1.5 text-right tabular-nums">
+                            {gstPct > 0 ? gstPct : "—"}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              {orderSuggestedCharges.some((c) => !c.mapping_ok) ? (
+                <p className="text-xs text-amber-700">
+                  The following SO charges are not in Additional Charge Master:{" "}
+                  {orderSuggestedCharges
+                    .filter((c) => !c.mapping_ok)
+                    .map((c) => c.charge_name)
+                    .join(", ")}
+                </p>
+              ) : null}
+            </Section>
+          ) : null
+        ) : null}
+
         <Section title="Additional Charges">
           {soGen || stGen ? (
-            <GoodsInvoiceAdditionalChargesEditor
-              expenses={additionalExpenses}
-              onChange={setAdditionalExpenses}
-              interstate={interstateGst}
-            />
+            <>
+              <p className={cn(INVOICE_FORM_HELPER_CLASS, "-mt-1")}>
+                Optional freight, packing, or other charges. These post on the sales
+                invoice.
+              </p>
+              <GoodsInvoiceAdditionalChargesEditor
+                expenses={additionalExpenses}
+                onChange={setAdditionalExpenses}
+                interstate={interstateGst}
+              />
+            </>
           ) : (
             <InvoiceAdditionalExpensesEditor
               expenses={additionalExpenses}
@@ -2400,6 +2689,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
             />
           )}
         </Section>
+        </>
         ) : null}
 
         <div
@@ -2525,19 +2815,15 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
                 <>
                   <div className="flex items-center justify-between gap-4 py-0.5">
                     <span className="so-summary-label">Gross Amount</span>
-                    <span className="so-summary-value">{formatINR(totals.productSubtotal)}</span>
+                    <span className="so-summary-value">{formatINR(summaryGrossAmount)}</span>
                   </div>
                   <div className="flex items-center justify-between gap-4 py-0.5">
                     <span className="so-summary-label">Additional Charges</span>
-                    <span className="so-summary-value">{formatINR(totals.expenseTaxable)}</span>
+                    <span className="so-summary-value">{formatINR(summaryAdditionalCharges)}</span>
                   </div>
                   <div className="flex items-center justify-between gap-4 py-0.5">
                     <span className="so-summary-label">Taxable Value</span>
-                    <span className="so-summary-value">
-                      {formatINR(
-                        Math.max(0, totals.productSubtotal - totals.discountTotal + totals.expenseTaxable),
-                      )}
-                    </span>
+                    <span className="so-summary-value">{formatINR(summaryTaxableAmount)}</span>
                   </div>
                   {interstateGst ? (
                     <div className="flex items-center justify-between gap-4 py-0.5 border-t border-border/60 pt-1.5">
@@ -2558,7 +2844,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
                   )}
                   <div className="flex items-center justify-between gap-4 py-0.5">
                     <span className="so-summary-label">Total Tax</span>
-                    <span className="so-summary-value">{formatINR(totals.taxAmount)}</span>
+                    <span className="so-summary-value">{formatINR(summaryTaxAmount)}</span>
                   </div>
                   <div className="flex items-center justify-between gap-4 py-0.5">
                     <Label className="so-summary-label">Round Off</Label>
@@ -2570,67 +2856,91 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
                   </div>
                   <div className="flex items-center justify-between gap-4 py-1.5 border-t border-border/60">
                     <span className="so-grand-total-label">Total Invoice Value</span>
-                    <span className="so-grand-total-value">{formatINR(totals.grandTotal)}</span>
+                    <span className="so-grand-total-value">{formatINR(summaryGrandTotal)}</span>
+                  </div>
+                </>
+              ) : soGen ? (
+                <>
+                  <div className="flex items-center justify-between gap-4 py-0.5">
+                    <span className="so-summary-label">Gross Amount</span>
+                    <span className="so-summary-value">{formatINR(summaryGrossAmount)}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-4 py-0.5">
+                    <span className="so-summary-label">Discount</span>
+                    <span className="so-summary-value">{formatINR(summaryDiscountAmount)}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-4 py-0.5">
+                    <span className="so-summary-label">Taxable Amount</span>
+                    <span className="so-summary-value">{formatINR(summaryTaxableAmount)}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-4 py-0.5">
+                    <span className="so-summary-label">Additional Charges</span>
+                    <span className="so-summary-value">{formatINR(summaryAdditionalCharges)}</span>
+                  </div>
+                  {interstateGst ? (
+                    <div className="flex items-center justify-between gap-4 py-0.5">
+                      <span className="so-summary-label">Output IGST</span>
+                      <span className="so-summary-value">{formatINR(outputGstSplit.igst)}</span>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex items-center justify-between gap-4 py-0.5">
+                        <span className="so-summary-label">Output CGST</span>
+                        <span className="so-summary-value">{formatINR(outputGstSplit.cgst)}</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-4 py-0.5">
+                        <span className="so-summary-label">Output SGST</span>
+                        <span className="so-summary-value">{formatINR(outputGstSplit.sgst)}</span>
+                      </div>
+                    </>
+                  )}
+                  <div className="flex items-center justify-between gap-4 py-0.5">
+                    <Label className="so-summary-label">Round Off</Label>
+                    <AccountsMoneyInput
+                      className={CHARGE_INPUT_CLASS}
+                      value={roundOff || ""}
+                      onChange={(v) => setRoundOff(v)}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between gap-4 py-1.5 border-t border-border/60">
+                    <span className="so-grand-total-label">Grand Total</span>
+                    <span className="so-grand-total-value">{formatINR(summaryGrandTotal)}</span>
                   </div>
                 </>
               ) : (
                 <>
               <div className="flex items-center justify-between gap-4 py-0.5">
-                <span className={soGen ? "so-summary-label" : "text-muted-foreground"}>Gross Amount</span>
-                <span className={soGen ? "so-summary-value" : "font-medium tabular-nums"}>
-                  {formatINR(totals.productSubtotal)}
+                <span className="text-muted-foreground">Gross Amount</span>
+                <span className="font-medium tabular-nums">
+                  {formatINR(summaryGrossAmount)}
                 </span>
               </div>
               <div className="flex items-center justify-between gap-4 py-0.5">
-                <span className={soGen ? "so-summary-label" : "text-muted-foreground"}>Discount</span>
-                <span className={soGen ? "so-summary-value" : "font-medium tabular-nums"}>
-                  {formatINR(totals.discountTotal)}
+                <span className="text-muted-foreground">Discount</span>
+                <span className="font-medium tabular-nums">
+                  {formatINR(summaryDiscountAmount)}
                 </span>
               </div>
               <div className="flex items-center justify-between gap-4 py-0.5">
-                <span className={soGen ? "so-summary-label" : "text-muted-foreground"}>Taxable Amount</span>
-                <span className={soGen ? "so-summary-value" : "font-medium tabular-nums"}>
-                  {formatINR(
-                    Math.max(0, totals.productSubtotal - totals.discountTotal + totals.expenseTaxable),
-                  )}
+                <span className="text-muted-foreground">Taxable Amount</span>
+                <span className="font-medium tabular-nums">
+                  {formatINR(summaryTaxableAmount)}
                 </span>
               </div>
-              {soGen ? (
-                interstateGst ? (
-                  <div className="flex items-center justify-between gap-4 py-0.5 border-t border-border/60 pt-1.5">
-                    <span className="so-summary-label">Output IGST</span>
-                    <span className="so-summary-value">{formatINR(outputGstSplit.igst)}</span>
-                  </div>
-                ) : (
-                  <>
-                    <div className="flex items-center justify-between gap-4 py-0.5 border-t border-border/60 pt-1.5">
-                      <span className="so-summary-label">Output CGST</span>
-                      <span className="so-summary-value">{formatINR(outputGstSplit.cgst)}</span>
-                    </div>
-                    <div className="flex items-center justify-between gap-4 py-0.5">
-                      <span className="so-summary-label">Output SGST</span>
-                      <span className="so-summary-value">{formatINR(outputGstSplit.sgst)}</span>
-                    </div>
-                  </>
-                )
-              ) : (
-                <div className="flex items-center justify-between gap-4 py-0.5 border-t border-border/60 pt-1.5">
-                  <span className="text-muted-foreground">GST Total</span>
-                  <span className="font-medium tabular-nums">{formatINR(totals.taxAmount)}</span>
-                </div>
-              )}
-              {(totals.expenseTaxable > 0 || soGen) && (
+              <div className="flex items-center justify-between gap-4 py-0.5 border-t border-border/60 pt-1.5">
+                <span className="text-muted-foreground">GST Total</span>
+                <span className="font-medium tabular-nums">{formatINR(summaryTaxAmount)}</span>
+              </div>
+              {summaryAdditionalCharges > 0 && (
                 <div className="flex items-center justify-between gap-4 py-0.5">
-                  <span className={soGen ? "so-summary-label" : "text-muted-foreground"}>
-                    {soGen ? "Additional Charges" : "Additional Expenses"}
-                  </span>
-                  <span className={soGen ? "so-summary-value" : "font-medium tabular-nums"}>
-                    {formatINR(totals.expenseTaxable)}
+                  <span className="text-muted-foreground">Additional Expenses</span>
+                  <span className="font-medium tabular-nums">
+                    {formatINR(summaryAdditionalCharges)}
                   </span>
                 </div>
               )}
               <div className="flex items-center justify-between gap-4 py-0.5">
-                <Label className={cn(soGen ? "so-summary-label" : "text-muted-foreground font-normal text-xs")}>
+                <Label className="text-muted-foreground font-normal text-xs">
                   Round Off
                 </Label>
                 <AccountsMoneyInput
@@ -2640,15 +2950,9 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
                 />
               </div>
               <div className="flex items-center justify-between gap-4 py-1.5 border-t border-border/60">
-                <span className={soGen ? "so-grand-total-label" : "font-semibold text-sm"}>Grand Total</span>
-                <span
-                  className={
-                    soGen
-                      ? "so-grand-total-value"
-                      : "font-bold text-sm tabular-nums text-brand-700"
-                  }
-                >
-                  {formatINR(totals.grandTotal)}
+                <span className="font-semibold text-sm">Grand Total</span>
+                <span className="font-bold text-sm tabular-nums text-brand-700">
+                  {formatINR(summaryGrandTotal)}
                 </span>
               </div>
                 </>
@@ -2657,7 +2961,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
           </div>
         </div>
 
-        {(soGen || stGen) && !isEdit ? (
+        {stGen && !isEdit ? (
           <InvoiceFormCard title="Statutory Generation">
             <GoodsStatutoryGenerationSection
               value={transport}
@@ -2682,10 +2986,12 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
           </Section>
         )}
 
+        {!soGen ? (
         <AccountingImpactSection
           docKey="sales_invoice"
           className={compactGen ? "mt-2" : undefined}
         />
+        ) : null}
       </div>
     </InvoiceFormLayout>
     {discardDialog}

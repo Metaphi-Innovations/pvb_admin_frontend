@@ -17,13 +17,13 @@ import {
 import { invalidatePurchaseOrderModuleListingQueries } from "@/lib/procurement/invalidate-po-listing-queries";
 import {
   formatDateOnly,
-  formatDisplayQty,
   getLatestPackingDate,
   getSnapshotField,
   resolveProductSku,
   toDateInputValue,
   validateDispatchDateAgainstPacking,
 } from "../dispatch-display-utils";
+import { DispatchStackedQty } from "../components/DispatchStackedQty";
 import { showToast } from "@/lib/toast";
 
 type PackingDoneProductRow = NonNullable<
@@ -119,6 +119,12 @@ export default function CreateDispatchPage() {
   const [selectedOrderId, setSelectedOrderId] = useState("");
   const [selectedPackingDoneIds, setSelectedPackingDoneIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
+
+  // Transportation details (only for Purchase Return dispatch)
+  const [transporter, setTransporter] = useState("");
+  const [vehicleNumber, setVehicleNumber] = useState("");
+  const [lrNumber, setLrNumber] = useState("");
+  const [lrDate, setLrDate] = useState("");
 
   useEffect(() => {
     getPackedOrdersDropdown({ source_type: sourceType })
@@ -281,11 +287,20 @@ export default function CreateDispatchPage() {
     setLoading(true);
     try {
       const dispatchDateIso = new Date(dispatchDate).toISOString();
-      await createDispatch({
+      const payload: any = {
         packing_done_ids: selectedPackingDoneIds,
         status: "Ready for Dispatch",
         dispatch_date: dispatchDateIso,
-      });
+      };
+
+      if (sourceType === "purchase_return") {
+        payload.transporter = transporter || null;
+        payload.vehicle_number = vehicleNumber || null;
+        payload.lr_number = lrNumber || null;
+        payload.lr_date = lrDate ? new Date(lrDate).toISOString() : null;
+      }
+
+      await createDispatch(payload);
       await invalidatePurchaseOrderModuleListingQueries(queryClient);
       showToast("Dispatch created successfully", "success");
       router.push(listHref);
@@ -393,6 +408,60 @@ export default function CreateDispatchPage() {
             </div>
           </div>
         </div>
+
+        {sourceType === "purchase_return" && (
+          <div className="border-t border-border/80 pt-6 space-y-4">
+            <h2 className="text-xs font-bold text-foreground uppercase tracking-wider border-b pb-2 flex items-center gap-1.5">
+              <Truck className="w-4 h-4 text-brand-600" /> Transportation Details
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+              <div>
+                <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
+                  Transporter Name
+                </p>
+                <Input
+                  value={transporter}
+                  onChange={(e) => setTransporter(e.target.value)}
+                  placeholder="Transporter name..."
+                  className="h-8 text-xs mt-1.5"
+                />
+              </div>
+              <div>
+                <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
+                  Vehicle Number
+                </p>
+                <Input
+                  value={vehicleNumber}
+                  onChange={(e) => setVehicleNumber(e.target.value)}
+                  placeholder="Vehicle number..."
+                  className="h-8 text-xs mt-1.5"
+                />
+              </div>
+              <div>
+                <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
+                  LR Number
+                </p>
+                <Input
+                  value={lrNumber}
+                  onChange={(e) => setLrNumber(e.target.value)}
+                  placeholder="LR number..."
+                  className="h-8 text-xs mt-1.5"
+                />
+              </div>
+              <div>
+                <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
+                  LR Date
+                </p>
+                <Input
+                  type="date"
+                  value={lrDate}
+                  onChange={(e) => setLrDate(e.target.value)}
+                  className="h-8 text-xs mt-1.5"
+                />
+              </div>
+            </div>
+          </div>
+        )}
 
         {selectedPackings.length > 0 && (
           <div className="border-t border-border/80 pt-6 space-y-4">
@@ -505,14 +574,25 @@ export default function CreateDispatchPage() {
                                 <td className="py-3 px-3 text-xs text-muted-foreground">
                                   {formatDateOnly(expiryDate)}
                                 </td>
-                                <td className="py-3 px-3 text-xs font-semibold text-center tabular-nums">
-                                  {formatDisplayQty(Number(product.order_base_qty || 0), product)}
+                                <td className="py-3 px-3 align-top">
+                                  <DispatchStackedQty
+                                    baseQty={Number(product.order_base_qty || 0)}
+                                    product={product}
+                                  />
                                 </td>
-                                <td className="py-3 px-3 text-xs font-bold text-center text-emerald-600 tabular-nums">
-                                  {formatDisplayQty(Number(product.base_qty || 0), product)}
+                                <td className="py-3 px-3 align-top">
+                                  <DispatchStackedQty
+                                    baseQty={Number(product.base_qty || 0)}
+                                    product={product}
+                                    accent="emerald"
+                                  />
                                 </td>
-                                <td className="py-3 px-3 text-xs font-bold text-center text-amber-600 tabular-nums">
-                                  {formatDisplayQty(Number(product.pending_base_qty || 0), product)}
+                                <td className="py-3 px-3 align-top">
+                                  <DispatchStackedQty
+                                    baseQty={Number(product.pending_base_qty || 0)}
+                                    product={product}
+                                    accent="amber"
+                                  />
                                 </td>
                               </tr>
                             );

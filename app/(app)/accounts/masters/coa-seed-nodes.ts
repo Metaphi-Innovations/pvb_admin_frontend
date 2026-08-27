@@ -5,6 +5,7 @@ import {
   GST_INPUT_STATUTORY_LEDGERS,
   GST_OUTPUT_LEDGER_NAMES,
   MANDATORY_SYSTEM_LEDGERS,
+  OTHER_CURRENT_ASSETS_STATUTORY_LEDGERS,
   type CoaStatutoryLedgerSeed,
 } from "./chart-of-accounts/coa-statutory-ledgers";
 
@@ -127,7 +128,11 @@ const ASSETS_GROUPS: CoaTreeGroup[] = [
       { name: "Deposits", code: "1215" },
       { name: "Prepaid Expenses", code: "1216" },
       { name: "Accrued Income", code: "1217" },
-      { name: "Other Current Assets", code: "1218" },
+      {
+        name: "Other Current Assets",
+        code: "1218",
+        ledgers: OTHER_CURRENT_ASSETS_STATUTORY_LEDGERS,
+      },
     ],
   },
   {
@@ -220,7 +225,6 @@ const INCOME_GROUPS: CoaTreeGroup[] = [
       { name: "Interest Income", code: "3210" },
       { name: "Dividend Income", code: "3211" },
       { name: "Rent Income", code: "3212" },
-      { name: "Discount Received", code: "3213" },
       { name: "Profit on Sale of Asset", code: "3214" },
       { name: "Foreign Exchange Gain", code: "3215" },
       { name: "Miscellaneous Income", code: "3216" },
@@ -311,6 +315,17 @@ const INDIRECT_EXPENSE_BRANCHES: CoaTreeBranch[] = [
   },
   { name: "Depreciation & Amortisation", code: "4270" },
   { name: "Miscellaneous Expenses", code: "4280" },
+  {
+    name: "Round Off",
+    code: "4290",
+    ledgers: [
+      {
+        name: "Round Off Adjustment",
+        code: "42901",
+        balanceType: "Debit" as const,
+      },
+    ],
+  },
 ];
 
 let _nextId = 100;
@@ -364,7 +379,9 @@ function systemLedgerNode(
   const nameLower = name.toLowerCase();
   const usedIn: ErpUsageModule[] =
     ledger.tdsApplicable
-      ? ["payments", "procurement", "journal"]
+      ? nameLower.includes("receivable")
+        ? ["sales", "payments", "journal"]
+        : ["payments", "procurement", "journal"]
       : GST_INPUT_LEDGER_NAMES.has(nameLower)
         ? ["procurement", "journal"]
         : GST_OUTPUT_LEDGER_NAMES.has(nameLower)
@@ -401,10 +418,14 @@ function systemLedgerNode(
     balanceType: ledger.balanceType,
     gstApplicable: ledger.gstApplicable ?? false,
     tdsApplicable: ledger.tdsApplicable ?? false,
-    alias: ledger.systemKey
+    alias: ledger.alias?.trim()
+      ? ledger.alias.trim()
+      : ledger.systemKey
       ? `sys:${ledger.systemKey}`
       : ledger.tdsApplicable
-        ? "tds:payable"
+        ? nameLower.includes("receivable")
+          ? "tds:receivable"
+          : "tds:payable"
         : nameLower === "tcs payable"
           ? "tcs:payable"
           : GST_INPUT_LEDGER_NAMES.has(nameLower)
@@ -537,6 +558,6 @@ function buildSystemCoaNodes(): ChartOfAccount[] {
 export const SYSTEM_COA_NODES: ChartOfAccount[] = buildSystemCoaNodes();
 
 /** Bump when CA system hierarchy changes — triggers storage reset on mismatch */
-export const COA_SYSTEM_REVISION = 18;
+export const COA_SYSTEM_REVISION = 19;
 
 export const EXPECTED_SYSTEM_NODE_COUNT = SYSTEM_COA_NODES.length;

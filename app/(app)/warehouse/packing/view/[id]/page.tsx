@@ -11,7 +11,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { PackingListService } from "@/services/packing-list.service";
 import { PackingDoneService } from "@/services/packing-done.service";
 import { STATUS_BADGE_CONFIG } from "../../constants";
-import { PackingRecordUnion, SalesOrderRecord, SalesOrderProduct, PackingRecord } from "../../types";
+import { PackingRecordUnion } from "../../types";
+import { PackingProductsViewTable } from "../../components/PackingProductsViewTable";
 import {
   getPackingDateLabel,
   getPackingDocumentNo,
@@ -33,16 +34,6 @@ function packingStatusVariant(status: string): "active" | "inactive" | "draft" |
   if (s.includes("ready") || s.includes("pending")) return "draft";
   if (s.includes("cancel")) return "blocked";
   return "neutral";
-}
-
-function formatDateOnly(value: unknown): string {
-  if (value === null || value === undefined) return "—";
-  const raw = String(value).trim();
-  if (!raw) return "—";
-  if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10);
-  const parsed = new Date(raw);
-  if (Number.isNaN(parsed.getTime())) return raw;
-  return parsed.toISOString().slice(0, 10);
 }
 
 export default function ViewPackingDetailsPage({ params }: { params: { id: string } }) {
@@ -135,7 +126,6 @@ export default function ViewPackingDetailsPage({ params }: { params: { id: strin
   const isPurchaseReturn = isPurchaseReturnDoc(rowData);
   const isStockTransfer = isStockTransferDoc(rowData);
   const qtyLabel = getPackingQtyLabel(docType);
-  const showBatchInfo = isPurchaseReturn || (rowData.products?.some((p: any) => p.batchNumber) ?? false);
 
   const listHref = resolvePackingReturnTo(
     searchParams,
@@ -282,46 +272,11 @@ export default function ViewPackingDetailsPage({ params }: { params: { id: strin
                 <Package className="w-4 h-4 text-brand-600" />
                 {isPurchaseReturn ? "Return Line Items" : "Product Details"}
               </h2>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="border-b border-border bg-slate-50/50">
-                      <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Product</th>
-                      <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">SKU</th>
-                      {showBatchInfo && (
-                        <>
-                          <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Batch</th>
-                          <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Mfg Date</th>
-                          <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Expiry Date</th>
-                        </>
-                      )}
-                      <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider text-center">
-                        {qtyLabel}
-                      </th>
-                      <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider text-center">Packed Qty</th>
-                      <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider text-center">Pending Qty</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rowData.products?.map((p: SalesOrderProduct) => (
-                      <tr key={`${p.sku}-${p.batchNumber || ""}`} className="border-b border-border/60 hover:bg-slate-50/40">
-                        <td className="py-3 px-3 text-xs font-bold text-foreground">{p.product}</td>
-                        <td className="py-3 px-3 text-xs font-mono font-bold text-brand-700">{p.sku}</td>
-                        {showBatchInfo && (
-                          <>
-                            <td className="py-3 px-3 text-xs font-mono text-foreground">{p.batchNumber ?? "—"}</td>
-                            <td className="py-3 px-3 text-xs text-muted-foreground">{formatDateOnly(p.mfgDate)}</td>
-                            <td className="py-3 px-3 text-xs text-muted-foreground">{formatDateOnly(p.expDate)}</td>
-                          </>
-                        )}
-                        <td className="py-3 px-3 text-xs font-semibold text-center">{p.ordered_cases}</td>
-                        <td className="py-3 px-3 text-xs font-bold text-center text-emerald-600">{p.packedQty}</td>
-                        <td className="py-3 px-3 text-xs font-bold text-center text-amber-600">{p.pending_cases}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <PackingProductsViewTable
+                products={rowData.products ?? []}
+                qtyLabel={qtyLabel}
+                showPending
+              />
             </div>
           </div>
         )}
@@ -397,44 +352,10 @@ export default function ViewPackingDetailsPage({ params }: { params: { id: strin
                 <Package className="w-4 h-4 text-brand-600" />
                 Packed Products Details
               </h2>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="border-b border-border bg-slate-50/50">
-                      <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Product</th>
-                      <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">SKU</th>
-                      <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Batch Number</th>
-                      <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Mfg Date</th>
-                      <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Expiry Date</th>
-                      <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider text-center">
-                        {qtyLabel}
-                      </th>
-                      <th className="py-2.5 px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider text-center">Packed Qty</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(rowData.products as any[] | undefined)?.map((p: any, idx: number) => {
-                      return (
-                        <tr key={`${p.sku || p.productCode || p.product}-${p.batchNumber || idx}`} className="border-b border-border/60 hover:bg-slate-50/40">
-                          <td className="py-3 px-3 text-xs font-bold text-foreground">{p.product}</td>
-                          <td className="py-3 px-3 text-xs font-mono font-bold text-brand-700">
-                            {p.sku || "—"}
-                          </td>
-                          <td className="py-3 px-3 text-xs font-mono text-foreground">{p.batchNumber ?? "—"}</td>
-                          <td className="py-3 px-3 text-xs text-muted-foreground">{formatDateOnly(p.mfgDate)}</td>
-                          <td className="py-3 px-3 text-xs text-muted-foreground">{formatDateOnly(p.expDate)}</td>
-                          <td className="py-3 px-3 text-xs font-semibold text-center tabular-nums">
-                            {Number(p.ordered_cases ?? p.orderBaseQty ?? 0)}
-                          </td>
-                          <td className="py-3 px-3 text-xs font-bold text-center text-emerald-600 tabular-nums">
-                            {Number(p.packedQty ?? p.packedBaseQty ?? 0)}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+              <PackingProductsViewTable
+                products={rowData.products ?? []}
+                qtyLabel={qtyLabel}
+              />
             </div>
           </div>
         )}

@@ -6,7 +6,6 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -35,21 +34,16 @@ import {
   recalculateLineItem,
   type InvoiceLineItem,
 } from "@/app/(app)/accounts/invoices/invoices-data";
-import { CustomerPartyInfoButton } from "@/app/(app)/accounts/invoices/components/CustomerPartyInfo";
+import {
+  ServiceInvoiceCustomerInfoButton,
+  ServiceInvoiceWarehouseInfoButton,
+} from "@/app/(app)/accounts/invoices/components/ServiceInvoiceEntityInfo";
 import { SearchableSelect } from "@/app/(app)/accounts/credit-notes/components/SearchableSelect";
 import { inferInterstateFromPlaceOfSupply } from "@/lib/accounts/gst-accounting";
 import { splitInvoiceGst } from "@/lib/accounts/invoice-gst-breakup";
 import { formatINR } from "@/app/(app)/accounts/invoices/invoice-utils";
 import { cn } from "@/lib/utils";
 import "./sales-order-invoice-form-compact.css";
-
-const AccountingImpactSection = dynamic(
-  () =>
-    import("@/components/accounts/AccountingImpactSection").then((m) => ({
-      default: m.AccountingImpactSection,
-    })),
-  { ssr: false, loading: () => null },
-);
 import {
   useCustomersDropdown,
   useCustomerDetails,
@@ -76,7 +70,10 @@ import {
   type InvoiceAdditionalExpense,
 } from "@/app/(app)/accounts/invoices/invoice-additional-expenses";
 
-type ServiceLineItem = InvoiceLineItem & { sacId: string | null };
+type ServiceLineItem = InvoiceLineItem & {
+  sacId: string | null;
+  incomeLedgerId: CoaNodeId | null;
+};
 
 function computeDueDate(baseDate: string, creditDays: number): string {
   const d = new Date(`${baseDate}T12:00:00`);
@@ -89,7 +86,7 @@ function todayStr() {
   return new Date().toISOString().slice(0, 10);
 }
 
-function createEmptyServiceLine(): ServiceLineItem {
+function createEmptyServiceLine(incomeLedgerId: CoaNodeId | null = null): ServiceLineItem {
   return {
     ...recalculateLineItem({
       ...createEmptyLine(),
@@ -98,6 +95,7 @@ function createEmptyServiceLine(): ServiceLineItem {
       taxPct: 18,
     }),
     sacId: null,
+    incomeLedgerId,
   };
 }
 
@@ -108,6 +106,45 @@ function ledgerApiUuid(ledger: ChartOfAccount | null | undefined): string | null
 
 function isActiveIncomeLedger(ledger: ChartOfAccount): boolean {
   return ledger.nodeLevel === "ledger" && ledger.status === "active" && ledger.accountType === "Income";
+}
+
+function nestedRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+function detailString(source: Record<string, unknown> | null | undefined, ...keys: string[]): string {
+  if (!source) return "";
+  for (const key of keys) {
+    const value = source[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return "";
+}
+
+function formatPaymentTerms(paymentType?: string, creditDays?: number | string): string {
+  if (!paymentType) return "";
+  const type = paymentType.toLowerCase();
+  if (type === "advance") return "Advance";
+  if (type === "credit") {
+    const days = creditDays ? Number(creditDays) : 30;
+    return `Net ${days}`;
+  }
+  return paymentType;
+}
+
+const CHARGE_INPUT_CLASS =
+  "h-9 text-sm tabular-nums text-right w-28 ml-auto [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none";
+
+function resolveLineIncomeLedger(
+  line: Pick<ServiceLineItem, "incomeLedgerId">,
+  coaRecords: ChartOfAccount[],
+): ChartOfAccount | null {
+  if (line.incomeLedgerId == null) return null;
+  return resolveServiceInvoiceRevenueLedger({
+    selectedLedgerId: line.incomeLedgerId,
+    records: coaRecords,
+  });
 }
 
 export default function ServiceInvoiceFormPageClient() {
@@ -128,7 +165,7 @@ export default function ServiceInvoiceFormPageClient() {
   const [creditDays, setCreditDays] = useState(30);
   const [branch, setBranch] = useState("");
   const [warehouseId, setWarehouseId] = useState<string | null>(null);
-  const [incomeLedgerId, setIncomeLedgerId] = useState<CoaNodeId | null>(null);
+  const [defaultIncomeLedgerId, setDefaultIncomeLedgerId] = useState<CoaNodeId | null>(null);
   const [invoiceDate, setInvoiceDate] = useState(todayStr);
   const [dueDate, setDueDate] = useState("");
   const [referenceNo, setReferenceNo] = useState("");
@@ -137,6 +174,7 @@ export default function ServiceInvoiceFormPageClient() {
   const [additionalExpenses, setAdditionalExpenses] = useState<InvoiceAdditionalExpense[]>([
     createEmptyAdditionalExpense("manual"),
   ]);
+  const [roundOff, setRoundOff] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -174,10 +212,19 @@ export default function ServiceInvoiceFormPageClient() {
   }, [coaRecords]);
 
   useEffect(() => {
-    if (!coaRecords.length || incomeLedgerId != null) return;
+    if (!coaRecords.length || defaultIncomeLedgerId != null) return;
     const resolved = resolveServiceInvoiceRevenueLedger({ records: coaRecords });
-    if (resolved) setIncomeLedgerId(resolved.id);
-  }, [coaRecords, incomeLedgerId]);
+    if (resolved) setDefaultIncomeLedgerId(resolved.id);
+  }, [coaRecords, defaultIncomeLedgerId]);
+
+  useEffect(() => {
+    if (defaultIncomeLedgerId == null) return;
+    setLines((prev) =>
+      prev.map((line) =>
+        line.incomeLedgerId == null ? { ...line, incomeLedgerId: defaultIncomeLedgerId } : line,
+      ),
+    );
+  }, [defaultIncomeLedgerId]);
 
   useEffect(() => {
     if (invoiceDate && creditDays >= 0) {
@@ -202,10 +249,18 @@ export default function ServiceInvoiceFormPageClient() {
         lineTotals.discountTotal +
         lineTotals.taxAmount +
         expenseTotals.taxableAmount +
-        expenseTotals.gstAmount) *
+        expenseTotals.gstAmount +
+        roundOff) *
         100,
     ) / 100;
   const gstSplit = useMemo(() => splitInvoiceGst(taxAmount, interstate), [taxAmount, interstate]);
+  const summaryGrossAmount = lineTotals.subtotal;
+  const summaryDiscountAmount = lineTotals.discountTotal;
+  const summaryAdditionalCharges = expenseTotals.taxableAmount;
+  const summaryTaxableAmount =
+    Math.round(
+      (lineTotals.subtotal - lineTotals.discountTotal + expenseTotals.taxableAmount) * 100,
+    ) / 100;
 
   const customerOptions = useMemo(
     () =>
@@ -240,10 +295,44 @@ export default function ServiceInvoiceFormPageClient() {
       sacOptions.map((s) => ({
         value: s.id,
         label: `${s.hsnCode} — ${s.hsnDescription}`,
+        selectedLabel: s.hsnCode,
         sub: s.gstRate,
       })),
     [sacOptions],
   );
+
+  const customerTypeName = useMemo(() => {
+    const details = nestedRecord(customerDetails);
+    const typeObj = nestedRecord(details?.customer_type);
+    return detailString(typeObj, "customer_type_name", "name") || detailString(details, "customer_type_name");
+  }, [customerDetails]);
+
+  const linkedLedgerLabel = useMemo(() => {
+    const details = nestedRecord(customerDetails);
+    const nested =
+      nestedRecord(details?.ledger) ||
+      nestedRecord(details?.account_ledger) ||
+      nestedRecord(details?.linked_ledger);
+    const name = detailString(nested, "ledger_name", "account_name", "name") || detailString(details, "ledger_name");
+    const code = detailString(nested, "ledger_code", "account_code", "code") || detailString(details, "ledger_code");
+    if (name) return code ? `${name} (${code})` : name;
+    if (!customerId) return "";
+    const ledger = coaRecords.find(
+      (l) =>
+        l.nodeLevel === "ledger" &&
+        (String(l.masterId ?? "") === customerId || String(l.erpSourceId ?? "") === customerId),
+    );
+    if (!ledger) return "";
+    return ledger.accountCode ? `${ledger.accountName} (${ledger.accountCode})` : ledger.accountName;
+  }, [coaRecords, customerDetails, customerId]);
+
+  const customerPaymentTerms = useMemo(() => {
+    const details = nestedRecord(customerDetails);
+    return formatPaymentTerms(
+      detailString(details, "payment_type"),
+      details?.credit_days as number | string | undefined,
+    );
+  }, [customerDetails]);
 
   const applyCustomer = useCallback(
     (id: string | null) => {
@@ -310,34 +399,25 @@ export default function ServiceInvoiceFormPageClient() {
       prev.map((l) => {
         if (l.id !== id) return l;
         const next = { ...l, ...patch };
-        return { ...recalculateLineItem(next), sacId: next.sacId ?? null };
+        return {
+          ...recalculateLineItem(next),
+          sacId: next.sacId ?? null,
+          incomeLedgerId: next.incomeLedgerId ?? null,
+        };
       }),
     );
   }, []);
 
   const addLine = () => {
-    setLines((prev) => [...prev, createEmptyServiceLine()]);
+    setLines((prev) => [...prev, createEmptyServiceLine(defaultIncomeLedgerId)]);
   };
 
   const removeLine = (id: string) => {
     setLines((prev) => {
       const next = prev.filter((l) => l.id !== id);
-      return next.length ? next : [createEmptyServiceLine()];
+      return next.length ? next : [createEmptyServiceLine(defaultIncomeLedgerId)];
     });
   };
-
-  const selectedIncomeLedger = useMemo(() => {
-    if (incomeLedgerId == null) return null;
-    return resolveServiceInvoiceRevenueLedger({
-      selectedLedgerId: incomeLedgerId,
-      records: coaRecords,
-    });
-  }, [coaRecords, incomeLedgerId]);
-
-  const serviceLedgerUuid = useMemo(
-    () => ledgerApiUuid(selectedIncomeLedger),
-    [selectedIncomeLedger],
-  );
 
   const saveAndPost = async () => {
     setError(null);
@@ -353,10 +433,6 @@ export default function ServiceInvoiceFormPageClient() {
       setError("Invoice Date is required.");
       return;
     }
-    if (!selectedIncomeLedger || !serviceLedgerUuid) {
-      setError(SERVICE_INVOICE_REVENUE_LEDGER_MISSING_ERROR);
-      return;
-    }
     if (!sacOptions.length) {
       setError("No active SAC codes found in HSN Master. Create SAC records before posting.");
       return;
@@ -370,7 +446,7 @@ export default function ServiceInvoiceFormPageClient() {
           productName: l.productName.trim() || l.description.trim(),
           description: l.description.trim() || l.productName.trim(),
         }),
-      );
+      ) as ServiceLineItem[];
 
     if (!serviceLines.length) {
       setError("Add at least one service line.");
@@ -378,6 +454,16 @@ export default function ServiceInvoiceFormPageClient() {
     }
 
     for (const line of serviceLines) {
+      const incomeLedger = resolveLineIncomeLedger(line, coaRecords);
+      const serviceLedgerUuid = ledgerApiUuid(incomeLedger);
+      if (!incomeLedger || !serviceLedgerUuid) {
+        setError(
+          line.productName
+            ? `Select an Income Ledger for "${line.productName}".`
+            : SERVICE_INVOICE_REVENUE_LEDGER_MISSING_ERROR,
+        );
+        return;
+      }
       if (!line.sacId) {
         setError(`Select a SAC code for "${line.productName}".`);
         return;
@@ -415,7 +501,7 @@ export default function ServiceInvoiceFormPageClient() {
         narration: narration.trim() || undefined,
         remarks: referenceNo.trim() || undefined,
         items: serviceLines.map((line) => ({
-          service_ledger_id: serviceLedgerUuid,
+          service_ledger_id: ledgerApiUuid(resolveLineIncomeLedger(line, coaRecords))!,
           service_name: line.productName.trim(),
           sac_id: line.sacId!,
           quantity: line.qty || 1,
@@ -423,6 +509,7 @@ export default function ServiceInvoiceFormPageClient() {
           gst_rate: line.taxPct,
         })),
         additional_charges: charges,
+        round_off_amount: roundOff,
       });
 
       dispatchAccountsDataChanged("sales-invoices");
@@ -454,42 +541,9 @@ export default function ServiceInvoiceFormPageClient() {
       }
     >
       <div className="space-y-3">
-        <InvoiceFormCard title="Customer">
-          <div className="flex flex-wrap items-end gap-2 max-w-xl">
-            <div className="flex-1 min-w-[240px]">
-              <SearchableSelect
-                label="Customer Name"
-                required
-                value={customerId ?? ""}
-                onChange={(id) => applyCustomer(id || null)}
-                options={customerOptions}
-                placeholder="Select customer…"
-              />
-            </div>
-            {customerName ? (
-              <div className="pb-0.5">
-                <CustomerPartyInfoButton
-                  customerName={customerName}
-                  customerCode={customerCode}
-                  branch={branch}
-                />
-              </div>
-            ) : null}
-          </div>
-        </InvoiceFormCard>
-
         <InvoiceFormCard title="Invoice Details">
           <div className={INVOICE_FORM_GRID_CLASS}>
             <InvoiceFormReadOnly label="Invoice No." value="Auto-generated on post" />
-            <InvoiceFormField label="Warehouse" required>
-              <SearchableSelect
-                label=""
-                value={warehouseId ?? ""}
-                onChange={(id) => setWarehouseId(id || null)}
-                options={warehouseOptions}
-                placeholder="Select warehouse…"
-              />
-            </InvoiceFormField>
             <InvoiceFormField label="Invoice Date" required>
               <InvoiceFormInput
                 type="date"
@@ -498,15 +552,50 @@ export default function ServiceInvoiceFormPageClient() {
               />
             </InvoiceFormField>
             <InvoiceFormReadOnly label="Due Date" value={dueDate || "—"} />
-            <InvoiceFormField label="Income Ledger" required>
+            <div className="space-y-1">
+              <div className="flex items-center gap-1 min-h-[16px]">
+                <Label className={INVOICE_FORM_LABEL_CLASS}>
+                  Customer <span className="text-red-500 ml-0.5">*</span>
+                </Label>
+                <ServiceInvoiceCustomerInfoButton
+                  enabled={Boolean(customerId)}
+                  info={{
+                    customerName,
+                    customerCode,
+                    gstin: customerGst,
+                    billingAddress,
+                    shippingAddress,
+                    state: placeOfSupply,
+                    branch,
+                    customerType: customerTypeName,
+                    paymentTerms: customerPaymentTerms,
+                    linkedLedger: linkedLedgerLabel,
+                  }}
+                />
+              </div>
               <SearchableSelect
                 label=""
-                value={incomeLedgerId != null ? String(incomeLedgerId) : ""}
-                onChange={(id) => setIncomeLedgerId(id ? Number(id) : null)}
-                options={incomeLedgerSelectOptions}
-                placeholder="Service Income under Service Revenue…"
+                value={customerId ?? ""}
+                onChange={(id) => applyCustomer(id || null)}
+                options={customerOptions}
+                placeholder="Select customer…"
               />
-            </InvoiceFormField>
+            </div>
+            <div className="space-y-1">
+              <div className="flex items-center gap-1 min-h-[16px]">
+                <Label className={INVOICE_FORM_LABEL_CLASS}>
+                  Warehouse <span className="text-red-500 ml-0.5">*</span>
+                </Label>
+                <ServiceInvoiceWarehouseInfoButton warehouseId={warehouseId} />
+              </div>
+              <SearchableSelect
+                label=""
+                value={warehouseId ?? ""}
+                onChange={(id) => setWarehouseId(id || null)}
+                options={warehouseOptions}
+                placeholder="Select warehouse…"
+              />
+            </div>
             <InvoiceFormField label="Manual Reference No.">
               <InvoiceFormInput
                 value={referenceNo}
@@ -514,60 +603,53 @@ export default function ServiceInvoiceFormPageClient() {
                 placeholder="Optional"
               />
             </InvoiceFormField>
-            <InvoiceFormField label="Place of Supply">
-              <InvoiceFormInput
-                value={placeOfSupply}
-                onChange={(e) => setPlaceOfSupply(e.target.value)}
-                placeholder="State / UT"
-              />
-            </InvoiceFormField>
-            <div className="sm:col-span-2 lg:col-span-3 space-y-1.5">
-              <Label className={INVOICE_FORM_LABEL_CLASS}>Narration</Label>
-              <Textarea
-                className={cn(INVOICE_FORM_INPUT_CLASS, "min-h-[64px]")}
-                value={narration}
-                onChange={(e) => setNarration(e.target.value)}
-                placeholder="Optional"
-                rows={2}
-              />
-            </div>
           </div>
-          {!selectedIncomeLedger && coaRecords.length > 0 ? (
-            <p className="mt-2 text-xs text-amber-700">
-              {SERVICE_INVOICE_REVENUE_LEDGER_MISSING_ERROR}
-            </p>
-          ) : null}
         </InvoiceFormCard>
 
-        <InvoiceFormSection title="Service Lines">
-          <div className="so-goods-product-table-wrap">
-            <table className="w-full text-xs min-w-[1100px]">
+        <InvoiceFormSection
+          title="Service Lines"
+          action={
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs gap-1.5"
+              onClick={addLine}
+            >
+              <Plus className="w-3.5 h-3.5" /> Add Service Line
+            </Button>
+          }
+        >
+          <div className="so-goods-product-table-wrap overflow-x-auto">
+            <table className="text-xs w-max min-w-[1520px]">
               <thead className="bg-muted/30 border-b border-border">
                 <tr>
                   {[
-                    { label: "Service Description", align: "left" as const },
-                    { label: "SAC Code", align: "left" as const },
-                    { label: "Qty", align: "right" as const },
-                    { label: "UOM", align: "left" as const },
-                    { label: "Rate", align: "right" as const },
-                    { label: "Disc %", align: "right" as const },
-                    { label: "Disc Amt", align: "right" as const },
-                    { label: "Taxable", align: "right" as const },
-                    { label: "GST %", align: "right" as const },
+                    { label: "Service Description", align: "left" as const, className: "min-w-[180px]" },
+                    { label: "Income Ledger", align: "left" as const, className: "min-w-[220px]" },
+                    { label: "SAC Code", align: "left" as const, className: "min-w-[120px]" },
+                    { label: "Qty", align: "right" as const, className: "min-w-[65px]" },
+                    { label: "UOM", align: "left" as const, className: "min-w-[70px]" },
+                    { label: "Rate", align: "right" as const, className: "min-w-[90px]" },
+                    { label: "Disc %", align: "right" as const, className: "min-w-[70px]" },
+                    { label: "Disc Amt", align: "right" as const, className: "min-w-[90px]" },
+                    { label: "Taxable", align: "right" as const, className: "min-w-[95px]" },
+                    { label: "GST %", align: "right" as const, className: "min-w-[70px]" },
                     ...(interstate
-                      ? [{ label: "IGST", align: "right" as const }]
+                      ? [{ label: "IGST", align: "right" as const, className: "min-w-[90px]" }]
                       : [
-                          { label: "CGST", align: "right" as const },
-                          { label: "SGST", align: "right" as const },
+                          { label: "CGST", align: "right" as const, className: "min-w-[90px]" },
+                          { label: "SGST", align: "right" as const, className: "min-w-[90px]" },
                         ]),
-                    { label: "Line Total", align: "right" as const },
-                    { label: "", align: "left" as const },
+                    { label: "Line Total", align: "right" as const, className: "min-w-[110px]" },
+                    { label: "", align: "left" as const, className: "min-w-[40px]" },
                   ].map((h) => (
                     <th
                       key={h.label || "del"}
                       className={cn(
                         "px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap",
                         h.align === "right" ? "text-right" : "text-left",
+                        h.className,
                       )}
                     >
                       {h.label}
@@ -581,7 +663,7 @@ export default function ServiceInvoiceFormPageClient() {
                   const split = calcGstLineSplit(line, interstate);
                   return (
                     <tr key={line.id} className="border-b border-border/40 last:border-0">
-                      <td className="p-1.5 min-w-[160px]">
+                      <td className="p-1.5 min-w-[180px] w-[180px]">
                         <Input
                           className="h-8 text-xs"
                           value={line.productName}
@@ -594,7 +676,21 @@ export default function ServiceInvoiceFormPageClient() {
                           placeholder="Service description"
                         />
                       </td>
-                      <td className="p-1.5 w-[180px]">
+                      <td className="p-1.5 min-w-[220px] max-w-[240px] w-[220px] overflow-hidden">
+                        <SearchableSelect
+                          label=""
+                          value={line.incomeLedgerId != null ? String(line.incomeLedgerId) : ""}
+                          onChange={(id) =>
+                            updateLine(line.id, {
+                              incomeLedgerId: id ? Number(id) : null,
+                            })
+                          }
+                          options={incomeLedgerSelectOptions}
+                          placeholder="Select income ledger…"
+                          contentClassName="w-[320px]"
+                        />
+                      </td>
+                      <td className="p-1.5 min-w-[120px] max-w-[130px] w-[120px] overflow-hidden">
                         <SearchableSelect
                           label=""
                           value={line.sacId ?? ""}
@@ -608,9 +704,10 @@ export default function ServiceInvoiceFormPageClient() {
                           }}
                           options={sacSelectOptions}
                           placeholder="Select SAC…"
+                          contentClassName="w-[340px]"
                         />
                       </td>
-                      <td className="p-1.5 w-[72px]">
+                      <td className="p-1.5 min-w-[65px] w-[65px]">
                         <Input
                           type="number"
                           min={0}
@@ -622,21 +719,21 @@ export default function ServiceInvoiceFormPageClient() {
                           }
                         />
                       </td>
-                      <td className="p-1.5 w-[72px]">
+                      <td className="p-1.5 min-w-[70px] w-[70px]">
                         <Input
                           className="h-8 text-xs"
                           value={line.unit}
                           onChange={(e) => updateLine(line.id, { unit: e.target.value })}
                         />
                       </td>
-                      <td className="p-1.5 w-[100px]">
+                      <td className="p-1.5 min-w-[90px] w-[90px]">
                         <AccountsMoneyInput
                           className="h-8 text-xs text-right"
                           value={line.unitPrice || ""}
                           onChange={(v) => updateLine(line.id, { unitPrice: v })}
                         />
                       </td>
-                      <td className="p-1.5 w-[72px]">
+                      <td className="p-1.5 min-w-[70px] w-[70px]">
                         <Input
                           type="number"
                           min={0}
@@ -651,11 +748,13 @@ export default function ServiceInvoiceFormPageClient() {
                           }
                         />
                       </td>
-                      <td className="p-1.5 w-[90px] text-right tabular-nums text-muted-foreground">
+                      <td className="p-1.5 min-w-[90px] w-[90px] text-right tabular-nums text-muted-foreground whitespace-nowrap">
                         {formatINR(discountAmt)}
                       </td>
-                      <td className="p-1.5 w-[90px] text-right tabular-nums">{formatINR(taxable)}</td>
-                      <td className="p-1.5 w-[72px]">
+                      <td className="p-1.5 min-w-[95px] w-[95px] text-right tabular-nums whitespace-nowrap">
+                        {formatINR(taxable)}
+                      </td>
+                      <td className="p-1.5 min-w-[70px] w-[70px]">
                         <Input
                           type="number"
                           min={0}
@@ -669,23 +768,23 @@ export default function ServiceInvoiceFormPageClient() {
                         />
                       </td>
                       {interstate ? (
-                        <td className="p-1.5 w-[90px] text-right tabular-nums text-muted-foreground">
+                        <td className="p-1.5 min-w-[90px] w-[90px] text-right tabular-nums text-muted-foreground whitespace-nowrap">
                           {formatINR(split.igst)}
                         </td>
                       ) : (
                         <>
-                          <td className="p-1.5 w-[90px] text-right tabular-nums text-muted-foreground">
+                          <td className="p-1.5 min-w-[90px] w-[90px] text-right tabular-nums text-muted-foreground whitespace-nowrap">
                             {formatINR(split.cgst)}
                           </td>
-                          <td className="p-1.5 w-[90px] text-right tabular-nums text-muted-foreground">
+                          <td className="p-1.5 min-w-[90px] w-[90px] text-right tabular-nums text-muted-foreground whitespace-nowrap">
                             {formatINR(split.sgst)}
                           </td>
                         </>
                       )}
-                      <td className="p-1.5 w-[100px] text-right tabular-nums font-semibold">
+                      <td className="p-1.5 min-w-[110px] w-[110px] text-right tabular-nums font-semibold whitespace-nowrap">
                         {formatINR(split.lineTotal)}
                       </td>
-                      <td className="p-1.5 w-9">
+                      <td className="p-1.5 min-w-[40px] w-[40px]">
                         <button
                           type="button"
                           className="p-1 rounded hover:bg-red-50 text-muted-foreground hover:text-red-600"
@@ -701,17 +800,11 @@ export default function ServiceInvoiceFormPageClient() {
               </tbody>
             </table>
           </div>
-          <div className="flex justify-end mt-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-8 text-xs gap-1.5"
-              onClick={addLine}
-            >
-              <Plus className="w-3.5 h-3.5" /> Add Service Line
-            </Button>
-          </div>
+          {!incomeLedgerOptions.length && coaRecords.length > 0 ? (
+            <p className="mt-2 text-xs text-amber-700">
+              {SERVICE_INVOICE_REVENUE_LEDGER_MISSING_ERROR}
+            </p>
+          ) : null}
         </InvoiceFormSection>
 
         <InvoiceFormSection title="Additional Charges">
@@ -722,43 +815,70 @@ export default function ServiceInvoiceFormPageClient() {
           />
         </InvoiceFormSection>
 
-        <InvoiceFormCard title="Summary">
-          <div className="svc-invoice-summary-grid">
-            <div className="svc-invoice-summary-item">
-              <div className="svc-invoice-summary-label">Taxable</div>
-              <div className="svc-invoice-summary-value">
-                {formatINR(
-                  lineTotals.subtotal - lineTotals.discountTotal + expenseTotals.taxableAmount,
-                )}
-              </div>
+        <div className="grid grid-cols-1 gap-2.5 items-start lg:grid-cols-[minmax(0,1fr)_300px]">
+          <InvoiceFormSection title="Narration">
+            <div className="rounded-lg border border-slate-200 bg-white p-3">
+              <Textarea
+                className={cn(INVOICE_FORM_INPUT_CLASS, "so-goods-narration resize-y")}
+                value={narration}
+                onChange={(e) => setNarration(e.target.value)}
+                placeholder="Optional narration for this invoice…"
+                maxLength={500}
+              />
             </div>
-            {interstate ? (
-              <div className="svc-invoice-summary-item">
-                <div className="svc-invoice-summary-label">IGST</div>
-                <div className="svc-invoice-summary-value">{formatINR(gstSplit.igst)}</div>
+          </InvoiceFormSection>
+
+          <div className="rounded-lg border border-slate-200 bg-white space-y-2 p-3 lg:sticky lg:top-3 lg:z-10 shadow-sm">
+            <h2 className="accounts-card-title">Summary</h2>
+            <div className="space-y-1.5 so-invoice-summary">
+              <div className="flex items-center justify-between gap-4 py-0.5">
+                <span className="so-summary-label">Gross Amount</span>
+                <span className="so-summary-value">{formatINR(summaryGrossAmount)}</span>
               </div>
-            ) : (
-              <>
-                <div className="svc-invoice-summary-item">
-                  <div className="svc-invoice-summary-label">CGST</div>
-                  <div className="svc-invoice-summary-value">{formatINR(gstSplit.cgst)}</div>
+              <div className="flex items-center justify-between gap-4 py-0.5">
+                <span className="so-summary-label">Discount</span>
+                <span className="so-summary-value">{formatINR(summaryDiscountAmount)}</span>
+              </div>
+              <div className="flex items-center justify-between gap-4 py-0.5">
+                <span className="so-summary-label">Taxable Amount</span>
+                <span className="so-summary-value">{formatINR(summaryTaxableAmount)}</span>
+              </div>
+              <div className="flex items-center justify-between gap-4 py-0.5">
+                <span className="so-summary-label">Additional Charges</span>
+                <span className="so-summary-value">{formatINR(summaryAdditionalCharges)}</span>
+              </div>
+              {interstate ? (
+                <div className="flex items-center justify-between gap-4 py-0.5">
+                  <span className="so-summary-label">Output IGST</span>
+                  <span className="so-summary-value">{formatINR(gstSplit.igst)}</span>
                 </div>
-                <div className="svc-invoice-summary-item">
-                  <div className="svc-invoice-summary-label">SGST</div>
-                  <div className="svc-invoice-summary-value">{formatINR(gstSplit.sgst)}</div>
-                </div>
-              </>
-            )}
-            <div className="svc-invoice-summary-item">
-              <div className="svc-invoice-summary-label">Grand Total</div>
-              <div className="svc-invoice-summary-value svc-invoice-summary-value--grand">
-                {formatINR(grandTotal)}
+              ) : (
+                <>
+                  <div className="flex items-center justify-between gap-4 py-0.5">
+                    <span className="so-summary-label">Output CGST</span>
+                    <span className="so-summary-value">{formatINR(gstSplit.cgst)}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-4 py-0.5">
+                    <span className="so-summary-label">Output SGST</span>
+                    <span className="so-summary-value">{formatINR(gstSplit.sgst)}</span>
+                  </div>
+                </>
+              )}
+              <div className="flex items-center justify-between gap-4 py-0.5">
+                <Label className="so-summary-label">Round Off</Label>
+                <AccountsMoneyInput
+                  className={CHARGE_INPUT_CLASS}
+                  value={roundOff || ""}
+                  onChange={(v) => setRoundOff(v)}
+                />
+              </div>
+              <div className="flex items-center justify-between gap-4 py-1.5 border-t border-border/60">
+                <span className="so-grand-total-label">Grand Total</span>
+                <span className="so-grand-total-value">{formatINR(grandTotal)}</span>
               </div>
             </div>
           </div>
-        </InvoiceFormCard>
-
-        <AccountingImpactSection docKey="service_invoice" />
+        </div>
       </div>
     </InvoiceFormLayout>
     </div>

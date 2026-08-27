@@ -52,9 +52,8 @@ export interface StockPositionLine {
   productName: string;
   hsn: string;
   scientificName: string;
-  category: string;
-  packSize: string;
   batchNumber: string;
+  mfgDate: string;
   expiryDate: string;
   warehouse: string;
   cp: number;
@@ -64,8 +63,13 @@ export interface StockPositionLine {
   dayIn: number;
   dayOut: number;
   closingQty: number;
-  availableQty: number;
   stockValuation: number;
+  /** Packing meta for stacked Case / Unit · Kg|Ltr qty display */
+  unitPerPacking?: number;
+  quantityType?: string;
+  unitPackSize?: number | null;
+  netWeight?: number | null;
+  uom?: string | null;
 }
 
 export interface StockPositionKpis {

@@ -17,7 +17,7 @@ export const ACCOUNTS_LISTING_TABLE_CARD_CLASS =
 
 /** Compact tabs row below filters, above table */
 export const ACCOUNTS_LISTING_TABS_ROW_CLASS =
-  "accounts-listing-tabs-row flex-shrink-0 bg-white";
+  "accounts-listing-tabs-row flex-shrink-0 bg-white px-3 pt-2.5 pb-1.5";
 
 export interface AccountsListingFilterCardProps {
   children: React.ReactNode;

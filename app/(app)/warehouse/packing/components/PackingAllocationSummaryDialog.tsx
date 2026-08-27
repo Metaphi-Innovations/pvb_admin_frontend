@@ -13,6 +13,8 @@ import {
 } from "@/components/ui/dialog";
 import { formatBatchExpiryDate } from "../../dispatch/near-expiry-dispatch";
 import type { PackingSummaryLine } from "../lib/packing-batch-allocation";
+import { ProductSkuCell } from "@/app/(app)/warehouse/grn/shared/components/ProductSkuCell";
+import { PackingStackedQty } from "./PackingStackedQty";
 
 interface PackingAllocationSummaryDialogProps {
   open: boolean;
@@ -52,7 +54,7 @@ export function PackingAllocationSummaryDialog({
                 <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                   Product
                 </th>
-                <th className="px-3 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                   Pack Qty
                 </th>
                 <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
@@ -64,11 +66,17 @@ export function PackingAllocationSummaryDialog({
               {lines.map((line) => (
                 <tr key={line.sku} className="border-b border-border/60 align-top">
                   <td className="px-3 py-2.5">
-                    <p className="font-semibold text-foreground">{line.product}</p>
-                    <p className="font-mono text-[10px] text-brand-700 mt-0.5">{line.sku}</p>
+                    <ProductSkuCell name={line.product} sku={line.sku} />
                   </td>
-                  <td className="px-3 py-2.5 text-right font-mono font-bold tabular-nums">
-                    {line.packingQty}
+                  <td className="px-3 py-2.5">
+                    <PackingStackedQty
+                      baseQty={line.packingQty}
+                      line={{
+                        packSize: line.packSize,
+                        quantity_type: line.quantityType,
+                        productSnapshot: line.productSnapshot,
+                      }}
+                    />
                   </td>
                   <td className="px-3 py-2.5">
                     <div className="space-y-1">

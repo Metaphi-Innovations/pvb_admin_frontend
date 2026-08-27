@@ -65,12 +65,10 @@ import {
   getMasterListErrorMessage,
 } from "@/lib/masters/master-query-errors";
 import type { MasterListKeyParams } from "@/lib/masters/master-query-keys";
-
+import { sortStateToOrdering } from "@/services/category-list.service";
 import { MasterListing } from "@/components/listing/MasterListing";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
 import { ListingAuditCell, ListingStatusToggle, isActiveStatus } from "@/components/listing";
-
-type SortKey = "categoryName" | "description" | "status";
 
 interface ToastState {
   msg: string;
@@ -126,7 +124,7 @@ export default function CategoryMasterPage() {
     appliedSearch,
   } = useAppliedListFilters();
   const { handleOpenFilter, isFilterOpen } = useLazyFilterColumns();
-  const [sort, setSort] = useState<SortState>({ key: "categoryName", direction: "asc" });
+  const [sort, setSort] = useState<SortState>({ key: "", direction: "none" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [toast, setToast] = useState<ToastState | null>(null);
@@ -156,8 +154,9 @@ export default function CategoryMasterPage() {
       search: appliedSearch,
       status: listStatus,
       apiFilters,
+      ordering: sortStateToOrdering(sort.key, sort.direction),
     }),
-    [page, pageSize, appliedSearch, listStatus, apiFilters],
+    [page, pageSize, appliedSearch, listStatus, apiFilters, sort.key, sort.direction],
   );
 
   const listQuery = useCategories(listParams);
@@ -177,12 +176,6 @@ export default function CategoryMasterPage() {
   const statusOptionsQuery = useCategoryFilterDropdown("is_active", {
     enabled: isFilterOpen("status"),
   });
-  const createdByOptionsQuery = useCategoryFilterDropdown("created_by_user__username", {
-    enabled: isFilterOpen("createdBy"),
-  });
-  const updatedByOptionsQuery = useCategoryFilterDropdown("updated_by_user__username", {
-    enabled: isFilterOpen("updatedBy"),
-  });
 
   const categoryNameOptions = useMemo(
     () => categoryNameOptionsQuery.data ?? [],
@@ -199,14 +192,6 @@ export default function CategoryMasterPage() {
       { label: "Inactive", value: "inactive" },
     ];
   }, [statusOptionsQuery.data]);
-  const createdByOptions = useMemo(
-    () => createdByOptionsQuery.data ?? [],
-    [createdByOptionsQuery.data],
-  );
-  const updatedByOptions = useMemo(
-    () => updatedByOptionsQuery.data ?? [],
-    [updatedByOptionsQuery.data],
-  );
 
   const records = useMemo(
     () => (listQuery.data?.items ?? []).map(toCategoryRow),
@@ -311,8 +296,7 @@ export default function CategoryMasterPage() {
       header: "Created",
       sortable: true,
       filterable: true,
-      filterType: "audit",
-      auditUserOptions: createdByOptions,
+      filterType: "date",
       width: "120px",
       render: (val, row) => <ListingAuditCell name={row.createdBy} date={row.createdDate} variant="created" />,
     },
@@ -321,8 +305,7 @@ export default function CategoryMasterPage() {
       header: "Updated",
       sortable: true,
       filterable: true,
-      filterType: "audit",
-      auditUserOptions: updatedByOptions,
+      filterType: "date",
       width: "120px",
       render: (val, row) => <ListingAuditCell name={row.updatedBy} date={row.updatedDate} variant="updated" />,
     },
@@ -346,6 +329,7 @@ export default function CategoryMasterPage() {
 
   const displayRecords = useMemo(() => {
     if (!sort.key || sort.direction === "none") return records;
+    if (sort.key === "createdBy" || sort.key === "updatedBy") return records;
     return [...records].sort((a, b) => {
       const aVal = String(a[sort.key as keyof Category] || "").toLowerCase();
       const bVal = String(b[sort.key as keyof Category] || "").toLowerCase();

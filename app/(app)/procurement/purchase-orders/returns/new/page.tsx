@@ -22,6 +22,7 @@ import {
 } from "@/hooks/procurement";
 import { PurchaseReturnService } from "@/services/purchase-return.service";
 import { getErrorMessage } from "@/lib/masters/master-query-errors";
+import { recalcPurchaseReturn } from "@/app/(app)/procurement/purchase-returns/purchase-return-calc";
 
 export default function NewPurchaseReturnPage() {
   return (
@@ -41,22 +42,30 @@ function NewPurchaseReturnContent() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
   const initializedRef = useRef(false);
+  const eligibleMergedRef = useRef(false);
+
   const poQuery = usePurchaseOrder(poId || null);
+  const warehouseId =
+    poQuery.data?.warehouseId != null ? String(poQuery.data.warehouseId) : null;
   const previewQuery = usePurchaseReturnPreviewNumber(
-    poQuery.data?.warehouseId != null ? String(poQuery.data.warehouseId) : null,
+    warehouseId,
     Boolean(poId),
   );
-  const eligibleItemsQuery = useEligiblePurchaseReturnItems(poId || null);
+  const eligibleItemsQuery = useEligiblePurchaseReturnItems(
+    poId || null,
+    warehouseId || undefined,
+  );
   const createMutation = useCreatePurchaseReturn();
 
+  // Show form shell as soon as PO + preview number are ready (don't wait on eligible lines).
   useEffect(() => {
-    if (!poQuery.data || !previewQuery.data || !eligibleItemsQuery.data) return;
+    if (!poQuery.data || !previewQuery.data) return;
     if (!initializedRef.current) {
       setRecord(
         PurchaseReturnService.buildCreateFromPo(
           poQuery.data,
           previewQuery.data,
-          eligibleItemsQuery.data,
+          [],
         ),
       );
       initializedRef.current = true;
@@ -67,14 +76,59 @@ function NewPurchaseReturnContent() {
         ? { ...prev, returnNumber: previewQuery.data }
         : prev,
     );
-  }, [eligibleItemsQuery.data, poQuery.data, previewQuery.data]);
+  }, [poQuery.data, previewQuery.data]);
+
+  // Merge eligible lines when they arrive.
+  useEffect(() => {
+    if (!record || !poQuery.data || !eligibleItemsQuery.data) return;
+    if (eligibleMergedRef.current) return;
+    eligibleMergedRef.current = true;
+    setRecord(
+      recalcPurchaseReturn({
+        ...record,
+        items: eligibleItemsQuery.data,
+      }, poQuery.data),
+    );
+  }, [eligibleItemsQuery.data, poQuery.data, record]);
+
+  useEffect(() => {
+    initializedRef.current = false;
+    eligibleMergedRef.current = false;
+    setRecord(null);
+  }, [poId]);
+
+  if (poQuery.isLoading || (!record && previewQuery.isLoading)) {
+    return <div className="p-4 text-sm text-muted-foreground">Loading…</div>;
+  }
+
+  if (!poId || (!record && poQuery.isError)) {
+    return (
+      <div className="p-4 text-sm text-muted-foreground">
+        Purchase order not found.{" "}
+        <button
+          type="button"
+          className="text-brand-600 hover:underline"
+          onClick={() => router.push(backHref)}
+        >
+          Go back
+        </button>
+      </div>
+    );
+  }
 
   if (!record) {
     return <div className="p-4 text-sm text-muted-foreground">Loading…</div>;
   }
 
+  const linesLoading =
+    eligibleItemsQuery.isLoading || eligibleItemsQuery.isFetching;
+
   const handleSubmit = () => {
     setFormError(null);
+    if (linesLoading) {
+      setFormError("Still loading returnable items. Please wait a moment.");
+      return;
+    }
     const e = validateReturnItems(record.items);
     if (Object.keys(e).length > 0) {
       setErrors(e);
@@ -120,11 +174,37 @@ function NewPurchaseReturnContent() {
           onCancel={() => router.push(backHref)}
           onSaveDraft={handleSaveDraft}
           onSubmit={handleSubmit}
+          submitDisabled={linesLoading || createMutation.isPending}
         />
       }
     >
       {formError ? <p className="mb-3 text-xs text-red-600">{formError}</p> : null}
-      <PurchaseReturnForm record={record} onChange={setRecord} errors={errors} />
+      {linesLoading ? (
+        <p className="mb-3 text-xs text-muted-foreground">
+          Loading returnable batches…
+        </p>
+      ) : null}
+      {eligibleItemsQuery.isError ? (
+        <p className="mb-3 text-xs text-red-600">
+          Failed to load returnable items.{" "}
+          <button
+            type="button"
+            className="underline"
+            onClick={() => {
+              eligibleMergedRef.current = false;
+              void eligibleItemsQuery.refetch();
+            }}
+          >
+            Retry
+          </button>
+        </p>
+      ) : null}
+      <PurchaseReturnForm
+        record={record}
+        onChange={setRecord}
+        errors={errors}
+        linesLoading={linesLoading}
+      />
     </PReturnFormLayout>
   );
 }

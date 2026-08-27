@@ -4,36 +4,45 @@ import React, { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { Package } from "lucide-react";
 import { RecordDetailPage } from "@/components/record-detail";
-import { SalesReturnService, type SalesReturnDetail } from "@/services/sales-return.service";
+import { ProductSkuCell } from "@/app/(app)/warehouse/grn/shared/components/ProductSkuCell";
+import { SalesReturnService, type SalesReturnDetail, type SalesReturnLineItem } from "@/services/sales-return.service";
 import {
-  formatProductReturnQuantity,
   formatReturnAmount,
   getReturnTotalAmount,
   type SalesReturnRecord,
 } from "../../sales-return-data";
+import { SalesReturnStackedQty } from "../../components/SalesReturnStackedQty";
+import type { SalesReturnQtyMetaSource } from "../../sales-return-qty";
 
-function mapBackendReturnToFrontend(detail: SalesReturnDetail): SalesReturnRecord {
-  const products = (detail.items || []).map((item) => {
-    const unitPerPacking = Number(item.unitPerPacking) || 10;
-    const totalPieces = Number(item.returnedBaseQty || 0);
-    const cases = Math.floor(totalPieces / unitPerPacking);
-    const pieces = totalPieces % unitPerPacking;
+function lineQtySource(item: SalesReturnLineItem): SalesReturnQtyMetaSource {
+  return {
+    unitPerPacking: item.unitPerPacking,
+    quantityType: item.quantityType,
+    uom: item.unit,
+    productSnapshot: item.productSnapshot,
+  };
+}
 
-    return {
-      product: item.productName || "Unknown Product",
-      sku: item.sku || item.productCode || "",
-      packedQty: 0,
-      dispatchQty: 0,
-      returnQty: totalPieces,
-      unitRate: Number(item.amount || 0) / (totalPieces || 1),
-      batchNo: item.batchNumber || "",
-      returnCaseQty: cases,
-      returnLooseQty: pieces,
-      returnTotalPieces: totalPieces,
-      lineAmount: Number(item.amount || 0),
-      packingNumber: detail.packingNumber || "",
-    };
-  });
+type SalesReturnViewRecord = SalesReturnRecord & {
+  lineItems: SalesReturnLineItem[];
+  packingNumber?: string;
+};
+
+function mapBackendReturnToFrontend(detail: SalesReturnDetail): SalesReturnViewRecord {
+  const products = (detail.items || []).map((item) => ({
+    product: item.productName || "Unknown Product",
+    sku: item.sku || item.productCode || "",
+    packedQty: 0,
+    dispatchQty: item.dispatchedBaseQty,
+    returnQty: item.returnedBaseQty,
+    unitRate: Number(item.amount || 0) / (item.returnedBaseQty || 1),
+    batchNo: item.batchNumber || "",
+    returnCaseQty: 0,
+    returnLooseQty: 0,
+    returnTotalPieces: item.returnedBaseQty,
+    lineAmount: Number(item.amount || 0),
+    packingNumber: detail.packingNumber || "",
+  }));
 
   const totalAmount = products.reduce((acc, p) => acc + p.lineAmount, 0);
 
@@ -45,17 +54,19 @@ function mapBackendReturnToFrontend(detail: SalesReturnDetail): SalesReturnRecor
     customer: detail.customerName || "",
     returnDate: detail.returnDate || "",
     warehouse: detail.warehouseName || "",
-    products: products,
-    totalAmount: totalAmount,
+    products,
+    totalAmount,
     remarks: detail.remarks || "",
-    status: detail.status?.toLowerCase() as any,
+    status: detail.status?.toLowerCase() as SalesReturnRecord["status"],
+    lineItems: detail.items || [],
+    packingNumber: detail.packingNumber || "",
   };
 }
 
 export default function SalesReturnViewPage() {
   const params = useParams();
   const id = params?.id as string;
-  const [record, setRecord] = useState<SalesReturnRecord | null>(null);
+  const [record, setRecord] = useState<SalesReturnViewRecord | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -134,11 +145,11 @@ export default function SalesReturnViewPage() {
             <Package className="h-4 w-4 text-brand-600" /> Returned Products
           </h2>
           <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-left">
+            <table className="w-full min-w-[880px] border-collapse text-left">
               <thead>
                 <tr className="border-b border-border bg-slate-50/60">
                   <th className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Packing List</th>
-                  <th className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Product</th>
+                  <th className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground min-w-[160px]">Product</th>
                   <th className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Batch</th>
                   <th className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-center">Dispatch Qty</th>
                   <th className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-center">Return Qty</th>
@@ -146,14 +157,27 @@ export default function SalesReturnViewPage() {
                 </tr>
               </thead>
               <tbody>
-                {record.products.map((product, index) => (
-                  <tr key={`${product.sku}-${product.batchNo || index}`} className="border-b border-border/60">
-                    <td className="px-3 py-3 text-xs font-mono text-muted-foreground">{product.packingNumber || "-"}</td>
-                    <td className="px-3 py-3 text-xs font-bold">{product.product}</td>
-                    <td className="px-3 py-3 text-xs font-mono text-brand-700">{product.batchNo || "-"}</td>
-                    <td className="px-3 py-3 text-center text-xs font-bold">{product.dispatchQty} Cases</td>
-                    <td className="px-3 py-3 text-center text-xs font-bold text-red-600">{formatProductReturnQuantity(product)}</td>
-                    <td className="px-3 py-3 text-right text-xs font-semibold">{formatReturnAmount(typeof product.lineAmount === "number" ? product.lineAmount : 0)}</td>
+                {record.lineItems.map((item, index) => (
+                  <tr key={`${item.id}-${index}`} className="border-b border-border/60">
+                    <td className="px-3 py-3 text-xs font-mono text-muted-foreground">{record.packingNumber || "—"}</td>
+                    <td className="px-3 py-3 align-top min-w-[160px]">
+                      <ProductSkuCell name={item.productName} sku={item.sku || item.productCode} />
+                    </td>
+                    <td className="px-3 py-3 text-xs font-mono font-semibold text-brand-700">{item.batchNumber || "-"}</td>
+                    <td className="px-3 py-3 align-top">
+                      <SalesReturnStackedQty
+                        baseQty={item.dispatchedBaseQty}
+                        source={lineQtySource(item)}
+                      />
+                    </td>
+                    <td className="px-3 py-3 align-top">
+                      <SalesReturnStackedQty
+                        baseQty={item.returnedBaseQty}
+                        source={lineQtySource(item)}
+                        accent="emerald"
+                      />
+                    </td>
+                    <td className="px-3 py-3 text-right text-xs font-semibold">{formatReturnAmount(Number(item.amount || 0))}</td>
                   </tr>
                 ))}
               </tbody>

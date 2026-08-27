@@ -125,6 +125,11 @@ interface NotesListingFilterBarProps {
   searchPlaceholder: string;
   onChange: (patch: Partial<NotesListingFilterState>) => void;
   onReset: () => void;
+  /**
+   * When false, Branch / Customer / Source / More Filters stay commented-out.
+   * Those dimensions are already available as table column filters.
+   */
+  showEntityFilters?: boolean;
 }
 
 export function NotesListingFilterBar({
@@ -137,6 +142,7 @@ export function NotesListingFilterBar({
   searchPlaceholder,
   onChange,
   onReset,
+  showEntityFilters = true,
 }: NotesListingFilterBarProps) {
   const moreActiveCount =
     (filters.status !== "all" ? 1 : 0) +
@@ -159,65 +165,71 @@ export function NotesListingFilterBar({
         onDateFromChange={(dateFrom) => onChange({ dateFrom, preset: "custom" })}
         onDateToChange={(dateTo) => onChange({ dateTo, preset: "custom" })}
       />
-      <ReportMultiSelect
-        label="Branch"
-        values={filters.branches}
-        onChange={(branches) => onChange({ branches })}
-        options={branchOptions}
-        entityName="Branch"
-        minWidthClass="min-w-[120px]"
-      />
-      <ReportMultiSelect
-        label={partyLabel}
-        values={filters.parties}
-        onChange={(parties) => onChange({ parties })}
-        options={partyOptions}
-        entityName={partyLabel}
-        minWidthClass="min-w-[130px]"
-      />
-      <ReportMultiSelect
-        label="Source"
-        values={filters.sources}
-        onChange={(sources) => onChange({ sources })}
-        options={sourceOptions}
-        entityName="Source"
-        minWidthClass="min-w-[120px]"
-      />
-      <ReportMoreFilters activeCount={moreActiveCount}>
-        <div className="space-y-1.5">
-          <Label className={ACCOUNTS_FILTER_LABEL_CLASS}>Status</Label>
-          <Select value={filters.status} onValueChange={(status) => onChange({ status })}>
-            <SelectTrigger className="h-8 text-xs">
-              <SelectValue placeholder="All statuses" />
-            </SelectTrigger>
-            <SelectContent>
-              {statusOptions.map((opt) => (
-                <SelectItem key={opt.value} value={opt.value} className="text-xs">
-                  {opt.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-1.5">
-          <Label className={ACCOUNTS_FILTER_LABEL_CLASS}>Voucher Number</Label>
-          <Input
-            value={filters.voucherNo}
-            onChange={(e) => onChange({ voucherNo: e.target.value })}
-            placeholder="CN-2026-0001 / DN-…"
-            className="h-8 text-xs"
+      {/* Toolbar Branch / Customer / Source / More Filters — duplicated by column filters.
+          Restored when showEntityFilters is true (Debit Notes). Credit Notes listing keeps these off. */}
+      {showEntityFilters ? (
+        <>
+          <ReportMultiSelect
+            label="Branch"
+            values={filters.branches}
+            onChange={(branches) => onChange({ branches })}
+            options={branchOptions}
+            entityName="Branch"
+            minWidthClass="min-w-[120px]"
           />
-        </div>
-        <div className="space-y-1.5">
-          <Label className={ACCOUNTS_FILTER_LABEL_CLASS}>Invoice Number</Label>
-          <Input
-            value={filters.invoiceNo}
-            onChange={(e) => onChange({ invoiceNo: e.target.value })}
-            placeholder="INV-… / PUR-…"
-            className="h-8 text-xs"
+          <ReportMultiSelect
+            label={partyLabel}
+            values={filters.parties}
+            onChange={(parties) => onChange({ parties })}
+            options={partyOptions}
+            entityName={partyLabel}
+            minWidthClass="min-w-[130px]"
           />
-        </div>
-      </ReportMoreFilters>
+          <ReportMultiSelect
+            label="Source"
+            values={filters.sources}
+            onChange={(sources) => onChange({ sources })}
+            options={sourceOptions}
+            entityName="Source"
+            minWidthClass="min-w-[120px]"
+          />
+          <ReportMoreFilters activeCount={moreActiveCount}>
+            <div className="space-y-1.5">
+              <Label className={ACCOUNTS_FILTER_LABEL_CLASS}>Status</Label>
+              <Select value={filters.status} onValueChange={(status) => onChange({ status })}>
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue placeholder="All statuses" />
+                </SelectTrigger>
+                <SelectContent>
+                  {statusOptions.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className={ACCOUNTS_FILTER_LABEL_CLASS}>Voucher Number</Label>
+              <Input
+                value={filters.voucherNo}
+                onChange={(e) => onChange({ voucherNo: e.target.value })}
+                placeholder="CN-2026-0001 / DN-…"
+                className="h-8 text-xs"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className={ACCOUNTS_FILTER_LABEL_CLASS}>Invoice Number</Label>
+              <Input
+                value={filters.invoiceNo}
+                onChange={(e) => onChange({ invoiceNo: e.target.value })}
+                placeholder="INV-… / PUR-…"
+                className="h-8 text-xs"
+              />
+            </div>
+          </ReportMoreFilters>
+        </>
+      ) : null}
       <ReportFilterResetButton
         showOnlyWhenActive
         active={notesListingFiltersActive(filters)}

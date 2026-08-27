@@ -1,1676 +1,1476 @@
 ﻿"use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Input } from "@/components/ui/input";
-import { useFormDirtySnapshot } from "@/lib/accounts/use-form-dirty-snapshot";
-import { roundMoney } from "@/lib/accounts/money-format";
-import { useTransactionFormCancel } from "@/components/accounts/TransactionFormCancel";
+import { Button } from "@/components/ui/button";
 import { AccountsFormLayout } from "../expenses/components/AccountsFormLayout";
-import { SearchableSelect } from "./components/SearchableSelect";
-import { CreditNoteCustomerInfoButton } from "./components/CreditNoteCustomerInfoButton";
-import { resolveCreditNoteCustomerLedger } from "./credit-note-accounting";
-import { computeNoteTaxBreakup } from "@/lib/accounts/note-tax-breakup";
-import { inferInterstateFromPlaceOfSupply } from "@/lib/accounts/gst-accounting";
-import {
-  isInterstateGstTreatment,
-  isGstApplicableTreatment,
-} from "@/lib/accounts/scheme-entitlement-credit-note";
-import {
-  buildReferenceFromInvoice,
-  buildReferenceFromSalesReturn,
-  createCreditNote,
-  createEmptyCreditLine,
-  creditLinesForSchemeSettlement,
-  getCreditNoteById,
-  getCustomersForCreditNote,
-  listInvoicesForReference,
-  listSalesReturnsForCreditNote,
-  normalizeCreditLine,
-  peekNextCreditNoteNo,
-  postCreditNote,
-  previewToFormInput,
-  recalcAllCreditLines,
-  updateCreditNote,
-  validateCreditNoteLines,
-  calcCreditLineAmounts,
-  getCreditLineMaxQty,
-  type CreditNoteCreationMode,
-  type CreditNoteLine,
-  type CreditNoteLinkedInvoice,
-  type CreditNoteSource,
-  type CreditReferencePreview,
-  type NoteWorkflowStatus,
-} from "./credit-notes-data";
-import {
-  customerMasterToTransactionFields,
-  type CustomerTransactionFields,
-} from "@/lib/accounts/transaction-master-fetch";
-import { findPendingSchemeSettlement } from "@/lib/accounts/scheme-settlement-data";
-import {
-  buildCreditNotePrefillFromEntitlement,
-  resolveEntitlementCreditNoteNavigation,
-  SCHEME_ENTITLEMENT_LEDGER_ERROR,
-} from "@/lib/accounts/scheme-entitlement-credit-note";
-import { getPendingCreditNoteRow } from "./pending-credit-notes-data";
-import { CREDIT_NOTES_BREADCRUMB, CREDIT_NOTES_LIST_PATH, formatINR } from "./note-utils";
 import { AccountsDateInput } from "@/components/accounts/AccountsDateInput";
-import { dispatchAccountsDataChanged } from "@/lib/accounts/accounts-data-events";
-import {
-  attachWorkflowOnCreate,
-  submitDocumentForApproval,
-} from "@/lib/accounts/accounts-workflow-persist";
 import { AccountsToast, useAccountsToast } from "@/components/accounts/AccountsToast";
-import { getInvoiceById } from "@/app/(app)/accounts/invoices/invoices-data";
-import { WarehouseMappedBankAccountSelect } from "@/components/accounts/WarehouseMappedBankAccountSelect";
-import { VoucherFormSectionCard } from "@/components/accounts/voucher-form/VoucherFormSectionCard";
-import { VoucherGstSummaryCard } from "@/components/accounts/voucher-form/VoucherGstSummaryCard";
-import { VoucherSignedRoundOffInput } from "@/components/accounts/voucher-form/VoucherSignedRoundOffInput";
-import { VoucherAccountingPostingSummary } from "@/components/accounts/voucher-form/VoucherAccountingPostingSummary";
+import { useTransactionFormCancel } from "@/components/accounts/TransactionFormCancel";
+import { useFormDirtySnapshot } from "@/lib/accounts/use-form-dirty-snapshot";
 import { AccountingImpactSection } from "@/components/accounts/AccountingImpactSection";
+import { VoucherAccountingPostingSummary } from "@/components/accounts/voucher-form/VoucherAccountingPostingSummary";
+import { VoucherFormSectionCard } from "@/components/accounts/voucher-form/VoucherFormSectionCard";
 import { VoucherNarrationAttachmentsSection } from "@/components/accounts/voucher-form/VoucherNarrationAttachmentsSection";
+import { VoucherSignedRoundOffInput } from "@/components/accounts/voucher-form/VoucherSignedRoundOffInput";
 import {
   VoucherNoteField,
   VoucherNoteFieldGrid,
   VoucherNoteReadOnly,
 } from "@/components/accounts/voucher-form/VoucherNoteFieldGrid";
-import { VoucherFormActionBar } from "@/components/accounts/voucher-form/VoucherFormActionBar";
-import { VoucherNoteSegmentControl } from "@/components/accounts/voucher-form/VoucherNoteSegmentControl";
-import { NoteParticularsTable, computeNoteParticularTotals } from "@/components/accounts/voucher-form/NoteParticularsTable";
-import { NoteReferenceDocumentDetails } from "@/components/accounts/voucher-form/NoteReferenceDocumentDetails";
-import { NoteQuantityLinesTable } from "@/components/accounts/voucher-form/NoteQuantityLinesTable";
-import { mapNoteLineToQuantityView } from "@/components/accounts/voucher-form/note-quantity-line-map";
-import {
-  NoteInventoryImpactBanner,
-  NoteNoInventoryImpactBanner,
-} from "@/components/accounts/voucher-form/NoteScenarioBanners";
-import { GroupedLedgerSelect } from "@/components/accounts/GroupedLedgerSelect";
-import {
-  adaptSalesInvoiceReference,
-  adaptSalesReturnReference,
-} from "@/components/accounts/voucher-form/note-reference-model";
 import { defaultVisibilityForType } from "@/components/accounts/voucher-form/voucher-form-shell";
-import "@/components/accounts/voucher-form/note-form-compact.css";
+import type { VoucherAttachmentFile } from "@/components/accounts/voucher-form/VoucherAttachmentSection";
+import { SearchableSelect } from "./components/SearchableSelect";
+import { CreditNoteFormActionBar } from "./components/CreditNoteFormActionBar";
+import { CreditNoteAmountSummary } from "./components/CreditNoteAmountSummary";
+import { CreditNoteInvoiceAllocationSection } from "./components/CreditNoteInvoiceAllocationSection";
+import { CreditNoteParticularsEditor } from "./components/CreditNoteParticularsEditor";
+import { CreditNoteReasonDialog } from "./components/CreditNoteReasonDialog";
+import { CreditNoteSourceEntitlementSection } from "./components/CreditNoteSourceEntitlementSection";
+import { CreditNoteLedgerSelect } from "./components/CreditNoteLedgerSelect";
+import { CREDIT_NOTES_BREADCRUMB, CREDIT_NOTES_LIST_PATH } from "./note-utils";
+import { CreditNoteFormApi, creditNoteApiError, creditNoteErrorIncludes } from "./credit-note-form-api";
+import type {
+  CreateDirectCreditNotePayload,
+  CreditNoteDetail,
+  CreditNoteFormLine,
+  DirectCnMode,
+  DirectLineDraft,
+  InvoiceOption,
+  PendingCreditNoteDetail,
+  SchemeTypeLedgerMapping,
+} from "./credit-note-form-types";
+import {
+  canEditDocument,
+  computeDirectLinePreview,
+  extractCreditNoteIdFromPath,
+  formatCnMoney,
+  isPendingGeneratedSource,
+  isReadOnlyStatus,
+  isUuid,
+  newDirectLine,
+  pageTitleFor,
+  snapshotStr,
+  SOURCE_TYPE_LABELS,
+  statusChipClass,
+  STATUS_LABELS,
+  toDateInput,
+  toNum,
+  todayIso,
+} from "./credit-note-form-utils";
+import { useCustomersDropdown, useCustomerDetails, useWarehousesDropdown } from "@/hooks/sales/use-sales-orders";
+import { SalesInvoiceService } from "@/services/sales-invoice.service";
+import { LedgerService } from "@/services/ledger.service";
+import { UserListService } from "@/services/user-list.service";
+import { AuthService } from "@/services/auth.service";
 import "./credit-note-tx.css";
+import "@/components/accounts/voucher-form/note-form-compact.css";
 
-type FormMode = "fresh" | "return" | "scheme";
-type UiRefType = "direct" | "sales_invoice" | "sales_return";
-/** Against invoice: product-wise qty vs single amount particular. */
-type InvoiceAdjustmentBasis = "quantity" | "amount";
+type FormModeProp = "fresh" | "return" | "scheme";
 
-const REF_TYPE_OPTIONS: { value: UiRefType; label: string }[] = [
-  { value: "direct", label: "Direct" },
-  { value: "sales_invoice", label: "Sales Invoice" },
-  { value: "sales_return", label: "Sales Return" },
-];
+type DirectExtraCharge = {
+  id: string;
+  description: string;
+  ledgerId: string;
+  ledgerName: string;
+  amount: string;
+  gstPct: string;
+};
 
-const INVOICE_BASIS_OPTIONS: { value: InvoiceAdjustmentBasis; label: string }[] = [
-  { value: "amount", label: "Amount" },
-  { value: "quantity", label: "Quantity" },
-];
+function newDirectExtraChargeId() {
+  return `cn-xch-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+}
 
 export default function CreditNoteFormPageClient({
-  creditNoteId,
-  returnId: returnIdProp,
-  schemeKey: schemeKeyProp,
-  entitlementId: entitlementIdProp,
-  invoiceId: invoiceIdProp,
-  mode,
+  creditNoteId: creditNoteIdProp,
 }: {
   creditNoteId?: number;
   returnId?: string;
   schemeKey?: string;
   entitlementId?: string;
   invoiceId?: string;
-  mode?: FormMode;
+  mode?: FormModeProp;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const { toast, showToast, dismissToast } = useAccountsToast();
-  const isEdit = creditNoteId != null;
-  const returnId = returnIdProp ?? searchParams.get("returnId") ?? undefined;
-  const schemeKey = schemeKeyProp ?? searchParams.get("schemeKey") ?? undefined;
-  const entitlementId =
-    entitlementIdProp ?? searchParams.get("entitlementId") ?? undefined;
-  const invoiceIdFromUrl = invoiceIdProp ?? searchParams.get("invoiceId") ?? undefined;
-  const modeFromUrl = searchParams.get("mode");
-  const resolvedMode: FormMode | undefined =
-    mode ??
-    (modeFromUrl === "fresh" || modeFromUrl === "return" || modeFromUrl === "scheme"
-      ? modeFromUrl
-      : returnId
-        ? "return"
-        : schemeKey || entitlementId
-          ? "scheme"
-          : undefined);
-  const isFresh = !isEdit && resolvedMode === "fresh";
-  const isReturn = !isEdit && (resolvedMode === "return" || Boolean(returnId));
-  const isScheme =
-    !isEdit && (resolvedMode === "scheme" || Boolean(schemeKey) || Boolean(entitlementId));
-  const isEntitlementScheme = isScheme && Boolean(entitlementId);
 
-  const customers = useMemo(() => getCustomersForCreditNote(), []);
-  const invoices = useMemo(() => listInvoicesForReference(), []);
-  const salesReturns = useMemo(() => listSalesReturnsForCreditNote(), []);
-
-  const [noteType, setNoteType] = useState<CreditNoteCreationMode>(() =>
-    isFresh || (!isReturn && !isScheme) ? "direct_adjustment" : "against_reference",
+  const routeCnId = extractCreditNoteIdFromPath(pathname);
+  const pendingId = searchParams.get("pendingId")?.trim() || "";
+  const invoiceIdFromUrl = searchParams.get("invoiceId")?.trim() || "";
+  const legacyPendingNav = Boolean(
+    searchParams.get("returnId") ||
+      searchParams.get("schemeKey") ||
+      searchParams.get("entitlementId"),
   );
-  const [uiRefType, setUiRefType] = useState<UiRefType>(() => {
-    if (isFresh || (!isReturn && !isScheme)) return "direct";
-    if (isReturn) return "sales_return";
-    return "sales_invoice";
-  });
-  const [invoiceAdjustmentBasis, setInvoiceAdjustmentBasis] =
-    useState<InvoiceAdjustmentBasis>("amount");
-  const [creditNoteNo, setCreditNoteNo] = useState("");
-  const [creditNoteDate, setCreditNoteDate] = useState(new Date().toISOString().slice(0, 10));
-  const [bankAccountId, setBankAccountId] = useState<number | null>(null);
-  const [customerId, setCustomerId] = useState("");
-  const [referenceInvoiceId, setReferenceInvoiceId] = useState("");
-  const [referenceReturnId, setReferenceReturnId] = useState("");
-  const [sourceReturnId, setSourceReturnId] = useState("");
-  const [sourceReturnNo, setSourceReturnNo] = useState("");
-  const [referencePreview, setReferencePreview] = useState<CreditReferencePreview | null>(null);
-  const [sourceInvoiceId, setSourceInvoiceId] = useState<number | null>(null);
-  const [sourceInvoiceNo, setSourceInvoiceNo] = useState("");
-  const [sourceOrderNo, setSourceOrderNo] = useState("");
-  const [originalAmount, setOriginalAmount] = useState("");
-  const [alreadyAdjusted, setAlreadyAdjusted] = useState("0");
-  const [billingAddress, setBillingAddress] = useState("");
-  const [shippingAddress, setShippingAddress] = useState("");
-  const [customerFields, setCustomerFields] = useState<CustomerTransactionFields | null>(null);
-  const [billToId, setBillToId] = useState("");
-  const [shipToId, setShipToId] = useState("");
-  const [lines, setLines] = useState<CreditNoteLine[]>([]);
-  const [remarks, setRemarks] = useState("");
-  const [status, setStatus] = useState<NoteWorkflowStatus>("draft");
+
+  const [cnId, setCnId] = useState<string | null>(routeCnId);
+  const [pending, setPending] = useState<PendingCreditNoteDetail | null>(null);
+  const [cn, setCn] = useState<CreditNoteDetail | null>(null);
+  const [pageLoading, setPageLoading] = useState(Boolean(routeCnId || pendingId));
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [adjustment, setAdjustment] = useState(0);
+  const submittingRef = useRef(false);
+  const [approvalRequired, setApprovalRequired] = useState(true);
+  const [configReady, setConfigReady] = useState(false);
 
-  const [schemeSettlementKey, setSchemeSettlementKey] = useState("");
-  const [schemeCode, setSchemeCode] = useState("");
-  const [schemeName, setSchemeName] = useState("");
-  const [schemeSettlementAmount, setSchemeSettlementAmount] = useState<number | undefined>();
-  const [schemeEntitlementId, setSchemeEntitlementId] = useState("");
-  const [schemeId, setSchemeId] = useState("");
-  const [schemeType, setSchemeType] = useState("");
-  const [calculationReference, setCalculationReference] = useState("");
-  const [sourceInvoiceIds, setSourceInvoiceIds] = useState<number[]>([]);
-  const [schemePeriod, setSchemePeriod] = useState("");
-  const [schemeClaimNumber, setSchemeClaimNumber] = useState("");
-  const [gstTreatment, setGstTreatment] = useState("");
-  const [eligibleBase, setEligibleBase] = useState<number | undefined>();
-  const [ledgerConfigError, setLedgerConfigError] = useState<string | null>(null);
+  const [cnDate, setCnDate] = useState(todayIso());
+  const [warehouseId, setWarehouseId] = useState("");
+  const [customerId, setCustomerId] = useState("");
+  const [narration, setNarration] = useState("");
+  const [approverId, setApproverId] = useState("");
+  const [directMode, setDirectMode] = useState<DirectCnMode>("on_account");
+  const [invoiceId, setInvoiceId] = useState("");
+  const [allocation, setAllocation] = useState("");
+  const [invoices, setInvoices] = useState<InvoiceOption[]>([]);
+  const [directLines, setDirectLines] = useState<DirectLineDraft[]>([newDirectLine()]);
+  const [arLedgerName, setArLedgerName] = useState("");
+  const [arLedgerCode, setArLedgerCode] = useState("");
+  const [schemeMappings, setSchemeMappings] = useState<SchemeTypeLedgerMapping[]>([]);
+  const [approvers, setApprovers] = useState<{ value: string; label: string }[]>([]);
+  const [attachments, setAttachments] = useState<VoucherAttachmentFile[]>([]);
+  const [fyLabel, setFyLabel] = useState("");
+  const [reasonDialog, setReasonDialog] = useState<"reject" | "cancel" | null>(null);
+  const [directExtraCharges, setDirectExtraCharges] = useState<DirectExtraCharge[]>([]);
+  const [roundOff, setRoundOff] = useState(0);
 
-  const [directParticular, setDirectParticular] = useState("");
-  const [directRefNo, setDirectRefNo] = useState("");
-  const [linkedInvoices, setLinkedInvoices] = useState<CreditNoteLinkedInvoice[]>([]);
-  const [particularQty, setParticularQty] = useState("1");
-  const [particularRate, setParticularRate] = useState("");
-  const [directGstApplicable, setDirectGstApplicable] = useState(false);
-  const [directGstPct, setDirectGstPct] = useState("18");
-  const [adjustmentLedgerId, setAdjustmentLedgerId] = useState<number | null>(null);
-  const [adjustmentLedgerName, setAdjustmentLedgerName] = useState("");
-  const [attachmentName, setAttachmentName] = useState("");
+  const { data: customerData } = useCustomersDropdown();
+  const { data: warehouseData } = useWarehousesDropdown();
+  const { data: customerDetails } = useCustomerDetails(customerId || null);
 
-  const readOnly = isEdit && status === "cancelled";
-  const alreadyAdjustedNum = parseFloat(alreadyAdjusted) || 0;
-  const customerLocked = Boolean(referencePreview) || isReturn || isScheme;
-  const refControlsLocked = isReturn || isScheme || readOnly;
+  const sourceType = cn?.source_type || pending?.source_type || "DIRECT";
+  const isPendingFlow = Boolean(pendingId) || Boolean(cn?.pending_credit_note_id) || isPendingGeneratedSource(String(sourceType));
+  const status = cn?.status || (isPendingFlow && !cnId ? undefined : "DRAFT");
+  const readOnly = isReadOnlyStatus(status) || status === "PENDING_APPROVAL" || status === "APPROVED";
+  const fieldsEditable = canEditDocument(status) && !readOnly;
+  const pendingEntitlementLocked = isPendingFlow;
+  const linesEditable = fieldsEditable && !pendingEntitlementLocked;
+  /** Free-form charges editable on Direct always; on SR pending only until converted to a CN. */
+  const chargesEditable = fieldsEditable && (!pendingEntitlementLocked || !cnId);
 
-  const invoiceOptions = useMemo(
-    () =>
-      invoices.map((inv) => ({
-        value: String(inv.id),
-        label: inv.invoiceNo,
-        sub: `${inv.customerName} · ${inv.invoiceDate} · ${formatINR(inv.grandTotal)}`,
-      })),
-    [invoices],
-  );
+  const customers = useMemo(() => {
+    if (!Array.isArray(customerData)) return [];
+    return customerData.map((c: Record<string, unknown>) => ({
+      id: String(c.customer_id ?? ""),
+      code: String(c.customer_code ?? ""),
+      name: String(c.customer_name ?? ""),
+    })).filter((c) => c.id);
+  }, [customerData]);
 
-  const salesReturnOptions = useMemo(
-    () =>
-      salesReturns.map((ret) => ({
-        value: ret.id,
-        label: ret.returnNumber,
-        sub: `${ret.customer} · ${ret.returnDate} · SO ${ret.salesOrderNumber}`,
-      })),
-    [salesReturns],
-  );
+  const warehouses = useMemo(() => {
+    if (!Array.isArray(warehouseData)) return [];
+    return warehouseData.map((w: Record<string, unknown>) => ({
+      id: String(w.warehouse_id ?? ""),
+      name: String(w.warehouse_name ?? w.name ?? ""),
+      state: String(w.state ?? w.warehouse_state ?? ""),
+    })).filter((w) => w.id);
+  }, [warehouseData]);
 
-  const selectedCustomer = customers.find((c) => c.id === Number(customerId));
-  const customerLedgerName =
-    customerFields?.receivableLedger || selectedCustomer?.customerName || referencePreview?.customerName || "";
-
-  const applyReferencePreview = (preview: CreditReferencePreview, loadLines = false) => {
-    setReferencePreview(preview);
-    const pre = previewToFormInput(preview);
-    setSourceInvoiceId(pre.sourceInvoiceId ?? null);
-    setSourceInvoiceNo(pre.sourceInvoiceNo ?? "");
-    setSourceOrderNo(pre.sourceOrderNo ?? "");
-    if (pre.customerId) setCustomerId(String(pre.customerId));
-    setOriginalAmount(String(pre.originalAmount ?? ""));
-    setAlreadyAdjusted(String(pre.alreadyAdjustedAmount ?? 0));
-    if (loadLines && pre.lineItems?.length) {
-      setLines(
-        recalcAllCreditLines(
-          pre.lineItems.map((l) => {
-            const salesRet = l.salesReturnQty ?? 0;
-            if (salesRet > 0) {
-              // Sales return: lock current qty to returned quantity
-              const withQty = normalizeCreditLine({ ...l, returnQty: salesRet });
-              const calc = calcCreditLineAmounts(withQty);
-              return normalizeCreditLine({
-                ...withQty,
-                creditAmount: calc.amount,
-                gstAmount: calc.taxAmt,
-              });
-            }
-            // Sales invoice quantity mode: blank qty until user enters
-            return normalizeCreditLine({
-              ...l,
-              returnQty: 0,
-              creditAmount: 0,
-              gstAmount: 0,
-            });
-          }),
-          preview.alreadyAdjustedAmount,
-        ),
-      );
-    } else {
-      setLines([]);
-    }
-  };
-
-  const onCustomerChange = (id: string, fields: CustomerTransactionFields | null) => {
-    setCustomerId(id);
-    if (!fields) {
-      setCustomerFields(null);
-      return;
-    }
-    setCustomerFields(fields);
-    setBillToId(fields.defaultBillToId);
-    setShipToId(fields.defaultShipToId);
-    setBillingAddress(fields.billingAddress);
-    setShippingAddress(fields.shippingAddress);
-  };
-
-  const clearReference = () => {
-    if (isReturn || isScheme) return;
-    setReferencePreview(null);
-    setSourceInvoiceId(null);
-    setSourceInvoiceNo("");
-    setSourceOrderNo("");
-    setSourceReturnId("");
-    setSourceReturnNo("");
-    setOriginalAmount("");
-    setAlreadyAdjusted("0");
-    setLines([]);
-    setSchemeSettlementKey("");
-    setSchemeCode("");
-    setSchemeName("");
-    setSchemeSettlementAmount(undefined);
-  };
-
-  const onInvoiceSelect = (id: string) => {
-    setReferenceInvoiceId(id);
-    setReferenceReturnId("");
-    setSourceReturnId("");
-    setSourceReturnNo("");
-    setNoteType("against_reference");
-    if (!id) {
-      clearReference();
-      setLinkedInvoices([]);
-      return;
-    }
-    const inv = invoices.find((i) => i.id === Number(id));
-    if (inv) {
-      setLinkedInvoices([{ id: inv.id, invoiceNo: inv.invoiceNo }]);
-    }
-    const preview = buildReferenceFromInvoice(Number(id));
-    if (preview) {
-      const loadProductLines = invoiceAdjustmentBasis === "quantity";
-      applyReferencePreview(preview, loadProductLines);
-      const c = customers.find((x) => x.id === preview.customerId);
-      if (c) onCustomerChange(String(c.id), customerMasterToTransactionFields(c));
-      if (!loadProductLines) {
-        if (!directParticular.trim()) {
-          setDirectParticular(preview.lineItems[0]?.productName || "Sales invoice adjustment");
-        }
-        const first = preview.lineItems[0];
-        if (first && !particularRate.trim()) {
-          setParticularQty("1");
-          setParticularRate(String(first.unitPrice || ""));
-          const gstOn = (first.taxPct || 0) > 0;
-          setDirectGstApplicable(gstOn);
-          if (gstOn) setDirectGstPct(String(first.taxPct));
-        }
-      }
-    }
-  };
-
-  const onSalesReturnSelect = (id: string) => {
-    setReferenceReturnId(id);
-    setReferenceInvoiceId("");
-    setNoteType("against_reference");
-    if (!id) {
-      clearReference();
-      return;
-    }
-    const ret = salesReturns.find((r) => r.id === id);
-    const preview = buildReferenceFromSalesReturn(id);
-    if (preview && ret) {
-      setSourceReturnId(ret.id);
-      setSourceReturnNo(ret.returnNumber);
-      // Return lines are source of truth — load product rows; do not recreate manually.
-      applyReferencePreview(preview, true);
-      if (preview.sourceInvoiceId && preview.sourceInvoiceNo) {
-        setLinkedInvoices([{ id: preview.sourceInvoiceId, invoiceNo: preview.sourceInvoiceNo }]);
-      }
-      const c = customers.find(
-        (x) => x.id === preview.customerId || x.customerName === ret.customer,
-      );
-      if (c) onCustomerChange(String(c.id), customerMasterToTransactionFields(c));
-      setDirectParticular("");
-      setParticularQty("1");
-      setParticularRate("");
-    }
-  };
-
-  const onUiRefTypeChange = (next: UiRefType) => {
-    if (isReturn || isScheme) return;
-    setUiRefType(next);
-    clearReference();
-    setReferenceInvoiceId("");
-    setReferenceReturnId("");
-    setLinkedInvoices([]);
-    setNoteType(next === "direct" ? "direct_adjustment" : "against_reference");
-    // #region agent log
-    fetch('http://127.0.0.1:7502/ingest/b60215f3-a2ea-4dec-b0ac-4488ce88b732',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'e2f165'},body:JSON.stringify({sessionId:'e2f165',location:'CreditNoteFormPageClient.tsx:onUiRefTypeChange',message:'CN ref type change',data:{next,prev:uiRefType},timestamp:Date.now(),hypothesisId:'B',runId:'pre-fix'})}).catch(()=>{});
-    // #endregion
-  };
-
-  useEffect(() => {
-    if (isEdit) return;
-    const invId = invoiceIdFromUrl ?? searchParams.get("invoiceId");
-    if (!invId || isReturn || isScheme || isFresh) return;
-    setNoteType("against_reference");
-    setUiRefType("sales_invoice");
-    setReferenceInvoiceId(invId);
-    onInvoiceSelect(invId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isEdit, searchParams, isReturn, isScheme, isFresh]);
-
-  useEffect(() => {
-    if (!isReturn || !returnId || isEdit) return;
-    const pending = getPendingCreditNoteRow(returnId, "sales_return");
-    const preview = buildReferenceFromSalesReturn(returnId);
-    const ret = salesReturns.find((r) => r.id === returnId);
-    if (!preview || !ret) return;
-
-    setNoteType("against_reference");
-    setUiRefType("sales_return");
-    setReferenceReturnId(returnId);
-    setSourceReturnId(ret.id);
-    setSourceReturnNo(ret.returnNumber);
-    if (pending?.returnDate) setCreditNoteDate(pending.returnDate);
-
-    // Return-based CN: load complete product lines (qty-locked table), not a single particular.
-    applyReferencePreview(preview, true);
-    setDirectParticular("");
-    setParticularQty("1");
-    setParticularRate("");
-
-    if (pending?.linkedInvoiceIds.length) {
-      setLinkedInvoices(
-        pending.linkedInvoiceIds.map((id, i) => ({
-          id,
-          invoiceNo: pending.linkedInvoiceNos[i] ?? invoices.find((inv) => inv.id === id)?.invoiceNo ?? "",
-        })),
-      );
-    } else if (preview.sourceInvoiceId && preview.sourceInvoiceNo) {
-      setLinkedInvoices([{ id: preview.sourceInvoiceId, invoiceNo: preview.sourceInvoiceNo }]);
-    }
-
-    const c = customers.find(
-      (x) => x.id === preview.customerId || x.customerName === ret.customer,
+  const selectedWarehouse = warehouses.find((w) => w.id === warehouseId);
+  const customerGstin =
+    snapshotStr(cn?.customer_snapshot, "gstin_no", "gstin") ||
+    snapshotStr(pending?.customer_snapshot, "gstin_no", "gstin") ||
+    String(
+      (customerDetails as Record<string, unknown> | undefined)?.gstin_no ||
+        (customerDetails as Record<string, unknown> | undefined)?.gstin ||
+        "",
     );
-    if (c) onCustomerChange(String(c.id), customerMasterToTransactionFields(c));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isReturn, returnId, isEdit, salesReturns, customers]);
-
-  useEffect(() => {
-    if (!isScheme || !schemeKey || entitlementId || isEdit) return;
-    const opt = findPendingSchemeSettlement(schemeKey);
-    const preview = opt ? buildReferenceFromInvoice(opt.invoiceId) : null;
-    if (!opt || !preview) return;
-
-    setNoteType("against_reference");
-    setUiRefType("sales_invoice");
-    setReferenceInvoiceId(String(opt.invoiceId));
-    setSchemeSettlementKey(schemeKey);
-    setSchemeCode(opt.schemeCode);
-    setSchemeName(opt.schemeName);
-    setSchemeSettlementAmount(opt.estimatedBenefitAmount);
-
-    let schemeLines = creditLinesForSchemeSettlement(preview.lineItems, opt);
-    if (opt.estimatedBenefitAmount > 0 && schemeLines.length > 0) {
-      schemeLines = schemeLines.map((l, idx) =>
-        idx === 0
-          ? normalizeCreditLine({
-              ...l,
-              creditAmount: opt.estimatedBenefitAmount,
-              returnQty: 0,
-            })
-          : l,
-      );
-    }
-    applyReferencePreview({ ...preview, lineItems: schemeLines }, true);
-
-    setLinkedInvoices([{ id: opt.invoiceId, invoiceNo: opt.invoiceNo }]);
-
-    const c = customers.find((x) => x.id === preview.customerId || x.customerName === opt.customerName);
-    if (c) onCustomerChange(String(c.id), customerMasterToTransactionFields(c));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isScheme, schemeKey, entitlementId, isEdit, customers]);
-
-  useEffect(() => {
-    if (!isEntitlementScheme || !entitlementId || isEdit) return;
-
-    const nav = resolveEntitlementCreditNoteNavigation(entitlementId);
-    if (nav.kind === "open_draft") {
-      router.replace(nav.href);
-      return;
-    }
-    if (nav.kind === "open_existing") {
-      router.replace(nav.href);
-      return;
-    }
-
-    try {
-      const prefill = buildCreditNotePrefillFromEntitlement(entitlementId);
-      setLedgerConfigError(null);
-      setNoteType("against_reference");
-      setUiRefType("sales_invoice");
-      setSchemeEntitlementId(prefill.entitlement.id);
-      setSchemeId(prefill.schemeId);
-      setSchemeType(prefill.schemeType);
-      setSchemeCode(prefill.schemeCode);
-      setSchemeName(prefill.schemeName);
-      setSchemePeriod(prefill.schemePeriod);
-      setSchemeClaimNumber(prefill.schemeClaimNumber);
-      setCalculationReference(prefill.calculationReference);
-      setGstTreatment(prefill.gstTreatment);
-      setEligibleBase(prefill.eligibleBase);
-      setSchemeSettlementAmount(prefill.creditNoteAmount);
-      setSourceInvoiceIds(prefill.sourceInvoiceIds);
-      setAdjustmentLedgerId(prefill.ledger.id);
-      setAdjustmentLedgerName(prefill.ledger.name);
-      setLinkedInvoices(prefill.linkedInvoices);
-      setSourceInvoiceId(prefill.sourceInvoiceId);
-      setSourceInvoiceNo(prefill.sourceInvoiceNo);
-      if (prefill.sourceInvoiceId) {
-        setReferenceInvoiceId(String(prefill.sourceInvoiceId));
-      }
-      applyReferencePreview(prefill.referencePreview, true);
-      setLines(
-        recalcAllCreditLines(
-          prefill.lines.map((l) => normalizeCreditLine(l)),
-          0,
-        ),
-      );
-      setRemarks(prefill.narration);
-      setOriginalAmount(String(prefill.eligibleBase));
-      setAlreadyAdjusted("0");
-
-      const c = customers.find(
-        (x) =>
-          x.id === prefill.customerId ||
-          x.customerName === prefill.customerName,
-      );
-      if (c) onCustomerChange(String(c.id), customerMasterToTransactionFields(c));
-      else {
-        setCustomerId(prefill.customerId ? String(prefill.customerId) : "");
-        setCustomerFields(null);
-      }
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : SCHEME_ENTITLEMENT_LEDGER_ERROR;
-      setLedgerConfigError(msg);
-      setError(msg);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isEntitlementScheme, entitlementId, isEdit, customers, router]);
-
-  useEffect(() => {
-    if (isEdit) return;
-    setCreditNoteNo(peekNextCreditNoteNo());
-  }, [isEdit]);
-
-  useEffect(() => {
-    if (!isEdit || creditNoteId == null) return;
-    const rec = getCreditNoteById(creditNoteId);
-    if (!rec) {
-      router.replace(CREDIT_NOTES_LIST_PATH);
-      return;
-    }
-    const isDirect =
-      rec.source === "manual" && !rec.sourceInvoiceId && rec.lineItems.every((l) => l.invoiceQty <= 0);
-    setNoteType(isDirect ? "direct_adjustment" : "against_reference");
-    if (rec.sourceReturnId) {
-      setUiRefType("sales_return");
-      setReferenceReturnId(rec.sourceReturnId);
-    } else if (isDirect && !rec.sourceInvoiceId) {
-      setUiRefType("direct");
-    } else {
-      setUiRefType("sales_invoice");
-    }
-    setCreditNoteNo(rec.creditNoteNo);
-    setCreditNoteDate(rec.creditNoteDate);
-    setCustomerId(rec.customerId ? String(rec.customerId) : "");
-    setSourceInvoiceNo(rec.sourceInvoiceNo);
-    setSourceOrderNo(rec.sourceOrderNo);
-    setSourceInvoiceId(rec.sourceInvoiceId);
-    setReferenceInvoiceId(rec.sourceInvoiceId ? String(rec.sourceInvoiceId) : "");
-    setLinkedInvoices(
-      rec.linkedInvoices?.length
-        ? rec.linkedInvoices
-        : rec.sourceInvoiceId && rec.sourceInvoiceNo
-          ? [{ id: rec.sourceInvoiceId, invoiceNo: rec.sourceInvoiceNo }]
-          : [],
-    );
-    setSourceReturnId(rec.sourceReturnId ?? "");
-    setSourceReturnNo(rec.sourceReturnNo ?? "");
-    setSchemeSettlementKey(rec.schemeSettlementKey ?? "");
-    setSchemeCode(rec.schemeCode ?? "");
-    setSchemeName(rec.schemeName ?? "");
-    setSchemeSettlementAmount(rec.schemeSettlementAmount);
-    setSchemeEntitlementId(rec.schemeEntitlementId ?? "");
-    setSchemeId(rec.schemeId ?? "");
-    setSchemeType(rec.schemeType ?? "");
-    setCalculationReference(rec.calculationReference ?? "");
-    setSourceInvoiceIds(rec.sourceInvoiceIds ?? []);
-    if (rec.schemeEntitlementId) {
-      setAdjustmentLedgerId(rec.adjustmentLedgerId ?? null);
-      setAdjustmentLedgerName(rec.adjustmentLedgerName ?? "");
-    }
-    setOriginalAmount(String(rec.originalAmount));
-    setAlreadyAdjusted(String(rec.alreadyAdjustedAmount));
-    setBillingAddress(rec.billingAddress ?? "");
-    setShippingAddress(rec.shippingAddress ?? "");
-    const c = rec.customerId ? customers.find((x) => x.id === rec.customerId) : undefined;
-    if (c) {
-      const fields = customerMasterToTransactionFields(c);
-      setCustomerFields(fields);
-      setBillToId(fields.defaultBillToId);
-      setShipToId(fields.defaultShipToId);
-    }
-    setRemarks(rec.remarks);
-    setBankAccountId(rec.bankAccountId ?? null);
-    setStatus(rec.status);
-    if (isDirect) {
-      const line = rec.lineItems[0];
-      setDirectParticular(
-        (line?.description || line?.productName || "").trim() || "",
-      );
-      const base = line?.unitPrice ?? rec.taxableValue ?? rec.currentCreditAmount;
-      const gstOn = (line?.taxPct ?? 0) > 0;
-      const gstPctStr = String(line?.taxPct ?? 18);
-      if (line && line.returnQty > 0 && line.unitPrice > 0) {
-        setParticularQty(String(line.returnQty));
-        setParticularRate(String(line.unitPrice));
-      } else {
-        setParticularQty("1");
-        setParticularRate(String(base));
-      }
-      setDirectGstApplicable(gstOn);
-      setDirectGstPct(gstPctStr);
-      const expected = computeNoteParticularTotals(
-        line && line.returnQty > 0 ? String(line.returnQty) : "1",
-        line && line.unitPrice > 0 ? String(line.unitPrice) : String(base),
-        gstOn,
-        gstPctStr,
-        false,
-      ).total;
-      const savedTotal = line?.creditAmount ?? rec.currentCreditAmount ?? expected;
-      setAdjustment(roundMoney(savedTotal - expected));
-      setDirectRefNo(rec.referenceNo ?? "");
-      setAdjustmentLedgerId(rec.adjustmentLedgerId ?? null);
-      setAdjustmentLedgerName(rec.adjustmentLedgerName ?? "");
-      setAttachmentName(rec.attachmentName ?? "");
-    } else {
-      const loadedLines = rec.lineItems.length ? rec.lineItems.map((l) => normalizeCreditLine(l)) : [];
-      if (rec.sourceInvoiceId) {
-        const p = buildReferenceFromInvoice(rec.sourceInvoiceId);
-        if (p) setReferencePreview(p);
-      } else if (rec.sourceReturnId) {
-        const p = buildReferenceFromSalesReturn(rec.sourceReturnId);
-        if (p) setReferencePreview(p);
-      }
-      if (rec.adjustmentLedgerId) {
-        setAdjustmentLedgerId(rec.adjustmentLedgerId);
-        setAdjustmentLedgerName(rec.adjustmentLedgerName ?? "");
-      }
-
-      const keepQtyLines =
-        Boolean(rec.sourceReturnId) ||
-        Boolean(rec.schemeEntitlementId) ||
-        Boolean(rec.schemeSettlementKey) ||
-        loadedLines.some((l) => (l.invoiceQty ?? 0) > 0);
-
-      if (keepQtyLines) {
-        if (rec.sourceReturnId) setUiRefType("sales_return");
-        else if (!rec.schemeEntitlementId && !rec.schemeSettlementKey) {
-          setInvoiceAdjustmentBasis("quantity");
-        }
-        setLines(recalcAllCreditLines(loadedLines, rec.alreadyAdjustedAmount));
-        setDirectParticular("");
-        setParticularQty("1");
-        setParticularRate("");
-        setAdjustment(0);
-      } else {
-        setInvoiceAdjustmentBasis("amount");
-        setLines([]);
-        const line = rec.lineItems[0];
-        const taxable = rec.taxableValue || 0;
-        const gstOn = (rec.taxCreditAmount ?? 0) > 0 || (line?.taxPct ?? 0) > 0;
-        const gstPctStr =
-          line?.taxPct && line.taxPct > 0
-            ? String(line.taxPct)
-            : taxable > 0 && gstOn
-              ? String(Math.round(((rec.taxCreditAmount ?? 0) / taxable) * 10000) / 100)
-              : "18";
-        if (line && line.returnQty > 0 && line.unitPrice > 0) {
-          setParticularQty(String(line.returnQty));
-          setParticularRate(String(line.unitPrice));
-        } else {
-          setParticularQty("1");
-          setParticularRate(String(taxable || line?.unitPrice || rec.currentCreditAmount || ""));
-        }
-        setDirectGstApplicable(gstOn);
-        setDirectGstPct(gstPctStr);
-        setDirectParticular(line?.productName || rec.reason || "");
-        const qtyStr = line && line.returnQty > 0 ? String(line.returnQty) : "1";
-        const rateStr =
-          line && line.unitPrice > 0
-            ? String(line.unitPrice)
-            : String(taxable || rec.currentCreditAmount || "");
-        const expected = computeNoteParticularTotals(qtyStr, rateStr, gstOn, gstPctStr, false).total;
-        setAdjustment(roundMoney((rec.currentCreditAmount ?? expected) - expected));
-      }
-    }
-  }, [isEdit, creditNoteId, router, customers]);
-
-  const placeOfSupply =
-    customerFields?.placeOfSupply?.trim() ||
-    selectedCustomer?.stateName?.trim() ||
+  const customerName =
+    cn?.customer?.customer_name ||
+    pending?.customer?.customer_name ||
+    snapshotStr(cn?.customer_snapshot, "customer_name") ||
+    snapshotStr(pending?.customer_snapshot, "customer_name") ||
+    customers.find((c) => c.id === customerId)?.name ||
     "";
-  const interstateFromPos = inferInterstateFromPlaceOfSupply(placeOfSupply);
-  const interstate =
-    isScheme && gstTreatment.trim()
-      ? isInterstateGstTreatment(gstTreatment)
-        ? true
-        : /cgst|sgst|intra/i.test(gstTreatment)
-          ? false
-          : interstateFromPos
-      : interstateFromPos;
-
-  const isSourceRefMode =
-    !isScheme && (uiRefType === "sales_invoice" || uiRefType === "sales_return");
-  const isDirectMode = !isScheme && uiRefType === "direct";
-  const isReturnRefMode = !isScheme && uiRefType === "sales_return";
-  const isInvoiceQtyMode =
-    !isScheme && uiRefType === "sales_invoice" && invoiceAdjustmentBasis === "quantity";
-  const isInvoiceAmountMode =
-    !isScheme && uiRefType === "sales_invoice" && invoiceAdjustmentBasis === "amount";
-  const usesQuantityLines = isReturnRefMode || isInvoiceQtyMode;
-
-  const particularTotals = computeNoteParticularTotals(
-    particularQty,
-    particularRate,
-    directGstApplicable,
-    directGstPct,
-    interstate,
+  const salesperson =
+    snapshotStr(cn?.customer_snapshot, "sales_man_name", "salesperson_name") ||
+    String(
+      (customerDetails as Record<string, unknown> | undefined)?.sales_man_name ||
+        (customerDetails as Record<string, unknown> | undefined)?.salesperson_name ||
+        "",
+    );
+  const customerBillingState =
+    snapshotStr(cn?.place_of_supply_snapshot, "customer_state") ||
+    String(
+      (customerDetails as Record<string, unknown> | undefined)?.billing_state ||
+        ((customerDetails as Record<string, unknown> | undefined)?.branches as Array<Record<string, unknown>> | undefined)?.find(
+          (b) => b.is_main_branch,
+        )?.billing_state ||
+        "",
+    );
+  const warehouseState =
+    selectedWarehouse?.state ||
+    snapshotStr(cn?.warehouse_snapshot, "state") ||
+    snapshotStr(pending?.warehouse_snapshot, "state") ||
+    cn?.warehouse?.state ||
+    pending?.warehouse?.state ||
+    "";
+  const interstate = Boolean(
+    cn?.is_interstate ??
+      (warehouseState && customerBillingState
+        ? warehouseState.trim().toLowerCase() !== customerBillingState.trim().toLowerCase()
+        : false),
   );
 
-  const referenceDocumentView = useMemo(() => {
-    if (!isSourceRefMode || !referencePreview) return null;
-    const base = {
-      documentDate: referencePreview.documentDate,
-      partyName: referencePreview.customerName,
-      grandTotal: referencePreview.originalAmount,
-      interstate,
-      lines: referencePreview.lineItems,
-    };
-    if (uiRefType === "sales_return") {
-      return adaptSalesReturnReference({
-        ...base,
-        documentNumber: sourceReturnNo || referencePreview.sourceInvoiceNo,
-      });
+  const schemeType =
+    pending?.scheme?.scheme_type ||
+    snapshotStr(pending?.scheme_snapshot, "scheme_type") ||
+    cn?.scheme?.scheme_type ||
+    "";
+  const schemeMapping = schemeMappings.find((m) => m.scheme_type === schemeType) ?? null;
+  const supportingLedgerName =
+    (cn?.lines?.[0]
+      ? cn.lines[0].ledger?.ledger_name || snapshotStr(cn.lines[0].ledger_snapshot, "ledger_name")
+      : "") ||
+    schemeMapping?.ledger?.ledger_name ||
+    "";
+
+  const selectedInvoice = invoices.find((i) => i.sales_invoice_id === invoiceId) || null;
+
+  const pendingLines: CreditNoteFormLine[] = cn?.lines?.length
+    ? cn.lines
+    : pending?.lines ?? [];
+
+  const applyCn = useCallback((detail: CreditNoteDetail) => {
+    setCn(detail);
+    setCnId(detail.credit_note_id);
+    setCnDate(toDateInput(detail.cn_date) || todayIso());
+    setWarehouseId(detail.warehouse_id || "");
+    setCustomerId(detail.customer_id || "");
+    setNarration(detail.narration || "");
+    setRoundOff(toNum(detail.round_off_amount));
+    setArLedgerName(detail.party_ledger?.ledger_name || snapshotStr(detail.party_ledger_snapshot, "ledger_name"));
+    setArLedgerCode(detail.party_ledger?.ledger_code || snapshotStr(detail.party_ledger_snapshot, "ledger_code"));
+    setFyLabel(detail.financial_year?.name || detail.financial_year?.code || "");
+    const src = String(detail.source_type || "DIRECT");
+    if (src === "DIRECT" || src === "SALES_INVOICE") {
+      const invRef = (detail.references || []).find((r) => r.reference_type === "SALES_INVOICE");
+      setDirectMode(invRef ? "against_invoice" : "on_account");
+      setInvoiceId(invRef?.reference_id || "");
+      setAllocation(invRef?.allocated_amount != null ? String(invRef.allocated_amount) : "");
+      setDirectLines(
+        (detail.lines || []).length
+          ? (detail.lines || []).map((line) => ({
+              key: line.credit_note_line_id || `line-${line.line_number}`,
+              description: line.description || "",
+              ledger_id: line.ledger_id || line.ledger?.ledger_id || "",
+              ledger_name: line.ledger?.ledger_name || snapshotStr(line.ledger_snapshot, "ledger_name"),
+              quantity: line.quantity != null ? String(line.quantity) : "",
+              rate:
+                toNum(line.quantity) > 0
+                  ? String(Math.round((toNum(line.taxable_amount) / Math.max(toNum(line.quantity), 1)) * 10000) / 10000)
+                  : String(line.taxable_amount ?? ""),
+              taxable_amount: String(line.taxable_amount ?? ""),
+              gst_applicable: toNum(line.gst_rate) > 0,
+              gst_rate: String(toNum(line.gst_rate) || 18),
+            }))
+          : [newDirectLine()],
+      );
     }
-    return adaptSalesInvoiceReference({
-      ...base,
-      documentNumber: referencePreview.sourceInvoiceNo || sourceInvoiceNo,
-    });
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      setPageLoading(true);
+      setError(null);
+      try {
+        if (routeCnId) {
+          const detail = await CreditNoteFormApi.getById(routeCnId);
+          if (cancelled) return;
+          applyCn(detail);
+          if (detail.pending_credit_note_id) {
+            try {
+              const p = await CreditNoteFormApi.getPendingById(detail.pending_credit_note_id);
+              if (!cancelled) {
+                setPending(p);
+              }
+            } catch {
+              /* pending snapshot on CN is enough */
+            }
+          }
+        } else if (pendingId && isUuid(pendingId)) {
+          const p = await CreditNoteFormApi.getPendingById(pendingId);
+          if (cancelled) return;
+          setPending(p);
+          setCustomerId(p.customer_id);
+          setWarehouseId(p.warehouse_id || "");
+          setCnDate(toDateInput(p.eligibility_date) || todayIso());
+          setNarration("");
+          setFyLabel(p.financial_year?.name || p.financial_year?.code || "");
+          setArLedgerName(snapshotStr(p.customer_snapshot, "ledger_name", "party_ledger_name"));
+          if (p.credit_note?.credit_note_id) {
+            setError(
+              `PENDING_CREDIT_NOTE_ALREADY_CONVERTED: Already converted to ${p.credit_note.cn_number || "a Credit Note"}.`,
+            );
+          }
+        }
+      } catch (e) {
+        if (!cancelled) setError(creditNoteApiError(e, "Failed to load Credit Note."));
+      } finally {
+        if (!cancelled) setPageLoading(false);
+      }
+    }
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [routeCnId, pendingId, applyCn]);
+
+  const refreshConfig = useCallback(async () => {
+    try {
+      const cfg = await CreditNoteFormApi.getConfig();
+      setApprovalRequired(cfg.approval_required !== false);
+    } catch (e) {
+      setApprovalRequired(true);
+      showToast(
+        creditNoteApiError(e, "Could not load Credit Note approval settings. Approval remains required."),
+        "error",
+      );
+    } finally {
+      setConfigReady(true);
+    }
+  }, [showToast]);
+
+  useEffect(() => {
+    void refreshConfig();
+  }, [refreshConfig]);
+
+  useEffect(() => {
+    CreditNoteFormApi.listSchemeTypeLedgerMappings()
+      .then(setSchemeMappings)
+      .catch(() => setSchemeMappings([]));
+    UserListService.dropdown()
+      .then((rows) =>
+        setApprovers(
+          rows.map((u) => ({
+            value: u.userId,
+            label: u.label || `${u.firstName} ${u.lastName}`.trim() || u.username || u.userId,
+          })),
+        ),
+      )
+      .catch(() => setApprovers([]));
+    LedgerService.getCurrentFinancialYear()
+      .then((fy) => {
+        if (fy && !fyLabel) setFyLabel(fy.name || fy.code || "");
+      })
+      .catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    if (!customerId || pendingEntitlementLocked) return;
+    LedgerService.syncCustomerLedger(customerId)
+      .then((res) => {
+        setArLedgerName(res.ledgerName);
+        setArLedgerCode(res.ledgerCode);
+      })
+      .catch(() => {
+        setArLedgerName("");
+        setArLedgerCode("");
+      });
+  }, [customerId, pendingEntitlementLocked]);
+
+  useEffect(() => {
+    if (!customerId || pendingEntitlementLocked) {
+      setInvoices([]);
+      return;
+    }
+    let cancelled = false;
+    SalesInvoiceService.list({ customer_id: customerId, page: 1, page_size: 50, status: "POSTED" })
+      .then((res) => {
+        if (cancelled) return;
+        const items = Array.isArray(res?.results) ? res.results : [];
+        setInvoices(
+          items.map((inv) => ({
+            sales_invoice_id: String(inv.sales_invoice_id ?? ""),
+            invoice_number: String(inv.invoice_number ?? ""),
+            invoice_date: toDateInput(inv.invoice_date),
+            invoice_amount: toNum(inv.invoice_amount),
+            outstanding_amount:
+              "outstanding_amount" in inv && inv.outstanding_amount != null
+                ? toNum(inv.outstanding_amount)
+                : null,
+          })),
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setInvoices([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [customerId, pendingEntitlementLocked]);
+
+  useEffect(() => {
+    if (pendingEntitlementLocked) return;
+    if (invoiceIdFromUrl && isUuid(invoiceIdFromUrl)) {
+      setDirectMode("against_invoice");
+      setInvoiceId(invoiceIdFromUrl);
+    }
+  }, [invoiceIdFromUrl, pendingEntitlementLocked]);
+
+  const directTotals = useMemo(() => {
+    const fromLines = directLines.reduce(
+      (acc, line) => {
+        const p = computeDirectLinePreview(line, interstate);
+        acc.taxable += p.basicAmount;
+        acc.cgst += p.cgst;
+        acc.sgst += p.sgst;
+        acc.igst += p.igst;
+        acc.gst += p.gstAmount;
+        acc.raw += p.lineTotal;
+        return acc;
+      },
+      { taxable: 0, cgst: 0, sgst: 0, igst: 0, gst: 0, raw: 0 },
+    );
+    for (const c of directExtraCharges) {
+      const taxable = toNum(c.amount);
+      if (taxable <= 0) continue;
+      const rate = toNum(c.gstPct);
+      const gst = Math.round(((taxable * rate) / 100) * 100) / 100;
+      const half = Math.round((gst / 2) * 100) / 100;
+      fromLines.taxable += taxable;
+      if (interstate) {
+        fromLines.igst += gst;
+      } else {
+        fromLines.cgst += half;
+        fromLines.sgst += Math.round((gst - half) * 100) / 100;
+      }
+      fromLines.gst += gst;
+      fromLines.raw += taxable + gst;
+    }
+    return fromLines;
+  }, [directLines, directExtraCharges, interstate]);
+
+  const amountPreview = useMemo(() => {
+    if (cn && !fieldsEditable) {
+      const taxable = toNum(cn.taxable_amount);
+      const cgst = toNum(cn.cgst_amount);
+      const sgst = toNum(cn.sgst_amount);
+      const igst = toNum(cn.igst_amount);
+      const gst = toNum(cn.gst_amount);
+      const storedRoundOff = toNum(cn.round_off_amount);
+      const total = toNum(cn.cn_amount);
+      return { taxable, cgst, sgst, igst, gst, roundOff: storedRoundOff, total };
+    }
+    if (pendingEntitlementLocked && cn) {
+      const taxable = toNum(cn.taxable_amount);
+      const cgst = toNum(cn.cgst_amount);
+      const sgst = toNum(cn.sgst_amount);
+      const igst = toNum(cn.igst_amount);
+      const gst = toNum(cn.gst_amount);
+      const raw = Math.round((taxable + gst) * 100) / 100;
+      return {
+        taxable,
+        cgst,
+        sgst,
+        igst,
+        gst,
+        roundOff,
+        total: Math.round((raw + roundOff) * 100) / 100,
+      };
+    }
+    if (pendingEntitlementLocked && pending) {
+      let taxable = toNum(pending.taxable_credit_amount);
+      let cgst = toNum(pending.cgst_amount);
+      let sgst = toNum(pending.sgst_amount);
+      let igst = toNum(pending.igst_amount);
+      let gst = toNum(pending.gst_amount);
+      for (const c of directExtraCharges) {
+        const amt = toNum(c.amount);
+        if (amt <= 0 || !c.description.trim()) continue;
+        const rate = toNum(c.gstPct);
+        const lineGst = Math.round(((amt * rate) / 100) * 100) / 100;
+        taxable += amt;
+        gst += lineGst;
+        if (interstate) igst += lineGst;
+        else {
+          const half = Math.round((lineGst / 2) * 100) / 100;
+          cgst += half;
+          sgst += Math.round((lineGst - half) * 100) / 100;
+        }
+      }
+      const raw = Math.round((taxable + gst) * 100) / 100;
+      return {
+        taxable: Math.round(taxable * 100) / 100,
+        cgst: Math.round(cgst * 100) / 100,
+        sgst: Math.round(sgst * 100) / 100,
+        igst: Math.round(igst * 100) / 100,
+        gst: Math.round(gst * 100) / 100,
+        roundOff,
+        total: Math.round((raw + roundOff) * 100) / 100,
+      };
+    }
+    const raw = Math.round(directTotals.raw * 100) / 100;
+    const total = Math.round((raw + roundOff) * 100) / 100;
+    return {
+      taxable: Math.round(directTotals.taxable * 100) / 100,
+      cgst: Math.round(directTotals.cgst * 100) / 100,
+      sgst: Math.round(directTotals.sgst * 100) / 100,
+      igst: Math.round(directTotals.igst * 100) / 100,
+      gst: Math.round(directTotals.gst * 100) / 100,
+      roundOff,
+      total,
+    };
   }, [
-    isSourceRefMode,
-    referencePreview,
-    uiRefType,
+    cn,
+    fieldsEditable,
+    pendingEntitlementLocked,
+    pending,
+    directTotals,
+    directExtraCharges,
     interstate,
-    sourceReturnNo,
-    sourceInvoiceNo,
+    roundOff,
   ]);
 
-  const againstLinesForTax = lines.filter(
-    (l) => l.productName && (l.returnQty > 0 || l.creditAmount > 0),
-  );
-  const taxBreakup = isScheme || usesQuantityLines
-    ? computeNoteTaxBreakup(againstLinesForTax, interstate)
-    : computeNoteTaxBreakup(
-        [
-          {
-            creditAmount: particularTotals.total,
-            taxPct: directGstApplicable ? parseFloat(directGstPct) || 0 : 0,
-          },
-        ],
-        interstate,
-      );
+  const buildPendingExtraChargesPayload = () =>
+    directExtraCharges
+      .filter((c) => toNum(c.amount) > 0 && c.description.trim() && isUuid(c.ledgerId))
+      .map((c) => ({
+        description: c.description.trim(),
+        ledger_id: c.ledgerId,
+        taxable_amount: toNum(c.amount),
+        gst_rate: toNum(c.gstPct),
+      }));
 
-  const subTotal =
-    isScheme || usesQuantityLines ? taxBreakup.taxableValue : particularTotals.basicAmount;
-  const grandTotal = Math.max(
-    0,
-    (isScheme || usesQuantityLines ? taxBreakup.total : particularTotals.total) +
-      (isScheme ? 0 : adjustment),
-  );
-  const cgstDisplay =
-    isScheme || usesQuantityLines ? taxBreakup.cgstAmount : particularTotals.cgst;
-  const sgstDisplay =
-    isScheme || usesQuantityLines ? taxBreakup.sgstAmount : particularTotals.sgst;
-  const igstDisplay =
-    isScheme || usesQuantityLines ? taxBreakup.igstAmount : particularTotals.igst;
-  const original = parseFloat(originalAmount) || grandTotal;
-  const alreadyAdjustedNumSafe = parseFloat(alreadyAdjusted) || 0;
-
-  const quantityLineViews = useMemo(
-    () =>
-      lines
-        .filter((l) => Boolean(l.productName?.trim()))
-        .map((l) => mapNoteLineToQuantityView(l, { interstate })),
-    [lines, interstate],
-  );
-
-  const quantityLinesEmptyMessage = (() => {
-    if (isReturnRefMode) {
-      if (!referencePreview) return "Select a sales return to load product lines.";
-      return "Product lines could not be loaded for the selected Sales Return.";
-    }
-    if (referenceInvoiceId || referencePreview) {
-      return "Product lines could not be loaded for the selected Sales Invoice.";
-    }
-    return "Select a sales invoice to load product lines.";
-  })();
-
-  const handleQuantityLineQtyChange = (lineId: string, qty: number) => {
-    setLines((prev) => {
-      const next = prev.map((line) => {
-        if (line.id !== lineId) return line;
-        const max = isInvoiceQtyMode
-          ? line.invoiceQty > 0
-            ? line.invoiceQty
-            : getCreditLineMaxQty(line)
-          : getCreditLineMaxQty(line);
-        const clamped = Number.isFinite(max)
-          ? Math.min(Math.max(0, qty), max)
-          : Math.max(0, qty);
-        const updated = normalizeCreditLine({ ...line, returnQty: clamped });
-        const calc = calcCreditLineAmounts(updated);
-        return normalizeCreditLine({
-          ...updated,
-          creditAmount: calc.amount,
-          gstAmount: calc.taxAmt,
-        });
-      });
-      return recalcAllCreditLines(next, alreadyAdjustedNumSafe);
-    });
-  };
-
-  const resolveCustomerName = (): string => {
-    if (selectedCustomer) return selectedCustomer.customerName;
-    if (customerFields?.customerName) return customerFields.customerName;
-    if (referencePreview?.customerName) return referencePreview.customerName;
-    return "";
-  };
-
-  /** Shared save lines from generic Particulars (direct + amount-based invoice). */
-  const buildParticularLineItems = (): CreditNoteLine[] => {
-    if (usesQuantityLines) {
-      return againstLinesForTax;
-    }
-    if (particularTotals.total <= 0 && Math.abs(adjustment) < 0.005) return [];
-    const particular = directParticular.trim() || "Adjustment";
-    const lineTotal = roundMoney(particularTotals.total + adjustment);
-    return [
-      normalizeCreditLine({
-        ...createEmptyCreditLine(),
-        productName: particular,
-        description: directParticular.trim(),
-        reason: particular,
-        returnQty: particularTotals.qty || 1,
-        unitPrice: particularTotals.rate || particularTotals.basicAmount,
-        taxPct: directGstApplicable ? parseFloat(directGstPct) || 0 : 0,
-        gstApplicable: directGstApplicable,
-        creditAmount: lineTotal,
-        gstAmount: particularTotals.gstAmount,
-        adjustmentLedgerId,
-        adjustmentLedgerName,
-      }),
-    ];
-  };
-
-  const warehouseRef = useMemo(() => {
-    const invId =
-      linkedInvoices[0]?.id ??
-      (referenceInvoiceId ? Number(referenceInvoiceId) : null) ??
-      sourceInvoiceId;
-    if (invId && Number.isFinite(invId)) {
-      return getInvoiceById(invId)?.warehouse ?? null;
+  const validatePendingCharges = (): string | null => {
+    for (const c of directExtraCharges) {
+      const amt = toNum(c.amount);
+      if (amt <= 0 && !c.description.trim() && !c.ledgerId) continue;
+      if (amt <= 0) continue;
+      if (!c.description.trim()) {
+        return "Enter a description for each additional charge with an amount.";
+      }
+      if (!isUuid(c.ledgerId)) {
+        return `Select a ledger for additional charge "${c.description.trim() || "row"}".`;
+      }
     }
     return null;
-  }, [linkedInvoices, referenceInvoiceId, sourceInvoiceId]);
-
-  const resolveSource = (): CreditNoteSource => {
-    if (isFresh || noteType === "direct_adjustment") return "manual";
-    if (isScheme || schemeSettlementKey || schemeEntitlementId) return "payment_discount_scheme";
-    if (isReturn || referenceReturnId || sourceReturnId) return "sales_return";
-    return "manual";
   };
 
-  const buildInput = (nextStatus: NoteWorkflowStatus) => {
-    const isDirect = isDirectMode;
-    const primaryLinked = linkedInvoices[0];
-    const refInvId = primaryLinked?.id ?? sourceInvoiceId;
-    const refInvNo =
-      primaryLinked?.invoiceNo ??
-      (sourceInvoiceNo || invoices.find((i) => i.id === refInvId)?.invoiceNo || "");
-
-    const schemeSaveLines = lines.filter(
-      (l) => l.productName && (l.returnQty > 0 || l.creditAmount > 0),
-    );
-
+  const buildDirectPayload = (): CreateDirectCreditNotePayload => {
+    const mainLines = directLines.map((line) => {
+      const preview = computeDirectLinePreview(line, interstate);
+      const qty = toNum(line.quantity);
+      return {
+        description: line.description.trim(),
+        ledger_id: line.ledger_id,
+        calculation_basis: qty > 0 ? ("QUANTITY" as const) : ("DIRECT" as const),
+        quantity: qty > 0 ? qty : null,
+        eligible_base_amount: preview.basicAmount,
+        taxable_amount: preview.basicAmount,
+        gst_rate: line.gst_applicable ? toNum(line.gst_rate) : 0,
+      };
+    });
+    const extraLines = directExtraCharges
+      .filter((c) => toNum(c.amount) > 0 && c.description.trim() && isUuid(c.ledgerId))
+      .map((c) => ({
+        description: c.description.trim(),
+        ledger_id: c.ledgerId,
+        calculation_basis: "DIRECT" as const,
+        quantity: null,
+        eligible_base_amount: toNum(c.amount),
+        taxable_amount: toNum(c.amount),
+        gst_rate: toNum(c.gstPct),
+      }));
+    const lines = [...mainLines, ...extraLines];
+    const references =
+      directMode === "against_invoice" && invoiceId
+        ? [
+            {
+              reference_type: "SALES_INVOICE" as const,
+              reference_id: invoiceId,
+              reference_code: selectedInvoice?.invoice_number || null,
+              reference_date: selectedInvoice?.invoice_date || null,
+              relation_type: "INVOICE_AGAINST" as const,
+              allocated_amount: toNum(allocation) > 0 ? toNum(allocation) : null,
+            },
+          ]
+        : [];
     return {
-      creditNoteDate,
-      customerId: customerId ? Number(customerId) : null,
-      customerName: resolveCustomerName(),
-      receivableLedger: customerLedgerName,
-      billingAddress,
-      shippingAddress,
-      placeOfSupply: placeOfSupply || undefined,
-      sourceInvoiceId: refInvId,
-      sourceInvoiceNo: refInvNo,
-      linkedInvoices: linkedInvoices.length ? linkedInvoices : undefined,
-      sourceOrderId: null,
-      sourceOrderNo,
-      originalAmount: isScheme
-        ? original
-        : roundMoney(particularTotals.total + adjustment),
-      alreadyAdjustedAmount: isDirect ? 0 : alreadyAdjustedNum,
-      lineItems: isScheme ? schemeSaveLines : buildParticularLineItems(),
-      reason: isDirect
-        ? directParticular.trim() || remarks.trim() || "Other"
-        : isEntitlementScheme || schemeEntitlementId
-          ? "Scheme Settlement"
-          : isScheme
-            ? "Near Expiry Scheme Settlement"
-            : directParticular.trim() ||
-              (uiRefType === "sales_return" ? "Sales return" : "Sales invoice"),
-      remarks,
-      status: nextStatus,
-      source: resolveSource(),
-      sourceReturnId: referenceReturnId || sourceReturnId || undefined,
-      sourceReturnNo: sourceReturnNo || undefined,
-      schemeSettlementKey: schemeSettlementKey || undefined,
-      schemeCode: schemeCode || undefined,
-      schemeName: schemeName || undefined,
-      schemeSettlementAmount: schemeSettlementAmount ?? (isScheme ? grandTotal : undefined),
-      schemeEntitlementId: schemeEntitlementId || undefined,
-      schemeId: schemeId || undefined,
-      schemeType: schemeType || undefined,
-      calculationReference: calculationReference || undefined,
-      sourceInvoiceIds: sourceInvoiceIds.length ? sourceInvoiceIds : undefined,
-      adjustmentLedgerId: adjustmentLedgerId ?? undefined,
-      adjustmentLedgerName: adjustmentLedgerName || undefined,
-      referenceNo: directRefNo || undefined,
-      attachmentName: attachmentName || undefined,
-      warehouse: warehouseRef ?? undefined,
-      bankAccountId,
+      cn_date: cnDate,
+      warehouse_id: warehouseId,
+      customer_id: customerId,
+      narration: narration.trim() || null,
+      round_off_amount: roundOff,
+      lines,
+      references,
     };
   };
 
-  const validateForPost = (): boolean => {
-    if (ledgerConfigError) {
-      setError(ledgerConfigError);
-      return false;
+  const validateDirect = (): string | null => {
+    if (!cnDate) return "Credit Note Date is required.";
+    if (!warehouseId) return "Warehouse is required.";
+    if (!customerId) return "Customer is required.";
+    if (!directLines.length) return "At least one particular line is required.";
+    for (const [i, line] of directLines.entries()) {
+      if (!line.description.trim()) return `Line ${i + 1}: description is required.`;
+      if (!isUuid(line.ledger_id)) return `Line ${i + 1}: select an adjustment ledger.`;
+      if (computeDirectLinePreview(line, interstate).basicAmount <= 0) {
+        return `Line ${i + 1}: taxable amount must be greater than zero.`;
+      }
     }
-    if (!resolveCustomerName().trim()) {
-      setError("Select a customer before saving.");
-      return false;
+    for (const c of directExtraCharges) {
+      if (toNum(c.amount) <= 0 && !c.description.trim()) continue;
+      if (!c.description.trim()) return "Enter a description for each additional charge.";
+      if (!isUuid(c.ledgerId)) {
+        return `Select a ledger for additional charge "${c.description.trim()}".`;
+      }
+      if (toNum(c.amount) <= 0) {
+        return `Enter an amount for additional charge "${c.description.trim()}".`;
+      }
     }
-    if (schemeEntitlementId && !adjustmentLedgerId && !adjustmentLedgerName.trim()) {
-      setError(SCHEME_ENTITLEMENT_LEDGER_ERROR);
-      return false;
+    if (directMode === "against_invoice") {
+      if (!invoiceId) return "Select a Sales Invoice or switch to On-account.";
+      const alloc = toNum(allocation);
+      if (alloc > 0 && Math.abs(alloc - amountPreview.total) > 0.009) {
+        return "Allocation must equal the full Credit Note amount, or be left blank (no settlement).";
+      }
+      if (alloc > 0 && selectedInvoice?.outstanding_amount != null && alloc > selectedInvoice.outstanding_amount + 0.009) {
+        return "Allocation exceeds the invoice outstanding amount.";
+      }
     }
-    if (!isScheme) {
-      if (isSourceRefMode && !referencePreview) {
-        setError(
-          uiRefType === "sales_return"
-            ? "Select a sales return."
-            : "Select a sales invoice.",
-        );
-        return false;
+    return null;
+  };
+
+  const guardBusy = async (fn: () => Promise<void>) => {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+    setBusy(true);
+    setError(null);
+    try {
+      await fn();
+    } catch (e) {
+      const msg = creditNoteApiError(e, "Request failed.");
+      setError(msg);
+      showToast(msg, "error");
+    } finally {
+      submittingRef.current = false;
+      setBusy(false);
+    }
+  };
+
+  const goToEdit = (id: string) => {
+    router.replace(`${CREDIT_NOTES_LIST_PATH}/${id}/edit`);
+  };
+
+  const goToDetail = (id: string) => {
+    router.replace(`${CREDIT_NOTES_LIST_PATH}/${id}`);
+  };
+
+  const requireCreditNoteId = (detail: CreditNoteDetail | null | undefined): string => {
+    const id = detail?.credit_note_id?.trim() || "";
+    if (!isUuid(id)) {
+      throw new Error("CREDIT_NOTE_ID_MISSING: The server did not return a Credit Note id.");
+    }
+    return id;
+  };
+
+  const refreshConfigIfApprovalDisabled = async (error: unknown) => {
+    if (creditNoteErrorIncludes(error, "CREDIT_NOTE_APPROVAL_DISABLED")) {
+      await refreshConfig();
+    }
+  };
+
+  const updateCurrentDraft = async (id: string): Promise<CreditNoteDetail> => {
+    if (pendingEntitlementLocked) {
+      const updated = await CreditNoteFormApi.updateDraft(id, {
+        cn_date: cnDate,
+        narration: narration.trim() || null,
+        round_off_amount: roundOff,
+      });
+      applyCn(updated);
+      return updated;
+    }
+    const invalid = validateDirect();
+    if (invalid) throw new Error(invalid);
+    const payload = buildDirectPayload();
+    const updated = await CreditNoteFormApi.updateDraft(id, {
+      cn_date: payload.cn_date,
+      narration: payload.narration,
+      round_off_amount: payload.round_off_amount,
+      lines: payload.lines,
+      references: payload.references,
+    });
+    applyCn(updated);
+    return updated;
+  };
+
+  const postById = async (id: string): Promise<CreditNoteDetail> => {
+    if (!isUuid(id)) {
+      throw new Error("CREDIT_NOTE_ID_MISSING: Cannot post before the Credit Note exists.");
+    }
+    try {
+      const posted = await CreditNoteFormApi.post(id);
+      applyCn(posted);
+      return posted;
+    } catch (e) {
+      await refreshConfigIfApprovalDisabled(e);
+      if (
+        creditNoteErrorIncludes(e, "ALREADY_POSTED") ||
+        /already posted/i.test(creditNoteApiError(e, ""))
+      ) {
+        const latest = await CreditNoteFormApi.getById(id);
+        applyCn(latest);
+        if (latest.status === "POSTED") return latest;
       }
-      if (!directParticular.trim()) {
-        setError("Enter a particular / description for the adjustment.");
-        return false;
+      throw e;
+    }
+  };
+
+  const saveDraft = () =>
+    guardBusy(async () => {
+      if (pendingEntitlementLocked && pendingId && !cnId) {
+        if (pending?.credit_note?.credit_note_id) {
+          throw new Error("PENDING_CREDIT_NOTE_ALREADY_CONVERTED: This Pending CN is already converted.");
+        }
+        const chargeErr = validatePendingCharges();
+        if (chargeErr) throw new Error(chargeErr);
+        const created = await CreditNoteFormApi.createFromPending(pendingId, {
+          cn_date: cnDate,
+          narration: narration.trim() || null,
+          remarks: pending?.remarks || null,
+          round_off_amount: roundOff,
+          extra_charges: buildPendingExtraChargesPayload(),
+        });
+        applyCn(created);
+        showToast("Credit Note created as Draft", "success");
+        goToEdit(created.credit_note_id);
+        return;
       }
-      if (!adjustmentLedgerId && !adjustmentLedgerName) {
-        setError("Select an adjustment ledger.");
-        return false;
+      if (pendingEntitlementLocked && cnId) {
+        const updated = await CreditNoteFormApi.updateDraft(cnId, {
+          cn_date: cnDate,
+          narration: narration.trim() || null,
+          round_off_amount: roundOff,
+        });
+        applyCn(updated);
+        showToast("Draft updated", "success");
+        return;
       }
-      if (particularTotals.total <= 0) {
-        setError("Enter a valid Qty and Rate for the particular.");
-        return false;
+      const invalid = validateDirect();
+      if (invalid) throw new Error(invalid);
+      if (cnId) {
+        const payload = buildDirectPayload();
+        const updated = await CreditNoteFormApi.updateDraft(cnId, {
+          cn_date: payload.cn_date,
+          narration: payload.narration,
+          round_off_amount: payload.round_off_amount,
+          lines: payload.lines,
+          references: payload.references,
+        });
+        applyCn(updated);
+        showToast("Draft updated", "success");
+        return;
       }
-    } else {
-      if (!referencePreview && !schemeEntitlementId && !schemeSettlementKey) {
-        setError("Select a sales invoice or sales return.");
-        return false;
-      }
+      const created = await CreditNoteFormApi.createDirect(buildDirectPayload());
+      applyCn(created);
+      showToast("Credit Note saved as Draft", "success");
+      goToEdit(created.credit_note_id);
+    });
+
+  const ensureSavedId = async (): Promise<string> => {
+    if (cnId) return cnId;
+    if (pendingEntitlementLocked && pendingId) {
+      const chargeErr = validatePendingCharges();
+      if (chargeErr) throw new Error(chargeErr);
+      const created = await CreditNoteFormApi.createFromPending(pendingId, {
+        cn_date: cnDate,
+        narration: narration.trim() || null,
+        remarks: pending?.remarks || null,
+        round_off_amount: roundOff,
+        extra_charges: buildPendingExtraChargesPayload(),
+      });
+      applyCn(created);
+      return created.credit_note_id;
+    }
+    const invalid = validateDirect();
+    if (invalid) throw new Error(invalid);
+    const created = await CreditNoteFormApi.createDirect(buildDirectPayload());
+    applyCn(created);
+    return created.credit_note_id;
+  };
+
+  const submitForApproval = () =>
+    guardBusy(async () => {
       try {
-        validateCreditNoteLines(lines);
+        if (!approverId) throw new Error("CREDIT_NOTE_APPROVER_REQUIRED: Select an approver before submitting.");
+        if (!pendingEntitlementLocked) {
+          const invalid = validateDirect();
+          if (invalid) throw new Error(invalid);
+        }
+        const id = await ensureSavedId();
+        const updated = await CreditNoteFormApi.submit(id, approverId);
+        applyCn(updated);
+        showToast("Submitted for approval", "success");
+        goToEdit(id);
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Invalid line quantities.");
-        return false;
+        await refreshConfigIfApprovalDisabled(e);
+        throw e;
       }
-      const againstTotal = Math.max(0, taxBreakup.total + (isScheme ? 0 : adjustment));
-      if (againstTotal <= 0) {
-        setError(
-          isEntitlementScheme || schemeEntitlementId
-            ? "Credit Note amount must be greater than zero."
-            : "Enter credit qty on at least one line.",
-        );
-        return false;
+    });
+
+  const approve = () =>
+    guardBusy(async () => {
+      try {
+        if (!cnId) return;
+        const updated = await CreditNoteFormApi.approve(cnId);
+        applyCn(updated);
+        showToast("Credit Note approved", "success");
+      } catch (e) {
+        await refreshConfigIfApprovalDisabled(e);
+        throw e;
       }
-    }
-    return true;
+    });
+
+  const postCn = () =>
+    guardBusy(async () => {
+      try {
+        if (!approvalRequired) {
+          if (status === "DRAFT" && cnId) {
+            const updated = await updateCurrentDraft(cnId);
+            if (updated.status && updated.status !== "DRAFT") {
+              throw new Error("CREDIT_NOTE_INVALID_STATUS: Cannot post until the Credit Note is a Draft.");
+            }
+            await postById(requireCreditNoteId(updated));
+            showToast("Credit Note posted", "success");
+            goToDetail(requireCreditNoteId(updated));
+            return;
+          }
+          if ((status === "PENDING_APPROVAL" || status === "APPROVED") && cnId) {
+            await postById(cnId);
+            showToast("Credit Note posted", "success");
+            goToDetail(cnId);
+            return;
+          }
+          return;
+        }
+        if (!cnId) return;
+        const updated = await CreditNoteFormApi.post(cnId);
+        applyCn(updated);
+        showToast("Credit Note posted", "success");
+      } catch (e) {
+        await refreshConfigIfApprovalDisabled(e);
+        throw e;
+      }
+    });
+
+  const saveAndPost = () =>
+    guardBusy(async () => {
+      try {
+        if (pendingEntitlementLocked && pendingId && !cnId) {
+          if (!cnDate) throw new Error("Credit Note Date is required.");
+          if (pending?.credit_note?.credit_note_id) {
+            throw new Error("PENDING_CREDIT_NOTE_ALREADY_CONVERTED: This Pending CN is already converted.");
+          }
+          const chargeErr = validatePendingCharges();
+          if (chargeErr) throw new Error(chargeErr);
+          const created = await CreditNoteFormApi.createFromPending(pendingId, {
+            cn_date: cnDate,
+            narration: narration.trim() || null,
+            remarks: pending?.remarks || null,
+            round_off_amount: roundOff,
+            extra_charges: buildPendingExtraChargesPayload(),
+          });
+          const id = requireCreditNoteId(created);
+          applyCn(created);
+          try {
+            await postById(id);
+          } catch (e) {
+            goToEdit(id);
+            throw e;
+          }
+          showToast("Credit Note posted", "success");
+          goToDetail(id);
+          return;
+        }
+        if (status === "REJECTED" && cnId) {
+          const updated = await updateCurrentDraft(cnId);
+          if (updated.status !== "DRAFT") {
+            throw new Error("CREDIT_NOTE_INVALID_STATUS: Save the rejected Credit Note to Draft before posting.");
+          }
+          await postById(requireCreditNoteId(updated));
+          showToast("Credit Note posted", "success");
+          goToDetail(requireCreditNoteId(updated));
+          return;
+        }
+        const invalid = validateDirect();
+        if (invalid) throw new Error(invalid);
+        if (cnId) {
+          const updated = await updateCurrentDraft(cnId);
+          await postById(requireCreditNoteId(updated));
+          showToast("Credit Note posted", "success");
+          goToDetail(requireCreditNoteId(updated));
+          return;
+        }
+        const created = await CreditNoteFormApi.createDirect(buildDirectPayload());
+        const id = requireCreditNoteId(created);
+        applyCn(created);
+        try {
+          await postById(id);
+        } catch (e) {
+          goToEdit(id);
+          throw e;
+        }
+        showToast("Credit Note posted", "success");
+        goToDetail(id);
+      } catch (e) {
+        await refreshConfigIfApprovalDisabled(e);
+        throw e;
+      }
+    });
+
+  const onReasonConfirm = (reason: string) => {
+    const kind = reasonDialog;
+    setReasonDialog(null);
+    if (!kind || !cnId) return;
+    void guardBusy(async () => {
+      try {
+        if (kind === "reject") {
+          const updated = await CreditNoteFormApi.reject(cnId, reason);
+          applyCn(updated);
+          showToast("Credit Note rejected", "success");
+        } else {
+          const updated = await CreditNoteFormApi.cancel(cnId, reason);
+          applyCn(updated);
+          showToast("Credit Note cancelled", "success");
+        }
+      } catch (e) {
+        await refreshConfigIfApprovalDisabled(e);
+        throw e;
+      }
+    });
   };
 
-  const saveDraft = () => {
-    setError(null);
-    try {
-      if (ledgerConfigError) {
-        setError(ledgerConfigError);
-        return;
-      }
-      if (!resolveCustomerName().trim()) {
-        setError("Select a customer before saving.");
-        return;
-      }
-      if (schemeEntitlementId && !adjustmentLedgerId && !adjustmentLedgerName.trim()) {
-        setError(SCHEME_ENTITLEMENT_LEDGER_ERROR);
-        return;
-      }
-      if (isEdit && creditNoteId != null) {
-        updateCreditNote(creditNoteId, buildInput("draft"), { requireAmount: false });
-        dispatchAccountsDataChanged("credit-notes");
-        showToast("Credit note saved as draft");
-        router.push(`${CREDIT_NOTES_LIST_PATH}/${creditNoteId}`);
-      } else {
-        const rec = createCreditNote(buildInput("draft"), { requireAmount: false });
-        dispatchAccountsDataChanged("credit-notes");
-        showToast("Credit note saved as draft");
-        router.push(`${CREDIT_NOTES_LIST_PATH}/${rec.id}`);
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not save draft.");
-    }
-  };
-
-  const submitForApproval = () => {
-    setError(null);
-    try {
-      if (ledgerConfigError) {
-        setError(ledgerConfigError);
-        return;
-      }
-      if (!resolveCustomerName().trim()) {
-        setError("Select a customer before submitting.");
-        return;
-      }
-      if (schemeEntitlementId && !adjustmentLedgerId && !adjustmentLedgerName.trim()) {
-        setError(SCHEME_ENTITLEMENT_LEDGER_ERROR);
-        return;
-      }
-      if (!validateForPost()) return;
-      let id = creditNoteId;
-      if (isEdit && creditNoteId != null) {
-        updateCreditNote(creditNoteId, buildInput("pending_approval"), { requireAmount: true });
-      } else {
-        const rec = createCreditNote(buildInput("pending_approval"), { requireAmount: true });
-        id = rec.id;
-        attachWorkflowOnCreate("credit_note", rec.id);
-      }
-      if (id != null) {
-        submitDocumentForApproval("credit_note", id);
-        dispatchAccountsDataChanged("credit-notes");
-        showToast("Credit note submitted for approval");
-        router.push(`${CREDIT_NOTES_LIST_PATH}/${id}`);
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not submit for approval.");
-    }
-  };
-
-  const postNote = () => {
-    setError(null);
-    if (!validateForPost()) return;
-    try {
-      if (isEdit && creditNoteId != null) {
-        updateCreditNote(creditNoteId, buildInput("draft"));
-        postCreditNote(creditNoteId);
-        dispatchAccountsDataChanged("credit-notes");
-        showToast("Credit note posted successfully");
-        router.push(`${CREDIT_NOTES_LIST_PATH}/${creditNoteId}`);
-      } else {
-        const rec = createCreditNote(buildInput("draft"));
-        postCreditNote(rec.id);
-        dispatchAccountsDataChanged("credit-notes");
-        showToast("Credit note posted successfully");
-        router.push(`${CREDIT_NOTES_LIST_PATH}/${rec.id}`);
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not post credit note.");
-    }
-  };
-
-  const formTitle = isEdit
-    ? "Edit Credit Note"
-    : isReturn
-      ? "Generate Credit Note — Sales Return"
-      : isScheme
-        ? "Generate Credit Note — Scheme"
-        : isFresh
-          ? "Create Credit Note"
-          : "New Credit Note";
+  const title = pageTitleFor({
+    isEdit: Boolean(cnId),
+    isPendingGenerate: isPendingFlow && !cnId,
+  });
 
   const [baselineReady, setBaselineReady] = useState(false);
   useEffect(() => {
     setBaselineReady(false);
-    const id = window.setTimeout(() => setBaselineReady(true), 350);
+    const id = window.setTimeout(() => setBaselineReady(!pageLoading), 200);
     return () => window.clearTimeout(id);
-  }, [creditNoteId, isReturn, isScheme, isFresh, searchParams.toString()]);
+  }, [pageLoading, cnId, pendingId]);
 
-  const formSnapshot = useMemo(
+  const snapshot = useMemo(
     () => ({
-      noteType,
-      creditNoteDate,
+      cnDate,
+      warehouseId,
       customerId,
-      referenceInvoiceId,
-      lines,
-      remarks,
-      linkedInvoices,
-      directParticular,
-      directRefNo,
-      particularQty,
-      particularRate,
-      directGstApplicable,
-      directGstPct,
-      adjustmentLedgerId,
-      adjustment,
-      schemeSettlementKey,
-      uiRefType,
+      narration,
+      directMode,
+      invoiceId,
+      allocation,
+      directLines,
+      approverId,
+      roundOff,
+      directExtraCharges,
     }),
     [
-      noteType,
-      creditNoteDate,
+      cnDate,
+      warehouseId,
       customerId,
-      referenceInvoiceId,
-      lines,
-      remarks,
-      linkedInvoices,
-      directParticular,
-      directRefNo,
-      particularQty,
-      particularRate,
-      directGstApplicable,
-      directGstPct,
-      adjustmentLedgerId,
-      adjustment,
-      schemeSettlementKey,
-      uiRefType,
+      narration,
+      directMode,
+      invoiceId,
+      allocation,
+      directLines,
+      approverId,
+      roundOff,
+      directExtraCharges,
     ],
   );
-  const isDirty = useFormDirtySnapshot(formSnapshot, { ready: baselineReady && !readOnly });
+  const isDirty = useFormDirtySnapshot(snapshot, { ready: baselineReady && fieldsEditable });
   const { requestCancel, discardDialog } = useTransactionFormCancel({
     listHref: CREDIT_NOTES_LIST_PATH,
     isDirty,
   });
-  const invoiceCountForScheme =
-    sourceInvoiceIds.length ||
-    linkedInvoices.length ||
-    (sourceInvoiceNo ? 1 : 0);
-  const showGstBreakup = isScheme
-    ? taxBreakup.taxAmount > 0 || isGstApplicableTreatment(gstTreatment)
-    : directGstApplicable;
 
-  const stickyActions = readOnly ? undefined : (
-    <VoucherFormActionBar
-      onDiscard={requestCancel}
-      onSaveDraft={saveDraft}
-      onSubmitForApproval={submitForApproval}
-      showSubmitForApproval
-      onSaveAndPost={postNote}
-      saveAndPostLabel="Save & Post"
-      saveDraftDisabled={Boolean(ledgerConfigError)}
-      submitForApprovalDisabled={Boolean(ledgerConfigError)}
-      saveAndPostDisabled={Boolean(ledgerConfigError)}
-    />
-  );
-
-  const debitLedgerName = adjustmentLedgerName || "Not selected";
-  const creditLedgerResolved =
-    resolveCreditNoteCustomerLedger(customerLedgerName, resolveCustomerName()) || "Not selected";
+  const debitLedger =
+    supportingLedgerName ||
+    directLines.find((l) => l.ledger_name)?.ledger_name ||
+    "Not selected";
+  const creditLedger = arLedgerName || customerName || "Not selected";
+  const showGst = amountPreview.gst > 0.004;
 
   const postingSummary = (
     <VoucherAccountingPostingSummary
       compact
       voucherTypeLabel="Credit Note"
       debitLedgerLabel="Debit"
-      debitLedgerName={debitLedgerName}
+      debitLedgerName={debitLedger}
       creditLedgerLabel="Credit"
-      creditLedgerName={creditLedgerResolved}
-      voucherAmount={grandTotal}
+      creditLedgerName={creditLedger}
+      voucherAmount={amountPreview.total}
       voucherAmountLabel="Credit Note Amount"
       gstAdjustments={
-        showGstBreakup
+        showGst
           ? {
-              cgstLabel: "Output CGST Adjustment",
-              cgstAmount: cgstDisplay,
-              sgstLabel: "Output SGST Adjustment",
-              sgstAmount: sgstDisplay,
-              igstLabel: "Output IGST Adjustment",
-              igstAmount: igstDisplay,
+              cgstLabel: "Output CGST",
+              cgstAmount: amountPreview.cgst,
+              sgstLabel: "Output SGST",
+              sgstAmount: amountPreview.sgst,
+              igstLabel: "Output IGST",
+              igstAmount: amountPreview.igst,
             }
           : undefined
       }
-      visibilityItems={defaultVisibilityForType("credit_note", {
-        gstApplicable: showGstBreakup,
-      })}
+      visibilityItems={defaultVisibilityForType("credit_note", { gstApplicable: showGst })}
     />
   );
 
-  // #region agent log
-  useEffect(() => {
-    fetch("http://127.0.0.1:7502/ingest/b60215f3-a2ea-4dec-b0ac-4488ce88b732", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Debug-Session-Id": "e2f165",
-      },
-      body: JSON.stringify({
-        sessionId: "e2f165",
-        location: "CreditNoteFormPageClient.tsx:render",
-        message: "CN render branch",
-        data: {
-          uiRefType,
-          isSourceRefMode,
-          hasPreview: Boolean(referencePreview),
-          hasRefDoc: Boolean(referenceDocumentView),
-          gstOn: directGstApplicable,
-          particularQty,
-          particularRate,
-          usesSharedParticulars: !isScheme,
-        },
-        timestamp: Date.now(),
-        hypothesisId: "A",
-        runId: "pre-fix",
-      }),
-    }).catch(() => {});
-  }, [
-    uiRefType,
-    isSourceRefMode,
-    referencePreview,
-    referenceDocumentView,
-    directGstApplicable,
-    particularQty,
-    particularRate,
-    isScheme,
-  ]);
-  // #endregion
+  const currentUserId = AuthService.getUserData()?.user_id;
+  const canActAsApprover =
+    status === "PENDING_APPROVAL" &&
+    (!cn?.current_approver_id || cn.current_approver_id === currentUserId);
+
+  void creditNoteIdProp;
 
   return (
     <>
-      <div className="credit-debit-note-form h-full min-h-0 flex flex-col">
-      <AccountsFormLayout
-        fullWidth
-        onBackClick={readOnly ? undefined : requestCancel}
-        title={formTitle}
-        breadcrumb={[...CREDIT_NOTES_BREADCRUMB]}
-        code={creditNoteNo || undefined}
-        headerMeta={
-          <div className="flex items-center gap-1.5">
-            <span className="cdn-chip inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-600 capitalize">
-              {status.replaceAll("_", " ")}
-            </span>
-            {creditNoteNo ? (
-              <span className="cdn-chip cdn-chip--code inline-flex items-center h-5 px-1.5 rounded border font-mono text-[10px]">
-                {creditNoteNo}
-              </span>
-            ) : null}
-          </div>
-        }
-        stickyFooter={stickyActions}
-      >
-        <div className="cdn-stack pb-20">
-          {error ? (
-            <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-1.5 text-xs text-red-700">{error}</div>
-          ) : null}
-          {ledgerConfigError ? (
-            <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-1.5 text-xs text-red-700">
-              {ledgerConfigError}
-            </div>
-          ) : null}
-
-          <VoucherFormSectionCard title="Basic & Reference Details" compact>
-            <VoucherNoteFieldGrid columns={4}>
-              <VoucherNoteField label="Credit Note Number" width="sm">
-                <VoucherNoteReadOnly mono>{creditNoteNo || "…"}</VoucherNoteReadOnly>
-              </VoucherNoteField>
-              <VoucherNoteField label="Credit Note Date" width="sm">
-                <AccountsDateInput
-                  value={creditNoteDate}
-                  onChange={setCreditNoteDate}
-                  disabled={readOnly}
-                  aria-label="Credit note date"
-                  className="h-[30px] text-xs cdn-control"
-                />
-              </VoucherNoteField>
-              <VoucherNoteField label="Reference Number" width="md">
-                <Input
-                  className="h-[30px] text-xs cdn-control"
-                  value={directRefNo}
-                  onChange={(e) => setDirectRefNo(e.target.value)}
-                  placeholder="Optional"
-                  disabled={readOnly || isScheme}
-                />
-              </VoucherNoteField>
-              {warehouseRef ? (
-                <VoucherNoteField label="Bank Account (optional — refund only)" width="lg">
-                  <div className="space-y-1">
-                    <WarehouseMappedBankAccountSelect
-                      warehouseRef={warehouseRef}
-                      value={bankAccountId}
-                      onChange={(id) => setBankAccountId(id)}
-                      label=""
-                      disabled={readOnly}
-                    />
-                    <p className="text-[10px] text-muted-foreground leading-tight">
-                      Not required for a normal Credit Note (AR + adjustment + GST). Use only if
-                      settling an immediate bank refund with this note.
-                    </p>
-                  </div>
-                </VoucherNoteField>
+      <div className="credit-debit-note-form flex-1 min-h-0 h-full flex flex-col">
+        <AccountsFormLayout
+          fullWidth
+          onBackClick={requestCancel}
+          title={title}
+          breadcrumb={[...CREDIT_NOTES_BREADCRUMB]}
+          code={cn?.cn_number || undefined}
+          headerMeta={
+            <div className="flex items-center gap-1.5">
+              {status ? (
+                <span className={`cdn-chip inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium ${statusChipClass(status)}`}>
+                  {STATUS_LABELS[status] || status.replaceAll("_", " ")}
+                </span>
+              ) : isPendingFlow ? (
+                <span className="cdn-chip inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-amber-50 text-amber-700">
+                  Pending entitlement
+                </span>
               ) : null}
-              <VoucherNoteField
-                width="md"
-                label={
-                  <span className="inline-flex items-center gap-1">
-                    Customer
-                    <CreditNoteCustomerInfoButton
-                      customer={selectedCustomer}
-                      placeOfSupply={placeOfSupply}
-                    />
-                  </span>
+              {cn?.cn_number ? (
+                <span className="cdn-chip cdn-chip--code inline-flex items-center h-5 px-1.5 rounded border font-mono text-[10px]">
+                  {cn.cn_number}
+                </span>
+              ) : null}
+            </div>
+          }
+          stickyFooter={
+            isReadOnlyStatus(status) ? undefined : (
+              <CreditNoteFormActionBar
+                status={status}
+                busy={busy || pageLoading}
+                approvalRequired={approvalRequired}
+                configReady={configReady}
+                isPendingGenerate={isPendingFlow && !cnId}
+                hasExistingId={Boolean(cnId)}
+                canCancel={Boolean(cnId) && status !== "POSTED" && status !== "CANCELLED" && status !== "REVERSED"}
+                onDiscard={requestCancel}
+                onSaveDraft={fieldsEditable ? saveDraft : undefined}
+                onSubmitForApproval={approvalRequired && fieldsEditable ? submitForApproval : undefined}
+                onSaveAndPost={
+                  !approvalRequired &&
+                  configReady &&
+                  fieldsEditable &&
+                  (!cnId || status === "REJECTED")
+                    ? saveAndPost
+                    : undefined
                 }
-                required
-              >
-                {customerLocked ? (
-                  <VoucherNoteReadOnly>
-                    {resolveCustomerName() || "—"}
-                  </VoucherNoteReadOnly>
-                ) : (
-                  <SearchableSelect
-                    label=""
-                    options={customers.map((cust) => ({
-                      value: String(cust.id),
-                      label: cust.customerName,
-                      sub: cust.customerCode,
-                    }))}
-                    value={customerId}
-                    onChange={(id) => {
-                      const cust = customers.find((x) => x.id === Number(id));
-                      onCustomerChange(id, cust ? customerMasterToTransactionFields(cust) : null);
-                    }}
-                    placeholder="Select customer"
-                    required
-                    disabled={readOnly}
-                  />
-                )}
-              </VoucherNoteField>
-              <VoucherNoteField label="Customer GSTIN" width="md">
-                <VoucherNoteReadOnly mono>
-                  {selectedCustomer?.gstin || customerFields?.customerGst || "—"}
-                </VoucherNoteReadOnly>
-              </VoucherNoteField>
-              <VoucherNoteField label="AR Ledger" width="md">
-                <VoucherNoteReadOnly>
-                  {customerLedgerName || resolveCustomerName() || "—"}
-                </VoucherNoteReadOnly>
-              </VoucherNoteField>
-              <VoucherNoteField label="Salesperson" width="md">
-                <VoucherNoteReadOnly>
-                  {selectedCustomer?.salesManName || "—"}
-                </VoucherNoteReadOnly>
-              </VoucherNoteField>
-              <VoucherNoteField label="Reference Type" span={2} width="ref">
-                {isReturn || isScheme ? (
-                  <VoucherNoteReadOnly>
-                    {isScheme
-                      ? `Scheme${schemeCode ? ` · ${schemeCode}` : ""}`
-                      : "Sales Return"}
-                    {isReturn && sourceReturnNo ? ` · ${sourceReturnNo}` : ""}
-                    {isScheme && invoiceCountForScheme > 0
-                      ? ` · ${invoiceCountForScheme} Invoice${invoiceCountForScheme === 1 ? "" : "s"}`
-                      : ""}
-                  </VoucherNoteReadOnly>
-                ) : (
-                  <VoucherNoteSegmentControl
-                    hideLabel
-                    label="Reference Type"
-                    name="cn-ref-type"
-                    value={uiRefType}
-                    options={REF_TYPE_OPTIONS}
-                    onChange={onUiRefTypeChange}
-                    disabled={refControlsLocked}
-                  />
-                )}
-              </VoucherNoteField>
-              {!isReturn && !isScheme && uiRefType === "sales_invoice" ? (
-                <>
-                  <VoucherNoteField label="Reference Document" span={2} width="ref">
-                    <SearchableSelect
-                      label=""
-                      value={referenceInvoiceId}
-                      onChange={onInvoiceSelect}
-                      options={invoiceOptions}
-                      placeholder="Select invoice"
-                      required
-                      disabled={readOnly}
-                    />
-                  </VoucherNoteField>
-                  <VoucherNoteField label="Adjustment Basis" span={2} width="ref">
-                    <VoucherNoteSegmentControl
-                      hideLabel
-                      label="Adjustment Basis"
-                      name="cn-invoice-basis"
-                      value={invoiceAdjustmentBasis}
-                      options={INVOICE_BASIS_OPTIONS}
-                      onChange={(next) => {
-                        setInvoiceAdjustmentBasis(next);
-                        if (referenceInvoiceId) {
-                          const preview = buildReferenceFromInvoice(Number(referenceInvoiceId));
-                          if (preview) {
-                            applyReferencePreview(preview, next === "quantity");
-                            if (next === "quantity") {
-                              setDirectParticular("");
-                              setParticularQty("1");
-                              setParticularRate("");
-                            } else if (!directParticular.trim()) {
-                              setDirectParticular(
-                                preview.lineItems[0]?.productName || "Sales invoice adjustment",
-                              );
-                              const first = preview.lineItems[0];
-                              if (first && !particularRate.trim()) {
-                                setParticularQty("1");
-                                setParticularRate(String(first.unitPrice || ""));
-                                const gstOn = (first.taxPct || 0) > 0;
-                                setDirectGstApplicable(gstOn);
-                                if (gstOn) setDirectGstPct(String(first.taxPct));
-                              }
-                            }
-                          }
-                        }
-                      }}
-                      disabled={readOnly || refControlsLocked}
-                    />
-                  </VoucherNoteField>
-                </>
-              ) : null}
-              {!isReturn && !isScheme && uiRefType === "sales_return" ? (
-                <VoucherNoteField label="Reference Document" span={2} width="ref">
-                  <SearchableSelect
-                    label=""
-                    value={referenceReturnId}
-                    onChange={onSalesReturnSelect}
-                    options={salesReturnOptions}
-                    placeholder="Select sales return"
-                    required
-                    disabled={readOnly}
+                onApprove={approvalRequired && canActAsApprover ? approve : undefined}
+                onReject={approvalRequired && canActAsApprover ? () => setReasonDialog("reject") : undefined}
+                onPost={
+                  approvalRequired
+                    ? status === "APPROVED"
+                      ? postCn
+                      : undefined
+                    : configReady &&
+                        (status === "APPROVED" ||
+                          status === "PENDING_APPROVAL" ||
+                          (status === "DRAFT" && Boolean(cnId)))
+                      ? postCn
+                      : undefined
+                }
+                onCancel={cnId && status !== "POSTED" ? () => setReasonDialog("cancel") : undefined}
+              />
+            )
+          }
+        >
+          <div className="cdn-stack pb-3">
+            {pageLoading ? (
+              <div className="bg-muted/30 border border-border rounded-lg px-3 py-2 text-xs text-muted-foreground">
+                Loading Credit Note…
+              </div>
+            ) : null}
+            {error ? (
+              <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-1.5 text-xs text-red-700">{error}</div>
+            ) : null}
+            {legacyPendingNav && !pendingId ? (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5 text-xs text-amber-800">
+                This form now loads Pending Credit Notes from GET /api/accounts/credit-note/pending/:id.
+                Open it with <span className="font-mono">?pendingId=&lt;uuid&gt;</span>. The Pending list still uses the previous demo navigation and was not changed in this task.
+              </div>
+            ) : null}
+
+            <VoucherFormSectionCard title="Basic Details" compact>
+              <VoucherNoteFieldGrid columns={4}>
+                <VoucherNoteField label="Credit Note Number" width="sm">
+                  <VoucherNoteReadOnly mono>{cn?.cn_number || "Assigned on save"}</VoucherNoteReadOnly>
+                </VoucherNoteField>
+                <VoucherNoteField label="Credit Note Date" required width="sm">
+                  <AccountsDateInput
+                    value={cnDate}
+                    onChange={setCnDate}
+                    disabled={!fieldsEditable}
+                    aria-label="Credit note date"
+                    className="h-[30px] text-xs cdn-control"
                   />
                 </VoucherNoteField>
-              ) : null}
-
-              {isScheme ? (
-                <>
-                  <VoucherNoteField label="Claim Number" width="md">
-                    <VoucherNoteReadOnly mono>{schemeClaimNumber || "—"}</VoucherNoteReadOnly>
-                  </VoucherNoteField>
-                  <VoucherNoteField label="Scheme Type" width="md">
-                    <VoucherNoteReadOnly>{schemeType || "—"}</VoucherNoteReadOnly>
-                  </VoucherNoteField>
-                  <VoucherNoteField label="Scheme Period" width="md">
-                    <VoucherNoteReadOnly>{schemePeriod || "—"}</VoucherNoteReadOnly>
-                  </VoucherNoteField>
-                  <VoucherNoteField label="Eligible Amount" width="md">
+                <VoucherNoteField label="Source Type" width="md">
+                  <VoucherNoteReadOnly>
+                    {SOURCE_TYPE_LABELS[String(sourceType)] || sourceType}
+                    {isPendingFlow ? " · from Pending CN" : directMode === "against_invoice" ? " · against invoice" : " · on-account"}
+                  </VoucherNoteReadOnly>
+                </VoucherNoteField>
+                <VoucherNoteField label="Financial Year" width="md">
+                  <VoucherNoteReadOnly>{fyLabel || "Working FY on save"}</VoucherNoteReadOnly>
+                </VoucherNoteField>
+                <VoucherNoteField label="Warehouse / Branch" required width="md">
+                  {pendingEntitlementLocked ? (
                     <VoucherNoteReadOnly>
-                      {formatINR(eligibleBase ?? original)}
+                      {pending?.warehouse?.warehouse_name || selectedWarehouse?.name || "—"}
                     </VoucherNoteReadOnly>
-                  </VoucherNoteField>
-                  <VoucherNoteField label="Approved Amount" width="md">
-                    <VoucherNoteReadOnly>
-                      {formatINR(schemeSettlementAmount ?? grandTotal)}
-                    </VoucherNoteReadOnly>
-                  </VoucherNoteField>
-                  <VoucherNoteField label="Mapped Ledger" width="md">
-                    <VoucherNoteReadOnly>{adjustmentLedgerName || "—"}</VoucherNoteReadOnly>
-                  </VoucherNoteField>
-                  <VoucherNoteField label="Calculation Reference" span={2} width="ref">
-                    <VoucherNoteReadOnly>{calculationReference || "—"}</VoucherNoteReadOnly>
-                  </VoucherNoteField>
-                </>
-              ) : null}
-            </VoucherNoteFieldGrid>
-          </VoucherFormSectionCard>
-
-          {isSourceRefMode ? (
-            <NoteReferenceDocumentDetails
-              document={referenceDocumentView}
-              emptyMessage={
-                uiRefType === "sales_return"
-                  ? "Select a sales return to view source details."
-                  : "Select a sales invoice to view source details."
-              }
-            />
-          ) : null}
-
-          {isReturnRefMode ? (
-            <NoteInventoryImpactBanner returnDocumentLabel="Sales Return" />
-          ) : null}
-          {isDirectMode || isScheme || isInvoiceAmountMode ? (
-            <NoteNoInventoryImpactBanner />
-          ) : null}
-
-          <VoucherFormSectionCard title="Particulars" flush compact>
-            <div className="cnz-items !shadow-none !border-0 !rounded-none">
-              {isScheme ? (
-                <div className="cnz-table-wrap">
-                  <table className="cnz-table cnz-table--scheme accounts-table">
-                    <thead>
-                      <tr>
-                        <th className="accounts-table-th" style={{ width: "24%" }}>Scheme Particular</th>
-                        <th className="accounts-table-th">Mapped Ledger</th>
-                        <th className="accounts-table-th text-right">Eligible Base</th>
-                        <th className="accounts-table-th text-right">Rate</th>
-                        <th className="accounts-table-th text-right">GST Amount</th>
-                        <th className="accounts-table-th text-right">Credit Note Total</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(lines.length
-                        ? lines.filter((l) => l.creditAmount > 0 || l.productName)
-                        : [
-                            {
-                              id: "scheme-row",
-                              productName: schemeName || "Scheme Settlement",
-                              creditAmount: schemeSettlementAmount ?? grandTotal,
-                              taxPct: 0,
-                              unitPrice: 0,
-                              returnQty: 0,
-                              gstAmount: 0,
-                            } as CreditNoteLine,
-                          ]
-                      ).map((line) => {
-                        const rate =
-                          eligibleBase && eligibleBase > 0 && line.creditAmount > 0
-                            ? Math.round((line.creditAmount / eligibleBase) * 10000) / 100
-                            : 0;
-                        const lineTax =
-                          line.gstAmount > 0
-                            ? line.gstAmount
-                            : line.taxPct > 0
-                              ? Math.round(
-                                  (line.creditAmount -
-                                    line.creditAmount / (1 + line.taxPct / 100)) *
-                                    100,
-                                ) / 100
-                              : taxBreakup.taxAmount;
-                        return (
-                          <tr key={line.id}>
-                            <td className="font-normal">
-                              {line.productName || schemeName || "Scheme Settlement"}
-                            </td>
-                            <td className="text-[12px]">{adjustmentLedgerName || "Not selected"}</td>
-                            <td className="cnz-num">{formatINR(eligibleBase ?? 0)}</td>
-                            <td className="cnz-num">{rate > 0 ? `${rate}%` : "—"}</td>
-                            <td className="cnz-num">{formatINR(lineTax)}</td>
-                            <td className="cnz-num font-normal">
-                              {formatINR(line.creditAmount)}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              ) : usesQuantityLines ? (
-                <div className="space-y-2">
-                  <div className="px-3 pt-2 max-w-sm">
-                    <p className="text-[11px] font-medium text-muted-foreground mb-1">
-                      Adjustment Ledger <span className="text-red-500">*</span>
-                    </p>
-                    <GroupedLedgerSelect
-                      value={adjustmentLedgerId}
-                      onChange={(l) => {
-                        setAdjustmentLedgerId(l.id);
-                        setAdjustmentLedgerName(l.accountName);
-                      }}
-                      placeholder="Select adjustment ledger"
+                  ) : (
+                    <SearchableSelect
+                      value={warehouseId}
+                      onChange={setWarehouseId}
+                      options={warehouses.map((w) => ({ value: w.id, label: w.name, sub: w.state }))}
+                      placeholder="Select warehouse"
                       required
-                      disabled={readOnly}
-                      compact
+                      disabled={!fieldsEditable}
                     />
-                  </div>
-                  <NoteQuantityLinesTable
-                    lines={quantityLineViews}
-                    readOnly={readOnly}
-                    qtyLocked={isReturnRefMode}
-                    currentQtyLabel="Qty"
-                    onCurrentQtyChange={handleQuantityLineQtyChange}
-                    emptyMessage={quantityLinesEmptyMessage}
-                  />
-                </div>
+                  )}
+                </VoucherNoteField>
+                <VoucherNoteField label="Customer" required width="md">
+                  {pendingEntitlementLocked ? (
+                    <VoucherNoteReadOnly>{customerName || "—"}</VoucherNoteReadOnly>
+                  ) : (
+                    <SearchableSelect
+                      value={customerId}
+                      onChange={(id) => {
+                        setCustomerId(id);
+                        setInvoiceId("");
+                        setAllocation("");
+                      }}
+                      options={customers.map((c) => ({ value: c.id, label: c.name, sub: c.code }))}
+                      placeholder="Select customer"
+                      required
+                      disabled={!fieldsEditable}
+                    />
+                  )}
+                </VoucherNoteField>
+                <VoucherNoteField label="Customer GSTIN" width="md">
+                  <VoucherNoteReadOnly mono>{customerGstin || "—"}</VoucherNoteReadOnly>
+                </VoucherNoteField>
+                <VoucherNoteField label="AR / Party Ledger" width="md">
+                  <VoucherNoteReadOnly>
+                    {arLedgerName ? `${arLedgerCode ? `${arLedgerCode} · ` : ""}${arLedgerName}` : "Derived from customer"}
+                  </VoucherNoteReadOnly>
+                </VoucherNoteField>
+                {salesperson ? (
+                  <VoucherNoteField label="Salesperson" width="md">
+                    <VoucherNoteReadOnly>{salesperson}</VoucherNoteReadOnly>
+                  </VoucherNoteField>
+                ) : null}
+                {approvalRequired && fieldsEditable && (status === "DRAFT" || status === "REJECTED" || !status) ? (
+                  <VoucherNoteField label="Approver" width="md">
+                    <SearchableSelect
+                      value={approverId}
+                      onChange={setApproverId}
+                      options={approvers}
+                      placeholder="Required to submit"
+                      disabled={!fieldsEditable}
+                    />
+                  </VoucherNoteField>
+                ) : null}
+              </VoucherNoteFieldGrid>
+            </VoucherFormSectionCard>
+
+            <CreditNoteSourceEntitlementSection
+              pending={pending}
+              sourceType={String(sourceType)}
+              mappedLedgerName={supportingLedgerName}
+              schemeMapping={schemeMapping}
+            />
+
+            <CreditNoteParticularsEditor
+              sourceType={String(sourceType)}
+              interstate={interstate}
+              editable={linesEditable}
+              directLines={directLines}
+              pendingLines={pendingLines}
+              onDirectLinesChange={setDirectLines}
+            />
+
+            {pendingEntitlementLocked &&
+            (pending?.sales_return_additional_charges || []).length > 0 ? (
+              <VoucherFormSectionCard title="Sales Return Additional Charges" compact>
+                <p className="px-3 pt-2 text-[10px] text-muted-foreground">
+                  Charges from the linked Sales Invoice (display only — not posted).
+                </p>
+                <table className="w-full text-[11px]">
+                  <thead>
+                    <tr className="border-b bg-muted/20">
+                      <th className="p-1.5 text-left font-medium">Charge</th>
+                      <th className="p-1.5 text-right font-medium w-28">Original</th>
+                      <th className="p-1.5 text-right font-medium w-28">Remaining</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(pending?.sales_return_additional_charges || []).map((charge) => {
+                      const id = charge.sales_invoice_additional_charge_id;
+                      return (
+                        <tr key={`sr-display-${id}`} className="border-b last:border-0">
+                          <td className="p-1.5">{charge.description || "Additional charge"}</td>
+                          <td className="p-1.5 text-right tabular-nums">
+                            {formatCnMoney(
+                              toNum(
+                                charge.original_total_amount ?? charge.original_taxable_amount,
+                              ),
+                            )}
+                          </td>
+                          <td className="p-1.5 text-right tabular-nums">
+                            {formatCnMoney(
+                              toNum(
+                                charge.remaining_amount ?? charge.original_total_amount,
+                              ),
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </VoucherFormSectionCard>
+            ) : null}
+
+            <VoucherFormSectionCard title="Additional Charges" compact>
+              <div className="flex items-center justify-between px-3 py-1.5 border-b bg-muted/20">
+                <p className="text-[10px] text-muted-foreground">
+                  Optional freight, packing, or other charges. These post as extra credit note lines.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-[11px]"
+                  disabled={!chargesEditable || busy}
+                  onClick={() =>
+                    setDirectExtraCharges((prev) => [
+                      ...prev,
+                      {
+                        id: newDirectExtraChargeId(),
+                        description: "",
+                        ledgerId: "",
+                        ledgerName: "",
+                        amount: "",
+                        gstPct: "0",
+                      },
+                    ])
+                  }
+                >
+                  + Add charge
+                </Button>
+              </div>
+              {directExtraCharges.length === 0 ? (
+                <p className="px-3 py-2 text-[11px] text-muted-foreground">No additional charges.</p>
               ) : (
-                <div className="px-3 py-2">
-                  <NoteParticularsTable
-                    particular={directParticular}
-                    onParticularChange={setDirectParticular}
-                    adjustmentLedgerId={adjustmentLedgerId}
-                    onAdjustmentLedgerChange={(l) => {
-                      setAdjustmentLedgerId(l.id);
-                      setAdjustmentLedgerName(l.accountName);
-                    }}
-                    qty={particularQty}
-                    onQtyChange={setParticularQty}
-                    rate={particularRate}
-                    onRateChange={setParticularRate}
-                    gstPct={directGstPct}
-                    onGstPctChange={setDirectGstPct}
-                    gstApplicable={directGstApplicable}
-                    onGstApplicableChange={setDirectGstApplicable}
-                    interstate={interstate}
-                    disabled={readOnly}
-                    switchId="cn-gst-applicable"
-                  />
-                </div>
+                <table className="w-full text-[11px]">
+                  <thead>
+                    <tr className="border-b bg-muted/20">
+                      <th className="p-1.5 text-left font-medium">Description</th>
+                      <th className="p-1.5 text-left font-medium">Ledger</th>
+                      <th className="p-1.5 text-right font-medium w-24">Taxable</th>
+                      <th className="p-1.5 text-right font-medium w-16">GST %</th>
+                      <th className="p-1.5 text-right font-medium w-10" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {directExtraCharges.map((row) => (
+                      <tr key={row.id} className="border-b last:border-0">
+                        <td className="p-1.5">
+                          <Input
+                            className="h-7 text-xs"
+                            value={row.description}
+                            placeholder="e.g. Freight"
+                            disabled={!chargesEditable || busy}
+                            onChange={(e) =>
+                              setDirectExtraCharges((prev) =>
+                                prev.map((c) =>
+                                  c.id === row.id
+                                    ? { ...c, description: e.target.value }
+                                    : c,
+                                ),
+                              )
+                            }
+                          />
+                        </td>
+                        <td className="p-1.5 min-w-[160px]">
+                          <CreditNoteLedgerSelect
+                            value={row.ledgerId}
+                            fallbackLabel={row.ledgerName}
+                            placeholder="Select ledger"
+                            disabled={!chargesEditable || busy}
+                            onChange={(ledgerId, ledgerName) =>
+                              setDirectExtraCharges((prev) =>
+                                prev.map((c) =>
+                                  c.id === row.id
+                                    ? { ...c, ledgerId, ledgerName }
+                                    : c,
+                                ),
+                              )
+                            }
+                          />
+                        </td>
+                        <td className="p-1.5">
+                          <Input
+                            className="h-7 text-xs text-right"
+                            value={row.amount}
+                            placeholder="0.00"
+                            disabled={!chargesEditable || busy}
+                            onChange={(e) =>
+                              setDirectExtraCharges((prev) =>
+                                prev.map((c) =>
+                                  c.id === row.id ? { ...c, amount: e.target.value } : c,
+                                ),
+                              )
+                            }
+                          />
+                        </td>
+                        <td className="p-1.5">
+                          <Input
+                            className="h-7 text-xs text-right"
+                            value={row.gstPct}
+                            placeholder="0"
+                            disabled={!chargesEditable || busy}
+                            onChange={(e) =>
+                              setDirectExtraCharges((prev) =>
+                                prev.map((c) =>
+                                  c.id === row.id ? { ...c, gstPct: e.target.value } : c,
+                                ),
+                              )
+                            }
+                          />
+                        </td>
+                        <td className="p-1.5 text-right">
+                          <button
+                            type="button"
+                            className="text-[11px] text-red-600 hover:underline"
+                            disabled={!chargesEditable || busy}
+                            onClick={() =>
+                              setDirectExtraCharges((prev) =>
+                                prev.filter((c) => c.id !== row.id),
+                              )
+                            }
+                          >
+                            Remove
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               )}
-            </div>
-            <VoucherGstSummaryCard
-              embedded
-              visible
-              showTaxRows={showGstBreakup}
-              taxableAmount={subTotal}
-              cgstAmount={cgstDisplay}
-              sgstAmount={sgstDisplay}
-              igstAmount={igstDisplay}
-              roundOff={isScheme ? 0 : adjustment}
-              grandTotal={grandTotal}
+            </VoucherFormSectionCard>
+
+            <CreditNoteInvoiceAllocationSection
+              visible={!pendingEntitlementLocked}
+              mode={directMode}
+              onModeChange={(mode) => {
+                setDirectMode(mode);
+                if (mode === "on_account") {
+                  setInvoiceId("");
+                  setAllocation("");
+                }
+              }}
+              invoices={invoices}
+              invoiceId={invoiceId}
+              onInvoiceChange={(id) => {
+                setInvoiceId(id);
+                setAllocation("");
+              }}
+              selected={selectedInvoice}
+              allocation={allocation}
+              onAllocationChange={setAllocation}
+              cnAmount={amountPreview.total}
+              disabled={!fieldsEditable}
+            />
+
+            <CreditNoteAmountSummary
+              taxable={amountPreview.taxable}
+              cgst={amountPreview.cgst}
+              sgst={amountPreview.sgst}
+              igst={amountPreview.igst}
+              gst={amountPreview.gst}
+              roundOff={amountPreview.roundOff}
+              total={amountPreview.total}
+              interstate={interstate}
+              locked={!fieldsEditable}
               roundOffSlot={
-                !isScheme ? (
-                  <VoucherSignedRoundOffInput
-                    value={adjustment}
-                    onChange={setAdjustment}
-                    disabled={readOnly}
-                  />
+                fieldsEditable ? (
+                  <VoucherSignedRoundOffInput value={roundOff} onChange={setRoundOff} />
                 ) : undefined
               }
             />
-          </VoucherFormSectionCard>
 
-          <VoucherNarrationAttachmentsSection
-            compact
-            narration={remarks}
-            onNarrationChange={setRemarks}
-            readOnly={readOnly}
-            narrationPlaceholder="Accounting narration for this credit note"
-            singleAttachment
-            attachmentFiles={
-              attachmentName
-                ? [{ id: "cn-att-1", fileName: attachmentName }]
-                : []
-            }
-            onAddAttachmentFiles={(files) => {
-              const f = files[0];
-              if (f) setAttachmentName(f.name);
-            }}
-            onRemoveAttachment={() => setAttachmentName("")}
-          />
+            <VoucherNarrationAttachmentsSection
+              compact
+              narration={narration}
+              onNarrationChange={setNarration}
+              readOnly={!fieldsEditable}
+              maxLength={2000}
+              attachmentFiles={attachments}
+              singleAttachment
+              onAddAttachmentFiles={(files) => {
+                const file = files[0];
+                if (!file) return;
+                setAttachments([{ id: `att-${Date.now()}`, fileName: file.name }]);
+              }}
+              onRemoveAttachment={() => setAttachments([])}
+            />
 
-          <AccountingImpactSection docKey="credit_note" compact entryPreview={postingSummary} />
-        </div>
-      </AccountsFormLayout>
+            <AccountingImpactSection
+              docKey="credit_note"
+              compact
+              entryPreview={
+                <div className="space-y-1">
+                  <p className="text-[10px] text-muted-foreground">
+                    Informational preview only. It does not post or control accounting.
+                  </p>
+                  {postingSummary}
+                </div>
+              }
+            />
+          </div>
+        </AccountsFormLayout>
       </div>
-      <AccountsToast toast={toast} onDismiss={dismissToast} />
       {discardDialog}
+      <CreditNoteReasonDialog
+        open={reasonDialog != null}
+        onClose={() => setReasonDialog(null)}
+        title={reasonDialog === "reject" ? "Reject Credit Note" : "Cancel Credit Note"}
+        description={
+          reasonDialog === "reject"
+            ? "Provide a rejection reason. The document returns to REJECTED and can be edited."
+            : "Provide a cancellation reason. Posted Credit Notes cannot be cancelled from this form."
+        }
+        confirmLabel={reasonDialog === "reject" ? "Reject" : "Cancel Credit Note"}
+        destructive
+        busy={busy}
+        onConfirm={onReasonConfirm}
+      />
+      <AccountsToast toast={toast} onDismiss={dismissToast} />
     </>
   );
 }

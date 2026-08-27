@@ -219,12 +219,6 @@ export default function TcsPageClient() {
     enabled: isFilterOpen("description"),
   });
   const statusOptionsQuery = useTcsFilterDropdown("is_active", { enabled: isFilterOpen("status") });
-  const createdByOptionsQuery = useTcsFilterDropdown("created_by_user__username", {
-    enabled: isFilterOpen("createdBy"),
-  });
-  const updatedByOptionsQuery = useTcsFilterDropdown("updated_by_user__username", {
-    enabled: isFilterOpen("updatedBy"),
-  });
 
   const sectionNameOptions = useMemo(
     () => sectionNameOptionsQuery.data ?? [],
@@ -263,14 +257,6 @@ export default function TcsPageClient() {
       { label: "Inactive", value: "inactive" },
     ];
   }, [statusOptionsQuery.data]);
-  const createdByOptions = useMemo(
-    () => createdByOptionsQuery.data ?? [],
-    [createdByOptionsQuery.data],
-  );
-  const updatedByOptions = useMemo(
-    () => updatedByOptionsQuery.data ?? [],
-    [updatedByOptionsQuery.data],
-  );
 
   const records = useMemo(
     () => (listQuery.data?.items ?? []).map(toTcsRow),
@@ -480,8 +466,7 @@ export default function TcsPageClient() {
         header: "Created By",
         sortable: true,
         filterable: true,
-        filterType: "audit",
-        auditUserOptions: createdByOptions,
+        filterType: "date",
         width: "150px",
         render: (_val, row) => (
           <ListingUserCell name={row.createdBy} date={row.createdAt} />
@@ -492,8 +477,7 @@ export default function TcsPageClient() {
         header: "Updated By",
         sortable: true,
         filterable: true,
-        filterType: "audit",
-        auditUserOptions: updatedByOptions,
+        filterType: "date",
         width: "150px",
         render: (_val, row) => (
           <ListingUserCell name={row.updatedBy} date={row.updatedAt} />
@@ -506,8 +490,6 @@ export default function TcsPageClient() {
       applicableToFilterOptions,
       descriptionOptions,
       statusOptions,
-      createdByOptions,
-      updatedByOptions,
       openView,
     ],
   );

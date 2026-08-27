@@ -7,7 +7,6 @@ import { Input } from "@/components/ui/input";
 import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
 import { formatMoney } from "@/lib/accounts/money-format";
 import { cn } from "@/lib/utils";
-import type { ChartOfAccount } from "@/app/(app)/accounts/data";
 import type { DirectPurchaseLineItem, ItcClassification, PurchaseNature } from "./purchase-invoices-data";
 import {
   UQC_OPTIONS,
@@ -19,6 +18,7 @@ import { DirectPurchaseGstRateSelect } from "./DirectPurchaseGstRateSelect";
 import { DirectPurchaseLineLedgerSelect } from "./DirectPurchaseLineLedgerSelect";
 import type { AutocompleteOption } from "@/components/ui/AutocompleteSelect";
 import { DP_TABLE_INPUT_CLASS } from "./direct-purchase-form-ui";
+import type { HsnDropdownItem } from "@/services/hsn-list.service";
 
 const UQC_SELECT_OPTIONS: AutocompleteOption[] = UQC_OPTIONS.map((u) => ({
   value: u,
@@ -120,7 +120,7 @@ export function PurchaseInvoiceDirectLineTable({
   interstate,
   purchaseNature,
   defaultItc,
-  coaRecords,
+  hsnOptions = [],
   readOnly,
 }: {
   lines: DirectPurchaseLineItem[];
@@ -128,7 +128,7 @@ export function PurchaseInvoiceDirectLineTable({
   interstate: boolean;
   purchaseNature: PurchaseNature;
   defaultItc: ItcClassification;
-  coaRecords: ChartOfAccount[];
+  hsnOptions?: HsnDropdownItem[];
   readOnly?: boolean;
 }) {
   const colSpanBefore = 7;
@@ -205,25 +205,38 @@ export function PurchaseInvoiceDirectLineTable({
                   <td className={TABLE_CELL}>
                     <DirectPurchaseLineLedgerSelect
                       purchaseNature={purchaseNature}
-                      coaRecords={coaRecords}
                       value={line.expenseLedgerId}
                       fallbackLabel={line.expenseLedgerName}
                       disabled={readOnly}
                       onChange={(ledger) =>
                         updateLine(idx, {
-                          expenseLedgerId: ledger.id,
-                          expenseLedgerName: ledger.accountName,
+                          expenseLedgerId: ledger.ledgerId,
+                          expenseLedgerName: ledger.ledgerName,
                         })
                       }
                     />
                   </td>
                   <td className={TABLE_CELL}>
-                    <Input
-                      className={cn(DP_TABLE_INPUT_CLASS, "font-mono text-center")}
-                      value={line.hsnSac}
-                      readOnly={readOnly}
-                      onChange={(e) => updateLine(idx, { hsnSac: e.target.value })}
-                      placeholder="HSN"
+                    <DirectPurchaseTableSelect
+                      value={purchaseNature === "service" ? line.sacId || "" : line.hsnId || ""}
+                      disabled={readOnly}
+                      onChange={(id) => {
+                        const picked = hsnOptions.find((h) => h.id === id);
+                        updateLine(idx, {
+                          hsnId: purchaseNature === "service" ? null : id || null,
+                          sacId: purchaseNature === "service" ? id || null : null,
+                          hsnSac: picked?.hsnCode || "",
+                          gstRate: picked?.gstPercentage ?? line.gstRate,
+                        });
+                      }}
+                      options={hsnOptions.map((h) => ({
+                        value: h.id,
+                        label: h.hsnCode,
+                        sublabel: h.hsnDescription,
+                      }))}
+                      placeholder={purchaseNature === "service" ? "SAC" : "HSN"}
+                      searchPlaceholder={purchaseNature === "service" ? "Search SAC…" : "Search HSN…"}
+                      popoverMinWidth={100}
                     />
                   </td>
                   <td className={TABLE_CELL}>

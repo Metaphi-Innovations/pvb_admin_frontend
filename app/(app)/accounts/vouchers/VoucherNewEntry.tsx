@@ -4,6 +4,7 @@ import { VoucherEntryClient } from "./components/VoucherEntryClient";
 import { PaymentVoucherForm } from "./components/PaymentVoucherForm";
 import { ReceiptVoucherForm } from "./components/ReceiptVoucherForm";
 import { ContraVoucherForm } from "./components/ContraVoucherForm";
+import { JournalVoucherForm } from "./journal/JournalVoucherForm";
 import type { VoucherTypeCode } from "../masters/masters-data";
 
 interface VoucherNewEntryProps {
@@ -14,7 +15,7 @@ interface VoucherNewEntryProps {
 /** Code-split entry forms — not loaded on voucher listing routes. */
 export function VoucherNewEntry({ activeTab, onDone }: VoucherNewEntryProps) {
   if (activeTab === "journal") {
-    return <VoucherEntryClient voucherType="journal" onDone={onDone} />;
+    return <JournalVoucherForm onDone={onDone} />;
   }
   if (activeTab === "payment") {
     return <PaymentVoucherForm onDone={onDone} />;

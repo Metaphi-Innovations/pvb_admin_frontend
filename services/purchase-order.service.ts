@@ -1,9 +1,11 @@
 import { axiosInstance } from "@/api/axios";
 import { API_ENDPOINTS } from "@/api/endpoints";
+import { openEditablePdfPreview } from "@/lib/pdf/paramverse";
 import { COMPANY_BILLING } from "@/lib/procurement/config";
 import { amountInWords, round2 } from "@/lib/procurement/utils";
 import {
   calcPackingToBaseQty,
+  resolveNetWeightPerPack,
   type ProcurementAdditionalCharge,
 } from "@/lib/procurement/procurement-line-utils";
 import {
@@ -21,7 +23,6 @@ import type { POFormValues } from "@/app/(app)/procurement/purchase-orders/compo
 import { recalcPO } from "@/app/(app)/procurement/purchase-orders/po-data";
 import type { POFollowUpEntry } from "@/app/(app)/procurement/purchase-orders/po-followup-data";
 import {
-  generateAndPrintPurchaseOrderPdf,
   openPurchaseOrderPdfWindow,
 } from "@/app/(app)/procurement/purchase-orders/po-pdf/poPdfGenerator";
 
@@ -72,6 +73,25 @@ function toDisplayName(user: unknown): string {
 function asRecord(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   return value as Record<string, unknown>;
+}
+
+function triggerBlobDownload(blob: Blob, fileName: string): void {
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => window.URL.revokeObjectURL(url), 2000);
+}
+
+function fileNameFromDisposition(
+  disposition: string | undefined,
+  fallback: string,
+): string {
+  const matched = disposition?.match(/filename="?([^"]+)"?/i);
+  return matched?.[1] || fallback;
 }
 
 function resolveLineQtyFields(line: POLineItem): {
@@ -135,6 +155,8 @@ function mapAdditionalCharges(raw: unknown): ProcurementAdditionalCharge[] {
     const row = (item ?? {}) as Record<string, unknown>;
     return {
       uid: `chg-${idx}`,
+      chargeMasterId: asString(row.additional_charge_id || row.chargeMasterId) || undefined,
+      chargeCode: asString(row.charge_code || row.chargeCode) || undefined,
       chargeName: asString(row.charge_name ?? row.name ?? row.chargeName),
       amount: asNumber(row.amount ?? row.value),
       remarks: asString(row.remarks),
@@ -185,6 +207,16 @@ function mapLine(raw: Record<string, unknown>, index: number): POLineItem {
   const shortClosedBaseQty = asNumber(raw.short_closed_base_qty);
   const snapshot = asRecord(raw.product_snapshot);
   const snapshotHsn = asRecord(snapshot.hsn);
+  const baseUnit = asString(raw.base_unit) || asString(snapshot.unit) || "Unit";
+  const packSize =
+    asNumber(snapshot.pack_size) || asNumber(snapshot.packSize) || undefined;
+  const weightMeta = resolveNetWeightPerPack({
+    netWeight:
+      asNumber(snapshot.net_weight) || asNumber(snapshot.netWeight) || null,
+    packSize: packSize ?? null,
+    unitPerPacking: conversionQty,
+    baseUnit,
+  });
   const hsnCode =
     asString(raw.hsn_code) ||
     asString(raw.hsnCode) ||
@@ -219,9 +251,12 @@ function mapLine(raw: Record<string, unknown>, index: number): POLineItem {
         snapshot.category_name,
     ),
     hsnCode,
-    baseUnit: asString(raw.base_unit) || "Unit",
-    packagingUnit: asString(raw.packing_unit) || "Box",
+    baseUnit,
+    packagingUnit: asString(raw.packing_unit) || asString(snapshot.packing_unit) || "Box",
     conversionQty,
+    packSize,
+    netWeightPerPack: weightMeta?.netWeightPerPack,
+    weightUom: weightMeta?.weightUom,
     orderUom: "Unit",
     orderedQtyPack: packingQty,
     uom: asString(raw.base_unit) || "Unit",
@@ -424,6 +459,7 @@ export function mapDetail(raw: Record<string, unknown>): PurchaseOrder {
     approvedDate: asDateOnly(raw.approved_at),
     activity,
     shortClose,
+    hasReturnableQty: raw.has_returnable_qty === true,
   };
 }
 
@@ -536,6 +572,8 @@ function buildWriteBody(
     warehouse_name: form.warehouseName || null,
     delivery_address: form.deliveryAddress || null,
     additional_charges: (form.additionalCharges ?? []).map((c) => ({
+      additional_charge_id: c.chargeMasterId || null,
+      charge_code: c.chargeCode || null,
       charge_name: c.chargeName,
       charge_type: "Fixed",
       value: c.amount,
@@ -725,15 +763,54 @@ export const PurchaseOrderService = {
     return data as Record<string, unknown>;
   },
 
+  async fetchPdfPreviewById(
+    id: string,
+    signal?: AbortSignal,
+  ): Promise<{ html: string; fileName: string }> {
+    const response = await axiosInstance.get(
+      API_ENDPOINTS.PROCUREMENT.PURCHASE_ORDER.PREVIEW(id),
+      { signal },
+    );
+    const data = (response.data as Record<string, any>)?.data || {};
+    return {
+      html: String(data.html || ""),
+      fileName: String(data.fileName || "purchase-order.pdf"),
+    };
+  },
+
+  async downloadPdfFileById(
+    id: string,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    const response = await axiosInstance.get(
+      API_ENDPOINTS.PROCUREMENT.PURCHASE_ORDER.PDF(id),
+      { responseType: "blob", signal },
+    );
+    const blob = response.data as Blob;
+    const fileName = fileNameFromDisposition(
+      response.headers?.["content-disposition"] as string | undefined,
+      "purchase-order.pdf",
+    );
+    triggerBlobDownload(blob, fileName);
+  },
+
   async downloadPdfById(
     id: string,
     options?: { signal?: AbortSignal; openedWindow?: Window | null },
   ): Promise<void> {
-    const [po, raw] = await Promise.all([
-      this.getById(id, options?.signal),
-      this.getRawById(id, options?.signal),
-    ]);
-    await generateAndPrintPurchaseOrderPdf(po, raw, options?.openedWindow);
+    const { html, fileName } = await this.fetchPdfPreviewById(id, options?.signal);
+    if (!html.trim()) {
+      throw new Error("Empty Purchase Order preview received from server.");
+    }
+    await openEditablePdfPreview({
+      title: "Purchase Order PDF Preview",
+      initialData: { html },
+      renderHtml: (data) => String(data.html || ""),
+      enableDirectPreviewEditing: false,
+      printButtonLabel: "Download PO PDF",
+      outputFileName: fileName,
+      onDownload: () => this.downloadPdfFileById(id, options?.signal),
+    });
   },
 
   async getPreviewNumber(

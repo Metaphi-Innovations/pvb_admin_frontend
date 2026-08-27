@@ -4,9 +4,10 @@ import React from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import { IndianRupeeInput } from "@/components/ui/IndianRupeeInput";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { useAdditionalChargeDropdown } from "@/hooks/masters/use-additional-charge";
 import {
 	createEmptyExpense,
 	recalculateExpense,
@@ -32,6 +33,8 @@ export default function AdditionalExpensesEditor({
 	onChange: (expenses: SalesOrderAdditionalExpense[]) => void;
 	taxSupplyType?: TaxSupplyType;
 }) {
+	const chargeDropdownQuery = useAdditionalChargeDropdown();
+
 	const update = (id: string, patch: Partial<SalesOrderAdditionalExpense>) => {
 		onChange(
 			expenses.map((row) => {
@@ -40,6 +43,26 @@ export default function AdditionalExpensesEditor({
 			}),
 		);
 	};
+
+	const chargeOptions = React.useMemo(() => {
+		return (chargeDropdownQuery.data ?? []).map((c) => {
+			const isAlreadyAdded = expenses.some(
+				(row) => row.expenseName.trim().toLowerCase() === c.charge_name.trim().toLowerCase()
+			);
+			const gstLabel = c.gst_applicable
+				? `GST ${Number(c.default_gst_rate) || 0}%`
+				: "No GST";
+			return {
+				value: c.additional_charge_id,
+				label: c.charge_name,
+				sublabel: isAlreadyAdded
+					? "Already added"
+					: [c.charge_code, gstLabel].filter(Boolean).join(" · "),
+				disabled: isAlreadyAdded,
+				searchText: `${c.charge_code} ${c.description ?? ""}`,
+			};
+		});
+	}, [chargeDropdownQuery.data, expenses]);
 
 	const [showWarning, setShowWarning] = React.useState(false);
 
@@ -129,11 +152,44 @@ export default function AdditionalExpensesEditor({
 									className="border-b border-border/40 last:border-0 hover:bg-muted/10 transition-colors"
 								>
 									<td className="px-3 py-2">
-										<Input
-											value={row.expenseName}
-											onChange={(e) => update(row.id, { expenseName: e.target.value })}
-											placeholder="e.g. Freight Charges"
-											className={cn(inputCls, "bg-white shadow-sm")}
+										<AutocompleteSelect
+											options={chargeOptions.map((o) =>
+												expenses.some(
+													(r) =>
+														r.id === row.id &&
+														r.expenseName.trim().toLowerCase() === o.label.trim().toLowerCase()
+												)
+													? { ...o, disabled: false }
+													: o
+											)}
+											value={
+												(chargeDropdownQuery.data ?? []).find(
+													(c) =>
+														c.charge_name.trim().toLowerCase() ===
+														(row.expenseName || "").trim().toLowerCase()
+												)?.additional_charge_id ?? ""
+											}
+											onChange={(v) => {
+												const master = (chargeDropdownQuery.data ?? []).find(
+													(c) => c.additional_charge_id === v
+												);
+												if (master) {
+													const gstRate = master.gst_applicable
+														? String(Number(master.default_gst_rate) || 0)
+														: "0";
+													update(row.id, {
+														expenseName: master.charge_name,
+														gstRate,
+													});
+												}
+											}}
+											placeholder={
+												chargeDropdownQuery.isLoading
+													? "Loading charges…"
+													: "Select additional charge…"
+											}
+											searchPlaceholder="Search charge…"
+											className={cn("w-full bg-white shadow-sm h-8 rounded-lg")}
 										/>
 									</td>
 									<td className="px-3 py-2">
@@ -144,22 +200,16 @@ export default function AdditionalExpensesEditor({
 											className={cn(inputCls, "w-full shadow-sm")}
 										/>
 									</td>
-									<td className="px-3 py-2">
-										<Select
-											value={row.gstRate}
-											onValueChange={(val) => update(row.id, { gstRate: val })}
+									<td className="px-3 py-2 text-center">
+										<span
+											className={cn(
+												"inline-flex h-8 min-w-[56px] items-center justify-center rounded-lg border border-border bg-muted/20 px-2 text-xs tabular-nums text-muted-foreground shadow-sm w-full",
+												!row.expenseName && "text-muted-foreground/60",
+											)}
+											title="GST is set from Additional Charge Master"
 										>
-											<SelectTrigger className={cn("h-8 text-xs shadow-sm bg-white", inputCls)}>
-												<SelectValue placeholder="0%" />
-											</SelectTrigger>
-											<SelectContent className="min-w-[100px]">
-												<SelectItem value="0">0%</SelectItem>
-												<SelectItem value="5">5%</SelectItem>
-												<SelectItem value="12">12%</SelectItem>
-												<SelectItem value="18">18%</SelectItem>
-												<SelectItem value="28">28%</SelectItem>
-											</SelectContent>
-										</Select>
+											{row.expenseName ? `${row.gstRate}%` : "—"}
+										</span>
 									</td>
 									{taxSupplyType === "intra" ? (
 										<>

@@ -3,6 +3,7 @@
 import React from "react";
 import { RotateCcw } from "lucide-react";
 import type { PurchaseOrder } from "../../purchase-orders/po-data";
+import { canCreatePurchaseReturnPO } from "../../purchase-orders/po-actions";
 
 interface CreatePurchaseReturnActionProps {
   po: PurchaseOrder;
@@ -12,11 +13,13 @@ interface CreatePurchaseReturnActionProps {
 }
 
 export function CreatePurchaseReturnAction({
-  po: _po,
+  po,
   onCreate,
   variant = "menu",
   className,
 }: CreatePurchaseReturnActionProps) {
+  if (!canCreatePurchaseReturnPO(po)) return null;
+
   const content =
     variant === "menu" ? (
       <button

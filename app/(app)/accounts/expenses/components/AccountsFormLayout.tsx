@@ -44,12 +44,8 @@ export function AccountsFormLayout({
   };
 
   return (
-    <div
-      className={`${
-        stickyFooter ? "h-full min-h-0" : "min-h-full -m-3"
-      } bg-background flex flex-col`}
-    >
-        <header className="bg-white border-b border-border px-5 py-2 flex-shrink-0 sticky top-0 z-20 shadow-sm">
+    <div className="h-full min-h-0 bg-background flex flex-col">
+        <header className="bg-white border-b border-border px-5 py-2.5 flex-shrink-0 z-20 shadow-sm">
           <div className={`${fullWidth ? "w-full max-w-none" : "max-w-[1100px]"} mx-auto w-full flex items-center justify-between gap-3`}>
             <div className="flex items-center gap-2.5 min-w-0">
               <button
@@ -64,7 +60,7 @@ export function AccountsFormLayout({
                   <h1 className={ACCOUNTS_PAGE_TITLE_CLASS}>{title}</h1>
                   {headerMeta}
                 </div>
-                <p className={`${ACCOUNTS_PAGE_SUBTITLE_CLASS} truncate`}>
+                <p className={`${ACCOUNTS_PAGE_SUBTITLE_CLASS} truncate mt-0.5`}>
                   {breadcrumb.map((b, i) => (
                     <span key={b.href}>
                       {i > 0 && <span className="mx-1">/</span>}
@@ -82,14 +78,12 @@ export function AccountsFormLayout({
                 </p>
               </div>
             </div>
-            {footer ? <div className="flex items-center gap-2 flex-shrink-0">{footer}</div> : null}
+            {footer && !stickyFooter ? (
+              <div className="flex items-center gap-2 flex-shrink-0">{footer}</div>
+            ) : null}
           </div>
         </header>
-        <main
-          className={`flex-1 min-h-0 overflow-y-auto overscroll-contain ${
-            stickyFooter ? "px-5 py-2 pb-3" : "px-4 py-3"
-          }`}
-        >
+        <main className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-5 py-4">
           <div className={fullWidth ? "w-full max-w-none" : "max-w-[1100px] mx-auto"}>{children}</div>
         </main>
         {stickyFooter ? (

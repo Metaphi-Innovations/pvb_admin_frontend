@@ -134,6 +134,34 @@ export function resolveDisplayQtyFromBase(
   return baseQty;
 }
 
+export type QtyStackParts = {
+  caseQty: number;
+  unitQty: number;
+  weightQty: number | null;
+  weightUom: "Kg" | "Ltr" | null;
+};
+
+/** Convert a base/SKU qty into Case + Unit + optional Kg/Ltr for stacked display. */
+export function resolveQtyStack(
+  baseQty: number,
+  caseSize: number,
+  netWeightPerPack?: number | null,
+  weightUom?: "Kg" | "Ltr" | string | null,
+): QtyStackParts {
+  const unitQty = Math.max(0, Number(baseQty) || 0);
+  const size = Number(caseSize) || 0;
+  const caseQty =
+    size > 0 ? Math.round((unitQty / size) * 1000) / 1000 : 0;
+  const net = Number(netWeightPerPack) || 0;
+  const uom =
+    weightUom === "Kg" || weightUom === "Ltr" ? weightUom : null;
+  const weightQty =
+    caseQty > 0 && net > 0 && uom
+      ? Math.round(caseQty * net * 1000) / 1000
+      : null;
+  return { caseQty, unitQty, weightQty, weightUom: uom };
+}
+
 export function resolveMaxReturnBaseQty(item: PurchaseReturnItem): number {
   if (item.editableMaxReturnBaseQty != null && item.editableMaxReturnBaseQty >= 0) {
     return item.editableMaxReturnBaseQty;

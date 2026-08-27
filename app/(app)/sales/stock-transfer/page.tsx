@@ -27,6 +27,7 @@ import {
   XCircle,
   FileText,
   Package,
+  Download,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ListingContainer } from "@/components/layout/ListingContainer";
@@ -40,6 +41,7 @@ import {
   canCancelTransfer,
   canDownloadNote,
   canGeneratePackingList,
+  canDownloadPackingList,
 } from "./stock-transfer-data";
 import { formatFulfillmentStatus, FULFILLMENT_STATUS_OPTIONS } from "@/app/(app)/sales/orders/orders-data";
 import { printTransferPackingList } from "./transfer-note-document";
@@ -51,6 +53,8 @@ import {
   useStockTransferSummary,
 } from "@/hooks/sales/use-stock-transfers";
 import { StockTransferService } from "@/services/stock-transfer.service";
+import { openPackingListPdfById } from "@/app/(app)/sales/orders/pl-pdf/packingListPdfGenerator";
+import { PackingListDownloadDialog, type PackingListDownloadOption } from "@/app/(app)/sales/shared/PackingListDownloadDialog";
 
 const STATUS_CFG: Record<string, { bg: string; text: string; dot: string }> = {
   draft: { bg: "bg-slate-100", text: "text-slate-600", dot: "bg-slate-400" },
@@ -106,6 +110,8 @@ export default function StockTransferPage() {
   const [pageSize, setPageSize] = useState(25);
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
   const [cancelTransfer, setCancelTransfer] = useState<StockTransfer | null>(null);
+  const [plDownloadOpen, setPlDownloadOpen] = useState(false);
+  const [plDownloadOptions, setPlDownloadOptions] = useState<PackingListDownloadOption[]>([]);
 
   useEffect(() => {
     const tab = searchParams.get("tab");
@@ -481,6 +487,48 @@ export default function StockTransferPage() {
             >
               <Package className="w-3.5 h-3.5 mr-2" /> Generate Packing List
             </button>
+            <button
+              type="button"
+              disabled={!canDownloadPackingList(row)}
+              onClick={() => {
+                const opts: PackingListDownloadOption[] =
+                  (row.packingLists && row.packingLists.length > 0
+                    ? row.packingLists
+                    : row.packingListId
+                      ? [
+                          {
+                            packingListId: String(row.packingListId),
+                            packingNumber: row.packingListNumber || String(row.packingListId),
+                          },
+                        ]
+                      : []);
+                if (opts.length === 1) {
+                  void (async () => {
+                    try {
+                      await openPackingListPdfById(opts[0].packingListId);
+                      setToast({ msg: "Packing List ready to download.", type: "success" });
+                    } catch (e: unknown) {
+                      const message =
+                        e instanceof Error && e.message
+                          ? e.message
+                          : "Failed to download Packing List.";
+                      setToast({ msg: message, type: "error" });
+                    }
+                  })();
+                  return;
+                }
+                setPlDownloadOptions(opts);
+                setPlDownloadOpen(true);
+              }}
+              className={cn(
+                "flex items-center gap-2 w-full px-2 py-1.5 text-xs transition-colors rounded-sm",
+                !canDownloadPackingList(row)
+                  ? "text-muted-foreground/50 cursor-not-allowed"
+                  : "text-foreground hover:bg-muted/60"
+              )}
+            >
+              <Download className="w-3.5 h-3.5 mr-2" /> Download Packing List
+            </button>
             {canCancelTransfer(row) ? (
               <>
                 <DropdownMenuSeparator />
@@ -562,6 +610,25 @@ export default function StockTransferPage() {
         onClose={() => setCancelTransfer(null)}
         onConfirm={handleCancelConfirm}
         isLoading={cancelMutation.isPending}
+      />
+
+      <PackingListDownloadDialog
+        open={plDownloadOpen}
+        onOpenChange={setPlDownloadOpen}
+        options={plDownloadOptions}
+        onDownload={async (opt) => {
+          try {
+            await openPackingListPdfById(opt.packingListId);
+            setPlDownloadOpen(false);
+            setToast({ msg: "Packing List ready to download.", type: "success" });
+          } catch (e: unknown) {
+            const message =
+              e instanceof Error && e.message
+                ? e.message
+                : "Failed to download Packing List.";
+            setToast({ msg: message, type: "error" });
+          }
+        }}
       />
 
       {toast && (

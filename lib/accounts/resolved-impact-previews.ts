@@ -153,6 +153,7 @@ export function purchaseInvoiceImpactResolved(input: {
   sgst?: number;
   igst?: number;
   interstate?: boolean;
+  roundOff?: number;
 }): LedgerImpactLine[] {
   const gst: GstComponentAmounts =
     input.cgst != null || input.sgst != null || input.igst != null
@@ -165,11 +166,26 @@ export function purchaseInvoiceImpactResolved(input: {
 
   const purchaseLedger = ledgerLabel("purchase_inventory", "Inventory / Stock-in-Hand", "Inventory / Purchase");
   const vendorLedger = ledgerLabel("purchase_payable", input.vendorName, input.vendorName);
+  const roundOffLedger = ledgerLabel("round_off", "General", "Round Off Adjustment");
 
   const lines: LedgerImpactLine[] = [
     { ledger: purchaseLedger, debit: input.taxable, note: "Inventory / Purchase Dr" },
   ];
   appendGstLines(lines, gst, "purchase");
+  const roundOff = input.roundOff ?? 0;
+  if (roundOff > 0) {
+    lines.push({
+      ledger: roundOffLedger,
+      debit: roundOff,
+      note: "Round Off Adjustment Dr",
+    });
+  } else if (roundOff < 0) {
+    lines.push({
+      ledger: roundOffLedger,
+      credit: Math.abs(roundOff),
+      note: "Round Off Adjustment Cr",
+    });
+  }
   lines.push({ ledger: vendorLedger, credit: input.grandTotal, note: "Supplier Cr — Sundry Creditor" });
   return lines;
 }

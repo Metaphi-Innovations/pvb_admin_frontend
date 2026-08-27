@@ -31,6 +31,8 @@ export interface PurchaseReturnItem {
   productId: string;
   productCode: string;
   productName: string;
+  /** Product master SKU (shown under product name). */
+  sku?: string;
   batchNumber: string;
   /** Origin purchase GRN (backward-compatible primary GRN display). */
   grnNo: string;
@@ -57,6 +59,10 @@ export interface PurchaseReturnItem {
   mfgDate: string;
   expDate: string;
   caseSize: number;
+  /** Net Kg/Ltr per Case (from product snapshot) for stacked weight display. */
+  netWeightPerPack?: number;
+  /** Kg or Ltr label for weight stack line. */
+  weightUom?: "Kg" | "Ltr";
   grnReceivedQty: number;
   qcRejectedQty: number;
   alreadyReturnedQty: number;

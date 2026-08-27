@@ -1,6 +1,8 @@
 import { axiosInstance } from "@/api/axios";
 import { API_ENDPOINTS } from "@/api/endpoints";
 import { QcRecord, QcItem } from "@/app/(app)/warehouse/qc/types";
+import { resolvePackingSize } from "@/lib/warehouse/grn-quantity";
+import { resolveNetWeightPerPack } from "@/lib/procurement/procurement-line-utils";
 
 export interface QcListParams {
   page?: number;
@@ -32,6 +34,121 @@ function asText(value: unknown): string {
   if (typeof value === "string") return value;
   if (typeof value === "number" || typeof value === "boolean") return String(value);
   return "";
+}
+
+function asNumber(value: unknown): number {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim() !== "") {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : 0;
+  }
+  return 0;
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return value as Record<string, unknown>;
+}
+
+function asDateOnly(value: unknown): string {
+  const raw = asText(value);
+  if (!raw) return "";
+  if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10);
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return parsed.toISOString().slice(0, 10);
+}
+
+function mapProductWeightMeta(product: Record<string, unknown>, unitPerPacking: number) {
+  const packSize =
+    asNumber(product.pack_size) ||
+    asNumber(product.packSize) ||
+    asNumber(product.unit_size) ||
+    undefined;
+  const baseUnit =
+    asText(product.base_unit) ||
+    asText(product.unit) ||
+    "Unit";
+  return resolveNetWeightPerPack({
+    netWeight:
+      asNumber(product.net_weight) ||
+      asNumber(product.netWeight) ||
+      asNumber(product.net_weight_per_pack) ||
+      null,
+    packSize: packSize || null,
+    unitPerPacking,
+    baseUnit,
+  });
+}
+
+function mapGrnLineToQcItem(
+  batch: Record<string, unknown>,
+  item: Record<string, unknown>,
+  overrides: Partial<QcItem> = {},
+): QcItem {
+  const product = asRecord(item.productSnapshot);
+  const unitPerPacking =
+    resolvePackingSize({ productSnapshot: product }) ||
+    asNumber(product.unit_per_packing || product.unitPerPacking || product.packaging_ratio) ||
+    10;
+  const weightMeta = mapProductWeightMeta(product, unitPerPacking);
+
+  return {
+    productId: asText(product.product_id),
+    productName: asText(product.product_name),
+    productCode: asText(product.product_code),
+    batchNumber: asText(batch.batchNumber),
+    receivedQty: asNumber(
+      batch.quantity_base_qty || batch.quantity_base_unit || batch.quantity,
+    ),
+    acceptedQty: 0,
+    rejectedQty: 0,
+    holdQty: 0,
+    grnBatchId: asText(batch.id),
+    unitPerPacking,
+    quantityType: asText(item.quantity_type) || null,
+    mfgDate: asDateOnly(batch.manufactureDate),
+    expDate: asDateOnly(batch.expiryDate),
+    netWeightPerPack: weightMeta?.netWeightPerPack,
+    weightUom: weightMeta?.weightUom,
+    ...overrides,
+  };
+}
+
+function mapQcDetailItemToFrontend(item: Record<string, unknown>): QcItem {
+  const product = asRecord(item.productSnapshot);
+  const batch = asRecord(item.grnBatch);
+  const batchSnap = asRecord(item.batchSnapshot);
+  const unitPerPacking =
+    resolvePackingSize({ productSnapshot: product }) ||
+    asNumber(product.unit_per_packing || product.unitPerPacking || product.packaging_ratio) ||
+    10;
+  const weightMeta = mapProductWeightMeta(product, unitPerPacking);
+
+  return {
+    productId: asText(product.product_id),
+    productName: asText(product.product_name),
+    productCode: asText(product.product_code),
+    batchNumber: asText(batch.batchNumber || batchSnap.batchNumber),
+    receivedQty: asNumber(
+      item.received_base_qty || item.receivedQty_base_unit || item.receivedQty,
+    ),
+    acceptedQty: asNumber(
+      item.accepted_base_qty || item.acceptedQty_base_unit || item.acceptedQty,
+    ),
+    rejectedQty: asNumber(
+      item.rejected_base_qty || item.rejectedQty_base_unit || item.rejectedQty,
+    ),
+    holdQty: 0,
+    grnBatchId: asText(batch.id || item.source_batch_id),
+    unitPerPacking,
+    rejectionReason: asText(item.remarks),
+    quantityType: asText(item.quantity_type) || null,
+    mfgDate: asDateOnly(batch.manufactureDate || batchSnap.manufactureDate),
+    expDate: asDateOnly(batch.expiryDate || batchSnap.expiryDate),
+    netWeightPerPack: weightMeta?.netWeightPerPack,
+    weightUom: weightMeta?.weightUom,
+  };
 }
 
 function resolveVendorName(payload: any): string {
@@ -77,21 +194,8 @@ export function mapBackendRecordToFrontend(item: any): QcRecord {
 export function mapBackendGrnToPendingQc(grn: any): QcRecord {
   const qcItems: QcItem[] = [];
   grn.items?.forEach((item: any) => {
-    const product = item.productSnapshot || {};
     item.batches?.forEach((batch: any) => {
-      qcItems.push({
-        productId: product.product_id || "",
-        productName: product.product_name || "",
-        productCode: product.product_code || "",
-        batchNumber: batch.batchNumber,
-        receivedQty: Number(batch.quantity_base_qty || batch.quantity_base_unit || batch.quantity || 0),
-        acceptedQty: 0,
-        rejectedQty: 0,
-        holdQty: 0,
-        grnBatchId: batch.id,
-        unitPerPacking: Number(product.unit_per_packing || product.unitPerPacking || product.packaging_ratio || 10),
-        quantityType: item.quantity_type || null,
-      });
+      qcItems.push(mapGrnLineToQcItem(batch, item));
     });
   });
 
@@ -122,24 +226,8 @@ export function mapBackendGrnToPendingQc(grn: any): QcRecord {
 }
 
 export function mapBackendQcDetailToFrontend(qc: any): QcRecord {
-  const qcItems: QcItem[] = qc.items?.map((item: any) => {
-    const product = item.productSnapshot || {};
-    const batch = item.grnBatch || {};
-    return {
-      productId: product.product_id || "",
-      productName: product.product_name || "",
-      productCode: product.product_code || "",
-      batchNumber: batch.batchNumber || (item.batchSnapshot?.batchNumber) || "",
-      receivedQty: Number(item.received_base_qty || item.receivedQty_base_unit || item.receivedQty || 0),
-      acceptedQty: Number(item.accepted_base_qty || item.acceptedQty_base_unit || item.acceptedQty || 0),
-      rejectedQty: Number(item.rejected_base_qty || item.rejectedQty_base_unit || item.rejectedQty || 0),
-      holdQty: 0,
-      grnBatchId: batch.id || item.source_batch_id,
-      unitPerPacking: Number(product.unit_per_packing || product.unitPerPacking || product.packaging_ratio || 10),
-      rejectionReason: item.remarks || "",
-      quantityType: item.quantity_type || null,
-    };
-  }) || [];
+  const qcItems: QcItem[] =
+    qc.items?.map((item: any) => mapQcDetailItemToFrontend(item)) || [];
 
   const totalReceived = qcItems.reduce((sum: number, it: any) => sum + it.receivedQty, 0);
   const totalAccepted = qcItems.reduce((sum: number, it: any) => sum + it.acceptedQty, 0);
@@ -187,21 +275,8 @@ export function mapBackendGrnToQcRecord(grn: any): QcRecord {
   const qcItems: QcItem[] = [];
 
   grn.items?.forEach((item: any) => {
-    const product = item.productSnapshot || {};
     item.batches?.forEach((batch: any) => {
-      qcItems.push({
-        productId: product.product_id || "",
-        productName: product.product_name || "",
-        productCode: product.product_code || "",
-        batchNumber: batch.batchNumber,
-        receivedQty: Number(batch.quantity_base_qty || batch.quantity_base_unit || batch.quantity || 0),
-        acceptedQty: 0,
-        rejectedQty: 0,
-        holdQty: 0,
-        grnBatchId: batch.id,
-        unitPerPacking: Number(product.unit_per_packing || product.unitPerPacking || product.packaging_ratio || 10),
-        quantityType: item.quantity_type || null,
-      });
+      qcItems.push(mapGrnLineToQcItem(batch, item));
     });
   });
 
