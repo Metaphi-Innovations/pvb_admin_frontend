@@ -89,7 +89,7 @@ function getRowActions(status: string, approvalRequired: boolean): string[] {
       : ["view", "edit", "cancel", "eway_bill"];
   }
   if (s === "POSTED") {
-    return ["view", "reverse"];
+    return ["view", "cancel"];
   }
   return ["view"];
 }
@@ -643,14 +643,33 @@ export default function DebitNotesListClient() {
         open={!!cancelTarget}
         onClose={() => setCancelTarget(null)}
         debitNoteNo={cancelTarget?.debitNoteNo ?? ""}
+        mode={
+          cancelTarget?.status?.toUpperCase() === "POSTED" ? "reverse" : "cancel"
+        }
         onConfirm={async (reason) => {
           if (!cancelTarget) return;
+          const isPosted = cancelTarget.status?.toUpperCase() === "POSTED";
           try {
-            await DebitNoteService.cancel(cancelTarget.id, { reason });
-            showToast("Debit Note cancelled successfully.", "success");
+            if (isPosted) {
+              const res = await DebitNoteService.reverse(cancelTarget.id, { reason });
+              if (res?.already_reversed) {
+                showToast("This Debit Note was already reversed.", "info");
+              } else {
+                showToast("Debit Note reversed successfully.", "success");
+              }
+            } else {
+              await DebitNoteService.cancel(cancelTarget.id, { reason });
+              showToast("Debit Note cancelled successfully.", "success");
+            }
             refreshRecords();
           } catch (e: any) {
-            showToast(e.message || "Failed to cancel Debit Note.", "error");
+            showToast(
+              e.message ||
+                (isPosted
+                  ? "Unable to reverse Debit Note."
+                  : "Failed to cancel Debit Note."),
+              "error",
+            );
           }
           setCancelTarget(null);
         }}
