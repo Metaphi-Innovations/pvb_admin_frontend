@@ -353,7 +353,7 @@ export function validateContraForm(form: ContraFormState): string | null {
 
   if (hasBankSide(form)) {
     if (!form.transaction_mode || form.transaction_mode === "CASH") {
-      return "Transaction mode is required when a Bank account is selected.";
+      return "Mode of payment is required when a Bank account is selected.";
     }
     if (form.transaction_mode === "CHEQUE") {
       if (!form.cheque_number.trim()) return "Cheque number is required for CHEQUE mode.";

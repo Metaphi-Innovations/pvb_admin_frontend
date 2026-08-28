@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AccountsTableScroll } from "@/components/accounts/AccountsTable";
 import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
@@ -209,6 +210,26 @@ export function AccountsTableListing({
         {footer}
       </AccountsListingTableCard>
     </div>
+  );
+}
+
+/** Inline loading row for accounts tables — keeps filters/tabs visible while data loads. */
+export function AccountsTableLoading({
+  message = "Loading…",
+  colSpan,
+}: {
+  message?: string;
+  colSpan: number;
+}) {
+  return (
+    <tr>
+      <td colSpan={colSpan} className="accounts-table-empty">
+        <span className="inline-flex items-center justify-center gap-2">
+          <Loader2 className="w-4 h-4 animate-spin text-brand-600" aria-hidden />
+          {message}
+        </span>
+      </td>
+    </tr>
   );
 }
 

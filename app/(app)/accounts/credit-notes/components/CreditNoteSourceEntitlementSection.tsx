@@ -3,11 +3,8 @@
 import { useState, type ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
 import { VoucherFormSectionCard } from "@/components/accounts/voucher-form/VoucherFormSectionCard";
-import {
-  VoucherNoteField,
-  VoucherNoteFieldGrid,
-  VoucherNoteReadOnly,
-} from "@/components/accounts/voucher-form/VoucherNoteFieldGrid";
+import { InvoiceDetailField } from "@/app/(app)/accounts/invoices/components/invoice-form-voucher-ui";
+import { cn } from "@/lib/utils";
 import type { PendingCreditNoteDetail, SchemeTypeLedgerMapping } from "../credit-note-form-types";
 import {
   formatCnMoney,
@@ -25,9 +22,11 @@ import {
 function Info({ label, value, mono }: { label: string; value: ReactNode; mono?: boolean }) {
   if (value == null || value === "" || value === "—") return null;
   return (
-    <VoucherNoteField label={label} width="md">
-      <VoucherNoteReadOnly mono={mono}>{value}</VoucherNoteReadOnly>
-    </VoucherNoteField>
+    <InvoiceDetailField label={label}>
+      <div className={cn("so-goods-ro w-full min-w-0", mono && "font-mono text-brand-700")}>
+        {value}
+      </div>
+    </InvoiceDetailField>
   );
 }
 
@@ -35,7 +34,7 @@ function ContributingInvoices({ refs }: { refs: ReturnType<typeof invoiceRefsOf>
   const [open, setOpen] = useState(false);
   if (!refs.length) return null;
   return (
-    <div className="sm:col-span-2">
+    <div className="sm:col-span-2 lg:col-span-4">
       <button
         type="button"
         className="inline-flex items-center gap-1 text-[11px] font-medium text-brand-700 hover:underline"
@@ -101,8 +100,8 @@ export function CreditNoteSourceEntitlementSection({
         : summaryValue(summary, "discount_rate", "discount_pct", "applied_slab") || "—";
 
   return (
-    <VoucherFormSectionCard title="Source & Entitlement Details" compact>
-      <VoucherNoteFieldGrid columns={4}>
+    <VoucherFormSectionCard title="Source & Entitlement Details">
+      <div className="so-invoice-details-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
         <Info label="Source Type" value={sourceLabel} />
         {scheme ? (
           <>
@@ -217,7 +216,7 @@ export function CreditNoteSourceEntitlementSection({
         ) : (
           <Info label="Sales ledger treatment" value={ledgerName} />
         )}
-      </VoucherNoteFieldGrid>
+      </div>
     </VoucherFormSectionCard>
   );
 }

@@ -2227,7 +2227,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
             ? "Stock Transfer Invoice generated successfully."
             : "Sales Invoice generated successfully.",
         );
-        router.push(`${INVOICES_LIST_PATH}/${created.sales_invoice_id}`);
+        router.push(INVOICES_LIST_PATH);
         router.refresh();
         return;
       }
@@ -2240,7 +2240,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
             ? "Invoice saved as draft."
             : "Invoice saved and posted to ledger successfully.",
         );
-        router.push(`${INVOICES_LIST_PATH}/${invoiceId}`);
+        router.push(INVOICES_LIST_PATH);
         router.refresh();
       } else {
         const rec = await createInvoice(buildInput(status));
@@ -2252,7 +2252,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
               ? "Sample Order Proforma generated — inventory posted at Cost Price."
               : "Invoice saved and posted to ledger successfully.",
         );
-        router.push(`${INVOICES_LIST_PATH}/${rec.salesInvoiceId || rec.id}`);
+        router.push(INVOICES_LIST_PATH);
         router.refresh();
       }
     } catch (e) {
@@ -2389,13 +2389,13 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between w-full">
             <Button
               type="button"
-              variant="ghost"
+              variant="outline"
               size="sm"
-              className="h-8 text-xs gap-1.5 text-muted-foreground self-start sm:self-auto"
+              className="h-8 text-xs gap-1.5 text-red-600 border-red-200 hover:bg-red-50 self-start sm:self-auto"
               onClick={requestCancel}
               disabled={saving}
             >
-              Discard Form
+              Cancel
             </Button>
             <div className="flex items-center gap-2 flex-wrap justify-end w-full sm:w-auto">
               {stGen ? (

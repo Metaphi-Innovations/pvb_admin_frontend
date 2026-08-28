@@ -1,16 +1,17 @@
 "use client";
 
-import { Save, Send } from "lucide-react";
+import { Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { TRANSACTION_FORM_CANCEL_BTN_CLASS } from "@/lib/accounts/transaction-form-phase";
 
 const BTN = "h-8 text-xs gap-1.5";
 
 export interface VoucherFormActionBarProps {
-  /** Discard unsaved form (not Cancel Voucher). */
+  /** Leave form without saving (navigate back / discard changes). */
   onDiscard: () => void;
   onSaveDraft: () => void;
-  /** Optional maker-checker submit. */
+  /** Optional maker-checker submit — hidden until approval phase is enabled. */
   onSubmitForApproval?: () => void;
   /**
    * Primary post action for authorized users.
@@ -28,22 +29,17 @@ export interface VoucherFormActionBarProps {
 }
 
 /**
- * Standard sticky footer for the six Accounts voucher modules.
- * Discard Form · Save Draft · [Submit for Approval] · Save & Post / Approve & Post
- *
- * Document-level Cancel Voucher / Reverse Voucher belong on the view screen, not here.
+ * Standard sticky footer for Accounts transaction voucher forms.
+ * Cancel · Save Draft · Save & Post / Approve & Post
  */
 export function VoucherFormActionBar({
   onDiscard,
   onSaveDraft,
-  onSubmitForApproval,
   onSaveAndPost,
   saveAndPostLabel = "Save & Post",
   discardDisabled,
   saveDraftDisabled,
-  submitForApprovalDisabled,
   saveAndPostDisabled,
-  showSubmitForApproval = false,
   className,
 }: VoucherFormActionBarProps) {
   return (
@@ -55,13 +51,13 @@ export function VoucherFormActionBar({
     >
       <Button
         type="button"
-        variant="ghost"
+        variant="outline"
         size="sm"
-        className={cn(BTN, "text-muted-foreground self-start sm:self-auto")}
+        className={cn(TRANSACTION_FORM_CANCEL_BTN_CLASS, "self-start sm:self-auto")}
         onClick={onDiscard}
         disabled={discardDisabled}
       >
-        Discard Form
+        Cancel
       </Button>
       <div className="flex items-center gap-2 flex-wrap justify-end w-full sm:w-auto">
         <Button
@@ -74,18 +70,6 @@ export function VoucherFormActionBar({
         >
           <Save className="w-3.5 h-3.5" /> Save Draft
         </Button>
-        {showSubmitForApproval && onSubmitForApproval ? (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className={cn(BTN, "text-navy-700 border-navy-200")}
-            onClick={onSubmitForApproval}
-            disabled={submitForApprovalDisabled}
-          >
-            <Send className="w-3.5 h-3.5" /> Submit for Approval
-          </Button>
-        ) : null}
         <Button
           type="button"
           size="sm"

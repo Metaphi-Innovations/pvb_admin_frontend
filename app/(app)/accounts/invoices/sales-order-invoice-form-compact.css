@@ -977,6 +977,17 @@ div:has(> .accounts-module-shell):has(.invoice-form-shell) {
   box-sizing: border-box !important;
 }
 
+/* Compact select triggers in tables / sections outside the details grid */
+.sales-order-invoice-form-compact .so-invoice-select-trigger {
+  height: var(--so-ctrl-h) !important;
+  min-height: var(--so-ctrl-h) !important;
+  max-height: var(--so-ctrl-h) !important;
+  font-size: var(--so-fs-control) !important;
+  line-height: 1.2 !important;
+  border-radius: 0.375rem !important;
+  box-sizing: border-box !important;
+}
+
 /* Unified invoice line-item table styling (service lines + additional charges) */
 .sales-order-invoice-form-compact .so-invoice-table thead {
   background: hsl(var(--muted) / 0.3);
@@ -1037,4 +1048,50 @@ div:has(> .accounts-module-shell):has(.invoice-form-shell) {
 .sales-order-invoice-form-compact .so-table-ro--strong {
   color: hsl(var(--foreground));
   font-weight: var(--so-fw-semibold);
+}
+
+/* Credit Note — direct mode segmented toggle in detail grid */
+.sales-order-invoice-form-compact .so-invoice-details-grid .cnz-gst-toggle {
+  width: 100%;
+  max-width: 100%;
+  height: var(--so-ctrl-h, 32px);
+  min-height: var(--so-ctrl-h, 32px);
+}
+
+.sales-order-invoice-form-compact .cnz-gst-toggle button {
+  font-size: 11px !important;
+  font-weight: 600 !important;
+}
+
+/* Credit Note — GST switch in particulars table (preserve pill shape) */
+.sales-order-invoice-form-compact table tbody button[role="switch"] {
+  width: 2.25rem !important;
+  min-width: 2.25rem !important;
+  max-width: 2.25rem !important;
+  height: 1.25rem !important;
+  min-height: 1.25rem !important;
+  max-height: 1.25rem !important;
+  padding: 0 !important;
+  border-radius: 9999px !important;
+  flex-shrink: 0;
+  margin-inline: auto;
+  display: inline-flex !important;
+}
+
+.sales-order-invoice-form-compact table tbody .cn-switch-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Debit / Credit Note — particulars tables using accounts-table inside voucher wrap */
+.sales-order-invoice-form-compact .so-invoice-charges-table-wrap .accounts-table thead th,
+.sales-order-invoice-form-compact .so-invoice-charges-table-wrap .accounts-table .accounts-table-th {
+  padding: 0.5rem 0.5rem;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+  white-space: nowrap;
 }

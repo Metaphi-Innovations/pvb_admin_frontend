@@ -420,7 +420,7 @@ function BankBookFallback() {
 
 export default function BankBookPageClient() {
   return (
-    <Suspense fallback={<BankBookFallback />}>
+    <Suspense fallback={null}>
       <BankBookPageContent />
     </Suspense>
   );

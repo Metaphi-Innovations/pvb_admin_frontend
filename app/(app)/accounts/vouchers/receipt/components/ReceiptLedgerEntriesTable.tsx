@@ -1,12 +1,15 @@
 "use client";
 
-import { Plus, Trash2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
-  VOUCHER_INPUT_CLASS,
   VOUCHER_MONEY_INPUT_CLASS,
 } from "@/components/accounts/voucher-simple-form-ui";
+import {
+  INVOICE_DETAIL_INPUT_CLASS,
+  INVOICE_DETAIL_SELECT_CLASS,
+  InvoiceTableReadonly,
+} from "@/app/(app)/accounts/invoices/components/invoice-form-voucher-ui";
 import { formatMoney } from "@/lib/accounts/money-format";
 import { cn } from "@/lib/utils";
 import { ReceiptSearchableSelect } from "./ReceiptSearchableSelect";
@@ -17,15 +20,15 @@ import {
 } from "../receipt-voucher-utils";
 
 const AMOUNT_INPUT = cn(
-  VOUCHER_INPUT_CLASS,
+  INVOICE_DETAIL_INPUT_CLASS,
   VOUCHER_MONEY_INPUT_CLASS,
-  "h-8 w-[140px] max-w-full",
+  "text-xs text-right tabular-nums w-full",
 );
+
+const LEDGER_SELECT_CLASS = cn(INVOICE_DETAIL_SELECT_CLASS, "w-full min-w-0");
 
 /**
  * Ledger Entries — optional manual adjustment lines only.
- * Cash/Bank Received In is selected in Received In and must not be duplicated here.
- * Auto CUSTOMER_TDS rows stay in form.adjustments for payload sync but are not shown.
  */
 export function ReceiptLedgerEntriesTable({
   rows,
@@ -49,46 +52,49 @@ export function ReceiptLedgerEntriesTable({
     onChange(rows.filter((r) => r.id !== id));
   };
 
-  const addRow = () => {
-    const next = createEmptyAdjustment("OTHER");
-    onChange([...tdsRows, ...manualRows, next]);
-  };
-
   return (
-    <div className="space-y-2">
-      {manualRows.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-border px-3 py-6 text-center">
-          <p className="text-xs text-muted-foreground">
-            No additional ledger adjustments.
-          </p>
-        </div>
-      ) : (
-        <div className="border border-border rounded-xl overflow-hidden">
-          <table className="w-full">
-            <thead>
-              <tr className="bg-muted/40 border-b border-border">
-                <th className="px-3 py-2 text-left text-xs font-semibold">
-                  Ledger Account
-                </th>
-                <th className="px-3 py-2 text-right text-xs font-semibold w-[160px]">
-                  Amount
-                </th>
-                <th className="w-10 px-2 py-2 text-left text-xs font-semibold">
-                  {!readOnly ? "Action" : null}
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {manualRows.map((row) => (
-                <tr key={row.id} className="border-b border-border/60">
-                  <td className="px-3 py-2 min-w-[220px]">
-                    {readOnly ? (
-                      <span className="text-xs">{row.ledger_name || "—"}</span>
-                    ) : (
+    <div className="so-invoice-charges-table-wrap w-full min-w-0">
+      <table className="so-invoice-table text-xs w-full table-fixed min-w-full">
+        <colgroup>
+          <col />
+          <col style={{ width: "9rem" }} />
+          <col style={{ width: "2.75rem" }} />
+        </colgroup>
+        <thead>
+          <tr>
+            <th className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground text-left">
+              Ledger Account
+            </th>
+            <th className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground text-right">
+              Amount
+            </th>
+            <th className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground text-center">
+              <span className="sr-only">Actions</span>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {manualRows.length === 0 ? (
+            <tr>
+              <td colSpan={3} className="px-3 py-4 text-center text-[11px] text-muted-foreground">
+                No additional ledger adjustments.
+              </td>
+            </tr>
+          ) : (
+            manualRows.map((row) => (
+              <tr key={row.id} className="border-b border-border/40 last:border-0">
+                <td className="p-1.5 align-middle w-full min-w-0">
+                  {readOnly ? (
+                    <div className="so-goods-ro w-full min-w-0 truncate text-left">
+                      {row.ledger_name || "—"}
+                    </div>
+                  ) : (
+                    <div className="w-full min-w-0">
                       <ReceiptSearchableSelect
                         value={row.ledger_id}
                         options={ledgerOptions}
                         placeholder="Select ledger…"
+                        triggerClassName={LEDGER_SELECT_CLASS}
                         onChange={(id) => {
                           const opt = ledgerOptions.find((o) => o.value === id);
                           updateManual(row.id, {
@@ -99,57 +105,46 @@ export function ReceiptLedgerEntriesTable({
                           });
                         }}
                       />
-                    )}
-                  </td>
-                  <td className="px-3 py-2 text-right">
-                    {readOnly ? (
-                      <span className="text-xs tabular-nums font-medium">
-                        {formatMoney(toMoneyNumber(row.amount))}
-                      </span>
-                    ) : (
-                      <div className="flex justify-end">
-                        <Input
-                          className={AMOUNT_INPUT}
-                          value={row.amount}
-                          onChange={(e) =>
-                            updateManual(row.id, { amount: e.target.value })
-                          }
-                          placeholder="0.00"
-                        />
-                      </div>
-                    )}
-                  </td>
-                  <td className="px-1 py-2">
-                    {!readOnly ? (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-8 w-8 p-0 text-red-600"
-                        onClick={() => removeManual(row.id)}
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </Button>
-                    ) : null}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {!readOnly ? (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-8 text-xs gap-1.5"
-          onClick={addRow}
-        >
-          <Plus className="w-3.5 h-3.5" /> Add Row
-        </Button>
-      ) : null}
+                    </div>
+                  )}
+                </td>
+                <td className="p-1.5 align-middle text-right w-36">
+                  {readOnly ? (
+                    <InvoiceTableReadonly value={formatMoney(toMoneyNumber(row.amount))} strong />
+                  ) : (
+                    <Input
+                      className={AMOUNT_INPUT}
+                      value={row.amount}
+                      onChange={(e) => updateManual(row.id, { amount: e.target.value })}
+                      placeholder="0.00"
+                    />
+                  )}
+                </td>
+                <td className="p-1.5 align-middle text-center w-11">
+                  {!readOnly ? (
+                    <button
+                      type="button"
+                      className="p-1 rounded hover:bg-red-50 text-muted-foreground hover:text-red-600 disabled:opacity-40"
+                      onClick={() => removeManual(row.id)}
+                      aria-label="Remove line"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  ) : null}
+                </td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
     </div>
   );
+}
+
+export function createReceiptLedgerEntryRow(
+  rows: ReceiptUiAdjustment[],
+): ReceiptUiAdjustment[] {
+  const tdsRows = rows.filter((r) => r.adjustment_type === "CUSTOMER_TDS");
+  const manualRows = rows.filter((r) => r.adjustment_type !== "CUSTOMER_TDS");
+  return [...tdsRows, ...manualRows, createEmptyAdjustment("OTHER")];
 }

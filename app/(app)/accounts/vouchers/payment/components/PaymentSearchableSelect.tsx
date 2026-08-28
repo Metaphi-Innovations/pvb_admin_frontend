@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { INVOICE_DETAIL_SELECT_CLASS } from "@/app/(app)/accounts/invoices/components/invoice-form-voucher-ui";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -50,7 +51,7 @@ export function PaymentSearchableSelect({
   const selected = options.find((o) => o.value === value);
 
   return (
-    <div className={cn(label ? "space-y-1" : undefined, className)}>
+    <div className={cn(label ? "space-y-0.5" : "w-full min-w-0", className)}>
       {label ? (
         <Label className={cn("text-xs font-medium", labelClassName)}>
           {label}
@@ -71,10 +72,11 @@ export function PaymentSearchableSelect({
             type="button"
             disabled={disabled}
             className={cn(
-              "w-full h-9 px-3 text-sm text-left border border-border rounded-lg bg-background flex items-center justify-between",
+              "w-full min-w-0 text-left flex items-center justify-between gap-1",
+              INVOICE_DETAIL_SELECT_CLASS,
               disabled
                 ? "opacity-50 cursor-not-allowed bg-muted/30"
-                : "hover:bg-muted/30",
+                : "hover:bg-muted/20",
               triggerClassName,
             )}
           >
@@ -86,14 +88,14 @@ export function PaymentSearchableSelect({
             >
               {selected?.label || placeholder}
             </span>
-            <ChevronsUpDown className="w-4 h-4 text-muted-foreground shrink-0" />
+            <ChevronsUpDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
           </button>
         </PopoverTrigger>
         <PopoverContent
           className="w-[var(--radix-popover-trigger-width)] p-0"
           align="start"
         >
-          <div className="p-1.5 border-b">
+          <div className="p-1 border-b">
             <Input
               placeholder="Search…"
               value={q}
@@ -102,11 +104,11 @@ export function PaymentSearchableSelect({
               autoFocus
             />
           </div>
-          <div className="max-h-[220px] overflow-y-auto py-1">
+          <div className="max-h-[200px] overflow-y-auto py-0.5">
             {allowClear ? (
               <button
                 type="button"
-                className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-left hover:bg-muted/60 text-muted-foreground"
+                className="w-full flex items-center gap-1.5 px-2 py-1.5 text-xs text-left hover:bg-muted/60 text-muted-foreground"
                 onClick={() => {
                   onChange("");
                   setOpen(false);
@@ -117,7 +119,7 @@ export function PaymentSearchableSelect({
               </button>
             ) : null}
             {filtered.length === 0 ? (
-              <p className="px-3 py-4 text-center text-xs text-muted-foreground">
+              <p className="px-2 py-3 text-center text-[11px] text-muted-foreground">
                 No results
               </p>
             ) : (
@@ -126,7 +128,7 @@ export function PaymentSearchableSelect({
                   key={o.value}
                   type="button"
                   className={cn(
-                    "w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-muted/60",
+                    "w-full flex items-center gap-1.5 px-2 py-1.5 text-xs text-left hover:bg-muted/60",
                     value === o.value && "bg-brand-50",
                   )}
                   onClick={() => {

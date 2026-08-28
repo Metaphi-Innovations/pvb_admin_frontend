@@ -66,7 +66,7 @@ export function CreditNoteAmountSummary({
   const showRoundOff = Boolean(roundOffSlot) || Math.abs(roundOff) > 0.004 || !locked;
 
   return (
-    <VoucherFormSectionCard title="Amount Summary" compact className="lg:sticky lg:top-3 lg:z-10">
+    <VoucherFormSectionCard title="Amount Summary" className="lg:sticky lg:top-3 lg:z-10">
       <div className="space-y-1.5 so-invoice-summary">
           <SummaryRow label="Taxable / Basic Amount" value={taxable} />
           {showIntra ? <SummaryRow label="CGST" value={cgst} /> : null}

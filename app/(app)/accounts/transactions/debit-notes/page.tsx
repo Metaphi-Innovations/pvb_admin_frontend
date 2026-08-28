@@ -1,6 +1,4 @@
-import { lazyAccountsPage } from "@/lib/accounts/lazy-accounts-page";
-
-const DebitNotesListClient = lazyAccountsPage(() => import("./DebitNotesListClient"));
+import DebitNotesListClient from "./DebitNotesListClient";
 
 export default function Page() {
   return <DebitNotesListClient />;

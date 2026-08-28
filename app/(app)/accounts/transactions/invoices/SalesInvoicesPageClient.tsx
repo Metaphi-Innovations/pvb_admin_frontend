@@ -17,6 +17,7 @@ import {
 import {
   AccountsTableEmpty,
   AccountsTableListing,
+  AccountsTableLoading,
   AccountsTablePagination,
 } from "@/components/accounts/AccountsTableListing";
 import {
@@ -636,8 +637,8 @@ function SalesInvoicesTable({
 
 
   const emptyStates =
-    !mounted || loading ? (
-      <AccountsTableEmpty colSpan={colSpan} message="Loading invoices…" />
+    loading && toolbarRows.length === 0 ? (
+      <AccountsTableLoading colSpan={colSpan} message="Loading invoices…" />
     ) : error ? (
       <AccountsTableEmpty colSpan={colSpan} message={error} />
     ) : toolbarRows.length === 0 ? (
@@ -711,7 +712,7 @@ function SalesInvoicesTable({
                   <InvoiceStatusBadge status={r.invoiceStatus} />
                 </AccountsTableCell>
                 <StatutoryStatusCells row={r} />
-                <AccountsTableCell align="right">
+                <AccountsTableCell align="right" actions>
                   <RowActions row={r} onCancel={onCancel} onPrint={onPrint} />
                 </AccountsTableCell>
               </AccountsTableRow>
@@ -778,7 +779,7 @@ function SalesInvoicesTable({
                   <InvoiceStatusBadge status={r.invoiceStatus} />
                 </AccountsTableCell>
                 <StatutoryStatusCells row={r} />
-                <AccountsTableCell align="right">
+                <AccountsTableCell align="right" actions>
                   <RowActions row={r} onCancel={onCancel} onPrint={onPrint} />
                 </AccountsTableCell>
               </AccountsTableRow>
@@ -852,7 +853,7 @@ function SalesInvoicesTable({
                 <InvoiceStatusBadge status={r.invoiceStatus} />
               </AccountsTableCell>
               <StatutoryStatusCells row={r} />
-              <AccountsTableCell align="right">
+              <AccountsTableCell align="right" actions>
                 <RowActions row={r} onCancel={onCancel} onPrint={onPrint} />
               </AccountsTableCell>
             </AccountsTableRow>

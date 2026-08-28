@@ -54,7 +54,7 @@ export function InvoiceFormLayout({
   onBackClick?: () => void;
   /** Legacy: actions in sticky header. Prefer stickyFooter for voucher-standard footers. */
   actions?: React.ReactNode;
-  /** Sticky bottom action bar (Discard Form · Save Draft · Save & Post). */
+  /** Sticky bottom action bar (Cancel · Save Draft · Save & Post). */
   stickyFooter?: React.ReactNode;
   children: React.ReactNode;
 }) {

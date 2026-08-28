@@ -61,7 +61,7 @@ const nextConfig = {
       { source: "/accounts/reports/receipt-register", destination: "/accounts/vouchers?tab=receipt", permanent: false },
       { source: "/accounts/reports/payment-register", destination: "/accounts/vouchers?tab=payment", permanent: false },
       { source: "/accounts/reports/contra-register", destination: "/accounts/vouchers?tab=contra", permanent: false },
-      { source: "/accounts/reports/journal-register", destination: "/accounts/vouchers/journal", permanent: false },
+      { source: "/accounts/reports/journal-register", destination: "/accounts/vouchers?tab=journal", permanent: false },
     ];
   },
 };

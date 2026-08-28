@@ -12,13 +12,15 @@ import {
 
 /** Standard icon button — always visible, no hover-only opacity */
 export const ACCOUNTS_ACTION_BTN_CLASS =
-  "inline-flex items-center justify-center p-1.5 hover:bg-muted rounded-md transition-colors flex-shrink-0";
+  "inline-flex items-center justify-center p-1 hover:bg-muted rounded-md transition-colors flex-shrink-0";
 
 export const ACCOUNTS_ACTION_ICON_CLASS = "w-4 h-4 text-muted-foreground";
 
 export const ACCOUNTS_ACTION_COL_CLASS = {
   single: "accounts-col-actions",
   multi: "accounts-col-actions-wide",
+  /** Text CTA buttons (e.g. Generate Invoice, Create Invoice). */
+  cta: "accounts-col-actions-cta",
 } as const;
 
 export type AccountsActionColVariant = keyof typeof ACCOUNTS_ACTION_COL_CLASS;
@@ -39,7 +41,7 @@ export function AccountsTableActionCell({
   return (
     <div
       className={cn(
-        "flex items-center justify-end gap-0.5 flex-shrink-0",
+        "flex items-center justify-end gap-0 flex-shrink-0",
         ACCOUNTS_ACTION_COL_CLASS[variant],
         className,
       )}
@@ -184,7 +186,7 @@ export function AccountsMoreActions({
           type="button"
           title={title}
           className={cn(
-            "inline-flex items-center justify-center w-7 h-7 rounded hover:bg-muted transition-colors flex-shrink-0",
+            "inline-flex items-center justify-center w-6 h-6 rounded hover:bg-muted transition-colors flex-shrink-0",
             className,
           )}
         >

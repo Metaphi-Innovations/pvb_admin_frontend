@@ -26,6 +26,7 @@ import {
 import {
   AccountsListingFilterCard,
   AccountsTableEmpty,
+  AccountsTableLoading,
   AccountsTableListing,
   AccountsTablePagination,
 } from "@/components/accounts/AccountsTableListing";
@@ -164,8 +165,8 @@ function PendingCreditNotesTable({
           </AccountsTableHeadRow>
         </AccountsTableHead>
         <AccountsTableBody>
-          {loading ? (
-            <AccountsTableEmpty colSpan={colSpan} message="Loading pending credit notes…" />
+          {loading && toolbarFiltered.length === 0 ? (
+            <AccountsTableLoading colSpan={colSpan} message="Loading pending credit notes…" />
           ) : toolbarFiltered.length === 0 ? (
             <AccountsTableEmpty colSpan={colSpan} message="No pending credit notes found." />
           ) : visible.length === 0 ? (

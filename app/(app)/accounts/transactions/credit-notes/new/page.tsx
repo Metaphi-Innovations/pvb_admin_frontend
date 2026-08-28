@@ -25,7 +25,7 @@ export default function NewCreditNotePage({
   else if (searchParams?.schemeKey || searchParams?.entitlementId) mode = "scheme";
 
   return (
-    <Suspense fallback={<div className="p-8 text-sm text-muted-foreground">Loading credit note form…</div>}>
+    <Suspense fallback={null}>
       <CreditNoteFormPageClient
         returnId={searchParams?.returnId}
         schemeKey={searchParams?.schemeKey}

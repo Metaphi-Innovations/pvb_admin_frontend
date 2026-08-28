@@ -501,6 +501,7 @@ function GrnPendingTabTable({
               sortable={false}
               filterable={false}
               align="right"
+              className={accountsActionColClass("cta")}
             />
           </AccountsTableHeadRow>
         </AccountsTableHead>
@@ -526,10 +527,10 @@ function GrnPendingTabTable({
                 <AccountsTableCell align="right" money>
                   {formatMoney(Number(grn.total_invoice_amount || 0))}
                 </AccountsTableCell>
-                <AccountsTableCell align="right">
+                <AccountsTableCell align="right" actions="cta">
                   <Button
                     size="sm"
-                    className="h-8 text-xs font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1"
+                    className="h-7 px-2 text-xs font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1 whitespace-nowrap"
                     onClick={() => onCreateInvoice(grn)}
                   >
                     <FileText className="w-3 h-3" />

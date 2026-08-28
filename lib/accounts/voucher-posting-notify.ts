@@ -20,6 +20,14 @@ function voucherPostDataScope(voucherType: VoucherTypeCode): AccountsDataScope {
   }
 }
 
+/** Notify listings and related views after a voucher is saved or posted. */
+export function notifyVoucherListingChanged(
+  voucherType: Extract<VoucherTypeCode, "receipt" | "payment" | "contra" | "journal">,
+  operation: "create" | "update" | "post" = "update",
+): void {
+  dispatchAccountsDataChanged(voucherPostDataScope(voucherType), { operation });
+}
+
 /** Notify COA, party ledgers, and receivables/payables views after a voucher is posted. */
 export function notifyVoucherPosted(voucher: AccountingVoucher): void {
   const scope = voucherPostDataScope(voucher.voucherType);

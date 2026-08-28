@@ -1,6 +1,4 @@
-import { lazyAccountsPage } from "@/lib/accounts/lazy-accounts-page";
-
-const PurchaseInvoicesPageClient = lazyAccountsPage(() => import("./PurchaseInvoicesPageClient"));
+import PurchaseInvoicesPageClient from "./PurchaseInvoicesPageClient";
 
 export default function Page() {
   return <PurchaseInvoicesPageClient />;

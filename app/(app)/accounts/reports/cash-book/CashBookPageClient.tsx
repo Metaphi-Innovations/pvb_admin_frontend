@@ -375,7 +375,7 @@ function CashBookPageBody({
 
 export default function CashBookPageClient() {
   return (
-    <Suspense fallback={<CashBookFallback />}>
+    <Suspense fallback={null}>
       <CashBookPageContent />
     </Suspense>
   );

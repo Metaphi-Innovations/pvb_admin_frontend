@@ -384,6 +384,14 @@
 }
 
 /* Posting list dots — neutral, not orange */
-.credit-debit-note-form .cdn-posting-dot {
-  background: hsl(var(--muted-foreground) / 0.45) !important;
+.credit-debit-note-form .so-invoice-detail-field {
+  grid-template-rows: auto minmax(var(--so-ctrl-h, 32px), auto);
+  gap: 2px;
+}
+
+.credit-debit-note-form .so-invoice-details-grid .cnz-gst-toggle {
+  width: 100%;
+  max-width: 100%;
+  height: var(--so-ctrl-h, 32px);
+  min-height: var(--so-ctrl-h, 32px);
 }

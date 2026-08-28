@@ -327,7 +327,6 @@ export function CreditNoteParticularsEditor({
     <VoucherFormSectionCard
       title="Particulars"
       flush
-      compact
       headerActions={
         isDirect && editable ? (
           <Button

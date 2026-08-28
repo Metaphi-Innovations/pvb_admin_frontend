@@ -750,7 +750,7 @@ export function buildCreatePayload(form: ReceiptFormState): CreateReceiptVoucher
   });
 
   return {
-    voucher_date: form.voucher_date,
+    voucher_date: todayDateInput(),
     warehouse_id: form.warehouse_id,
     party_kind: form.party_kind,
     customer_id: form.party_kind === "CUSTOMER" ? form.customer_id : null,
@@ -782,6 +782,7 @@ export function buildCreatePayload(form: ReceiptFormState): CreateReceiptVoucher
 export function buildUpdatePayload(form: ReceiptFormState): UpdateReceiptVoucherPayload {
   return {
     ...buildCreatePayload(form),
+    voucher_date: form.voucher_date || todayDateInput(),
     existing_attachments: form.persistedAttachments,
   };
 }
