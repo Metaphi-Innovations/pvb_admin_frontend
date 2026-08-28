@@ -300,6 +300,10 @@ export interface ContraVoucherListItem {
   to_account_type: ContraAccountType;
   from_ledger_id: string;
   to_ledger_id: string;
+  from_cash_ledger_id?: string | null;
+  to_cash_ledger_id?: string | null;
+  from_bank_account_id?: string | null;
+  to_bank_account_id?: string | null;
   amount: string | number;
   reference_number?: string | null;
   narration?: string | null;

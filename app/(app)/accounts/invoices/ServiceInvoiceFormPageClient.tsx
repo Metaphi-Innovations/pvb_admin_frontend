@@ -51,12 +51,6 @@ import {
 } from "@/hooks/sales/use-sales-orders";
 import { useChartOfAccountsTree } from "@/hooks/accounts/use-chart-of-accounts";
 import { useHsnDropdown } from "@/hooks/masters/use-hsn";
-import { getLedgersUnderSubGroupName } from "@/lib/accounts/coa-hierarchy";
-import {
-  resolveServiceInvoiceRevenueLedger,
-  SERVICE_INVOICE_REVENUE_LEDGER_MISSING_ERROR,
-} from "@/lib/accounts/ledger-mappings";
-import type { ChartOfAccount, CoaNodeId } from "@/app/(app)/accounts/data";
 import { SalesInvoiceService } from "@/services/sales-invoice.service";
 import { showToast } from "@/lib/toast";
 import { dispatchAccountsDataChanged } from "@/lib/accounts/accounts-data-events";
@@ -64,15 +58,21 @@ import {
   GoodsInvoiceAdditionalChargesEditor,
   validateGoodsAdditionalCharges,
 } from "@/app/(app)/accounts/invoices/components/GoodsInvoiceAdditionalChargesEditor";
+import { ServiceInvoiceLineLedgerSelect } from "@/app/(app)/accounts/invoices/components/ServiceInvoiceLineLedgerSelect";
 import {
   calcAdditionalExpensesTotals,
   createEmptyAdditionalExpense,
   type InvoiceAdditionalExpense,
 } from "@/app/(app)/accounts/invoices/invoice-additional-expenses";
 
+const LEDGER_UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 type ServiceLineItem = InvoiceLineItem & {
   sacId: string | null;
-  incomeLedgerId: CoaNodeId | null;
+  /** Backend ledger UUID from generic dropdown. */
+  incomeLedgerId: string | null;
+  incomeLedgerName?: string;
 };
 
 function computeDueDate(baseDate: string, creditDays: number): string {
@@ -86,7 +86,7 @@ function todayStr() {
   return new Date().toISOString().slice(0, 10);
 }
 
-function createEmptyServiceLine(incomeLedgerId: CoaNodeId | null = null): ServiceLineItem {
+function createEmptyServiceLine(): ServiceLineItem {
   return {
     ...recalculateLineItem({
       ...createEmptyLine(),
@@ -95,17 +95,13 @@ function createEmptyServiceLine(incomeLedgerId: CoaNodeId | null = null): Servic
       taxPct: 18,
     }),
     sacId: null,
-    incomeLedgerId,
+    incomeLedgerId: null,
+    incomeLedgerName: "",
   };
 }
 
-function ledgerApiUuid(ledger: ChartOfAccount | null | undefined): string | null {
-  const id = ledger?.apiNodeId?.trim();
-  return id || null;
-}
-
-function isActiveIncomeLedger(ledger: ChartOfAccount): boolean {
-  return ledger.nodeLevel === "ledger" && ledger.status === "active" && ledger.accountType === "Income";
+function isLedgerUuid(value: unknown): value is string {
+  return typeof value === "string" && LEDGER_UUID_RE.test(value);
 }
 
 function nestedRecord(value: unknown): Record<string, unknown> | null {
@@ -136,17 +132,6 @@ function formatPaymentTerms(paymentType?: string, creditDays?: number | string):
 const CHARGE_INPUT_CLASS =
   "h-9 text-sm tabular-nums text-right w-28 ml-auto [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none";
 
-function resolveLineIncomeLedger(
-  line: Pick<ServiceLineItem, "incomeLedgerId">,
-  coaRecords: ChartOfAccount[],
-): ChartOfAccount | null {
-  if (line.incomeLedgerId == null) return null;
-  return resolveServiceInvoiceRevenueLedger({
-    selectedLedgerId: line.incomeLedgerId,
-    records: coaRecords,
-  });
-}
-
 export default function ServiceInvoiceFormPageClient() {
   const router = useRouter();
   const { data: customerData } = useCustomersDropdown();
@@ -165,7 +150,6 @@ export default function ServiceInvoiceFormPageClient() {
   const [creditDays, setCreditDays] = useState(30);
   const [branch, setBranch] = useState("");
   const [warehouseId, setWarehouseId] = useState<string | null>(null);
-  const [defaultIncomeLedgerId, setDefaultIncomeLedgerId] = useState<CoaNodeId | null>(null);
   const [invoiceDate, setInvoiceDate] = useState(todayStr);
   const [dueDate, setDueDate] = useState("");
   const [referenceNo, setReferenceNo] = useState("");
@@ -206,25 +190,6 @@ export default function ServiceInvoiceFormPageClient() {
     () => hsnDropdown.filter((h) => h.codeType === "SAC"),
     [hsnDropdown],
   );
-
-  const incomeLedgerOptions = useMemo(() => {
-    return getLedgersUnderSubGroupName("Service Revenue", coaRecords).filter(isActiveIncomeLedger);
-  }, [coaRecords]);
-
-  useEffect(() => {
-    if (!coaRecords.length || defaultIncomeLedgerId != null) return;
-    const resolved = resolveServiceInvoiceRevenueLedger({ records: coaRecords });
-    if (resolved) setDefaultIncomeLedgerId(resolved.id);
-  }, [coaRecords, defaultIncomeLedgerId]);
-
-  useEffect(() => {
-    if (defaultIncomeLedgerId == null) return;
-    setLines((prev) =>
-      prev.map((line) =>
-        line.incomeLedgerId == null ? { ...line, incomeLedgerId: defaultIncomeLedgerId } : line,
-      ),
-    );
-  }, [defaultIncomeLedgerId]);
 
   useEffect(() => {
     if (invoiceDate && creditDays >= 0) {
@@ -279,15 +244,6 @@ export default function ServiceInvoiceFormPageClient() {
         label: w.name || w.id,
       })),
     [warehouses],
-  );
-
-  const incomeLedgerSelectOptions = useMemo(
-    () =>
-      incomeLedgerOptions.map((l) => ({
-        value: String(l.id),
-        label: `${l.accountName}${l.accountCode ? ` (${l.accountCode})` : ""}`,
-      })),
-    [incomeLedgerOptions],
   );
 
   const sacSelectOptions = useMemo(
@@ -403,19 +359,20 @@ export default function ServiceInvoiceFormPageClient() {
           ...recalculateLineItem(next),
           sacId: next.sacId ?? null,
           incomeLedgerId: next.incomeLedgerId ?? null,
+          incomeLedgerName: next.incomeLedgerName ?? "",
         };
       }),
     );
   }, []);
 
   const addLine = () => {
-    setLines((prev) => [...prev, createEmptyServiceLine(defaultIncomeLedgerId)]);
+    setLines((prev) => [...prev, createEmptyServiceLine()]);
   };
 
   const removeLine = (id: string) => {
     setLines((prev) => {
       const next = prev.filter((l) => l.id !== id);
-      return next.length ? next : [createEmptyServiceLine(defaultIncomeLedgerId)];
+      return next.length ? next : [createEmptyServiceLine()];
     });
   };
 
@@ -454,13 +411,11 @@ export default function ServiceInvoiceFormPageClient() {
     }
 
     for (const line of serviceLines) {
-      const incomeLedger = resolveLineIncomeLedger(line, coaRecords);
-      const serviceLedgerUuid = ledgerApiUuid(incomeLedger);
-      if (!incomeLedger || !serviceLedgerUuid) {
+      if (!isLedgerUuid(line.incomeLedgerId)) {
         setError(
           line.productName
-            ? `Select an Income Ledger for "${line.productName}".`
-            : SERVICE_INVOICE_REVENUE_LEDGER_MISSING_ERROR,
+            ? `Select a ledger for "${line.productName}".`
+            : "Select a ledger for each service line.",
         );
         return;
       }
@@ -501,7 +456,7 @@ export default function ServiceInvoiceFormPageClient() {
         narration: narration.trim() || undefined,
         remarks: referenceNo.trim() || undefined,
         items: serviceLines.map((line) => ({
-          service_ledger_id: ledgerApiUuid(resolveLineIncomeLedger(line, coaRecords))!,
+          service_ledger_id: line.incomeLedgerId!,
           service_name: line.productName.trim(),
           sac_id: line.sacId!,
           quantity: line.qty || 1,
@@ -677,17 +632,15 @@ export default function ServiceInvoiceFormPageClient() {
                         />
                       </td>
                       <td className="p-1.5 min-w-[220px] max-w-[240px] w-[220px] overflow-hidden">
-                        <SearchableSelect
-                          label=""
-                          value={line.incomeLedgerId != null ? String(line.incomeLedgerId) : ""}
-                          onChange={(id) =>
+                        <ServiceInvoiceLineLedgerSelect
+                          value={isLedgerUuid(line.incomeLedgerId) ? line.incomeLedgerId : null}
+                          fallbackLabel={line.incomeLedgerName || undefined}
+                          onChange={(ledger) =>
                             updateLine(line.id, {
-                              incomeLedgerId: id ? Number(id) : null,
+                              incomeLedgerId: ledger.ledgerId,
+                              incomeLedgerName: ledger.ledgerName,
                             })
                           }
-                          options={incomeLedgerSelectOptions}
-                          placeholder="Select income ledger…"
-                          contentClassName="w-[320px]"
                         />
                       </td>
                       <td className="p-1.5 min-w-[120px] max-w-[130px] w-[120px] overflow-hidden">
@@ -800,11 +753,6 @@ export default function ServiceInvoiceFormPageClient() {
               </tbody>
             </table>
           </div>
-          {!incomeLedgerOptions.length && coaRecords.length > 0 ? (
-            <p className="mt-2 text-xs text-amber-700">
-              {SERVICE_INVOICE_REVENUE_LEDGER_MISSING_ERROR}
-            </p>
-          ) : null}
         </InvoiceFormSection>
 
         <InvoiceFormSection title="Additional Charges">

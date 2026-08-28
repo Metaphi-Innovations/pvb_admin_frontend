@@ -1,6 +1,5 @@
 "use client";
 
-import { Fragment } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -68,52 +67,6 @@ function AmountCell({ value, bold }: { value: string; bold?: boolean }) {
   );
 }
 
-function lineTaxTotal(line: DirectPurchaseLineItem): number {
-  return line.cgst + line.sgst + line.igst;
-}
-
-function TaxBreakupRow({
-  line,
-  interstate,
-  colSpanBefore,
-  colSpanAmounts,
-  hasAction,
-}: {
-  line: DirectPurchaseLineItem;
-  interstate: boolean;
-  colSpanBefore: number;
-  colSpanAmounts: number;
-  hasAction: boolean;
-}) {
-  const taxTotal = lineTaxTotal(line);
-  if (taxTotal <= 0 && line.gstRate <= 0) return null;
-
-  return (
-    <tr className="border-b border-border/50 bg-muted/10">
-      <td colSpan={colSpanBefore} className="py-0" />
-      <td colSpan={colSpanAmounts} className="px-2 pb-1.5 pt-0 align-top">
-        <div className="flex flex-col items-end gap-0.5 text-[11px] text-muted-foreground tabular-nums">
-          {interstate ? (
-            <span>
-              IGST <span className="font-medium text-foreground">{formatMoney(line.igst)}</span>
-            </span>
-          ) : (
-            <>
-              <span>
-                CGST <span className="font-medium text-foreground">{formatMoney(line.cgst)}</span>
-              </span>
-              <span>
-                SGST <span className="font-medium text-foreground">{formatMoney(line.sgst)}</span>
-              </span>
-            </>
-          )}
-        </div>
-      </td>
-      {hasAction && <td className="py-0" />}
-    </tr>
-  );
-}
-
 export function PurchaseInvoiceDirectLineTable({
   lines,
   onChange,
@@ -131,9 +84,6 @@ export function PurchaseInvoiceDirectLineTable({
   hsnOptions?: HsnDropdownItem[];
   readOnly?: boolean;
 }) {
-  const colSpanBefore = 7;
-  const colSpanAmounts = 3;
-
   const updateLine = (idx: number, patch: Partial<DirectPurchaseLineItem>) => {
     onChange(
       lines.map((l, i) =>
@@ -160,18 +110,21 @@ export function PurchaseInvoiceDirectLineTable({
   return (
     <div>
       <div className="overflow-x-auto">
-        <table className="w-full table-fixed text-[13px] min-w-[920px] border-collapse">
+        <table className="w-full table-fixed text-[13px] min-w-[1100px] border-collapse">
           <colgroup>
-            <col className="w-[22%]" />
-            <col className="w-[20%]" />
-            <col className="w-[7%]" />
+            <col className="w-[18%]" />
+            <col className="w-[16%]" />
+            <col className="w-[6%]" />
             <col className="w-[5%]" />
+            <col className="w-[5%]" />
+            <col className="w-[7%]" />
             <col className="w-[6%]" />
             <col className="w-[8%]" />
-            <col className="w-[7%]" />
-            <col className="w-[9%]" />
+            <col className="w-[6%]" />
+            <col className="w-[6%]" />
+            <col className="w-[6%]" />
+            <col className="w-[6%]" />
             <col className="w-[8%]" />
-            <col className="w-[9%]" />
             {!readOnly && <col className="w-[3%]" />}
           </colgroup>
           <thead>
@@ -185,135 +138,141 @@ export function PurchaseInvoiceDirectLineTable({
               <Th align="right">Discount</Th>
               <Th align="right">Taxable Amt</Th>
               <Th align="center">GST Rate</Th>
+              <Th align="right">CGST</Th>
+              <Th align="right">SGST</Th>
+              <Th align="right">IGST</Th>
               <Th align="right">Line Total</Th>
               {!readOnly && <Th align="center" />}
             </tr>
           </thead>
           <tbody>
             {lines.map((line, idx) => (
-              <Fragment key={line.id}>
-                <tr className="border-b border-border/60 hover:bg-muted/15 group transition-colors">
-                  <td className={TABLE_CELL}>
-                    <Input
-                      className={DP_TABLE_INPUT_CLASS}
-                      value={line.description}
-                      readOnly={readOnly}
-                      onChange={(e) => updateLine(idx, { description: e.target.value })}
-                      placeholder="Particulars…"
-                    />
+              <tr
+                key={line.id}
+                className="border-b border-border/60 hover:bg-muted/15 group transition-colors"
+              >
+                <td className={TABLE_CELL}>
+                  <Input
+                    className={DP_TABLE_INPUT_CLASS}
+                    value={line.description}
+                    readOnly={readOnly}
+                    onChange={(e) => updateLine(idx, { description: e.target.value })}
+                    placeholder="Particulars…"
+                  />
+                </td>
+                <td className={TABLE_CELL}>
+                  <DirectPurchaseLineLedgerSelect
+                    purchaseNature={purchaseNature}
+                    value={line.expenseLedgerId}
+                    fallbackLabel={line.expenseLedgerName}
+                    disabled={readOnly}
+                    onChange={(ledger) =>
+                      updateLine(idx, {
+                        expenseLedgerId: ledger.ledgerId,
+                        expenseLedgerName: ledger.ledgerName,
+                      })
+                    }
+                  />
+                </td>
+                <td className={TABLE_CELL}>
+                  <DirectPurchaseTableSelect
+                    value={purchaseNature === "service" ? line.sacId || "" : line.hsnId || ""}
+                    disabled={readOnly}
+                    onChange={(id) => {
+                      const picked = hsnOptions.find((h) => h.id === id);
+                      updateLine(idx, {
+                        hsnId: purchaseNature === "service" ? null : id || null,
+                        sacId: purchaseNature === "service" ? id || null : null,
+                        hsnSac: picked?.hsnCode || "",
+                        gstRate: picked?.gstPercentage ?? line.gstRate,
+                      });
+                    }}
+                    options={hsnOptions.map((h) => ({
+                      value: h.id,
+                      label: h.hsnCode,
+                      sublabel: h.hsnDescription,
+                    }))}
+                    placeholder={purchaseNature === "service" ? "SAC" : "HSN"}
+                    searchPlaceholder={purchaseNature === "service" ? "Search SAC…" : "Search HSN…"}
+                    popoverMinWidth={100}
+                  />
+                </td>
+                <td className={TABLE_CELL}>
+                  <Input
+                    type="number"
+                    min={0}
+                    step="any"
+                    className={NUM_CELL_CLASS}
+                    value={line.quantity || ""}
+                    readOnly={readOnly}
+                    onChange={(e) => updateLine(idx, { quantity: Number(e.target.value) || 0 })}
+                  />
+                </td>
+                <td className={TABLE_CELL}>
+                  <DirectPurchaseTableSelect
+                    value={line.uqc}
+                    disabled={readOnly}
+                    onChange={(v) => updateLine(idx, { uqc: v })}
+                    options={UQC_SELECT_OPTIONS}
+                    placeholder="Unit"
+                    searchPlaceholder="Search unit…"
+                    popoverMinWidth={100}
+                  />
+                </td>
+                <td className={TABLE_CELL}>
+                  <AccountsMoneyInput
+                    className={MONEY_CELL_CLASS}
+                    value={line.rate}
+                    disabled={readOnly}
+                    onChange={(v) => updateLine(idx, { rate: v })}
+                  />
+                </td>
+                <td className={TABLE_CELL}>
+                  <AccountsMoneyInput
+                    className={MONEY_CELL_CLASS}
+                    value={line.discount}
+                    disabled={readOnly}
+                    onChange={(v) => updateLine(idx, { discount: v })}
+                  />
+                </td>
+                <td className={TABLE_CELL}>
+                  <AmountCell value={formatMoney(line.taxableAmount)} bold />
+                </td>
+                <td className={cn(TABLE_CELL, "relative z-0")}>
+                  <DirectPurchaseGstRateSelect
+                    value={line.gstRate}
+                    disabled={readOnly}
+                    onChange={(rate) => updateLine(idx, { gstRate: rate })}
+                  />
+                </td>
+                <td className={TABLE_CELL}>
+                  <AmountCell value={formatMoney(line.cgst)} />
+                </td>
+                <td className={TABLE_CELL}>
+                  <AmountCell value={formatMoney(line.sgst)} />
+                </td>
+                <td className={TABLE_CELL}>
+                  <AmountCell value={formatMoney(line.igst)} />
+                </td>
+                <td className={TABLE_CELL}>
+                  <AmountCell value={formatMoney(line.lineTotal)} bold />
+                </td>
+                {!readOnly && (
+                  <td className={cn(TABLE_CELL, "text-center")}>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 p-0 text-muted-foreground hover:text-red-600 opacity-50 group-hover:opacity-100"
+                      disabled={lines.length <= 1}
+                      onClick={() => removeLine(idx)}
+                      aria-label="Delete row"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </Button>
                   </td>
-                  <td className={TABLE_CELL}>
-                    <DirectPurchaseLineLedgerSelect
-                      purchaseNature={purchaseNature}
-                      value={line.expenseLedgerId}
-                      fallbackLabel={line.expenseLedgerName}
-                      disabled={readOnly}
-                      onChange={(ledger) =>
-                        updateLine(idx, {
-                          expenseLedgerId: ledger.ledgerId,
-                          expenseLedgerName: ledger.ledgerName,
-                        })
-                      }
-                    />
-                  </td>
-                  <td className={TABLE_CELL}>
-                    <DirectPurchaseTableSelect
-                      value={purchaseNature === "service" ? line.sacId || "" : line.hsnId || ""}
-                      disabled={readOnly}
-                      onChange={(id) => {
-                        const picked = hsnOptions.find((h) => h.id === id);
-                        updateLine(idx, {
-                          hsnId: purchaseNature === "service" ? null : id || null,
-                          sacId: purchaseNature === "service" ? id || null : null,
-                          hsnSac: picked?.hsnCode || "",
-                          gstRate: picked?.gstPercentage ?? line.gstRate,
-                        });
-                      }}
-                      options={hsnOptions.map((h) => ({
-                        value: h.id,
-                        label: h.hsnCode,
-                        sublabel: h.hsnDescription,
-                      }))}
-                      placeholder={purchaseNature === "service" ? "SAC" : "HSN"}
-                      searchPlaceholder={purchaseNature === "service" ? "Search SAC…" : "Search HSN…"}
-                      popoverMinWidth={100}
-                    />
-                  </td>
-                  <td className={TABLE_CELL}>
-                    <Input
-                      type="number"
-                      min={0}
-                      step="any"
-                      className={NUM_CELL_CLASS}
-                      value={line.quantity || ""}
-                      readOnly={readOnly}
-                      onChange={(e) => updateLine(idx, { quantity: Number(e.target.value) || 0 })}
-                    />
-                  </td>
-                  <td className={TABLE_CELL}>
-                    <DirectPurchaseTableSelect
-                      value={line.uqc}
-                      disabled={readOnly}
-                      onChange={(v) => updateLine(idx, { uqc: v })}
-                      options={UQC_SELECT_OPTIONS}
-                      placeholder="Unit"
-                      searchPlaceholder="Search unit…"
-                      popoverMinWidth={100}
-                    />
-                  </td>
-                  <td className={TABLE_CELL}>
-                    <AccountsMoneyInput
-                      className={MONEY_CELL_CLASS}
-                      value={line.rate}
-                      disabled={readOnly}
-                      onChange={(v) => updateLine(idx, { rate: v })}
-                    />
-                  </td>
-                  <td className={TABLE_CELL}>
-                    <AccountsMoneyInput
-                      className={MONEY_CELL_CLASS}
-                      value={line.discount}
-                      disabled={readOnly}
-                      onChange={(v) => updateLine(idx, { discount: v })}
-                    />
-                  </td>
-                  <td className={TABLE_CELL}>
-                    <AmountCell value={formatMoney(line.taxableAmount)} bold />
-                  </td>
-                  <td className={cn(TABLE_CELL, "relative z-0")}>
-                    <DirectPurchaseGstRateSelect
-                      value={line.gstRate}
-                      disabled={readOnly}
-                      onChange={(rate) => updateLine(idx, { gstRate: rate })}
-                    />
-                  </td>
-                  <td className={TABLE_CELL}>
-                    <AmountCell value={formatMoney(line.lineTotal)} bold />
-                  </td>
-                  {!readOnly && (
-                    <td className={cn(TABLE_CELL, "text-center")}>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-8 w-8 p-0 text-muted-foreground hover:text-red-600 opacity-50 group-hover:opacity-100"
-                        disabled={lines.length <= 1}
-                        onClick={() => removeLine(idx)}
-                        aria-label="Delete row"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </Button>
-                    </td>
-                  )}
-                </tr>
-                <TaxBreakupRow
-                  line={line}
-                  interstate={interstate}
-                  colSpanBefore={colSpanBefore}
-                  colSpanAmounts={colSpanAmounts}
-                  hasAction={!readOnly}
-                />
-              </Fragment>
+                )}
+              </tr>
             ))}
           </tbody>
         </table>

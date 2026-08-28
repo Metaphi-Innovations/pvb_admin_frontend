@@ -7,7 +7,9 @@ import type {
   CreateDirectDebitNotePayload,
   CreateDebitNoteFromPendingPayload,
   UpdateDebitNoteEwayBillPayload,
-  DebitNoteConfig
+  DebitNoteConfig,
+  EligiblePurchaseInvoicesQuery,
+  EligiblePurchaseInvoicesResponse,
 } from "@/types/debit-note.types";
 
 /** Share one in-flight GET when React Strict Mode (or overlapping effects) call the same list twice.
@@ -197,5 +199,39 @@ export const DebitNoteService = {
   async createFromPending(pendingId: string | number, payload: CreateDebitNoteFromPendingPayload): Promise<any> {
     const response = await axiosInstance.post(API_ENDPOINTS.ACCOUNTS.DEBIT_NOTE.CREATE_FROM_PENDING(pendingId), payload);
     return response.data?.data;
+  },
+
+  /**
+   * Authoritative eligible Purchase Invoices for Direct DN → Against Purchase Invoice.
+   * GET /api/accounts/debit-note/supplier/:supplierId/eligible-purchase-invoices
+   */
+  async listEligiblePurchaseInvoices(
+    supplierId: string | number,
+    query: EligiblePurchaseInvoicesQuery = {},
+  ): Promise<EligiblePurchaseInvoicesResponse> {
+    const response = await axiosInstance.get(
+      API_ENDPOINTS.ACCOUNTS.DEBIT_NOTE.ELIGIBLE_PURCHASE_INVOICES(supplierId),
+      {
+        params: {
+          search: query.search?.trim() || undefined,
+          page: query.page ?? 1,
+          page_size: query.page_size ?? 100,
+        },
+      },
+    );
+    const data = response.data?.data as EligiblePurchaseInvoicesResponse | undefined;
+    const items = Array.isArray(data?.items) ? data.items : [];
+    const pagination = data?.pagination;
+    return {
+      supplier_id: String(data?.supplier_id ?? supplierId),
+      party_ledger_id: String(data?.party_ledger_id ?? ""),
+      items,
+      pagination: {
+        page: Number(pagination?.page) || 1,
+        page_size: Number(pagination?.page_size) || items.length,
+        total: Number(pagination?.total) || items.length,
+        total_pages: Number(pagination?.total_pages) || 1,
+      },
+    };
   },
 };

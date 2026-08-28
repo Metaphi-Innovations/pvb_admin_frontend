@@ -27,7 +27,6 @@ import {
 } from "@/components/ui/select";
 import { showToast } from "@/lib/toast";
 import { useFY } from "@/lib/fy-store";
-import { useTdsDropdown } from "@/hooks/masters";
 import { ReceiptVoucherService } from "@/services/receipt-voucher.service";
 import { CustomerListService } from "@/services/customer-list.service";
 import { SupplierListService } from "@/services/supplier-list.service";
@@ -35,7 +34,6 @@ import { WarehouseService } from "@/services/warehouse.service";
 import { BankAccountsListService } from "@/services/bank-accounts-list.service";
 import { LedgerService } from "@/services/ledger.service";
 import { UserListService } from "@/services/user-list.service";
-import { formatTdsSectionLabel } from "@/services/tds-list.service";
 import {
   BANK_TRANSACTION_MODE_LABELS,
   BANK_TRANSACTION_MODES,
@@ -65,7 +63,6 @@ import {
   buildUpdatePayload,
   canCancelStatus,
   computeReceiptPreview,
-  computeSettlementComponentTotal,
   emptyReceiptForm,
   formatSrNo,
   isDraftEditable,
@@ -117,9 +114,8 @@ export function ReceiptVoucherApiForm({
   const [cashLedgers, setCashLedgers] = useState<{ value: string; label: string; sub?: string }[]>([]);
   const [manualLedgers, setManualLedgers] = useState<{ value: string; label: string; sub?: string }[]>([]);
   const [approvers, setApprovers] = useState<{ value: string; label: string }[]>([]);
-  /** Customer master TDS Section — default only when positive TDS is first entered. */
+  /** Customer master TDS Section — retained for allocation TDS payload sync (columns hidden). */
   const [partyTdsSectionId, setPartyTdsSectionId] = useState<string | null>(null);
-  const tdsDropdownQuery = useTdsDropdown();
 
   const [submitOpen, setSubmitOpen] = useState(false);
   const [approverId, setApproverId] = useState("");
@@ -137,10 +133,25 @@ export function ReceiptVoucherApiForm({
   const isPostedView = status === "POSTED" && !readOnlyProp;
   const showViewChrome = readOnlyProp || isPostedView;
   const preview = useMemo(() => computeReceiptPreview(form), [form]);
-  const ledgerTotal = useMemo(
-    () => computeSettlementComponentTotal(preview.netBank, form.adjustments),
-    [preview.netBank, form.adjustments],
-  );
+  /** Manual ledger adjustments only (excludes auto CUSTOMER_TDS). */
+  const manualAdjustmentsTotal = useMemo(() => {
+    let debit = 0;
+    let credit = 0;
+    for (const adj of form.adjustments) {
+      if (adj.adjustment_type === "CUSTOMER_TDS") continue;
+      const amt = toMoneyNumber(adj.amount);
+      if (amt <= 0) continue;
+      if (
+        (adj.adjustment_type === "OTHER" || adj.adjustment_type === "ROUND_OFF") &&
+        adj.entry_type === "CREDIT"
+      ) {
+        credit += amt;
+      } else {
+        debit += amt;
+      }
+    }
+    return debit - credit;
+  }, [form.adjustments]);
   const isCustomerAdvance =
     form.party_kind === "CUSTOMER" &&
     form.receipt_treatment === "advance_on_account";
@@ -148,6 +159,13 @@ export function ReceiptVoucherApiForm({
     (form.party_kind === "CUSTOMER" &&
       form.receipt_treatment === "against_outstanding") ||
     form.party_kind === "SUPPLIER_REFUND";
+  const showOnAccountInSummary =
+    form.party_kind === "CUSTOMER" && preview.advance > 0.004;
+  /** Soft chip: allocated + on-account matches gross when settlement applies. */
+  const summaryBalanced =
+    form.party_kind === "OTHER_LEDGER"
+      ? true
+      : Math.abs(preview.totalAllocated + preview.advance - preview.gross) < 0.01;
   const selectedInvoiceIds = useMemo(
     () =>
       form.allocations.filter((a) => a.selected).map((a) => a.open_item_id),
@@ -469,16 +487,6 @@ export function ReceiptVoucherApiForm({
       return changed ? { ...prev, allocations } : prev;
     });
   }, [partyTdsSectionId, fieldsEditable]);
-
-  const tdsSectionOptions = useMemo(
-    () =>
-      (tdsDropdownQuery.data ?? []).map((tds) => ({
-        value: tds.tdsUuid,
-        label: formatTdsSectionLabel(tds),
-        sub: [tds.sectionCode, tds.description].filter(Boolean).join(" · "),
-      })),
-    [tdsDropdownQuery.data],
-  );
 
   const applyAllocationPatch = useCallback(
     (
@@ -1169,11 +1177,11 @@ export function ReceiptVoucherApiForm({
                   <ReceiptAllocationTable
                     rows={selectedInvoiceRows}
                     readOnly={!fieldsEditable}
-                    showTdsSection
+                    showTds={false}
+                    showTdsSection={false}
                     showDiscount={false}
                     showSelectColumn={false}
                     settlementAmountLabel="Settlement"
-                    tdsSectionOptions={tdsSectionOptions}
                     emptyMessage="Select invoice(s) above."
                     onToggle={() => undefined}
                     onChangeAmount={applyAllocationPatch}
@@ -1181,19 +1189,16 @@ export function ReceiptVoucherApiForm({
                 </div>
               ) : (
                 <p className="text-[11px] text-muted-foreground">
-                  Selected invoices will appear here for settlement and TDS.
+                  Selected invoices will appear here for settlement.
                 </p>
               )}
             </div>
           </VoucherFormSectionCard>
         ) : null}
 
-        {/* 6. Ledger Entries */}
+        {/* 6. Ledger Entries — optional manual adjustments only */}
         <VoucherFormSectionCard title="Ledger Entries">
           <ReceiptLedgerEntriesTable
-            bankLedgerName={form.cash_bank_ledger_name}
-            bankAmount={preview.netBank}
-            tdsAmount={preview.totalTds}
             rows={form.adjustments}
             ledgerOptions={manualLedgers}
             readOnly={!fieldsEditable}
@@ -1201,48 +1206,44 @@ export function ReceiptVoucherApiForm({
           />
         </VoucherFormSectionCard>
 
-        {/* 7. Narration & Attachments */}
-        <VoucherFormSectionCard title="Narration & Attachments">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-            <div className="min-w-0 space-y-0.5">
-              <Label className="text-xs font-medium">Narration</Label>
-              <Textarea
-                className="resize-y rounded-lg border border-border min-h-[60px] max-h-36 h-[60px] py-1.5 text-sm focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:border-brand-400"
-                rows={2}
-                value={form.narration}
-                onChange={(e) => patch({ narration: e.target.value })}
-                placeholder="Optional narration…"
-                maxLength={2000}
-                disabled={!fieldsEditable}
+        {/* 7. Narration + Attachments (left) / Summary (right) */}
+        <div className="grid grid-cols-1 gap-2.5 items-start lg:grid-cols-[minmax(0,1fr)_300px]">
+          <VoucherFormSectionCard title="Narration & Attachments">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+              <div className="min-w-0 space-y-0.5">
+                <Label className="text-xs font-medium">Narration</Label>
+                <Textarea
+                  className="resize-y rounded-lg border border-border min-h-[60px] max-h-36 h-[60px] py-1.5 text-sm focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:border-brand-400"
+                  rows={2}
+                  value={form.narration}
+                  onChange={(e) => patch({ narration: e.target.value })}
+                  placeholder="Optional narration…"
+                  maxLength={2000}
+                  disabled={!fieldsEditable}
+                />
+              </div>
+              <ReceiptAttachmentsPanel
+                persisted={form.persistedAttachments}
+                pending={form.pendingFiles}
+                readOnly={!fieldsEditable}
+                onAddFiles={handleAddAttachmentFiles}
+                onRemovePersisted={handleRemovePersistedAttachment}
+                onRemovePending={handleRemovePendingAttachment}
               />
             </div>
-            <ReceiptAttachmentsPanel
-              persisted={form.persistedAttachments}
-              pending={form.pendingFiles}
-              readOnly={!fieldsEditable}
-              onAddFiles={handleAddAttachmentFiles}
-              onRemovePersisted={handleRemovePersistedAttachment}
-              onRemovePending={handleRemovePendingAttachment}
-            />
-          </div>
-        </VoucherFormSectionCard>
+          </VoucherFormSectionCard>
 
-        {/* 8. One Summary — bottom-right */}
-        <div className="flex justify-end">
           <ReceiptFormSummary
-            invoiceSettlement={preview.gross}
-            ledgerTotal={ledgerTotal}
-            bankAmount={preview.netBank}
-            tdsAmount={preview.totalTds}
-            label={
-              isCustomerAdvance
-                ? "Advance Amount"
-                : form.party_kind === "OTHER_LEDGER"
-                  ? "Receipt Amount"
-                  : form.party_kind === "SUPPLIER_REFUND"
-                    ? "Refund Settlement"
-                    : "Invoice Settlement"
+            grossAmount={preview.gross}
+            invoiceSettlement={preview.totalAllocated}
+            onAccountAmount={preview.advance}
+            adjustmentsTotal={manualAdjustmentsTotal}
+            receiptAmount={preview.netBank}
+            showInvoiceSettlement={
+              showInvoiceSettlement || preview.totalAllocated > 0.004
             }
+            showOnAccount={showOnAccountInSummary}
+            balanced={summaryBalanced}
           />
         </div>
 

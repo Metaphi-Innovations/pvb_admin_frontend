@@ -2,31 +2,31 @@
 
 import { GenericLedgerHierarchySelect } from "@/components/accounts/GenericLedgerHierarchySelect";
 import type { LedgerDropdownItem } from "@/services/ledger.service";
-import type { PurchaseNature } from "./purchase-invoices-data";
 import { cn } from "@/lib/utils";
-import { DP_TABLE_INPUT_CLASS } from "./direct-purchase-form-ui";
 
-export function DirectPurchaseLineLedgerSelect({
+/**
+ * Service invoice line ledger — generic COA dropdown, manual-posting ledgers only.
+ */
+export function ServiceInvoiceLineLedgerSelect({
   value,
   fallbackLabel,
   onChange,
   disabled,
+  className,
 }: {
-  purchaseNature?: PurchaseNature;
-  value: string | number | null;
+  value: string | null;
   fallbackLabel?: string;
   onChange: (ledger: LedgerDropdownItem) => void;
   disabled?: boolean;
+  className?: string;
 }) {
-  const selectedId = typeof value === "string" && value.trim() ? value : null;
-
   return (
     <GenericLedgerHierarchySelect
-      value={selectedId}
+      value={value}
       onChange={onChange}
       fallbackLabel={fallbackLabel}
       disabled={disabled}
-      className={cn(DP_TABLE_INPUT_CLASS, "text-left")}
+      className={cn("h-8 text-xs text-left", className)}
       compact
       placeholder="Select ledger…"
       query={{ status: "ACTIVE", allowManualPosting: true }}

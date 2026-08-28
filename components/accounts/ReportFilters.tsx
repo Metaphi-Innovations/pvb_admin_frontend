@@ -179,13 +179,16 @@ export function ReportDateRangeFilter({
   }, [dateFrom, dateTo, preset, onPresetChange]);
 
   const handlePresetChange = (value: DateRangePresetId) => {
-    onPresetChange(value);
     if (value !== "custom") {
       const { from, to } = resolveDateRangePreset(value);
+      // Set dates first, then preset last so parents that mark date edits as
+      // `custom` (e.g. NotesListingFilterBar) still keep the chosen preset.
       onDateFromChange(from);
       onDateToChange(to);
+      onPresetChange(value);
       return;
     }
+    onPresetChange(value);
     if (!dateFrom || !dateTo) {
       const { from, to } = resolveDateRangePreset("last_month");
       onDateFromChange(from);

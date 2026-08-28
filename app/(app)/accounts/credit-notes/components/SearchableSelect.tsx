@@ -63,7 +63,7 @@ export function SearchableSelect({
             type="button"
             disabled={disabled}
             className={cn(
-              "w-full min-w-0 h-7 px-2 text-xs text-left border border-border rounded-md bg-background flex items-center justify-between gap-1",
+              "w-full min-w-0 h-[30px] px-2 text-xs text-left border border-border rounded-md bg-background flex items-center justify-between gap-1",
               disabled ? "opacity-50 cursor-not-allowed bg-muted/30" : "hover:bg-muted/30",
             )}
           >

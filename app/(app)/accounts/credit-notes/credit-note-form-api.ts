@@ -6,6 +6,9 @@ import type {
   CreateFromPendingPayload,
   CreditNoteApprovalConfig,
   CreditNoteDetail,
+  CreditNoteEligibleLedgersQuery,
+  CreditNoteEligibleLedgersResponse,
+  CreditNoteEligibleLedger,
   EligibleSalesInvoicesQuery,
   EligibleSalesInvoicesResponse,
   PendingCreditNoteDetail,
@@ -211,6 +214,73 @@ export const CreditNoteFormApi = {
     return {
       customer_id: String(data?.customer_id ?? customerId),
       party_ledger_id: String(data?.party_ledger_id ?? ""),
+      items,
+      pagination: {
+        page: Number(pagination?.page) || 1,
+        page_size: Number(pagination?.page_size) || items.length,
+        total: Number(pagination?.total) || items.length,
+        total_pages: Number(pagination?.total_pages) || 1,
+      },
+    };
+  },
+
+  /**
+   * Authoritative Direct CN Supporting Ledger options.
+   * GET /api/accounts/credit-note/eligible-ledgers
+   */
+  async listEligibleSupportingLedgers(
+    query: CreditNoteEligibleLedgersQuery = {},
+  ): Promise<CreditNoteEligibleLedgersResponse> {
+    const response = await axiosInstance.get(`${CN}/eligible-ledgers`, {
+      params: {
+        search: query.search?.trim() || undefined,
+        page: query.page ?? 1,
+        page_size: query.page_size ?? 100,
+      },
+    });
+    const data = unwrapData(response) as
+      | CreditNoteEligibleLedgersResponse
+      | {
+          data?: CreditNoteEligibleLedger[];
+          items?: CreditNoteEligibleLedger[];
+          pagination?: CreditNoteEligibleLedgersResponse["pagination"];
+        }
+      | CreditNoteEligibleLedger[]
+      | undefined;
+
+    let items: CreditNoteEligibleLedger[] = [];
+    let pagination: CreditNoteEligibleLedgersResponse["pagination"] | undefined;
+
+    if (Array.isArray(data)) {
+      items = data;
+    } else if (data && typeof data === "object") {
+      const bag = data as {
+        data?: CreditNoteEligibleLedger[];
+        items?: CreditNoteEligibleLedger[];
+        pagination?: CreditNoteEligibleLedgersResponse["pagination"];
+      };
+      if (Array.isArray(bag.items)) items = bag.items;
+      else if (Array.isArray(bag.data)) items = bag.data;
+      pagination = bag.pagination;
+    }
+
+    items = items
+      .map((row) => ({
+        ledger_id: String(row.ledger_id ?? ""),
+        ledger_code: row.ledger_code != null ? String(row.ledger_code) : null,
+        ledger_name: String(row.ledger_name ?? ""),
+        alias_name: row.alias_name != null ? String(row.alias_name) : null,
+        allow_manual_posting: Boolean(row.allow_manual_posting),
+        source_type: row.source_type != null ? String(row.source_type) : null,
+        source_entity_type:
+          row.source_entity_type != null ? String(row.source_entity_type) : null,
+        system_ledger_type:
+          row.system_ledger_type != null ? String(row.system_ledger_type) : null,
+        account_sub_group: row.account_sub_group ?? null,
+      }))
+      .filter((row) => row.ledger_id && row.ledger_name);
+
+    return {
       items,
       pagination: {
         page: Number(pagination?.page) || 1,

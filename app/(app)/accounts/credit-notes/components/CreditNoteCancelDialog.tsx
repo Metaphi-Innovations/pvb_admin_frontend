@@ -18,21 +18,30 @@ export function CreditNoteCancelDialog({
   onClose,
   creditNoteNo,
   onConfirm,
+  busy,
 }: {
   open: boolean;
   onClose: () => void;
   creditNoteNo: string;
   onConfirm: (reason: string) => void;
+  busy?: boolean;
 }) {
   const [reason, setReason] = useState("");
 
+  const handleClose = () => {
+    if (busy) return;
+    setReason("");
+    onClose();
+  };
+
   return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+    <Dialog open={open} onOpenChange={(v) => !v && handleClose()}>
       <DialogContent className="max-w-sm">
         <DialogHeader>
-          <DialogTitle className="text-sm">Cancel Credit Note</DialogTitle>
+          <DialogTitle className="text-sm">Discard Voucher</DialogTitle>
           <DialogDescription className="text-xs">
-            Cancel {creditNoteNo}? This will be recorded in the activity trail.
+            Are you sure you want to discard this voucher entry
+            {creditNoteNo ? ` (${creditNoteNo})` : ""}?
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-1 py-2">
@@ -42,22 +51,29 @@ export function CreditNoteCancelDialog({
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             placeholder="Cancellation reason…"
+            disabled={busy}
           />
         </div>
         <DialogFooter>
-          <Button variant="outline" size="sm" className="h-9 text-sm font-medium" onClick={onClose}>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-9 text-sm font-medium"
+            onClick={handleClose}
+            disabled={busy}
+          >
             Close
           </Button>
           <Button
             size="sm"
             className="h-9 text-sm font-medium bg-red-600 hover:bg-red-700 text-white"
+            disabled={busy}
             onClick={() => {
+              if (busy) return;
               onConfirm(reason.trim());
-              setReason("");
-              onClose();
             }}
           >
-            Cancel Credit Note
+            Discard Voucher
           </Button>
         </DialogFooter>
       </DialogContent>

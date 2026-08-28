@@ -48,7 +48,15 @@ function Cell({
 function ReadCell({ value, align }: { value: ReactNode; align?: "right" | "center" | "left" }) {
   return (
     <Cell align={align}>
-      <span className="text-xs">{value}</span>
+      <div
+        className={
+          align === "left" || !align
+            ? "cdn-cell-value cdn-cell-value--left"
+            : "cdn-cell-value"
+        }
+      >
+        {value}
+      </div>
     </Cell>
   );
 }
@@ -112,7 +120,7 @@ export function CreditNoteParticularsEditor({
         return (
           <Cell key={col}>
             <Input
-              className="h-7 text-xs"
+              className="h-7 text-xs border border-border"
               value={line.description}
               onChange={(e) => updateLine(line.key, { description: e.target.value })}
               placeholder="Particular…"
@@ -135,7 +143,7 @@ export function CreditNoteParticularsEditor({
         return (
           <Cell key={col} align="right">
             <Input
-              className="h-7 text-xs text-right"
+              className="h-7 text-xs text-right border border-border"
               value={line.quantity}
               onChange={(e) => {
                 const quantity = e.target.value;
@@ -153,7 +161,7 @@ export function CreditNoteParticularsEditor({
         return (
           <Cell key={col} align="right">
             <AccountsMoneyInput
-              className="h-7 text-xs"
+              className="h-7 text-xs border border-border"
               value={line.rate}
               onChange={(v) => {
                 const rate = String(v);
@@ -171,7 +179,7 @@ export function CreditNoteParticularsEditor({
         return (
           <Cell key={col} align="right">
             <AccountsMoneyInput
-              className="h-7 text-xs"
+              className="h-7 text-xs border border-border"
               value={line.taxable_amount || preview.basicAmount}
               onChange={(v) => updateLine(line.key, { taxable_amount: String(v), rate: toNum(line.quantity) > 0 ? String(Math.round((toNum(v) / Math.max(toNum(line.quantity), 1)) * 100) / 100) : line.rate })}
               disabled={!editable}

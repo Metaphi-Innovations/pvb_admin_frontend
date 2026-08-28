@@ -107,24 +107,6 @@ export function bankAccountDisplayName(input: {
   return bankName || acct || "—";
 }
 
-export function transferAccountLabel(params: {
-  accountType: ContraAccountType;
-  cashName?: string;
-  bankName?: string;
-  ledgerName?: string;
-  warehouseName?: string;
-  showWarehouse?: boolean;
-}): string {
-  const base =
-    params.accountType === "CASH"
-      ? params.cashName || params.ledgerName || "Cash"
-      : params.bankName || params.ledgerName || "Bank";
-  if (params.showWarehouse && params.warehouseName) {
-    return `${base} — ${params.warehouseName}`;
-  }
-  return base;
-}
-
 export function isCashEligible(
   row: ContraEligibleAccount,
 ): row is ContraEligibleCashAccount {
@@ -333,43 +315,6 @@ export function sameAccountSelected(form: ContraFormState): boolean {
       ? form.to_cash_ledger_id
       : form.to_bank_ledger_id;
   return !!fromLedger && !!toLedger && fromLedger === toLedger;
-}
-
-export function computeContraPreview(
-  form: ContraFormState,
-  warehouseNames?: { from?: string; to?: string },
-) {
-  const amount = toMoneyNumber(form.amount);
-  const cross =
-    !!form.from_warehouse_id &&
-    !!form.to_warehouse_id &&
-    form.from_warehouse_id !== form.to_warehouse_id;
-
-  const fromName = transferAccountLabel({
-    accountType: form.from_account_type,
-    cashName: form.from_cash_ledger_name,
-    bankName: form.from_bank_account_name,
-    showWarehouse: cross,
-    warehouseName: warehouseNames?.from,
-  });
-  const toName = transferAccountLabel({
-    accountType: form.to_account_type,
-    cashName: form.to_cash_ledger_name,
-    bankName: form.to_bank_account_name,
-    showWarehouse: cross,
-    warehouseName: warehouseNames?.to,
-  });
-
-  return {
-    amount,
-    /** To Account = Debit */
-    debitName: toName,
-    /** From Account = Credit */
-    creditName: fromName,
-    totalDebit: amount,
-    totalCredit: amount,
-    difference: 0,
-  };
 }
 
 export const CROSS_WAREHOUSE_CASH_MESSAGE =

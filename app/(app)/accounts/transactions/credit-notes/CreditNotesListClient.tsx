@@ -10,7 +10,7 @@ import {
   AccountsViewAction,
   accountsActionColClass,
 } from "@/components/accounts/AccountsTableActions";
-import { XCircle, RotateCcw } from "lucide-react";
+import { XCircle } from "lucide-react";
 import { AccountsToast, useAccountsToast } from "@/components/accounts/AccountsToast";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import {
@@ -168,10 +168,10 @@ function canEditListRow(row: CreditNoteListRow): boolean {
 }
 
 function canCancelListRow(row: CreditNoteListRow): boolean {
-  return row.status !== "POSTED" && row.status !== "CANCELLED" && row.status !== "REVERSED";
+  return row.status !== "CANCELLED" && row.status !== "REVERSED";
 }
 
-function canReverseListRow(row: CreditNoteListRow): boolean {
+function isPostedListRow(row: CreditNoteListRow): boolean {
   return row.status === "POSTED";
 }
 
@@ -282,7 +282,7 @@ function CreditNotesRecordsTable({
   onPageSizeChange,
   onView,
   onCancel,
-  onReverse,
+  actionBusy,
 }: {
   mounted: boolean;
   loading: boolean;
@@ -293,7 +293,7 @@ function CreditNotesRecordsTable({
   onPageSizeChange: (s: number) => void;
   onView: (r: CreditNoteListRow) => void;
   onCancel: (r: CreditNoteListRow) => void;
-  onReverse: (r: CreditNoteListRow) => void;
+  actionBusy?: boolean;
 }) {
   const ctx = useAccountsColumnFilterContext();
   const visible = useAccountsFilteredRows(toolbarFiltered);
@@ -406,19 +406,10 @@ function CreditNotesRecordsTable({
                         <AccountsMoreActions contentClassName="w-44">
                           <DropdownMenuItem
                             className="text-xs gap-2 text-red-600"
+                            disabled={actionBusy}
                             onClick={() => onCancel(r)}
                           >
                             <XCircle className="w-4 h-4" /> Cancel
-                          </DropdownMenuItem>
-                        </AccountsMoreActions>
-                      )}
-                      {canReverseListRow(r) && (
-                        <AccountsMoreActions contentClassName="w-44">
-                          <DropdownMenuItem
-                            className="text-xs gap-2 text-purple-700"
-                            onClick={() => onReverse(r)}
-                          >
-                            <RotateCcw className="w-4 h-4" /> Reverse
                           </DropdownMenuItem>
                         </AccountsMoreActions>
                       )}
@@ -574,10 +565,11 @@ export default function CreditNotesListClient() {
 
   const handleResetFilters = () => {
     setStatusTab("all");
-    setPreset("this_month");
-    setDateFrom("");
-    setDateTo("");
-    setFilters(resetNotesListingFilters("this_month"));
+    const reset = resetNotesListingFilters("this_month");
+    setPreset(reset.preset);
+    setDateFrom(reset.dateFrom);
+    setDateTo(reset.dateTo);
+    setFilters(reset);
   };
 
   const handleView = (row: CreditNoteListRow) => {
@@ -662,8 +654,11 @@ export default function CreditNotesListClient() {
                   onPageChange={setPage}
                   onPageSizeChange={setPageSize}
                   onView={handleView}
-                  onCancel={setCancelTarget}
-                  onReverse={setReverseTarget}
+                  actionBusy={reverseBusy}
+                  onCancel={(r) => {
+                    if (isPostedListRow(r)) setReverseTarget(r);
+                    else setCancelTarget(r);
+                  }}
                 />
               </AccountsTableListing>
             </AccountsColumnFilterProvider>
@@ -677,8 +672,11 @@ export default function CreditNotesListClient() {
         open={!!cancelTarget}
         onClose={() => setCancelTarget(null)}
         creditNoteNo={cancelTarget?.cn_number ?? ""}
+        busy={reverseBusy}
         onConfirm={async (reason) => {
-          if (!cancelTarget) return;
+          if (!cancelTarget || reverseBusyRef.current) return;
+          reverseBusyRef.current = true;
+          setReverseBusy(true);
           try {
             await CreditNoteListApi.cancel(cancelTarget.credit_note_id, reason);
             showToast(`Cancelled ${cancelTarget.cn_number}`);
@@ -686,6 +684,9 @@ export default function CreditNotesListClient() {
             await refresh();
           } catch (e) {
             showToast(creditNoteListApiError(e, "Could not cancel credit note."), "error");
+          } finally {
+            reverseBusyRef.current = false;
+            setReverseBusy(false);
           }
         }}
       />
@@ -702,11 +703,11 @@ export default function CreditNotesListClient() {
           setReverseBusy(true);
           try {
             await CreditNoteListApi.reverse(reverseTarget.credit_note_id, payload);
-            showToast(`Reversed ${reverseTarget.cn_number}`);
+            showToast(`Cancelled ${reverseTarget.cn_number}`);
             setReverseTarget(null);
             await refresh();
           } catch (e) {
-            showToast(creditNoteListApiError(e, "Could not reverse this Credit Note."), "error");
+            showToast(creditNoteListApiError(e, "Could not cancel this Credit Note."), "error");
           } finally {
             reverseBusyRef.current = false;
             setReverseBusy(false);
