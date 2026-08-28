@@ -939,8 +939,10 @@ interface CustomerFormProps {
 		customerType: string;
 		documents: CustomerTypeDocument[];
 	}[];
-	/** Accounts COA customer ledger — show license validity dates on compliance rows. */
+	/** Show expiry date column on compliance rows. */
 	showComplianceValidityDates?: boolean;
+	/** When true, expiry date is required for each applicable registration. */
+	requireComplianceValidityDates?: boolean;
 	activeStep?: CustomerFormStepId;
 	onStepChange?: (step: CustomerFormStepId) => void;
 }
@@ -1003,7 +1005,8 @@ export function CustomerForm({
 	isAdd,
 	customerCode,
 	customerTypes,
-	showComplianceValidityDates = false,
+	showComplianceValidityDates = true,
+	requireComplianceValidityDates = false,
 	activeStep,
 	onStepChange,
 }: CustomerFormProps) {
@@ -1439,7 +1442,7 @@ export function CustomerForm({
 					delete next.fssai;
 				}
 			}
-			if (showComplianceValidityDates) {
+			if (showComplianceValidityDates && requireComplianceValidityDates) {
 				const validityChecks: { enabled: boolean; value: string; key: string }[] = [
 					{
 						enabled: form.msmeRegistered,
@@ -1465,7 +1468,7 @@ export function CustomerForm({
 				for (const check of validityChecks) {
 					if (fieldKey === check.key && check.enabled) {
 						if (!check.value.trim()) {
-							next[check.key] = "License validity date is required";
+							next[check.key] = "Expiry date is required";
 						} else {
 							delete next[check.key];
 						}
@@ -2711,12 +2714,16 @@ export interface CustomerApiRecord {
 	customer_type_id: string;
 	cib_applicable?: boolean;
 	cib_reg_no?: string;
+	cib_expiry_date?: string | null;
 	fco_applicable?: boolean;
 	fco_reg_no?: string;
+	fco_expiry_date?: string | null;
 	fssai_applicable?: boolean;
 	fssai_no?: string;
+	fssai_expiry_date?: string | null;
 	msme_applicable?: boolean;
 	msme_reg_no?: string;
+	msme_expiry_date?: string | null;
 	gst_applicable?: boolean;
 	registration_type?: string;
 	gstin_no?: string;
@@ -2821,12 +2828,16 @@ export function customerApiRecordToFormValues(
 
 		msmeRegistered: !!record.msme_applicable,
 		msmeNumber: record.msme_reg_no ?? "",
+		msmeValidityDate: record.msme_expiry_date ? String(record.msme_expiry_date).slice(0, 10) : "",
 		fssaiRegistered: !!record.fssai_applicable,
 		fssai: record.fssai_no ?? "",
+		fssaiValidityDate: record.fssai_expiry_date ? String(record.fssai_expiry_date).slice(0, 10) : "",
 		cibRegistered: !!record.cib_applicable,
 		cibRegn: record.cib_reg_no ?? "",
+		cibValidityDate: record.cib_expiry_date ? String(record.cib_expiry_date).slice(0, 10) : "",
 		fcoRegistered: !!record.fco_applicable,
 		fcoRegn: record.fco_reg_no ?? "",
+		fcoValidityDate: record.fco_expiry_date ? String(record.fco_expiry_date).slice(0, 10) : "",
 
 		address: branches[0]?.billingAddress?.address ?? "",
 		pincode: branches[0]?.billingAddress?.pincode ?? "",
@@ -2901,16 +2912,16 @@ export function validateCustomerForm(
 
 	if (options?.requireComplianceValidityDates) {
 		if (form.msmeRegistered && !form.msmeValidityDate.trim()) {
-			e.msmeValidityDate = "License validity date is required";
+			e.msmeValidityDate = "Expiry date is required";
 		}
 		if (form.fssaiRegistered && !form.fssaiValidityDate.trim()) {
-			e.fssaiValidityDate = "License validity date is required";
+			e.fssaiValidityDate = "Expiry date is required";
 		}
 		if (form.cibRegistered && !form.cibValidityDate.trim()) {
-			e.cibValidityDate = "License validity date is required";
+			e.cibValidityDate = "Expiry date is required";
 		}
 		if (form.fcoRegistered && !form.fcoValidityDate.trim()) {
-			e.fcoValidityDate = "License validity date is required";
+			e.fcoValidityDate = "Expiry date is required";
 		}
 	}
 
@@ -3161,12 +3172,16 @@ export function customerRecordToFormValues(
 
 		msmeRegistered: record.msmeApplicable,
 		msmeNumber: record.msmeRegNo ?? "",
+		msmeValidityDate: record.msmeExpiryDate ?? "",
 		fssaiRegistered: record.fssaiApplicable,
 		fssai: record.fssaiNo ?? "",
+		fssaiValidityDate: record.fssaiExpiryDate ?? "",
 		cibRegistered: record.cibApplicable,
 		cibRegn: record.cibRegNo ?? "",
+		cibValidityDate: record.cibExpiryDate ?? "",
 		fcoRegistered: record.fcoApplicable,
 		fcoRegn: record.fcoRegNo ?? "",
+		fcoValidityDate: record.fcoExpiryDate ?? "",
 
 		address: branches[0]?.billingAddress?.address ?? "",
 		pincode: branches[0]?.billingAddress?.pincode ?? "",
@@ -3206,15 +3221,19 @@ export function formValuesToUpdatePayload(
 
 		cib_applicable: form.cibRegistered,
 		cib_reg_no: form.cibRegistered ? form.cibRegn : "",
+		cib_expiry_date: form.cibRegistered && form.cibValidityDate ? form.cibValidityDate : null,
 
 		fco_applicable: form.fcoRegistered,
 		fco_reg_no: form.fcoRegistered ? form.fcoRegn : "",
+		fco_expiry_date: form.fcoRegistered && form.fcoValidityDate ? form.fcoValidityDate : null,
 
 		fssai_applicable: form.fssaiRegistered,
 		fssai_no: form.fssaiRegistered ? form.fssai : "",
+		fssai_expiry_date: form.fssaiRegistered && form.fssaiValidityDate ? form.fssaiValidityDate : null,
 
 		msme_applicable: form.msmeRegistered,
 		msme_reg_no: form.msmeRegistered ? form.msmeNumber : "",
+		msme_expiry_date: form.msmeRegistered && form.msmeValidityDate ? form.msmeValidityDate : null,
 
 		gst_applicable: form.gstRegistered,
 		registration_type: form.gstRegistered
@@ -3256,15 +3275,19 @@ export function formValuesToCreatePayload(
 
 		cib_applicable: form.cibRegistered,
 		cib_reg_no: form.cibRegistered ? form.cibRegn : "",
+		cib_expiry_date: form.cibRegistered && form.cibValidityDate ? form.cibValidityDate : null,
 
 		fco_applicable: form.fcoRegistered,
 		fco_reg_no: form.fcoRegistered ? form.fcoRegn : "",
+		fco_expiry_date: form.fcoRegistered && form.fcoValidityDate ? form.fcoValidityDate : null,
 
 		fssai_applicable: form.fssaiRegistered,
 		fssai_no: form.fssaiRegistered ? form.fssai : "",
+		fssai_expiry_date: form.fssaiRegistered && form.fssaiValidityDate ? form.fssaiValidityDate : null,
 
 		msme_applicable: form.msmeRegistered,
 		msme_reg_no: form.msmeRegistered ? form.msmeNumber : "",
+		msme_expiry_date: form.msmeRegistered && form.msmeValidityDate ? form.msmeValidityDate : null,
 
 		gst_applicable: form.gstRegistered,
 		registration_type: form.gstRegistered
