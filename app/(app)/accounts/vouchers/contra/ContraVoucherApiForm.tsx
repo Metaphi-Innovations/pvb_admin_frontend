@@ -25,7 +25,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { showToast } from "@/lib/toast";
-import { useFY } from "@/lib/fy-store";
 import { ContraVoucherService } from "@/services/contra-voucher.service";
 import { WarehouseService } from "@/services/warehouse.service";
 import { UserListService } from "@/services/user-list.service";
@@ -43,6 +42,7 @@ import {
 } from "@/types/contra-voucher.types";
 import { ContraSearchableSelect } from "./components/ContraSearchableSelect";
 import { ContraFormActionBar } from "./components/ContraFormActionBar";
+import { ContraFormSummary } from "./components/ContraFormSummary";
 import { ContraReasonDialog } from "./components/ContraReasonDialog";
 import { ContraAttachmentsPanel } from "./components/ContraAttachmentsPanel";
 import {
@@ -72,7 +72,9 @@ import {
   isCrossWarehouseCashBlocked,
   isDraftEditable,
   mapDetailToForm,
+  sameAccountSelected,
   sanitizeNonNegativeMoneyInput,
+  toMoneyNumber,
   validateContraForm,
   type ContraFormState,
 } from "./contra-voucher-utils";
@@ -91,7 +93,6 @@ export function ContraVoucherApiForm({
   onEdit,
 }: ContraVoucherApiFormProps) {
   const router = useRouter();
-  const { selectedFY } = useFY();
   const [form, setForm] = useState<ContraFormState>(emptyContraForm);
   const [detail, setDetail] = useState<ContraVoucherDetail | null>(null);
   const [status, setStatus] = useState<ContraVoucherStatus>("DRAFT");
@@ -124,6 +125,38 @@ export function ContraVoucherApiForm({
   const fieldsEditable = isDraftEditable(status) && !readOnlyProp;
   const bankSide = hasBankSide(form);
   const crossCashBlocked = isCrossWarehouseCashBlocked(form);
+
+  const fromAccountLabel =
+    form.from_account_type === "CASH"
+      ? form.from_cash_ledger_name || form.from_cash_ledger_code || "—"
+      : form.from_bank_account_name || "—";
+  const toAccountLabel =
+    form.to_account_type === "CASH"
+      ? form.to_cash_ledger_name || form.to_cash_ledger_code || "—"
+      : form.to_bank_account_name || "—";
+  const fromWarehouseLabel =
+    warehouses.find((w) => w.value === form.from_warehouse_id)?.label || "";
+  const toWarehouseLabel =
+    warehouses.find((w) => w.value === form.to_warehouse_id)?.label || "";
+  const transferAmount = toMoneyNumber(form.amount);
+  const fromAccountSelected =
+    form.from_account_type === "CASH"
+      ? !!form.from_cash_ledger_id
+      : !!form.from_bank_account_id;
+  const toAccountSelected =
+    form.to_account_type === "CASH"
+      ? !!form.to_cash_ledger_id
+      : !!form.to_bank_account_id;
+  const summaryBalanced =
+    fromAccountSelected &&
+    toAccountSelected &&
+    !sameAccountSelected(form) &&
+    transferAmount > 0 &&
+    !crossCashBlocked;
+  const branchContext =
+    fromWarehouseLabel && toWarehouseLabel
+      ? `${fromWarehouseLabel} → ${toWarehouseLabel}`
+      : undefined;
 
   const patch = useCallback((p: Partial<ContraFormState>) => {
     setForm((prev) => ({ ...prev, ...p }));
@@ -628,48 +661,90 @@ export function ContraVoucherApiForm({
         ) : null}
 
         <VoucherFormSectionCard title="Voucher Details">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
-            <VoucherFormField label="Voucher Date" required>
-              <Input
-                type="date"
-                className={VOUCHER_INPUT_CLASS}
-                value={form.voucher_date}
-                disabled={!fieldsEditable}
-                onChange={(e) => patch({ voucher_date: e.target.value })}
-              />
-            </VoucherFormField>
-            <VoucherFormField label="Contra No.">
-              <p className="h-8 flex items-center text-xs font-mono font-semibold text-brand-700">
-                {detail ? formatSrNo(detail.sr_no) : "Auto on save"}
-              </p>
-            </VoucherFormField>
-            <VoucherFormField label="Reference Number">
-              <Input
-                className={VOUCHER_INPUT_CLASS}
-                value={form.reference_number}
-                disabled={!fieldsEditable}
-                onChange={(e) => patch({ reference_number: e.target.value })}
-                placeholder="Transfer / deposit / withdrawal reference"
-                maxLength={150}
-              />
-            </VoucherFormField>
-            <VoucherFormField label="Status">
-              <p className="h-8 flex items-center text-xs font-medium text-foreground">
-                {CONTRA_STATUS_LABELS[status]}
-              </p>
-            </VoucherFormField>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-2.5">
+            <div className="lg:col-span-2 min-w-0">
+              <VoucherFormField label="Voucher Date" required>
+                <Input
+                  type="date"
+                  className={VOUCHER_INPUT_CLASS}
+                  value={form.voucher_date}
+                  disabled={!fieldsEditable}
+                  onChange={(e) => patch({ voucher_date: e.target.value })}
+                />
+              </VoucherFormField>
+            </div>
+            <div className="lg:col-span-2 min-w-0">
+              <VoucherFormField label="Contra No.">
+                <p className="h-8 flex items-center text-xs font-mono font-semibold text-brand-700">
+                  {detail ? formatSrNo(detail.sr_no) : "Auto on save"}
+                </p>
+              </VoucherFormField>
+            </div>
+            <div className="lg:col-span-3 min-w-0">
+              <VoucherFormField label="Reference Number">
+                <Input
+                  className={VOUCHER_INPUT_CLASS}
+                  value={form.reference_number}
+                  disabled={!fieldsEditable}
+                  onChange={(e) => patch({ reference_number: e.target.value })}
+                  placeholder="Transfer / deposit / withdrawal reference"
+                  maxLength={150}
+                />
+              </VoucherFormField>
+            </div>
+            <div className="lg:col-span-3 min-w-0 space-y-1">
+              <Label className="text-xs font-medium">
+                Transaction Mode{" "}
+                {bankSide ? <span className="text-red-500">*</span> : null}
+              </Label>
+              {bankSide ? (
+                <Select
+                  value={form.transaction_mode}
+                  disabled={!fieldsEditable}
+                  onValueChange={(v) => {
+                    const mode = v as ContraBankTransactionMode;
+                    patch({
+                      transaction_mode: mode,
+                      cheque_number: mode === "CHEQUE" ? form.cheque_number : "",
+                      cheque_date: mode === "CHEQUE" ? form.cheque_date : "",
+                      utr_number: mode === "CHEQUE" ? "" : form.utr_number,
+                    });
+                  }}
+                >
+                  <SelectTrigger className={VOUCHER_INPUT_CLASS}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CONTRA_BANK_TRANSACTION_MODES.map((m) => (
+                      <SelectItem key={m} value={m} className="text-sm">
+                        {CONTRA_BANK_TRANSACTION_MODE_LABELS[m]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <p className="h-8 flex items-center text-xs font-medium text-foreground">
+                  {CONTRA_BANK_TRANSACTION_MODE_LABELS.CASH}
+                </p>
+              )}
+            </div>
+            <div className="lg:col-span-2 min-w-0">
+              <VoucherFormField label="Transaction Date">
+                <Input
+                  type="date"
+                  className={VOUCHER_INPUT_CLASS}
+                  value={form.transaction_date}
+                  disabled={!fieldsEditable}
+                  onChange={(e) => patch({ transaction_date: e.target.value })}
+                />
+              </VoucherFormField>
+            </div>
           </div>
-          {selectedFY?.label ? (
-            <p className="text-[11px] text-muted-foreground mt-2">
-              Working FY:{" "}
-              <span className="font-medium text-foreground">{selectedFY.label}</span>
-            </p>
-          ) : null}
         </VoucherFormSectionCard>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-          <VoucherFormSectionCard title="Transfer From">
-            <div className="space-y-2.5">
+        <VoucherFormSectionCard title="Transfer From">
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5">
+            <div className="md:col-span-4 min-w-0">
               <ContraSearchableSelect
                 label="From Warehouse / Branch"
                 required
@@ -684,33 +759,35 @@ export function ContraVoucherApiForm({
                   })
                 }
               />
-              <div className="space-y-1">
-                <Label className="text-xs font-medium">
-                  From Account Type <span className="text-red-500">*</span>
-                </Label>
-                <Select
-                  value={form.from_account_type}
-                  disabled={!fieldsEditable}
-                  onValueChange={(v) => {
-                    const next = v as ContraAccountType;
-                    patch({
-                      from_account_type: next,
-                      ...clearFromAccountFields(next),
-                    });
-                  }}
-                >
-                  <SelectTrigger className={VOUCHER_INPUT_CLASS}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CONTRA_ACCOUNT_TYPES.map((t) => (
-                      <SelectItem key={t} value={t} className="text-sm">
-                        {CONTRA_ACCOUNT_TYPE_LABELS[t]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+            </div>
+            <div className="md:col-span-3 min-w-0 space-y-1">
+              <Label className="text-xs font-medium">
+                From Account Type <span className="text-red-500">*</span>
+              </Label>
+              <Select
+                value={form.from_account_type}
+                disabled={!fieldsEditable}
+                onValueChange={(v) => {
+                  const next = v as ContraAccountType;
+                  patch({
+                    from_account_type: next,
+                    ...clearFromAccountFields(next),
+                  });
+                }}
+              >
+                <SelectTrigger className={VOUCHER_INPUT_CLASS}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {CONTRA_ACCOUNT_TYPES.map((t) => (
+                    <SelectItem key={t} value={t} className="text-sm">
+                      {CONTRA_ACCOUNT_TYPE_LABELS[t]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="md:col-span-5 min-w-0">
               <ContraSearchableSelect
                 label={
                   form.from_account_type === "CASH"
@@ -736,10 +813,69 @@ export function ContraVoucherApiForm({
                 onSearchChange={handleFromAccountSearch}
               />
             </div>
-          </VoucherFormSectionCard>
 
-          <VoucherFormSectionCard title="Transfer To">
-            <div className="space-y-2.5">
+            {bankSide && form.transaction_mode === "CHEQUE" ? (
+              <>
+                <div className="md:col-span-4 min-w-0">
+                  <VoucherFormField label="Cheque Number" required>
+                    <Input
+                      className={VOUCHER_INPUT_CLASS}
+                      value={form.cheque_number}
+                      disabled={!fieldsEditable}
+                      onChange={(e) => patch({ cheque_number: e.target.value })}
+                    />
+                  </VoucherFormField>
+                </div>
+                <div className="md:col-span-3 min-w-0">
+                  <VoucherFormField label="Cheque Date" required>
+                    <Input
+                      type="date"
+                      className={VOUCHER_INPUT_CLASS}
+                      value={form.cheque_date}
+                      disabled={!fieldsEditable}
+                      onChange={(e) => patch({ cheque_date: e.target.value })}
+                    />
+                  </VoucherFormField>
+                </div>
+              </>
+            ) : null}
+
+            {bankSide &&
+            form.transaction_mode !== "CASH" &&
+            form.transaction_mode !== "CHEQUE" ? (
+              <>
+                <div className="md:col-span-4 min-w-0">
+                  <VoucherFormField label="UTR Number">
+                    <Input
+                      className={VOUCHER_INPUT_CLASS}
+                      value={form.utr_number}
+                      disabled={!fieldsEditable}
+                      onChange={(e) => patch({ utr_number: e.target.value })}
+                      placeholder="UTR…"
+                    />
+                  </VoucherFormField>
+                </div>
+                <div className="md:col-span-5 min-w-0">
+                  <VoucherFormField label="Transaction Reference">
+                    <Input
+                      className={VOUCHER_INPUT_CLASS}
+                      value={form.transaction_reference}
+                      disabled={!fieldsEditable}
+                      onChange={(e) =>
+                        patch({ transaction_reference: e.target.value })
+                      }
+                      placeholder="Reference…"
+                    />
+                  </VoucherFormField>
+                </div>
+              </>
+            ) : null}
+          </div>
+        </VoucherFormSectionCard>
+
+        <VoucherFormSectionCard title="Transfer To">
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5">
+            <div className="md:col-span-4 min-w-0">
               <ContraSearchableSelect
                 label="To Warehouse / Branch"
                 required
@@ -754,33 +890,35 @@ export function ContraVoucherApiForm({
                   })
                 }
               />
-              <div className="space-y-1">
-                <Label className="text-xs font-medium">
-                  To Account Type <span className="text-red-500">*</span>
-                </Label>
-                <Select
-                  value={form.to_account_type}
-                  disabled={!fieldsEditable}
-                  onValueChange={(v) => {
-                    const next = v as ContraAccountType;
-                    patch({
-                      to_account_type: next,
-                      ...clearToAccountFields(next),
-                    });
-                  }}
-                >
-                  <SelectTrigger className={VOUCHER_INPUT_CLASS}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CONTRA_ACCOUNT_TYPES.map((t) => (
-                      <SelectItem key={t} value={t} className="text-sm">
-                        {CONTRA_ACCOUNT_TYPE_LABELS[t]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+            </div>
+            <div className="md:col-span-3 min-w-0 space-y-1">
+              <Label className="text-xs font-medium">
+                To Account Type <span className="text-red-500">*</span>
+              </Label>
+              <Select
+                value={form.to_account_type}
+                disabled={!fieldsEditable}
+                onValueChange={(v) => {
+                  const next = v as ContraAccountType;
+                  patch({
+                    to_account_type: next,
+                    ...clearToAccountFields(next),
+                  });
+                }}
+              >
+                <SelectTrigger className={VOUCHER_INPUT_CLASS}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {CONTRA_ACCOUNT_TYPES.map((t) => (
+                    <SelectItem key={t} value={t} className="text-sm">
+                      {CONTRA_ACCOUNT_TYPE_LABELS[t]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="md:col-span-3 min-w-0">
               <ContraSearchableSelect
                 label={
                   form.to_account_type === "CASH"
@@ -806,18 +944,13 @@ export function ContraVoucherApiForm({
                 onSearchChange={handleToAccountSearch}
               />
             </div>
-          </VoucherFormSectionCard>
-        </div>
-
-        <VoucherFormSectionCard title="Transfer Details">
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5">
-            <div className="md:col-span-3 min-w-0">
+            <div className="md:col-span-2 min-w-0">
               <VoucherFormField label="Amount" required>
                 <Input
                   className={cn(
                     VOUCHER_INPUT_CLASS,
                     VOUCHER_MONEY_INPUT_CLASS,
-                    "w-full max-w-[180px]",
+                    "w-full max-w-[160px]",
                   )}
                   value={form.amount}
                   disabled={!fieldsEditable}
@@ -828,146 +961,45 @@ export function ContraVoucherApiForm({
                 />
               </VoucherFormField>
             </div>
-
-            {bankSide ? (
-              <>
-                <div className="md:col-span-3 min-w-0 space-y-1">
-                  <Label className="text-xs font-medium">
-                    Transaction Mode <span className="text-red-500">*</span>
-                  </Label>
-                  <Select
-                    value={form.transaction_mode}
-                    disabled={!fieldsEditable}
-                    onValueChange={(v) => {
-                      const mode = v as ContraBankTransactionMode;
-                      patch({
-                        transaction_mode: mode,
-                        cheque_number: mode === "CHEQUE" ? form.cheque_number : "",
-                        cheque_date: mode === "CHEQUE" ? form.cheque_date : "",
-                        utr_number: mode === "CHEQUE" ? "" : form.utr_number,
-                      });
-                    }}
-                  >
-                    <SelectTrigger className={VOUCHER_INPUT_CLASS}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {CONTRA_BANK_TRANSACTION_MODES.map((m) => (
-                        <SelectItem key={m} value={m} className="text-sm">
-                          {CONTRA_BANK_TRANSACTION_MODE_LABELS[m]}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="md:col-span-3 min-w-0">
-                  <VoucherFormField label="Transaction / Value Date">
-                    <Input
-                      type="date"
-                      className={VOUCHER_INPUT_CLASS}
-                      value={form.transaction_date}
-                      disabled={!fieldsEditable}
-                      onChange={(e) => patch({ transaction_date: e.target.value })}
-                    />
-                  </VoucherFormField>
-                </div>
-              </>
-            ) : null}
           </div>
-
-          {bankSide && form.transaction_mode === "CHEQUE" ? (
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5 mt-2.5">
-              <div className="md:col-span-4 min-w-0">
-                <VoucherFormField label="Cheque Number" required>
-                  <Input
-                    className={VOUCHER_INPUT_CLASS}
-                    value={form.cheque_number}
-                    disabled={!fieldsEditable}
-                    onChange={(e) => patch({ cheque_number: e.target.value })}
-                  />
-                </VoucherFormField>
-              </div>
-              <div className="md:col-span-3 min-w-0">
-                <VoucherFormField label="Cheque Date" required>
-                  <Input
-                    type="date"
-                    className={VOUCHER_INPUT_CLASS}
-                    value={form.cheque_date}
-                    disabled={!fieldsEditable}
-                    onChange={(e) => patch({ cheque_date: e.target.value })}
-                  />
-                </VoucherFormField>
-              </div>
-            </div>
-          ) : null}
-
-          {bankSide &&
-          form.transaction_mode !== "CASH" &&
-          form.transaction_mode !== "CHEQUE" ? (
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5 mt-2.5">
-              <div className="md:col-span-4 min-w-0">
-                <VoucherFormField label="UTR Number">
-                  <Input
-                    className={VOUCHER_INPUT_CLASS}
-                    value={form.utr_number}
-                    disabled={!fieldsEditable}
-                    onChange={(e) => patch({ utr_number: e.target.value })}
-                    placeholder="UTR…"
-                  />
-                </VoucherFormField>
-              </div>
-              <div className="md:col-span-5 min-w-0">
-                <VoucherFormField label="Transaction Reference">
-                  <Input
-                    className={VOUCHER_INPUT_CLASS}
-                    value={form.transaction_reference}
-                    disabled={!fieldsEditable}
-                    onChange={(e) => patch({ transaction_reference: e.target.value })}
-                    placeholder="Reference…"
-                  />
-                </VoucherFormField>
-              </div>
-              <div className="md:col-span-3 min-w-0">
-                <VoucherFormField label="Instrument Date">
-                  <Input
-                    type="date"
-                    className={VOUCHER_INPUT_CLASS}
-                    value={form.instrument_date}
-                    disabled={!fieldsEditable}
-                    onChange={(e) => patch({ instrument_date: e.target.value })}
-                  />
-                </VoucherFormField>
-              </div>
-            </div>
-          ) : null}
         </VoucherFormSectionCard>
 
-        <VoucherFormSectionCard title="Supporting Information">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-            <div className="min-w-0 space-y-0.5">
-              <Label className="text-xs font-medium">
-                Narration <span className="text-red-500">*</span>
-              </Label>
-              <Textarea
-                className="resize-y rounded-lg border border-border min-h-[80px] max-h-40 py-1.5 text-sm focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:border-brand-400"
-                rows={3}
-                value={form.narration}
-                onChange={(e) => patch({ narration: e.target.value })}
-                placeholder="Enter reason/details for this fund transfer"
-                maxLength={5000}
-                disabled={!fieldsEditable}
+        <div className="grid grid-cols-1 gap-2.5 items-start lg:grid-cols-[minmax(0,1fr)_300px]">
+          <VoucherFormSectionCard title="Supporting Information">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+              <div className="min-w-0 space-y-0.5">
+                <Label className="text-xs font-medium">
+                  Narration <span className="text-red-500">*</span>
+                </Label>
+                <Textarea
+                  className="resize-y rounded-lg border border-border min-h-[80px] max-h-40 py-1.5 text-sm focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:border-brand-400"
+                  rows={3}
+                  value={form.narration}
+                  onChange={(e) => patch({ narration: e.target.value })}
+                  placeholder="Enter reason/details for this fund transfer"
+                  maxLength={5000}
+                  disabled={!fieldsEditable}
+                />
+              </div>
+              <ContraAttachmentsPanel
+                persisted={form.persistedAttachments}
+                pending={form.pendingFiles}
+                readOnly={!fieldsEditable}
+                onAddFiles={handleAddAttachmentFiles}
+                onRemovePersisted={handleRemovePersistedAttachment}
+                onRemovePending={handleRemovePendingAttachment}
               />
             </div>
-            <ContraAttachmentsPanel
-              persisted={form.persistedAttachments}
-              pending={form.pendingFiles}
-              readOnly={!fieldsEditable}
-              onAddFiles={handleAddAttachmentFiles}
-              onRemovePersisted={handleRemovePersistedAttachment}
-              onRemovePending={handleRemovePendingAttachment}
-            />
-          </div>
-        </VoucherFormSectionCard>
+          </VoucherFormSectionCard>
+
+          <ContraFormSummary
+            fromAccount={fromAccountLabel}
+            toAccount={toAccountLabel}
+            transferAmount={transferAmount}
+            branchContext={branchContext}
+            balanced={summaryBalanced}
+          />
+        </div>
 
         {detail?.accounting_voucher ? (
           <VoucherFormSectionCard title="Posted Accounting Voucher">
