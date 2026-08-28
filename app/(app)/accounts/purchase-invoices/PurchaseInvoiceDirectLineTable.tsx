@@ -1,11 +1,14 @@
 "use client";
 
+import { useCallback, useEffect } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
 import { formatMoney } from "@/lib/accounts/money-format";
 import { cn } from "@/lib/utils";
+import { VOUCHER_INPUT_CLASS } from "@/components/accounts/voucher-simple-form-ui";
+import { InvoiceTableReadonly } from "@/app/(app)/accounts/invoices/components/invoice-form-voucher-ui";
 import type { DirectPurchaseLineItem, ItcClassification, PurchaseNature } from "./purchase-invoices-data";
 import {
   UQC_OPTIONS,
@@ -16,7 +19,6 @@ import { DirectPurchaseTableSelect } from "./DirectPurchaseSelectField";
 import { DirectPurchaseGstRateSelect } from "./DirectPurchaseGstRateSelect";
 import { DirectPurchaseLineLedgerSelect } from "./DirectPurchaseLineLedgerSelect";
 import type { AutocompleteOption } from "@/components/ui/AutocompleteSelect";
-import { DP_TABLE_INPUT_CLASS } from "./direct-purchase-form-ui";
 import type { HsnDropdownItem } from "@/services/hsn-list.service";
 
 const UQC_SELECT_OPTIONS: AutocompleteOption[] = UQC_OPTIONS.map((u) => ({
@@ -24,11 +26,11 @@ const UQC_SELECT_OPTIONS: AutocompleteOption[] = UQC_OPTIONS.map((u) => ({
   label: u,
 }));
 
-const TABLE_CELL = "px-1.5 py-1 align-middle";
-const MONEY_CELL_CLASS = cn(DP_TABLE_INPUT_CLASS, "text-right tabular-nums");
+const TABLE_CELL = "p-1.5 align-middle";
+const MONEY_CELL_CLASS = cn(VOUCHER_INPUT_CLASS, "text-xs text-right tabular-nums");
 const NUM_CELL_CLASS = cn(
-  DP_TABLE_INPUT_CLASS,
-  "text-right tabular-nums [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none",
+  VOUCHER_INPUT_CLASS,
+  "text-xs text-right tabular-nums [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none",
 );
 
 function Th({
@@ -43,7 +45,7 @@ function Th({
   return (
     <th
       className={cn(
-        "px-2 py-2.5 text-xs font-semibold text-foreground whitespace-nowrap bg-muted/40 sticky top-0 z-10 border-b border-border",
+        "px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap",
         align === "right" && "text-right",
         align === "center" && "text-center",
         className,
@@ -51,19 +53,6 @@ function Th({
     >
       {children}
     </th>
-  );
-}
-
-function AmountCell({ value, bold }: { value: string; bold?: boolean }) {
-  return (
-    <div
-      className={cn(
-        "h-8 flex items-center justify-end px-2 rounded-lg bg-muted/20 border border-border/40 tabular-nums text-[13px]",
-        bold ? "font-semibold text-foreground" : "text-muted-foreground",
-      )}
-    >
-      {value}
-    </div>
   );
 }
 
@@ -75,6 +64,8 @@ export function PurchaseInvoiceDirectLineTable({
   defaultItc,
   hsnOptions = [],
   readOnly,
+  hideAddButton = false,
+  onBindAddRow,
 }: {
   lines: DirectPurchaseLineItem[];
   onChange: (lines: DirectPurchaseLineItem[]) => void;
@@ -83,6 +74,8 @@ export function PurchaseInvoiceDirectLineTable({
   defaultItc: ItcClassification;
   hsnOptions?: HsnDropdownItem[];
   readOnly?: boolean;
+  hideAddButton?: boolean;
+  onBindAddRow?: (addRow: () => void) => void;
 }) {
   const updateLine = (idx: number, patch: Partial<DirectPurchaseLineItem>) => {
     onChange(
@@ -94,13 +87,17 @@ export function PurchaseInvoiceDirectLineTable({
     );
   };
 
-  const addLine = () => {
+  const addLine = useCallback(() => {
     const blank = recalcDirectLine(
       { ...emptyDirectLine(defaultItc), purchaseNature },
       interstate,
     );
     onChange([...lines, blank]);
-  };
+  }, [defaultItc, interstate, lines, onChange, purchaseNature]);
+
+  useEffect(() => {
+    onBindAddRow?.(addLine);
+  }, [addLine, onBindAddRow]);
 
   const removeLine = (idx: number) => {
     if (lines.length <= 1) return;
@@ -108,9 +105,8 @@ export function PurchaseInvoiceDirectLineTable({
   };
 
   return (
-    <div>
-      <div className="overflow-x-auto">
-        <table className="w-full table-fixed text-[13px] min-w-[1100px] border-collapse">
+    <div className="so-goods-product-table-wrap overflow-x-auto">
+      <table className="so-invoice-table text-xs w-max min-w-[1100px]">
           <colgroup>
             <col className="w-[18%]" />
             <col className="w-[16%]" />
@@ -153,7 +149,7 @@ export function PurchaseInvoiceDirectLineTable({
               >
                 <td className={TABLE_CELL}>
                   <Input
-                    className={DP_TABLE_INPUT_CLASS}
+                    className={cn(VOUCHER_INPUT_CLASS, "text-xs")}
                     value={line.description}
                     readOnly={readOnly}
                     onChange={(e) => updateLine(idx, { description: e.target.value })}
@@ -236,7 +232,7 @@ export function PurchaseInvoiceDirectLineTable({
                   />
                 </td>
                 <td className={TABLE_CELL}>
-                  <AmountCell value={formatMoney(line.taxableAmount)} bold />
+                  <InvoiceTableReadonly value={formatMoney(line.taxableAmount)} />
                 </td>
                 <td className={cn(TABLE_CELL, "relative z-0")}>
                   <DirectPurchaseGstRateSelect
@@ -246,16 +242,16 @@ export function PurchaseInvoiceDirectLineTable({
                   />
                 </td>
                 <td className={TABLE_CELL}>
-                  <AmountCell value={formatMoney(line.cgst)} />
+                  <InvoiceTableReadonly value={formatMoney(line.cgst)} muted />
                 </td>
                 <td className={TABLE_CELL}>
-                  <AmountCell value={formatMoney(line.sgst)} />
+                  <InvoiceTableReadonly value={formatMoney(line.sgst)} muted />
                 </td>
                 <td className={TABLE_CELL}>
-                  <AmountCell value={formatMoney(line.igst)} />
+                  <InvoiceTableReadonly value={formatMoney(line.igst)} muted />
                 </td>
                 <td className={TABLE_CELL}>
-                  <AmountCell value={formatMoney(line.lineTotal)} bold />
+                  <InvoiceTableReadonly value={formatMoney(line.lineTotal)} strong />
                 </td>
                 {!readOnly && (
                   <td className={cn(TABLE_CELL, "text-center")}>
@@ -276,8 +272,7 @@ export function PurchaseInvoiceDirectLineTable({
             ))}
           </tbody>
         </table>
-      </div>
-      {!readOnly && (
+      {!readOnly && !hideAddButton ? (
         <div className="border-t border-border/60 px-2 py-1.5">
           <Button
             type="button"
@@ -289,7 +284,7 @@ export function PurchaseInvoiceDirectLineTable({
             <Plus className="w-3.5 h-3.5" /> Add Row
           </Button>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

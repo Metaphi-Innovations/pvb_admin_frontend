@@ -7,6 +7,10 @@ import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
 import { VoucherFormSectionCard } from "@/components/accounts/voucher-form/VoucherFormSectionCard";
+import { VOUCHER_INPUT_CLASS } from "@/components/accounts/voucher-simple-form-ui";
+import {
+  InvoiceTableReadonly,
+} from "@/app/(app)/accounts/invoices/components/invoice-form-voucher-ui";
 import { CreditNoteLedgerSelect } from "./CreditNoteLedgerSelect";
 import type { CreditNoteFormLine, DirectLineDraft, ParticularColumnKey } from "../credit-note-form-types";
 import {
@@ -22,43 +26,78 @@ import {
   particularsColumnsForSource,
   toNum,
 } from "../credit-note-form-utils";
+import { cn } from "@/lib/utils";
+
+const INPUT_CLASS = cn(VOUCHER_INPUT_CLASS, "text-xs");
 
 function Cell({
   children,
   align,
+  className,
 }: {
   children: ReactNode;
   align?: "right" | "center" | "left";
+  className?: string;
 }) {
   return (
     <td
-      className={
-        align === "right"
-          ? "px-2 py-1 text-right tabular-nums"
-          : align === "center"
-            ? "px-2 py-1 text-center"
-            : "px-2 py-1"
-      }
+      className={cn(
+        "p-1.5 align-middle",
+        align === "right" && "text-right",
+        align === "center" && "text-center",
+        className,
+      )}
     >
       {children}
     </td>
   );
 }
 
-function ReadCell({ value, align }: { value: ReactNode; align?: "right" | "center" | "left" }) {
+function ReadCell({
+  value,
+  align,
+  muted,
+  strong,
+}: {
+  value: ReactNode;
+  align?: "right" | "center" | "left";
+  muted?: boolean;
+  strong?: boolean;
+}) {
+  if (align === "right" || align === "center") {
+    return (
+      <Cell align={align}>
+        <InvoiceTableReadonly
+          value={String(value ?? "—")}
+          muted={muted}
+          strong={strong}
+        />
+      </Cell>
+    );
+  }
   return (
-    <Cell align={align}>
-      <div
-        className={
-          align === "left" || !align
-            ? "cdn-cell-value cdn-cell-value--left"
-            : "cdn-cell-value"
-        }
-      >
-        {value}
-      </div>
+    <Cell align="left">
+      <div className="so-goods-ro w-full min-w-0 truncate text-left">{value}</div>
     </Cell>
   );
+}
+
+function colAlign(col: ParticularColumnKey): "right" | "center" | "left" {
+  if (
+    col === "qty" ||
+    col === "eligible_base" ||
+    col === "rate_benefit" ||
+    col === "gst" ||
+    col === "gst_rate" ||
+    col === "cgst" ||
+    col === "sgst" ||
+    col === "igst" ||
+    col === "cn_amount"
+  ) {
+    return "right";
+  }
+  if (col === "gst_toggle" || col === "actions") return "center";
+  return "left";
 }
 
 export function CreditNoteParticularsEditor({
@@ -120,7 +159,7 @@ export function CreditNoteParticularsEditor({
         return (
           <Cell key={col}>
             <Input
-              className="h-7 text-xs border border-border"
+              className={INPUT_CLASS}
               value={line.description}
               onChange={(e) => updateLine(line.key, { description: e.target.value })}
               placeholder="Particular…"
@@ -143,7 +182,7 @@ export function CreditNoteParticularsEditor({
         return (
           <Cell key={col} align="right">
             <Input
-              className="h-7 text-xs text-right border border-border"
+              className={cn(INPUT_CLASS, "text-right tabular-nums")}
               value={line.quantity}
               onChange={(e) => {
                 const quantity = e.target.value;
@@ -161,7 +200,7 @@ export function CreditNoteParticularsEditor({
         return (
           <Cell key={col} align="right">
             <AccountsMoneyInput
-              className="h-7 text-xs border border-border"
+              className={cn(INPUT_CLASS, "text-right tabular-nums")}
               value={line.rate}
               onChange={(v) => {
                 const rate = String(v);
@@ -179,20 +218,29 @@ export function CreditNoteParticularsEditor({
         return (
           <Cell key={col} align="right">
             <AccountsMoneyInput
-              className="h-7 text-xs border border-border"
+              className={cn(INPUT_CLASS, "text-right tabular-nums")}
               value={line.taxable_amount || preview.basicAmount}
-              onChange={(v) => updateLine(line.key, { taxable_amount: String(v), rate: toNum(line.quantity) > 0 ? String(Math.round((toNum(v) / Math.max(toNum(line.quantity), 1)) * 100) / 100) : line.rate })}
+              onChange={(v) =>
+                updateLine(line.key, {
+                  taxable_amount: String(v),
+                  rate:
+                    toNum(line.quantity) > 0
+                      ? String(Math.round((toNum(v) / Math.max(toNum(line.quantity), 1)) * 100) / 100)
+                      : line.rate,
+                })
+              }
               disabled={!editable}
             />
           </Cell>
         );
       case "gst_toggle":
         return (
-          <Cell key={col} align="center">
+          <Cell key={col} align="center" className="cn-switch-cell">
             <Switch
               checked={line.gst_applicable}
               onCheckedChange={(v) => updateLine(line.key, { gst_applicable: v })}
               disabled={!editable}
+              className="shrink-0"
             />
           </Cell>
         );
@@ -200,7 +248,7 @@ export function CreditNoteParticularsEditor({
         return (
           <Cell key={col} align="right">
             <Input
-              className="h-7 text-xs text-right w-16 ml-auto"
+              className={cn(INPUT_CLASS, "text-right tabular-nums w-16 ml-auto")}
               value={line.gst_rate}
               onChange={(e) => updateLine(line.key, { gst_rate: e.target.value })}
               disabled={!editable || !line.gst_applicable}
@@ -208,13 +256,13 @@ export function CreditNoteParticularsEditor({
           </Cell>
         );
       case "cgst":
-        return <ReadCell key={col} align="right" value={formatCnMoney(preview.cgst)} />;
+        return <ReadCell key={col} align="right" value={formatCnMoney(preview.cgst)} muted />;
       case "sgst":
-        return <ReadCell key={col} align="right" value={formatCnMoney(preview.sgst)} />;
+        return <ReadCell key={col} align="right" value={formatCnMoney(preview.sgst)} muted />;
       case "igst":
-        return <ReadCell key={col} align="right" value={formatCnMoney(preview.igst)} />;
+        return <ReadCell key={col} align="right" value={formatCnMoney(preview.igst)} muted />;
       case "cn_amount":
-        return <ReadCell key={col} align="right" value={formatCnMoney(preview.lineTotal)} />;
+        return <ReadCell key={col} align="right" value={formatCnMoney(preview.lineTotal)} strong />;
       case "actions":
         return (
           <Cell key={col} align="center">
@@ -255,15 +303,21 @@ export function CreditNoteParticularsEditor({
       case "qty":
         return <ReadCell key={col} align="right" value={lineQty(line) || "—"} />;
       case "eligible_base":
-        return <ReadCell key={col} align="right" value={formatCnMoney(line.eligible_base_amount ?? lineTaxable(line))} />;
+        return (
+          <ReadCell
+            key={col}
+            align="right"
+            value={formatCnMoney(line.eligible_base_amount ?? lineTaxable(line))}
+          />
+        );
       case "rate_benefit":
         return <ReadCell key={col} align="right" value={rate} />;
       case "ledger":
         return <ReadCell key={col} value={lineLedgerName(line)} />;
       case "gst":
-        return <ReadCell key={col} align="right" value={formatCnMoney(line.gst_amount)} />;
+        return <ReadCell key={col} align="right" value={formatCnMoney(line.gst_amount)} muted />;
       case "cn_amount":
-        return <ReadCell key={col} align="right" value={formatCnMoney(line.line_total)} />;
+        return <ReadCell key={col} align="right" value={formatCnMoney(line.line_total)} strong />;
       default:
         return null;
     }
@@ -276,34 +330,37 @@ export function CreditNoteParticularsEditor({
       compact
       headerActions={
         isDirect && editable ? (
-          <Button type="button" variant="outline" size="sm" className="h-7 text-[11px] gap-1" onClick={addLine}>
-            <Plus className="w-3 h-3" /> Add Line
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="so-section-header-btn"
+            onClick={addLine}
+          >
+            <Plus /> Add Line
           </Button>
         ) : null
       }
     >
-      <div className="cnz-table-wrap">
-        <table className="cnz-table accounts-table">
+      <div className="so-invoice-charges-table-wrap w-full">
+        <table className="so-invoice-table text-xs w-full table-fixed">
           <thead>
             <tr>
               {columns.map((col) => (
                 <th
                   key={col}
-                  className={
-                    col === "qty" ||
-                    col === "eligible_base" ||
-                    col === "rate_benefit" ||
-                    col === "gst" ||
-                    col === "gst_rate" ||
-                    col === "cgst" ||
-                    col === "sgst" ||
-                    col === "igst" ||
-                    col === "cn_amount"
+                  className={cn(
+                    "px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap",
+                    colAlign(col) === "right"
                       ? "text-right"
-                      : col === "gst_toggle" || col === "actions"
+                      : colAlign(col) === "center"
                         ? "text-center"
-                        : "text-left"
-                  }
+                        : "text-left",
+                    col === "particular" && "w-[22%]",
+                    col === "ledger" && "w-[18%]",
+                    col === "gst_toggle" && "w-[4.5rem]",
+                    col === "actions" && "w-[2.75rem]",
+                  )}
                 >
                   {columnLabel(col)}
                 </th>
@@ -313,11 +370,16 @@ export function CreditNoteParticularsEditor({
           <tbody>
             {isDirect
               ? directLines.map((line) => (
-                  <tr key={line.key}>{columns.map((col) => renderDirectCell(col, line))}</tr>
+                  <tr key={line.key} className="border-b border-border/40 last:border-0">
+                    {columns.map((col) => renderDirectCell(col, line))}
+                  </tr>
                 ))
               : pendingLines.length
                 ? pendingLines.map((line, idx) => (
-                    <tr key={line.credit_note_line_id || line.pending_credit_note_line_id || String(idx)}>
+                    <tr
+                      key={line.credit_note_line_id || line.pending_credit_note_line_id || String(idx)}
+                      className="border-b border-border/40 last:border-0"
+                    >
                       {columns.map((col) => renderPendingCell(col, line))}
                     </tr>
                   ))

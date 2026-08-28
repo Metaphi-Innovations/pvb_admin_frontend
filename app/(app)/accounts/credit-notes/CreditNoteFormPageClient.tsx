@@ -58,6 +58,7 @@ import { UserListService } from "@/services/user-list.service";
 import { AuthService } from "@/services/auth.service";
 import "./credit-note-tx.css";
 import "@/components/accounts/voucher-form/note-form-compact.css";
+import "@/app/(app)/accounts/invoices/sales-order-invoice-form-compact.css";
 
 type FormModeProp = "fresh" | "return" | "scheme";
 
@@ -1118,7 +1119,7 @@ export default function CreditNoteFormPageClient({
 
   return (
     <>
-      <div className="credit-debit-note-form flex-1 min-h-0 h-full flex flex-col">
+      <div className="credit-debit-note-form sales-order-invoice-form-compact flex-1 min-h-0 h-full flex flex-col">
         <AccountsFormLayout
           fullWidth
           onBackClick={requestCancel}
@@ -1365,23 +1366,30 @@ export default function CreditNoteFormPageClient({
 
             {pendingEntitlementLocked &&
             (pending?.sales_return_additional_charges || []).length > 0 ? (
-              <VoucherFormSectionCard title="Sales Return Additional Charges" compact>
-                <p className="px-3 pt-2 text-[10px] text-muted-foreground">
+              <VoucherFormSectionCard title="Sales Return Additional Charges" flush compact>
+                <p className="px-3 pt-2 text-[11px] text-muted-foreground">
                   Charges from the linked Sales Invoice (display only — not posted).
                 </p>
-                <table className="w-full text-[11px]">
-                  <thead>
-                    <tr className="border-b bg-muted/20">
-                      <th className="p-1.5 text-left font-medium">Charge</th>
-                      <th className="p-1.5 text-right font-medium w-28">Original</th>
-                      <th className="p-1.5 text-right font-medium w-28">Remaining</th>
-                    </tr>
-                  </thead>
+                <div className="so-invoice-charges-table-wrap w-full">
+                  <table className="so-invoice-table so-invoice-charges-table table-fixed w-full text-xs">
+                    <thead>
+                      <tr>
+                        <th className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground text-left">
+                          Charge
+                        </th>
+                        <th className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground text-right w-28">
+                          Original
+                        </th>
+                        <th className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground text-right w-28">
+                          Remaining
+                        </th>
+                      </tr>
+                    </thead>
                   <tbody>
                     {(pending?.sales_return_additional_charges || []).map((charge) => {
                       const id = charge.sales_invoice_additional_charge_id;
                       return (
-                        <tr key={`sr-display-${id}`} className="border-b last:border-0">
+                        <tr key={`sr-display-${id}`} className="border-b border-border/40 last:border-0">
                           <td className="p-1.5">{charge.description || "Additional charge"}</td>
                           <td className="p-1.5 text-right tabular-nums">
                             {formatCnMoney(
@@ -1402,21 +1410,20 @@ export default function CreditNoteFormPageClient({
                     })}
                   </tbody>
                 </table>
+                </div>
               </VoucherFormSectionCard>
             ) : null}
 
             <div className="cn-narration-summary-grid">
               <VoucherFormSectionCard title="Narration" compact>
-                <div className="px-3 pb-3 pt-1">
-                  <Textarea
-                    className="cdn-control min-h-[64px] resize-y text-xs"
-                    value={narration}
-                    onChange={(e) => setNarration(e.target.value)}
-                    placeholder="Optional narration…"
-                    maxLength={2000}
-                    disabled={!fieldsEditable}
-                  />
-                </div>
+                <Textarea
+                  className="cdn-control so-goods-narration min-h-[64px] h-auto resize-y text-xs w-full"
+                  value={narration}
+                  onChange={(e) => setNarration(e.target.value)}
+                  placeholder="Optional narration…"
+                  maxLength={2000}
+                  disabled={!fieldsEditable}
+                />
               </VoucherFormSectionCard>
 
               <CreditNoteAmountSummary

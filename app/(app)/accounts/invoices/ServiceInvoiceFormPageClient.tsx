@@ -5,7 +5,7 @@
  * Appears only in Sales Invoice → All Invoices (type Service).
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -13,18 +13,17 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
-import {
-  InvoiceFormLayout,
-  InvoiceFormCard,
-  InvoiceFormSection,
-  InvoiceFormField,
-  InvoiceFormInput,
-  InvoiceFormReadOnly,
-  INVOICE_FORM_GRID_CLASS,
-  INVOICE_FORM_INPUT_CLASS,
-  INVOICE_FORM_LABEL_CLASS,
-} from "@/app/(app)/accounts/components/InvoiceFormLayout";
+import { InvoiceFormLayout } from "@/app/(app)/accounts/components/InvoiceFormLayout";
 import { VoucherFormActionBar } from "@/components/accounts/voucher-form/VoucherFormActionBar";
+import { VoucherFormSectionCard } from "@/components/accounts/voucher-form/VoucherFormSectionCard";
+import {
+  INVOICE_DETAIL_INPUT_CLASS,
+  INVOICE_DETAIL_SELECT_CLASS,
+  InvoiceDetailField,
+  InvoiceTableReadonly,
+} from "@/app/(app)/accounts/invoices/components/invoice-form-voucher-ui";
+import { VOUCHER_INPUT_CLASS } from "@/components/accounts/voucher-simple-form-ui";
+import { useFY } from "@/lib/fy-store";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import {
   calcGstLineSplit,
@@ -134,6 +133,7 @@ const CHARGE_INPUT_CLASS =
 
 export default function ServiceInvoiceFormPageClient() {
   const router = useRouter();
+  const { selectedFY } = useFY();
   const { data: customerData } = useCustomersDropdown();
   const { data: warehouseData } = useWarehousesDropdown();
   const { data: coaRecords = [] } = useChartOfAccountsTree({ includeLedgers: true });
@@ -161,6 +161,7 @@ export default function ServiceInvoiceFormPageClient() {
   const [roundOff, setRoundOff] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const addChargeRowRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     if (!error) return;
@@ -496,88 +497,107 @@ export default function ServiceInvoiceFormPageClient() {
       }
     >
       <div className="space-y-3">
-        <InvoiceFormCard title="Invoice Details">
-          <div className={INVOICE_FORM_GRID_CLASS}>
-            <InvoiceFormReadOnly label="Invoice No." value="Auto-generated on post" />
-            <InvoiceFormField label="Invoice Date" required>
-              <InvoiceFormInput
-                type="date"
-                value={invoiceDate}
-                onChange={(e) => setInvoiceDate(e.target.value)}
-              />
-            </InvoiceFormField>
-            <InvoiceFormReadOnly label="Due Date" value={dueDate || "—"} />
-            <div className="space-y-1">
-              <div className="flex items-center gap-1 min-h-[16px]">
-                <Label className={INVOICE_FORM_LABEL_CLASS}>
-                  Customer <span className="text-red-500 ml-0.5">*</span>
-                </Label>
-                <ServiceInvoiceCustomerInfoButton
-                  enabled={Boolean(customerId)}
-                  info={{
-                    customerName,
-                    customerCode,
-                    gstin: customerGst,
-                    billingAddress,
-                    shippingAddress,
-                    state: placeOfSupply,
-                    branch,
-                    customerType: customerTypeName,
-                    paymentTerms: customerPaymentTerms,
-                    linkedLedger: linkedLedgerLabel,
-                  }}
+        <VoucherFormSectionCard title="Invoice Details">
+          <div className="space-y-1.5">
+            <div className="so-invoice-details-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+              <InvoiceDetailField label="Invoice No.">
+                <div className="so-goods-ro so-goods-ro--mono w-full text-brand-700">
+                  Auto-generated on post
+                </div>
+              </InvoiceDetailField>
+              <InvoiceDetailField label="Invoice Date" required>
+                <Input
+                  type="date"
+                  className={INVOICE_DETAIL_INPUT_CLASS}
+                  value={invoiceDate}
+                  onChange={(e) => setInvoiceDate(e.target.value)}
                 />
-              </div>
-              <SearchableSelect
-                label=""
-                value={customerId ?? ""}
-                onChange={(id) => applyCustomer(id || null)}
-                options={customerOptions}
-                placeholder="Select customer…"
-              />
+              </InvoiceDetailField>
+              <InvoiceDetailField label="Due Date">
+                <div className="so-goods-ro w-full">{dueDate || "—"}</div>
+              </InvoiceDetailField>
+              <InvoiceDetailField
+                label="Customer"
+                required
+                labelExtra={
+                  <ServiceInvoiceCustomerInfoButton
+                    enabled={Boolean(customerId)}
+                    info={{
+                      customerName,
+                      customerCode,
+                      gstin: customerGst,
+                      billingAddress,
+                      shippingAddress,
+                      state: placeOfSupply,
+                      branch,
+                      customerType: customerTypeName,
+                      paymentTerms: customerPaymentTerms,
+                      linkedLedger: linkedLedgerLabel,
+                    }}
+                  />
+                }
+              >
+                <SearchableSelect
+                  value={customerId ?? ""}
+                  onChange={(id) => applyCustomer(id || null)}
+                  options={customerOptions}
+                  placeholder="Select customer…"
+                  triggerClassName={INVOICE_DETAIL_SELECT_CLASS}
+                />
+              </InvoiceDetailField>
             </div>
-            <div className="space-y-1">
-              <div className="flex items-center gap-1 min-h-[16px]">
-                <Label className={INVOICE_FORM_LABEL_CLASS}>
-                  Warehouse <span className="text-red-500 ml-0.5">*</span>
-                </Label>
-                <ServiceInvoiceWarehouseInfoButton warehouseId={warehouseId} />
-              </div>
-              <SearchableSelect
-                label=""
-                value={warehouseId ?? ""}
-                onChange={(id) => setWarehouseId(id || null)}
-                options={warehouseOptions}
-                placeholder="Select warehouse…"
-              />
+            <div className="so-invoice-details-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+              <InvoiceDetailField
+                label="Warehouse"
+                required
+                labelExtra={
+                  <ServiceInvoiceWarehouseInfoButton warehouseId={warehouseId} />
+                }
+              >
+                <SearchableSelect
+                  value={warehouseId ?? ""}
+                  onChange={(id) => setWarehouseId(id || null)}
+                  options={warehouseOptions}
+                  placeholder="Select warehouse…"
+                  triggerClassName={INVOICE_DETAIL_SELECT_CLASS}
+                />
+              </InvoiceDetailField>
+              <InvoiceDetailField label="Manual Reference No.">
+                <Input
+                  className={INVOICE_DETAIL_INPUT_CLASS}
+                  value={referenceNo}
+                  onChange={(e) => setReferenceNo(e.target.value)}
+                  placeholder="Optional"
+                />
+              </InvoiceDetailField>
             </div>
-            <InvoiceFormField label="Manual Reference No.">
-              <InvoiceFormInput
-                value={referenceNo}
-                onChange={(e) => setReferenceNo(e.target.value)}
-                placeholder="Optional"
-              />
-            </InvoiceFormField>
           </div>
-        </InvoiceFormCard>
+          {selectedFY?.label ? (
+            <p className="text-[11px] text-muted-foreground mt-2">
+              Working FY:{" "}
+              <span className="font-medium text-foreground">{selectedFY.label}</span>
+            </p>
+          ) : null}
+        </VoucherFormSectionCard>
 
-        <InvoiceFormSection
+        <VoucherFormSectionCard
           title="Service Lines"
-          action={
+          flush
+          headerActions={
             <Button
               type="button"
               variant="outline"
               size="sm"
-              className="h-8 text-xs gap-1.5"
+              className="so-section-header-btn"
               onClick={addLine}
             >
-              <Plus className="w-3.5 h-3.5" /> Add Service Line
+              <Plus /> Add Service Line
             </Button>
           }
         >
           <div className="so-goods-product-table-wrap overflow-x-auto">
-            <table className="text-xs w-max min-w-[1520px]">
-              <thead className="bg-muted/30 border-b border-border">
+            <table className="so-invoice-table text-xs w-max min-w-[1520px]">
+              <thead>
                 <tr>
                   {[
                     { label: "Service Description", align: "left" as const, className: "min-w-[180px]" },
@@ -620,7 +640,7 @@ export default function ServiceInvoiceFormPageClient() {
                     <tr key={line.id} className="border-b border-border/40 last:border-0">
                       <td className="p-1.5 min-w-[180px] w-[180px]">
                         <Input
-                          className="h-8 text-xs"
+                          className={cn(VOUCHER_INPUT_CLASS, "text-xs")}
                           value={line.productName}
                           onChange={(e) =>
                             updateLine(line.id, {
@@ -658,6 +678,7 @@ export default function ServiceInvoiceFormPageClient() {
                           options={sacSelectOptions}
                           placeholder="Select SAC…"
                           contentClassName="w-[340px]"
+                          triggerClassName={cn(VOUCHER_INPUT_CLASS, "text-xs")}
                         />
                       </td>
                       <td className="p-1.5 min-w-[65px] w-[65px]">
@@ -665,7 +686,7 @@ export default function ServiceInvoiceFormPageClient() {
                           type="number"
                           min={0}
                           step={0.01}
-                          className="h-8 text-xs text-right tabular-nums"
+                          className={cn(VOUCHER_INPUT_CLASS, "text-xs text-right tabular-nums")}
                           value={line.qty || ""}
                           onChange={(e) =>
                             updateLine(line.id, { qty: parseFloat(e.target.value) || 0 })
@@ -674,14 +695,14 @@ export default function ServiceInvoiceFormPageClient() {
                       </td>
                       <td className="p-1.5 min-w-[70px] w-[70px]">
                         <Input
-                          className="h-8 text-xs"
+                          className={cn(VOUCHER_INPUT_CLASS, "text-xs")}
                           value={line.unit}
                           onChange={(e) => updateLine(line.id, { unit: e.target.value })}
                         />
                       </td>
                       <td className="p-1.5 min-w-[90px] w-[90px]">
                         <AccountsMoneyInput
-                          className="h-8 text-xs text-right"
+                          className={cn(VOUCHER_INPUT_CLASS, "text-xs text-right")}
                           value={line.unitPrice || ""}
                           onChange={(v) => updateLine(line.id, { unitPrice: v })}
                         />
@@ -692,7 +713,7 @@ export default function ServiceInvoiceFormPageClient() {
                           min={0}
                           max={100}
                           step={0.01}
-                          className="h-8 text-xs text-right"
+                          className={cn(VOUCHER_INPUT_CLASS, "text-xs text-right")}
                           value={line.discountPct || ""}
                           onChange={(e) =>
                             updateLine(line.id, {
@@ -701,11 +722,11 @@ export default function ServiceInvoiceFormPageClient() {
                           }
                         />
                       </td>
-                      <td className="p-1.5 min-w-[90px] w-[90px] text-right tabular-nums text-muted-foreground whitespace-nowrap">
-                        {formatINR(discountAmt)}
+                      <td className="p-1.5 min-w-[90px] w-[90px]">
+                        <InvoiceTableReadonly value={formatINR(discountAmt)} muted />
                       </td>
-                      <td className="p-1.5 min-w-[95px] w-[95px] text-right tabular-nums whitespace-nowrap">
-                        {formatINR(taxable)}
+                      <td className="p-1.5 min-w-[95px] w-[95px]">
+                        <InvoiceTableReadonly value={formatINR(taxable)} />
                       </td>
                       <td className="p-1.5 min-w-[70px] w-[70px]">
                         <Input
@@ -713,7 +734,7 @@ export default function ServiceInvoiceFormPageClient() {
                           min={0}
                           max={100}
                           step={0.01}
-                          className="h-8 text-xs text-right"
+                          className={cn(VOUCHER_INPUT_CLASS, "text-xs text-right")}
                           value={line.taxPct || ""}
                           onChange={(e) =>
                             updateLine(line.id, { taxPct: parseFloat(e.target.value) || 0 })
@@ -721,21 +742,21 @@ export default function ServiceInvoiceFormPageClient() {
                         />
                       </td>
                       {interstate ? (
-                        <td className="p-1.5 min-w-[90px] w-[90px] text-right tabular-nums text-muted-foreground whitespace-nowrap">
-                          {formatINR(split.igst)}
+                        <td className="p-1.5 min-w-[90px] w-[90px]">
+                          <InvoiceTableReadonly value={formatINR(split.igst)} muted />
                         </td>
                       ) : (
                         <>
-                          <td className="p-1.5 min-w-[90px] w-[90px] text-right tabular-nums text-muted-foreground whitespace-nowrap">
-                            {formatINR(split.cgst)}
+                          <td className="p-1.5 min-w-[90px] w-[90px]">
+                            <InvoiceTableReadonly value={formatINR(split.cgst)} muted />
                           </td>
-                          <td className="p-1.5 min-w-[90px] w-[90px] text-right tabular-nums text-muted-foreground whitespace-nowrap">
-                            {formatINR(split.sgst)}
+                          <td className="p-1.5 min-w-[90px] w-[90px]">
+                            <InvoiceTableReadonly value={formatINR(split.sgst)} muted />
                           </td>
                         </>
                       )}
-                      <td className="p-1.5 min-w-[110px] w-[110px] text-right tabular-nums font-semibold whitespace-nowrap">
-                        {formatINR(split.lineTotal)}
+                      <td className="p-1.5 min-w-[110px] w-[110px]">
+                        <InvoiceTableReadonly value={formatINR(split.lineTotal)} strong />
                       </td>
                       <td className="p-1.5 min-w-[40px] w-[40px]">
                         <button
@@ -753,31 +774,47 @@ export default function ServiceInvoiceFormPageClient() {
               </tbody>
             </table>
           </div>
-        </InvoiceFormSection>
+        </VoucherFormSectionCard>
 
-        <InvoiceFormSection title="Additional Charges">
+        <VoucherFormSectionCard
+          title="Additional Charges"
+          flush
+          headerActions={
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="so-section-header-btn"
+              onClick={() => addChargeRowRef.current?.()}
+            >
+              <Plus /> Add Charge
+            </Button>
+          }
+        >
           <GoodsInvoiceAdditionalChargesEditor
             expenses={additionalExpenses}
             onChange={setAdditionalExpenses}
             interstate={interstate}
+            tableVariant="invoice"
+            hideAddButton
+            onBindAddRow={(fn) => {
+              addChargeRowRef.current = fn;
+            }}
           />
-        </InvoiceFormSection>
+        </VoucherFormSectionCard>
 
         <div className="grid grid-cols-1 gap-2.5 items-start lg:grid-cols-[minmax(0,1fr)_300px]">
-          <InvoiceFormSection title="Narration">
-            <div className="rounded-lg border border-slate-200 bg-white p-3">
-              <Textarea
-                className={cn(INVOICE_FORM_INPUT_CLASS, "so-goods-narration resize-y")}
-                value={narration}
-                onChange={(e) => setNarration(e.target.value)}
-                placeholder="Optional narration for this invoice…"
-                maxLength={500}
-              />
-            </div>
-          </InvoiceFormSection>
+          <VoucherFormSectionCard title="Narration">
+            <Textarea
+              className={cn(VOUCHER_INPUT_CLASS, "so-goods-narration min-h-[60px] h-auto resize-y")}
+              value={narration}
+              onChange={(e) => setNarration(e.target.value)}
+              placeholder="Optional narration for this invoice…"
+              maxLength={500}
+            />
+          </VoucherFormSectionCard>
 
-          <div className="rounded-lg border border-slate-200 bg-white space-y-2 p-3 lg:sticky lg:top-3 lg:z-10 shadow-sm">
-            <h2 className="accounts-card-title">Summary</h2>
+          <VoucherFormSectionCard title="Summary" className="lg:sticky lg:top-3 lg:z-10">
             <div className="space-y-1.5 so-invoice-summary">
               <div className="flex items-center justify-between gap-4 py-0.5">
                 <span className="so-summary-label">Gross Amount</span>
@@ -825,7 +862,7 @@ export default function ServiceInvoiceFormPageClient() {
                 <span className="so-grand-total-value">{formatINR(grandTotal)}</span>
               </div>
             </div>
-          </div>
+          </VoucherFormSectionCard>
         </div>
       </div>
     </InvoiceFormLayout>

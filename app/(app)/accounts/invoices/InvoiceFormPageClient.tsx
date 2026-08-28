@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 import { useRouter, useSearchParams } from "next/navigation";
+import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
 import { Label } from "@/components/ui/label";
@@ -116,6 +117,8 @@ import {
   useTransactionFormCancel,
 } from "@/components/accounts/TransactionFormCancel";
 import { VoucherFormActionBar } from "@/components/accounts/voucher-form/VoucherFormActionBar";
+import { VoucherFormSectionCard } from "@/components/accounts/voucher-form/VoucherFormSectionCard";
+import { VOUCHER_INPUT_CLASS } from "@/components/accounts/voucher-simple-form-ui";
 import {
   customerMasterToTransactionFields,
   type CustomerTransactionFields,
@@ -188,12 +191,56 @@ const LedgerImpactPreview = dynamic(
   { ssr: false, loading: () => null },
 );
 
-function Section({ title, children, className }: { title: string; children: React.ReactNode; className?: string }) {
+function Section({
+  title,
+  children,
+  className,
+  compact,
+  flush,
+  headerActions,
+  helper,
+}: {
+  title: string;
+  children: ReactNode;
+  className?: string;
+  compact?: boolean;
+  flush?: boolean;
+  headerActions?: ReactNode;
+  helper?: string;
+}) {
+  if (compact) {
+    return (
+      <VoucherFormSectionCard
+        title={title}
+        helper={helper}
+        flush={flush}
+        headerActions={headerActions}
+        className={className}
+      >
+        {children}
+      </VoucherFormSectionCard>
+    );
+  }
   return (
     <InvoiceFormSection title={title}>
       <div className={className}>{children}</div>
     </InvoiceFormSection>
   );
+}
+
+function DetailsCard({
+  title,
+  compact,
+  children,
+}: {
+  title: string;
+  compact?: boolean;
+  children: ReactNode;
+}) {
+  if (compact) {
+    return <VoucherFormSectionCard title={title}>{children}</VoucherFormSectionCard>;
+  }
+  return <InvoiceFormCard title={title}>{children}</InvoiceFormCard>;
 }
 
 const CHARGE_INPUT_CLASS =
@@ -290,6 +337,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const addChargeRowRef = useRef<(() => void) | null>(null);
 
   const patchTransport = useCallback((patch: Partial<GoodsTransportStatutoryState>) => {
     setTransport((prev) => ({ ...prev, ...patch }));
@@ -2440,7 +2488,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
         </InvoiceFormCard>
         ) : null}
 
-        <InvoiceFormCard title="Invoice & Dispatch Details">
+        <DetailsCard title="Invoice & Dispatch Details" compact={compactGen}>
           <SalesInvoiceDocumentInfoSection
             isEdit={isEdit}
             invoiceNo={isEdit ? invoiceNo : previewInvoiceNo}
@@ -2558,9 +2606,19 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
               )}
             </div>
           ) : null}
-        </InvoiceFormCard>
+        </DetailsCard>
 
         {(soGen || stGen) && !isEdit ? (
+          compactGen ? (
+            <VoucherFormSectionCard title="Transport & Statutory Details">
+              <div id="goods-transport-section" className="scroll-mt-24">
+                <GoodsTransportStatutorySection
+                  value={transport}
+                  onChange={patchTransport}
+                />
+              </div>
+            </VoucherFormSectionCard>
+          ) : (
           <InvoiceFormCard title="Transport & Statutory Details">
             <div id="goods-transport-section" className="scroll-mt-24">
               <GoodsTransportStatutorySection
@@ -2569,6 +2627,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
               />
             </div>
           </InvoiceFormCard>
+          )
         ) : null}
 
         {!isStockTransferInvoice && !soGen && !smGen && (
@@ -2578,7 +2637,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
           />
         )}
 
-        <Section title="Product Details">
+        <Section title="Product Details" compact={compactGen} flush={compactGen}>
           {stGen ? (
             <StockTransferInvoiceLinesEditor
               lines={lines}
@@ -2611,17 +2670,17 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
         <>
         {soGen || stGen ? (
           orderSuggestedCharges.length > 0 ? (
-            <Section title="Sales Order Additional Charges">
-              <p className={cn(INVOICE_FORM_HELPER_CLASS, "-mt-1")}>
+            <Section title="Sales Order Additional Charges" compact={compactGen} flush={compactGen}>
+              <p className={cn(INVOICE_FORM_HELPER_CLASS, compactGen ? "px-3 pt-2" : "-mt-1")}>
                 Charges from the sales order (display only — not posted).
               </p>
-              <div className="border rounded-md overflow-hidden">
-                <table className="w-full text-[11px]">
-                  <thead>
-                    <tr className="border-b bg-muted/20">
-                      <th className="p-1.5 text-left font-medium">Charge</th>
-                      <th className="p-1.5 text-right font-medium w-28">Amount</th>
-                      <th className="p-1.5 text-right font-medium w-20">GST %</th>
+              <div className={cn(compactGen ? "so-invoice-charges-table-wrap w-full" : "border rounded-md overflow-hidden")}>
+                <table className={cn("w-full text-xs", compactGen && "so-invoice-table so-invoice-charges-table table-fixed")}>
+                  <thead className={compactGen ? undefined : "border-b bg-muted/20"}>
+                    <tr>
+                      <th className={cn("p-1.5 text-left font-medium", compactGen && "px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground")}>Charge</th>
+                      <th className={cn("p-1.5 text-right font-medium w-28", compactGen && "px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground")}>Amount</th>
+                      <th className={cn("p-1.5 text-right font-medium w-20", compactGen && "px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground")}>GST %</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -2667,17 +2726,41 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
           ) : null
         ) : null}
 
-        <Section title="Additional Charges">
+        <Section
+          title="Additional Charges"
+          compact={compactGen && (soGen || stGen)}
+          flush={compactGen && (soGen || stGen)}
+          headerActions={
+            compactGen && (soGen || stGen) ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="so-section-header-btn"
+                onClick={() => addChargeRowRef.current?.()}
+              >
+                <Plus /> Add Charge
+              </Button>
+            ) : undefined
+          }
+        >
           {soGen || stGen ? (
             <>
-              <p className={cn(INVOICE_FORM_HELPER_CLASS, "-mt-1")}>
-                Optional freight, packing, or other charges. These post on the sales
-                invoice.
-              </p>
+              {!compactGen ? (
+                <p className={cn(INVOICE_FORM_HELPER_CLASS, "-mt-1")}>
+                  Optional freight, packing, or other charges. These post on the sales
+                  invoice.
+                </p>
+              ) : null}
               <GoodsInvoiceAdditionalChargesEditor
                 expenses={additionalExpenses}
                 onChange={setAdditionalExpenses}
                 interstate={interstateGst}
+                tableVariant={compactGen ? "invoice" : "default"}
+                hideAddButton={compactGen}
+                onBindAddRow={(fn) => {
+                  addChargeRowRef.current = fn;
+                }}
               />
             </>
           ) : (
@@ -2701,7 +2784,20 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
           )}
         >
           {soGen || stGen || smGen ? (
-            <Section title="Narration">
+            <Section title="Narration" compact={compactGen}>
+              {compactGen ? (
+                <Textarea
+                  className={cn(VOUCHER_INPUT_CLASS, "so-goods-narration min-h-[60px] h-auto resize-y text-xs")}
+                  value={narration}
+                  onChange={(e) => setNarration(e.target.value)}
+                  placeholder={
+                    smGen
+                      ? "Optional narration for this Sample Order Proforma…"
+                      : "Optional narration for this invoice…"
+                  }
+                  maxLength={500}
+                />
+              ) : (
               <div className="rounded-lg border border-slate-200 bg-white p-3">
                 <Textarea
                   className={cn(INVOICE_FORM_INPUT_CLASS, "so-goods-narration resize-y")}
@@ -2715,6 +2811,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
                   maxLength={500}
                 />
               </div>
+              )}
             </Section>
           ) : (
           <Section title="Customer Notes &amp; Terms">
@@ -2751,20 +2848,15 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
           </Section>
           )}
 
-          <div
-            className={cn(
-              "rounded-lg border border-slate-200 bg-white space-y-2 lg:sticky lg:top-3 lg:z-10 shadow-sm",
-              compactGen ? "p-3" : "p-4 space-y-3",
-            )}
-          >
-            <h2 className="accounts-card-title">
-              {smGen
+          {compactGen ? (
+            <VoucherFormSectionCard title={
+              smGen
                 ? "Sample Order Summary"
                 : stGen
                   ? "Stock Transfer Invoice Summary"
-                  : "Invoice Summary"}
-            </h2>
-            <div className={cn("space-y-1.5 so-invoice-summary", compactGen ? "" : "text-sm space-y-2")}>
+                  : "Invoice Summary"
+            } className="lg:sticky lg:top-3 lg:z-10">
+            <div className="space-y-1.5 so-invoice-summary">
               {smGen ? (
                 <>
                   <div className="flex items-center justify-between gap-4 py-0.5">
@@ -2958,10 +3050,81 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
                 </>
               )}
             </div>
+            </VoucherFormSectionCard>
+          ) : (
+          <div
+            className="rounded-lg border border-slate-200 bg-white space-y-2 lg:sticky lg:top-3 lg:z-10 shadow-sm p-4 space-y-3"
+          >
+            <h2 className="accounts-card-title">Invoice Summary</h2>
+            <div className="space-y-1.5 so-invoice-summary text-sm space-y-2">
+              <div className="flex items-center justify-between gap-4 py-0.5">
+                <span className="text-muted-foreground">Gross Amount</span>
+                <span className="font-medium tabular-nums">
+                  {formatINR(summaryGrossAmount)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-4 py-0.5">
+                <span className="text-muted-foreground">Discount</span>
+                <span className="font-medium tabular-nums">
+                  {formatINR(summaryDiscountAmount)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-4 py-0.5">
+                <span className="text-muted-foreground">Taxable Amount</span>
+                <span className="font-medium tabular-nums">
+                  {formatINR(summaryTaxableAmount)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-4 py-0.5 border-t border-border/60 pt-1.5">
+                <span className="text-muted-foreground">GST Total</span>
+                <span className="font-medium tabular-nums">{formatINR(summaryTaxAmount)}</span>
+              </div>
+              {summaryAdditionalCharges > 0 && (
+                <div className="flex items-center justify-between gap-4 py-0.5">
+                  <span className="text-muted-foreground">Additional Expenses</span>
+                  <span className="font-medium tabular-nums">
+                    {formatINR(summaryAdditionalCharges)}
+                  </span>
+                </div>
+              )}
+              <div className="flex items-center justify-between gap-4 py-0.5">
+                <Label className="text-muted-foreground font-normal text-xs">
+                  Round Off
+                </Label>
+                <AccountsMoneyInput
+                  className={CHARGE_INPUT_CLASS}
+                  value={roundOff || ""}
+                  onChange={(v) => setRoundOff(v)}
+                />
+              </div>
+              <div className="flex items-center justify-between gap-4 py-1.5 border-t border-border/60">
+                <span className="font-semibold text-sm">Grand Total</span>
+                <span className="font-bold text-sm tabular-nums text-brand-700">
+                  {formatINR(summaryGrandTotal)}
+                </span>
+              </div>
+            </div>
           </div>
+          )}
         </div>
 
         {stGen && !isEdit ? (
+          compactGen ? (
+            <VoucherFormSectionCard title="Statutory Generation">
+              <GoodsStatutoryGenerationSection
+                value={transport}
+                onGenerateEInvoice={handleGenerateEInvoice}
+                onGenerateEway={handleGenerateEway}
+                onViewQr={() =>
+                  setSuccess(
+                    transport.irn
+                      ? `QR available for IRN ${transport.irn.slice(0, 18)}…`
+                      : "QR code available.",
+                  )
+                }
+              />
+            </VoucherFormSectionCard>
+          ) : (
           <InvoiceFormCard title="Statutory Generation">
             <GoodsStatutoryGenerationSection
               value={transport}
@@ -2976,6 +3139,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
               }
             />
           </InvoiceFormCard>
+          )
         ) : null}
 
         {!compactGen && accountingPreview && (

@@ -187,10 +187,7 @@ export function mapApiInvoiceToListRow(
   const ewayBillStatusLabel = resolveListingEWayStatus(stubRecord as never, kind);
   const canDownloadPi =
     kind !== "service" && hasPdfValue(dto.dispatch_id);
-  const canDownloadTaxInvoice =
-    canDownloadPi &&
-    hasPdfValue(dto.irn_number) &&
-    hasPdfValue(dto.eway_bill_number);
+  const canDownloadTaxInvoice = canDownloadPi;
 
   return {
     id,

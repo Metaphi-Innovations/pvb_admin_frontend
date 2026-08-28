@@ -506,10 +506,6 @@ export default function InvoiceViewPageClient({
     record.sourceType !== "service" &&
     Boolean(record.salesInvoiceId) &&
     Boolean(record.sourceDispatchId);
-  const canDownloadTaxInvoice =
-    canDownloadPi &&
-    Boolean(record.irn?.trim()) &&
-    Boolean(record.ewayBillNo?.trim());
   const invoicePdfId = String(record.salesInvoiceId || "");
 
   const handleOfficialPdfError = (error: unknown, fallback: string) => {
@@ -533,7 +529,7 @@ export default function InvoiceViewPageClient({
           : undefined
       }
       headerActions={
-        canDownloadPi || canDownloadTaxInvoice ? (
+        canDownloadPi ? (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="sm" className="h-8 text-xs font-medium gap-1.5">
@@ -542,35 +538,29 @@ export default function InvoiceViewPageClient({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
-              {canDownloadPi ? (
+              <DropdownMenuItem
+                onClick={() => {
+                  void openProformaInvoicePreview(invoicePdfId).catch((error) =>
+                    handleOfficialPdfError(error, "Failed to open Proforma Invoice."),
+                  );
+                }}
+              >
+                Download Proforma Invoice
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel>Tax Invoice</DropdownMenuLabel>
+              {TAX_INVOICE_COPY_LABELS.map((copyLabel) => (
                 <DropdownMenuItem
+                  key={copyLabel}
                   onClick={() => {
-                    void openProformaInvoicePreview(invoicePdfId).catch((error) =>
-                      handleOfficialPdfError(error, "Failed to open Proforma Invoice."),
+                    void openTaxInvoicePreview(invoicePdfId, copyLabel).catch((error) =>
+                      handleOfficialPdfError(error, "Failed to open Tax Invoice."),
                     );
                   }}
                 >
-                  Download Proforma Invoice
+                  {copyLabel}
                 </DropdownMenuItem>
-              ) : null}
-              {canDownloadTaxInvoice ? (
-                <>
-                  {canDownloadPi ? <DropdownMenuSeparator /> : null}
-                  <DropdownMenuLabel>Tax Invoice</DropdownMenuLabel>
-                  {TAX_INVOICE_COPY_LABELS.map((copyLabel) => (
-                    <DropdownMenuItem
-                      key={copyLabel}
-                      onClick={() => {
-                        void openTaxInvoicePreview(invoicePdfId, copyLabel).catch((error) =>
-                          handleOfficialPdfError(error, "Failed to open Tax Invoice."),
-                        );
-                      }}
-                    >
-                      {copyLabel}
-                    </DropdownMenuItem>
-                  ))}
-                </>
-              ) : null}
+              ))}
             </DropdownMenuContent>
           </DropdownMenu>
         ) : (

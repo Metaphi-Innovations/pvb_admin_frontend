@@ -24,6 +24,7 @@ export function SearchableSelect({
   required,
   disabled,
   contentClassName,
+  triggerClassName,
 }: {
   label?: string;
   value: string;
@@ -33,6 +34,8 @@ export function SearchableSelect({
   required?: boolean;
   disabled?: boolean;
   contentClassName?: string;
+  /** Optional classes for the closed trigger (e.g. voucher h-8 inputs). */
+  triggerClassName?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
@@ -63,7 +66,8 @@ export function SearchableSelect({
             type="button"
             disabled={disabled}
             className={cn(
-              "w-full min-w-0 h-[30px] px-2 text-xs text-left border border-border rounded-md bg-background flex items-center justify-between gap-1",
+              "w-full min-w-0 text-left border border-border bg-background flex items-center justify-between gap-1",
+              triggerClassName ?? "h-[30px] px-2 text-xs rounded-md",
               disabled ? "opacity-50 cursor-not-allowed bg-muted/30" : "hover:bg-muted/30",
             )}
           >
