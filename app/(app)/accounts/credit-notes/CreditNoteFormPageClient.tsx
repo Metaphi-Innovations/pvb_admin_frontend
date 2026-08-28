@@ -1268,7 +1268,7 @@ export default function CreditNoteFormPageClient({
                   )}
                 </VoucherNoteField>
                 {!pendingEntitlementLocked ? (
-                  <VoucherNoteField label="Direct Mode" width="ref">
+                  <VoucherNoteField label="Direct Mode" width="full">
                     <div className="cnz-gst-toggle" role="group" aria-label="Direct credit note mode">
                       <button
                         type="button"

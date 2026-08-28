@@ -3,7 +3,7 @@
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
-import { LedgerHierarchySelect } from "@/components/accounts/LedgerHierarchySelect";
+import { GenericLedgerHierarchySelect } from "@/components/accounts/GenericLedgerHierarchySelect";
 import { formatMoney } from "@/lib/accounts/money-format";
 import { cn } from "@/lib/utils";
 
@@ -24,7 +24,7 @@ export interface NoteParticularsTableProps {
   interstate?: boolean;
   disabled?: boolean;
   className?: string;
-  /** Optional filter to restrict which ledgers appear in the dropdown. */
+  /** @deprecated Unused — dropdown always filters ACTIVE + allowManualPosting. */
   ledgerFilter?: (ledger: import("@/services/ledger.service").LedgerDropdownItem) => boolean;
   /** Switch id prefix to avoid duplicate ids when both CN/DN mount (should not). */
   switchId?: string;
@@ -51,7 +51,6 @@ export function NoteParticularsTable({
   interstate = false,
   disabled = false,
   className,
-  ledgerFilter,
   switchId = "note-gst-applicable",
 }: NoteParticularsTableProps) {
   const totals = computeNoteParticularTotals(qty, rate, gstApplicable, gstPct, interstate);
@@ -82,7 +81,7 @@ export function NoteParticularsTable({
           <tr className="border-b border-border/40">
             <td className="px-2 py-1" style={{ minWidth: 140 }}>
               <Input
-                className="h-[30px] text-xs font-normal"
+                className="h-[28px] text-xs font-normal"
                 value={particular}
                 onChange={(e) => onParticularChange(e.target.value)}
                 placeholder="Particular / description"
@@ -90,8 +89,8 @@ export function NoteParticularsTable({
                 aria-label="Particular"
               />
             </td>
-            <td className="px-2 py-1" style={{ minWidth: 140 }}>
-              <LedgerHierarchySelect
+            <td className="px-2 py-1" style={{ minWidth: 160 }}>
+              <GenericLedgerHierarchySelect
                 value={adjustmentLedgerId ? String(adjustmentLedgerId) : null}
                 onChange={(ledger) =>
                   onAdjustmentLedgerChange({
@@ -100,10 +99,11 @@ export function NoteParticularsTable({
                   })
                 }
                 fallbackLabel={adjustmentLedgerName}
-                placeholder="Select ledger"
+                placeholder="Select ledger…"
                 disabled={disabled}
-                className="h-[30px] w-full text-left font-normal"
-                ledgerFilter={ledgerFilter}
+                className="h-[28px] w-full text-left font-normal text-xs"
+                compact
+                query={{ status: "ACTIVE", allowManualPosting: true }}
               />
             </td>
             <td className="px-2 py-1 text-right" style={{ width: 64 }}>
@@ -111,7 +111,7 @@ export function NoteParticularsTable({
                 type="number"
                 min={0}
                 step={0.01}
-                className="h-[30px] w-14 text-xs text-right font-normal ml-auto"
+                className="h-[28px] w-14 text-xs text-right font-normal ml-auto"
                 value={qty}
                 onChange={(e) => onQtyChange(e.target.value)}
                 disabled={disabled}
@@ -120,17 +120,17 @@ export function NoteParticularsTable({
             </td>
             <td className="px-2 py-1 text-right" style={{ width: 96 }}>
               <AccountsMoneyInput
-                className="h-[30px] w-24 text-xs text-right font-normal ml-auto"
+                className="h-[28px] w-24 text-xs text-right font-normal ml-auto border border-border"
                 value={rate}
                 onChange={(v) => onRateChange(String(v))}
                 disabled={disabled}
               />
             </td>
-            <td className="px-2 py-1 text-right tabular-nums text-[12px] text-muted-foreground font-normal">
-              {formatMoney(totals.basicAmount)}
+            <td className="px-2 py-1 text-right" style={{ minWidth: 88 }}>
+              <div className="cdn-cell-value">{formatMoney(totals.basicAmount)}</div>
             </td>
             <td className="px-2 py-1 text-center">
-              <div className="inline-flex items-center justify-center">
+              <div className="inline-flex items-center justify-center h-[28px]">
                 <Switch
                   id={switchId}
                   checked={gstApplicable}
@@ -149,25 +149,25 @@ export function NoteParticularsTable({
                     max={100}
                     step={0.01}
                     disabled={disabled}
-                    className="h-[30px] text-xs text-right ml-auto w-12 font-normal"
+                    className="h-[28px] text-xs text-right ml-auto w-12 font-normal"
                     value={gstPct || ""}
                     onChange={(e) => onGstPctChange(e.target.value)}
                     aria-label="GST percent"
                   />
                 </td>
-                <td className="px-2 py-1 text-right tabular-nums text-[12px] text-muted-foreground font-normal">
-                  {formatMoney(totals.cgst)}
+                <td className="px-2 py-1 text-right" style={{ minWidth: 72 }}>
+                  <div className="cdn-cell-value">{formatMoney(totals.cgst)}</div>
                 </td>
-                <td className="px-2 py-1 text-right tabular-nums text-[12px] text-muted-foreground font-normal">
-                  {formatMoney(totals.sgst)}
+                <td className="px-2 py-1 text-right" style={{ minWidth: 72 }}>
+                  <div className="cdn-cell-value">{formatMoney(totals.sgst)}</div>
                 </td>
-                <td className="px-2 py-1 text-right tabular-nums text-[12px] text-muted-foreground font-normal">
-                  {formatMoney(totals.igst)}
+                <td className="px-2 py-1 text-right" style={{ minWidth: 72 }}>
+                  <div className="cdn-cell-value">{formatMoney(totals.igst)}</div>
                 </td>
               </>
             ) : null}
-            <td className="px-2 py-1 text-right tabular-nums text-[12px] font-normal">
-              {formatMoney(totals.lineTotal)}
+            <td className="px-2 py-1 text-right" style={{ minWidth: 88 }}>
+              <div className="cdn-cell-value">{formatMoney(totals.lineTotal)}</div>
             </td>
           </tr>
         </tbody>

@@ -65,7 +65,7 @@ import {
   NoteInventoryImpactBanner,
   NoteNoInventoryImpactBanner,
 } from "@/components/accounts/voucher-form/NoteScenarioBanners";
-import { LedgerHierarchySelect } from "@/components/accounts/LedgerHierarchySelect";
+import { GenericLedgerHierarchySelect } from "@/components/accounts/GenericLedgerHierarchySelect";
 import {
   adaptPurchaseInvoiceReference,
   adaptPurchaseReturnReference,
@@ -1666,18 +1666,17 @@ export default function DebitNoteFormPageClient({
                     width="lg"
                   >
                     {isDirectMode ? (
-                      <select
-                        className="h-[30px] border rounded px-2 text-xs w-full cdn-control"
+                      <SearchableSelect
                         value={warehouseId}
-                        onChange={(e) => setWarehouseId(e.target.value)}
-                      >
-                        <option value="">Select Warehouse</option>
-                        {warehouseList.map((w) => (
-                          <option key={w.warehouse_id} value={w.warehouse_id}>
-                            {w.warehouse_name}
-                          </option>
-                        ))}
-                      </select>
+                        onChange={setWarehouseId}
+                        options={warehouseList.map((w) => ({
+                          value: String(w.warehouse_id),
+                          label: w.warehouse_name,
+                          sub: w.state || undefined,
+                        }))}
+                        placeholder="Select warehouse"
+                        required
+                      />
                     ) : (
                       <VoucherNoteReadOnly>
                         {warehouseDetail?.warehouseName ||
@@ -1743,7 +1742,7 @@ export default function DebitNoteFormPageClient({
                 </VoucherNoteField>
                 {isDirectMode && !refControlsLocked ? (
                   <>
-                    <VoucherNoteField label="Direct Mode" width="ref">
+                    <VoucherNoteField label="Direct Mode" width="full">
                       <div className="cnz-gst-toggle" role="group" aria-label="Direct debit note mode">
                         <button
                           type="button"
@@ -1872,17 +1871,18 @@ export default function DebitNoteFormPageClient({
                         <p className="text-[11px] font-medium text-muted-foreground mb-1">
                           Adjustment Ledger <span className="text-red-500">*</span>
                         </p>
-                        <LedgerHierarchySelect
+                        <GenericLedgerHierarchySelect
                           value={adjustmentLedgerId ? String(adjustmentLedgerId) : null}
                           onChange={(l) => {
                             setAdjustmentLedgerId(l.ledgerId);
                             setAdjustmentLedgerName(l.ledgerName);
                           }}
                           fallbackLabel={adjustmentLedgerName}
-                          placeholder="Select adjustment ledger"
+                          placeholder="Select adjustment ledger…"
                           disabled={saving}
-                          className="h-8 w-full text-left font-normal"
-                          ledgerFilter={(l) => l.allowManualPosting === true}
+                          className="h-8 w-full text-left font-normal text-xs"
+                          compact
+                          query={{ status: "ACTIVE", allowManualPosting: true }}
                         />
                       </div>
                     ) : null}
@@ -1915,7 +1915,6 @@ export default function DebitNoteFormPageClient({
                       onGstApplicableChange={setGstApplicable}
                       interstate={isDirectMode ? directInterstate : false}
                       switchId="dn-gst-applicable"
-                      ledgerFilter={(l) => l.allowManualPosting === true}
                     />
                   </div>
                 )}
@@ -2044,7 +2043,7 @@ export default function DebitNoteFormPageClient({
                                   />
                                 </td>
                                 <td className="p-1.5 min-w-[160px]">
-                                  <LedgerHierarchySelect
+                                  <GenericLedgerHierarchySelect
                                     value={row.ledgerId}
                                     onChange={(l) =>
                                       setDirectExtraCharges((prev) =>
@@ -2060,10 +2059,11 @@ export default function DebitNoteFormPageClient({
                                       )
                                     }
                                     fallbackLabel={row.ledgerName}
-                                    placeholder="Select ledger"
+                                    placeholder="Select ledger…"
                                     disabled={!chargesEditable}
                                     className="h-7 w-full text-left font-normal text-xs"
-                                    ledgerFilter={(l) => l.allowManualPosting === true}
+                                    compact
+                                    query={{ status: "ACTIVE", allowManualPosting: true }}
                                   />
                                 </td>
                                 <td className="p-1.5">
