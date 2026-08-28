@@ -17,7 +17,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { showToast } from "@/lib/toast";
-import { useFY } from "@/lib/fy-store";
 import { JournalVoucherService } from "@/services/journal-voucher.service";
 import { WarehouseService } from "@/services/warehouse.service";
 import { UserListService } from "@/services/user-list.service";
@@ -29,7 +28,7 @@ import {
 } from "@/types/journal-voucher.types";
 import { JournalSearchableSelect } from "./components/JournalSearchableSelect";
 import { JournalFormActionBar } from "./components/JournalFormActionBar";
-import { JournalAccountingPreview } from "./components/JournalAccountingPreview";
+import { JournalFormSummary } from "./components/JournalFormSummary";
 import { JournalReasonDialog } from "./components/JournalReasonDialog";
 import { JournalAttachmentsPanel } from "./components/JournalAttachmentsPanel";
 import {
@@ -41,6 +40,7 @@ import {
   buildCreatePayload,
   buildUpdatePayload,
   canCancelStatus,
+  computeJournalPreview,
   emptyJournalForm,
   formatSrNo,
   isDraftEditable,
@@ -68,7 +68,6 @@ export function JournalVoucherApiForm({
   onEdit,
 }: JournalVoucherApiFormProps) {
   const router = useRouter();
-  const { selectedFY } = useFY();
   const [form, setForm] = useState<JournalFormState>(emptyJournalForm);
   const [detail, setDetail] = useState<JournalVoucherDetail | null>(null);
   const [status, setStatus] = useState<JournalVoucherStatus>("DRAFT");
@@ -97,6 +96,22 @@ export function JournalVoucherApiForm({
   const [reverseDate, setReverseDate] = useState("");
 
   const fieldsEditable = isDraftEditable(status) && !readOnlyProp;
+
+  const preview = useMemo(() => computeJournalPreview(form), [form]);
+  const summaryBalanced =
+    !!form.debit_ledger_id &&
+    !!form.credit_ledger_id &&
+    form.debit_ledger_id !== form.credit_ledger_id &&
+    preview.amount > 0;
+
+  const debitAccountLabel =
+    form.debit_ledger_name ||
+    form.debit_ledger_code ||
+    "—";
+  const creditAccountLabel =
+    form.credit_ledger_name ||
+    form.credit_ledger_code ||
+    "—";
 
   const patch = useCallback((p: Partial<JournalFormState>) => {
     setForm((prev) => ({ ...prev, ...p }));
@@ -502,11 +517,6 @@ export function JournalVoucherApiForm({
               />
             </VoucherFormField>
           </div>
-          {selectedFY?.label ? (
-            <p className="text-[11px] text-muted-foreground mt-2">
-              Working FY: <span className="font-medium text-foreground">{selectedFY.label}</span>
-            </p>
-          ) : null}
         </VoucherFormSectionCard>
 
         <VoucherFormSectionCard title="Journal Entry">
@@ -564,34 +574,41 @@ export function JournalVoucherApiForm({
           ) : null}
         </VoucherFormSectionCard>
 
-        <VoucherFormSectionCard title="Supporting Information">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-            <div className="min-w-0 space-y-0.5">
-              <Label className="text-xs font-medium">
-                Narration <span className="text-red-500">*</span>
-              </Label>
-              <Textarea
-                className="resize-y rounded-lg border border-border min-h-[80px] max-h-40 py-1.5 text-sm focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:border-brand-400"
-                rows={3}
-                value={form.narration}
-                onChange={(e) => patch({ narration: e.target.value })}
-                placeholder="Enter reason for this accounting adjustment"
-                maxLength={5000}
-                disabled={!fieldsEditable}
+        <div className="grid grid-cols-1 gap-2.5 items-start lg:grid-cols-[minmax(0,1fr)_300px]">
+          <VoucherFormSectionCard title="Supporting Information">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+              <div className="min-w-0 space-y-0.5">
+                <Label className="text-xs font-medium">
+                  Narration <span className="text-red-500">*</span>
+                </Label>
+                <Textarea
+                  className="resize-y rounded-lg border border-border min-h-[80px] max-h-40 py-1.5 text-sm focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:border-brand-400"
+                  rows={3}
+                  value={form.narration}
+                  onChange={(e) => patch({ narration: e.target.value })}
+                  placeholder="Enter reason for this accounting adjustment"
+                  maxLength={5000}
+                  disabled={!fieldsEditable}
+                />
+              </div>
+              <JournalAttachmentsPanel
+                persisted={form.persistedAttachments}
+                pending={form.pendingFiles}
+                readOnly={!fieldsEditable}
+                onAddFiles={handleAddAttachmentFiles}
+                onRemovePersisted={handleRemovePersistedAttachment}
+                onRemovePending={handleRemovePendingAttachment}
               />
             </div>
-            <JournalAttachmentsPanel
-              persisted={form.persistedAttachments}
-              pending={form.pendingFiles}
-              readOnly={!fieldsEditable}
-              onAddFiles={handleAddAttachmentFiles}
-              onRemovePersisted={handleRemovePersistedAttachment}
-              onRemovePending={handleRemovePendingAttachment}
-            />
-          </div>
-        </VoucherFormSectionCard>
+          </VoucherFormSectionCard>
 
-        <JournalAccountingPreview form={form} />
+          <JournalFormSummary
+            debitAccount={debitAccountLabel}
+            creditAccount={creditAccountLabel}
+            journalAmount={preview.amount}
+            balanced={summaryBalanced}
+          />
+        </div>
 
         {detail?.accounting_voucher ? (
           <VoucherFormSectionCard title="Posted Accounting Voucher">

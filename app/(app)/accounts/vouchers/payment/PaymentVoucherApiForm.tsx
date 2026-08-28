@@ -25,8 +25,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { showToast } from "@/lib/toast";
-import { useFY } from "@/lib/fy-store";
-import { useTdsDropdown } from "@/hooks/masters";
 import { PaymentVoucherService } from "@/services/payment-voucher.service";
 import { CustomerListService } from "@/services/customer-list.service";
 import { SupplierListService } from "@/services/supplier-list.service";
@@ -34,7 +32,6 @@ import { WarehouseService } from "@/services/warehouse.service";
 import { BankAccountsListService } from "@/services/bank-accounts-list.service";
 import { LedgerService } from "@/services/ledger.service";
 import { UserListService } from "@/services/user-list.service";
-import { formatTdsSectionLabel } from "@/services/tds-list.service";
 import {
   PAYMENT_BANK_TRANSACTION_MODE_LABELS,
   PAYMENT_BANK_TRANSACTION_MODES,
@@ -48,9 +45,8 @@ import {
 import { PaymentSearchableSelect } from "./components/PaymentSearchableSelect";
 import { PaymentFormActionBar } from "./components/PaymentFormActionBar";
 import { PaymentAllocationTable } from "./components/PaymentAllocationTable";
-import { PaymentAdjustmentsEditor } from "./components/PaymentAdjustmentsEditor";
-import { PaymentSummaryCard } from "./components/PaymentSummaryCard";
-import { PaymentAccountingPreview } from "./components/PaymentAccountingPreview";
+import { PaymentLedgerEntriesTable } from "./components/PaymentLedgerEntriesTable";
+import { PaymentFormSummary } from "./components/PaymentFormSummary";
 import { PaymentReasonDialog } from "./components/PaymentReasonDialog";
 import { PaymentAttachmentsPanel } from "./components/PaymentAttachmentsPanel";
 import {
@@ -92,7 +88,6 @@ export function PaymentVoucherApiForm({
   onEdit,
 }: PaymentVoucherApiFormProps) {
   const router = useRouter();
-  const { selectedFY } = useFY();
   const [form, setForm] = useState<PaymentFormState>(emptyPaymentForm);
   const [detail, setDetail] = useState<PaymentVoucherDetail | null>(null);
   const [status, setStatus] = useState<PaymentVoucherStatus>("DRAFT");
@@ -113,9 +108,8 @@ export function PaymentVoucherApiForm({
   const [cashLedgers, setCashLedgers] = useState<{ value: string; label: string; sub?: string }[]>([]);
   const [manualLedgers, setManualLedgers] = useState<{ value: string; label: string; sub?: string }[]>([]);
   const [approvers, setApprovers] = useState<{ value: string; label: string }[]>([]);
-  /** Supplier master TDS Section — default only when positive TDS is first entered. */
+  /** Supplier master TDS Section — retained for legacy allocation payload sync (TDS UI hidden). */
   const [partyTdsSectionId, setPartyTdsSectionId] = useState<string | null>(null);
-  const tdsDropdownQuery = useTdsDropdown();
 
   const [submitOpen, setSubmitOpen] = useState(false);
   const [approverId, setApproverId] = useState("");
@@ -131,6 +125,20 @@ export function PaymentVoucherApiForm({
   const isPostedView = status === "POSTED" && !readOnlyProp;
   const showViewChrome = readOnlyProp || isPostedView;
   const preview = useMemo(() => computePaymentPreview(form), [form]);
+  /** Net adjustment effect from existing preview: adjCredit − adjDebit. */
+  const adjustmentsTotal = preview.adjCredit - preview.adjDebit;
+  const showSupplierInvoiceSettlement =
+    form.party_kind === "SUPPLIER" &&
+    form.payment_treatment === "against_outstanding";
+  const showInvoiceSettlementInSummary =
+    showSupplierInvoiceSettlement ||
+    (form.party_kind === "CUSTOMER_REFUND" && preview.totalAllocated > 0.004);
+  const showAdvanceInSummary =
+    form.party_kind === "SUPPLIER" && preview.advance > 0.004;
+  const summaryBalanced =
+    form.party_kind === "OTHER_LEDGER"
+      ? true
+      : Math.abs(preview.totalAllocated + preview.advance - preview.gross) < 0.01;
 
   const patch = useCallback((p: Partial<PaymentFormState>) => {
     setForm((prev) => ({ ...prev, ...p }));
@@ -397,16 +405,6 @@ export function PaymentVoucherApiForm({
     });
   }, [partyTdsSectionId, fieldsEditable]);
 
-  const tdsSectionOptions = useMemo(
-    () =>
-      (tdsDropdownQuery.data ?? []).map((tds) => ({
-        value: tds.tdsUuid,
-        label: formatTdsSectionLabel(tds),
-        sub: [tds.sectionCode, tds.description].filter(Boolean).join(" · "),
-      })),
-    [tdsDropdownQuery.data],
-  );
-
   const applyAllocationPatch = useCallback(
     (
       openItemId: string,
@@ -453,16 +451,6 @@ export function PaymentVoucherApiForm({
         sub: b.ledgerId,
       }));
   }, [bankRows, form.warehouse_id, warehouseName]);
-
-  const partyName = useMemo(() => {
-    if (form.party_kind === "SUPPLIER") {
-      return suppliers.find((s) => s.value === form.supplier_id)?.label || "";
-    }
-    if (form.party_kind === "CUSTOMER_REFUND") {
-      return customers.find((c) => c.value === form.customer_id)?.label || "";
-    }
-    return form.other_ledger_name;
-  }, [form, customers, suppliers]);
 
   const attachmentCount = form.persistedAttachments.length + form.pendingFiles.length;
   const selectedAllocCount = form.allocations.filter((a) => a.selected).length;
@@ -651,52 +639,55 @@ export function PaymentVoucherApiForm({
         {error ? <div className={VOUCHER_ERROR_CLASS}>{error}</div> : null}
 
         <VoucherFormSectionCard title="Voucher Details">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-2.5">
-            <VoucherFormField label="Voucher Date" required>
-              <Input
-                type="date"
-                className={VOUCHER_INPUT_CLASS}
-                value={form.voucher_date}
-                disabled={!fieldsEditable}
-                onChange={(e) => patch({ voucher_date: e.target.value })}
-              />
-            </VoucherFormField>
-            <VoucherFormField label="Financial Year">
-              <p className="h-8 flex items-center text-xs font-medium">
-                {selectedFY?.label || "—"}
-              </p>
-            </VoucherFormField>
-            <VoucherFormField label="Draft Payment No.">
-              <p className="h-8 flex items-center text-xs font-mono font-semibold text-brand-700">
-                {detail ? formatSrNo(detail.sr_no) : "Auto on save"}
-              </p>
-            </VoucherFormField>
-            {detail?.accounting_voucher?.voucher_number ? (
-              <VoucherFormField label="Accounting Voucher No.">
-                <p className="h-8 flex items-center text-xs font-mono font-semibold text-navy-700">
-                  {detail.accounting_voucher.voucher_number}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-2.5">
+            <div className="lg:col-span-2 min-w-0">
+              <VoucherFormField label="Voucher Date" required>
+                <Input
+                  type="date"
+                  className={VOUCHER_INPUT_CLASS}
+                  value={form.voucher_date}
+                  disabled={!fieldsEditable}
+                  onChange={(e) => patch({ voucher_date: e.target.value })}
+                />
+              </VoucherFormField>
+            </div>
+            <div className="lg:col-span-2 min-w-0">
+              <VoucherFormField label="Draft Payment No.">
+                <p className="h-8 flex items-center text-xs font-mono font-semibold text-brand-700">
+                  {detail ? formatSrNo(detail.sr_no) : "Auto on save"}
                 </p>
               </VoucherFormField>
+            </div>
+            {detail?.accounting_voucher?.voucher_number ? (
+              <div className="lg:col-span-2 min-w-0">
+                <VoucherFormField label="Accounting Voucher No.">
+                  <p className="h-8 flex items-center text-xs font-mono font-semibold text-navy-700">
+                    {detail.accounting_voucher.voucher_number}
+                  </p>
+                </VoucherFormField>
+              </div>
             ) : null}
-            <PaymentSearchableSelect
-              label="Branch / Warehouse"
-              required
-              disabled={!fieldsEditable}
-              value={form.warehouse_id}
-              options={warehouses}
-              placeholder="Select warehouse…"
-              onChange={(id) =>
-                patch({
-                  warehouse_id: id,
-                  bank_account_id: "",
-                  cash_bank_ledger_id:
-                    form.transaction_mode === "CASH" ? form.cash_bank_ledger_id : "",
-                  cash_bank_ledger_name:
-                    form.transaction_mode === "CASH" ? form.cash_bank_ledger_name : "",
-                })
-              }
-            />
-            <div className="space-y-1">
+            <div className="lg:col-span-3 min-w-0">
+              <PaymentSearchableSelect
+                label="Branch / Warehouse"
+                required
+                disabled={!fieldsEditable}
+                value={form.warehouse_id}
+                options={warehouses}
+                placeholder="Select warehouse…"
+                onChange={(id) =>
+                  patch({
+                    warehouse_id: id,
+                    bank_account_id: "",
+                    cash_bank_ledger_id:
+                      form.transaction_mode === "CASH" ? form.cash_bank_ledger_id : "",
+                    cash_bank_ledger_name:
+                      form.transaction_mode === "CASH" ? form.cash_bank_ledger_name : "",
+                  })
+                }
+              />
+            </div>
+            <div className="lg:col-span-2 min-w-0 space-y-1">
               <Label className="text-xs font-medium">
                 Mode of Payment <span className="text-red-500">*</span>
               </Label>
@@ -726,15 +717,17 @@ export function PaymentVoucherApiForm({
                 </SelectContent>
               </Select>
             </div>
-            <VoucherFormField label="Transaction Date">
-              <Input
-                type="date"
-                className={VOUCHER_INPUT_CLASS}
-                value={form.transaction_date}
-                disabled={!fieldsEditable}
-                onChange={(e) => patch({ transaction_date: e.target.value })}
-              />
-            </VoucherFormField>
+            <div className="lg:col-span-2 min-w-0">
+              <VoucherFormField label="Transaction Date">
+                <Input
+                  type="date"
+                  className={VOUCHER_INPUT_CLASS}
+                  value={form.transaction_date}
+                  disabled={!fieldsEditable}
+                  onChange={(e) => patch({ transaction_date: e.target.value })}
+                />
+              </VoucherFormField>
+            </div>
           </div>
         </VoucherFormSectionCard>
 
@@ -1029,55 +1022,6 @@ export function PaymentVoucherApiForm({
           ) : null}
 
           {form.party_kind === "SUPPLIER" &&
-          form.payment_treatment === "against_outstanding" ? (
-            <div className="mt-3 space-y-2">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold text-foreground">
-                  Supplier Outstanding Allocations
-                </p>
-                {outstandingLoading ? (
-                  <span className="text-[11px] text-muted-foreground flex items-center gap-1">
-                    <Loader2 className="w-3 h-3 animate-spin" /> Loading…
-                  </span>
-                ) : null}
-              </div>
-              <PaymentAllocationTable
-                rows={form.allocations}
-                readOnly={!fieldsEditable}
-                showTdsDiscount
-                tdsSectionOptions={tdsSectionOptions}
-                emptyMessage={
-                  form.supplier_id
-                    ? "No outstanding open items for this supplier."
-                    : "Select a supplier to load outstanding items."
-                }
-                onToggle={(id, selected) => {
-                  setForm((prev) => ({
-                    ...prev,
-                    allocations: prev.allocations.map((a) =>
-                      a.open_item_id === id
-                        ? {
-                            ...a,
-                            selected,
-                            allocated_amount: selected
-                              ? a.allocated_amount || String(a.outstanding_amount)
-                              : "",
-                          }
-                        : a,
-                    ),
-                  }));
-                }}
-                onChangeAmount={applyAllocationPatch}
-              />
-              <p className="text-[11px] text-muted-foreground">
-                Gross settlement {preview.gross.toFixed(2)} · Allocated{" "}
-                {preview.totalAllocated.toFixed(2)} · Supplier Advance {preview.advance.toFixed(2)}{" "}
-                · Net paid {preview.netBank.toFixed(2)}
-              </p>
-            </div>
-          ) : null}
-
-          {form.party_kind === "SUPPLIER" &&
           form.payment_treatment === "advance_on_account" ? (
             <div className="mt-3 rounded-lg border border-brand-200 bg-brand-50/50 px-3 py-2">
               <p className="text-xs text-brand-800">
@@ -1103,7 +1047,6 @@ export function PaymentVoucherApiForm({
               <PaymentAllocationTable
                 rows={form.allocations}
                 readOnly={!fieldsEditable}
-                showTdsDiscount={false}
                 emptyMessage={
                   form.customer_id
                     ? "No eligible Customer Advance or Credit Note balance. You can still make a direct refund using a Refund / Adjustment Ledger."
@@ -1140,41 +1083,96 @@ export function PaymentVoucherApiForm({
           ) : null}
         </VoucherFormSectionCard>
 
-        <VoucherFormSectionCard title="Adjustments">
-          <PaymentAdjustmentsEditor
+        {showSupplierInvoiceSettlement ? (
+          <VoucherFormSectionCard
+            title="Supplier Outstanding Allocations"
+            headerActions={
+              outstandingLoading ? (
+                <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                  <Loader2 className="w-3 h-3 animate-spin" /> Loading…
+                </span>
+              ) : null
+            }
+          >
+            <PaymentAllocationTable
+              rows={form.allocations}
+              readOnly={!fieldsEditable}
+              simplifiedSettlement
+              emptyMessage={
+                form.supplier_id
+                  ? "No outstanding open items for this supplier."
+                  : "Select a supplier to load outstanding items."
+              }
+              onToggle={(id, selected) => {
+                setForm((prev) => ({
+                  ...prev,
+                  allocations: prev.allocations.map((a) =>
+                    a.open_item_id === id
+                      ? {
+                          ...a,
+                          selected,
+                          allocated_amount: selected
+                            ? a.allocated_amount || String(a.outstanding_amount)
+                            : "",
+                          tds_amount: selected ? a.tds_amount : "0",
+                          tds_section_id: selected ? a.tds_section_id : "",
+                          discount_amount: selected ? a.discount_amount : "0",
+                        }
+                      : a,
+                  ),
+                }));
+              }}
+              onChangeAmount={applyAllocationPatch}
+            />
+          </VoucherFormSectionCard>
+        ) : null}
+
+        <VoucherFormSectionCard title="Ledger Entries">
+          <PaymentLedgerEntriesTable
             rows={form.adjustments}
             ledgerOptions={manualLedgers}
             readOnly={!fieldsEditable}
             onChange={(rows) => patch({ adjustments: rows })}
           />
-          {(preview.totalTds > 0 || preview.totalDiscount > 0) && (
-            <div className="mt-2 text-[11px] text-muted-foreground space-y-0.5">
-              <p>
-                Allocation TDS total: {preview.totalTds.toFixed(2)} (must match Supplier TDS
-                adjustment)
-              </p>
-              <p>
-                Allocation Discount total: {preview.totalDiscount.toFixed(2)} (must match
-                Discount Received adjustment; select a ledger)
-              </p>
-            </div>
-          )}
         </VoucherFormSectionCard>
 
-        <div className="grid grid-cols-1 xl:grid-cols-[minmax(280px,360px)_1fr] gap-3 items-start">
-          <PaymentSummaryCard
-            gross={preview.gross}
-            totalAllocated={preview.totalAllocated}
-            advance={preview.advance}
-            tds={preview.adjTds}
-            discount={preview.adjDiscount}
-            otherDebit={preview.otherDebit}
-            otherCredit={preview.otherCredit}
-            roundOff={preview.roundOff}
-            netBank={preview.netBank}
+        <div className="grid grid-cols-1 gap-2.5 items-start lg:grid-cols-[minmax(0,1fr)_300px]">
+          <VoucherFormSectionCard title="Narration & Attachments">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+              <div className="min-w-0 space-y-0.5">
+                <Label className="text-xs font-medium">Narration</Label>
+                <Textarea
+                  className="resize-y rounded-lg border border-border min-h-[60px] max-h-36 h-[60px] py-1.5 text-sm focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:border-brand-400"
+                  rows={2}
+                  value={form.narration}
+                  onChange={(e) => patch({ narration: e.target.value })}
+                  placeholder="Optional narration…"
+                  maxLength={2000}
+                  disabled={!fieldsEditable}
+                />
+              </div>
+              <PaymentAttachmentsPanel
+                persisted={form.persistedAttachments}
+                pending={form.pendingFiles}
+                readOnly={!fieldsEditable}
+                onAddFiles={handleAddAttachmentFiles}
+                onRemovePersisted={handleRemovePersistedAttachment}
+                onRemovePending={handleRemovePendingAttachment}
+              />
+            </div>
+          </VoucherFormSectionCard>
+
+          <PaymentFormSummary
+            grossAmount={preview.gross}
+            invoiceSettlement={preview.totalAllocated}
+            advanceAmount={preview.advance}
+            adjustmentsTotal={adjustmentsTotal}
+            paymentAmount={preview.netBank}
             partyKind={form.party_kind}
+            showInvoiceSettlement={showInvoiceSettlementInSummary}
+            showAdvance={showAdvanceInSummary}
+            balanced={summaryBalanced}
           />
-          <PaymentAccountingPreview form={form} partyLedgerName={partyName} />
         </div>
 
         {detail?.accounting_voucher ? (
@@ -1193,31 +1191,6 @@ export function PaymentVoucherApiForm({
             </div>
           </VoucherFormSectionCard>
         ) : null}
-
-        <VoucherFormSectionCard title="Narration and Attachments">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-            <div className="min-w-0 space-y-0.5">
-              <Label className="text-xs font-medium">Narration</Label>
-              <Textarea
-                className="resize-y rounded-lg border border-border min-h-[60px] max-h-36 h-[60px] py-1.5 text-sm focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:border-brand-400"
-                rows={2}
-                value={form.narration}
-                onChange={(e) => patch({ narration: e.target.value })}
-                placeholder="Optional narration…"
-                maxLength={2000}
-                disabled={!fieldsEditable}
-              />
-            </div>
-            <PaymentAttachmentsPanel
-              persisted={form.persistedAttachments}
-              pending={form.pendingFiles}
-              readOnly={!fieldsEditable}
-              onAddFiles={handleAddAttachmentFiles}
-              onRemovePersisted={handleRemovePersistedAttachment}
-              onRemovePending={handleRemovePendingAttachment}
-            />
-          </div>
-        </VoucherFormSectionCard>
       </div>
 
       {(!showViewChrome || status === "POSTED") ? (
