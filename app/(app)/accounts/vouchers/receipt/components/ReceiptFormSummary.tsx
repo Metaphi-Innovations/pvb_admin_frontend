@@ -1,35 +1,43 @@
 "use client";
 
-import { AlertTriangle, CheckCircle2 } from "lucide-react";
+import { CheckCircle2 } from "lucide-react";
 import { formatMoney } from "@/lib/accounts/money-format";
 import { cn } from "@/lib/utils";
 
-/** Single compact Receipt summary — bottom-right only. */
+/**
+ * Compact business-focused Receipt Summary (right column).
+ * Uses existing preview totals — does not invent new formulas.
+ */
 export function ReceiptFormSummary({
+  grossAmount,
   invoiceSettlement,
-  ledgerTotal,
-  bankAmount,
-  tdsAmount,
-  label = "Invoice Settlement",
+  onAccountAmount,
+  adjustmentsTotal,
+  receiptAmount,
+  showInvoiceSettlement = false,
+  showOnAccount = false,
+  balanced,
   className,
 }: {
+  grossAmount: number;
   invoiceSettlement: number;
-  ledgerTotal: number;
-  bankAmount?: number;
-  tdsAmount?: number;
-  /** e.g. Invoice Settlement / Advance / Receipt Amount */
-  label?: string;
+  onAccountAmount: number;
+  /** Manual ReceiptAdjustment total (excludes bank/cash). Hide when zero. */
+  adjustmentsTotal: number;
+  /** Final receipt / net bank amount from existing preview. */
+  receiptAmount: number;
+  showInvoiceSettlement?: boolean;
+  showOnAccount?: boolean;
+  /** Optional soft status chip — not a manual balancing control. */
+  balanced?: boolean;
   className?: string;
 }) {
-  const difference =
-    Math.round((invoiceSettlement - ledgerTotal) * 100) / 100;
-  const balanced = Math.abs(difference) < 0.01;
+  const showAdjustments = Math.abs(adjustmentsTotal) > 0.004;
 
   return (
     <div
       className={cn(
-        "rounded-xl border border-border bg-white shadow-sm px-3.5 py-3 space-y-1.5 w-full max-w-[280px]",
-        !balanced && "border-amber-300",
+        "rounded-xl border border-border bg-white shadow-sm px-3.5 py-3 space-y-1.5 w-full",
         className,
       )}
     >
@@ -41,43 +49,24 @@ export function ReceiptFormSummary({
           <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700">
             <CheckCircle2 className="w-3.5 h-3.5" /> Balanced
           </span>
-        ) : (
-          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-800">
-            <AlertTriangle className="w-3.5 h-3.5" /> Difference
-          </span>
-        )}
+        ) : null}
       </div>
 
-      <Row label={label} value={invoiceSettlement} />
-      {(bankAmount ?? 0) > 0 ? (
-        <Row label="Bank Received" value={bankAmount!} muted />
+      <Row label="Gross Amount" value={grossAmount} />
+      {showInvoiceSettlement ? (
+        <Row label="Invoice Settlement" value={invoiceSettlement} />
       ) : null}
-      {(tdsAmount ?? 0) > 0 ? (
-        <Row label="TDS" value={tdsAmount!} muted />
+      {showOnAccount ? (
+        <Row label="On-account Amount" value={onAccountAmount} />
       ) : null}
-      <Row label="Ledger Total" value={ledgerTotal} emphasize />
+      {showAdjustments ? (
+        <Row label="Adjustments" value={adjustmentsTotal} />
+      ) : null}
 
-      <div
-        className={cn(
-          "mt-1 rounded-lg px-2.5 py-1.5 flex items-center justify-between",
-          balanced ? "bg-emerald-50" : "bg-amber-50",
-        )}
-      >
-        <span
-          className={cn(
-            "text-xs font-semibold",
-            balanced ? "text-emerald-800" : "text-amber-900",
-          )}
-        >
-          Difference
-        </span>
-        <span
-          className={cn(
-            "text-sm tabular-nums font-bold",
-            balanced ? "text-emerald-800" : "text-amber-900",
-          )}
-        >
-          {formatMoney(difference)}
+      <div className="mt-1 rounded-lg bg-brand-50/80 border border-brand-100 px-2.5 py-1.5 flex items-center justify-between gap-3">
+        <span className="text-xs font-semibold text-brand-800">Receipt Amount</span>
+        <span className="text-sm tabular-nums font-bold text-brand-800">
+          {formatMoney(receiptAmount)}
         </span>
       </div>
     </div>
@@ -87,25 +76,14 @@ export function ReceiptFormSummary({
 function Row({
   label,
   value,
-  emphasize,
-  muted,
 }: {
   label: string;
   value: number;
-  emphasize?: boolean;
-  muted?: boolean;
 }) {
   return (
     <div className="flex items-center justify-between gap-3 text-xs">
-      <span className={muted ? "text-muted-foreground" : "text-foreground"}>
-        {label}
-      </span>
-      <span
-        className={cn(
-          "tabular-nums font-medium",
-          emphasize && "text-brand-700 font-semibold",
-        )}
-      >
+      <span className="text-muted-foreground">{label}</span>
+      <span className="tabular-nums font-medium text-foreground">
         {formatMoney(value)}
       </span>
     </div>
