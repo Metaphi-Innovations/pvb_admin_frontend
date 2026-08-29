@@ -9,15 +9,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { AccountsFormLayout } from "../expenses/components/AccountsFormLayout";
-import { AccountingImpactSection } from "@/components/accounts/AccountingImpactSection";
-import { VoucherAccountingPostingSummary } from "@/components/accounts/voucher-form/VoucherAccountingPostingSummary";
 import { VoucherFormSectionCard } from "@/components/accounts/voucher-form/VoucherFormSectionCard";
 import {
   VoucherNoteField,
   VoucherNoteFieldGrid,
   VoucherNoteReadOnly,
 } from "@/components/accounts/voucher-form/VoucherNoteFieldGrid";
-import { defaultVisibilityForType } from "@/components/accounts/voucher-form/voucher-form-shell";
 import { AccountsToast, useAccountsToast } from "@/components/accounts/AccountsToast";
 import { CreditNoteCancelDialog } from "./components/CreditNoteCancelDialog";
 import { CreditNoteReverseDialog } from "./components/CreditNoteReverseDialog";
@@ -208,9 +205,6 @@ export default function CreditNoteViewPageClient({ creditNoteId }: { creditNoteI
   const cnNo = record.cn_number || "—";
   const customerName = record.customer?.customer_name || "—";
   const sourceLabel = SOURCE_TYPE_LABELS[String(record.source_type)] || record.source_type || "—";
-  const debitLedger = lines[0]?.ledgerName || "Adjustment ledger";
-  const creditLedger = record.party_ledger?.ledger_name || customerName;
-  const showGst = gst > 0.004;
 
   return (
     <>
@@ -398,43 +392,6 @@ export default function CreditNoteViewPageClient({ creditNoteId }: { creditNoteI
                 {record.narration?.trim() || "—"}
               </p>
             </VoucherFormSectionCard>
-
-            <AccountingImpactSection
-              docKey="credit_note"
-              compact
-              entryPreview={
-                <div className="space-y-1">
-                  <p className="text-[10px] text-muted-foreground">
-                    Posted accounting preview. Ledger balances are not edited from this screen.
-                  </p>
-                  <VoucherAccountingPostingSummary
-                    compact
-                    voucherTypeLabel="Credit Note"
-                    debitLedgerLabel="Debit"
-                    debitLedgerName={debitLedger}
-                    creditLedgerLabel="Credit"
-                    creditLedgerName={creditLedger}
-                    voucherAmount={total}
-                    voucherAmountLabel="Credit Note Amount"
-                    gstAdjustments={
-                      showGst
-                        ? {
-                            cgstLabel: "Output CGST",
-                            cgstAmount: cgst,
-                            sgstLabel: "Output SGST",
-                            sgstAmount: sgst,
-                            igstLabel: "Output IGST",
-                            igstAmount: igst,
-                          }
-                        : undefined
-                    }
-                    visibilityItems={defaultVisibilityForType("credit_note", {
-                      gstApplicable: showGst,
-                    })}
-                  />
-                </div>
-              }
-            />
           </div>
         </AccountsFormLayout>
       </div>
