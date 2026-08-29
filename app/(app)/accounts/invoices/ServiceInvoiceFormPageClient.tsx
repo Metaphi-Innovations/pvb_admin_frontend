@@ -617,7 +617,7 @@ export default function ServiceInvoiceFormPageClient() {
                           { label: "SGST", align: "right" as const, className: "min-w-[90px]" },
                         ]),
                     { label: "Line Total", align: "right" as const, className: "min-w-[110px]" },
-                    { label: "", align: "left" as const, className: "min-w-[40px]" },
+                    { label: "", align: "left" as const, className: "so-col-actions" },
                   ].map((h) => (
                     <th
                       key={h.label || "del"}
@@ -758,7 +758,7 @@ export default function ServiceInvoiceFormPageClient() {
                       <td className="p-1.5 min-w-[110px] w-[110px]">
                         <InvoiceTableReadonly value={formatINR(split.lineTotal)} strong />
                       </td>
-                      <td className="p-1.5 min-w-[40px] w-[40px]">
+                      <td className="p-1.5 so-col-actions">
                         <button
                           type="button"
                           className="p-1 rounded hover:bg-red-50 text-muted-foreground hover:text-red-600"

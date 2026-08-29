@@ -456,7 +456,7 @@ export default function PurchaseInvoiceFormClient({ invoiceId }: { invoiceId?: n
                   <td className={cn(INVOICE_FORM_TABLE_TD_CLASS, "text-right tabular-nums font-medium")}>
                     {formatMoney(line.total)}
                   </td>
-                  <td className={INVOICE_FORM_TABLE_TD_CLASS}>
+                  <td className={cn(INVOICE_FORM_TABLE_TD_CLASS, "so-col-actions")}>
                     {lines.length > 1 && (
                       <Button
                         variant="ghost"

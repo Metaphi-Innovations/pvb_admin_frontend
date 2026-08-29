@@ -265,7 +265,7 @@ export function CreditNoteParticularsEditor({
         return <ReadCell key={col} align="right" value={formatCnMoney(preview.lineTotal)} strong />;
       case "actions":
         return (
-          <Cell key={col} align="center">
+          <Cell key={col} align="center" className="so-col-actions">
             <button
               type="button"
               className="p-1 rounded hover:bg-red-50 text-muted-foreground hover:text-red-600 disabled:opacity-40"
@@ -358,7 +358,7 @@ export function CreditNoteParticularsEditor({
                     col === "particular" && "w-[22%]",
                     col === "ledger" && "w-[18%]",
                     col === "gst_toggle" && "w-[4.5rem]",
-                    col === "actions" && "w-[2.75rem]",
+                    col === "actions" && "so-col-actions",
                   )}
                 >
                   {columnLabel(col)}
