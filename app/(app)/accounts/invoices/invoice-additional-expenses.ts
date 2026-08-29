@@ -131,26 +131,62 @@ const FREIGHT_EXPENSE_HEADS = new Set<InvoiceExpenseHead>([
 	"Transportation",
 ]);
 
-export type InvoiceExpenseOrigin = "sales_order" | "manual";
+export type InvoiceExpenseOrigin = "sales_order" | "manual" | "purchase_order";
+
+export type InvoiceChargeSource = "ORDER" | "INVOICE";
 
 export interface InvoiceAdditionalExpense {
 	id: string;
-	expenseHead: InvoiceExpenseHead | "";
+	/** Free-text Particular (charge_name). Not bound to Additional Charge Master. */
+	expenseHead: string;
 	amount: number;
 	gstApplicable: boolean;
 	gstPct: number;
 	remarks: string;
-	/** Additional Charge Master id (UUID from backend). */
+	/** Optional legacy / source Additional Charge Master id. */
 	chargeMasterId?: string | null;
-	/** Charge Master code (Goods generate). */
+	/** Charge Master code (legacy). */
 	chargeCode?: string | null;
-	/** Auto-resolved / Charge-Master COA ledger — not user-selectable. */
+	/** User-selected COA ledger (Income or Expense). */
 	coaLedgerId?: number | string | null;
 	coaLedgerName?: string;
 	coaLedgerCode?: string;
-	/** Prefetched from Sales Order — not removable on the invoice screen. */
+	/** HSN Master id (required for new charge rows). */
+	hsnId?: string | null;
+	hsnCode?: string | null;
+	/** Backend charge_source — ORDER for source-suggested, INVOICE for manual. */
+	chargeSource?: InvoiceChargeSource;
+	/** Prefetched from Sales Order / PO — may be edited (ledger/HSN required). */
 	origin?: InvoiceExpenseOrigin;
 }
+
+/** Payload shape shared by Sales / Purchase invoice create APIs. */
+export type InvoiceAdditionalChargePayload = {
+	charge_name: string;
+	ledger_id: string;
+	hsn_id: string;
+	amount: number;
+	gst_applicable: boolean;
+	gst_rate: number;
+	remarks?: string | null;
+	charge_source: InvoiceChargeSource;
+	additional_charge_id?: string | null;
+};
+
+export type SuggestedAdditionalChargeLike = {
+	charge_name?: string | null;
+	amount?: string | number | null;
+	gst_percent?: string | number | null;
+	gst_applicable?: boolean | null;
+	default_gst_rate?: string | number | null;
+	charge_source?: string | null;
+	matched_additional_charge_id?: string | null;
+	/** Ignored for auto-selection — ledger must be chosen by the user. */
+	matched_ledger_id?: string | null;
+	hsn_id?: string | null;
+	hsn_code?: string | null;
+	sales_order_expense_id?: string | null;
+};
 
 export function getActiveInvoiceChargeOptions(): InvoiceChargeMasterOption[] {
 	return INVOICE_CHARGE_MASTER_DEMO.filter((c) => c.status === "active");
@@ -249,8 +285,98 @@ export function createEmptyAdditionalExpense(
 		coaLedgerId: null,
 		coaLedgerName: "",
 		coaLedgerCode: "",
+		hsnId: null,
+		hsnCode: null,
+		chargeSource: origin === "manual" ? "INVOICE" : "ORDER",
 		origin,
 	};
+}
+
+function asSuggestedNumber(value: string | number | null | undefined): number {
+	if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+	if (value == null || value === "") return 0;
+	const n = Number(value);
+	return Number.isFinite(n) ? n : 0;
+}
+
+/**
+ * Map prepare/suggested ORDER charges into editable rows.
+ * Ledger is intentionally left blank — never auto-fill from matched_ledger_id / master.
+ */
+export function mapSuggestedAdditionalChargesToExpenses(
+	suggested: SuggestedAdditionalChargeLike[],
+	origin: InvoiceExpenseOrigin = "sales_order",
+): InvoiceAdditionalExpense[] {
+	return (suggested || []).map((charge, idx) => {
+		const gstPct =
+			asSuggestedNumber(charge.gst_percent) ||
+			asSuggestedNumber(charge.default_gst_rate);
+		const gstApplicable =
+			charge.gst_applicable == null ? gstPct > 0 : Boolean(charge.gst_applicable);
+		const hsnId = charge.hsn_id?.trim() || null;
+		return {
+			id:
+				charge.sales_order_expense_id?.trim() ||
+				`suggested-${origin}-${idx}-${Math.random().toString(36).slice(2, 7)}`,
+			expenseHead: (charge.charge_name || "").trim(),
+			amount: asSuggestedNumber(charge.amount),
+			gstApplicable,
+			gstPct: gstApplicable ? gstPct : 0,
+			remarks: "",
+			chargeMasterId: charge.matched_additional_charge_id || null,
+			chargeCode: null,
+			coaLedgerId: null,
+			coaLedgerName: "",
+			coaLedgerCode: "",
+			hsnId,
+			hsnCode: charge.hsn_code?.trim() || null,
+			chargeSource: "ORDER",
+			origin,
+		};
+	});
+}
+
+/** Build API charge payload when the row has enough identity to submit. */
+export function toAdditionalChargePayload(
+	row: InvoiceAdditionalExpense,
+	fallbackSource: InvoiceChargeSource = "INVOICE",
+): InvoiceAdditionalChargePayload | null {
+	const particular = (row.expenseHead || "").trim();
+	const ledgerId =
+		row.coaLedgerId != null && String(row.coaLedgerId).trim()
+			? String(row.coaLedgerId).trim()
+			: "";
+	const hsnId = row.hsnId?.trim() || "";
+	const hasContent =
+		Boolean(particular) || row.amount > 0 || Boolean(ledgerId) || Boolean(hsnId);
+	if (!hasContent) return null;
+
+	const source: InvoiceChargeSource =
+		row.chargeSource ||
+		(row.origin === "sales_order" || row.origin === "purchase_order"
+			? "ORDER"
+			: fallbackSource);
+
+	return {
+		charge_name: particular,
+		ledger_id: ledgerId,
+		hsn_id: hsnId,
+		amount: roundMoney(Math.max(0, row.amount)),
+		gst_applicable: Boolean(row.gstApplicable),
+		gst_rate: row.gstApplicable ? Math.max(0, row.gstPct) : 0,
+		remarks: row.remarks?.trim() || null,
+		charge_source: source,
+		additional_charge_id: row.chargeMasterId || null,
+	};
+}
+
+export function toAdditionalChargePayloadList(
+	rows: InvoiceAdditionalExpense[],
+	fallbackSource: InvoiceChargeSource = "INVOICE",
+): InvoiceAdditionalChargePayload[] {
+	return rows
+		.map((row) => toAdditionalChargePayload(row, fallbackSource))
+		.filter((row): row is InvoiceAdditionalChargePayload => row != null);
 }
 
 export function calcAdditionalExpenseRow(

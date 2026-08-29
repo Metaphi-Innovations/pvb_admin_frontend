@@ -62,10 +62,8 @@ import {
   validateSampleOrderBatchStock,
   validateSampleOrderCostPrices,
 } from "./components/SampleOrderInvoiceLinesEditor";
-import { InvoiceAdditionalExpensesEditor } from "./components/InvoiceAdditionalExpensesEditor";
 import {
   GoodsInvoiceAdditionalChargesEditor,
-  enrichExpensesFromChargeMaster,
   validateGoodsAdditionalCharges,
 } from "./components/GoodsInvoiceAdditionalChargesEditor";
 import { SalesInvoiceCustomerSection } from "./components/SalesInvoiceCustomerSection";
@@ -133,7 +131,9 @@ import {
   calcAdditionalExpensesTotals,
   createEmptyAdditionalExpense,
   deriveLegacyChargeFields,
+  mapSuggestedAdditionalChargesToExpenses,
   resolveInvoiceAdditionalExpenses,
+  toAdditionalChargePayloadList,
   type InvoiceAdditionalExpense,
 } from "./invoice-additional-expenses";
 import {
@@ -296,10 +296,6 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
   const [additionalExpenses, setAdditionalExpenses] = useState<InvoiceAdditionalExpense[]>([
     createEmptyAdditionalExpense(),
   ]);
-  /** SO/order charges from prepare — display only; not posted (CN/DN / PI-GRN pattern). */
-  const [orderSuggestedCharges, setOrderSuggestedCharges] = useState<
-    PrepareDispatchInvoiceDto["suggested_additional_charges"]
-  >([]);
   const [roundOff, setRoundOff] = useState(0);
   const [backendTotals, setBackendTotals] = useState<DispatchInvoiceTotalsPreview | null>(
     null,
@@ -660,35 +656,27 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
       prefill.sourceType === "sales_order" ||
       prefill.sourceType === "stock_transfer"
     ) {
-      // Editable charges start empty; SO/order charges are shown read-only separately.
-      setAdditionalExpenses([]);
+      // Seed editable charges from prepare/bridge suggestions (ledger left blank).
       if (prefill.sourceType === "sample_order") {
-        setOrderSuggestedCharges([]);
+        setAdditionalExpenses([]);
         setRoundOff(0);
       } else if (prefill.additionalExpenses?.length) {
-        // Local bridge path: surface SO expenses as display-only suggestions.
-        setOrderSuggestedCharges(
-          prefill.additionalExpenses.map((e, idx) => {
-            const gstPct = Number(e.gstPct || 0);
-            return {
-              sales_order_expense_id: String(e.id || `bridge-${idx}`),
-              charge_name: e.expenseHead || "Additional charge",
-              amount: String(e.amount || 0),
-              gst_percent: gstPct > 0 ? String(gstPct) : null,
-              charge_source: "ORDER" as const,
-              matched_additional_charge_id: e.chargeMasterId || null,
-              matched_ledger_id: null,
-              matched_ledger_code: null,
-              matched_ledger_name: null,
-              gst_applicable: e.gstApplicable ?? gstPct > 0,
-              default_gst_rate: gstPct > 0 ? String(gstPct) : null,
-              mapping_ok: Boolean(e.chargeMasterId),
-            };
-          }),
+        setAdditionalExpenses(
+          prefill.additionalExpenses.map((e) => ({
+            ...e,
+            // Never auto-fill ledger from legacy master / matched ledger.
+            coaLedgerId: null,
+            coaLedgerName: "",
+            coaLedgerCode: "",
+            chargeSource: "ORDER" as const,
+            origin: e.origin === "manual" ? "sales_order" : e.origin || "sales_order",
+          })),
         );
+      } else {
+        setAdditionalExpenses([]);
       }
     } else if (prefill.additionalExpenses?.length) {
-      setAdditionalExpenses(enrichExpensesFromChargeMaster(prefill.additionalExpenses));
+      setAdditionalExpenses(prefill.additionalExpenses);
     }
     setSchemeSettlementEntries(prefill.nearExpirySchemes);
   };
@@ -713,7 +701,6 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     setTransport(EMPTY_TRANSPORT_STATUTORY);
     setLines([createEmptyLine()]);
     setAdditionalExpenses([]);
-    setOrderSuggestedCharges([]);
     setError(null);
     setSchemeSettlementEntries([]);
   };
@@ -763,7 +750,6 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
         setBranch("Head Office");
         setLines([createEmptyLine()]);
         setAdditionalExpenses([]);
-        setOrderSuggestedCharges([]);
         setError(null);
         setSchemeSettlementEntries([]);
         return;
@@ -801,7 +787,10 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
             salespersonName,
           );
 
-          setOrderSuggestedCharges(prepared.suggested_additional_charges || []);
+          const suggestedExpenses = mapSuggestedAdditionalChargesToExpenses(
+            prepared.suggested_additional_charges || [],
+            "sales_order",
+          );
 
           const customerName = String(
             customer.customer_name || customer.customerName || row.customerName || "",
@@ -879,7 +868,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
                 : null,
             lineItems,
             lineErrors: [],
-            additionalExpenses: [],
+            additionalExpenses: suggestedExpenses,
             nearExpirySchemes: [],
             sourceWarehouseGstin: String(
               (prepared.warehouse_gst as Record<string, unknown> | null)?.gst_number ||
@@ -985,7 +974,10 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
             salespersonName,
           );
 
-          setOrderSuggestedCharges(prepared.suggested_additional_charges || []);
+          const suggestedExpenses = mapSuggestedAdditionalChargesToExpenses(
+            prepared.suggested_additional_charges || [],
+            "sales_order",
+          );
 
           const customerName = String(
             customer.customer_name || customer.customerName || "",
@@ -1123,7 +1115,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
                 : transportDistanceKm,
             lineItems,
             lineErrors: [],
-            additionalExpenses: [],
+            additionalExpenses: suggestedExpenses,
             nearExpirySchemes: [],
             sourceWarehouseGstin: sourceWhGstin,
             destinationWarehouseGstin: destWhGstin,
@@ -1477,15 +1469,13 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
       return;
     }
 
-    const charges = additionalExpenses
-      .filter((e) => (e.expenseHead.trim() || e.amount > 0) && e.chargeMasterId)
-      .map((e) => ({
-        additional_charge_id: String(e.chargeMasterId),
-        amount: e.amount,
-        charge_source: "INVOICE" as const,
-        gst_applicable: e.gstApplicable,
-        gst_rate: e.gstPct,
-      }));
+    const charges = toAdditionalChargePayloadList(additionalExpenses, "INVOICE").filter(
+      (c) =>
+        Boolean(c.charge_name?.trim()) &&
+        Boolean(c.ledger_id?.trim()) &&
+        Boolean(c.hsn_id?.trim()) &&
+        Number(c.amount) > 0,
+    );
 
     let cancelled = false;
     const timer = window.setTimeout(() => {
@@ -2104,6 +2094,18 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
         setError(chargeErr);
         return;
       }
+    } else if (
+      !isSampleOrderGeneration &&
+      sourceType !== "sample_order" &&
+      !isStockTransferGeneration &&
+      sourceType !== "stock_transfer"
+    ) {
+      // Manual Sales Invoice — same Additional Charges validation as dispatch-generated.
+      const chargeErr = validateGoodsAdditionalCharges(additionalExpenses);
+      if (chargeErr) {
+        setError(chargeErr);
+        return;
+      }
     }
     if (isStockTransferGeneration || sourceType === "stock_transfer") {
       const stErr = validateStockTransferInvoiceCore();
@@ -2178,16 +2180,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
       const status: InvoiceStatus = asDraft ? "draft" : "sent";
 
       if ((isSalesOrderGeneration || isStockTransferGeneration) && !asDraft) {
-        const charges = additionalExpenses
-          .filter((e) => (e.expenseHead.trim() || e.amount > 0) && e.chargeMasterId)
-          .map((e) => ({
-            additional_charge_id: String(e.chargeMasterId),
-            amount: e.amount,
-            charge_source: "INVOICE" as const,
-            gst_applicable: e.gstApplicable,
-            gst_rate: e.gstPct,
-            remarks: e.remarks || undefined,
-          }));
+        const charges = toAdditionalChargePayloadList(additionalExpenses, "INVOICE");
 
         const created = await SalesInvoiceService.createFromDispatch(sourceDispatchId, {
           invoice_date: invoiceDate,
@@ -2668,64 +2661,6 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
 
         {!smGen ? (
         <>
-        {soGen || stGen ? (
-          orderSuggestedCharges.length > 0 ? (
-            <Section title="Sales Order Additional Charges" compact={compactGen} flush={compactGen}>
-              <p className={cn(INVOICE_FORM_HELPER_CLASS, compactGen ? "px-3 pt-2" : "-mt-1")}>
-                Charges from the sales order (display only — not posted).
-              </p>
-              <div className={cn(compactGen ? "so-invoice-charges-table-wrap w-full" : "border rounded-md overflow-hidden")}>
-                <table className={cn("w-full text-xs", compactGen && "so-invoice-table so-invoice-charges-table table-fixed")}>
-                  <thead className={compactGen ? undefined : "border-b bg-muted/20"}>
-                    <tr>
-                      <th className={cn("p-1.5 text-left font-medium", compactGen && "px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground")}>Charge</th>
-                      <th className={cn("p-1.5 text-right font-medium w-28", compactGen && "px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground")}>Amount</th>
-                      <th className={cn("p-1.5 text-right font-medium w-20", compactGen && "px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground")}>GST %</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {orderSuggestedCharges.map((charge, idx) => {
-                      const gstPct = Number(
-                        charge.gst_percent ?? charge.default_gst_rate ?? 0,
-                      );
-                      return (
-                        <tr
-                          key={`so-charge-${charge.sales_order_expense_id || charge.charge_name}-${idx}`}
-                          className="border-b last:border-0"
-                        >
-                          <td className="p-1.5">
-                            {charge.charge_name}
-                            {!charge.mapping_ok ? (
-                              <span className="ml-1 text-[10px] text-amber-700">
-                                (unmapped)
-                              </span>
-                            ) : null}
-                          </td>
-                          <td className="p-1.5 text-right tabular-nums">
-                            {formatINR(Number(charge.amount || 0))}
-                          </td>
-                          <td className="p-1.5 text-right tabular-nums">
-                            {gstPct > 0 ? gstPct : "—"}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-              {orderSuggestedCharges.some((c) => !c.mapping_ok) ? (
-                <p className="text-xs text-amber-700">
-                  The following SO charges are not in Additional Charge Master:{" "}
-                  {orderSuggestedCharges
-                    .filter((c) => !c.mapping_ok)
-                    .map((c) => c.charge_name)
-                    .join(", ")}
-                </p>
-              ) : null}
-            </Section>
-          ) : null
-        ) : null}
-
         <Section
           title="Additional Charges"
           compact={compactGen && (soGen || stGen)}
@@ -2744,33 +2679,22 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
             ) : undefined
           }
         >
-          {soGen || stGen ? (
-            <>
-              {!compactGen ? (
-                <p className={cn(INVOICE_FORM_HELPER_CLASS, "-mt-1")}>
-                  Optional freight, packing, or other charges. These post on the sales
-                  invoice.
-                </p>
-              ) : null}
-              <GoodsInvoiceAdditionalChargesEditor
-                expenses={additionalExpenses}
-                onChange={setAdditionalExpenses}
-                interstate={interstateGst}
-                tableVariant={compactGen ? "invoice" : "default"}
-                hideAddButton={compactGen}
-                onBindAddRow={(fn) => {
-                  addChargeRowRef.current = fn;
-                }}
-              />
-            </>
-          ) : (
-            <InvoiceAdditionalExpensesEditor
-              expenses={additionalExpenses}
-              onChange={setAdditionalExpenses}
-              defaultGstPct={18}
-              interstate={interstateGst}
-            />
-          )}
+          {!compactGen ? (
+            <p className={cn(INVOICE_FORM_HELPER_CLASS, "-mt-1")}>
+              Optional freight, packing, or other charges. These post on the sales
+              invoice. Select ledger and HSN for each row.
+            </p>
+          ) : null}
+          <GoodsInvoiceAdditionalChargesEditor
+            expenses={additionalExpenses}
+            onChange={setAdditionalExpenses}
+            interstate={interstateGst}
+            tableVariant={compactGen && (soGen || stGen) ? "invoice" : "default"}
+            hideAddButton={Boolean(compactGen && (soGen || stGen))}
+            onBindAddRow={(fn) => {
+              addChargeRowRef.current = fn;
+            }}
+          />
         </Section>
         </>
         ) : null}

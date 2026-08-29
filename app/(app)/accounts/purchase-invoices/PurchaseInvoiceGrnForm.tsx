@@ -43,11 +43,16 @@ import {
   type EligibleGrnDto,
   type PrepareGrnInvoiceDto,
 } from "@/services/purchase-invoice.service";
-import { GoodsInvoiceAdditionalChargesEditor } from "@/app/(app)/accounts/invoices/components/GoodsInvoiceAdditionalChargesEditor";
 import {
   calcAdditionalExpensesTotals,
+  mapSuggestedAdditionalChargesToExpenses,
+  toAdditionalChargePayloadList,
   type InvoiceAdditionalExpense,
 } from "@/app/(app)/accounts/invoices/invoice-additional-expenses";
+import {
+  GoodsInvoiceAdditionalChargesEditor,
+  validateGoodsAdditionalCharges,
+} from "@/app/(app)/accounts/invoices/components/GoodsInvoiceAdditionalChargesEditor";
 import { PurchaseInvoiceDirectTotals } from "./PurchaseInvoiceDirectTotals";
 import type { DirectPurchaseTotals } from "./purchase-invoice-direct-utils";
 import { DP_FIELD_CLASS } from "./direct-purchase-form-ui";
@@ -247,8 +252,13 @@ export function PurchaseInvoiceGrnForm({
 
   function applyPrepared(data: PrepareGrnInvoiceDto, fallback?: EligibleGrnDto | null) {
     setPrepared(data);
-    // PO charges stay read-only; editable invoice charges start empty (CN/DN pattern).
-    setAdditionalExpenses([]);
+    // Seed PO suggested charges as editable rows — ledger left blank (no master auto-map).
+    setAdditionalExpenses(
+      mapSuggestedAdditionalChargesToExpenses(
+        data.suggested_additional_charges || [],
+        "purchase_order",
+      ),
+    );
     setRoundOff(0);
     setVendorInvoiceNo(data.supplier_invoice.supplier_invoice_number || "");
     setSupplierInvoiceDate(formatDateOnly(data.supplier_invoice.supplier_invoice_date));
@@ -379,8 +389,6 @@ export function PurchaseInvoiceGrnForm({
     invoiceTotal: roundMoney(subtotal + totalGst + chargeBreakdown.totalAmount),
     netPayable: Math.round(finalTotal * 100) / 100,
   };
-  const poSuggestedCharges = prepared?.suggested_additional_charges || [];
-  const unmappedCharges = poSuggestedCharges.filter((c) => !c.mapping_ok);
   const supplierInvoiceLocked = Boolean(prepared?.supplier_invoice.supplier_invoice_number);
 
   const doSave = async () => {
@@ -400,15 +408,11 @@ export function PurchaseInvoiceGrnForm({
       );
     }
 
-    const additionalCharges: AdditionalChargeInput[] = additionalExpenses
-      .filter((e) => e.chargeMasterId && e.amount > 0)
-      .map((e) => ({
-        additional_charge_id: e.chargeMasterId!,
-        amount: e.amount,
-        charge_source: "INVOICE" as const,
-        gst_applicable: e.gstApplicable,
-        gst_rate: e.gstApplicable ? e.gstPct : undefined,
-      }));
+    const chargeErr = validateGoodsAdditionalCharges(additionalExpenses);
+    if (chargeErr) return setError(chargeErr);
+
+    const additionalCharges: AdditionalChargeInput[] =
+      toAdditionalChargePayloadList(additionalExpenses, "INVOICE");
 
     setSaving(true);
     // Ensure the FY id is in localStorage before axios fires the request.
@@ -696,65 +700,6 @@ export function PurchaseInvoiceGrnForm({
                   </table>
                 </div>
               </VoucherFormSectionCard>
-
-              {poSuggestedCharges.length > 0 ? (
-                <VoucherFormSectionCard title="PO Additional Charges" flush>
-                  <p className="px-3 pt-2 text-[11px] text-muted-foreground">
-                    Charges from the purchase order (display only — not posted).
-                  </p>
-                  <div className="so-invoice-charges-table-wrap w-full">
-                    <table className="so-invoice-table so-invoice-charges-table table-fixed w-full text-xs">
-                      <thead>
-                        <tr>
-                          <th className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground text-left">
-                            Charge
-                          </th>
-                          <th className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground text-right w-28">
-                            Amount
-                          </th>
-                          <th className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground text-right w-20">
-                            GST %
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {poSuggestedCharges.map((charge, idx) => (
-                          <tr
-                            key={`po-charge-${charge.matched_additional_charge_id || charge.charge_name}-${idx}`}
-                            className="border-b border-border/40 last:border-0"
-                          >
-                            <td className="p-1.5">
-                              {charge.charge_name}
-                              {!charge.mapping_ok ? (
-                                <span className="ml-1 text-[10px] text-amber-700">(unmapped)</span>
-                              ) : null}
-                            </td>
-                            <td className="p-1.5 text-right">
-                              <InvoiceTableReadonly value={formatMoney(Number(charge.amount || 0))} />
-                            </td>
-                            <td className="p-1.5 text-right">
-                              <InvoiceTableReadonly
-                                value={
-                                  charge.gst_percent != null && Number(charge.gst_percent) > 0
-                                    ? String(Number(charge.gst_percent))
-                                    : "—"
-                                }
-                                muted
-                              />
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  {unmappedCharges.length > 0 ? (
-                    <p className="px-3 pb-2 text-xs text-amber-700">
-                      The following PO charges are not in Additional Charge Master:{" "}
-                      {unmappedCharges.map((c) => c.charge_name).join(", ")}
-                    </p>
-                  ) : null}
-                </VoucherFormSectionCard>
-              ) : null}
 
               <VoucherFormSectionCard
                 title="Additional Charges"

@@ -233,7 +233,9 @@ function InvoiceAdditionalExpensesEditorInner({
 						next.gstPct = defaultGstPct;
 					}
 					if (patch.expenseHead && !patch.coaLedgerName) {
-						const ledger = resolveExpenseHeadCoaLedger(patch.expenseHead);
+						const ledger = resolveExpenseHeadCoaLedger(
+							patch.expenseHead as InvoiceExpenseHead | "",
+						);
 						next.coaLedgerId = ledger.coaLedgerId;
 						next.coaLedgerName = ledger.coaLedgerName;
 					}
