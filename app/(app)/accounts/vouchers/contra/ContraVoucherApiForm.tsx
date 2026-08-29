@@ -3,15 +3,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
-import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
+import { Button } from "@/components/ui/button";
 import { InvoiceFormLayout } from "@/app/(app)/accounts/components/InvoiceFormLayout";
+import {
+  INVOICE_DETAIL_INPUT_CLASS,
+  INVOICE_DETAIL_SELECT_CLASS,
+  InvoiceDetailField,
+} from "@/app/(app)/accounts/invoices/components/invoice-form-voucher-ui";
+import "@/app/(app)/accounts/invoices/sales-order-invoice-form-compact.css";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { VoucherFormSectionCard } from "@/components/accounts/voucher-form/VoucherFormSectionCard";
 import {
   VOUCHER_ERROR_CLASS,
-  VOUCHER_INPUT_CLASS,
   VOUCHER_MONEY_INPUT_CLASS,
-  VoucherFormField,
 } from "@/components/accounts/voucher-simple-form-ui";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
@@ -25,7 +29,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { showToast } from "@/lib/toast";
-import { useFY } from "@/lib/fy-store";
+import { notifyVoucherListingChanged } from "@/lib/accounts/voucher-posting-notify";
 import { ContraVoucherService } from "@/services/contra-voucher.service";
 import { WarehouseService } from "@/services/warehouse.service";
 import { UserListService } from "@/services/user-list.service";
@@ -43,6 +47,7 @@ import {
 } from "@/types/contra-voucher.types";
 import { ContraSearchableSelect } from "./components/ContraSearchableSelect";
 import { ContraFormActionBar } from "./components/ContraFormActionBar";
+import { ContraFormSummary } from "./components/ContraFormSummary";
 import { ContraReasonDialog } from "./components/ContraReasonDialog";
 import { ContraAttachmentsPanel } from "./components/ContraAttachmentsPanel";
 import {
@@ -72,7 +77,9 @@ import {
   isCrossWarehouseCashBlocked,
   isDraftEditable,
   mapDetailToForm,
+  sameAccountSelected,
   sanitizeNonNegativeMoneyInput,
+  toMoneyNumber,
   validateContraForm,
   type ContraFormState,
 } from "./contra-voucher-utils";
@@ -91,7 +98,10 @@ export function ContraVoucherApiForm({
   onEdit,
 }: ContraVoucherApiFormProps) {
   const router = useRouter();
-  const { selectedFY } = useFY();
+  const goToList = useCallback(() => {
+    notifyVoucherListingChanged("contra");
+    router.replace(CONTRA_LIST_PATH);
+  }, [router]);
   const [form, setForm] = useState<ContraFormState>(emptyContraForm);
   const [detail, setDetail] = useState<ContraVoucherDetail | null>(null);
   const [status, setStatus] = useState<ContraVoucherStatus>("DRAFT");
@@ -124,6 +134,38 @@ export function ContraVoucherApiForm({
   const fieldsEditable = isDraftEditable(status) && !readOnlyProp;
   const bankSide = hasBankSide(form);
   const crossCashBlocked = isCrossWarehouseCashBlocked(form);
+
+  const fromAccountLabel =
+    form.from_account_type === "CASH"
+      ? form.from_cash_ledger_name || form.from_cash_ledger_code || "—"
+      : form.from_bank_account_name || "—";
+  const toAccountLabel =
+    form.to_account_type === "CASH"
+      ? form.to_cash_ledger_name || form.to_cash_ledger_code || "—"
+      : form.to_bank_account_name || "—";
+  const fromWarehouseLabel =
+    warehouses.find((w) => w.value === form.from_warehouse_id)?.label || "";
+  const toWarehouseLabel =
+    warehouses.find((w) => w.value === form.to_warehouse_id)?.label || "";
+  const transferAmount = toMoneyNumber(form.amount);
+  const fromAccountSelected =
+    form.from_account_type === "CASH"
+      ? !!form.from_cash_ledger_id
+      : !!form.from_bank_account_id;
+  const toAccountSelected =
+    form.to_account_type === "CASH"
+      ? !!form.to_cash_ledger_id
+      : !!form.to_bank_account_id;
+  const summaryBalanced =
+    fromAccountSelected &&
+    toAccountSelected &&
+    !sameAccountSelected(form) &&
+    transferAmount > 0 &&
+    !crossCashBlocked;
+  const branchContext =
+    fromWarehouseLabel && toWarehouseLabel
+      ? `${fromWarehouseLabel} → ${toWarehouseLabel}`
+      : undefined;
 
   const patch = useCallback((p: Partial<ContraFormState>) => {
     setForm((prev) => ({ ...prev, ...p }));
@@ -524,8 +566,8 @@ export function ContraVoucherApiForm({
           "success",
         );
       }
-      if (!currentId && !options?.skipNavigate) {
-        router.replace(contraEditPath(saved.contra_voucher_id));
+      if (!options?.skipNavigate) {
+        goToList();
       }
       return saved;
     } catch (e) {
@@ -579,10 +621,10 @@ export function ContraVoucherApiForm({
       "Contra posted successfully.",
     );
     if (posted?.contra_voucher_id) {
-      router.replace(contraViewPath(posted.contra_voucher_id));
+      goToList();
       return;
     }
-    router.replace(contraEditPath(saved.contra_voucher_id));
+    goToList();
   };
 
   /** Post an already-saved voucher without confirmation (approved flows). */
@@ -593,7 +635,7 @@ export function ContraVoucherApiForm({
       "Contra posted successfully.",
     );
     if (posted?.contra_voucher_id) {
-      router.replace(contraViewPath(posted.contra_voucher_id));
+      goToList();
     }
   };
 
@@ -602,7 +644,7 @@ export function ContraVoucherApiForm({
       ? "View Contra Voucher"
       : currentId
         ? "Edit Contra Voucher"
-        : "New Contra Voucher";
+        : "Create Contra Voucher";
 
   const subtitle = detail
     ? `Contra No. ${formatSrNo(detail.sr_no)} · ${CONTRA_STATUS_LABELS[status]}`
@@ -615,11 +657,18 @@ export function ContraVoucherApiForm({
   );
 
   const showViewChrome = readOnlyProp || !fieldsEditable;
-  const useInvoiceChrome = !showViewChrome;
 
   const formBody = (
-    <>
+    <div className="space-y-2.5">
         {error ? <div className={VOUCHER_ERROR_CLASS}>{error}</div> : null}
+
+        {readOnlyProp && onEdit && !fieldsEditable && isDraftEditable(status) ? (
+          <div className="flex justify-end">
+            <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={onEdit}>
+              Edit
+            </Button>
+          </div>
+        ) : null}
 
         {crossCashBlocked ? (
           <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800">
@@ -628,55 +677,133 @@ export function ContraVoucherApiForm({
         ) : null}
 
         <VoucherFormSectionCard title="Voucher Details">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
-            <VoucherFormField label="Voucher Date" required>
+          <div className="so-invoice-details-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+            <InvoiceDetailField label="Voucher Date" required>
               <Input
                 type="date"
-                className={VOUCHER_INPUT_CLASS}
+                className={INVOICE_DETAIL_INPUT_CLASS}
                 value={form.voucher_date}
                 disabled={!fieldsEditable}
                 onChange={(e) => patch({ voucher_date: e.target.value })}
               />
-            </VoucherFormField>
-            <VoucherFormField label="Contra No.">
-              <p className="h-8 flex items-center text-xs font-mono font-semibold text-brand-700">
+            </InvoiceDetailField>
+            <InvoiceDetailField label="Contra No.">
+              <div className="so-goods-ro so-goods-ro--mono w-full text-brand-700">
                 {detail ? formatSrNo(detail.sr_no) : "Auto on save"}
-              </p>
-            </VoucherFormField>
-            <VoucherFormField label="Reference Number">
+              </div>
+            </InvoiceDetailField>
+            <InvoiceDetailField label="Reference Number">
               <Input
-                className={VOUCHER_INPUT_CLASS}
+                className={INVOICE_DETAIL_INPUT_CLASS}
                 value={form.reference_number}
                 disabled={!fieldsEditable}
                 onChange={(e) => patch({ reference_number: e.target.value })}
                 placeholder="Transfer / deposit / withdrawal reference"
                 maxLength={150}
               />
-            </VoucherFormField>
-            <VoucherFormField label="Status">
-              <p className="h-8 flex items-center text-xs font-medium text-foreground">
-                {CONTRA_STATUS_LABELS[status]}
-              </p>
-            </VoucherFormField>
+            </InvoiceDetailField>
+            <InvoiceDetailField label="Mode of Payment" required={bankSide}>
+              {bankSide ? (
+                <Select
+                  value={form.transaction_mode}
+                  disabled={!fieldsEditable}
+                  onValueChange={(v) => {
+                    const mode = v as ContraBankTransactionMode;
+                    patch({
+                      transaction_mode: mode,
+                      cheque_number: mode === "CHEQUE" ? form.cheque_number : "",
+                      cheque_date: mode === "CHEQUE" ? form.cheque_date : "",
+                      utr_number: mode === "CHEQUE" ? "" : form.utr_number,
+                    });
+                  }}
+                >
+                  <SelectTrigger className={INVOICE_DETAIL_SELECT_CLASS}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CONTRA_BANK_TRANSACTION_MODES.map((m) => (
+                      <SelectItem key={m} value={m}>
+                        {CONTRA_BANK_TRANSACTION_MODE_LABELS[m]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <div className="so-goods-ro w-full">
+                  {CONTRA_BANK_TRANSACTION_MODE_LABELS.CASH}
+                </div>
+              )}
+            </InvoiceDetailField>
+            <InvoiceDetailField label="Transaction Date">
+              <Input
+                type="date"
+                className={INVOICE_DETAIL_INPUT_CLASS}
+                value={form.transaction_date}
+                disabled={!fieldsEditable}
+                onChange={(e) => patch({ transaction_date: e.target.value })}
+              />
+            </InvoiceDetailField>
+
+            {bankSide && form.transaction_mode === "CHEQUE" ? (
+              <>
+                <InvoiceDetailField label="Cheque Number" required>
+                  <Input
+                    className={INVOICE_DETAIL_INPUT_CLASS}
+                    value={form.cheque_number}
+                    disabled={!fieldsEditable}
+                    onChange={(e) => patch({ cheque_number: e.target.value })}
+                  />
+                </InvoiceDetailField>
+                <InvoiceDetailField label="Cheque Date" required>
+                  <Input
+                    type="date"
+                    className={INVOICE_DETAIL_INPUT_CLASS}
+                    value={form.cheque_date}
+                    disabled={!fieldsEditable}
+                    onChange={(e) => patch({ cheque_date: e.target.value })}
+                  />
+                </InvoiceDetailField>
+              </>
+            ) : null}
+
+            {bankSide &&
+            form.transaction_mode !== "CASH" &&
+            form.transaction_mode !== "CHEQUE" ? (
+              <>
+                <InvoiceDetailField label="UTR Number">
+                  <Input
+                    className={INVOICE_DETAIL_INPUT_CLASS}
+                    value={form.utr_number}
+                    disabled={!fieldsEditable}
+                    onChange={(e) => patch({ utr_number: e.target.value })}
+                    placeholder="UTR…"
+                  />
+                </InvoiceDetailField>
+                <InvoiceDetailField label="Transaction Reference">
+                  <Input
+                    className={INVOICE_DETAIL_INPUT_CLASS}
+                    value={form.transaction_reference}
+                    disabled={!fieldsEditable}
+                    onChange={(e) =>
+                      patch({ transaction_reference: e.target.value })
+                    }
+                    placeholder="Reference…"
+                  />
+                </InvoiceDetailField>
+              </>
+            ) : null}
           </div>
-          {selectedFY?.label ? (
-            <p className="text-[11px] text-muted-foreground mt-2">
-              Working FY:{" "}
-              <span className="font-medium text-foreground">{selectedFY.label}</span>
-            </p>
-          ) : null}
         </VoucherFormSectionCard>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-          <VoucherFormSectionCard title="Transfer From">
-            <div className="space-y-2.5">
+        <VoucherFormSectionCard title="Transfer From">
+          <div className="so-invoice-details-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+            <InvoiceDetailField label="From Warehouse / Branch" required>
               <ContraSearchableSelect
-                label="From Warehouse / Branch"
-                required
                 disabled={!fieldsEditable}
                 value={form.from_warehouse_id}
                 options={warehouses}
                 placeholder="Select from warehouse…"
+                triggerClassName={INVOICE_DETAIL_SELECT_CLASS}
                 onChange={(id) =>
                   patch({
                     from_warehouse_id: id,
@@ -684,40 +811,40 @@ export function ContraVoucherApiForm({
                   })
                 }
               />
-              <div className="space-y-1">
-                <Label className="text-xs font-medium">
-                  From Account Type <span className="text-red-500">*</span>
-                </Label>
-                <Select
-                  value={form.from_account_type}
-                  disabled={!fieldsEditable}
-                  onValueChange={(v) => {
-                    const next = v as ContraAccountType;
-                    patch({
-                      from_account_type: next,
-                      ...clearFromAccountFields(next),
-                    });
-                  }}
-                >
-                  <SelectTrigger className={VOUCHER_INPUT_CLASS}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CONTRA_ACCOUNT_TYPES.map((t) => (
-                      <SelectItem key={t} value={t} className="text-sm">
-                        {CONTRA_ACCOUNT_TYPE_LABELS[t]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+            </InvoiceDetailField>
+            <InvoiceDetailField label="From Account Type" required>
+              <Select
+                value={form.from_account_type}
+                disabled={!fieldsEditable}
+                onValueChange={(v) => {
+                  const next = v as ContraAccountType;
+                  patch({
+                    from_account_type: next,
+                    ...clearFromAccountFields(next),
+                  });
+                }}
+              >
+                <SelectTrigger className={INVOICE_DETAIL_SELECT_CLASS}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {CONTRA_ACCOUNT_TYPES.map((t) => (
+                    <SelectItem key={t} value={t}>
+                      {CONTRA_ACCOUNT_TYPE_LABELS[t]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </InvoiceDetailField>
+            <InvoiceDetailField
+              label={
+                form.from_account_type === "CASH"
+                  ? "From Cash Account"
+                  : "From Bank Account"
+              }
+              required
+            >
               <ContraSearchableSelect
-                label={
-                  form.from_account_type === "CASH"
-                    ? "From Cash Account"
-                    : "From Bank Account"
-                }
-                required
                 disabled={!fieldsEditable || !form.from_warehouse_id}
                 value={
                   form.from_account_type === "CASH"
@@ -732,21 +859,23 @@ export function ContraVoucherApiForm({
                       ? "Loading accounts…"
                       : "Select account…"
                 }
+                triggerClassName={INVOICE_DETAIL_SELECT_CLASS}
                 onChange={selectFromAccount}
                 onSearchChange={handleFromAccountSearch}
               />
-            </div>
-          </VoucherFormSectionCard>
+            </InvoiceDetailField>
+          </div>
+        </VoucherFormSectionCard>
 
-          <VoucherFormSectionCard title="Transfer To">
-            <div className="space-y-2.5">
+        <VoucherFormSectionCard title="Transfer To">
+          <div className="so-invoice-details-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+            <InvoiceDetailField label="To Warehouse / Branch" required>
               <ContraSearchableSelect
-                label="To Warehouse / Branch"
-                required
                 disabled={!fieldsEditable}
                 value={form.to_warehouse_id}
                 options={warehouses}
                 placeholder="Select to warehouse…"
+                triggerClassName={INVOICE_DETAIL_SELECT_CLASS}
                 onChange={(id) =>
                   patch({
                     to_warehouse_id: id,
@@ -754,40 +883,40 @@ export function ContraVoucherApiForm({
                   })
                 }
               />
-              <div className="space-y-1">
-                <Label className="text-xs font-medium">
-                  To Account Type <span className="text-red-500">*</span>
-                </Label>
-                <Select
-                  value={form.to_account_type}
-                  disabled={!fieldsEditable}
-                  onValueChange={(v) => {
-                    const next = v as ContraAccountType;
-                    patch({
-                      to_account_type: next,
-                      ...clearToAccountFields(next),
-                    });
-                  }}
-                >
-                  <SelectTrigger className={VOUCHER_INPUT_CLASS}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CONTRA_ACCOUNT_TYPES.map((t) => (
-                      <SelectItem key={t} value={t} className="text-sm">
-                        {CONTRA_ACCOUNT_TYPE_LABELS[t]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+            </InvoiceDetailField>
+            <InvoiceDetailField label="To Account Type" required>
+              <Select
+                value={form.to_account_type}
+                disabled={!fieldsEditable}
+                onValueChange={(v) => {
+                  const next = v as ContraAccountType;
+                  patch({
+                    to_account_type: next,
+                    ...clearToAccountFields(next),
+                  });
+                }}
+              >
+                <SelectTrigger className={INVOICE_DETAIL_SELECT_CLASS}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {CONTRA_ACCOUNT_TYPES.map((t) => (
+                    <SelectItem key={t} value={t}>
+                      {CONTRA_ACCOUNT_TYPE_LABELS[t]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </InvoiceDetailField>
+            <InvoiceDetailField
+              label={
+                form.to_account_type === "CASH"
+                  ? "To Cash Account"
+                  : "To Bank Account"
+              }
+              required
+            >
               <ContraSearchableSelect
-                label={
-                  form.to_account_type === "CASH"
-                    ? "To Cash Account"
-                    : "To Bank Account"
-                }
-                required
                 disabled={!fieldsEditable || !form.to_warehouse_id}
                 value={
                   form.to_account_type === "CASH"
@@ -802,190 +931,85 @@ export function ContraVoucherApiForm({
                       ? "Loading accounts…"
                       : "Select account…"
                 }
+                triggerClassName={INVOICE_DETAIL_SELECT_CLASS}
                 onChange={selectToAccount}
                 onSearchChange={handleToAccountSearch}
               />
-            </div>
-          </VoucherFormSectionCard>
-        </div>
-
-        <VoucherFormSectionCard title="Transfer Details">
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5">
-            <div className="md:col-span-3 min-w-0">
-              <VoucherFormField label="Amount" required>
-                <Input
-                  className={cn(
-                    VOUCHER_INPUT_CLASS,
-                    VOUCHER_MONEY_INPUT_CLASS,
-                    "w-full max-w-[180px]",
-                  )}
-                  value={form.amount}
-                  disabled={!fieldsEditable}
-                  onChange={(e) =>
-                    patch({ amount: sanitizeNonNegativeMoneyInput(e.target.value) })
-                  }
-                  placeholder="0.00"
-                />
-              </VoucherFormField>
-            </div>
-
-            {bankSide ? (
-              <>
-                <div className="md:col-span-3 min-w-0 space-y-1">
-                  <Label className="text-xs font-medium">
-                    Transaction Mode <span className="text-red-500">*</span>
-                  </Label>
-                  <Select
-                    value={form.transaction_mode}
-                    disabled={!fieldsEditable}
-                    onValueChange={(v) => {
-                      const mode = v as ContraBankTransactionMode;
-                      patch({
-                        transaction_mode: mode,
-                        cheque_number: mode === "CHEQUE" ? form.cheque_number : "",
-                        cheque_date: mode === "CHEQUE" ? form.cheque_date : "",
-                        utr_number: mode === "CHEQUE" ? "" : form.utr_number,
-                      });
-                    }}
-                  >
-                    <SelectTrigger className={VOUCHER_INPUT_CLASS}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {CONTRA_BANK_TRANSACTION_MODES.map((m) => (
-                        <SelectItem key={m} value={m} className="text-sm">
-                          {CONTRA_BANK_TRANSACTION_MODE_LABELS[m]}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="md:col-span-3 min-w-0">
-                  <VoucherFormField label="Transaction / Value Date">
-                    <Input
-                      type="date"
-                      className={VOUCHER_INPUT_CLASS}
-                      value={form.transaction_date}
-                      disabled={!fieldsEditable}
-                      onChange={(e) => patch({ transaction_date: e.target.value })}
-                    />
-                  </VoucherFormField>
-                </div>
-              </>
-            ) : null}
+            </InvoiceDetailField>
+            <InvoiceDetailField label="Amount" required>
+              <Input
+                className={cn(INVOICE_DETAIL_INPUT_CLASS, VOUCHER_MONEY_INPUT_CLASS, "tabular-nums")}
+                value={form.amount}
+                disabled={!fieldsEditable}
+                onChange={(e) =>
+                  patch({ amount: sanitizeNonNegativeMoneyInput(e.target.value) })
+                }
+                placeholder="0.00"
+              />
+            </InvoiceDetailField>
           </div>
-
-          {bankSide && form.transaction_mode === "CHEQUE" ? (
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5 mt-2.5">
-              <div className="md:col-span-4 min-w-0">
-                <VoucherFormField label="Cheque Number" required>
-                  <Input
-                    className={VOUCHER_INPUT_CLASS}
-                    value={form.cheque_number}
-                    disabled={!fieldsEditable}
-                    onChange={(e) => patch({ cheque_number: e.target.value })}
-                  />
-                </VoucherFormField>
-              </div>
-              <div className="md:col-span-3 min-w-0">
-                <VoucherFormField label="Cheque Date" required>
-                  <Input
-                    type="date"
-                    className={VOUCHER_INPUT_CLASS}
-                    value={form.cheque_date}
-                    disabled={!fieldsEditable}
-                    onChange={(e) => patch({ cheque_date: e.target.value })}
-                  />
-                </VoucherFormField>
-              </div>
-            </div>
-          ) : null}
-
-          {bankSide &&
-          form.transaction_mode !== "CASH" &&
-          form.transaction_mode !== "CHEQUE" ? (
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5 mt-2.5">
-              <div className="md:col-span-4 min-w-0">
-                <VoucherFormField label="UTR Number">
-                  <Input
-                    className={VOUCHER_INPUT_CLASS}
-                    value={form.utr_number}
-                    disabled={!fieldsEditable}
-                    onChange={(e) => patch({ utr_number: e.target.value })}
-                    placeholder="UTR…"
-                  />
-                </VoucherFormField>
-              </div>
-              <div className="md:col-span-5 min-w-0">
-                <VoucherFormField label="Transaction Reference">
-                  <Input
-                    className={VOUCHER_INPUT_CLASS}
-                    value={form.transaction_reference}
-                    disabled={!fieldsEditable}
-                    onChange={(e) => patch({ transaction_reference: e.target.value })}
-                    placeholder="Reference…"
-                  />
-                </VoucherFormField>
-              </div>
-              <div className="md:col-span-3 min-w-0">
-                <VoucherFormField label="Instrument Date">
-                  <Input
-                    type="date"
-                    className={VOUCHER_INPUT_CLASS}
-                    value={form.instrument_date}
-                    disabled={!fieldsEditable}
-                    onChange={(e) => patch({ instrument_date: e.target.value })}
-                  />
-                </VoucherFormField>
-              </div>
-            </div>
-          ) : null}
         </VoucherFormSectionCard>
 
-        <VoucherFormSectionCard title="Supporting Information">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-            <div className="min-w-0 space-y-0.5">
-              <Label className="text-xs font-medium">
-                Narration <span className="text-red-500">*</span>
-              </Label>
-              <Textarea
-                className="resize-y rounded-lg border border-border min-h-[80px] max-h-40 py-1.5 text-sm focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:border-brand-400"
-                rows={3}
-                value={form.narration}
-                onChange={(e) => patch({ narration: e.target.value })}
-                placeholder="Enter reason/details for this fund transfer"
-                maxLength={5000}
-                disabled={!fieldsEditable}
+        <div className="grid grid-cols-1 gap-2.5 items-start lg:grid-cols-[minmax(0,1fr)_300px]">
+          <VoucherFormSectionCard title="Narration & Attachments">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+              <div className="min-w-0 space-y-0.5">
+                <Label className="text-xs font-medium">
+                  Narration <span className="text-red-500">*</span>
+                </Label>
+                <Textarea
+                  className={cn(INVOICE_DETAIL_INPUT_CLASS, "so-goods-narration min-h-[60px] h-auto resize-y text-xs w-full")}
+                  rows={2}
+                  value={form.narration}
+                  onChange={(e) => patch({ narration: e.target.value })}
+                  placeholder="Enter reason/details for this fund transfer"
+                  maxLength={5000}
+                  disabled={!fieldsEditable}
+                />
+              </div>
+              <ContraAttachmentsPanel
+                persisted={form.persistedAttachments}
+                pending={form.pendingFiles}
+                readOnly={!fieldsEditable}
+                onAddFiles={handleAddAttachmentFiles}
+                onRemovePersisted={handleRemovePersistedAttachment}
+                onRemovePending={handleRemovePendingAttachment}
               />
             </div>
-            <ContraAttachmentsPanel
-              persisted={form.persistedAttachments}
-              pending={form.pendingFiles}
-              readOnly={!fieldsEditable}
-              onAddFiles={handleAddAttachmentFiles}
-              onRemovePersisted={handleRemovePersistedAttachment}
-              onRemovePending={handleRemovePendingAttachment}
-            />
-          </div>
-        </VoucherFormSectionCard>
+          </VoucherFormSectionCard>
+
+          <ContraFormSummary
+            fromAccount={fromAccountLabel}
+            toAccount={toAccountLabel}
+            transferAmount={transferAmount}
+            branchContext={branchContext}
+            balanced={summaryBalanced}
+          />
+        </div>
 
         {detail?.accounting_voucher ? (
-          <VoucherFormSectionCard title="Posted Accounting Voucher">
-            <div className="text-xs space-y-1">
-              <p>
-                <span className="text-muted-foreground">Voucher No.: </span>
-                <span className="font-mono font-semibold text-brand-700">
+          <VoucherFormSectionCard title="Posted Accounting Voucher" highlight>
+            <div className="flex flex-wrap gap-3 text-xs">
+              <div className="rounded-lg border border-brand-100 bg-brand-50/60 px-3 py-2 min-w-[160px]">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-brand-700/80">
+                  Voucher No.
+                </p>
+                <p className="mt-0.5 font-mono font-semibold text-brand-800">
                   {detail.accounting_voucher.voucher_number || "—"}
-                </span>
-              </p>
-              <p>
-                <span className="text-muted-foreground">Status: </span>
-                {detail.accounting_voucher.status || "—"}
-              </p>
+                </p>
+              </div>
+              <div className="rounded-lg border border-emerald-100 bg-emerald-50/70 px-3 py-2 min-w-[140px]">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-800/80">
+                  Status
+                </p>
+                <p className="mt-0.5 font-semibold text-emerald-900">
+                  {detail.accounting_voucher.status || "—"}
+                </p>
+              </div>
             </div>
           </VoucherFormSectionCard>
         ) : null}
-    </>
+    </div>
   );
 
   const actionBar = (
@@ -1002,12 +1026,10 @@ export function ContraVoucherApiForm({
         fieldsEditable && !readOnlyProp ? () => void saveDraft() : undefined
       }
       onSubmitForApproval={
-        fieldsEditable && !readOnlyProp && approvalRequired
-          ? () => setSubmitOpen(true)
-          : undefined
+        fieldsEditable && !readOnlyProp ? () => setSubmitOpen(true) : undefined
       }
       onSaveAndPost={
-        fieldsEditable && !readOnlyProp && !approvalRequired && !currentId
+        fieldsEditable && !readOnlyProp && !currentId
           ? () => void handleSaveAndPost()
           : undefined
       }
@@ -1026,15 +1048,12 @@ export function ContraVoucherApiForm({
           : undefined
       }
       onPost={
-        !approvalRequired &&
-        currentId &&
-        (status === "APPROVED" ||
-          ((status === "DRAFT" || status === "REJECTED" || !status) &&
-            fieldsEditable &&
-            !readOnlyProp))
+        fieldsEditable && !readOnlyProp && currentId
           ? status === "APPROVED"
             ? () => void handlePostDirect()
-            : () => void handleSaveAndPost()
+            : status === "DRAFT" || status === "REJECTED" || !status
+              ? () => void handleSaveAndPost()
+              : undefined
           : undefined
       }
       onCancel={
@@ -1161,63 +1180,36 @@ export function ContraVoucherApiForm({
 
   if (loading) {
     return (
-      <AccountsPageShell
-        breadcrumbs={accountsBreadcrumb("Vouchers", "Contra Voucher", CONTRA_LIST_PATH)}
-        title="Contra Voucher"
-        description="Loading…"
-        layout="form"
-      >
-        <div className="flex items-center gap-2 text-sm text-muted-foreground py-10 justify-center">
-          <Loader2 className="w-4 h-4 animate-spin" /> Loading contra…
-        </div>
-      </AccountsPageShell>
-    );
-  }
-
-  if (useInvoiceChrome) {
-    return (
-      <div className="h-full min-h-0 flex flex-col w-full">
+      <div className="sales-order-invoice-form-compact h-full min-h-0 flex flex-col w-full">
         <InvoiceFormLayout
-          title={title}
-          subtitle={subtitle}
-          breadcrumb={breadcrumb}
+          title="Contra Voucher"
+          subtitle="Loading…"
+          breadcrumb={accountsBreadcrumb("Vouchers", "Contra Voucher", CONTRA_LIST_PATH)}
           backHref={CONTRA_LIST_PATH}
-          onBackClick={handleDiscard}
-          stickyFooter={actionBar}
         >
-          {formBody}
+          <div className="flex items-center gap-2 text-sm text-muted-foreground py-10 justify-center">
+            <Loader2 className="w-4 h-4 animate-spin" /> Loading contra…
+          </div>
         </InvoiceFormLayout>
-        {dialogs}
       </div>
     );
   }
 
   return (
-    <AccountsPageShell
-      breadcrumbs={breadcrumb}
-      title={title}
-      description={subtitle}
-      layout="form"
-      onBackClick={showViewChrome ? handleBack : undefined}
-      actions={
-        readOnlyProp && onEdit && isDraftEditable(status) ? (
-          <button
-            type="button"
-            className="h-8 px-3 text-xs rounded-lg border border-border hover:bg-muted"
-            onClick={onEdit}
-          >
-            Edit
-          </button>
-        ) : null
-      }
-    >
-      <div className="w-full space-y-3 pb-24">{formBody}</div>
-      {(!showViewChrome || status === "POSTED") ? (
-        <div className="fixed bottom-0 inset-x-0 z-40 border-t border-border bg-white/95 backdrop-blur px-4 py-2.5">
-          <div className="w-full">{actionBar}</div>
-        </div>
-      ) : null}
+    <>
+      <div className="sales-order-invoice-form-compact h-full min-h-0 flex flex-col w-full">
+        <InvoiceFormLayout
+          title={title}
+          subtitle={subtitle}
+          breadcrumb={breadcrumb}
+          backHref={CONTRA_LIST_PATH}
+          onBackClick={showViewChrome ? handleBack : fieldsEditable ? handleDiscard : undefined}
+          stickyFooter={!showViewChrome || status === "POSTED" ? actionBar : undefined}
+        >
+          {formBody}
+        </InvoiceFormLayout>
+      </div>
       {dialogs}
-    </AccountsPageShell>
+    </>
   );
 }

@@ -24,6 +24,7 @@ import {
 import {
   AccountsTableEmpty,
   AccountsTableListing,
+  AccountsTableLoading,
   AccountsTablePagination,
   AccountsListingFilterCard,
 } from "@/components/accounts/AccountsTableListing";
@@ -273,7 +274,6 @@ async function exportCreditNoteListRows(rows: CreditNoteListRow[]): Promise<void
 }
 
 function CreditNotesRecordsTable({
-  mounted,
   loading,
   toolbarFiltered,
   page,
@@ -284,7 +284,6 @@ function CreditNotesRecordsTable({
   onCancel,
   actionBusy,
 }: {
-  mounted: boolean;
   loading: boolean;
   toolbarFiltered: CreditNoteListRow[];
   page: number;
@@ -344,8 +343,8 @@ function CreditNotesRecordsTable({
           </AccountsTableHeadRow>
         </AccountsTableHead>
         <AccountsTableBody>
-          {!mounted || loading ? (
-            <AccountsTableEmpty colSpan={13} message="Loading credit notes…" />
+          {loading && toolbarFiltered.length === 0 ? (
+            <AccountsTableLoading colSpan={13} message="Loading credit notes…" />
           ) : toolbarFiltered.length === 0 ? (
             <AccountsTableEmpty colSpan={13} message="No credit notes found." />
           ) : visible.length === 0 ? (
@@ -421,7 +420,7 @@ function CreditNotesRecordsTable({
           )}
         </AccountsTableBody>
       </AccountsTable>
-      {mounted && !loading && visible.length > 0 ? (
+      {!loading && visible.length > 0 ? (
         <AccountsTablePagination
           page={page}
           pageSize={pageSize}
@@ -464,7 +463,6 @@ export default function CreditNotesListClient() {
   const sectionRefresh = useAccountsSectionRefresh("credit-notes");
 
   const refresh = useCallback(async () => {
-    if (!mounted) return;
     setLoading(true);
     try {
       const [listResult, pendingResult] = await Promise.all([
@@ -479,11 +477,12 @@ export default function CreditNotesListClient() {
     } finally {
       setLoading(false);
     }
-  }, [mounted, showToast]);
+  }, [showToast]);
 
   useEffect(() => {
+    if (!mounted) return;
     void refresh();
-  }, [refresh, sectionRefresh]);
+  }, [mounted, refresh, sectionRefresh]);
 
   useEffect(() => {
     setFilters((prev) => ({ ...prev, dateFrom, dateTo, preset }));
@@ -646,7 +645,6 @@ export default function CreditNotesListClient() {
                 }
               >
                 <CreditNotesRecordsTable
-                  mounted={mounted}
                   loading={loading}
                   toolbarFiltered={toolbarFiltered}
                   page={page}

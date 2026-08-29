@@ -77,7 +77,7 @@ export const ACCOUNTING_SETTINGS_HREF = "/accounts/settings";
 
 export const VOUCHERS_HUB_HREF = "/accounts/vouchers";
 
-export const JOURNAL_VOUCHER_HREF = "/accounts/vouchers/journal";
+export const JOURNAL_VOUCHER_HREF = "/accounts/vouchers?tab=journal";
 
 export const REPORTS_HOME_HREF = "/accounts/reports/trial-balance";
 
@@ -626,6 +626,16 @@ export function isAccountsNavActive(
   if (href.startsWith("/accounts/banking/") && matchesNavHref(pathname, hrefBase)) return true;
 
   if (href.startsWith("/accounts/transactions/") && matchesNavHref(pathname, hrefBase)) return true;
+
+  if (hrefBase === "/accounts/purchase-invoices") {
+    if (
+      matchesNavHref(pathname, hrefBase) ||
+      pathname === "/accounts/transactions/purchase" ||
+      pathname.startsWith("/accounts/transactions/purchase/")
+    ) {
+      return true;
+    }
+  }
 
   if (href === ACCOUNTING_SETTINGS_HREF && pathname.startsWith(ACCOUNTING_SETTINGS_HREF)) return true;
 

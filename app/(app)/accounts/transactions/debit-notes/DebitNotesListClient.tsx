@@ -24,6 +24,7 @@ import {
 import {
   AccountsTableEmpty,
   AccountsTableListing,
+  AccountsTableLoading,
   AccountsTablePagination,
   AccountsListingFilterCard,
 } from "@/components/accounts/AccountsTableListing";
@@ -95,7 +96,8 @@ function getRowActions(status: string, approvalRequired: boolean): string[] {
 }
 
 function DebitNotesRecordsTable({
-  mounted,
+  loading,
+  error,
   toolbarFiltered,
   page,
   pageSize,
@@ -108,7 +110,8 @@ function DebitNotesRecordsTable({
   hasCreatePermission,
   hasUpdatePermission,
 }: {
-  mounted: boolean;
+  loading: boolean;
+  error: string | null;
   toolbarFiltered: DebitNoteRecord[];
   page: number;
   pageSize: number;
@@ -154,8 +157,10 @@ function DebitNotesRecordsTable({
           </AccountsTableHeadRow>
         </AccountsTableHead>
         <AccountsTableBody>
-          {!mounted ? (
-            <AccountsTableEmpty colSpan={12} message="Loading debit notes…" />
+          {error ? (
+            <AccountsTableEmpty colSpan={12} message={error} />
+          ) : loading && toolbarFiltered.length === 0 ? (
+            <AccountsTableLoading colSpan={12} message="Loading debit notes…" />
           ) : toolbarFiltered.length === 0 ? (
             <AccountsTableEmpty colSpan={12} message="No debit notes found." />
           ) : (
@@ -234,7 +239,7 @@ function DebitNotesRecordsTable({
           )}
         </AccountsTableBody>
       </AccountsTable>
-      {mounted && visible.length > 0 ? (
+      {!loading && visible.length > 0 ? (
         <AccountsTablePagination
           page={page}
           pageSize={pageSize}
@@ -614,26 +619,21 @@ export default function DebitNotesListClient() {
                   </AccountsListingFilterCard>
                 }
               >
-                {loading ? (
-                  <div className="p-8 text-center text-xs text-muted-foreground">Loading debit notes...</div>
-                ) : error ? (
-                  <div className="p-8 text-center text-xs text-red-600">{error}</div>
-                ) : (
-                  <DebitNotesRecordsTable
-                    mounted={mounted}
-                    toolbarFiltered={records}
-                    page={page}
-                    pageSize={pageSize}
-                    totalRecords={totalRecords}
-                    onPageChange={setPage}
-                    onPageSizeChange={setPageSize}
-                    onCancel={setCancelTarget}
-                    onRefresh={refreshRecords}
-                    approvalRequired={approvalRequired}
-                    hasCreatePermission={hasCreatePermission}
-                    hasUpdatePermission={hasUpdatePermission}
-                  />
-                )}
+                <DebitNotesRecordsTable
+                  loading={loading}
+                  error={error}
+                  toolbarFiltered={records}
+                  page={page}
+                  pageSize={pageSize}
+                  totalRecords={totalRecords}
+                  onPageChange={setPage}
+                  onPageSizeChange={setPageSize}
+                  onCancel={setCancelTarget}
+                  onRefresh={refreshRecords}
+                  approvalRequired={approvalRequired}
+                  hasCreatePermission={hasCreatePermission}
+                  hasUpdatePermission={hasUpdatePermission}
+                />
               </AccountsTableListing>
             </AccountsColumnFilterProvider>
           )}

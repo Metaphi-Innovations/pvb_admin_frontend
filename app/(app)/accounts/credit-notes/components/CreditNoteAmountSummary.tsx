@@ -19,10 +19,18 @@ function SummaryRow({
   valueSlot?: ReactNode;
 }) {
   return (
-    <div className={strong ? "cnz-totals__grand" : "cnz-totals__row"}>
-      <span>{label}</span>
+    <div
+      className={
+        strong
+          ? "flex items-center justify-between gap-4 py-1.5 border-t border-border/60"
+          : "flex items-center justify-between gap-4 py-0.5"
+      }
+    >
+      <span className={strong ? "so-grand-total-label" : "so-summary-label"}>{label}</span>
       {valueSlot ?? (
-        <span>{signed ? formatSignedRoundOff(value) : formatMoney(value)}</span>
+        <span className={strong ? "so-grand-total-value tabular-nums" : "so-summary-value tabular-nums"}>
+          {signed ? formatSignedRoundOff(value) : formatMoney(value)}
+        </span>
       )}
     </div>
   );
@@ -58,9 +66,8 @@ export function CreditNoteAmountSummary({
   const showRoundOff = Boolean(roundOffSlot) || Math.abs(roundOff) > 0.004 || !locked;
 
   return (
-    <VoucherFormSectionCard title="Amount Summary" compact>
-      <div className="cnz-after-table !mt-0 !pt-0 !border-0">
-        <div className="cnz-totals">
+    <VoucherFormSectionCard title="Amount Summary" className="lg:sticky lg:top-3 lg:z-10">
+      <div className="space-y-1.5 so-invoice-summary">
           <SummaryRow label="Taxable / Basic Amount" value={taxable} />
           {showIntra ? <SummaryRow label="CGST" value={cgst} /> : null}
           {showIntra ? <SummaryRow label="SGST" value={sgst} /> : null}
@@ -80,9 +87,8 @@ export function CreditNoteAmountSummary({
           ) : null}
           <SummaryRow label="Credit Note Amount" value={total} strong />
         </div>
-      </div>
       {locked ? null : (
-        <p className="text-[10px] text-muted-foreground px-1 pb-1">
+        <p className="text-[10px] text-muted-foreground pt-1">
           Preview only. Backend totals are authoritative when saving.
         </p>
       )}

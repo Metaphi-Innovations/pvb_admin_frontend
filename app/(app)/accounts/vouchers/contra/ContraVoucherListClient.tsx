@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Loader2, XCircle } from "lucide-react";
+import { XCircle } from "lucide-react";
 import {
   AccountsEditAction,
   AccountsMoreActions,
@@ -27,6 +27,7 @@ import {
 import {
   ACCOUNTS_DEFAULT_PAGE_SIZE,
   AccountsTableListing,
+  AccountsTableLoading,
   AccountsTablePagination,
   AccountsTableToolbar,
 } from "@/components/accounts/AccountsTableListing";
@@ -60,6 +61,7 @@ import type {
   AccountsColumnFilters,
 } from "@/lib/accounts/column-filter-types";
 import { ContraVoucherService } from "@/services/contra-voucher.service";
+import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
 import { WarehouseService } from "@/services/warehouse.service";
 import {
   CONTRA_ACCOUNT_TYPE_LABELS,
@@ -345,14 +347,8 @@ function ContraListTable({
         </AccountsTableHeadRow>
       </AccountsTableHead>
       <AccountsTableBody>
-        {loading ? (
-          <AccountsTableRow>
-            <AccountsTableCell colSpan={12} className="accounts-table-empty">
-              <span className="inline-flex items-center gap-2">
-                <Loader2 className="w-4 h-4 animate-spin" /> Loading contra vouchers…
-              </span>
-            </AccountsTableCell>
-          </AccountsTableRow>
+        {loading && rows.length === 0 ? (
+          <AccountsTableLoading colSpan={12} message="Loading contra vouchers…" />
         ) : rows.length === 0 ? (
           <AccountsTableRow>
             <AccountsTableCell colSpan={12} className="accounts-table-empty">
@@ -462,6 +458,7 @@ export function ContraVoucherListClient() {
   const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } =
     useReportDateRange("this_month");
   const [search, setSearch] = useState("");
+  const refreshTick = useAccountsSectionRefresh("contra-vouchers", { apiListing: true });
   const debouncedSearch = useDebouncedValue(search, 300);
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [fromWarehouseId, setFromWarehouseId] = useState<string>("");
@@ -785,6 +782,7 @@ export function ContraVoucherListClient() {
     toAccountId,
     fromOptAccountType,
     toOptAccountType,
+    refreshTick,
   ]);
 
   useEffect(() => {

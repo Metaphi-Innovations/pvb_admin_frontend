@@ -19,6 +19,7 @@ import {
   AccountsTablePagination,
   AccountsTableToolbar,
 } from "@/components/accounts/AccountsTableListing";
+import { accountsActionColClass } from "@/components/accounts/AccountsTableActions";
 import {
   ReportDateRangeFilter,
   useReportDateRange,
@@ -92,7 +93,7 @@ function PendingVendorBillsTable({
             sortable={false}
             filterable={false}
             align="right"
-            className="accounts-col-actions-wide"
+            className={accountsActionColClass("cta")}
           />
         </AccountsTableHeadRow>
       </AccountsTableHead>
@@ -113,8 +114,8 @@ function PendingVendorBillsTable({
               <AccountsTableCell className="accounts-col-party">{r.vendorName}</AccountsTableCell>
               <AccountsTableCell className="tabular-nums">{r.grnDate}</AccountsTableCell>
               <AccountsTableCell align="center">{r.itemCount}</AccountsTableCell>
-              <AccountsTableCell align="right">
-                <Button asChild size="sm" variant="outline" className="h-7 text-sm">
+              <AccountsTableCell align="right" actions="cta">
+                <Button asChild size="sm" variant="outline" className="h-7 px-2 text-xs whitespace-nowrap">
                   <Link href={`/accounts/transactions/purchase/new?grn=${encodeURIComponent(r.grnNo)}`}>
                     Create Bill
                   </Link>

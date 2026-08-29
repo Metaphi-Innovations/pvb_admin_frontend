@@ -35,6 +35,28 @@ import type { ResolvedAdditionalChargeOption } from "@/services/additional-charg
 const NUM_INPUT_CLASS =
   "h-8 text-xs tabular-nums text-right w-full [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none";
 
+function ChargeTableReadonly({
+  value,
+  muted,
+  strong,
+}: {
+  value: string;
+  muted?: boolean;
+  strong?: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "so-table-ro so-table-ro--right",
+        muted && "so-table-ro--muted",
+        strong && "so-table-ro--strong",
+      )}
+    >
+      {value}
+    </div>
+  );
+}
+
 function ChargeSelect({
   row,
   options,
@@ -140,6 +162,7 @@ const ChargeRow = memo(function ChargeRow({
   interstate,
   onUpdate,
   onRemove,
+  tableVariant = "default",
 }: {
   row: InvoiceAdditionalExpense;
   options: ResolvedAdditionalChargeOption[];
@@ -147,14 +170,36 @@ const ChargeRow = memo(function ChargeRow({
   interstate: boolean;
   onUpdate: (id: string, patch: Partial<InvoiceAdditionalExpense>) => void;
   onRemove: (id: string) => void;
+  tableVariant?: "default" | "invoice";
 }) {
   const calc = calcAdditionalExpenseRow(row, interstate);
   const fromSalesOrder = row.origin === "sales_order";
   const mapped = Boolean(row.coaLedgerId && row.coaLedgerCode);
+  const invoiceTable = tableVariant === "invoice";
+  const rowClass = invoiceTable
+    ? "border-b border-border/40 last:border-0"
+    : "border-b border-border/40 last:border-b-0";
+  const cellClass = invoiceTable ? "p-1.5 align-middle" : "px-1.5 py-1.5 align-middle";
+
+  const renderComputed = (value: string, opts?: { muted?: boolean; strong?: boolean }) => {
+    if (invoiceTable) {
+      return <ChargeTableReadonly value={value} muted={opts?.muted} strong={opts?.strong} />;
+    }
+    return (
+      <span
+        className={cn(
+          "block text-right text-xs tabular-nums whitespace-nowrap",
+          opts?.strong ? "font-semibold text-foreground" : "text-muted-foreground",
+        )}
+      >
+        {value}
+      </span>
+    );
+  };
 
   return (
-    <tr className="border-b border-border/40 last:border-b-0">
-      <td className="px-1.5 py-1.5 align-middle so-charge-col">
+    <tr className={rowClass}>
+      <td className={cn(cellClass, "so-charge-col")}>
         <ChargeSelect
           row={row}
           options={options}
@@ -183,7 +228,7 @@ const ChargeRow = memo(function ChargeRow({
           <p className="so-product-meta mt-0.5">From Sales Order</p>
         ) : null}
       </td>
-      <td className="px-1.5 py-1.5 align-middle w-[100px]">
+      <td className={cn(cellClass, invoiceTable ? undefined : "w-[100px]")}>
         <AccountsMoneyInput
           className={NUM_INPUT_CLASS}
           value={row.amount || ""}
@@ -191,7 +236,7 @@ const ChargeRow = memo(function ChargeRow({
           onChange={(v) => onUpdate(row.id, { amount: v })}
         />
       </td>
-      <td className="px-1.5 py-1.5 align-middle w-[72px]">
+      <td className={cn(cellClass, invoiceTable ? undefined : "w-[72px]")}>
         <div className="flex items-center justify-center h-8">
           <Switch
             checked={row.gstApplicable}
@@ -200,7 +245,7 @@ const ChargeRow = memo(function ChargeRow({
           />
         </div>
       </td>
-      <td className="px-1.5 py-1.5 align-middle w-[56px]">
+      <td className={cn(cellClass, invoiceTable ? undefined : "w-[56px]")}>
         <Input
           type="number"
           min={0}
@@ -217,23 +262,35 @@ const ChargeRow = memo(function ChargeRow({
         />
       </td>
       {interstate ? (
-        <td className="px-1.5 py-1.5 align-middle w-[90px] text-right text-xs tabular-nums text-muted-foreground">
-          {row.gstApplicable && calc.igst > 0 ? formatINR(calc.igst) : "—"}
+        <td className={cn(cellClass, invoiceTable ? undefined : "w-[90px]")}>
+          {renderComputed(
+            row.gstApplicable && calc.igst > 0 ? formatINR(calc.igst) : "—",
+            { muted: true },
+          )}
         </td>
       ) : (
         <>
-          <td className="px-1.5 py-1.5 align-middle w-[90px] text-right text-xs tabular-nums text-muted-foreground">
-            {row.gstApplicable && calc.cgst > 0 ? formatINR(calc.cgst) : "—"}
+          <td className={cn(cellClass, invoiceTable ? undefined : "w-[90px]")}>
+            {renderComputed(
+              row.gstApplicable && calc.cgst > 0 ? formatINR(calc.cgst) : "—",
+              { muted: true },
+            )}
           </td>
-          <td className="px-1.5 py-1.5 align-middle w-[90px] text-right text-xs tabular-nums text-muted-foreground">
-            {row.gstApplicable && calc.sgst > 0 ? formatINR(calc.sgst) : "—"}
+          <td className={cn(cellClass, invoiceTable ? undefined : "w-[90px]")}>
+            {renderComputed(
+              row.gstApplicable && calc.sgst > 0 ? formatINR(calc.sgst) : "—",
+              { muted: true },
+            )}
           </td>
         </>
       )}
-      <td className="px-1.5 py-1.5 align-middle w-[110px] text-right text-xs tabular-nums font-semibold">
-        {calc.totalAmount > 0 ? formatINR(calc.totalAmount) : "—"}
+      <td className={cn(cellClass, invoiceTable ? undefined : "w-[110px]")}>
+        {renderComputed(
+          calc.totalAmount > 0 ? formatINR(calc.totalAmount) : "—",
+          { strong: calc.totalAmount > 0, muted: calc.totalAmount <= 0 },
+        )}
       </td>
-      <td className="px-1.5 py-1.5 align-middle w-[180px]">
+      <td className={cn(cellClass, invoiceTable ? undefined : "w-[180px]")}>
         <Input
           className="h-8 text-xs"
           placeholder="Optional"
@@ -242,7 +299,7 @@ const ChargeRow = memo(function ChargeRow({
           onChange={(e) => onUpdate(row.id, { remarks: e.target.value })}
         />
       </td>
-      <td className="px-1.5 py-1.5 align-middle w-9">
+      <td className={cn(cellClass, invoiceTable ? undefined : "w-9")}>
         {!disabled && !fromSalesOrder && (
           <button
             type="button"
@@ -263,11 +320,18 @@ function GoodsInvoiceAdditionalChargesEditorInner({
   onChange,
   disabled,
   interstate = false,
+  tableVariant = "default",
+  hideAddButton = false,
+  onBindAddRow,
 }: {
   expenses: InvoiceAdditionalExpense[];
   onChange: Dispatch<SetStateAction<InvoiceAdditionalExpense[]>>;
   disabled?: boolean;
   interstate?: boolean;
+  /** Match service-invoice line table chrome when embedded in voucher section cards. */
+  tableVariant?: "default" | "invoice";
+  hideAddButton?: boolean;
+  onBindAddRow?: (addRow: () => void) => void;
 }) {
   const { data: options = [], isLoading, isError } = useAdditionalChargeDropdownResolved();
 
@@ -318,6 +382,10 @@ function GoodsInvoiceAdditionalChargesEditorInner({
     onChange((prev) => [...prev, createEmptyAdditionalExpense("manual")]);
   }, [onChange]);
 
+  useEffect(() => {
+    onBindAddRow?.(addRow);
+  }, [addRow, onBindAddRow]);
+
   const removeRow = useCallback(
     (id: string) => {
       onChange((prev) => {
@@ -330,22 +398,63 @@ function GoodsInvoiceAdditionalChargesEditorInner({
     [onChange],
   );
 
+  const invoiceTable = tableVariant === "invoice";
+  const thClass = invoiceTable
+    ? "px-2 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap"
+    : "px-1.5 py-1.5 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap";
+
+  const invoiceChargeColgroup = interstate ? (
+    <colgroup>
+      <col style={{ width: "28%" }} />
+      <col style={{ width: "10%" }} />
+      <col style={{ width: "8%" }} />
+      <col style={{ width: "8%" }} />
+      <col style={{ width: "10%" }} />
+      <col style={{ width: "11%" }} />
+      <col style={{ width: "21%" }} />
+      <col style={{ width: "4%" }} />
+    </colgroup>
+  ) : (
+    <colgroup>
+      <col style={{ width: "26%" }} />
+      <col style={{ width: "9%" }} />
+      <col style={{ width: "7%" }} />
+      <col style={{ width: "7%" }} />
+      <col style={{ width: "8%" }} />
+      <col style={{ width: "8%" }} />
+      <col style={{ width: "10%" }} />
+      <col style={{ width: "21%" }} />
+      <col style={{ width: "4%" }} />
+    </colgroup>
+  );
+
   return (
-    <div className="space-y-2">
+    <div className={invoiceTable ? undefined : "space-y-2"}>
       {isError ? (
-        <p className="text-xs text-red-600">
+        <p className={cn("text-xs text-red-600", invoiceTable && "px-3 py-2")}>
           Failed to load Additional Charge Master. Check API / permissions.
         </p>
       ) : null}
-      <div className="so-goods-product-table-wrap">
-        <table className="w-full text-xs table-fixed min-w-[860px]">
-          <thead className="border-b border-border/60 bg-muted/20">
+      <div
+        className={cn(
+          invoiceTable ? "so-invoice-charges-table-wrap w-full" : "so-goods-product-table-wrap",
+        )}
+      >
+        <table
+          className={cn(
+            invoiceTable
+              ? "so-invoice-table so-invoice-charges-table text-xs w-full table-fixed"
+              : "w-full text-xs table-fixed min-w-[860px]",
+          )}
+        >
+          {invoiceTable ? invoiceChargeColgroup : null}
+          <thead className={invoiceTable ? undefined : "border-b border-border/60 bg-muted/20"}>
             <tr>
               {headers.map((h) => (
                 <th
                   key={h || "actions"}
                   className={cn(
-                    "px-1.5 py-1.5 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap",
+                    thClass,
                     rightAlign.has(h) && "text-right",
                     h === "GST" && "text-center",
                     h === "Additional Charge" && "so-charge-col",
@@ -375,6 +484,7 @@ function GoodsInvoiceAdditionalChargesEditorInner({
                   interstate={interstate}
                   onUpdate={update}
                   onRemove={removeRow}
+                  tableVariant={tableVariant}
                 />
               ))
             )}
@@ -382,7 +492,7 @@ function GoodsInvoiceAdditionalChargesEditorInner({
         </table>
       </div>
 
-      {!disabled && (
+      {!disabled && !hideAddButton && (
         <div className="flex items-center justify-end">
           <Button
             type="button"

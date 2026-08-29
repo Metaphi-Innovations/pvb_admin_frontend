@@ -533,11 +533,79 @@
   }
 
   .accounts-col-actions {
-    @apply min-w-[3rem] w-12;
+    @apply min-w-[2.25rem] w-9 max-w-[2.25rem];
   }
 
   .accounts-col-actions-wide {
-    @apply min-w-[7.5rem] w-[7.5rem];
+    @apply min-w-[5.25rem] w-[5.25rem] max-w-[5.25rem];
+  }
+
+  .accounts-col-actions-cta {
+    @apply min-w-[8.75rem] w-[8.75rem] max-w-[8.75rem];
+  }
+
+  /* Sticky actions column — opaque background so scrolled cells don't show through */
+  .accounts-table td.accounts-col-actions,
+  .accounts-table td.accounts-col-actions-wide,
+  .accounts-table td.accounts-col-actions-cta {
+    @apply sticky right-0 z-20 border-l border-border px-1;
+    background-color: #ffffff;
+    box-shadow: -4px 0 6px -2px rgb(0 0 0 / 0.08);
+    overflow: hidden;
+    white-space: nowrap;
+  }
+
+  .accounts-table th.accounts-col-actions,
+  .accounts-table th.accounts-col-actions-wide,
+  .accounts-table th.accounts-col-actions-cta {
+    @apply sticky right-0 z-40 border-l border-border px-1;
+    background-color: #fff3e8;
+    box-shadow: -4px 0 6px -2px rgb(0 0 0 / 0.08);
+    white-space: nowrap;
+  }
+
+  .accounts-table th.accounts-col-actions.accounts-table-th-sticky,
+  .accounts-table th.accounts-col-actions-wide.accounts-table-th-sticky,
+  .accounts-table th.accounts-col-actions-cta.accounts-table-th-sticky {
+    z-index: 50;
+  }
+
+  .accounts-table tbody > .accounts-table-row:nth-child(even) > td.accounts-col-actions,
+  .accounts-table tbody > .accounts-table-row:nth-child(even) > td.accounts-col-actions-wide,
+  .accounts-table tbody > .accounts-table-row:nth-child(even) > td.accounts-col-actions-cta,
+  .accounts-table > tbody > tr:nth-child(even) > td.accounts-col-actions,
+  .accounts-table > tbody > tr:nth-child(even) > td.accounts-col-actions-wide,
+  .accounts-table > tbody > tr:nth-child(even) > td.accounts-col-actions-cta {
+    background-color: #f3f4f6;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .accounts-table tbody > .accounts-table-row:hover > td.accounts-col-actions,
+    .accounts-table tbody > .accounts-table-row:hover > td.accounts-col-actions-wide,
+    .accounts-table tbody > .accounts-table-row:hover > td.accounts-col-actions-cta,
+    .accounts-table > tbody > tr:hover > td.accounts-col-actions,
+    .accounts-table > tbody > tr:hover > td.accounts-col-actions-wide,
+    .accounts-table > tbody > tr:hover > td.accounts-col-actions-cta {
+      background-color: #eceef2;
+    }
+  }
+
+  .accounts-table tbody > .accounts-table-row.is-selected > td.accounts-col-actions,
+  .accounts-table tbody > .accounts-table-row.is-selected > td.accounts-col-actions-wide,
+  .accounts-table tbody > .accounts-table-row.is-selected > td.accounts-col-actions-cta,
+  .accounts-table > tbody > tr.is-selected > td.accounts-col-actions,
+  .accounts-table > tbody > tr.is-selected > td.accounts-col-actions-wide,
+  .accounts-table > tbody > tr.is-selected > td.accounts-col-actions-cta {
+    background-color: #fff3e8;
+  }
+
+  .accounts-table tbody > .accounts-table-row.is-selected:hover > td.accounts-col-actions,
+  .accounts-table tbody > .accounts-table-row.is-selected:hover > td.accounts-col-actions-wide,
+  .accounts-table tbody > .accounts-table-row.is-selected:hover > td.accounts-col-actions-cta,
+  .accounts-table > tbody > tr.is-selected:hover > td.accounts-col-actions,
+  .accounts-table > tbody > tr.is-selected:hover > td.accounts-col-actions-wide,
+  .accounts-table > tbody > tr.is-selected:hover > td.accounts-col-actions-cta {
+    background-color: #ffe8d4;
   }
 
   .accounts-listing-card {

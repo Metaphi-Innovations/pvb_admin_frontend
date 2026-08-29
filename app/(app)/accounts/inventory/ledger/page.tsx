@@ -6,7 +6,7 @@ import { Suspense } from "react";
 
 export default function InventoryLedgerPage() {
   return (
-    <Suspense fallback={<div className="p-8 text-sm text-muted-foreground">Loading…</div>}>
+    <Suspense fallback={null}>
       <InventoryLedgerPageClient />
     </Suspense>
   );

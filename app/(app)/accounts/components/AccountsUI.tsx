@@ -80,7 +80,11 @@ export function SortTh({
       filterType={filterType}
       filterValue={filterValueProp ?? fromCtx?.filterValue}
       onFilterChange={onFilterChangeProp ?? fromCtx?.onFilterChange}
-      valueOptions={valueOptionsProp ?? fromCtx?.valueOptions}
+      valueOptions={
+        valueOptionsProp && valueOptionsProp.length > 0
+          ? valueOptionsProp
+          : fromCtx?.valueOptions
+      }
       statusOptions={statusOptionsProp ?? fromCtx?.statusOptions}
       optionLabels={fromCtx?.optionLabels}
       onFilterOpen={onFilterOpen}

@@ -295,7 +295,7 @@
 }
 
 .credit-debit-note-form table tbody input,
-.credit-debit-note-form table tbody button,
+.credit-debit-note-form table tbody button:not([role="switch"]),
 .credit-debit-note-form table tbody [data-accounts-money-input],
 .credit-debit-note-form table tbody .cdn-cell-value {
   height: 28px !important;
@@ -304,6 +304,27 @@
   font-size: var(--cdn-fs-control) !important;
   font-weight: 400 !important;
   box-sizing: border-box;
+}
+
+/* GST toggle — preserve compact pill shape (do not stretch like row inputs) */
+.credit-debit-note-form table tbody button[role="switch"] {
+  width: 2.25rem !important;
+  min-width: 2.25rem !important;
+  max-width: 2.25rem !important;
+  height: 1.25rem !important;
+  min-height: 1.25rem !important;
+  max-height: 1.25rem !important;
+  padding: 0 !important;
+  border-radius: 9999px !important;
+  flex-shrink: 0;
+  margin-inline: auto;
+  display: inline-flex !important;
+}
+
+.credit-debit-note-form table tbody .cn-switch-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .credit-debit-note-form table tbody td {
@@ -363,6 +384,14 @@
 }
 
 /* Posting list dots — neutral, not orange */
-.credit-debit-note-form .cdn-posting-dot {
-  background: hsl(var(--muted-foreground) / 0.45) !important;
+.credit-debit-note-form .so-invoice-detail-field {
+  grid-template-rows: auto minmax(var(--so-ctrl-h, 32px), auto);
+  gap: 2px;
+}
+
+.credit-debit-note-form .so-invoice-details-grid .cnz-gst-toggle {
+  width: 100%;
+  max-width: 100%;
+  height: var(--so-ctrl-h, 32px);
+  min-height: var(--so-ctrl-h, 32px);
 }

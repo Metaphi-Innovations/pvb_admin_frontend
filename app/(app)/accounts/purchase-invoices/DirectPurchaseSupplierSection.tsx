@@ -16,11 +16,15 @@ export function DirectPurchaseSupplierSection({
   supplierId,
   onSupplierSelect,
   disabled,
+  hideLabel = false,
+  className,
 }: {
   suppliers: DirectPurchaseSupplierOption[];
   supplierId: string;
   onSupplierSelect: (id: string) => void;
   disabled?: boolean;
+  hideLabel?: boolean;
+  className?: string;
 }) {
   const options = useMemo(
     () =>
@@ -33,10 +37,12 @@ export function DirectPurchaseSupplierSection({
   );
 
   return (
-    <div className="space-y-0.5">
-      <Label className={DP_LABEL_CLASS}>
-        Supplier <span className="text-red-500">*</span>
-      </Label>
+    <div className={hideLabel ? "min-w-0" : "space-y-0.5"}>
+      {!hideLabel ? (
+        <Label className={DP_LABEL_CLASS}>
+          Supplier <span className="text-red-500">*</span>
+        </Label>
+      ) : null}
       <AutocompleteSelect
         options={options}
         value={supplierId}
@@ -44,7 +50,7 @@ export function DirectPurchaseSupplierSection({
         placeholder="Select supplier…"
         searchPlaceholder="Search suppliers…"
         disabled={disabled}
-        className={DP_SELECT_CLASS}
+        className={className ?? DP_SELECT_CLASS}
       />
     </div>
   );

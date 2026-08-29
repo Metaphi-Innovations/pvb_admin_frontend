@@ -3,17 +3,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Textarea } from "@/components/ui/textarea";
-import { AccountsFormLayout } from "../expenses/components/AccountsFormLayout";
+import { InvoiceFormLayout } from "@/app/(app)/accounts/components/InvoiceFormLayout";
+import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
+import { VOUCHER_INPUT_CLASS } from "@/components/accounts/voucher-simple-form-ui";
+import { cn as cnMerge } from "@/lib/utils";
 import { AccountsDateInput } from "@/components/accounts/AccountsDateInput";
 import { AccountsToast, useAccountsToast } from "@/components/accounts/AccountsToast";
 import { useTransactionFormCancel } from "@/components/accounts/TransactionFormCancel";
+import { transactionsApprovalActive } from "@/lib/accounts/transaction-form-phase";
 import { useFormDirtySnapshot } from "@/lib/accounts/use-form-dirty-snapshot";
 import { VoucherFormSectionCard } from "@/components/accounts/voucher-form/VoucherFormSectionCard";
 import { VoucherSignedRoundOffInput } from "@/components/accounts/voucher-form/VoucherSignedRoundOffInput";
 import {
-  VoucherNoteField,
-  VoucherNoteReadOnly,
-} from "@/components/accounts/voucher-form/VoucherNoteFieldGrid";
+  INVOICE_DETAIL_INPUT_CLASS,
+  INVOICE_DETAIL_SELECT_CLASS,
+  InvoiceDetailField,
+} from "@/app/(app)/accounts/invoices/components/invoice-form-voucher-ui";
 import { SearchableSelect } from "./components/SearchableSelect";
 import { CreditNoteFormActionBar } from "./components/CreditNoteFormActionBar";
 import { CreditNoteAmountSummary } from "./components/CreditNoteAmountSummary";
@@ -22,7 +27,7 @@ import { CreditNoteReasonDialog } from "./components/CreditNoteReasonDialog";
 import { CreditNoteSourceEntitlementSection } from "./components/CreditNoteSourceEntitlementSection";
 import { CreditNoteCustomerInfoButton } from "./components/CreditNoteCustomerInfoButton";
 import { CreditNoteWarehouseInfoButton } from "./components/CreditNoteWarehouseInfoButton";
-import { CREDIT_NOTES_BREADCRUMB, CREDIT_NOTES_LIST_PATH } from "./note-utils";
+import { CREDIT_NOTES_LIST_PATH } from "./note-utils";
 import { CreditNoteFormApi, creditNoteApiError, creditNoteErrorIncludes } from "./credit-note-form-api";
 import type {
   CreateDirectCreditNotePayload,
@@ -46,8 +51,6 @@ import {
   newDirectLine,
   pageTitleFor,
   snapshotStr,
-  statusChipClass,
-  STATUS_LABELS,
   toDateInput,
   toNum,
   todayIso,
@@ -57,7 +60,7 @@ import { LedgerService } from "@/services/ledger.service";
 import { UserListService } from "@/services/user-list.service";
 import { AuthService } from "@/services/auth.service";
 import "./credit-note-tx.css";
-import "@/components/accounts/voucher-form/note-form-compact.css";
+import "@/app/(app)/accounts/invoices/sales-order-invoice-form-compact.css";
 
 type FormModeProp = "fresh" | "return" | "scheme";
 
@@ -173,7 +176,6 @@ export default function CreditNoteFormPageClient({
   const [arLedgerCode, setArLedgerCode] = useState("");
   const [schemeMappings, setSchemeMappings] = useState<SchemeTypeLedgerMapping[]>([]);
   const [approvers, setApprovers] = useState<{ value: string; label: string }[]>([]);
-  const [fyLabel, setFyLabel] = useState("");
   const [reasonDialog, setReasonDialog] = useState<"reject" | "cancel" | null>(null);
   const [directExtraCharges, setDirectExtraCharges] = useState<DirectExtraCharge[]>([]);
   const [roundOff, setRoundOff] = useState(0);
@@ -350,7 +352,6 @@ export default function CreditNoteFormPageClient({
     setRoundOff(toNum(detail.round_off_amount));
     setArLedgerName(detail.party_ledger?.ledger_name || snapshotStr(detail.party_ledger_snapshot, "ledger_name"));
     setArLedgerCode(detail.party_ledger?.ledger_code || snapshotStr(detail.party_ledger_snapshot, "ledger_code"));
-    setFyLabel(detail.financial_year?.name || detail.financial_year?.code || "");
     const src = String(detail.source_type || "DIRECT");
     if (src === "DIRECT" || src === "SALES_INVOICE") {
       const invRef = (detail.references || []).find((r) => r.reference_type === "SALES_INVOICE");
@@ -405,7 +406,6 @@ export default function CreditNoteFormPageClient({
           setWarehouseId(p.warehouse_id || "");
           setCnDate(toDateInput(p.eligibility_date) || todayIso());
           setNarration("");
-          setFyLabel(p.financial_year?.name || p.financial_year?.code || "");
           setArLedgerName(snapshotStr(p.customer_snapshot, "ledger_name", "party_ledger_name"));
           if (p.credit_note?.credit_note_id) {
             setError(
@@ -458,11 +458,6 @@ export default function CreditNoteFormPageClient({
         ),
       )
       .catch(() => setApprovers([]));
-    LedgerService.getCurrentFinancialYear()
-      .then((fy) => {
-        if (fy && !fyLabel) setFyLabel(fy.name || fy.code || "");
-      })
-      .catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -773,6 +768,10 @@ export default function CreditNoteFormPageClient({
     }
   };
 
+  const goToList = () => {
+    router.push(CREDIT_NOTES_LIST_PATH);
+  };
+
   const goToEdit = (id: string) => {
     router.replace(`${CREDIT_NOTES_LIST_PATH}/${id}/edit`);
   };
@@ -858,7 +857,7 @@ export default function CreditNoteFormPageClient({
         });
         applyCn(created);
         showToast("Credit Note created as Draft", "success");
-        goToEdit(created.credit_note_id);
+        goToList();
         return;
       }
       if (pendingEntitlementLocked && cnId) {
@@ -869,6 +868,7 @@ export default function CreditNoteFormPageClient({
         });
         applyCn(updated);
         showToast("Draft updated", "success");
+        goToList();
         return;
       }
       const invalid = validateDirect();
@@ -884,12 +884,13 @@ export default function CreditNoteFormPageClient({
         });
         applyCn(updated);
         showToast("Draft updated", "success");
+        goToList();
         return;
       }
       const created = await CreditNoteFormApi.createDirect(buildDirectPayload());
       applyCn(created);
       showToast("Credit Note saved as Draft", "success");
-      goToEdit(created.credit_note_id);
+      goToList();
     });
 
   const ensureSavedId = async (): Promise<string> => {
@@ -949,7 +950,7 @@ export default function CreditNoteFormPageClient({
   const postCn = () =>
     guardBusy(async () => {
       try {
-        if (!approvalRequired) {
+        if (!transactionsApprovalActive(approvalRequired)) {
           if (status === "DRAFT" && cnId) {
             const updated = await updateCurrentDraft(cnId);
             if (updated.status && updated.status !== "DRAFT") {
@@ -957,13 +958,13 @@ export default function CreditNoteFormPageClient({
             }
             await postById(requireCreditNoteId(updated));
             showToast("Credit Note posted", "success");
-            goToDetail(requireCreditNoteId(updated));
+            goToList();
             return;
           }
           if ((status === "PENDING_APPROVAL" || status === "APPROVED") && cnId) {
             await postById(cnId);
             showToast("Credit Note posted", "success");
-            goToDetail(cnId);
+            goToList();
             return;
           }
           return;
@@ -972,6 +973,7 @@ export default function CreditNoteFormPageClient({
         const updated = await CreditNoteFormApi.post(cnId);
         applyCn(updated);
         showToast("Credit Note posted", "success");
+        goToList();
       } catch (e) {
         await refreshConfigIfApprovalDisabled(e);
         throw e;
@@ -1004,7 +1006,7 @@ export default function CreditNoteFormPageClient({
             throw e;
           }
           showToast("Credit Note posted", "success");
-          goToDetail(id);
+          goToList();
           return;
         }
         if (status === "REJECTED" && cnId) {
@@ -1014,7 +1016,7 @@ export default function CreditNoteFormPageClient({
           }
           await postById(requireCreditNoteId(updated));
           showToast("Credit Note posted", "success");
-          goToDetail(requireCreditNoteId(updated));
+          goToList();
           return;
         }
         const invalid = validateDirect();
@@ -1023,7 +1025,7 @@ export default function CreditNoteFormPageClient({
           const updated = await updateCurrentDraft(cnId);
           await postById(requireCreditNoteId(updated));
           showToast("Credit Note posted", "success");
-          goToDetail(requireCreditNoteId(updated));
+          goToList();
           return;
         }
         const created = await CreditNoteFormApi.createDirect(buildDirectPayload());
@@ -1036,7 +1038,7 @@ export default function CreditNoteFormPageClient({
           throw e;
         }
         showToast("Credit Note posted", "success");
-        goToDetail(id);
+        goToList();
       } catch (e) {
         await refreshConfigIfApprovalDisabled(e);
         throw e;
@@ -1116,33 +1118,25 @@ export default function CreditNoteFormPageClient({
 
   void creditNoteIdProp;
 
+  const breadcrumbPage = cnId
+    ? "Edit Credit Note"
+    : isPendingFlow
+      ? "Generate Credit Note"
+      : "Create Credit Note";
+
+  const subtitle = isPendingFlow
+    ? "Details auto-fetched from pending entitlement."
+    : "Create a direct credit note or link to an outstanding Sales Invoice.";
+
   return (
     <>
-      <div className="credit-debit-note-form flex-1 min-h-0 h-full flex flex-col">
-        <AccountsFormLayout
-          fullWidth
+      <div className="sales-order-invoice-form-compact h-full min-h-0 flex flex-col w-full">
+        <InvoiceFormLayout
           onBackClick={requestCancel}
           title={title}
-          breadcrumb={[...CREDIT_NOTES_BREADCRUMB]}
-          code={cn?.cn_number || undefined}
-          headerMeta={
-            <div className="flex items-center gap-1.5">
-              {status ? (
-                <span className={`cdn-chip inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium ${statusChipClass(status)}`}>
-                  {STATUS_LABELS[status] || status.replaceAll("_", " ")}
-                </span>
-              ) : isPendingFlow ? (
-                <span className="cdn-chip inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-amber-50 text-amber-700">
-                  Pending entitlement
-                </span>
-              ) : null}
-              {cn?.cn_number ? (
-                <span className="cdn-chip cdn-chip--code inline-flex items-center h-5 px-1.5 rounded border font-mono text-[10px]">
-                  {cn.cn_number}
-                </span>
-              ) : null}
-            </div>
-          }
+          subtitle={subtitle}
+          breadcrumb={accountsBreadcrumb("Transactions", breadcrumbPage, CREDIT_NOTES_LIST_PATH)}
+          backHref={CREDIT_NOTES_LIST_PATH}
           stickyFooter={
             isReadOnlyStatus(status) ? undefined : (
               <CreditNoteFormActionBar
@@ -1150,40 +1144,29 @@ export default function CreditNoteFormPageClient({
                 busy={busy || pageLoading}
                 approvalRequired={approvalRequired}
                 configReady={configReady}
-                isPendingGenerate={isPendingFlow && !cnId}
                 hasExistingId={Boolean(cnId)}
                 canCancel={Boolean(cnId) && status !== "POSTED" && status !== "CANCELLED" && status !== "REVERSED"}
                 onDiscard={requestCancel}
                 onSaveDraft={fieldsEditable ? saveDraft : undefined}
-                onSubmitForApproval={approvalRequired && fieldsEditable ? submitForApproval : undefined}
-                onSaveAndPost={
-                  !approvalRequired &&
-                  configReady &&
-                  fieldsEditable &&
-                  (!cnId || status === "REJECTED")
-                    ? saveAndPost
-                    : undefined
-                }
+                onSaveAndPost={fieldsEditable && !cnId ? saveAndPost : undefined}
                 onApprove={approvalRequired && canActAsApprover ? approve : undefined}
                 onReject={approvalRequired && canActAsApprover ? () => setReasonDialog("reject") : undefined}
                 onPost={
-                  approvalRequired
-                    ? status === "APPROVED"
+                  fieldsEditable && cnId
+                    ? status === "DRAFT" ||
+                      status === "REJECTED" ||
+                      status === "APPROVED" ||
+                      status === "PENDING_APPROVAL"
                       ? postCn
                       : undefined
-                    : configReady &&
-                        (status === "APPROVED" ||
-                          status === "PENDING_APPROVAL" ||
-                          (status === "DRAFT" && Boolean(cnId)))
-                      ? postCn
-                      : undefined
+                    : undefined
                 }
                 onCancel={cnId && status !== "POSTED" ? () => setReasonDialog("cancel") : undefined}
               />
             )
           }
         >
-          <div className="cdn-stack pb-3">
+          <div className="space-y-2.5">
             {pageLoading ? (
               <div className="bg-muted/30 border border-border rounded-lg px-3 py-2 text-xs text-muted-foreground">
                 Loading Credit Note…
@@ -1199,150 +1182,152 @@ export default function CreditNoteFormPageClient({
               </div>
             ) : null}
 
-            <VoucherFormSectionCard title="Basic Details" compact>
-              <div className="cn-basic-details-grid">
-                <VoucherNoteField label="Credit Note Number" width="sm">
-                  <VoucherNoteReadOnly mono>{cn?.cn_number || "Assigned on save"}</VoucherNoteReadOnly>
-                </VoucherNoteField>
-                <VoucherNoteField label="Credit Note Date" required width="sm">
-                  <AccountsDateInput
-                    value={cnDate}
-                    onChange={setCnDate}
-                    disabled={!fieldsEditable}
-                    aria-label="Credit note date"
-                    className="h-[30px] text-xs cdn-control"
-                  />
-                </VoucherNoteField>
-                <VoucherNoteField label="Financial Year" width="sm">
-                  <VoucherNoteReadOnly>{fyLabel || "Working FY on save"}</VoucherNoteReadOnly>
-                </VoucherNoteField>
-                <VoucherNoteField
-                  label={
-                    <span className="inline-flex items-center gap-1">
-                      Warehouse / Branch
+            <VoucherFormSectionCard title="Credit Note Details">
+              <div className="space-y-1.5">
+                <div className="so-invoice-details-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+                  <InvoiceDetailField label="Credit Note Number">
+                    <div className="so-goods-ro so-goods-ro--mono w-full text-brand-700">
+                      {cn?.cn_number || "Assigned on save"}
+                    </div>
+                  </InvoiceDetailField>
+                  <InvoiceDetailField label="Credit Note Date" required>
+                    <AccountsDateInput
+                      value={cnDate}
+                      onChange={setCnDate}
+                      disabled={!fieldsEditable}
+                      aria-label="Credit note date"
+                      className={INVOICE_DETAIL_INPUT_CLASS}
+                    />
+                  </InvoiceDetailField>
+                  <InvoiceDetailField
+                    label="Warehouse / Branch"
+                    required
+                    labelExtra={
                       <CreditNoteWarehouseInfoButton warehouseId={warehouseId || null} />
-                    </span>
-                  }
-                  required
-                  width="lg"
-                >
-                  {pendingEntitlementLocked ? (
-                    <VoucherNoteReadOnly>
-                      {pending?.warehouse?.warehouse_name || selectedWarehouse?.name || "—"}
-                    </VoucherNoteReadOnly>
-                  ) : (
-                    <SearchableSelect
-                      value={warehouseId}
-                      onChange={setWarehouseId}
-                      options={warehouses.map((w) => ({ value: w.id, label: w.name, sub: w.state }))}
-                      placeholder="Select warehouse"
-                      required
-                      disabled={!fieldsEditable}
-                    />
-                  )}
-                </VoucherNoteField>
-                <VoucherNoteField
-                  label={
-                    <span className="inline-flex items-center gap-1">
-                      Customer
-                      <CreditNoteCustomerInfoButton enabled={Boolean(customerId)} info={customerInfo} />
-                    </span>
-                  }
-                  required
-                  width="lg"
-                >
-                  {pendingEntitlementLocked ? (
-                    <VoucherNoteReadOnly>{customerName || "—"}</VoucherNoteReadOnly>
-                  ) : (
-                    <SearchableSelect
-                      value={customerId}
-                      onChange={(id) => {
-                        setCustomerId(id);
-                        setInvoiceId("");
-                      }}
-                      options={customers.map((c) => ({ value: c.id, label: c.name, sub: c.code }))}
-                      placeholder="Select customer"
-                      required
-                      disabled={!fieldsEditable}
-                    />
-                  )}
-                </VoucherNoteField>
-                {!pendingEntitlementLocked ? (
-                  <VoucherNoteField label="Direct Mode" width="full">
-                    <div className="cnz-gst-toggle" role="group" aria-label="Direct credit note mode">
-                      <button
-                        type="button"
-                        data-active={directMode === "on_account"}
-                        aria-pressed={directMode === "on_account"}
+                    }
+                  >
+                    {pendingEntitlementLocked ? (
+                      <div className="so-goods-ro w-full">
+                        {pending?.warehouse?.warehouse_name || selectedWarehouse?.name || "—"}
+                      </div>
+                    ) : (
+                      <SearchableSelect
+                        value={warehouseId}
+                        onChange={setWarehouseId}
+                        options={warehouses.map((w) => ({ value: w.id, label: w.name, sub: w.state }))}
+                        placeholder="Select warehouse"
+                        required
                         disabled={!fieldsEditable}
-                        onClick={() => {
-                          setDirectMode("on_account");
+                        triggerClassName={INVOICE_DETAIL_SELECT_CLASS}
+                      />
+                    )}
+                  </InvoiceDetailField>
+                  <InvoiceDetailField
+                    label="Customer"
+                    required
+                    labelExtra={
+                      <CreditNoteCustomerInfoButton enabled={Boolean(customerId)} info={customerInfo} />
+                    }
+                  >
+                    {pendingEntitlementLocked ? (
+                      <div className="so-goods-ro w-full">{customerName || "—"}</div>
+                    ) : (
+                      <SearchableSelect
+                        value={customerId}
+                        onChange={(id) => {
+                          setCustomerId(id);
                           setInvoiceId("");
                         }}
-                      >
-                        On-account
-                      </button>
-                      <button
-                        type="button"
-                        data-active={directMode === "against_invoice"}
-                        aria-pressed={directMode === "against_invoice"}
-                        disabled={!fieldsEditable}
-                        onClick={() => setDirectMode("against_invoice")}
-                      >
-                        Against Sales Invoice
-                      </button>
-                    </div>
-                  </VoucherNoteField>
-                ) : null}
-                {!pendingEntitlementLocked && directMode === "against_invoice" ? (
-                  <>
-                    <VoucherNoteField label="Sales Invoice" required width="lg">
-                      <SearchableSelect
-                        value={invoiceId}
-                        onChange={(id) => {
-                          setInvoiceId(id);
-                        }}
-                        options={invoices.map((inv) => ({
-                          value: inv.sales_invoice_id,
-                          label: inv.invoice_date
-                            ? `${inv.invoice_number} · ${inv.invoice_date}`
-                            : inv.invoice_number,
-                          selectedLabel: inv.invoice_number,
-                          sub:
-                            typeof inv.outstanding_amount === "number"
-                              ? formatCnMoney(inv.outstanding_amount)
-                              : undefined,
-                        }))}
-                        placeholder={
-                          invoicesLoading
-                            ? "Loading invoices…"
-                            : !customerId
-                              ? "Select customer first"
-                              : "Select invoice…"
-                        }
-                        disabled={!fieldsEditable || invoicesLoading || !customerId}
+                        options={customers.map((c) => ({ value: c.id, label: c.name, sub: c.code }))}
+                        placeholder="Select customer"
                         required
+                        disabled={!fieldsEditable}
+                        triggerClassName={INVOICE_DETAIL_SELECT_CLASS}
                       />
-                      {!invoicesLoading && !invoicesError && customerId && invoices.length === 0 ? (
-                        <p className="text-[10px] text-muted-foreground mt-0.5">
-                          No outstanding Sales Invoices available for this customer.
-                        </p>
-                      ) : null}
-                      {invoicesError ? (
-                        <p className="text-[10px] text-red-600 mt-0.5">{invoicesError}</p>
-                      ) : null}
-                    </VoucherNoteField>
-                    <VoucherNoteField label="Outstanding" width="sm">
-                      <VoucherNoteReadOnly>
-                        {invoiceOutstanding != null ? formatCnMoney(invoiceOutstanding) : "—"}
-                      </VoucherNoteReadOnly>
-                      {invoiceId && invoiceOutstanding == null && !invoicesLoading ? (
-                        <p className="text-[10px] text-muted-foreground mt-0.5">
-                          This invoice is no longer in the eligible outstanding list.
-                        </p>
-                      ) : null}
-                    </VoucherNoteField>
-                  </>
+                    )}
+                  </InvoiceDetailField>
+                </div>
+
+                {!pendingEntitlementLocked ? (
+                  <div className="so-invoice-details-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+                    <InvoiceDetailField label="Direct Mode">
+                      <div className="cnz-gst-toggle w-full" role="group" aria-label="Direct credit note mode">
+                        <button
+                          type="button"
+                          data-active={directMode === "on_account"}
+                          aria-pressed={directMode === "on_account"}
+                          disabled={!fieldsEditable}
+                          onClick={() => {
+                            setDirectMode("on_account");
+                            setInvoiceId("");
+                          }}
+                        >
+                          On-account
+                        </button>
+                        <button
+                          type="button"
+                          data-active={directMode === "against_invoice"}
+                          aria-pressed={directMode === "against_invoice"}
+                          disabled={!fieldsEditable}
+                          onClick={() => setDirectMode("against_invoice")}
+                        >
+                          Against Sales Invoice
+                        </button>
+                      </div>
+                    </InvoiceDetailField>
+
+                    {directMode === "against_invoice" ? (
+                      <>
+                        <InvoiceDetailField label="Sales Invoice" required>
+                          <SearchableSelect
+                            value={invoiceId}
+                            onChange={(id) => {
+                              setInvoiceId(id);
+                            }}
+                            options={invoices.map((inv) => ({
+                              value: inv.sales_invoice_id,
+                              label: inv.invoice_date
+                                ? `${inv.invoice_number} · ${inv.invoice_date}`
+                                : inv.invoice_number,
+                              selectedLabel: inv.invoice_number,
+                              sub:
+                                typeof inv.outstanding_amount === "number"
+                                  ? formatCnMoney(inv.outstanding_amount)
+                                  : undefined,
+                            }))}
+                            placeholder={
+                              invoicesLoading
+                                ? "Loading invoices…"
+                                : !customerId
+                                  ? "Select customer first"
+                                  : "Select invoice…"
+                            }
+                            disabled={!fieldsEditable || invoicesLoading || !customerId}
+                            required
+                            triggerClassName={INVOICE_DETAIL_SELECT_CLASS}
+                          />
+                          {!invoicesLoading && !invoicesError && customerId && invoices.length === 0 ? (
+                            <p className="text-[10px] text-muted-foreground mt-0.5 leading-snug">
+                              No outstanding Sales Invoices available for this customer.
+                            </p>
+                          ) : null}
+                          {invoicesError ? (
+                            <p className="text-[10px] text-red-600 mt-0.5 leading-snug">{invoicesError}</p>
+                          ) : null}
+                        </InvoiceDetailField>
+                        <InvoiceDetailField label="Outstanding">
+                          <div className="so-goods-ro w-full tabular-nums">
+                            {invoiceOutstanding != null ? formatCnMoney(invoiceOutstanding) : "—"}
+                          </div>
+                          {invoiceId && invoiceOutstanding == null && !invoicesLoading ? (
+                            <p className="text-[10px] text-muted-foreground mt-0.5 leading-snug">
+                              This invoice is no longer in the eligible outstanding list.
+                            </p>
+                          ) : null}
+                        </InvoiceDetailField>
+                      </>
+                    ) : null}
+                  </div>
                 ) : null}
               </div>
             </VoucherFormSectionCard>
@@ -1365,23 +1350,30 @@ export default function CreditNoteFormPageClient({
 
             {pendingEntitlementLocked &&
             (pending?.sales_return_additional_charges || []).length > 0 ? (
-              <VoucherFormSectionCard title="Sales Return Additional Charges" compact>
-                <p className="px-3 pt-2 text-[10px] text-muted-foreground">
+              <VoucherFormSectionCard title="Sales Return Additional Charges" flush>
+                <p className="px-3 pt-2 text-[11px] text-muted-foreground">
                   Charges from the linked Sales Invoice (display only — not posted).
                 </p>
-                <table className="w-full text-[11px]">
-                  <thead>
-                    <tr className="border-b bg-muted/20">
-                      <th className="p-1.5 text-left font-medium">Charge</th>
-                      <th className="p-1.5 text-right font-medium w-28">Original</th>
-                      <th className="p-1.5 text-right font-medium w-28">Remaining</th>
-                    </tr>
-                  </thead>
+                <div className="so-invoice-charges-table-wrap w-full">
+                  <table className="so-invoice-table so-invoice-charges-table table-fixed w-full text-xs">
+                    <thead>
+                      <tr>
+                        <th className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground text-left">
+                          Charge
+                        </th>
+                        <th className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground text-right w-28">
+                          Original
+                        </th>
+                        <th className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground text-right w-28">
+                          Remaining
+                        </th>
+                      </tr>
+                    </thead>
                   <tbody>
                     {(pending?.sales_return_additional_charges || []).map((charge) => {
                       const id = charge.sales_invoice_additional_charge_id;
                       return (
-                        <tr key={`sr-display-${id}`} className="border-b last:border-0">
+                        <tr key={`sr-display-${id}`} className="border-b border-border/40 last:border-0">
                           <td className="p-1.5">{charge.description || "Additional charge"}</td>
                           <td className="p-1.5 text-right tabular-nums">
                             {formatCnMoney(
@@ -1402,21 +1394,20 @@ export default function CreditNoteFormPageClient({
                     })}
                   </tbody>
                 </table>
+                </div>
               </VoucherFormSectionCard>
             ) : null}
 
-            <div className="cn-narration-summary-grid">
-              <VoucherFormSectionCard title="Narration" compact>
-                <div className="px-3 pb-3 pt-1">
-                  <Textarea
-                    className="cdn-control min-h-[64px] resize-y text-xs"
-                    value={narration}
-                    onChange={(e) => setNarration(e.target.value)}
-                    placeholder="Optional narration…"
-                    maxLength={2000}
-                    disabled={!fieldsEditable}
-                  />
-                </div>
+            <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_300px] gap-2.5 items-start">
+              <VoucherFormSectionCard title="Narration">
+                <Textarea
+                  className={cnMerge(VOUCHER_INPUT_CLASS, "so-goods-narration min-h-[60px] h-auto resize-y text-xs w-full")}
+                  value={narration}
+                  onChange={(e) => setNarration(e.target.value)}
+                  placeholder="Optional narration…"
+                  maxLength={2000}
+                  disabled={!fieldsEditable}
+                />
               </VoucherFormSectionCard>
 
               <CreditNoteAmountSummary
@@ -1437,7 +1428,7 @@ export default function CreditNoteFormPageClient({
               />
             </div>
           </div>
-        </AccountsFormLayout>
+        </InvoiceFormLayout>
       </div>
       {discardDialog}
       <CreditNoteReasonDialog

@@ -2,18 +2,9 @@
 
 import type { ComponentType } from "react";
 import dynamic from "next/dynamic";
-import { PageContentSkeleton } from "@/components/layout/PageContentSkeleton";
-
-function SectionFallback() {
-  return (
-    <div className="p-6">
-      <PageContentSkeleton />
-    </div>
-  );
-}
 
 const lazy = (loader: () => Promise<{ default: ComponentType }>) =>
-  dynamic(loader, { loading: SectionFallback, ssr: false });
+  dynamic(loader, { loading: () => null, ssr: false });
 
 export const TEMPLATE_SECTIONS: Record<string, ComponentType> = {
   colors: lazy(() => import("./sections/ColorSection")),

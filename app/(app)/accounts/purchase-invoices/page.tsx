@@ -1,6 +1,4 @@
-import { lazyAccountsPage } from "@/lib/accounts/lazy-accounts-page";
-
-const PurchaseInvoiceListClient = lazyAccountsPage(() => import("./PurchaseInvoiceListClient"));
+import PurchaseInvoiceListClient from "./PurchaseInvoiceListClient";
 
 import { Suspense } from "react";
 

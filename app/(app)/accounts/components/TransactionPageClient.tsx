@@ -2,7 +2,7 @@
 
 import React, { useCallback, useMemo, useState } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { PageContentSkeleton } from "@/components/layout/PageContentSkeleton";
+import { AccountsTableLoading } from "@/components/accounts/AccountsTableListing";
 import { AccountsListingChrome } from "@/components/accounts/ui";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,12 +43,14 @@ function TransactionTable({
   title,
   partyLabel,
   toolbarRows,
+  loading,
   onApprove,
   onPost,
 }: {
   title: string;
   partyLabel: string;
   toolbarRows: AccountTxn[];
+  loading?: boolean;
   onApprove: (rec: AccountTxn) => void;
   onPost: (rec: AccountTxn) => void;
 }) {
@@ -73,7 +75,16 @@ function TransactionTable({
             </tr>
           </thead>
           <tbody>
-            {visible.map((r) => (
+            {loading && toolbarRows.length === 0 ? (
+              <AccountsTableLoading colSpan={10} message={`Loading ${title.toLowerCase()}…`} />
+            ) : visible.length === 0 ? (
+              <tr>
+                <td colSpan={10} className="px-3 py-8 text-center text-xs text-muted-foreground">
+                  No records found.
+                </td>
+              </tr>
+            ) : (
+              visible.map((r) => (
               <tr key={r.id} className="accounts-table-row group">
                 <td className="px-3 py-2 text-xs font-mono">{r.number}</td>
                 <td className="px-3 py-2 text-xs text-muted-foreground">{r.date}</td>
@@ -101,7 +112,8 @@ function TransactionTable({
                   )}
                 </td>
               </tr>
-            ))}
+              ))
+            )}
           </tbody>
         </table>
       </div>
@@ -247,35 +259,32 @@ export default function TransactionPageClient({
           />
         </div>
 
-        {!ready ? (
-          <PageContentSkeleton />
-        ) : (
-          <AccountsColumnFilterProvider
-            rows={toolbarRows}
-            getCellValue={getCellValue}
-            columnConfig={{
-              number: { type: "text" },
-              date: { type: "date" },
-              party: { type: "text" },
-              referenceNo: { type: "text" },
-              amount: { type: "amount" },
-              taxAmount: { type: "amount" },
-              totalAmount: { type: "amount" },
-              createdBy: { type: "text" },
-              updatedBy: { type: "text" },
-            }}
-            defaultSortKey="date"
-            defaultSortDir="desc"
-          >
-            <TransactionTable
-              title={title}
-              partyLabel={partyLabel}
-              toolbarRows={toolbarRows}
-              onApprove={(r) => updateStatus(r, "approved")}
-              onPost={(r) => updateStatus(r, "posted")}
-            />
-          </AccountsColumnFilterProvider>
-        )}
+        <AccountsColumnFilterProvider
+          rows={toolbarRows}
+          getCellValue={getCellValue}
+          columnConfig={{
+            number: { type: "text" },
+            date: { type: "date" },
+            party: { type: "text" },
+            referenceNo: { type: "text" },
+            amount: { type: "amount" },
+            taxAmount: { type: "amount" },
+            totalAmount: { type: "amount" },
+            createdBy: { type: "text" },
+            updatedBy: { type: "text" },
+          }}
+          defaultSortKey="date"
+          defaultSortDir="desc"
+        >
+          <TransactionTable
+            title={title}
+            partyLabel={partyLabel}
+            toolbarRows={toolbarRows}
+            loading={!ready}
+            onApprove={(r) => updateStatus(r, "approved")}
+            onPost={(r) => updateStatus(r, "posted")}
+          />
+        </AccountsColumnFilterProvider>
       </div>
     </AppLayout>
   );

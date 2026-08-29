@@ -1,10 +1,5 @@
-import { lazyAccountsPage } from "@/lib/accounts/lazy-accounts-page";
+import PendingTaxInvoicesClient from "./PendingTaxInvoicesClient";
 
-const PendingTaxInvoicesClient = lazyAccountsPage(
-  () => import("./PendingTaxInvoicesClient"),
-  { pathnameHint: "/accounts/sales/pending-tax-invoices" },
-);
-
-export default function PendingTaxInvoicesPage() {
+export default function Page() {
   return <PendingTaxInvoicesClient />;
 }

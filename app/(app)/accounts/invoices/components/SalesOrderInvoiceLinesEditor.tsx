@@ -341,15 +341,15 @@ function SalesOrderInvoiceLinesEditorInner({
   ]);
 
   return (
-    <div className="so-goods-product-table-wrap">
-      <table className="w-full text-xs min-w-[1480px] so-goods-product-table">
-        <thead className="border-b border-border/60 bg-muted/20">
+    <div className="so-goods-product-table-wrap overflow-x-auto">
+      <table className="so-invoice-table text-xs w-max min-w-[1480px] so-goods-product-table">
+        <thead>
           <tr>
             {headers.map((h) => (
               <th
                 key={h}
                 className={cn(
-                  "px-2 py-1.5 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap",
+                  "px-2 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap",
                   rightAlign.has(h) && "text-right",
                   HEADER_COL[h],
                 )}

@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
 import {
   AccountsEditAction,
   AccountsTableActionCell,
@@ -23,6 +22,7 @@ import {
 import {
   ACCOUNTS_DEFAULT_PAGE_SIZE,
   AccountsTableListing,
+  AccountsTableLoading,
   AccountsTablePagination,
   AccountsTableToolbar,
 } from "@/components/accounts/AccountsTableListing";
@@ -56,6 +56,7 @@ import type {
   AccountsColumnFilters,
 } from "@/lib/accounts/column-filter-types";
 import { ReceiptVoucherService } from "@/services/receipt-voucher.service";
+import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
 import { WarehouseService } from "@/services/warehouse.service";
 import { CustomerListService } from "@/services/customer-list.service";
 import { SupplierListService } from "@/services/supplier-list.service";
@@ -250,14 +251,8 @@ function ReceiptListTable({
         </AccountsTableHeadRow>
       </AccountsTableHead>
       <AccountsTableBody>
-        {loading ? (
-          <AccountsTableRow>
-            <AccountsTableCell colSpan={11} className="accounts-table-empty">
-              <span className="inline-flex items-center gap-2">
-                <Loader2 className="w-4 h-4 animate-spin" /> Loading receipts…
-              </span>
-            </AccountsTableCell>
-          </AccountsTableRow>
+        {loading && rows.length === 0 ? (
+          <AccountsTableLoading colSpan={11} message="Loading receipts…" />
         ) : rows.length === 0 ? (
           <AccountsTableRow>
             <AccountsTableCell colSpan={11} className="accounts-table-empty">
@@ -364,6 +359,7 @@ export function ReceiptVoucherListClient() {
   const [branchOptions, setBranchOptions] = useState<{ value: string; count: number }[]>([]);
   const [partyOptions, setPartyOptions] = useState<{ value: string; count: number }[]>([]);
   const [cashBankOptions, setCashBankOptions] = useState<{ value: string; count: number }[]>([]);
+  const refreshTick = useAccountsSectionRefresh("receipt-vouchers", { apiListing: true });
 
   useEffect(() => {
     let cancelled = false;
@@ -479,6 +475,7 @@ export function ReceiptVoucherListClient() {
     sortKey,
     sortDir,
     columnFilters,
+    refreshTick,
   ]);
 
   useEffect(() => {

@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Check, ChevronsUpDown, X } from "lucide-react";
+import { INVOICE_DETAIL_SELECT_CLASS } from "@/app/(app)/accounts/invoices/components/invoice-form-voucher-ui";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { formatMoney } from "@/lib/accounts/money-format";
@@ -52,7 +53,7 @@ export function ReceiptInvoiceMultiSelect({
   const selectedRows = allocations.filter((a) => selectedSet.has(a.open_item_id));
 
   return (
-    <div className="space-y-1.5">
+    <div className="space-y-0.5">
       <Label className="text-xs font-medium">{label}</Label>
       <Popover
         open={open && !disabled}
@@ -68,10 +69,11 @@ export function ReceiptInvoiceMultiSelect({
             type="button"
             disabled={disabled}
             className={cn(
-              "w-full min-h-9 px-3 py-1.5 text-sm text-left border border-border rounded-lg bg-background flex items-center justify-between gap-2",
+              "w-full min-w-0 min-h-8 py-1 text-left flex items-center justify-between gap-1.5",
+              INVOICE_DETAIL_SELECT_CLASS,
               disabled
                 ? "opacity-50 cursor-not-allowed bg-muted/30"
-                : "hover:bg-muted/30",
+                : "hover:bg-muted/20",
             )}
           >
             <div className="flex-1 min-w-0 flex flex-wrap gap-1">
@@ -118,22 +120,22 @@ export function ReceiptInvoiceMultiSelect({
                 ))
               )}
             </div>
-            <ChevronsUpDown className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+            <ChevronsUpDown className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
           </button>
         </PopoverTrigger>
         <PopoverContent
           className="w-[--radix-popover-trigger-width] min-w-[320px] p-0"
           align="start"
         >
-          <div className="p-2 border-b border-border">
+          <div className="p-1 border-b border-border">
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Search invoice…"
-              className="w-full h-8 px-2 text-sm rounded-md border border-border bg-background focus:outline-none focus:ring-2 focus:ring-brand-300"
+              className="w-full h-8 px-2 text-xs rounded-md border border-border bg-background focus:outline-none focus:ring-2 focus:ring-brand-300"
             />
           </div>
-          <div className="max-h-56 overflow-y-auto py-1">
+          <div className="max-h-48 overflow-y-auto py-0.5">
             {filtered.length === 0 ? (
               <p className="px-3 py-4 text-xs text-muted-foreground text-center">
                 No matching invoices
@@ -146,7 +148,7 @@ export function ReceiptInvoiceMultiSelect({
                     key={row.open_item_id}
                     type="button"
                     className={cn(
-                      "w-full flex items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-muted/60",
+                      "w-full flex items-center gap-2 px-2 py-1.5 text-left text-xs hover:bg-muted/60",
                       checked && "bg-brand-50",
                     )}
                     onClick={() => toggle(row.open_item_id)}

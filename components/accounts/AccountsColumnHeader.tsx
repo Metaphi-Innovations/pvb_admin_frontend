@@ -4,6 +4,7 @@ import React from "react";
 import { cn } from "@/lib/utils";
 import { ChevronDown, ChevronsUpDown } from "lucide-react";
 import { AccountsTableHeadCell } from "@/components/accounts/AccountsTable";
+import { accountsActionColClass } from "@/components/accounts/AccountsTableActions";
 import { AccountsColumnFilterPopover } from "./AccountsColumnFilterPopover";
 import { useAccountsColumnFilterContext } from "./AccountsColumnFilterContext";
 import type {
@@ -84,12 +85,20 @@ export function AccountsColumnHeader({
   const filterType = filterTypeProp;
   const filterValue = filterValueProp ?? fromCtx?.filterValue;
   const onFilterChange = onFilterChangeProp ?? fromCtx?.onFilterChange;
-  const valueOptions = valueOptionsProp ?? fromCtx?.valueOptions ?? [];
+  const valueOptions =
+    valueOptionsProp && valueOptionsProp.length > 0
+      ? valueOptionsProp
+      : (fromCtx?.valueOptions ?? valueOptionsProp ?? []);
   const statusOptions = statusOptionsProp ?? fromCtx?.statusOptions ?? [];
   const optionLabels = optionLabelsProp ?? fromCtx?.optionLabels ?? {};
 
   const sorted = sortable && sortKey === colKey;
   const filtered = isColumnFilterActive(filterValue);
+  const hasActionColClass =
+    typeof className === "string" &&
+    (className.includes("accounts-col-actions-wide") ||
+      className.includes("accounts-col-actions-cta") ||
+      /\baccounts-col-actions\b/.test(className));
 
   const handleSortClick = () => {
     if (!sortable || !onSort) return;
@@ -101,7 +110,11 @@ export function AccountsColumnHeader({
       align={align}
       sorted={sorted || filtered}
       uppercase
-      className={cn(sortable && "select-none", className)}
+      className={cn(
+        sortable && "select-none",
+        colKey === "_actions" && !hasActionColClass && accountsActionColClass("multi"),
+        className,
+      )}
     >
       <div
         className={cn(

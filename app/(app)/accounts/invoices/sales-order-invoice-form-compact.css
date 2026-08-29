@@ -24,8 +24,9 @@ div:has(> .accounts-module-shell):has(.invoice-form-shell) {
 .sales-order-invoice-form-compact {
   --so-ctrl-h: 32px;
   --so-label-gap: 4px;
-  --so-helper-h: 14px;
+  --so-helper-h: 12px;
   --so-field-gap: 0.75rem;
+  --so-field-row-gap: 0.375rem;
 
   /* Typography scale — matches Accounts module (no new font family) */
   --so-fs-page: 18px;
@@ -624,7 +625,7 @@ div:has(> .accounts-module-shell):has(.invoice-form-shell) {
   grid-auto-flow: unset !important;
   grid-template-columns: unset !important;
   width: 100%;
-  gap: 0.5rem 0.75rem;
+  gap: var(--so-field-row-gap) var(--so-field-gap);
   align-items: start;
   justify-content: flex-start;
 }
@@ -634,6 +635,7 @@ div:has(> .accounts-module-shell):has(.invoice-form-shell) {
   min-width: 0;
   max-width: 100%;
   grid-template-rows: auto var(--so-ctrl-h);
+  gap: 2px;
 }
 
 .sales-order-invoice-form-compact .so-invoice-dispatch-grid .so-goods-field:has(.so-goods-field__helper) {
@@ -687,8 +689,14 @@ div:has(> .accounts-module-shell):has(.invoice-form-shell) {
 .sales-order-invoice-form-compact .so-transport-grid {
   display: grid;
   width: 100%;
-  gap: var(--so-field-gap);
+  row-gap: var(--so-field-row-gap);
+  column-gap: var(--so-field-gap);
   align-items: start;
+}
+
+.sales-order-invoice-form-compact .so-transport-grid .so-goods-field {
+  grid-template-rows: auto var(--so-ctrl-h);
+  gap: 2px;
 }
 
 .sales-order-invoice-form-compact .so-transport-grid--5 {
@@ -887,4 +895,203 @@ div:has(> .accounts-module-shell):has(.invoice-form-shell) {
 .sales-order-invoice-form-compact .invoice-form-main {
   flex: 1;
   min-height: 0;
+}
+
+/* Voucher section cards — denser headers on service / goods invoice forms */
+.sales-order-invoice-form-compact section.rounded-xl > div:first-child {
+  min-height: 26px !important;
+  padding-top: 0.25rem !important;
+  padding-bottom: 0.25rem !important;
+}
+
+.sales-order-invoice-form-compact section.rounded-xl h2 {
+  font-size: 10px !important;
+  letter-spacing: 0.06em !important;
+  line-height: 1.2 !important;
+}
+
+/* Compact header action buttons (Add Service Line / Add Charge) */
+.sales-order-invoice-form-compact .so-section-header-btn {
+  height: 24px !important;
+  min-height: 24px !important;
+  padding: 0 0.5rem !important;
+  font-size: 10px !important;
+  font-weight: 500 !important;
+  gap: 0.25rem !important;
+  line-height: 1 !important;
+}
+
+.sales-order-invoice-form-compact .so-section-header-btn svg {
+  width: 12px !important;
+  height: 12px !important;
+}
+
+/* Additional charges — stretch table to full section width */
+.sales-order-invoice-form-compact .so-invoice-charges-table {
+  width: 100%;
+  table-layout: fixed;
+}
+
+.sales-order-invoice-form-compact .so-invoice-charges-table .so-charge-col {
+  width: auto;
+  max-width: none;
+  min-width: 0;
+}
+
+.sales-order-invoice-form-compact .so-invoice-charges-table-wrap {
+  overflow-x: auto;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+
+/* Invoice Details — aligned labels + uniform control heights */
+.sales-order-invoice-form-compact .so-invoice-detail-field {
+  display: grid;
+  grid-template-rows: auto var(--so-ctrl-h);
+  gap: 2px;
+  min-width: 0;
+}
+
+.sales-order-invoice-form-compact .so-invoice-details-grid {
+  row-gap: var(--so-field-row-gap);
+  column-gap: var(--so-field-gap);
+}
+
+.sales-order-invoice-form-compact .so-invoice-detail-label {
+  min-height: 16px;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.sales-order-invoice-form-compact .so-invoice-details-grid input:not([type="checkbox"]):not([type="radio"]),
+.sales-order-invoice-form-compact .so-invoice-details-grid .so-goods-ro,
+.sales-order-invoice-form-compact .so-invoice-details-grid .so-invoice-select-trigger {
+  height: var(--so-ctrl-h) !important;
+  min-height: var(--so-ctrl-h) !important;
+  max-height: var(--so-ctrl-h) !important;
+  font-size: var(--so-fs-control) !important;
+  line-height: 1.2 !important;
+  border-radius: 0.375rem !important;
+  box-sizing: border-box !important;
+}
+
+/* Compact select triggers in tables / sections outside the details grid */
+.sales-order-invoice-form-compact .so-invoice-select-trigger {
+  height: var(--so-ctrl-h) !important;
+  min-height: var(--so-ctrl-h) !important;
+  max-height: var(--so-ctrl-h) !important;
+  font-size: var(--so-fs-control) !important;
+  line-height: 1.2 !important;
+  border-radius: 0.375rem !important;
+  box-sizing: border-box !important;
+}
+
+/* Unified invoice line-item table styling (service lines + additional charges) */
+.sales-order-invoice-form-compact .so-invoice-table thead {
+  background: hsl(var(--muted) / 0.3);
+  border-bottom: 1px solid hsl(var(--border));
+}
+
+.sales-order-invoice-form-compact .so-invoice-table thead th {
+  padding: 0.5rem !important;
+  font-size: var(--so-fs-th) !important;
+  font-weight: var(--so-fw-semibold) !important;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground)) !important;
+  white-space: nowrap;
+}
+
+.sales-order-invoice-form-compact .so-invoice-table tbody tr {
+  border-bottom: 1px solid hsl(var(--border) / 0.4);
+}
+
+.sales-order-invoice-form-compact .so-invoice-table tbody tr:last-child {
+  border-bottom: 0;
+}
+
+.sales-order-invoice-form-compact .so-invoice-table tbody td {
+  padding: 0.375rem !important;
+  vertical-align: middle;
+}
+
+.sales-order-invoice-form-compact .so-table-ro {
+  height: var(--so-ctrl-h);
+  min-height: var(--so-ctrl-h);
+  width: 100%;
+  padding: 0 0.625rem;
+  display: flex;
+  align-items: center;
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.5rem;
+  background: hsl(var(--muted) / 0.25);
+  font-size: var(--so-fs-control);
+  font-variant-numeric: tabular-nums;
+  box-sizing: border-box;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sales-order-invoice-form-compact .so-table-ro--right {
+  justify-content: flex-end;
+  text-align: right;
+}
+
+.sales-order-invoice-form-compact .so-table-ro--muted {
+  color: hsl(var(--muted-foreground));
+  font-weight: var(--so-fw-regular);
+}
+
+.sales-order-invoice-form-compact .so-table-ro--strong {
+  color: hsl(var(--foreground));
+  font-weight: var(--so-fw-semibold);
+}
+
+/* Credit Note — direct mode segmented toggle in detail grid */
+.sales-order-invoice-form-compact .so-invoice-details-grid .cnz-gst-toggle {
+  width: 100%;
+  max-width: 100%;
+  height: var(--so-ctrl-h, 32px);
+  min-height: var(--so-ctrl-h, 32px);
+}
+
+.sales-order-invoice-form-compact .cnz-gst-toggle button {
+  font-size: 11px !important;
+  font-weight: 600 !important;
+}
+
+/* Credit Note — GST switch in particulars table (preserve pill shape) */
+.sales-order-invoice-form-compact table tbody button[role="switch"] {
+  width: 2.25rem !important;
+  min-width: 2.25rem !important;
+  max-width: 2.25rem !important;
+  height: 1.25rem !important;
+  min-height: 1.25rem !important;
+  max-height: 1.25rem !important;
+  padding: 0 !important;
+  border-radius: 9999px !important;
+  flex-shrink: 0;
+  margin-inline: auto;
+  display: inline-flex !important;
+}
+
+.sales-order-invoice-form-compact table tbody .cn-switch-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Debit / Credit Note — particulars tables using accounts-table inside voucher wrap */
+.sales-order-invoice-form-compact .so-invoice-charges-table-wrap .accounts-table thead th,
+.sales-order-invoice-form-compact .so-invoice-charges-table-wrap .accounts-table .accounts-table-th {
+  padding: 0.5rem 0.5rem;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+  white-space: nowrap;
 }

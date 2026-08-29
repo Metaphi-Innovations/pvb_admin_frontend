@@ -19,6 +19,7 @@ import {
   AccountsListingFilterCard,
   AccountsTableEmpty,
   AccountsTableListing,
+  AccountsTableLoading,
   AccountsTablePagination,
 } from "@/components/accounts/AccountsTableListing";
 import { ReportSearchFilter } from "@/components/accounts/ReportFilters";
@@ -56,6 +57,7 @@ interface PendingDebitNoteRow {
 }
 
 function PendingDebitNotesTable({
+  loading,
   toolbarFiltered,
   page,
   pageSize,
@@ -64,6 +66,7 @@ function PendingDebitNotesTable({
   onPageSizeChange,
   onCreate,
 }: {
+  loading: boolean;
   toolbarFiltered: PendingDebitNoteRow[];
   page: number;
   pageSize: number;
@@ -101,7 +104,9 @@ function PendingDebitNotesTable({
           </AccountsTableHeadRow>
         </AccountsTableHead>
         <AccountsTableBody>
-          {toolbarFiltered.length === 0 ? (
+          {loading && toolbarFiltered.length === 0 ? (
+            <AccountsTableLoading colSpan={11} message="Loading pending returns…" />
+          ) : toolbarFiltered.length === 0 ? (
             <AccountsTableEmpty
               colSpan={11}
               message="No purchase returns pending debit note."
@@ -328,20 +333,16 @@ export function PendingDebitNotesPanel({
         </AccountsListingFilterCard>
       }
     >
-      {loading ? (
-        <div className="p-8 text-center text-xs text-muted-foreground">
-          Loading pending returns...
-        </div>
-      ) : (
-        <AccountsColumnFilterProvider
-          rows={rows}
-          getCellValue={getCellValue}
-          columnConfig={columnConfig}
-          defaultSortKey="returnDate"
-          defaultSortDir="desc"
-        >
-          <PendingDebitNotesTable
-            toolbarFiltered={rows}
+      <AccountsColumnFilterProvider
+        rows={rows}
+        getCellValue={getCellValue}
+        columnConfig={columnConfig}
+        defaultSortKey="returnDate"
+        defaultSortDir="desc"
+      >
+        <PendingDebitNotesTable
+          loading={loading}
+          toolbarFiltered={rows}
             page={page}
             pageSize={pageSize}
             totalRecords={totalRecords}
@@ -350,7 +351,6 @@ export function PendingDebitNotesPanel({
             onCreate={handleCreate}
           />
         </AccountsColumnFilterProvider>
-      )}
     </AccountsTableListing>
   );
 }

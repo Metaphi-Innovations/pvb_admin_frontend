@@ -3,8 +3,7 @@
 import React, { memo, useMemo } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
   ACCOUNTS_NAV_GROUPS,
@@ -21,7 +20,6 @@ import {
 import { AccountsSidebarModuleHeader } from "./AccountsSidebarModuleHeader";
 import { useAccountsSidebar } from "./AccountsSidebarContext";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { useNavigationPendingOptional } from "@/components/navigation/NavigationPendingContext";
 
 /** COA tree — code-split; mounts only when Chart of Accounts section is active. */
 const CoaSidebarNavTree = dynamic(
@@ -49,51 +47,37 @@ const SectionNavLink = memo(function SectionNavLink({
   icon: ItemIcon,
   active,
   collapsed,
+  onPrefetch,
 }: {
   href: string;
   label: string;
   icon: AccountsNavGroup["items"][number]["icon"];
   active: boolean;
   collapsed: boolean;
+  onPrefetch: (href: string) => void;
 }) {
-  const pending = useNavigationPendingOptional();
-  const isPending = pending?.isHrefPending(href) ?? false;
-  const isDisabled = isPending && !active;
-
   const link = (
     <Link
       href={href}
       scroll={false}
       prefetch
       aria-current={active ? "page" : undefined}
-      aria-disabled={isDisabled || undefined}
       aria-label={collapsed ? label : undefined}
       title={collapsed ? undefined : label}
-      onClick={(e) => {
-        if (isDisabled) {
-          e.preventDefault();
-          return;
-        }
-        pending?.trackNavigation(href, label);
-      }}
+      onMouseEnter={() => onPrefetch(href)}
+      onFocus={() => onPrefetch(href)}
       className={cn(
         ACCOUNTS_SIDEBAR_NAV_ITEM_CLASS,
         active && ACCOUNTS_SIDEBAR_NAV_ITEM_ACTIVE_CLASS,
         collapsed && "is-collapsed",
-        isPending && "is-nav-pending",
-        isDisabled && "pointer-events-none opacity-60",
       )}
     >
-      {isPending ? (
-        <Loader2 className="w-4 h-4 flex-shrink-0 animate-spin text-brand-600" aria-hidden />
-      ) : (
-        <ItemIcon
-          className={cn(
-            "w-4 h-4 flex-shrink-0",
-            active ? "text-brand-600" : "text-muted-foreground",
-          )}
-        />
-      )}
+      <ItemIcon
+        className={cn(
+          "w-4 h-4 flex-shrink-0",
+          active ? "text-brand-600" : "text-muted-foreground",
+        )}
+      />
       <span>{label}</span>
     </Link>
   );
@@ -119,9 +103,21 @@ const FlatSectionMenu = memo(function FlatSectionMenu({
   collapsed: boolean;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const search = searchParams.toString();
   const { toggleCollapsed } = useAccountsSidebar();
+
+  const prefetchHref = useMemo(
+    () => (href: string) => {
+      try {
+        router.prefetch(href);
+      } catch {
+        // ignore prefetch failures
+      }
+    },
+    [router],
+  );
 
   return (
     <div className="flex flex-col h-full min-h-0 overflow-hidden">
@@ -147,6 +143,7 @@ const FlatSectionMenu = memo(function FlatSectionMenu({
             icon={item.icon}
             active={isAccountsNavActive(pathname, item.href, search)}
             collapsed={collapsed}
+            onPrefetch={prefetchHref}
           />
         ))}
       </nav>

@@ -3,21 +3,26 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
-import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
+import { Button } from "@/components/ui/button";
+import { InvoiceFormLayout } from "@/app/(app)/accounts/components/InvoiceFormLayout";
+import {
+  INVOICE_DETAIL_INPUT_CLASS,
+  INVOICE_DETAIL_SELECT_CLASS,
+  InvoiceDetailField,
+} from "@/app/(app)/accounts/invoices/components/invoice-form-voucher-ui";
+import "@/app/(app)/accounts/invoices/sales-order-invoice-form-compact.css";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { VoucherFormSectionCard } from "@/components/accounts/voucher-form/VoucherFormSectionCard";
 import {
   VOUCHER_ERROR_CLASS,
-  VOUCHER_INPUT_CLASS,
   VOUCHER_MONEY_INPUT_CLASS,
-  VoucherFormField,
 } from "@/components/accounts/voucher-simple-form-ui";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { showToast } from "@/lib/toast";
-import { useFY } from "@/lib/fy-store";
+import { notifyVoucherListingChanged } from "@/lib/accounts/voucher-posting-notify";
 import { JournalVoucherService } from "@/services/journal-voucher.service";
 import { WarehouseService } from "@/services/warehouse.service";
 import { UserListService } from "@/services/user-list.service";
@@ -29,7 +34,7 @@ import {
 } from "@/types/journal-voucher.types";
 import { JournalSearchableSelect } from "./components/JournalSearchableSelect";
 import { JournalFormActionBar } from "./components/JournalFormActionBar";
-import { JournalAccountingPreview } from "./components/JournalAccountingPreview";
+import { JournalFormSummary } from "./components/JournalFormSummary";
 import { JournalReasonDialog } from "./components/JournalReasonDialog";
 import { JournalAttachmentsPanel } from "./components/JournalAttachmentsPanel";
 import {
@@ -41,6 +46,7 @@ import {
   buildCreatePayload,
   buildUpdatePayload,
   canCancelStatus,
+  computeJournalPreview,
   emptyJournalForm,
   formatSrNo,
   isDraftEditable,
@@ -68,7 +74,10 @@ export function JournalVoucherApiForm({
   onEdit,
 }: JournalVoucherApiFormProps) {
   const router = useRouter();
-  const { selectedFY } = useFY();
+  const goToList = useCallback(() => {
+    notifyVoucherListingChanged("journal");
+    router.replace(JOURNAL_LIST_PATH);
+  }, [router]);
   const [form, setForm] = useState<JournalFormState>(emptyJournalForm);
   const [detail, setDetail] = useState<JournalVoucherDetail | null>(null);
   const [status, setStatus] = useState<JournalVoucherStatus>("DRAFT");
@@ -97,6 +106,23 @@ export function JournalVoucherApiForm({
   const [reverseDate, setReverseDate] = useState("");
 
   const fieldsEditable = isDraftEditable(status) && !readOnlyProp;
+  const showViewChrome = readOnlyProp || !fieldsEditable;
+
+  const preview = useMemo(() => computeJournalPreview(form), [form]);
+  const summaryBalanced =
+    !!form.debit_ledger_id &&
+    !!form.credit_ledger_id &&
+    form.debit_ledger_id !== form.credit_ledger_id &&
+    preview.amount > 0;
+
+  const debitAccountLabel =
+    form.debit_ledger_name ||
+    form.debit_ledger_code ||
+    "—";
+  const creditAccountLabel =
+    form.credit_ledger_name ||
+    form.credit_ledger_code ||
+    "—";
 
   const patch = useCallback((p: Partial<JournalFormState>) => {
     setForm((prev) => ({ ...prev, ...p }));
@@ -345,7 +371,10 @@ export function JournalVoucherApiForm({
     });
   };
 
-  const saveDraft = async (): Promise<JournalVoucherDetail | null> => {
+  const saveDraft = async (options?: {
+    skipToast?: boolean;
+    skipNavigate?: boolean;
+  }): Promise<JournalVoucherDetail | null> => {
     const validationError = validateJournalForm(form);
     if (validationError) {
       setError(validationError);
@@ -363,12 +392,14 @@ export function JournalVoucherApiForm({
           })
         : await JournalVoucherService.create(buildCreatePayload(form), pendingFiles);
       hydrateFromDetail(saved);
-      showToast(
-        currentId ? "Journal draft updated." : "Journal draft created.",
-        "success",
-      );
-      if (!currentId) {
-        router.replace(journalEditPath(saved.journal_voucher_id));
+      if (!options?.skipToast) {
+        showToast(
+          currentId ? "Journal draft updated." : "Journal draft created.",
+          "success",
+        );
+      }
+      if (!options?.skipNavigate) {
+        goToList();
       }
       return saved;
     } catch (e) {
@@ -408,8 +439,13 @@ export function JournalVoucherApiForm({
     else router.push(JOURNAL_LIST_PATH);
   };
 
+  const handleBack = () => {
+    if (readOnlyProp && onDone) onDone();
+    else router.push(JOURNAL_LIST_PATH);
+  };
+
   const handleSaveAndPost = async () => {
-    const saved = await saveDraft();
+    const saved = await saveDraft({ skipNavigate: true });
     if (!saved) return;
     setPostOpen(true);
   };
@@ -419,143 +455,187 @@ export function JournalVoucherApiForm({
       ? "View Journal Voucher"
       : currentId
         ? "Edit Journal Voucher"
-        : "New Journal Voucher";
+        : "Create Journal Voucher";
+
+  const breadcrumbPage =
+    readOnlyProp || !fieldsEditable
+      ? "View Journal Voucher"
+      : currentId
+        ? "Edit Journal Voucher"
+        : "Create Journal Voucher";
 
   const subtitle = detail
     ? `JV No. ${formatSrNo(detail.sr_no)} · ${JOURNAL_STATUS_LABELS[status]}`
     : "One debit ledger, one credit ledger, one amount.";
 
+  const actionBar = (
+    <JournalFormActionBar
+      status={status}
+      busy={busy}
+      canCancel={canCancelStatus(status) && !!currentId}
+      approvalRequired={approvalRequired}
+      configReady={configReady}
+      hasExistingId={!!currentId}
+      onDiscard={fieldsEditable ? handleDiscard : undefined}
+      onSaveDraft={
+        fieldsEditable && !readOnlyProp ? () => void saveDraft() : undefined
+      }
+      onSubmitForApproval={
+        fieldsEditable && !readOnlyProp ? () => setSubmitOpen(true) : undefined
+      }
+      onSaveAndPost={
+        fieldsEditable && !readOnlyProp && !currentId
+          ? () => void handleSaveAndPost()
+          : undefined
+      }
+      onApprove={
+        status === "PENDING_APPROVAL" && approvalRequired && currentId
+          ? () =>
+              void runAction(
+                () => JournalVoucherService.approve(currentId!),
+                "Journal approved.",
+              )
+          : undefined
+      }
+      onReject={
+        status === "PENDING_APPROVAL" && approvalRequired && currentId
+          ? () => setRejectOpen(true)
+          : undefined
+      }
+      onPost={
+        fieldsEditable &&
+        !readOnlyProp &&
+        currentId &&
+        (status === "APPROVED" || status === "DRAFT" || status === "REJECTED")
+          ? () => setPostOpen(true)
+          : undefined
+      }
+      onCancel={
+        canCancelStatus(status) && currentId ? () => setCancelOpen(true) : undefined
+      }
+      onReverse={
+        status === "POSTED" && currentId ? () => setReverseOpen(true) : undefined
+      }
+    />
+  );
+
   if (loading) {
     return (
-      <AccountsPageShell
-        breadcrumbs={accountsBreadcrumb("Vouchers", "Journal Voucher", JOURNAL_LIST_PATH)}
-        title="Journal Voucher"
-        description="Loading…"
-        layout="form"
-      >
-        <div className="flex items-center gap-2 text-sm text-muted-foreground py-10 justify-center">
-          <Loader2 className="w-4 h-4 animate-spin" /> Loading journal…
-        </div>
-      </AccountsPageShell>
+      <div className="sales-order-invoice-form-compact h-full min-h-0 flex flex-col w-full">
+        <InvoiceFormLayout
+          title="Journal Voucher"
+          subtitle="Loading…"
+          breadcrumb={accountsBreadcrumb("Vouchers", "Journal Voucher", JOURNAL_LIST_PATH)}
+          backHref={JOURNAL_LIST_PATH}
+        >
+          <div className="flex items-center gap-2 text-sm text-muted-foreground py-10 justify-center">
+            <Loader2 className="w-4 h-4 animate-spin" /> Loading journal…
+          </div>
+        </InvoiceFormLayout>
+      </div>
     );
   }
 
   return (
-    <AccountsPageShell
-      breadcrumbs={accountsBreadcrumb("Vouchers", "Journal Voucher", JOURNAL_LIST_PATH)}
-      title={title}
-      description={subtitle}
-      layout="form"
-      actions={
-        readOnlyProp && onEdit && !fieldsEditable && isDraftEditable(status) ? (
-          <button
-            type="button"
-            className="h-8 px-3 text-xs rounded-lg border border-border hover:bg-muted"
-            onClick={onEdit}
-          >
-            Edit
-          </button>
-        ) : null
-      }
-    >
-      <div className="w-full space-y-3 pb-24">
-        {error ? <div className={VOUCHER_ERROR_CLASS}>{error}</div> : null}
+    <>
+      <div className="sales-order-invoice-form-compact h-full min-h-0 flex flex-col w-full">
+        <InvoiceFormLayout
+          title={title}
+          subtitle={subtitle}
+          breadcrumb={accountsBreadcrumb("Vouchers", breadcrumbPage, JOURNAL_LIST_PATH)}
+          backHref={JOURNAL_LIST_PATH}
+          onBackClick={showViewChrome ? handleBack : fieldsEditable ? handleDiscard : undefined}
+          stickyFooter={!showViewChrome || status === "POSTED" ? actionBar : undefined}
+        >
+          <div className="space-y-2.5">
+            {error ? <div className={VOUCHER_ERROR_CLASS}>{error}</div> : null}
+
+            {readOnlyProp && onEdit && !fieldsEditable && isDraftEditable(status) ? (
+              <div className="flex justify-end">
+                <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={onEdit}>
+                  Edit
+                </Button>
+              </div>
+            ) : null}
 
         <VoucherFormSectionCard title="Voucher Details">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
-            <VoucherFormField label="Voucher Date" required>
+          <div className="so-invoice-details-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+            <InvoiceDetailField label="Voucher Date" required>
               <Input
                 type="date"
-                className={VOUCHER_INPUT_CLASS}
+                className={INVOICE_DETAIL_INPUT_CLASS}
                 value={form.voucher_date}
                 disabled={!fieldsEditable}
                 onChange={(e) => patch({ voucher_date: e.target.value })}
               />
-            </VoucherFormField>
-            <VoucherFormField label="Journal No.">
-              <p className="h-8 flex items-center text-xs font-mono font-semibold text-brand-700">
+            </InvoiceDetailField>
+            <InvoiceDetailField label="Journal No.">
+              <div className="so-goods-ro so-goods-ro--mono w-full text-brand-700">
                 {detail ? formatSrNo(detail.sr_no) : "Auto on save"}
-              </p>
-            </VoucherFormField>
-            <div className="min-w-0 space-y-1">
+              </div>
+            </InvoiceDetailField>
+            <InvoiceDetailField label="Warehouse / Branch" required>
               <JournalSearchableSelect
-                label="Warehouse / Branch"
-                required
                 disabled={!fieldsEditable}
                 value={form.warehouse_id}
                 options={warehouses}
                 placeholder="Select warehouse…"
+                triggerClassName={INVOICE_DETAIL_SELECT_CLASS}
                 onChange={(id) => patch({ warehouse_id: id })}
               />
-              <p className="text-[11px] text-muted-foreground">
-                Select the branch for this accounting adjustment
-              </p>
-            </div>
-            <VoucherFormField label="Reference Number">
+            </InvoiceDetailField>
+            <InvoiceDetailField label="Reference Number">
               <Input
-                className={VOUCHER_INPUT_CLASS}
+                className={INVOICE_DETAIL_INPUT_CLASS}
                 value={form.reference_number}
                 disabled={!fieldsEditable}
                 onChange={(e) => patch({ reference_number: e.target.value })}
                 placeholder="Document / adjustment / audit reference"
                 maxLength={150}
               />
-            </VoucherFormField>
+            </InvoiceDetailField>
           </div>
-          {selectedFY?.label ? (
-            <p className="text-[11px] text-muted-foreground mt-2">
-              Working FY: <span className="font-medium text-foreground">{selectedFY.label}</span>
-            </p>
-          ) : null}
         </VoucherFormSectionCard>
 
         <VoucherFormSectionCard title="Journal Entry">
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5">
-            <div className="md:col-span-5 min-w-0">
+          <div className="so-invoice-details-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+            <InvoiceDetailField label="Debit Account" required>
               <JournalSearchableSelect
-                label="Debit Account"
-                required
                 disabled={!fieldsEditable}
                 value={form.debit_ledger_id}
                 options={debitOptions}
                 placeholder={ledgersLoading ? "Loading ledgers…" : "Select debit account…"}
+                triggerClassName={INVOICE_DETAIL_SELECT_CLASS}
                 onChange={selectDebit}
                 onSearchChange={handleLedgerSearch}
               />
-            </div>
-            <div className="md:col-span-5 min-w-0">
+            </InvoiceDetailField>
+            <InvoiceDetailField label="Credit Account" required>
               <JournalSearchableSelect
-                label="Credit Account"
-                required
                 disabled={!fieldsEditable}
                 value={form.credit_ledger_id}
                 options={creditOptions}
                 placeholder={ledgersLoading ? "Loading ledgers…" : "Select credit account…"}
+                triggerClassName={INVOICE_DETAIL_SELECT_CLASS}
                 onChange={selectCredit}
                 onSearchChange={handleLedgerSearch}
               />
-            </div>
-            <div className="md:col-span-2 min-w-0">
-              <VoucherFormField label="Amount" required>
-                <Input
-                  className={cn(
-                    VOUCHER_INPUT_CLASS,
-                    VOUCHER_MONEY_INPUT_CLASS,
-                    "w-full max-w-[160px]",
-                  )}
-                  value={form.amount}
-                  disabled={!fieldsEditable}
-                  onChange={(e) =>
-                    patch({ amount: sanitizeNonNegativeMoneyInput(e.target.value) })
-                  }
-                  placeholder="0.00"
-                />
-              </VoucherFormField>
-            </div>
+            </InvoiceDetailField>
+            <InvoiceDetailField label="Amount" required>
+              <Input
+                className={cn(INVOICE_DETAIL_INPUT_CLASS, VOUCHER_MONEY_INPUT_CLASS, "tabular-nums")}
+                value={form.amount}
+                disabled={!fieldsEditable}
+                onChange={(e) =>
+                  patch({ amount: sanitizeNonNegativeMoneyInput(e.target.value) })
+                }
+                placeholder="0.00"
+              />
+            </InvoiceDetailField>
           </div>
 
           {showsPartyInfo ? (
-            <div className="mt-3 rounded-lg border border-border bg-muted/20 px-3 py-2">
+            <div className="mt-2.5 rounded-lg border border-border bg-muted/20 px-3 py-2">
               <p className="text-[11px] text-muted-foreground">
                 This Journal Voucher affects the ledger balance only. It does not adjust
                 invoice-wise outstanding or create a settlement.
@@ -564,104 +644,66 @@ export function JournalVoucherApiForm({
           ) : null}
         </VoucherFormSectionCard>
 
-        <VoucherFormSectionCard title="Supporting Information">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-            <div className="min-w-0 space-y-0.5">
-              <Label className="text-xs font-medium">
-                Narration <span className="text-red-500">*</span>
-              </Label>
-              <Textarea
-                className="resize-y rounded-lg border border-border min-h-[80px] max-h-40 py-1.5 text-sm focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:border-brand-400"
-                rows={3}
-                value={form.narration}
-                onChange={(e) => patch({ narration: e.target.value })}
-                placeholder="Enter reason for this accounting adjustment"
-                maxLength={5000}
-                disabled={!fieldsEditable}
+        <div className="grid grid-cols-1 gap-2.5 items-start lg:grid-cols-[minmax(0,1fr)_300px]">
+          <VoucherFormSectionCard title="Narration & Attachments">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+              <div className="min-w-0 space-y-0.5">
+                <Label className="text-xs font-medium">
+                  Narration <span className="text-red-500">*</span>
+                </Label>
+                <Textarea
+                  className={cn(INVOICE_DETAIL_INPUT_CLASS, "so-goods-narration min-h-[60px] h-auto resize-y text-xs w-full")}
+                  rows={2}
+                  value={form.narration}
+                  onChange={(e) => patch({ narration: e.target.value })}
+                  placeholder="Enter reason for this accounting adjustment"
+                  maxLength={5000}
+                  disabled={!fieldsEditable}
+                />
+              </div>
+              <JournalAttachmentsPanel
+                persisted={form.persistedAttachments}
+                pending={form.pendingFiles}
+                readOnly={!fieldsEditable}
+                onAddFiles={handleAddAttachmentFiles}
+                onRemovePersisted={handleRemovePersistedAttachment}
+                onRemovePending={handleRemovePendingAttachment}
               />
             </div>
-            <JournalAttachmentsPanel
-              persisted={form.persistedAttachments}
-              pending={form.pendingFiles}
-              readOnly={!fieldsEditable}
-              onAddFiles={handleAddAttachmentFiles}
-              onRemovePersisted={handleRemovePersistedAttachment}
-              onRemovePending={handleRemovePendingAttachment}
-            />
-          </div>
-        </VoucherFormSectionCard>
+          </VoucherFormSectionCard>
 
-        <JournalAccountingPreview form={form} />
+          <JournalFormSummary
+            debitAccount={debitAccountLabel}
+            creditAccount={creditAccountLabel}
+            journalAmount={preview.amount}
+            balanced={summaryBalanced}
+          />
+        </div>
 
         {detail?.accounting_voucher ? (
-          <VoucherFormSectionCard title="Posted Accounting Voucher">
-            <div className="text-xs space-y-1">
-              <p>
-                <span className="text-muted-foreground">Voucher No.: </span>
-                <span className="font-mono font-semibold text-brand-700">
+          <VoucherFormSectionCard title="Posted Accounting Voucher" highlight>
+            <div className="flex flex-wrap gap-3 text-xs">
+              <div className="rounded-lg border border-brand-100 bg-brand-50/60 px-3 py-2 min-w-[160px]">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-brand-700/80">
+                  Voucher No.
+                </p>
+                <p className="mt-0.5 font-mono font-semibold text-brand-800">
                   {detail.accounting_voucher.voucher_number || "—"}
-                </span>
-              </p>
-              <p>
-                <span className="text-muted-foreground">Status: </span>
-                {detail.accounting_voucher.status || "—"}
-              </p>
+                </p>
+              </div>
+              <div className="rounded-lg border border-emerald-100 bg-emerald-50/70 px-3 py-2 min-w-[140px]">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-800/80">
+                  Status
+                </p>
+                <p className="mt-0.5 font-semibold text-emerald-900">
+                  {detail.accounting_voucher.status || "—"}
+                </p>
+              </div>
             </div>
           </VoucherFormSectionCard>
         ) : null}
-      </div>
-
-      <div className="fixed bottom-0 inset-x-0 z-40 border-t border-border bg-white/95 backdrop-blur px-4 py-2.5">
-        <div className="w-full">
-          <JournalFormActionBar
-            status={status}
-            busy={busy}
-            canCancel={canCancelStatus(status) && !!currentId}
-            approvalRequired={approvalRequired}
-            configReady={configReady}
-            hasExistingId={!!currentId}
-            onDiscard={handleDiscard}
-            onSaveDraft={
-              fieldsEditable && !readOnlyProp ? () => void saveDraft() : undefined
-            }
-            onSubmitForApproval={
-              fieldsEditable && !readOnlyProp && approvalRequired
-                ? () => setSubmitOpen(true)
-                : undefined
-            }
-            onSaveAndPost={
-              fieldsEditable && !readOnlyProp && !approvalRequired
-                ? () => void handleSaveAndPost()
-                : undefined
-            }
-            onApprove={
-              status === "PENDING_APPROVAL" && approvalRequired && currentId
-                ? () =>
-                    void runAction(
-                      () => JournalVoucherService.approve(currentId!),
-                      "Journal approved.",
-                    )
-                : undefined
-            }
-            onReject={
-              status === "PENDING_APPROVAL" && approvalRequired && currentId
-                ? () => setRejectOpen(true)
-                : undefined
-            }
-            onPost={
-              currentId &&
-              (status === "APPROVED" || (status === "DRAFT" && !approvalRequired))
-                ? () => setPostOpen(true)
-                : undefined
-            }
-            onCancel={
-              canCancelStatus(status) && currentId ? () => setCancelOpen(true) : undefined
-            }
-            onReverse={
-              status === "POSTED" && currentId ? () => setReverseOpen(true) : undefined
-            }
-          />
-        </div>
+          </div>
+        </InvoiceFormLayout>
       </div>
 
       <JournalReasonDialog
@@ -746,10 +788,15 @@ export function JournalVoucherApiForm({
         onConfirm={() => {
           if (!currentId) return;
           setPostOpen(false);
-          void runAction(
-            () => JournalVoucherService.post(currentId),
-            "Journal posted successfully.",
-          );
+          void (async () => {
+            const posted = await runAction(
+              () => JournalVoucherService.post(currentId),
+              "Journal posted successfully.",
+            );
+            if (posted?.journal_voucher_id) {
+              goToList();
+            }
+          })();
         }}
       />
 
@@ -779,6 +826,6 @@ export function JournalVoucherApiForm({
           );
         }}
       />
-    </AccountsPageShell>
+    </>
   );
 }
