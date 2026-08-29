@@ -184,7 +184,7 @@ div:has(> .accounts-module-shell):has(.invoice-form-shell) {
 /* View page — no reserved helper row under read-only fields */
 .sales-order-invoice-form-compact .so-goods-field--view {
   grid-template-rows: auto minmax(var(--so-ctrl-h), auto);
-  gap: 3px;
+  gap: 2px;
 }
 
 .sales-order-invoice-form-compact .so-invoice-view-card {
@@ -1016,7 +1016,7 @@ div:has(> .accounts-module-shell):has(.invoice-form-shell) {
 }
 
 .sales-order-invoice-form-compact .so-invoice-table tbody td {
-  padding: 0.375rem !important;
+  padding: 0.5rem !important;
   vertical-align: middle;
 }
 

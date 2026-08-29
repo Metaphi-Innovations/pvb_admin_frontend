@@ -275,7 +275,7 @@ export function PurchaseInvoiceDirectForm({
           ? "Direct purchase invoice was already posted."
           : "Direct purchase posted. Supplier outstanding and ledger entries were created.",
       );
-      router.push("/accounts/purchase-invoices");
+      router.replace("/accounts/purchase-invoices");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Post failed.");
       setSaving(false);

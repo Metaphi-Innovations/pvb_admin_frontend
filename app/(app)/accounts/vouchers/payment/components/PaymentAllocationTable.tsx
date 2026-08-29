@@ -65,20 +65,23 @@ export function PaymentAllocationTable({
   }
 
   if (simplifiedSettlement) {
+    const showSelectColumn = !readOnly;
     return (
       <div className="border border-border rounded-xl overflow-hidden w-full">
         <div className="overflow-x-auto">
           <table className="w-full table-fixed min-w-[520px]">
             <colgroup>
-              <col className="w-10" />
-              <col className="w-[160px]" />
+              {showSelectColumn ? <col className="w-10" /> : null}
+              <col />
               <col className="w-[110px]" />
               <col className="w-[120px]" />
               <col className="w-[120px]" />
             </colgroup>
             <thead>
               <tr className="bg-muted/40 border-b border-border">
-                <th className="px-2 py-2 text-left text-xs font-semibold w-8" />
+                {showSelectColumn ? (
+                  <th className="px-2 py-2 text-left text-xs font-semibold w-8" />
+                ) : null}
                 <th className={TEXT_TH}>Invoice No.</th>
                 <th className={cn(TEXT_TH, "px-2")}>Invoice Date</th>
                 <th className={AMOUNT_TH}>Outstanding</th>
@@ -98,15 +101,16 @@ export function PaymentAllocationTable({
                       row.selected && "bg-brand-50/40",
                     )}
                   >
-                    <td className="px-2 py-2 align-middle">
-                      <input
-                        type="checkbox"
-                        className="w-4 h-4 rounded accent-brand-600"
-                        checked={row.selected}
-                        disabled={readOnly}
-                        onChange={(e) => onToggle(row.open_item_id, e.target.checked)}
-                      />
-                    </td>
+                    {showSelectColumn ? (
+                      <td className="px-2 py-2 align-middle">
+                        <input
+                          type="checkbox"
+                          className="w-4 h-4 rounded accent-brand-600"
+                          checked={row.selected}
+                          onChange={(e) => onToggle(row.open_item_id, e.target.checked)}
+                        />
+                      </td>
+                    ) : null}
                     <td className={cn(TEXT_TD, "font-mono font-semibold text-brand-700")}>
                       {row.document_number}
                     </td>
