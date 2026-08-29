@@ -152,6 +152,18 @@ export const API_ENDPOINTS = {
       FILTER_DROPDOWN: "/master/additional-charge/filter-dropdown",
       DROPDOWN: "/master/additional-charge/dropdown",
     },
+    SCHEME: {
+      LIST: "/master/scheme/list",
+      SUMMARY: "/master/scheme/summary",
+      CREATE: "/master/scheme/create",
+      UPDATE: (id: string) => `/master/scheme/update/${id}`,
+      STATUS_UPDATE: (id: string) => `/master/scheme/toggle-status/${id}`,
+      VIEW: (id: string) => `/master/scheme/details/${id}`,
+      EXPORT: "/master/scheme/export",
+      FILTER_DROPDOWN: "/master/scheme/filter-dropdown",
+      DROPDOWN: "/master/scheme/dropdown",
+      PREVIEW_NUMBER: "/master/scheme/preview-number",
+    },
     UNIT: {
       LIST: "/master/unit/list",
       CREATE: "/master/unit/create",

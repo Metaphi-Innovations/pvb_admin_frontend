@@ -1631,33 +1631,30 @@ export function validateUnifiedSchemeForm(form: SchemeUnifiedForm): string | nul
   if (!form.startDate) return "Valid From is required";
   if (!form.endDate) return "Valid To is required";
   if (form.endDate < form.startDate) return "Valid To must be on or after Valid From";
-  if (!form.stateNames.length) return "Select at least one State";
-  if (!form.customerTypes.length) return "Select at least one Customer Type";
+  if (!form.customerTypes.length) {
+    return "Please select at least one Customer Type (or Select All).";
+  }
+  if (!form.customerIds.length) {
+    return "Please select at least one Customer (or Select All).";
+  }
+  if (!form.stateNames.length) {
+    return "Please select at least one State (or Select All).";
+  }
 
   const category = form.schemeCategory;
 
   if (formShowsProductApplicability(form)) {
+    if (!form.productIds.length) {
+      return "Please select at least one Product (or Select All).";
+    }
     if (form.schemeCategory === "Special Discount") {
       if (form.specialDiscountBasedOn === "Sales Quantity") {
-        if (!form.productIds.length) {
-          return "Select at least one product.";
+        if (!form.specialDiscountUom.trim()) {
+          const { incompatible, uom } = resolveSpecialDiscountUom(form.productIds);
+          if (incompatible || !uom) {
+            return "Selected products must use the same unit of measurement for a quantity-based scheme.";
+          }
         }
-        const { incompatible, uom } = resolveSpecialDiscountUom(form.productIds);
-        if (incompatible || !uom) {
-          return "Selected products must use the same unit of measurement for a quantity-based scheme.";
-        }
-      } else if (
-        form.productScope === "Selected Products" &&
-        form.productIds.length === 0
-      ) {
-        return "Select at least one product.";
-      }
-    } else if (
-      categoryUsesProducts(category) &&
-      category !== "Near Expiry Discount"
-    ) {
-      if (form.productScope === "Selected Products" && form.productIds.length === 0) {
-        return "Select at least one product.";
       }
     }
   }
