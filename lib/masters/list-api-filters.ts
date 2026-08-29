@@ -406,6 +406,17 @@ export const MASTER_FILTER_FIELD_MAPS = {
     status: statusColumnMapper,
     ...AUDIT_FILTER_FIELDS,
   },
+  scheme: {
+    schemeCode: "scheme_code",
+    schemeName: "scheme_name",
+    schemeType: "scheme_type",
+    settlementType: "settlement_type",
+    approvalStatus: "approval_status",
+    startDate: "start_date",
+    endDate: "end_date",
+    status: statusColumnMapper,
+    ...AUDIT_FILTER_FIELDS,
+  },
   customerType: {
     customerType: "customer_type_name",
     initialCode: "customer_initial_code",
