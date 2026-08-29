@@ -124,8 +124,8 @@ export function ReceiptSettlementBreakdown({
         Receivable is derived from invoice TDS. Add Discount, Round Off, or Other as needed.
       </p>
 
-      <div className="border border-border rounded-xl overflow-hidden">
-        <table className="w-full">
+      <div className="border border-border rounded-xl overflow-hidden so-invoice-charges-table-wrap">
+        <table className="so-invoice-table w-full">
           <thead>
             <tr className="bg-muted/40 border-b border-border">
               <th className="px-3 py-2 text-left text-xs font-semibold text-foreground">
@@ -137,7 +137,9 @@ export function ReceiptSettlementBreakdown({
               <th className="px-3 py-2 text-right text-xs font-semibold text-foreground w-[140px]">
                 Amount
               </th>
-              <th className="w-10" />
+              <th className="so-col-actions">
+                <span className="sr-only">Actions</span>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -154,7 +156,7 @@ export function ReceiptSettlementBreakdown({
               <td className="px-3 py-2 text-right text-xs tabular-nums font-semibold text-brand-700">
                 {formatMoney(Math.max(0, bankAmount))}
               </td>
-              <td />
+              <td className="so-col-actions" />
             </tr>
 
             {/* TDS Receivable — auto from allocation TDS */}
@@ -172,7 +174,7 @@ export function ReceiptSettlementBreakdown({
                 <td className="px-3 py-2 text-right text-xs tabular-nums font-semibold text-emerald-800">
                   {formatMoney(tdsAmount)}
                 </td>
-                <td />
+                <td className="so-col-actions" />
               </tr>
             ) : null}
 
@@ -294,7 +296,7 @@ export function ReceiptSettlementBreakdown({
                       </div>
                     )}
                   </td>
-                  <td className="px-1 py-2">
+                  <td className="so-col-actions px-1 py-2">
                     {!readOnly ? (
                       <Button
                         type="button"
@@ -333,7 +335,7 @@ export function ReceiptSettlementBreakdown({
               <td className="px-3 py-2 text-right text-xs tabular-nums font-bold text-navy-900">
                 {formatMoney(componentTotal)}
               </td>
-              <td />
+              <td className="so-col-actions" />
             </tr>
           </tfoot>
         </table>

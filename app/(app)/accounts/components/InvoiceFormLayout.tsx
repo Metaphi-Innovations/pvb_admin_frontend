@@ -262,8 +262,8 @@ export function InvoiceFormItemTable({
   minWidth?: number;
 }) {
   return (
-    <div className="overflow-x-auto border border-border rounded-lg bg-white">
-      <table className="w-full" style={minWidth ? { minWidth } : undefined}>
+    <div className="overflow-x-auto border border-border rounded-lg bg-white so-goods-product-table-wrap">
+      <table className="so-invoice-table w-full" style={minWidth ? { minWidth } : undefined}>
         {children}
       </table>
     </div>
@@ -284,6 +284,7 @@ export function InvoiceFormItemTableHead({
             className={cn(
               INVOICE_FORM_TABLE_TH_CLASS,
               col.align === "right" ? "text-right" : "text-left",
+              (col.key === "action" || col.key === "actions") && "so-col-actions",
             )}
           >
             {col.label}

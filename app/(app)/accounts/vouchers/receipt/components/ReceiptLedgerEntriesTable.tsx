@@ -68,7 +68,7 @@ export function ReceiptLedgerEntriesTable({
             <th className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground text-right">
               Amount
             </th>
-            <th className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground text-center">
+            <th className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground text-center so-col-actions">
               <span className="sr-only">Actions</span>
             </th>
           </tr>
@@ -120,7 +120,7 @@ export function ReceiptLedgerEntriesTable({
                     />
                   )}
                 </td>
-                <td className="p-1.5 align-middle text-center w-11">
+                <td className="p-1.5 align-middle text-center so-col-actions">
                   {!readOnly ? (
                     <button
                       type="button"

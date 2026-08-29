@@ -299,7 +299,7 @@ const ChargeRow = memo(function ChargeRow({
           onChange={(e) => onUpdate(row.id, { remarks: e.target.value })}
         />
       </td>
-      <td className={cn(cellClass, invoiceTable ? undefined : "w-9")}>
+      <td className={cn(cellClass, "so-col-actions", invoiceTable ? undefined : "w-9")}>
         {!disabled && !fromSalesOrder && (
           <button
             type="button"
@@ -458,6 +458,7 @@ function GoodsInvoiceAdditionalChargesEditorInner({
                     rightAlign.has(h) && "text-right",
                     h === "GST" && "text-center",
                     h === "Additional Charge" && "so-charge-col",
+                    !h && "so-col-actions",
                   )}
                 >
                   {h === "GST" ? "GST Applicable" : h}

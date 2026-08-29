@@ -325,8 +325,8 @@ export function InvoiceLinesEditor({
         )}
       </div>
 
-      <div className="overflow-x-auto border border-slate-200 rounded-lg bg-white">
-        <table className="w-full min-w-[1180px] table-fixed border-collapse">
+      <div className="overflow-x-auto border border-slate-200 rounded-lg bg-white so-goods-product-table-wrap">
+        <table className="so-invoice-table w-full min-w-[1180px] table-fixed border-collapse">
           <colgroup>
             {columns.map((col) => (
               <col key={col.key} style={{ width: col.width }} />
@@ -342,6 +342,7 @@ export function InvoiceLinesEditor({
                     col.align === "right" && "text-right",
                     col.align === "center" && "text-center",
                     RIGHT_ALIGNED_HEADERS.has(col.label) && !col.align && "text-right",
+                    col.key === "actions" && "so-col-actions",
                   )}
                 >
                   {col.label}
@@ -366,7 +367,7 @@ export function InvoiceLinesEditor({
                         CELL_CLASS,
                         col.align === "right" && "text-right",
                         col.align === "center" && "text-center",
-                        col.key === "actions" && "px-1",
+                        col.key === "actions" && "so-col-actions px-1",
                       )}
                     >
                       {renderCell(col, line)}

@@ -608,6 +608,49 @@
     background-color: #ffe8d4;
   }
 
+  /* Form tables (so-invoice-table) — sticky delete / actions column */
+  .so-invoice-table th.so-col-actions,
+  .so-invoice-table td.so-col-actions {
+    position: sticky;
+    right: 0;
+    border-left: 1px solid hsl(var(--border));
+    box-shadow: -4px 0 6px -2px rgb(0 0 0 / 0.08);
+    width: 2.75rem;
+    min-width: 2.75rem;
+    max-width: 2.75rem;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+
+  .so-invoice-table th.so-col-actions {
+    z-index: 40;
+    background-color: #f4f4f5;
+  }
+
+  .so-invoice-table td.so-col-actions {
+    z-index: 20;
+    background-color: #ffffff;
+  }
+
+  .so-invoice-table tbody tr:hover > td.so-col-actions {
+    background-color: #f9f9f8;
+  }
+
+  .so-invoice-table tbody tr.bg-muted\/20 > td.so-col-actions,
+  .so-invoice-table tfoot tr > td.so-col-actions,
+  .so-invoice-table tfoot tr.bg-muted\/30 > td.so-col-actions {
+    background-color: #f4f4f5;
+  }
+
+  .so-invoice-table tbody tr.bg-brand-50\/30 > td.so-col-actions {
+    background-color: #fff8f1;
+  }
+
+  .so-invoice-table tbody tr.bg-emerald-50\/40 > td.so-col-actions {
+    background-color: #ecfdf5;
+  }
+
   .accounts-listing-card {
     @apply flex flex-col flex-1 min-h-0 gap-2;
   }

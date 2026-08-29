@@ -138,7 +138,7 @@ export function PurchaseInvoiceDirectLineTable({
               <Th align="right">SGST</Th>
               <Th align="right">IGST</Th>
               <Th align="right">Line Total</Th>
-              {!readOnly && <Th align="center" />}
+              {!readOnly && <Th align="center" className="so-col-actions" />}
             </tr>
           </thead>
           <tbody>
@@ -254,7 +254,7 @@ export function PurchaseInvoiceDirectLineTable({
                   <InvoiceTableReadonly value={formatMoney(line.lineTotal)} strong />
                 </td>
                 {!readOnly && (
-                  <td className={cn(TABLE_CELL, "text-center")}>
+                  <td className={cn(TABLE_CELL, "text-center so-col-actions")}>
                     <Button
                       type="button"
                       variant="ghost"

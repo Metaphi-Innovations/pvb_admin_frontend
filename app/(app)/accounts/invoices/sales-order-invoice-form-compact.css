@@ -988,6 +988,8 @@ div:has(> .accounts-module-shell):has(.invoice-form-shell) {
   box-sizing: border-box !important;
 }
 
+/* Sticky delete column: see globals.css (.so-invoice-table .so-col-actions) */
+
 /* Unified invoice line-item table styling (service lines + additional charges) */
 .sales-order-invoice-form-compact .so-invoice-table thead {
   background: hsl(var(--muted) / 0.3);
