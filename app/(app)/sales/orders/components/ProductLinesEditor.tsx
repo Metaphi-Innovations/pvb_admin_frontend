@@ -35,6 +35,7 @@ import {
 	repriceOrderLineItems,
 	isProductDiscountSchemeApplied,
 	getEligibleSchemesForSalesOrderLine,
+	fetchEligibleSchemesForSalesOrderLine,
 	normalizeLineDiscountType,
 	LINE_DISCOUNT_TYPE_OPTIONS,
 	type TaxSupplyType,
@@ -43,6 +44,7 @@ import {
 	formatSchemeRupee,
 	formatSchemeOfferLabel,
 	mapCustomerMasterTypeToSchemeType,
+	resolveSalesOrderDealerPrice,
 } from "@/app/(app)/masters/scheme/product-discount-scheme";
 import type { EligibleProductDiscountSchemeOffer } from "@/app/(app)/masters/scheme/product-discount-scheme";
 import { Badge } from "@/components/ui/badge";
@@ -374,6 +376,51 @@ export default function ProductLinesEditor({
 
 	const taxOptions = { zeroGst, supplyType: taxSupplyType };
 
+	const resolveDealerPrice = (product: ProductCatalogItem): number => {
+		if (pricingContext?.stateName && pricingContext.customerMasterType) {
+			const dp = resolveSalesOrderDealerPrice({
+				productId: product.id,
+				stateName: pricingContext.stateName,
+				customerMasterType: pricingContext.customerMasterType,
+			});
+			if (dp > 0) return dp;
+		}
+		return product.sellingPrice || 0;
+	};
+
+	/** Apply highest eligible Product Discount from API (falls back to clear scheme). */
+	const applyBestSchemeFromApi = async (
+		line: SalesOrderLineItem,
+		product: ProductCatalogItem,
+	): Promise<SalesOrderLineItem> => {
+		const dealerPrice = resolveDealerPrice(product);
+		let next: SalesOrderLineItem = {
+			...line,
+			productId: product.id as SalesOrderLineItem["productId"],
+			productCode: product.code,
+			productName: product.name,
+			availableStock: product.stock,
+			dealerPrice,
+			unitPrice: dealerPrice,
+		};
+		next = removeAppliedSchemeFromLine(next, product, taxOptions);
+
+		if (!pricingContext) {
+			return applyLineTaxFields(next, product.gstRate, taxSupplyType, zeroGst);
+		}
+
+		const { recommended } = await fetchEligibleSchemesForSalesOrderLine(
+			product.id,
+			dealerPrice,
+			pricingContext,
+			product.name,
+		);
+		if (recommended) {
+			return applyManualSchemeToLine(next, recommended, product, taxOptions);
+		}
+		return applyLineTaxFields(next, product.gstRate, taxSupplyType, zeroGst);
+	};
+
 	const lineFromProduct = (
 		productId: number,
 		quantity: number,
@@ -389,9 +436,9 @@ export default function ProductLinesEditor({
 		return line;
 	};
 
-	const getLineEligibleSchemes = (
+	const getLineEligibleSchemes = async (
 		line: SalesOrderLineItem,
-	): EligibleProductDiscountSchemeOffer[] => {
+	): Promise<EligibleProductDiscountSchemeOffer[]> => {
 		if (
 			!line.productId ||
 			!pricingContext?.stateName ||
@@ -400,11 +447,23 @@ export default function ProductLinesEditor({
 		) {
 			return [];
 		}
+		const product = getProductById(line.productId);
+		const dealerPrice = product
+			? resolveDealerPrice(product)
+			: line.dealerPrice || line.unitPrice || 0;
+		const { offers } = await fetchEligibleSchemesForSalesOrderLine(
+			line.productId,
+			dealerPrice,
+			pricingContext,
+			product?.name ?? line.productName,
+		);
+		if (offers.length > 0) return offers;
+		// Fallback to local demo eligibility if API returns nothing (dev / offline)
 		return getEligibleSchemesForSalesOrderLine(line.productId, pricingContext);
 	};
 
-	const openSchemeDialog = (line: SalesOrderLineItem) => {
-		const eligible = getLineEligibleSchemes(line);
+	const openSchemeDialog = async (line: SalesOrderLineItem) => {
+		const eligible = await getLineEligibleSchemes(line);
 		if (eligible.length > 0) {
 			setSchemeDialog({
 				lineId: line.id,
@@ -554,6 +613,21 @@ export default function ProductLinesEditor({
 
 	const updateLine = (id: string, patch: Partial<SalesOrderLineItem>) => {
 		setLocalError(null);
+		if (patch.productId !== undefined && patch.productId !== null) {
+			const product = getProductById(patch.productId);
+			if (product) {
+				void (async () => {
+					const base = lines.find((l) => l.id === id);
+					if (!base) return;
+					const applied = await applyBestSchemeFromApi(
+						{ ...base, ...patch, productId: product.id as SalesOrderLineItem["productId"] },
+						product,
+					);
+					onChange(lines.map((line) => (line.id === id ? applied : line)));
+				})();
+				return;
+			}
+		}
 		onChange(
 			lines.map((line) => {
 				if (line.id !== id) return line;
@@ -597,7 +671,7 @@ export default function ProductLinesEditor({
 		}
 	};
 
-	const handleProductSelectMultiple = (lineId: string, selectedProds: ProductCatalogItem[]) => {
+	const handleProductSelectMultiple = async (lineId: string, selectedProds: ProductCatalogItem[]) => {
 		if (selectedProds.length === 0) {
 			updateLine(lineId, { productId: null, productCode: "", productName: "" } as Partial<SalesOrderLineItem>);
 			return;
@@ -605,26 +679,23 @@ export default function ProductLinesEditor({
 
 		let newLines = [...lines];
 		const firstProd = selectedProds[0];
-		
-		newLines = newLines.map((l) => {
-			if (l.id !== lineId) return l;
-			let updated = { ...l, productId: firstProd.id } as SalesOrderLineItem;
-			updated = applySchemePricingToLine(updated, firstProd, pricingContext, {
-				zeroGst,
-				supplyType: taxSupplyType,
-			});
-			return updated;
-		});
+
+		newLines = await Promise.all(
+			newLines.map(async (l) => {
+				if (l.id !== lineId) return l;
+				return applyBestSchemeFromApi(
+					{ ...l, productId: firstProd.id as SalesOrderLineItem["productId"], quantity: l.quantity || 1 },
+					firstProd,
+				);
+			}),
+		);
 
 		for (let i = 1; i < selectedProds.length; i++) {
 			const prod = selectedProds[i];
 			let newLine = createEmptyLineItem();
-			newLine.productId = prod.id;
+			newLine.productId = prod.id as SalesOrderLineItem["productId"];
 			newLine.quantity = 1;
-			newLine = applySchemePricingToLine(newLine, prod, pricingContext, {
-				zeroGst,
-				supplyType: taxSupplyType,
-			});
+			newLine = await applyBestSchemeFromApi(newLine, prod);
 			newLines.push(newLine);
 		}
 
@@ -637,7 +708,7 @@ export default function ProductLinesEditor({
 	const [topCaseQuantity, setTopCaseQuantity] = useState<number>(0);
 	const [topPieceQuantity, setTopPieceQuantity] = useState<number>(0);
 
-	const handleAddProductFromTop = () => {
+	const handleAddProductFromTop = async () => {
 		if (topSelectedProds.length === 0) {
 			setLocalError("Please select a product.");
 			return;
@@ -655,7 +726,7 @@ export default function ProductLinesEditor({
 
 		for (const prod of topSelectedProds) {
 			let newLine = createEmptyLineItem();
-			newLine.productId = prod.id;
+			newLine.productId = prod.id as SalesOrderLineItem["productId"];
 			const packSize = prod.packSize || 1;
 			newLine.packSize = packSize;
 			newLine.quantityType = topQuantityType;
@@ -683,10 +754,7 @@ export default function ProductLinesEditor({
 				return;
 			}
 
-			newLine = applySchemePricingToLine(newLine, prod, pricingContext, {
-				zeroGst,
-				supplyType: taxSupplyType,
-			});
+			newLine = await applyBestSchemeFromApi(newLine, prod);
 			newLines.push(newLine);
 		}
 

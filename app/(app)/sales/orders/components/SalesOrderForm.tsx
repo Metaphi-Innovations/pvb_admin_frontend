@@ -524,12 +524,24 @@ export default function SalesOrderForm({
 		if (!activeState || !selectedCustomer?.customerType || !form.orderDate) {
 			return null;
 		}
+		const customerTypeId =
+			(customerDetails as { customer_type_id?: string; customer_type?: { id?: string } } | undefined)
+				?.customer_type_id ||
+			(customerDetails as { customer_type?: { id?: string } } | undefined)?.customer_type
+				?.id ||
+			null;
 		return {
 			stateName: activeState,
 			customerMasterType: selectedCustomer.customerType,
 			orderDate: form.orderDate,
+			customerId: selectedCustomer.customerUuid
+				? String(selectedCustomer.customerUuid)
+				: form.customerId
+					? String(form.customerId)
+					: null,
+			customerTypeId: customerTypeId ? String(customerTypeId) : null,
 		};
-	}, [selectedCustomer, shipToAddress, form.orderDate]);
+	}, [selectedCustomer, shipToAddress, form.orderDate, form.customerId, customerDetails]);
 
 	const totalsSummary = useMemo(
 		() =>

@@ -5,6 +5,7 @@ import {
   resolveSalesOrderDealerPrice,
   lookupEligibleSchemesForSalesOrder,
   buildManualSchemePricingFromOffer,
+  mapCustomerMasterTypeToSchemeType,
   type EligibleProductDiscountSchemeOffer,
 } from "@/app/(app)/masters/scheme/product-discount-scheme";
 import { loadEmployees, type Employee } from "@/app/(app)/user-management/employee/employee-data";
@@ -128,10 +129,12 @@ export interface SalesOrderLineItem {
   finalRate: number;
   schemeCode?: string;
   schemeName?: string;
-  /** Persisted applied scheme reference */
-  appliedSchemeId?: number;
+  /** Persisted applied scheme reference (UUID from Scheme Master) */
+  appliedSchemeId?: string | number;
   appliedSchemeCode?: string;
   appliedSchemeName?: string;
+  /** Snapshot stored with the SO line */
+  schemeSnapshot?: Record<string, unknown>;
   originalDealerPrice?: number;
   finalRateAfterScheme?: number;
   /** "Yes" when user manually applied Product Discount Scheme; "No" otherwise */
@@ -1013,6 +1016,8 @@ export interface SalesOrderPricingContext {
   stateName: string;
   customerMasterType: string;
   orderDate: string;
+  customerId?: string | null;
+  customerTypeId?: string | null;
 }
 
 export function createEmptyLineItem(): SalesOrderLineItem {
@@ -1088,6 +1093,7 @@ function clearLineSchemeFields(dealerPrice: number): Pick<
   | "appliedSchemeId"
   | "appliedSchemeCode"
   | "appliedSchemeName"
+  | "schemeSnapshot"
   | "originalDealerPrice"
   | "finalRateAfterScheme"
   | "schemeApplied"
@@ -1106,6 +1112,7 @@ function clearLineSchemeFields(dealerPrice: number): Pick<
     appliedSchemeId: undefined,
     appliedSchemeCode: undefined,
     appliedSchemeName: undefined,
+    schemeSnapshot: undefined,
     originalDealerPrice: undefined,
     finalRateAfterScheme: undefined,
     schemeApplied: "No",
@@ -1122,6 +1129,88 @@ export function getEligibleSchemesForSalesOrderLine(
     customerMasterType: context.customerMasterType,
     orderDate: context.orderDate,
   });
+}
+
+/** Map Scheme Master eligible API offer → SO UI offer shape. */
+export function mapEligibleApiOfferToUiOffer(
+  offer: {
+    scheme_id: string;
+    scheme_code: string;
+    scheme_name: string;
+    discount_type: "Percentage" | "Flat" | string;
+    discount_value: number;
+    discount_amount: number;
+    final_rate: number;
+    start_date?: string | null;
+    end_date?: string | null;
+    scheme_snapshot?: Record<string, unknown>;
+  },
+  context: SalesOrderPricingContext,
+  dealerPrice: number,
+  productName = "",
+): EligibleProductDiscountSchemeOffer {
+  const discountType =
+    offer.discount_type === "Flat" || offer.discount_type === "Fixed Amount"
+      ? ("Rupees" as const)
+      : ("Percentage" as const);
+  return {
+    schemeId: offer.scheme_id,
+    schemeCode: offer.scheme_code,
+    schemeName: offer.scheme_name,
+    productName,
+    customerType: mapCustomerMasterTypeToSchemeType(context.customerMasterType),
+    stateName: context.stateName,
+    dealerPrice,
+    discountType,
+    discountValue: Number(offer.discount_value) || 0,
+    discountAmount: Number(offer.discount_amount) || 0,
+    finalSchemePrice: Number(offer.final_rate) || Math.max(0, dealerPrice - (Number(offer.discount_amount) || 0)),
+    startDate: offer.start_date ?? undefined,
+    endDate: offer.end_date ?? undefined,
+    schemeSnapshot: offer.scheme_snapshot,
+  };
+}
+
+/**
+ * Fetch eligible Product Discount schemes from API and return UI offers
+ * (already sorted with highest discount first). Falls back to [] on error.
+ */
+export async function fetchEligibleSchemesForSalesOrderLine(
+  productId: number | string,
+  dealerPrice: number,
+  context: SalesOrderPricingContext,
+  productName = "",
+  signal?: AbortSignal,
+): Promise<{
+  offers: EligibleProductDiscountSchemeOffer[];
+  recommended: EligibleProductDiscountSchemeOffer | null;
+}> {
+  try {
+    const { SchemeListService } = await import("@/services/scheme-list.service");
+    const result = await SchemeListService.eligibleProductDiscount({
+      product_id: String(productId),
+      order_date: context.orderDate,
+      unit_price: dealerPrice > 0 ? dealerPrice : 0,
+      customer_id: context.customerId ?? null,
+      customer_type_id: context.customerTypeId ?? null,
+      state_name: context.stateName,
+      signal,
+    });
+    const offers = result.schemes.map((row) =>
+      mapEligibleApiOfferToUiOffer(row, context, dealerPrice, productName),
+    );
+    const recommended = result.recommended
+      ? mapEligibleApiOfferToUiOffer(
+          result.recommended,
+          context,
+          dealerPrice,
+          productName,
+        )
+      : offers[0] ?? null;
+    return { offers, recommended };
+  } catch {
+    return { offers: [], recommended: null };
+  }
 }
 
 export function applyManualSchemeToLine(
@@ -1151,6 +1240,7 @@ export function applyManualSchemeToLine(
     appliedSchemeId: offer.schemeId,
     appliedSchemeCode: offer.schemeCode,
     appliedSchemeName: offer.schemeName,
+    schemeSnapshot: offer.schemeSnapshot,
     originalDealerPrice: dealerPrice,
     finalRateAfterScheme: schemePricing.finalRate,
     schemeApplied: "Yes",

@@ -103,14 +103,6 @@ function formatSetup(value: unknown): string {
   return raw || "";
 }
 
-function formatApplyOn(value: unknown): string {
-  const raw = asString(value);
-  if (raw === "PRODUCT_RATE") return "Product Rate";
-  if (raw === "PRODUCT_LINE_AMOUNT") return "Product Line Amount";
-  if (raw === "MRP") return "MRP";
-  return raw || "";
-}
-
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   return value as Record<string, unknown>;
@@ -323,10 +315,6 @@ export default function SchemeViewPageClient() {
                 <>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <Field label="Setup" value={formatSetup(setup)} />
-                    <Field
-                      label="Apply On"
-                      value={formatApplyOn(pdConfig?.apply_discount_on)}
-                    />
                     {setup !== "DIFFERENT_BY_PRODUCT" ? (
                       <>
                         <Field
@@ -346,7 +334,6 @@ export default function SchemeViewPageClient() {
                         <thead className="bg-muted/40 text-left text-[11px] uppercase text-muted-foreground">
                           <tr>
                             <th className="px-3 py-2 font-medium">Product</th>
-                            <th className="px-3 py-2 font-medium">Apply On</th>
                             <th className="px-3 py-2 font-medium">Type</th>
                             <th className="px-3 py-2 font-medium">Value</th>
                           </tr>
@@ -364,9 +351,6 @@ export default function SchemeViewPageClient() {
                                   {asString(
                                     product?.product_name || row.product_id,
                                   )}
-                                </td>
-                                <td className="px-3 py-2">
-                                  {formatApplyOn(row.apply_discount_on)}
                                 </td>
                                 <td className="px-3 py-2">
                                   {formatDiscountType(row.discount_type)}
@@ -443,10 +427,6 @@ export default function SchemeViewPageClient() {
                 <tbody>
                   {slabs.map((item, index) => {
                     const row = item as Record<string, unknown>;
-                    const uom =
-                      row.uom && typeof row.uom === "object"
-                        ? (row.uom as Record<string, unknown>)
-                        : null;
                     return (
                       <tr key={asString(row.scheme_slab_id) || String(index)} className="border-t">
                         <td className="px-3 py-2">{asString(row.from_value)}</td>
@@ -465,7 +445,7 @@ export default function SchemeViewPageClient() {
                                   )}
                                 </td>
                         <td className="px-3 py-2">
-                          {asString(uom?.short_name || uom?.unit_name) || "—"}
+                          {asString(row.uom) || "—"}
                         </td>
                       </tr>
                     );
