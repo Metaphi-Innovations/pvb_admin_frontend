@@ -480,7 +480,7 @@ export default function SchemeMasterPage() {
   ];
 
   const listError = listQuery.isError
-    ? getMasterListErrorMessage(listQuery.error, "Failed to load schemes")
+    ? getMasterListErrorMessage(listQuery.error, { resource: "schemes" })
     : null;
 
   return (
