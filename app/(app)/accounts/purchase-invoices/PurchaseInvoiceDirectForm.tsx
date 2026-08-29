@@ -24,13 +24,15 @@ import { useSuppliersDropdown } from "@/hooks/masters/use-supplier";
 import { useWarehousesDropdown } from "@/hooks/masters/use-warehouse-master";
 import { useHsnDropdown } from "@/hooks/masters/use-hsn";
 import { cn } from "@/lib/utils";
-import { PurchaseInvoiceService, type CreateDirectPurchasePayload } from "@/services/purchase-invoice.service";
+import { PurchaseInvoiceService } from "@/services/purchase-invoice.service";
 import { useFY, setStoredFYId, getStoredFYId } from "@/lib/fy-store";
 import {
   GoodsInvoiceAdditionalChargesEditor,
+  validateGoodsAdditionalCharges,
 } from "@/app/(app)/accounts/invoices/components/GoodsInvoiceAdditionalChargesEditor";
 import {
   calcAdditionalExpensesTotals,
+  toAdditionalChargePayloadList,
   type InvoiceAdditionalExpense,
 } from "@/app/(app)/accounts/invoices/invoice-additional-expenses";
 import type { ItcClassification, PurchaseNature } from "./purchase-invoices-data";
@@ -201,6 +203,11 @@ export function PurchaseInvoiceDirectForm({
       setError("Invoice total must be greater than zero.");
       return false;
     }
+    const chargeErr = validateGoodsAdditionalCharges(additionalExpenses);
+    if (chargeErr) {
+      setError(chargeErr);
+      return false;
+    }
     return true;
   };
 
@@ -222,15 +229,10 @@ export function PurchaseInvoiceDirectForm({
     if (selectedFY?.id) setStoredFYId(selectedFY.id);
     const financialYearId = selectedFY.id || getStoredFYId();
     try {
-      const additionalCharges: CreateDirectPurchasePayload["additional_charges"] & {} = additionalExpenses
-        .filter((e) => e.chargeMasterId && e.amount > 0)
-        .map((e) => ({
-          additional_charge_id: e.chargeMasterId!,
-          amount: e.amount,
-          charge_source: "INVOICE" as const,
-          gst_applicable: e.gstApplicable,
-          gst_rate: e.gstApplicable ? e.gstPct : undefined,
-        }));
+      const additionalCharges = toAdditionalChargePayloadList(
+        additionalExpenses,
+        "INVOICE",
+      );
 
       const created = await PurchaseInvoiceService.createDirectPurchase(
         {

@@ -43,12 +43,16 @@ export type EligibleDispatchesQuery = {
 };
 
 export type AdditionalChargeInput = {
-  additional_charge_id: string;
+  charge_name: string;
+  ledger_id: string;
+  hsn_id: string;
   amount: number | string;
-  charge_source: "ORDER" | "INVOICE";
   gst_applicable?: boolean;
   gst_rate?: number | string;
-  remarks?: string;
+  remarks?: string | null;
+  charge_source: "ORDER" | "INVOICE";
+  /** Optional — legacy / source master link only. */
+  additional_charge_id?: string | null;
 };
 
 export type CreateFromDispatchPayload = {
@@ -98,11 +102,7 @@ export type CreateDirectServicePayload = {
   narration?: string | null;
   remarks?: string | null;
   items: DirectServiceItemInput[];
-  additional_charges?: Array<
-    Omit<AdditionalChargeInput, "charge_source"> & {
-      charge_source?: "INVOICE";
-    }
-  >;
+  additional_charges?: AdditionalChargeInput[];
   round_off_amount?: number | string | null;
 };
 
@@ -347,6 +347,8 @@ export type PrepareDispatchInvoiceDto = {
     gst_applicable: boolean | null;
     default_gst_rate: string | null;
     mapping_ok: boolean;
+    hsn_id?: string | null;
+    hsn_code?: string | null;
   }>;
   totals?: DispatchInvoiceTotalsPreview;
 };
@@ -698,16 +700,52 @@ function mapBackendAdditionalCharge(
   raw: Record<string, unknown>,
   idx: number,
 ): InvoiceAdditionalExpense {
+  const snap = (raw.additional_charge_snapshot || {}) as Record<string, unknown>;
+  const ledgerSnap = (raw.ledger_snapshot || {}) as Record<string, unknown>;
+  const hsnSnap = (raw.hsn_snapshot || {}) as Record<string, unknown>;
   const gstPct = asNumber(raw.gst_rate);
+  const chargeName =
+    asString(raw.charge_name) ||
+    asString(snap.charge_name || snap.chargeName) ||
+    "Other Charges";
+  const ledgerId =
+    asString(raw.ledger_id) ||
+    asString(ledgerSnap.ledger_id || ledgerSnap.id) ||
+    undefined;
+  const ledgerName =
+    asString(raw.ledger_name) ||
+    asString(ledgerSnap.ledger_name || ledgerSnap.name) ||
+    "";
+  const ledgerCode =
+    asString(raw.ledger_code) ||
+    asString(ledgerSnap.ledger_code || ledgerSnap.code) ||
+    "";
+  const hsnId =
+    asString(raw.hsn_id) ||
+    asString(hsnSnap.hsn_id || hsnSnap.id) ||
+    undefined;
+  const hsnCode =
+    asString(raw.hsn_code) ||
+    asString(hsnSnap.hsn_code || hsnSnap.hsnCode || hsnSnap.code) ||
+    undefined;
+  const chargeSourceRaw = asString(raw.charge_source).toUpperCase();
+  const isOrder = chargeSourceRaw === "ORDER";
+
   return {
     id: asString(raw.sales_invoice_additional_charge_id || raw.id || `chg-${idx}`),
-    expenseHead: (asString(raw.charge_name) || "Other Charges") as InvoiceAdditionalExpense["expenseHead"],
+    expenseHead: chargeName,
     amount: asNumber(raw.amount ?? raw.taxable_amount),
     gstApplicable: Boolean(raw.gst_applicable) || gstPct > 0,
     gstPct,
-    remarks: "",
-    origin: asString(raw.charge_source).toUpperCase() === "ORDER" ? "sales_order" : "manual",
+    remarks: asString(raw.remarks) || "",
+    origin: isOrder ? "sales_order" : "manual",
+    chargeSource: isOrder ? "ORDER" : "INVOICE",
     chargeMasterId: asString(raw.additional_charge_id) || undefined,
+    coaLedgerId: ledgerId || undefined,
+    coaLedgerName: ledgerName,
+    coaLedgerCode: ledgerCode,
+    hsnId: hsnId || undefined,
+    hsnCode: hsnCode || undefined,
   };
 }
 

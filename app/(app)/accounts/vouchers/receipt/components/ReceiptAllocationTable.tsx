@@ -106,21 +106,11 @@ export function ReceiptAllocationTable({
   return (
     <div className="border border-border rounded-xl overflow-hidden w-full">
       <div className="overflow-x-auto">
-        <table className="w-full table-fixed min-w-[520px]">
-          <colgroup>
-            {showSelectColumn ? <col className="w-10" /> : null}
-            <col className="w-[160px]" />
-            <col className="w-[110px]" />
-            <col className="w-[120px]" />
-            <col className="w-[120px]" />
-            {showTds ? <col className="w-[110px]" /> : null}
-            {showTds && showTdsSection ? <col className="w-[168px]" /> : null}
-            {showDiscount ? <col className="w-[110px]" /> : null}
-          </colgroup>
+        <table className="w-full min-w-[520px]">
           <thead>
             <tr className="bg-muted/40 border-b border-border">
               {showSelectColumn ? (
-                <th className="px-2 py-2 text-left text-xs font-semibold" />
+                <th className="px-2 py-2 text-left text-xs font-semibold w-10" />
               ) : null}
               <th className={TEXT_TH}>Invoice No.</th>
               <th className={cn(TEXT_TH, "px-2")}>Invoice Date</th>

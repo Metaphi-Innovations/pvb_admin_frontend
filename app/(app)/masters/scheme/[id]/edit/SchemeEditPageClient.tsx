@@ -1,72 +1,206 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { CheckCircle2, Save, XCircle } from "lucide-react";
 import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { saveMasterRecords } from "@/lib/masters/common";
 import { SchemeUnifiedConfigForm } from "../../components/SchemeUnifiedConfigForm";
-import { loadConsolidatedSchemeRecords } from "../../product-near-expiry-scheme";
 import {
-  canEditUnifiedScheme,
-  schemeRecordToUnifiedForm,
-  unifiedFormToRecord,
   validateUnifiedSchemeForm,
   type SchemeUnifiedForm,
 } from "../../scheme-unified-config";
-import { SCHEME_STORAGE_KEY, type SchemeRecord } from "../../scheme-data";
+import {
+  API_SCHEME_CATEGORIES,
+  detailToUnifiedForm,
+  expandAllScopesForUi,
+  unifiedFormToUpdatePayload,
+} from "../../scheme-api-mapper";
+import {
+  useScheme,
+  useUpdateScheme,
+  useCustomerTypeDropdown,
+  useCustomerDropdown,
+  useProductDropdown,
+} from "@/hooks/masters";
+import { getErrorMessage } from "@/lib/masters/master-query-errors";
+import { loadSchemeStateOptions } from "../../product-discount-scheme";
+import type { SchemeProductSelectOption } from "../../product-discount-scheme";
+
+type ToastState = { msg: string; type: "success" | "error" };
+
+function Toast({ toast }: { toast: ToastState }) {
+  return (
+    <div
+      className={cn(
+        "fixed top-5 right-5 z-[100] flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl text-white text-sm font-medium",
+        toast.type === "success" ? "bg-emerald-600" : "bg-red-600",
+      )}
+    >
+      {toast.type === "success" ? (
+        <CheckCircle2 className="w-4 h-4" />
+      ) : (
+        <XCircle className="w-4 h-4" />
+      )}
+      {toast.msg}
+    </div>
+  );
+}
 
 export default function SchemeEditPageClient() {
   const router = useRouter();
   const params = useParams();
-  const schemeId = Number(params.id);
+  const schemeId = String(params.id ?? "");
 
-  const [record, setRecord] = useState<SchemeRecord | null>(null);
   const [form, setForm] = useState<SchemeUnifiedForm | null>(null);
+  const [schemeCode, setSchemeCode] = useState("");
   const [formError, setFormError] = useState("");
-  const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
+  const [toast, setToast] = useState<ToastState | null>(null);
+  const [scopesExpanded, setScopesExpanded] = useState(false);
+
+  const detailQuery = useScheme(schemeId);
+  const updateMutation = useUpdateScheme();
+  const customerTypeQuery = useCustomerTypeDropdown();
+  const customerQuery = useCustomerDropdown();
+  const productQuery = useProductDropdown();
 
   useEffect(() => {
-    const list = loadConsolidatedSchemeRecords();
-    const found = list.find((r) => r.id === schemeId);
-    if (!found) {
-      router.replace("/masters/scheme");
-      return;
-    }
-    if (!canEditUnifiedScheme(found)) {
-      setToast({ msg: "This scheme cannot be edited after approval", type: "error" });
+    if (!detailQuery.data) return;
+    setForm(detailToUnifiedForm(detailQuery.data));
+    setSchemeCode(String(detailQuery.data.scheme_code ?? ""));
+    setScopesExpanded(false);
+  }, [detailQuery.data]);
+
+  useEffect(() => {
+    if (detailQuery.isError) {
+      setToast({
+        msg: getErrorMessage(detailQuery.error, "Failed to load scheme"),
+        type: "error",
+      });
       setTimeout(() => router.replace("/masters/scheme"), 1200);
-      return;
     }
-    setRecord(found);
-    setForm(schemeRecordToUnifiedForm(found));
-  }, [schemeId, router]);
+  }, [detailQuery.isError, detailQuery.error, router]);
+
+  const customerTypeSelectOptions = useMemo(
+    () =>
+      (customerTypeQuery.data ?? []).map((item) => ({
+        id: item.id,
+        name: item.customerType,
+      })),
+    [customerTypeQuery.data],
+  );
+
+  const customerSelectOptions = useMemo(
+    () =>
+      (customerQuery.data ?? []).map((item) => ({
+        id: item.customer_id,
+        name: `${item.customer_code} — ${item.customer_name}`,
+      })),
+    [customerQuery.data],
+  );
+
+  const productSelectOptions = useMemo<SchemeProductSelectOption[]>(
+    () =>
+      (productQuery.data ?? []).map((p) => {
+        const productName = p.product_name;
+        const productCode = p.product_code || "";
+        const sku = p.sku || "";
+        return {
+          value: p.product_id,
+          label: productName,
+          productName,
+          productCode: productCode || undefined,
+          sku: sku || undefined,
+          category: p.category?.categoryName,
+          segment: p.segment?.segment_name,
+          hsnCode: p.hsn?.hsnCode || p.hsn?.hsn_code || undefined,
+          sublabel: [productCode && `Code: ${productCode}`, sku && `SKU: ${sku}`]
+            .filter(Boolean)
+            .join(" · "),
+          searchText: [productCode, productName, sku].filter(Boolean).join(" ").toLowerCase(),
+        };
+      }),
+    [productQuery.data],
+  );
+
+  const stateSelectOptions = useMemo(() => loadSchemeStateOptions(), []);
+
+  const scopeOptionLists = useMemo(
+    () => ({
+      customerTypeIds: customerTypeSelectOptions.map((o) => o.id),
+      customerIds: customerSelectOptions.map((o) => o.id),
+      stateNames: stateSelectOptions.map((o) => o.id),
+      productIds: productSelectOptions.map((o) => o.value),
+    }),
+    [
+      customerTypeSelectOptions,
+      customerSelectOptions,
+      stateSelectOptions,
+      productSelectOptions,
+    ],
+  );
+
+  const optionsReady =
+    !customerTypeQuery.isLoading &&
+    !customerQuery.isLoading &&
+    !productQuery.isLoading &&
+    stateSelectOptions.length > 0;
+
+  useEffect(() => {
+    if (!form || !detailQuery.data || scopesExpanded || !optionsReady) return;
+    setForm(expandAllScopesForUi(form, detailQuery.data, scopeOptionLists));
+    setScopesExpanded(true);
+  }, [
+    form,
+    detailQuery.data,
+    scopesExpanded,
+    optionsReady,
+    scopeOptionLists,
+  ]);
+
+  const showToast = (next: ToastState) => {
+    setToast(next);
+    setTimeout(() => setToast(null), 3200);
+  };
 
   const handleSave = () => {
-    if (!record || !form) return;
+    if (!form || !schemeId) return;
     const err = validateUnifiedSchemeForm(form);
     if (err) {
       setFormError(err);
-      setToast({ msg: err, type: "error" });
-      setTimeout(() => setToast(null), 3200);
+      showToast({ msg: err, type: "error" });
       return;
     }
-    const list = loadConsolidatedSchemeRecords();
-    const updated = unifiedFormToRecord(form, list, record.id, record);
-    saveMasterRecords(
-      SCHEME_STORAGE_KEY,
-      list.map((r) => (r.id === record.id ? updated : r)),
+
+    const payload = unifiedFormToUpdatePayload(form, scopeOptionLists);
+    updateMutation.mutate(
+      { id: schemeId, payload },
+      {
+        onSuccess: () => {
+          showToast({ msg: "Scheme updated successfully", type: "success" });
+          setTimeout(() => router.push("/masters/scheme"), 900);
+        },
+        onError: (error) => {
+          const msg = getErrorMessage(error, "Failed to update scheme");
+          setFormError(msg);
+          showToast({ msg, type: "error" });
+        },
+      },
     );
-    setToast({ msg: "Scheme updated", type: "success" });
-    setTimeout(() => router.push("/masters/scheme"), 900);
   };
 
-  if (!record || !form) {
+  if (detailQuery.isLoading || !form) {
     return (
-      <FormContainer title="Edit Scheme" description="Loading…" compact>
-        <p className="text-xs text-muted-foreground">Loading scheme…</p>
+      <FormContainer
+        title="Edit Scheme"
+        description="Masters → Scheme Master"
+        onBack={() => router.push("/masters/scheme")}
+        onCancel={() => router.push("/masters/scheme")}
+        compact
+        noCard
+      >
+        <p className="text-sm text-muted-foreground px-1 py-6">Loading scheme...</p>
       </FormContainer>
     );
   }
@@ -75,7 +209,7 @@ export default function SchemeEditPageClient() {
     <>
       <FormContainer
         title="Edit Scheme"
-        description={`Masters → Scheme Master → ${record.schemeCode}`}
+        description="Masters → Scheme Master"
         onBack={() => router.push("/masters/scheme")}
         onCancel={() => router.push("/masters/scheme")}
         compact
@@ -84,40 +218,29 @@ export default function SchemeEditPageClient() {
           <Button
             type="button"
             size="sm"
-            className="h-7 gap-1 bg-brand-600 text-[11px] text-white hover:bg-brand-700"
             onClick={handleSave}
+            disabled={updateMutation.isPending}
           >
-            <Save className="h-3.5 w-3.5" /> Save Draft
+            <Save className="w-3.5 h-3.5 mr-1.5" />
+            {updateMutation.isPending ? "Saving..." : "Save Changes"}
           </Button>
         }
       >
         <SchemeUnifiedConfigForm
           form={form}
-          onChange={(next) => {
-            setForm(next);
-            setFormError("");
-          }}
+          onChange={setForm}
           mode="edit"
-          schemeCode={record.schemeCode}
+          schemeCode={schemeCode}
           error={formError}
           lockCategory
+          schemeCategoryOptions={API_SCHEME_CATEGORIES}
+          productSelectOptions={productSelectOptions}
+          stateSelectOptions={stateSelectOptions}
+          customerSelectOptions={customerSelectOptions}
+          customerTypeSelectOptions={customerTypeSelectOptions}
         />
       </FormContainer>
-      {toast ? (
-        <div
-          className={cn(
-            "fixed top-5 right-5 z-[100] flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl text-white text-sm font-medium",
-            toast.type === "success" ? "bg-emerald-600" : "bg-red-600",
-          )}
-        >
-          {toast.type === "success" ? (
-            <CheckCircle2 className="w-4 h-4" />
-          ) : (
-            <XCircle className="w-4 h-4" />
-          )}
-          {toast.msg}
-        </div>
-      ) : null}
+      {toast && <Toast toast={toast} />}
     </>
   );
 }

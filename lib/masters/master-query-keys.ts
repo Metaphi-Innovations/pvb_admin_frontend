@@ -154,6 +154,22 @@ export const masterKeys = {
       [...masterKeys.additionalCharges.filterDropdowns(), fieldName] as const,
   },
 
+  schemes: {
+    all: () => [...masterKeys.all, "schemes"] as const,
+    lists: () => [...masterKeys.schemes.all(), "list"] as const,
+    list: (params: MasterListKeyParams) =>
+      [...masterKeys.schemes.lists(), params] as const,
+    details: () => [...masterKeys.schemes.all(), "detail"] as const,
+    detail: (id: string) => [...masterKeys.schemes.details(), id] as const,
+    dropdown: () => [...masterKeys.schemes.all(), "dropdown"] as const,
+    filterDropdowns: () =>
+      [...masterKeys.schemes.all(), "filter-dropdown"] as const,
+    filterDropdown: (fieldName: string) =>
+      [...masterKeys.schemes.filterDropdowns(), fieldName] as const,
+    previewNumber: () => [...masterKeys.schemes.all(), "preview-number"] as const,
+    summary: () => [...masterKeys.schemes.all(), "summary"] as const,
+  },
+
   documentTypes: {
     all: () => [...masterKeys.all, "document-types"] as const,
     lists: () => [...masterKeys.documentTypes.all(), "list"] as const,

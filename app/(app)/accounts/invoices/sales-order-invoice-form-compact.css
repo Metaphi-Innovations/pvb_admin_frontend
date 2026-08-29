@@ -926,10 +926,11 @@ div:has(> .accounts-module-shell):has(.invoice-form-shell) {
   height: 12px !important;
 }
 
-/* Additional charges — stretch table to full section width */
+/* Additional charges — stretch table; horizontal scroll when columns exceed viewport */
 .sales-order-invoice-form-compact .so-invoice-charges-table {
   width: 100%;
-  table-layout: fixed;
+  min-width: 1480px;
+  table-layout: auto;
 }
 
 .sales-order-invoice-form-compact .so-invoice-charges-table .so-charge-col {

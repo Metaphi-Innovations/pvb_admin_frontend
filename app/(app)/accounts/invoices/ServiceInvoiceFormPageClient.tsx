@@ -61,6 +61,7 @@ import { ServiceInvoiceLineLedgerSelect } from "@/app/(app)/accounts/invoices/co
 import {
   calcAdditionalExpensesTotals,
   createEmptyAdditionalExpense,
+  toAdditionalChargePayloadList,
   type InvoiceAdditionalExpense,
 } from "@/app/(app)/accounts/invoices/invoice-additional-expenses";
 
@@ -436,16 +437,7 @@ export default function ServiceInvoiceFormPageClient() {
       return;
     }
 
-    const charges = additionalExpenses
-      .filter((e) => (e.expenseHead.trim() || e.amount > 0) && e.chargeMasterId)
-      .map((e) => ({
-        additional_charge_id: String(e.chargeMasterId),
-        amount: e.amount,
-        charge_source: "INVOICE" as const,
-        gst_applicable: e.gstApplicable,
-        gst_rate: e.gstPct,
-        remarks: e.remarks || undefined,
-      }));
+    const charges = toAdditionalChargePayloadList(additionalExpenses, "INVOICE");
 
     setSaving(true);
     try {
@@ -464,7 +456,7 @@ export default function ServiceInvoiceFormPageClient() {
           rate: line.unitPrice,
           gst_rate: line.taxPct,
         })),
-        additional_charges: charges,
+        additional_charges: charges.length > 0 ? charges : undefined,
         round_off_amount: roundOff,
       });
 
