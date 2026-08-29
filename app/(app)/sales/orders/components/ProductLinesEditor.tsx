@@ -891,7 +891,13 @@ export default function ProductLinesEditor({
 							? getProductById(draftLine.productId)
 							: undefined;
 						const hasScheme = isProductDiscountSchemeApplied(draftLine);
-						const eligibleSchemes = hasScheme ? [] : getLineEligibleSchemes(draftLine);
+						const eligibleSchemes: EligibleProductDiscountSchemeOffer[] =
+							hasScheme || !draftLine.productId || !pricingContext
+								? []
+								: getEligibleSchemesForSalesOrderLine(
+										draftLine.productId,
+										pricingContext,
+									);
 						const hasEligibleScheme = eligibleSchemes.length > 0;
 						const taxBreakdown =
 							draftLine.productId && product
