@@ -12,6 +12,7 @@ import {
 } from "@/app/(app)/accounts/invoices/components/invoice-form-voucher-ui";
 import "@/app/(app)/accounts/invoices/sales-order-invoice-form-compact.css";
 import "../../credit-notes/credit-note-tx.css";
+import "./receipt-voucher-view.css";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { VoucherFormSectionCard } from "@/components/accounts/voucher-form/VoucherFormSectionCard";
 import {
@@ -31,7 +32,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { showToast } from "@/lib/toast";
-import { notifyVoucherListingChanged } from "@/lib/accounts/voucher-posting-notify";
 import { useFY } from "@/lib/fy-store";
 import { ReceiptVoucherService } from "@/services/receipt-voucher.service";
 import { CustomerListService } from "@/services/customer-list.service";
@@ -99,10 +99,6 @@ export function ReceiptVoucherApiForm({
   onEdit,
 }: ReceiptVoucherApiFormProps) {
   const router = useRouter();
-  const goToList = useCallback(() => {
-    notifyVoucherListingChanged("receipt");
-    router.replace(RECEIPT_LIST_PATH);
-  }, [router]);
   const { selectedFY } = useFY();
   const [form, setForm] = useState<ReceiptFormState>(emptyReceiptForm);
   const [detail, setDetail] = useState<ReceiptVoucherDetail | null>(null);
@@ -628,8 +624,8 @@ export function ReceiptVoucherApiForm({
           "success",
         );
       }
-      if (!options?.skipNavigate) {
-        goToList();
+      if (!currentId && !options?.skipNavigate) {
+        router.replace(receiptEditPath(saved.receipt_voucher_id));
       }
       return saved;
     } catch (e) {
@@ -683,10 +679,10 @@ export function ReceiptVoucherApiForm({
       "Receipt posted successfully.",
     );
     if (posted?.receipt_voucher_id) {
-      goToList();
+      router.replace(receiptViewPath(posted.receipt_voucher_id));
       return;
     }
-    goToList();
+    router.replace(receiptEditPath(saved.receipt_voucher_id));
   };
 
   /** Post an already-saved voucher without confirmation (approved / view flows). */
@@ -697,7 +693,7 @@ export function ReceiptVoucherApiForm({
       "Receipt posted successfully.",
     );
     if (posted?.receipt_voucher_id) {
-      goToList();
+      router.replace(receiptViewPath(posted.receipt_voucher_id));
     }
   };
 
@@ -733,10 +729,15 @@ export function ReceiptVoucherApiForm({
         fieldsEditable && !readOnlyProp ? () => void saveDraft() : undefined
       }
       onSubmitForApproval={
-        fieldsEditable && !readOnlyProp ? () => setSubmitOpen(true) : undefined
+        fieldsEditable && !readOnlyProp && approvalRequired
+          ? () => setSubmitOpen(true)
+          : undefined
       }
       onSaveAndPost={
-        fieldsEditable && !readOnlyProp && !currentId
+        fieldsEditable &&
+        !readOnlyProp &&
+        !approvalRequired &&
+        !currentId
           ? () => void handleSaveAndPost()
           : undefined
       }
@@ -755,12 +756,15 @@ export function ReceiptVoucherApiForm({
           : undefined
       }
       onPost={
-        fieldsEditable && !readOnlyProp && currentId
+        !approvalRequired &&
+        currentId &&
+        (status === "APPROVED" ||
+          ((status === "DRAFT" || status === "REJECTED" || !status) &&
+            fieldsEditable &&
+            !readOnlyProp))
           ? status === "APPROVED"
             ? () => void handlePostDirect()
-            : status === "DRAFT" || status === "REJECTED" || !status
-              ? () => void handleSaveAndPost()
-              : undefined
+            : () => void handleSaveAndPost()
           : undefined
       }
       onCancel={
@@ -1165,9 +1169,13 @@ export function ReceiptVoucherApiForm({
         {showInvoiceSettlement ? (
           <VoucherFormSectionCard
             title={
-              form.party_kind === "SUPPLIER_REFUND"
-                ? "Select Recoverable Item(s)"
-                : "Select Invoice(s)"
+              isViewMode
+                ? form.party_kind === "SUPPLIER_REFUND"
+                  ? "Selected Recoverable Items"
+                  : "Selected Invoices"
+                : form.party_kind === "SUPPLIER_REFUND"
+                  ? "Select Recoverable Item(s)"
+                  : "Select Invoice(s)"
             }
             headerActions={
               outstandingLoading ? (
@@ -1178,27 +1186,29 @@ export function ReceiptVoucherApiForm({
             }
           >
             <div className="space-y-3">
-              <ReceiptInvoiceMultiSelect
-                allocations={form.allocations}
-                selectedIds={selectedInvoiceIds}
-                onChange={handleInvoiceSelection}
-                disabled={!fieldsEditable}
-                loading={outstandingLoading}
-                emptyHint={
-                  form.party_kind === "SUPPLIER_REFUND"
-                    ? form.supplier_id
-                      ? "No recoverable items"
-                      : "Select a supplier first"
-                    : form.customer_id
-                      ? "No outstanding invoices"
-                      : "Select a customer first"
-                }
-                label={
-                  form.party_kind === "SUPPLIER_REFUND"
-                    ? "Select Item(s)"
-                    : "Select Invoice(s)"
-                }
-              />
+              {!isViewMode ? (
+                <ReceiptInvoiceMultiSelect
+                  allocations={form.allocations}
+                  selectedIds={selectedInvoiceIds}
+                  onChange={handleInvoiceSelection}
+                  disabled={!fieldsEditable}
+                  loading={outstandingLoading}
+                  emptyHint={
+                    form.party_kind === "SUPPLIER_REFUND"
+                      ? form.supplier_id
+                        ? "No recoverable items"
+                        : "Select a supplier first"
+                      : form.customer_id
+                        ? "No outstanding invoices"
+                        : "Select a customer first"
+                  }
+                  label={
+                    form.party_kind === "SUPPLIER_REFUND"
+                      ? "Select Item(s)"
+                      : "Select Invoice(s)"
+                  }
+                />
+              ) : null}
 
               {selectedInvoiceRows.length > 0 ? (
                 <div className="space-y-2">
@@ -1228,7 +1238,9 @@ export function ReceiptVoucherApiForm({
                 </div>
               ) : (
                 <p className="text-[11px] text-muted-foreground">
-                  Selected invoices will appear here for settlement.
+                  {isViewMode
+                    ? "No invoices settled on this receipt."
+                    : "Selected invoices will appear here for settlement."}
                 </p>
               )}
             </div>
