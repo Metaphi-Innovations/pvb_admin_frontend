@@ -947,13 +947,13 @@ export default function ProductLinesEditor({
 												: "text-foreground",
 										)}
 									>
-										{line.productId != null ? line.availableStock : "—"}
+										{line.productId != null ? line.availableStock : "0"}
 									</span>
 								</td>
 								<td className='px-2 py-1.5 min-w-[140px] align-top'>
-									<div className="flex flex-col gap-1 w-full text-right">
+									<div className="flex flex-col gap-1 w-full text-left">
 										{isEditing ? (
-											<div className="flex items-center gap-1 justify-end">
+											<div className="flex items-center gap-1 justify-start">
 												<Input
 													type="number"
 													min={0}
@@ -971,7 +971,7 @@ export default function ProductLinesEditor({
 															updateDraft({ pieceQuantity: num });
 														}
 													}}
-													className="h-7 text-xs w-16 text-right tabular-nums"
+													className="h-7 text-xs w-16 text-left tabular-nums"
 												/>
 												<Select
 													value={draftLine.quantityType || "Piece"}
@@ -1016,7 +1016,7 @@ export default function ProductLinesEditor({
 													weightStr = `${(draftLine.quantity * product.netWeight).toFixed(2)} ${["ml", "ltr"].includes(uomLower) ? "Ltr" : "Kg"}`;
 												}
 												return (
-													<div className="text-right space-y-0.5 leading-tight text-[10px] text-muted-foreground border-t border-slate-100 pt-1">
+													<div className="text-left space-y-0.5 leading-tight text-[10px] text-muted-foreground border-t border-slate-100 pt-1">
 														<p>
 															Total units: <span className="font-semibold text-foreground">{draftLine.quantity} </span>
 														</p>
@@ -1038,7 +1038,7 @@ export default function ProductLinesEditor({
 									<span className='text-xs tabular-nums whitespace-nowrap'>
 										{line.productId
 											? formatSchemeRupee(line.dealerPrice)
-											: "—"}
+											: "₹0"}
 									</span>
 								</td>
 								<td className='px-2 py-1.5'>
@@ -1097,20 +1097,18 @@ export default function ProductLinesEditor({
 								</td>
 								<td className='px-2 py-1.5'>
 									{isEditing ? (
-										hasScheme ? (
-											<div className="flex flex-col text-right pr-2">
-												<span className="text-xs font-semibold">{line.schemeDiscountPercent}%</span>
-												<span className="text-[10px] text-muted-foreground">({formatSchemeRupee(line.schemeDiscountAmount)})</span>
-											</div>
-										) : (
 											<div className="flex flex-col items-stretch gap-1 min-w-[160px]">
+												{hasScheme ? (
+													<p className="text-[9px] text-muted-foreground leading-snug">
+														Manual discount (after scheme)
+													</p>
+												) : null}
 												<Select
 													value={normalizeLineDiscountType(draftLine.discountType)}
 													onValueChange={(value) => {
 														const discountType = normalizeLineDiscountType(value);
 														updateDraft({
 															discountType,
-															// Keep current entry as the value for the new type.
 															...(discountType === "Flat"
 																? { discountValue: draftLine.discountValue || 0 }
 																: { discount: draftLine.discount || 0 }),
@@ -1169,13 +1167,10 @@ export default function ProductLinesEditor({
 													)}
 												</div>
 											</div>
-										)
 									) : (
-										<span className='text-xs tabular-nums whitespace-nowrap block text-right pr-2'>
+										<span className='text-xs tabular-nums whitespace-nowrap block text-left'>
 											{line.productId ? (
-												hasScheme ? (
-													`${line.schemeDiscountPercent}% (${formatSchemeRupee(line.schemeDiscountAmount)})`
-												) : line.discountValue > 0 || line.discount > 0 ? (
+												line.discountValue > 0 || line.discount > 0 ? (
 													normalizeLineDiscountType(line.discountType) === "Flat" ? (
 														`Fixed · ${formatSchemeRupee(line.discountValue)}`
 													) : (
@@ -1192,7 +1187,7 @@ export default function ProductLinesEditor({
 								</td>
 								<td className='px-2 py-1.5'>
 									<span className='text-xs font-medium tabular-nums whitespace-nowrap'>
-										{draftLine.productId ? formatSchemeRupee(draftLine.finalRate) : "—"}
+										{draftLine.productId ? formatSchemeRupee(draftLine.finalRate) : "₹0"}
 									</span>
 								</td>
 								{draftLine.productId && product && taxBreakdown ? (

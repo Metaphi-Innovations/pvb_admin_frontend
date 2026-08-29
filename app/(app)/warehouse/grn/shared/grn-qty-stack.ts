@@ -134,6 +134,7 @@ export function stackGrnLineQty(
 }
 
 export function formatWeightStackPart(stack: GrnQtyStackParts): string {
-  if (stack.weightQty == null || !stack.weightUom) return "—";
-  return `${formatStackNum(stack.weightQty)} ${stack.weightUom}`;
+  if (!stack.weightUom) return "—";
+  const qty = stack.weightQty ?? 0;
+  return `${formatStackNum(qty)} ${stack.weightUom}`;
 }

@@ -827,6 +827,14 @@ export default function SalesOrderForm({
 									value: formatRupee(totalsSummary.productSubtotal),
 								},
 								{
+									label: "Scheme Discount:",
+									value: formatRupee(totalsSummary.schemeDiscountTotal),
+								},
+								{
+									label: "Manual Discount:",
+									value: formatRupee(totalsSummary.manualDiscountTotal),
+								},
+								{
 									label: "Product Discount Total:",
 									value: formatRupee(totalsSummary.productDiscountTotal),
 								},

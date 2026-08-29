@@ -128,14 +128,14 @@ export default function ViewStockDetailsPage() {
 
     const request = isRejected
       ? StockOverviewApi.getRejectedDetails(id, controller.signal).then((data) => {
-          setRejectedDetails(data);
-        })
+        setRejectedDetails(data);
+      })
       : StockOverviewApi.getInventoryDetails(id, {
-          signal: controller.signal,
-          warehouse_id: warehouseId,
-        }).then((data) => {
-          setInventoryDetails(data);
-        });
+        signal: controller.signal,
+        warehouse_id: warehouseId,
+      }).then((data) => {
+        setInventoryDetails(data);
+      });
 
     request
       .catch((err) => {

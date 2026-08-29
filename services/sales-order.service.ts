@@ -1,6 +1,6 @@
 import { axiosInstance } from "@/api/axios";
 import { API_ENDPOINTS } from "@/api/endpoints";
-import { calculateOrderTotalsSummary, isProductDiscountSchemeApplied, normalizeLineDiscountType, resolveTaxSupplyType } from "@/app/(app)/sales/orders/orders-data";
+import { calculateOrderTotalsSummary, isProductDiscountSchemeApplied, normalizeLineDiscountType, resolveTaxSupplyType, syncManualLineDiscount } from "@/app/(app)/sales/orders/orders-data";
 import type { SalesOrder, SalesOrderLineItem, SalesOrderAdditionalExpense } from "@/app/(app)/sales/orders/orders-data";
 import type { SalesOrderFormValues } from "@/app/(app)/sales/orders/components/SalesOrderForm";
 import { getCustomerAddressesForSalesOrder } from "@/app/(app)/sales/orders/sales-order-address-utils";
@@ -175,18 +175,9 @@ function mapBackendLineItem(raw: Record<string, unknown>, idx: number): SalesOrd
       : hasScheme && unitPrice > 0 && schemeDiscountAmount > 0
         ? Math.round((schemeDiscountAmount / unitPrice) * 10000) / 100
         : 0;
-  const finalRate = hasScheme
+  const rateAfterScheme = hasScheme
     ? Math.max(0, Math.round((unitPrice - schemeDiscountAmount) * 100) / 100)
-    : Math.max(
-        0,
-        Math.round(
-          (unitPrice -
-            (quantity > 0
-              ? discountValue / quantity
-              : unitPrice * (discountPct / 100))) *
-            100,
-        ) / 100,
-      );
+    : unitPrice;
 
   const schemeCode = asString(
     schemeSnapshot?.scheme_code ?? raw.scheme_code,
@@ -195,7 +186,7 @@ function mapBackendLineItem(raw: Record<string, unknown>, idx: number): SalesOrd
     schemeSnapshot?.scheme_name ?? raw.scheme_name,
   );
 
-  return {
+  const mappedBase: SalesOrderLineItem = {
     id: asString(raw.id || raw.sales_order_product_id || `line-${idx}`),
     productId: asNumber(raw.product_id) || (raw.product_id as any),
     productCode: asString(raw.product_code || product.product_code || product.code || (raw.product as any)?.product_code),
@@ -216,7 +207,7 @@ function mapBackendLineItem(raw: Record<string, unknown>, idx: number): SalesOrd
     schemeDiscountAmount,
     schemeDiscountType,
     schemeDiscountValue: hasScheme ? schemeDiscountValue : undefined,
-    finalRate,
+    finalRate: rateAfterScheme,
     schemeApplied: hasScheme ? "Yes" : "No",
     schemeCode: hasScheme ? schemeCode : undefined,
     schemeName: hasScheme ? schemeName : undefined,
@@ -225,7 +216,7 @@ function mapBackendLineItem(raw: Record<string, unknown>, idx: number): SalesOrd
     appliedSchemeName: hasScheme ? schemeName : undefined,
     schemeSnapshot,
     originalDealerPrice: hasScheme ? unitPrice : undefined,
-    finalRateAfterScheme: hasScheme ? finalRate : undefined,
+    finalRateAfterScheme: hasScheme ? rateAfterScheme : undefined,
     uom: asString(product.unit || snapshot.unit || snapshot.base_unit || snapshot.uom),
     unitPackSize:
       asNumber(product.pack_size ?? snapshot.pack_size ?? snapshot.unit_pack_size ?? product.unit_pack_size) ||
@@ -241,6 +232,14 @@ function mapBackendLineItem(raw: Record<string, unknown>, idx: number): SalesOrd
     igstPercentage,
     gstPercentage: gstPercentage || cgstPercentage + sgstPercentage + igstPercentage,
     lineTotal: asNumber(raw.item_total ?? raw.lineTotal),
+  };
+
+  // Apply manual on top of scheme (or DP) so finalRate / display are correct.
+  const synced = syncManualLineDiscount(mappedBase);
+  return {
+    ...mappedBase,
+    ...synced,
+    finalRateAfterScheme: hasScheme ? rateAfterScheme : undefined,
   };
 }
 
