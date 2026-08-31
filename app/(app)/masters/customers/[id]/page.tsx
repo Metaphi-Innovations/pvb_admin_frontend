@@ -388,7 +388,7 @@ export default function CustomerDetailPage() {
               </RecordSectionCard>
 
               <RecordSectionCard title="Territory & Location" icon={MapPin} accent="purple">
-                <RecordKvRow label="Territory" value={customer.territoryName} highlight />
+                {/* <RecordKvRow label="Territory" value={customer.territoryName} highlight /> */}
                 <RecordKvRow label="State" value={customer.stateName} />
                 <RecordKvRow label="District" value={customer.districtName} />
                 <RecordKvRow label="Pin Code" value={(customer as any).pincode ?? "—"} mono />
@@ -733,7 +733,8 @@ export default function CustomerDetailPage() {
             ? [{ label: customer.email, icon: Mail, href: `mailto:${customer.email}` }]
             : []),
           {
-            label: [customer.territoryName, customer.stateName].filter(Boolean).join(" · ") || "—",
+            // label: [customer.territoryName, customer.stateName].filter(Boolean).join(" · ") || "—",
+            label: customer.stateName || "—",
             icon: MapPin,
           },
         ]}
@@ -814,7 +815,7 @@ export default function CustomerDetailPage() {
             { label: "Credit Limit", value: formatCreditLimit(creditLimitVal), highlight: true },
             { label: "Payment Terms", value: payLabel },
             { label: "Sales Man", value: mainBranchSalesManName },
-            { label: "Territory", value: customer.territoryName || "—" },
+            // { label: "Territory", value: customer.territoryName || "—" },
             { label: "Created", value: customer.createdAt },
             { label: "Updated", value: customer.updatedAt },
           ],

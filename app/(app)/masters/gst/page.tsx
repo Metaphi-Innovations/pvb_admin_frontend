@@ -161,19 +161,13 @@ export default function GSTPage() {
     [remarkOptionsQuery.data],
   );
   const statusOptions = useMemo(() => {
-    const defaults = [
-      { label: "All", value: "all" },
+    if (statusOptionsQuery.data?.length) {
+      return statusOptionsQuery.data.filter((opt) => opt.value !== "all" && opt.label.toLowerCase() !== "all");
+    }
+    return [
       { label: "Active", value: "active" },
       { label: "Inactive", value: "inactive" },
     ];
-    const fromApi = statusOptionsQuery.data ?? [];
-    const merged = [...defaults];
-    for (const opt of fromApi) {
-      if (!merged.some((item) => item.value === opt.value)) {
-        merged.push(opt);
-      }
-    }
-    return merged;
   }, [statusOptionsQuery.data]);
 
   const records = useMemo(
