@@ -1,0 +1,225 @@
+/* Bank Reconciliation listing — compact sticky Action column with row-matched backgrounds */
+
+
+
+/*
+
+ * Do NOT use table-layout:fixed here — it compressed long headers
+
+ * ("Balance as per Books", "Bank Statement Balance").
+
+ *
+
+ * Override shared `.accounts-table { width: 100% }` with max-content so
+
+ * leftover viewport width is NOT redistributed into columns (which made
+
+ * Action stretch under table-layout:auto). Horizontal scroll handles overflow.
+
+ */
+
+.bank-recon-listing .accounts-table {
+
+  width: max-content;
+
+  min-width: 1360px;
+
+  table-layout: auto;
+
+}
+
+
+
+/* Data column floor widths — keep headers readable; scroll when needed */
+
+.bank-recon-listing .accounts-table col.bank-recon-col-bank {
+
+  width: 140px;
+
+  min-width: 140px;
+
+}
+
+.bank-recon-listing .accounts-table col.bank-recon-col-nickname {
+
+  width: 150px;
+
+  min-width: 150px;
+
+}
+
+.bank-recon-listing .accounts-table col.bank-recon-col-acct-no {
+
+  width: 110px;
+
+  min-width: 110px;
+
+}
+
+.bank-recon-listing .accounts-table col.bank-recon-col-type {
+
+  width: 110px;
+
+  min-width: 110px;
+
+}
+
+.bank-recon-listing .accounts-table col.bank-recon-col-book-bal {
+
+  width: 160px;
+
+  min-width: 160px;
+
+}
+
+.bank-recon-listing .accounts-table col.bank-recon-col-stmt-bal {
+
+  width: 170px;
+
+  min-width: 170px;
+
+}
+
+.bank-recon-listing .accounts-table col.bank-recon-col-diff {
+
+  width: 110px;
+
+  min-width: 110px;
+
+}
+
+.bank-recon-listing .accounts-table col.bank-recon-col-pending {
+
+  width: 110px;
+
+  min-width: 110px;
+
+}
+
+.bank-recon-listing .accounts-table col.bank-recon-col-last-recon {
+
+  width: 150px;
+
+  min-width: 150px;
+
+}
+
+
+
+.bank-recon-listing .accounts-table col.bank-recon-listing-action-col-width,
+
+.bank-recon-listing .accounts-table th.bank-recon-listing-action-col,
+
+.bank-recon-listing .accounts-table td.bank-recon-listing-action-col {
+
+  width: 100px;
+
+  min-width: 100px;
+
+  max-width: 100px;
+
+  white-space: nowrap;
+
+}
+
+
+
+.bank-recon-listing .accounts-table th.bank-recon-listing-action-col,
+
+.bank-recon-listing .accounts-table td.bank-recon-listing-action-col {
+
+  position: sticky;
+
+  right: 0;
+
+  z-index: 20;
+
+  box-sizing: border-box;
+
+  padding-left: 0.25rem;
+
+  padding-right: 0.25rem;
+
+  border-left: 1px solid hsl(var(--border));
+
+  box-shadow: -4px 0 6px -2px rgb(0 0 0 / 0.08);
+
+  overflow: hidden;
+
+}
+
+
+
+.bank-recon-listing .accounts-table th.bank-recon-listing-action-col {
+
+  z-index: 40;
+
+  background-color: #fff3e8;
+
+}
+
+
+
+.bank-recon-listing .accounts-table th.bank-recon-listing-action-col.accounts-table-th-sticky {
+
+  z-index: 50;
+
+}
+
+
+
+.bank-recon-listing .accounts-table td.bank-recon-listing-action-col .accounts-table-td-inner,
+
+.bank-recon-listing .accounts-table th.bank-recon-listing-action-col .accounts-table-th-inner {
+
+  justify-content: center;
+
+}
+
+
+
+/* Explicit cell backgrounds so sticky Action matches zebra striping on the row */
+
+.bank-recon-listing .accounts-table tbody > .accounts-table-row > td,
+
+.bank-recon-listing .accounts-table > tbody > tr > td {
+
+  background-color: hsl(var(--background));
+
+}
+
+
+
+.bank-recon-listing .accounts-table tbody > .accounts-table-row:nth-child(even) > td,
+
+.bank-recon-listing .accounts-table > tbody > tr:nth-child(even) > td {
+
+  background-color: hsl(var(--muted) / 0.2);
+
+}
+
+
+
+@media (hover: hover) and (pointer: fine) {
+
+  .bank-recon-listing .accounts-table tbody > .accounts-table-row:hover > td,
+
+  .bank-recon-listing .accounts-table > tbody > tr:hover > td {
+
+    background-color: hsl(var(--muted) / 0.25);
+
+  }
+
+
+
+  .bank-recon-listing .accounts-table tbody > .accounts-table-row:nth-child(even):hover > td,
+
+  .bank-recon-listing .accounts-table > tbody > tr:nth-child(even):hover > td {
+
+    background-color: hsl(var(--muted) / 0.3);
+
+  }
+
+}
+
+

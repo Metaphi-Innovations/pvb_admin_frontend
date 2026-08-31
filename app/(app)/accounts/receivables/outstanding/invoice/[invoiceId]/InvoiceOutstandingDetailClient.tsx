@@ -1,20 +1,26 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { ArrowLeft, FileText, Receipt } from "lucide-react";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
-import { getInvoiceOutstandingDetail } from "@/lib/accounts/receivables-data";
+import {
+  mapApiReceivableStatus,
+  mapReceivableInvoiceRow,
+  mapSettlementToReceiptHistory,
+} from "@/lib/accounts/receivables-api-mappers";
 import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
 import { formatMoney } from "@/lib/accounts/money-format";
+import { ReceivablesService } from "@/services/receivables.service";
 import {
   AccountsColumnFilterProvider,
   SortTh,
-  StatusBadge,
   useAccountsFilteredRows,
 } from "@/app/(app)/accounts/components/AccountsUI";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import { receivableStatusToBadge } from "@/lib/accounts/accounts-status-badges";
 import { Button } from "@/components/ui/button";
 import {
   AccountsTable,
@@ -26,6 +32,7 @@ import {
   AccountsTableScroll,
 } from "@/components/accounts/AccountsTable";
 import type { InvoiceReceiptHistoryRow } from "@/lib/accounts/receivables-data";
+import type { ReceivableInvoiceApiRow } from "@/types/receivables.types";
 
 function formatReportDate(value: string): string {
   const [y, m, d] = value.slice(0, 10).split("-");
@@ -53,7 +60,7 @@ function ReceiptHistoryTable({ rows }: { rows: InvoiceReceiptHistoryRow[] }) {
             <AccountsTableRow>
               <AccountsTableCell colSpan={5} className="accounts-table-empty">
                 {rows.length === 0
-                  ? "No receipts recorded against this invoice."
+                  ? "No settlements recorded against this invoice."
                   : "No records match the column filters."}
               </AccountsTableCell>
             </AccountsTableRow>
@@ -83,22 +90,77 @@ function ReceiptHistoryTable({ rows }: { rows: InvoiceReceiptHistoryRow[] }) {
 export default function InvoiceOutstandingDetailClient() {
   const params = useParams();
   const searchParams = useSearchParams();
-  const invoiceId = Number(params.invoiceId);
+  const openItemId = String(params.invoiceId ?? "");
   const fromAgeing = searchParams.get("from") === "ageing";
 
   const sectionRefresh = useAccountsSectionRefresh();
+  const [invoice, setInvoice] = useState<ReceivableInvoiceApiRow | null>(null);
+  const [receiptHistory, setReceiptHistory] = useState<InvoiceReceiptHistoryRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const detail = useMemo(
-    () => (Number.isFinite(invoiceId) ? getInvoiceOutstandingDetail(invoiceId) : null),
-    [invoiceId, sectionRefresh],
+  useEffect(() => {
+    if (!openItemId) {
+      setInvoice(null);
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const [invoiceData, settlements] = await Promise.all([
+          ReceivablesService.getInvoiceByOpenItem(openItemId),
+          ReceivablesService.getInvoiceSettlements(openItemId),
+        ]);
+        if (cancelled) return;
+        setInvoice(invoiceData);
+        setReceiptHistory(settlements.map(mapSettlementToReceiptHistory));
+      } catch (e) {
+        if (!cancelled) {
+          setInvoice(null);
+          setReceiptHistory([]);
+          setError(e instanceof Error ? e.message : "Failed to load invoice outstanding.");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [openItemId, sectionRefresh]);
+
+  const mappedInvoice = useMemo(
+    () => (invoice ? mapReceivableInvoiceRow(invoice) : null),
+    [invoice],
   );
 
-  if (!detail) {
+  const statusBadge = useMemo(() => {
+    if (!invoice) return { status: "pending" as const, label: "Pending" };
+    return receivableStatusToBadge(mapApiReceivableStatus(invoice.status));
+  }, [invoice]);
+
+  if (loading) {
+    return (
+      <AccountsPageShell
+        breadcrumbs={accountsBreadcrumb("Receivables", "Customer Outstanding", "/accounts/receivables/outstanding")}
+        title="Customer Outstanding Details"
+        description="Loading…"
+        layout="standard"
+      >
+        <div className="p-8 text-center text-sm text-muted-foreground">Loading invoice outstanding…</div>
+      </AccountsPageShell>
+    );
+  }
+
+  if (!invoice || !mappedInvoice) {
     return (
       <AccountsPageShell
         breadcrumbs={accountsBreadcrumb("Receivables", "Customer Outstanding", "/accounts/receivables/outstanding")}
         title="Invoice Not Found"
-        description="No outstanding record for this invoice."
+        description={error || "No outstanding record for this invoice."}
         layout="standard"
       >
         <div className="p-8 text-center">
@@ -113,19 +175,24 @@ export default function InvoiceOutstandingDetailClient() {
     );
   }
 
-  const { customer, invoice, receiptHistory, summary } = detail;
   const backHref = fromAgeing
     ? "/accounts/receivables/ageing"
     : "/accounts/receivables/outstanding";
+
+  const summary = {
+    invoiceAmount: mappedInvoice.invoiceAmount,
+    receivedAmount: mappedInvoice.receivedAmount,
+    outstandingAmount: mappedInvoice.outstandingAmount,
+  };
 
   return (
     <AccountsPageShell
       breadcrumbs={[
         ...accountsBreadcrumb("Receivables", "Customer Outstanding", "/accounts/receivables/outstanding"),
-        { label: invoice.invoiceNo },
+        { label: mappedInvoice.invoiceNo },
       ]}
       title="Customer Outstanding Details"
-      description={`${customer.customerName} · ${invoice.invoiceNo}`}
+      description={`${mappedInvoice.customerName} · ${mappedInvoice.invoiceNo}`}
       actions={
         <div className="flex items-center gap-2">
           <Link href={backHref}>
@@ -133,12 +200,14 @@ export default function InvoiceOutstandingDetailClient() {
               <ArrowLeft className="w-4 h-4" /> Back
             </Button>
           </Link>
-          <Link href={`/accounts/transactions/invoices/${invoice.invoiceId}`}>
-            <Button variant="outline" size="sm" className="h-9 text-sm font-medium gap-1">
-              <FileText className="w-4 h-4" /> View Sales Invoice
-            </Button>
-          </Link>
-          <Link href={`/accounts/receivables/receipt-allocation?customer=${customer.id}`}>
+          {invoice.invoiceId ? (
+            <Link href={`/accounts/transactions/invoices/${invoice.invoiceId}`}>
+              <Button variant="outline" size="sm" className="h-9 text-sm font-medium gap-1">
+                <FileText className="w-4 h-4" /> View Sales Invoice
+              </Button>
+            </Link>
+          ) : null}
+          <Link href={`/accounts/receivables/receipt-allocation?customer=${mappedInvoice.customerId}`}>
             <Button size="sm" className="h-9 text-sm font-medium gap-1 bg-brand-600 hover:bg-brand-700 text-white">
               <Receipt className="w-4 h-4" /> Go to Receipt Allocation
             </Button>
@@ -155,12 +224,11 @@ export default function InvoiceOutstandingDetailClient() {
           </p>
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 text-xs">
             {[
-              ["Customer", customer.customerName],
-              ["Code", customer.customerCode],
-              ["GSTIN", customer.gstin || "—"],
-              ["Mobile", customer.mobile],
-              ["Territory", customer.territoryName || "—"],
-              ["Sales Executive", customer.salesManName || "Rajesh Sharma"],
+              ["Customer", mappedInvoice.customerName],
+              ["Code", mappedInvoice.customerCode],
+              ["GSTIN", "—"],
+              ["Mobile", "—"],
+              ["Territory", "—"],
             ].map(([label, value]) => (
               <div key={label}>
                 <p className="text-xs uppercase text-muted-foreground font-semibold">{label}</p>
@@ -176,12 +244,12 @@ export default function InvoiceOutstandingDetailClient() {
           </p>
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 text-xs">
             {[
-              ["Invoice No.", invoice.invoiceNo],
-              ["Invoice Date", formatReportDate(invoice.invoiceDate)],
-              ["Due Date", formatReportDate(invoice.dueDate)],
-              ["Invoice Amount", formatMoney(invoice.invoiceAmount)],
-              ["Received", formatMoney(invoice.paidAmount)],
-              ["Outstanding", formatMoney(invoice.outstanding)],
+              ["Invoice No.", mappedInvoice.invoiceNo],
+              ["Invoice Date", formatReportDate(mappedInvoice.invoiceDate)],
+              ["Due Date", formatReportDate(mappedInvoice.dueDate)],
+              ["Invoice Amount", formatMoney(mappedInvoice.invoiceAmount)],
+              ["Received", formatMoney(mappedInvoice.receivedAmount)],
+              ["Outstanding", formatMoney(mappedInvoice.outstandingAmount)],
             ].map(([label, value]) => (
               <div key={label}>
                 <p className="text-xs uppercase text-muted-foreground font-semibold">{label}</p>
@@ -191,7 +259,7 @@ export default function InvoiceOutstandingDetailClient() {
             <div>
               <p className="text-xs uppercase text-muted-foreground font-semibold">Status</p>
               <div className="mt-1">
-                <StatusBadge status={invoice.status} />
+                <StatusBadge status={statusBadge.status} label={statusBadge.label} size="sm" showDot />
               </div>
             </div>
           </div>

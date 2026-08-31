@@ -19,24 +19,38 @@ import {
   type AgeingBreakpoints,
 } from "@/lib/accounts/ageing-breakpoints";
 import {
-  computeCustomerOutstanding,
-  computeInvoiceOutstanding,
-  computeCustomerAgeingRows,
   computeReceiptAllocationSummary,
-  createCollectionFollowUp,
-  updateCollectionFollowUp,
-  loadCollectionFollowUps,
-  loadCollectionFollowUpHistory,
-  type CustomerOutstandingRow,
-  type InvoiceOutstandingRow,
-  type CustomerAgeingRow,
-  type CollectionFollowUp,
   type CollectionFollowUpStatus,
 } from "@/lib/accounts/receivables-data";
+import type {
+  ApiCollectionFollowUpRow,
+  ApiCustomerAgeingRow,
+  ApiCustomerOutstandingRow,
+  ApiFollowUpContactMethod,
+  ApiInvoiceOutstandingRow,
+} from "@/types/receivables.types";
+import {
+  AGING_SORT_KEY_TO_API,
+  FOLLOW_UP_SORT_KEY_TO_API,
+  INVOICE_SORT_KEY_TO_API,
+  isUuid,
+  mapFollowUpHistoryRow,
+  mapFollowUpRow,
+  mapFollowUpStatusToApi,
+  SUMMARY_SORT_KEY_TO_API,
+} from "@/lib/accounts/receivables-api-mappers";
+import type { ReceivablesExportView } from "@/types/receivables.types";
+import { useReceivablesListing } from "@/lib/accounts/use-receivables-listing";
 import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
-import { loadCustomers } from "@/app/(app)/masters/customers/customer-data";
+import { CustomerListService } from "@/services/customer-list.service";
+import { ReceivablesService } from "@/services/receivables.service";
 import { formatMoneyNumber, MONEY_CELL_CLASS } from "@/lib/accounts/money-format";
 import { defaultAsOnDate } from "@/lib/accounts/report-date-presets";
+import {
+  COLLECTION_FOLLOWUP_STATUS_COLUMN_FILTER,
+  RECEIVABLE_STATUS_COLUMN_FILTER,
+} from "@/lib/accounts/column-filter-presets";
+import type { AccountsColumnFilterConfig } from "@/lib/accounts/column-filter-types";
 import {
   AccountsColumnFilterProvider,
   SectionTabs,
@@ -89,12 +103,6 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { AccountsToast, useAccountsToast } from "@/components/accounts/AccountsToast";
 import { cn } from "@/lib/utils";
-import {
-  exportReceivablesToExcel,
-  exportReceivablesToPdf,
-  formatExportAmount,
-  formatExportStatus,
-} from "../receivables-export";
 
 type WorkspaceView = "summary" | "invoice" | "ageing" | "collection";
 type DueStatusFilter = "all" | "overdue" | "not_due";
@@ -114,6 +122,20 @@ const FOLLOW_UP_STATUS: { value: CollectionFollowUpStatus; label: string }[] = [
   { value: "escalated", label: "Escalated" },
   { value: "closed", label: "Closed" },
 ];
+
+const FOLLOW_UP_CONTACT_METHOD: { value: ApiFollowUpContactMethod; label: string }[] = [
+  { value: "CALL", label: "Call" },
+  { value: "EMAIL", label: "Email" },
+  { value: "WHATSAPP", label: "WhatsApp" },
+  { value: "VISIT", label: "Visit" },
+  { value: "SMS", label: "SMS" },
+  { value: "OTHER", label: "Other" },
+];
+
+function contactMethodLabel(method?: ApiFollowUpContactMethod): string | null {
+  if (!method) return null;
+  return FOLLOW_UP_CONTACT_METHOD.find((o) => o.value === method)?.label ?? method;
+}
 
 function formatReportDate(value: string): string {
   if (!value || value === "—") return "—";
@@ -146,42 +168,63 @@ function resolveInitialView(searchParams: URLSearchParams): WorkspaceView {
   return "summary";
 }
 
+function ReceivablesListSortSync({
+  sortKey,
+  sortDir,
+  onSortChange,
+}: {
+  sortKey: string;
+  sortDir: "asc" | "desc";
+  onSortChange: (sortKey: string, sortDir: "asc" | "desc") => void;
+}) {
+  const ctx = useAccountsColumnFilterContext();
+
+  useEffect(() => {
+    if (!ctx) return;
+    const nextKey = ctx.sortKey || "";
+    const nextDir = ctx.sortDir ?? "asc";
+    if (nextKey !== sortKey || (nextKey !== "" && nextDir !== sortDir)) {
+      onSortChange(nextKey, nextDir);
+    }
+  }, [ctx?.sortKey, ctx?.sortDir, sortKey, sortDir, onSortChange]);
+
+  return null;
+}
+
 function FollowUpDialog({
   open,
   customerId: initialCustomerId,
   customerName: initialCustomerName,
   editing,
   customers,
+  selectableCustomers,
   onClose,
   onSaved,
 }: {
   open: boolean;
-  customerId: number;
+  customerId: string;
   customerName: string;
-  editing?: CollectionFollowUp | null;
-  customers: { id: number; customerName: string }[];
+  editing?: ApiCollectionFollowUpRow | null;
+  customers: { id: string; customerName: string }[];
+  selectableCustomers: { id: string; customerName: string }[];
   onClose: () => void;
   onSaved: () => void;
 }) {
   const [customerId, setCustomerId] = useState(initialCustomerId);
   const [customerName, setCustomerName] = useState(initialCustomerName);
-
-  const history = useMemo(() => {
-    if (!open) return [];
-    const targetId =
-      editing?.id ??
-      loadCollectionFollowUps()
-        .filter((f) => f.customerId === customerId)
-        .sort((a, b) => b.followUpDate.localeCompare(a.followUpDate))[0]?.id;
-    return targetId ? loadCollectionFollowUpHistory(targetId) : [];
-  }, [customerId, editing, open]);
+  const [history, setHistory] = useState<
+    ReturnType<typeof mapFollowUpHistoryRow>[]
+  >([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   const [status, setStatus] = useState<CollectionFollowUpStatus>("follow_up_scheduled");
   const [nextFollowUpDate, setNextFollowUpDate] = useState("");
   const [promiseToPayDate, setPromiseToPayDate] = useState("");
   const [remarks, setRemarks] = useState("");
-  const [assignedTo, setAssignedTo] = useState("Collection Desk");
+  const [assignedTo, setAssignedTo] = useState("");
+  const [contactMethod, setContactMethod] = useState<ApiFollowUpContactMethod | "">("");
   const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -193,40 +236,89 @@ function FollowUpDialog({
       setNextFollowUpDate(editing.nextFollowUpDate || "");
       setPromiseToPayDate(editing.promiseToPayDate || "");
       setRemarks(editing.remarks || "");
-      setAssignedTo(editing.assignedTo || "Collection Desk");
+      setAssignedTo(editing.assignedTo || "");
+      setContactMethod("");
     } else {
       setStatus("follow_up_scheduled");
       setNextFollowUpDate(new Date().toISOString().slice(0, 10));
       setPromiseToPayDate("");
       setRemarks("");
-      setAssignedTo("Collection Desk");
+      setAssignedTo("");
+      setContactMethod("");
     }
   }, [open, editing, initialCustomerId, initialCustomerName]);
 
-  const save = () => {
+  useEffect(() => {
+    if (!open || !editing?.id) {
+      setHistory([]);
+      return;
+    }
+    const followUpId = String(editing.id);
+    let cancelled = false;
+    (async () => {
+      setHistoryLoading(true);
+      try {
+        const rows = await ReceivablesService.getFollowUpHistory(followUpId);
+        if (!cancelled) {
+          const mapped = rows.map(mapFollowUpHistoryRow);
+          setHistory(mapped);
+          const latest = mapped[mapped.length - 1];
+          if (latest?.contactMethod) {
+            setContactMethod(latest.contactMethod);
+          }
+        }
+      } catch {
+        if (!cancelled) setHistory([]);
+      } finally {
+        if (!cancelled) setHistoryLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, editing?.id]);
+
+  const save = async () => {
     if (!customerId) {
       setError("Customer is required.");
       return;
     }
-    const payload = {
-      customerId,
-      invoiceId: editing?.invoiceId ?? null,
-      followUpDate: new Date().toISOString().slice(0, 10),
-      assignedTo,
-      status,
-      remarks,
-      nextFollowUpDate,
-      promiseToPayDate: promiseToPayDate || undefined,
-    };
-    const err = editing
-      ? updateCollectionFollowUp(editing.id, payload)
-      : createCollectionFollowUp(payload);
-    if (err) {
-      setError(err);
-      return;
+    if (promiseToPayDate && nextFollowUpDate && promiseToPayDate < nextFollowUpDate) {
+      // allow — no strict validation required
     }
-    onSaved();
-    onClose();
+    setSaving(true);
+    setError("");
+    try {
+      const assignedToId = isUuid(assignedTo) ? assignedTo : null;
+      const contactMethodPayload = contactMethod || null;
+      if (editing?.id) {
+        await ReceivablesService.updateFollowUp(String(editing.id), {
+          status: mapFollowUpStatusToApi(status),
+          nextFollowUpDate: nextFollowUpDate || null,
+          promisedPaymentDate: promiseToPayDate || null,
+          assignedTo: assignedToId,
+          remarks: remarks || null,
+          contactMethod: contactMethodPayload,
+        });
+      } else {
+        await ReceivablesService.createFollowUp({
+          customerId,
+          openItemId: editing?.openItemId ?? null,
+          status: mapFollowUpStatusToApi(status),
+          nextFollowUpDate: nextFollowUpDate || null,
+          promisedPaymentDate: promiseToPayDate || null,
+          assignedTo: assignedToId,
+          remarks: remarks || null,
+          contactMethod: contactMethodPayload,
+        });
+      }
+      onSaved();
+      onClose();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to save follow-up.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -245,19 +337,18 @@ function FollowUpDialog({
             <div className="space-y-1.5">
               <Label className="text-xs font-medium">Customer</Label>
               <Select
-                value={customerId ? String(customerId) : ""}
+                value={customerId || ""}
                 onValueChange={(v) => {
-                  const id = Number(v);
-                  setCustomerId(id);
-                  setCustomerName(customers.find((c) => c.id === id)?.customerName ?? "");
+                  setCustomerId(v);
+                  setCustomerName(customers.find((c) => c.id === v)?.customerName ?? "");
                 }}
               >
                 <SelectTrigger className="h-9 text-sm">
                   <SelectValue placeholder="Select customer…" />
                 </SelectTrigger>
                 <SelectContent>
-                  {customers.map((c) => (
-                    <SelectItem key={c.id} value={String(c.id)}>
+                  {selectableCustomers.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
                       {c.customerName}
                     </SelectItem>
                   ))}
@@ -273,6 +364,27 @@ function FollowUpDialog({
               </SelectTrigger>
               <SelectContent>
                 {FOLLOW_UP_STATUS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">Contact Method</Label>
+            <Select
+              value={contactMethod || "none"}
+              onValueChange={(v) =>
+                setContactMethod(v === "none" ? "" : (v as ApiFollowUpContactMethod))
+              }
+            >
+              <SelectTrigger className="h-9 text-sm">
+                <SelectValue placeholder="Select contact method…" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">—</SelectItem>
+                {FOLLOW_UP_CONTACT_METHOD.map((o) => (
                   <SelectItem key={o.value} value={o.value}>
                     {o.label}
                   </SelectItem>
@@ -317,20 +429,31 @@ function FollowUpDialog({
               className="text-sm"
             />
           </div>
-          {history.length > 0 && (
+          {(historyLoading || history.length > 0) && (
             <div className="rounded-lg border border-border bg-muted/20 p-2.5 space-y-1.5">
               <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
                 Collection History
               </p>
-              {history.slice(0, 6).map((h) => (
-                <div key={h.id} className="text-[11px] flex justify-between gap-2">
-                  <span className="text-muted-foreground shrink-0">{formatReportDate(h.date)}</span>
-                  <span className="font-medium truncate text-right">
-                    {FOLLOW_UP_STATUS.find((s) => s.value === h.status)?.label ?? h.status}
-                    {h.remarks ? ` · ${h.remarks}` : ""}
-                  </span>
-                </div>
-              ))}
+              {historyLoading ? (
+                <p className="text-[11px] text-muted-foreground">Loading history…</p>
+              ) : (
+                history.slice(0, 6).map((h) => {
+                  const methodLabel = contactMethodLabel(h.contactMethod);
+                  const statusLabel =
+                    FOLLOW_UP_STATUS.find((s) => s.value === h.status)?.label ?? h.status;
+                  const detail = [statusLabel, methodLabel, h.remarks || ""]
+                    .filter(Boolean)
+                    .join(" · ");
+                  return (
+                  <div key={h.id} className="text-[11px] flex justify-between gap-2">
+                    <span className="text-muted-foreground shrink-0">{formatReportDate(h.date)}</span>
+                    <span className="font-medium truncate text-right">
+                      {detail || "—"}
+                    </span>
+                  </div>
+                  );
+                })
+              )}
             </div>
           )}
           {error && <p className="text-xs text-red-600">{error}</p>}
@@ -342,9 +465,10 @@ function FollowUpDialog({
           <Button
             size="sm"
             className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white"
-            onClick={save}
+            onClick={() => void save()}
+            disabled={saving}
           >
-            Save Follow-up
+            {saving ? "Saving…" : "Save Follow-up"}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -353,31 +477,35 @@ function FollowUpDialog({
 }
 
 function SummaryTable({
+  rows,
+  totalRecords,
+  loading,
   page,
   pageSize,
   onPageChange,
   onPageSizeChange,
   onFollowUp,
+  activeFollowUpCustomerIds,
 }: {
+  rows: ApiCustomerOutstandingRow[];
+  totalRecords: number;
+  loading: boolean;
   page: number;
   pageSize: number;
   onPageChange: (p: number) => void;
   onPageSizeChange: (s: number) => void;
-  onFollowUp: (row: CustomerOutstandingRow) => void;
+  onFollowUp: (row: ApiCustomerOutstandingRow) => void;
+  activeFollowUpCustomerIds: Set<string>;
 }) {
   const router = useRouter();
   const ctx = useAccountsColumnFilterContext();
-  const visible = useAccountsFilteredRows<CustomerOutstandingRow>([]);
-  const paged = useMemo(
-    () => visible.slice((page - 1) * pageSize, page * pageSize),
-    [visible, page, pageSize],
-  );
+  const visible = useAccountsFilteredRows(rows);
 
   useEffect(() => {
     onPageChange(1);
   }, [ctx?.columnFilters, ctx?.sortKey, ctx?.sortDir, onPageChange]);
 
-  const columns: AccountsRichColumnDef<CustomerOutstandingRow>[] = useMemo(
+  const columns: AccountsRichColumnDef<ApiCustomerOutstandingRow>[] = useMemo(
     () => [
       {
         key: "customerName",
@@ -459,7 +587,11 @@ function SummaryTable({
             />
             <button
               type="button"
-              title="Add follow-up"
+              title={
+                activeFollowUpCustomerIds.has(String(r.customerId))
+                  ? "Update follow-up"
+                  : "Add follow-up"
+              }
               className="p-1.5 hover:bg-muted rounded-md transition-colors"
               onClick={(e) => {
                 e.stopPropagation();
@@ -472,26 +604,34 @@ function SummaryTable({
         ),
       },
     ],
-    [router, onFollowUp],
+    [router, onFollowUp, activeFollowUpCustomerIds],
   );
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
       <AccountsTableScroll>
-        <AccountsRichTable
-          columns={columns}
-          rows={paged}
-          minWidth={1100}
-          getRowKey={(r) => r.customerId}
-          emptyMessage="No customers with outstanding balances."
-          onRowClick={(r) => router.push(`/accounts/receivables/outstanding/${r.customerId}`)}
-        />
+        {loading && rows.length === 0 ? (
+          <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+            Loading customer summary…
+          </div>
+        ) : (
+          <AccountsRichTable
+            columns={columns}
+            rows={visible}
+            minWidth={1100}
+            getRowKey={(r) => String(r.customerId)}
+            emptyMessage="No customers with outstanding balances."
+            onRowClick={(r) =>
+              router.push(`/accounts/receivables/outstanding/${r.customerId}`)
+            }
+          />
+        )}
       </AccountsTableScroll>
-      {visible.length > 0 && (
+      {totalRecords > 0 && (
         <AccountsTablePagination
           page={page}
           pageSize={pageSize}
-          totalRecords={visible.length}
+          totalRecords={totalRecords}
           onPageChange={onPageChange}
           onPageSizeChange={onPageSizeChange}
         />
@@ -501,11 +641,17 @@ function SummaryTable({
 }
 
 function InvoiceTable({
+  rows,
+  totalRecords,
+  loading,
   page,
   pageSize,
   onPageChange,
   onPageSizeChange,
 }: {
+  rows: ApiInvoiceOutstandingRow[];
+  totalRecords: number;
+  loading: boolean;
   page: number;
   pageSize: number;
   onPageChange: (p: number) => void;
@@ -513,17 +659,13 @@ function InvoiceTable({
 }) {
   const router = useRouter();
   const ctx = useAccountsColumnFilterContext();
-  const visible = useAccountsFilteredRows<InvoiceOutstandingRow>([]);
-  const paged = useMemo(
-    () => visible.slice((page - 1) * pageSize, page * pageSize),
-    [visible, page, pageSize],
-  );
+  const visible = useAccountsFilteredRows(rows);
 
   useEffect(() => {
     onPageChange(1);
   }, [ctx?.columnFilters, ctx?.sortKey, ctx?.sortDir, onPageChange]);
 
-  const columns: AccountsRichColumnDef<InvoiceOutstandingRow>[] = useMemo(
+  const columns: AccountsRichColumnDef<ApiInvoiceOutstandingRow>[] = useMemo(
     () => [
       {
         key: "customerName",
@@ -605,22 +747,28 @@ function InvoiceTable({
   return (
     <div className="flex flex-col flex-1 min-h-0">
       <AccountsTableScroll>
-        <AccountsRichTable
-          columns={columns}
-          rows={paged}
-          minWidth={1100}
-          getRowKey={(r) => r.invoiceId}
-          emptyMessage="No open invoices."
-          onRowClick={(r) =>
-            router.push(`/accounts/receivables/outstanding/invoice/${r.invoiceId}`)
-          }
-        />
+        {loading && rows.length === 0 ? (
+          <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+            Loading invoices…
+          </div>
+        ) : (
+          <AccountsRichTable
+            columns={columns}
+            rows={visible}
+            minWidth={1100}
+            getRowKey={(r) => r.openItemId}
+            emptyMessage="No open invoices."
+            onRowClick={(r) =>
+              router.push(`/accounts/receivables/outstanding/invoice/${r.openItemId}`)
+            }
+          />
+        )}
       </AccountsTableScroll>
-      {visible.length > 0 && (
+      {totalRecords > 0 && (
         <AccountsTablePagination
           page={page}
           pageSize={pageSize}
-          totalRecords={visible.length}
+          totalRecords={totalRecords}
           onPageChange={onPageChange}
           onPageSizeChange={onPageSizeChange}
         />
@@ -631,12 +779,18 @@ function InvoiceTable({
 
 function AgeingTable({
   columns,
+  rows,
+  totalRecords,
+  loading,
   page,
   pageSize,
   onPageChange,
   onPageSizeChange,
 }: {
-  columns: AccountsRichColumnDef<CustomerAgeingRow>[];
+  columns: AccountsRichColumnDef<ApiCustomerAgeingRow>[];
+  rows: ApiCustomerAgeingRow[];
+  totalRecords: number;
+  loading: boolean;
   page: number;
   pageSize: number;
   onPageChange: (p: number) => void;
@@ -644,11 +798,7 @@ function AgeingTable({
 }) {
   const router = useRouter();
   const ctx = useAccountsColumnFilterContext();
-  const visible = useAccountsFilteredRows<CustomerAgeingRow>([]);
-  const paged = useMemo(
-    () => visible.slice((page - 1) * pageSize, page * pageSize),
-    [visible, page, pageSize],
-  );
+  const visible = useAccountsFilteredRows(rows);
 
   useEffect(() => {
     onPageChange(1);
@@ -657,20 +807,26 @@ function AgeingTable({
   return (
     <div className="flex flex-col flex-1 min-h-0">
       <AccountsTableScroll>
-        <AccountsRichTable
-          columns={columns}
-          rows={paged}
-          minWidth={1280}
-          getRowKey={(r) => r.customerId}
-          emptyMessage="No ageing balances."
-          onRowClick={(r) => router.push(`/accounts/receivables/outstanding/${r.customerId}`)}
-        />
+        {loading && rows.length === 0 ? (
+          <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+            Loading ageing data…
+          </div>
+        ) : (
+          <AccountsRichTable
+            columns={columns}
+            rows={visible}
+            minWidth={1280}
+            getRowKey={(r) => String(r.customerId)}
+            emptyMessage="No ageing balances."
+            onRowClick={(r) => router.push(`/accounts/receivables/outstanding/${r.customerId}`)}
+          />
+        )}
       </AccountsTableScroll>
-      {visible.length > 0 && (
+      {totalRecords > 0 && (
         <AccountsTablePagination
           page={page}
           pageSize={pageSize}
-          totalRecords={visible.length}
+          totalRecords={totalRecords}
           onPageChange={onPageChange}
           onPageSizeChange={onPageSizeChange}
         />
@@ -680,31 +836,33 @@ function AgeingTable({
 }
 
 function CollectionTable({
+  rows,
+  totalRecords,
+  loading,
   page,
   pageSize,
   onPageChange,
   onPageSizeChange,
   onEdit,
 }: {
+  rows: ApiCollectionFollowUpRow[];
+  totalRecords: number;
+  loading: boolean;
   page: number;
   pageSize: number;
   onPageChange: (p: number) => void;
   onPageSizeChange: (s: number) => void;
-  onEdit: (row: CollectionFollowUp) => void;
+  onEdit: (row: ApiCollectionFollowUpRow) => void;
 }) {
   const router = useRouter();
   const ctx = useAccountsColumnFilterContext();
-  const visible = useAccountsFilteredRows<CollectionFollowUp>([]);
-  const paged = useMemo(
-    () => visible.slice((page - 1) * pageSize, page * pageSize),
-    [visible, page, pageSize],
-  );
+  const visible = useAccountsFilteredRows(rows);
 
   useEffect(() => {
     onPageChange(1);
   }, [ctx?.columnFilters, ctx?.sortKey, ctx?.sortDir, onPageChange]);
 
-  const columns: AccountsRichColumnDef<CollectionFollowUp>[] = useMemo(
+  const columns: AccountsRichColumnDef<ApiCollectionFollowUpRow>[] = useMemo(
     () => [
       {
         key: "customerName",
@@ -807,20 +965,26 @@ function CollectionTable({
   return (
     <div className="flex flex-col flex-1 min-h-0">
       <AccountsTableScroll>
-        <AccountsRichTable
-          columns={columns}
-          rows={paged}
-          minWidth={1100}
-          getRowKey={(r) => r.id}
-          emptyMessage="No collection follow-ups yet. Use Add Follow-up."
-          onRowClick={onEdit}
-        />
+        {loading && rows.length === 0 ? (
+          <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+            Loading follow-ups…
+          </div>
+        ) : (
+          <AccountsRichTable
+            columns={columns}
+            rows={visible}
+            minWidth={1100}
+            getRowKey={(r) => String(r.id)}
+            emptyMessage="No collection follow-ups yet. Use Add Follow-up."
+            onRowClick={onEdit}
+          />
+        )}
       </AccountsTableScroll>
-      {visible.length > 0 && (
+      {totalRecords > 0 && (
         <AccountsTablePagination
           page={page}
           pageSize={pageSize}
-          totalRecords={visible.length}
+          totalRecords={totalRecords}
           onPageChange={onPageChange}
           onPageSizeChange={onPageSizeChange}
         />
@@ -834,7 +998,8 @@ export default function CustomerOutstandingClient() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const sectionRefresh = useAccountsSectionRefresh("receivables");
-  const { toast, showCreated, dismissToast } = useAccountsToast();
+  const { toast, showCreated, showUpdated, showExportCompleted, showToast, dismissToast } = useAccountsToast();
+  const [exporting, setExporting] = useState(false);
 
   const [view, setView] = useState<WorkspaceView>(() =>
     resolveInitialView(new URLSearchParams(searchParams.toString())),
@@ -853,11 +1018,17 @@ export default function CustomerOutstandingClient() {
   );
   const [breakpointError, setBreakpointError] = useState<string | null>(null);
   const [followUpTarget, setFollowUpTarget] = useState<{
-    customerId: number;
+    customerId: string;
     customerName: string;
-    editing?: CollectionFollowUp | null;
+    editing?: ApiCollectionFollowUpRow | null;
   } | null>(null);
+  const [activeFollowUpsByCustomerId, setActiveFollowUpsByCustomerId] = useState<
+    Record<string, ApiCollectionFollowUpRow>
+  >({});
   const [refreshKey, setRefreshKey] = useState(0);
+  const [sortKey, setSortKey] = useState("");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [customers, setCustomers] = useState<{ id: string; customerName: string }[]>([]);
 
   useEffect(() => {
     setView(resolveInitialView(new URLSearchParams(searchParams.toString())));
@@ -866,6 +1037,44 @@ export default function CustomerOutstandingClient() {
   useEffect(() => {
     setRefreshKey((k) => k + 1);
   }, [sectionRefresh]);
+
+  const refreshActiveFollowUps = useCallback(async () => {
+    try {
+      const res = await ReceivablesService.getFollowUps({ page: 1, page_size: 100 });
+      const map: Record<string, ApiCollectionFollowUpRow> = {};
+      for (const row of (res.data ?? []).map(mapFollowUpRow)) {
+        map[row.customerId] = row;
+      }
+      setActiveFollowUpsByCustomerId(map);
+    } catch {
+      setActiveFollowUpsByCustomerId({});
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshActiveFollowUps();
+  }, [refreshKey, refreshActiveFollowUps]);
+
+  const activeFollowUpCustomerIds = useMemo(
+    () => new Set(Object.keys(activeFollowUpsByCustomerId)),
+    [activeFollowUpsByCustomerId],
+  );
+
+  const customersWithoutActiveFollowUp = useMemo(
+    () => customers.filter((c) => !activeFollowUpsByCustomerId[c.id]),
+    [customers, activeFollowUpsByCustomerId],
+  );
+
+  const openFollowUpForCustomer = useCallback(
+    (customerId: string, customerName: string) => {
+      setFollowUpTarget({
+        customerId,
+        customerName,
+        editing: activeFollowUpsByCustomerId[customerId] ?? null,
+      });
+    },
+    [activeFollowUpsByCustomerId],
+  );
 
   const setWorkspaceView = useCallback(
     (next: WorkspaceView) => {
@@ -881,116 +1090,71 @@ export default function CustomerOutstandingClient() {
     [router, pathname, searchParams],
   );
 
-  const customers = useMemo(() => loadCustomers(), [refreshKey]);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const items = await CustomerListService.dropdown();
+        if (cancelled) return;
+        setCustomers(
+          items.map((c) => ({
+            id: c.customer_id,
+            customerName: c.customer_name,
+          })),
+        );
+      } catch {
+        if (!cancelled) setCustomers([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshKey]);
+
+  const handleSortChange = useCallback((key: string, dir: "asc" | "desc") => {
+    setSortKey(key);
+    setSortDir(dir);
+    setPage(1);
+  }, []);
+
+  const {
+    loading,
+    error,
+    total,
+    summaryRows,
+    invoiceRows,
+    ageingRows,
+    collectionRows,
+    resolvedSalespersonId,
+  } = useReceivablesListing({
+    view,
+    asOnDate,
+    search,
+    customerId,
+    salesperson: salesperson !== "all" ? salesperson : undefined,
+    dueStatus,
+    page,
+    pageSize,
+    sortKey,
+    sortDir,
+    appliedBreakpoints,
+    refreshKey,
+  });
+
   const salespersonOptions = useMemo(() => {
     const names = new Set<string>();
-    for (const c of customers) {
-      if (c.salesManName?.trim()) names.add(c.salesManName.trim());
+    for (const row of summaryRows) {
+      if (row.salesExecutive && row.salesExecutive !== "—") {
+        names.add(row.salesExecutive);
+      }
     }
     return [...names].sort((a, b) => a.localeCompare(b));
-  }, [customers]);
+  }, [summaryRows]);
 
   const pendingAllocations = useMemo(() => {
     void refreshKey;
     return computeReceiptAllocationSummary().pendingAllocationCount;
   }, [refreshKey, sectionRefresh]);
-
-  const summaryRows = useMemo(() => {
-    void refreshKey;
-    let rows = computeCustomerOutstanding(asOnDate).filter((r) => r.outstanding > 0.009);
-    if (customerId !== "all") rows = rows.filter((r) => String(r.customerId) === customerId);
-    if (salesperson !== "all") rows = rows.filter((r) => r.salesExecutive === salesperson);
-    if (dueStatus === "overdue") rows = rows.filter((r) => r.overdueAmount > 0.009);
-    if (dueStatus === "not_due") {
-      rows = rows.filter((r) => r.notDueAmount > 0.009 && r.overdueAmount <= 0.009);
-    }
-    if (search.trim()) {
-      const q = search.trim().toLowerCase();
-      rows = rows.filter(
-        (r) =>
-          r.customerName.toLowerCase().includes(q) ||
-          r.customerCode.toLowerCase().includes(q),
-      );
-    }
-    return rows;
-  }, [asOnDate, customerId, salesperson, dueStatus, search, refreshKey, sectionRefresh]);
-
-  const invoiceRows = useMemo(() => {
-    void refreshKey;
-    let rows = computeInvoiceOutstanding(asOnDate).filter((r) => r.outstandingAmount > 0.009);
-    if (customerId !== "all") rows = rows.filter((r) => String(r.customerId) === customerId);
-    if (salesperson !== "all") {
-      const custIds = new Set(
-        customers
-          .filter((c) => c.salesManName?.trim() === salesperson)
-          .map((c) => c.id),
-      );
-      rows = rows.filter((r) => custIds.has(r.customerId));
-    }
-    if (dueStatus === "overdue") rows = rows.filter((r) => r.overdueDays > 0);
-    if (dueStatus === "not_due") rows = rows.filter((r) => r.overdueDays <= 0);
-    if (search.trim()) {
-      const q = search.trim().toLowerCase();
-      rows = rows.filter(
-        (r) =>
-          r.customerName.toLowerCase().includes(q) ||
-          r.customerCode.toLowerCase().includes(q) ||
-          r.invoiceNo.toLowerCase().includes(q),
-      );
-    }
-    return rows;
-  }, [
-    asOnDate,
-    customerId,
-    salesperson,
-    dueStatus,
-    search,
-    customers,
-    refreshKey,
-    sectionRefresh,
-  ]);
-
-  const collectionRows = useMemo(() => {
-    void refreshKey;
-    let rows = loadCollectionFollowUps().filter((r) => r.status !== "closed");
-    if (customerId !== "all") rows = rows.filter((r) => String(r.customerId) === customerId);
-    if (search.trim()) {
-      const q = search.trim().toLowerCase();
-      rows = rows.filter(
-        (r) =>
-          r.customerName.toLowerCase().includes(q) ||
-          (r.invoiceNo || "").toLowerCase().includes(q) ||
-          (r.remarks || "").toLowerCase().includes(q),
-      );
-    }
-    return rows.sort((a, b) =>
-      (b.nextFollowUpDate || b.followUpDate).localeCompare(a.nextFollowUpDate || a.followUpDate),
-    );
-  }, [customerId, search, refreshKey, sectionRefresh]);
-
-  const ageingRows = useMemo(() => {
-    void refreshKey;
-    let rows = computeCustomerAgeingRows(asOnDate, {}, appliedBreakpoints);
-    if (customerId !== "all") rows = rows.filter((r) => String(r.customerId) === customerId);
-    if (salesperson !== "all") rows = rows.filter((r) => r.salesExecutive === salesperson);
-    if (search.trim()) {
-      const q = search.trim().toLowerCase();
-      rows = rows.filter(
-        (r) =>
-          r.customerName.toLowerCase().includes(q) ||
-          r.customerCode.toLowerCase().includes(q),
-      );
-    }
-    return rows;
-  }, [
-    asOnDate,
-    customerId,
-    salesperson,
-    search,
-    appliedBreakpoints,
-    refreshKey,
-    sectionRefresh,
-  ]);
 
   const bucketLabels = useMemo(
     () => getAgeingBucketLabels(appliedBreakpoints),
@@ -1002,16 +1166,16 @@ export default function CustomerOutstandingClient() {
     [appliedBreakpoints],
   );
 
-  const ageingColumns: AccountsRichColumnDef<CustomerAgeingRow>[] = useMemo(() => {
+  const ageingColumns: AccountsRichColumnDef<ApiCustomerAgeingRow>[] = useMemo(() => {
     const bucketCount = ageingBucketIndices.length;
-    const bucketColumns: AccountsRichColumnDef<CustomerAgeingRow>[] = ageingBucketIndices.map(
+    const bucketColumns: AccountsRichColumnDef<ApiCustomerAgeingRow>[] = ageingBucketIndices.map(
       (index) => ({
         key: ageingBucketColumnKey(index),
         label: bucketLabels[index] ?? "",
         align: "right" as const,
         filterType: "amount" as const,
         className: "min-w-[120px]",
-        render: (r: CustomerAgeingRow) => {
+        render: (r: ApiCustomerAgeingRow) => {
           const amount = r.buckets[index] ?? 0;
           const isOldest = index === bucketCount - 1;
           const isLate = index === bucketCount - 2;
@@ -1068,125 +1232,88 @@ export default function CustomerOutstandingClient() {
     setDueStatus("all");
   };
 
-  const getSummaryCell = useCallback((row: CustomerOutstandingRow, key: string) => {
+  const getSummaryCell = useCallback((row: ApiCustomerOutstandingRow, key: string) => {
     if (key === "status") return row.status;
     return (row as unknown as Record<string, unknown>)[key];
   }, []);
 
-  const getInvoiceCell = useCallback((row: InvoiceOutstandingRow, key: string) => {
+  const getInvoiceCell = useCallback((row: ApiInvoiceOutstandingRow, key: string) => {
     if (key === "overdueDays") return row.outstandingAmount > 0 ? row.overdueDays : 0;
     if (key === "status") return row.status;
     return (row as unknown as Record<string, unknown>)[key];
   }, []);
 
-  const getAgeingCell = useCallback((row: CustomerAgeingRow, key: string) => {
+  const getAgeingCell = useCallback((row: ApiCustomerAgeingRow, key: string) => {
     const bucketMatch = /^bucket_(\d+)$/.exec(key);
     if (bucketMatch) return row.buckets[Number(bucketMatch[1])] ?? 0;
     return (row as unknown as Record<string, unknown>)[key];
   }, []);
 
+  const buildExportQuery = useCallback(() => {
+    const viewMap: Record<WorkspaceView, ReceivablesExportView> = {
+      summary: "summary",
+      invoice: "invoice",
+      ageing: "ageing",
+      collection: "follow-ups",
+    };
+    const sortMap =
+      view === "summary"
+        ? SUMMARY_SORT_KEY_TO_API
+        : view === "invoice"
+          ? INVOICE_SORT_KEY_TO_API
+          : view === "ageing"
+            ? AGING_SORT_KEY_TO_API
+            : FOLLOW_UP_SORT_KEY_TO_API;
+    const apiSort = sortKey ? sortMap[sortKey] : undefined;
+    return {
+      view: viewMap[view],
+      search: search.trim() || undefined,
+      customerId: customerId !== "all" ? customerId : undefined,
+      salespersonId: resolvedSalespersonId,
+      asOfDate: asOnDate,
+      dueStatus,
+      excludeZeroBalance: true,
+      agingBreakpoints: appliedBreakpoints.join(","),
+      sortBy: apiSort,
+      sortOrder: apiSort ? sortDir : undefined,
+    };
+  }, [
+    view,
+    search,
+    customerId,
+    resolvedSalespersonId,
+    asOnDate,
+    dueStatus,
+    appliedBreakpoints,
+    sortKey,
+    sortDir,
+  ]);
+
   const handleExport = async () => {
-    if (view === "summary") {
-      await exportReceivablesToExcel(
-        summaryRows.map((r) => ({
-          "Customer Name": r.customerName,
-          "Customer Code": r.customerCode,
-          "Total Outstanding": formatExportAmount(r.outstanding),
-          "Overdue Amount": formatExportAmount(r.overdueAmount),
-          "Not Due Amount": formatExportAmount(r.notDueAmount),
-          "Oldest Due": r.oldestDueDate,
-          "Last Receipt Date": r.lastReceiptDate,
-          Status: formatExportStatus(r.status),
-        })),
-        { reportName: "Customer Outstanding", asOnDate },
-        "customer_outstanding",
-      );
-      return;
-    }
-    if (view === "invoice") {
-      await exportReceivablesToExcel(
-        invoiceRows.map((r) => ({
-          Customer: r.customerName,
-          "Invoice No.": r.invoiceNo,
-          "Invoice Date": r.invoiceDate,
-          "Due Date": r.dueDate,
-          "Invoice Amount": formatExportAmount(r.invoiceAmount),
-          Received: formatExportAmount(r.receivedAmount),
-          Outstanding: formatExportAmount(r.outstandingAmount),
-          Status: formatExportStatus(r.status),
-        })),
-        { reportName: "Invoice Outstanding", asOnDate },
-        "invoice_outstanding",
-      );
-      return;
-    }
-    if (view === "collection") {
-      await exportReceivablesToExcel(
-        collectionRows.map((r) => ({
-          Customer: r.customerName,
-          Invoice: r.invoiceNo || "—",
-          Outstanding: formatExportAmount(r.outstandingAmount),
-          Status: FOLLOW_UP_STATUS.find((s) => s.value === r.status)?.label ?? r.status,
-          "Promised Payment": r.promiseToPayDate || "—",
-          "Next Follow-up": r.nextFollowUpDate || "—",
-          Remarks: r.remarks || "—",
-          "Assigned To": r.assignedTo || "—",
-        })),
-        { reportName: "Collection Follow-ups", asOnDate },
-        "collection_followups",
-      );
-      return;
-    }
-    const exportBucketLabels = ageingBucketIndices.map((i) => bucketLabels[i] ?? "");
-    await exportReceivablesToExcel(
-      ageingRows.map((r) => {
-        const row: Record<string, string | number> = {
-          "Customer Name": r.customerName,
-          "Total Outstanding": formatExportAmount(r.totalOutstanding),
-        };
-        ageingBucketIndices.forEach((index) => {
-          row[bucketLabels[index] ?? ""] = formatExportAmount(r.buckets[index] ?? 0);
-        });
-        return row;
-      }),
-      {
-        reportName: "Customer Ageing",
-        asOnDate,
-        ageingBuckets: exportBucketLabels.join(" · "),
-      },
-      "customer_ageing",
-    );
-  };
-
-  const handlePdf = () => {
-    if (view === "summary") {
-      exportReceivablesToPdf(
-        [
-          "Customer",
-          "Code",
-          "Outstanding",
-          "Overdue",
-          "Not Due",
-          "Oldest Due",
-          "Last Receipt",
-          "Status",
-        ],
-        summaryRows.map((r) => [
-          r.customerName,
-          r.customerCode,
-          formatExportAmount(r.outstanding),
-          formatExportAmount(r.overdueAmount),
-          formatExportAmount(r.notDueAmount),
-          formatReportDate(r.oldestDueDate),
-          formatReportDate(r.lastReceiptDate),
-          formatExportStatus(r.status),
-        ]),
-        { reportName: "Customer Outstanding", asOnDate },
-      );
+    setExporting(true);
+    try {
+      await ReceivablesService.exportExcel(buildExportQuery());
+      showExportCompleted();
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Failed to export receivables.", "error");
+    } finally {
+      setExporting(false);
     }
   };
 
-  const getCollectionCell = useCallback((row: CollectionFollowUp, key: string) => {
+  const handlePdf = async () => {
+    setExporting(true);
+    try {
+      await ReceivablesService.exportPdf(buildExportQuery());
+      showExportCompleted();
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Failed to export receivables.", "error");
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const getCollectionCell = useCallback((row: ApiCollectionFollowUpRow, key: string) => {
     if (key === "status") return row.status;
     return (row as unknown as Record<string, unknown>)[key];
   }, []);
@@ -1200,7 +1327,7 @@ export default function CustomerOutstandingClient() {
           ? collectionRows
           : ageingRows;
 
-  const columnConfig: Record<string, { type: "text" | "amount" | "date" | "number" | "status" }> =
+  const columnConfig: AccountsColumnFilterConfig =
     view === "summary"
       ? {
           customerName: { type: "text" },
@@ -1209,7 +1336,7 @@ export default function CustomerOutstandingClient() {
           overdueAmount: { type: "amount" },
           oldestDueDate: { type: "date" },
           lastReceiptDate: { type: "date" },
-          status: { type: "status" },
+          status: RECEIVABLE_STATUS_COLUMN_FILTER,
         }
       : view === "invoice"
         ? {
@@ -1221,14 +1348,14 @@ export default function CustomerOutstandingClient() {
             receivedAmount: { type: "amount" },
             outstandingAmount: { type: "amount" },
             overdueDays: { type: "number" },
-            status: { type: "status" },
+            status: RECEIVABLE_STATUS_COLUMN_FILTER,
           }
         : view === "collection"
           ? {
               customerName: { type: "text" },
               invoiceNo: { type: "text" },
               outstandingAmount: { type: "amount" },
-              status: { type: "status" },
+              status: COLLECTION_FOLLOWUP_STATUS_COLUMN_FILTER,
               promiseToPayDate: { type: "date" },
               nextFollowUpDate: { type: "date" },
               remarks: { type: "text" },
@@ -1270,6 +1397,11 @@ export default function CustomerOutstandingClient() {
       defaultSortKey={defaultSortKey}
       defaultSortDir="desc"
     >
+      <ReceivablesListSortSync
+        sortKey={sortKey}
+        sortDir={sortDir}
+        onSortChange={handleSortChange}
+      />
       <AccountsPageShell
         breadcrumbs={accountsBreadcrumb("Receivables", "Customer Outstanding")}
         title="Customer Outstanding"
@@ -1291,14 +1423,24 @@ export default function CustomerOutstandingClient() {
               <Button
                 size="sm"
                 className="h-8 text-xs font-medium gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
+                disabled={customersWithoutActiveFollowUp.length === 0}
                 onClick={() => {
                   const selected =
                     customerId !== "all"
                       ? customers.find((c) => String(c.id) === customerId)
                       : undefined;
+                  if (selected && activeFollowUpsByCustomerId[selected.id]) {
+                    openFollowUpForCustomer(selected.id, selected.customerName);
+                    return;
+                  }
+                  const firstAvailable = selected
+                    ? activeFollowUpsByCustomerId[selected.id]
+                      ? undefined
+                      : selected
+                    : customersWithoutActiveFollowUp[0];
                   setFollowUpTarget({
-                    customerId: selected?.id ?? 0,
-                    customerName: selected?.customerName ?? "",
+                    customerId: firstAvailable?.id ?? "",
+                    customerName: firstAvailable?.customerName ?? "",
                     editing: null,
                   });
                 }}
@@ -1313,14 +1455,17 @@ export default function CustomerOutstandingClient() {
             end={
               <AccountsExportMenu
                 onExcel={() => void handleExport()}
-                onPdf={handlePdf}
-                disabled={providerRows.length === 0}
+                onPdf={() => void handlePdf()}
+                disabled={loading || exporting}
               />
             }
           >
             <ReportSearchFilter
               value={search}
-              onChange={setSearch}
+              onChange={(v) => {
+                setSearch(v);
+                setPage(1);
+              }}
               placeholder={
                 view === "invoice"
                   ? "Search invoice, customer…"
@@ -1331,20 +1476,29 @@ export default function CustomerOutstandingClient() {
             />
             <ReportCustomerFilter
               value={customerId}
-              onChange={setCustomerId}
+              onChange={(v) => {
+                setCustomerId(v);
+                setPage(1);
+              }}
               customers={customers}
             />
             {view !== "collection" && (
               <ReportSalespersonFilter
                 value={salesperson}
-                onChange={setSalesperson}
+                onChange={(v) => {
+                  setSalesperson(v);
+                  setPage(1);
+                }}
                 salespeople={salespersonOptions}
               />
             )}
             {view !== "ageing" && view !== "collection" && (
               <Select
                 value={dueStatus}
-                onValueChange={(v) => setDueStatus(v as DueStatusFilter)}
+                onValueChange={(v) => {
+                  setDueStatus(v as DueStatusFilter);
+                  setPage(1);
+                }}
               >
                 <SelectTrigger className="h-8 w-[130px] text-xs">
                   <SelectValue placeholder="Due status" />
@@ -1357,7 +1511,13 @@ export default function CustomerOutstandingClient() {
               </Select>
             )}
             {view !== "collection" && (
-              <ReportAsOnDateFilter value={asOnDate} onChange={setAsOnDate} />
+              <ReportAsOnDateFilter
+                value={asOnDate}
+                onChange={(v) => {
+                  setAsOnDate(v);
+                  setPage(1);
+                }}
+              />
             )}
             <ReportFilterResetButton
               showOnlyWhenActive
@@ -1370,6 +1530,11 @@ export default function CustomerOutstandingClient() {
         className="h-full min-h-0"
       >
         <AccountsListingTableCard className="flex flex-col flex-1 min-h-0">
+          {error ? (
+            <div className="px-4 py-3 text-xs text-red-600 bg-red-50 border-b border-red-100">
+              {error}
+            </div>
+          ) : null}
           <AccountsListingTabsRow className="flex items-center justify-between gap-2 px-3 py-1.5 border-b border-border/70">
             <SectionTabs
               tabs={VIEW_TABS}
@@ -1387,7 +1552,10 @@ export default function CustomerOutstandingClient() {
                   <AgeingBreakpointPanel
                     draft={breakpointDraft}
                     onDraftChange={setBreakpointDraft}
-                    onApply={setAppliedBreakpoints}
+                    onApply={(bp) => {
+                      setAppliedBreakpoints(bp);
+                      setPage(1);
+                    }}
                     error={breakpointError}
                     onErrorChange={setBreakpointError}
                   />
@@ -1397,49 +1565,64 @@ export default function CustomerOutstandingClient() {
           </AccountsListingTabsRow>
           {view === "summary" && (
             <SummaryTable
+              rows={summaryRows}
+              totalRecords={total}
+              loading={loading}
               page={page}
               pageSize={pageSize}
               onPageChange={setPage}
-              onPageSizeChange={setPageSize}
+              onPageSizeChange={(s) => {
+                setPageSize(s);
+                setPage(1);
+              }}
               onFollowUp={(r) =>
-                setFollowUpTarget({
-                  customerId: r.customerId,
-                  customerName: r.customerName,
-                  editing: null,
-                })
+                openFollowUpForCustomer(String(r.customerId), r.customerName)
               }
+              activeFollowUpCustomerIds={activeFollowUpCustomerIds}
             />
           )}
           {view === "invoice" && (
             <InvoiceTable
+              rows={invoiceRows}
+              totalRecords={total}
+              loading={loading}
               page={page}
               pageSize={pageSize}
               onPageChange={setPage}
-              onPageSizeChange={setPageSize}
+              onPageSizeChange={(s) => {
+                setPageSize(s);
+                setPage(1);
+              }}
             />
           )}
           {view === "ageing" && (
             <AgeingTable
               columns={ageingColumns}
+              rows={ageingRows}
+              totalRecords={total}
+              loading={loading}
               page={page}
               pageSize={pageSize}
               onPageChange={setPage}
-              onPageSizeChange={setPageSize}
+              onPageSizeChange={(s) => {
+                setPageSize(s);
+                setPage(1);
+              }}
             />
           )}
           {view === "collection" && (
             <CollectionTable
+              rows={collectionRows}
+              totalRecords={total}
+              loading={loading}
               page={page}
               pageSize={pageSize}
               onPageChange={setPage}
-              onPageSizeChange={setPageSize}
-              onEdit={(row) =>
-                setFollowUpTarget({
-                  customerId: row.customerId,
-                  customerName: row.customerName,
-                  editing: row,
-                })
-              }
+              onPageSizeChange={(s) => {
+                setPageSize(s);
+                setPage(1);
+              }}
+              onEdit={(row) => openFollowUpForCustomer(String(row.customerId), row.customerName)}
             />
           )}
         </AccountsListingTableCard>
@@ -1452,10 +1635,16 @@ export default function CustomerOutstandingClient() {
           customerName={followUpTarget.customerName}
           editing={followUpTarget.editing}
           customers={customers}
+          selectableCustomers={customersWithoutActiveFollowUp}
           onClose={() => setFollowUpTarget(null)}
           onSaved={() => {
             setRefreshKey((k) => k + 1);
-            showCreated("Follow-up");
+            void refreshActiveFollowUps();
+            if (followUpTarget.editing) {
+              showUpdated("Follow-up");
+            } else {
+              showCreated("Follow-up");
+            }
           }}
         />
       )}

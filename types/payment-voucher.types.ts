@@ -349,6 +349,10 @@ export interface PaymentVoucherListItem {
   transaction_mode: PaymentBankTransactionMode;
   gross_party_amount: string | number;
   net_bank_amount: string | number;
+  allocated_amount?: string | number;
+  transaction_reference?: string | null;
+  utr_number?: string | null;
+  cheque_number?: string | null;
   status: PaymentVoucherStatus;
   created_at?: string;
   created_by?: string | null;

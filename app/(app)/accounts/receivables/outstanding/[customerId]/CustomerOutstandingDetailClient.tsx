@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ArrowLeft, Receipt } from "lucide-react";
@@ -12,11 +12,20 @@ import {
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import {
-  getCustomerOutstandingDetail,
-  type CustomerInvoiceOutstandingRow,
-} from "@/lib/accounts/receivables-data";
+  mapCustomerDetailInvoiceRow,
+} from "@/lib/accounts/receivables-api-mappers";
+import type { ApiCustomerInvoiceOutstandingRow } from "@/types/receivables.types";
 import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
 import { formatMoney } from "@/lib/accounts/money-format";
+import { ReceivablesService } from "@/services/receivables.service";
+import type { CustomerOutstandingDetailApi, CustomerReceiptHistoryRow } from "@/types/receivables.types";
+import { defaultAsOnDate } from "@/lib/accounts/report-date-presets";
+import {
+  fetchCustomerReceiptHistory,
+  paymentVoucherStatusToBadgeKey,
+} from "@/lib/accounts/outstanding-voucher-history";
+import { receiptViewPath } from "@/app/(app)/accounts/vouchers/receipt/receipt-voucher-utils";
+import { StatusBadge } from "@/components/ui/StatusBadge";
 import {
   AccountsColumnFilterProvider,
   AccountsColumnHeader,
@@ -29,6 +38,7 @@ import {
   AccountsTableBody,
   AccountsTableCell,
   AccountsTableHead,
+  AccountsTableHeadCell,
   AccountsTableHeadRow,
   AccountsTableRow,
   AccountsTableScroll,
@@ -47,8 +57,8 @@ function OpenInvoicesTable({
   rows,
   onOpenInvoice,
 }: {
-  rows: CustomerInvoiceOutstandingRow[];
-  onOpenInvoice: (invoiceId: number) => void;
+  rows: ApiCustomerInvoiceOutstandingRow[];
+  onOpenInvoice: (openItemId: string) => void;
 }) {
   const visible = useAccountsFilteredRows(rows);
 
@@ -84,29 +94,33 @@ function OpenInvoicesTable({
           ) : (
             visible.map((inv) => (
               <AccountsTableRow
-                key={inv.invoiceId}
+                key={inv.openItemId}
                 className="group cursor-pointer"
-                onClick={() => onOpenInvoice(inv.invoiceId)}
+                onClick={() => onOpenInvoice(inv.openItemId)}
               >
                 <AccountsTableCell>
                   <span className="text-xs font-mono font-semibold text-brand-700">{inv.invoiceNo}</span>
                 </AccountsTableCell>
                 <AccountsTableCell>{formatReportDate(inv.invoiceDate)}</AccountsTableCell>
-                <AccountsTableCell align="right">
-                  <span className="tabular-nums">{formatMoney(inv.invoiceAmount)}</span>
+                <AccountsTableCell align="right" money>
+                  {formatMoney(inv.invoiceAmount)}
                 </AccountsTableCell>
-                <AccountsTableCell align="right">
-                  <span className="tabular-nums">{formatMoney(inv.paidAmount)}</span>
+                <AccountsTableCell align="right" money>
+                  {formatMoney(inv.paidAmount)}
                 </AccountsTableCell>
-                <AccountsTableCell align="right">
-                  <span className="tabular-nums font-semibold">{formatMoney(inv.outstanding)}</span>
+                <AccountsTableCell align="right" money className="font-semibold">
+                  {formatMoney(inv.outstanding)}
                 </AccountsTableCell>
                 <AccountsTableCell>{formatReportDate(inv.dueDate)}</AccountsTableCell>
                 <AccountsTableCell align="right" className={accountsActionColClass("single")}>
                   <AccountsTableActionCell variant="single">
                     <AccountsViewAction
                       title="View invoice"
-                      href={`/accounts/transactions/invoices/${inv.invoiceId}`}
+                      href={
+                        inv.invoiceId
+                          ? `/accounts/transactions/invoices/${inv.invoiceId}`
+                          : undefined
+                      }
                       onClick={(e) => e.stopPropagation()}
                     />
                   </AccountsTableActionCell>
@@ -122,21 +136,103 @@ function OpenInvoicesTable({
 
 export default function CustomerOutstandingDetailClient() {
   const params = useParams();
-  const customerId = Number(params.customerId);
+  const customerId = String(params.customerId ?? "");
+  const [asOnDate] = useState(defaultAsOnDate());
 
   const sectionRefresh = useAccountsSectionRefresh();
+  const [detail, setDetail] = useState<CustomerOutstandingDetailApi | null>(null);
+  const [receiptHistory, setReceiptHistory] = useState<CustomerReceiptHistoryRow[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const detail = useMemo(
-    () => (Number.isFinite(customerId) ? getCustomerOutstandingDetail(customerId) : null),
-    [customerId, sectionRefresh],
+  useEffect(() => {
+    if (!customerId) {
+      setDetail(null);
+      setReceiptHistory([]);
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const data = await ReceivablesService.getCustomerOutstanding(customerId);
+        if (!cancelled) setDetail(data);
+      } catch (e) {
+        if (!cancelled) {
+          setDetail(null);
+          setError(e instanceof Error ? e.message : "Failed to load customer outstanding.");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [customerId, sectionRefresh]);
+
+  useEffect(() => {
+    if (!customerId) return;
+    let cancelled = false;
+    (async () => {
+      setHistoryLoading(true);
+      setHistoryError(null);
+      try {
+        const history = await fetchCustomerReceiptHistory(customerId, asOnDate);
+        if (!cancelled) setReceiptHistory(history);
+      } catch (e) {
+        if (!cancelled) {
+          setReceiptHistory([]);
+          setHistoryError(
+            e instanceof Error ? e.message : "Failed to load receipt history.",
+          );
+        }
+      } finally {
+        if (!cancelled) setHistoryLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [customerId, asOnDate, sectionRefresh]);
+
+  const invoices = useMemo(
+    () => (detail?.openInvoices ?? []).map(mapCustomerDetailInvoiceRow),
+    [detail],
   );
+
+  const openInvoices = useMemo(
+    () => invoices.filter((i) => i.outstanding > 0.009),
+    [invoices],
+  );
+
+  const openInvoice = useCallback((openItemId: string) => {
+    window.location.href = `/accounts/receivables/outstanding/invoice/${openItemId}`;
+  }, []);
+
+  if (loading) {
+    return (
+      <AccountsPageShell
+        breadcrumbs={accountsBreadcrumb("Receivables", "Customer Outstanding", "/accounts/receivables/outstanding")}
+        title="Customer Outstanding Details"
+        description="Loading…"
+        layout="standard"
+      >
+        <div className="p-8 text-center text-sm text-muted-foreground">Loading customer outstanding…</div>
+      </AccountsPageShell>
+    );
+  }
 
   if (!detail) {
     return (
       <AccountsPageShell
         breadcrumbs={accountsBreadcrumb("Receivables", "Customer Outstanding", "/accounts/receivables/outstanding")}
         title="Customer Not Found"
-        description="No customer outstanding record for this ID."
+        description={error || "No customer outstanding record for this ID."}
         layout="standard"
       >
         <div className="p-8 text-center">
@@ -151,16 +247,10 @@ export default function CustomerOutstandingDetailClient() {
     );
   }
 
-  const { customer, invoices } = detail;
-  const openInvoices = invoices.filter((i) => i.outstanding > 0.009);
+  const { customer } = detail;
   const crossNav = buildReceivablesDetailCrossNavLinks({
-    customerId: customer.id,
-    ledgerId: detail.ledgerId,
+    customerId: customer.customerId,
   });
-
-  const openInvoice = useCallback((invoiceId: number) => {
-    window.location.href = `/accounts/receivables/outstanding/invoice/${invoiceId}`;
-  }, []);
 
   return (
     <AccountsPageShell
@@ -169,15 +259,15 @@ export default function CustomerOutstandingDetailClient() {
         { label: customer.customerName },
       ]}
       title="Customer Outstanding Details"
-      description={`${customer.customerCode} · ${customer.territoryName || customer.districtName || "—"}`}
+      description={`${customer.customerCode} · ${customer.territory || "—"}`}
       actions={
         <div className="flex flex-wrap items-center gap-2">
-          <Link href="/accounts/receivables/ageing">
+          <Link href="/accounts/receivables/outstanding">
             <Button variant="outline" size="sm" className="h-9 text-sm font-medium gap-1">
               <ArrowLeft className="w-4 h-4" /> Back
             </Button>
           </Link>
-          <Link href={`/accounts/receivables/receipt-allocation?customer=${customer.id}`}>
+          <Link href={`/accounts/receivables/receipt-allocation?customer=${customer.customerId}`}>
             <Button size="sm" className="h-9 text-sm font-medium gap-1 bg-brand-600 hover:bg-brand-700 text-white">
               <Receipt className="w-4 h-4" /> Go to Receipt Allocation
             </Button>
@@ -197,9 +287,9 @@ export default function CustomerOutstandingDetailClient() {
               ["Customer", customer.customerName],
               ["Code", customer.customerCode],
               ["GSTIN", customer.gstin || "—"],
-              ["Mobile", customer.mobile],
-              ["Credit Limit", formatMoney(customer.creditLimit)],
-              ["Territory", customer.territoryName || "—"],
+              ["Mobile", customer.mobile || "—"],
+              ["Credit Limit", formatMoney(customer.creditLimit ?? 0)],
+              ["Territory", customer.territory || "—"],
             ].map(([label, value]) => (
               <div key={label}>
                 <p className="text-xs uppercase text-muted-foreground font-semibold">{label}</p>
@@ -229,28 +319,101 @@ export default function CustomerOutstandingDetailClient() {
         </div>
       </div>
 
-      <div className="flex flex-col flex-1 min-h-0">
-        <div className="flex-shrink-0 px-4 py-2 border-b border-border/60 bg-white">
-          <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
-            Open Invoices
-          </p>
+      <div className="flex flex-col flex-1 min-h-0 overflow-auto">
+        <div className="flex flex-col flex-1 min-h-0">
+          <div className="flex-shrink-0 px-4 py-2 border-b border-border/60 bg-white">
+            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+              Open Invoices
+            </p>
+          </div>
+          <AccountsColumnFilterProvider
+            rows={openInvoices}
+            getCellValue={(row, key) => (row as unknown as Record<string, unknown>)[key]}
+            columnConfig={{
+              invoiceNo: { type: "text" },
+              invoiceDate: { type: "date" },
+              invoiceAmount: { type: "amount" },
+              paidAmount: { type: "amount" },
+              outstanding: { type: "amount" },
+              dueDate: { type: "date" },
+            }}
+            defaultSortKey="dueDate"
+            defaultSortDir="asc"
+          >
+            <OpenInvoicesTable rows={openInvoices} onOpenInvoice={openInvoice} />
+          </AccountsColumnFilterProvider>
         </div>
-        <AccountsColumnFilterProvider
-          rows={openInvoices}
-          getCellValue={(row, key) => (row as unknown as Record<string, unknown>)[key]}
-          columnConfig={{
-            invoiceNo: { type: "text" },
-            invoiceDate: { type: "date" },
-            invoiceAmount: { type: "amount" },
-            paidAmount: { type: "amount" },
-            outstanding: { type: "amount" },
-            dueDate: { type: "date" },
-          }}
-          defaultSortKey="dueDate"
-          defaultSortDir="asc"
-        >
-          <OpenInvoicesTable rows={openInvoices} onOpenInvoice={openInvoice} />
-        </AccountsColumnFilterProvider>
+
+        <section className="flex-shrink-0 border-t border-border bg-white shadow-sm overflow-hidden">
+          <div className="px-4 py-2.5 border-b border-border bg-muted/20">
+            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+              Receipt History
+            </p>
+            {historyError ? (
+              <p className="text-xs text-red-600 mt-1">{historyError}</p>
+            ) : null}
+          </div>
+          <AccountsTableScroll>
+            <AccountsTable minWidth={800}>
+              <AccountsTableHead>
+                <AccountsTableHeadRow>
+                  <AccountsTableHeadCell>Receipt No.</AccountsTableHeadCell>
+                  <AccountsTableHeadCell>Date</AccountsTableHeadCell>
+                  <AccountsTableHeadCell align="right">Amount</AccountsTableHeadCell>
+                  <AccountsTableHeadCell align="right">Allocated</AccountsTableHeadCell>
+                  <AccountsTableHeadCell>Bank Account</AccountsTableHeadCell>
+                  <AccountsTableHeadCell>Reference</AccountsTableHeadCell>
+                  <AccountsTableHeadCell>Status</AccountsTableHeadCell>
+                </AccountsTableHeadRow>
+              </AccountsTableHead>
+              <AccountsTableBody>
+                {historyLoading && receiptHistory.length === 0 ? (
+                  <AccountsTableRow>
+                    <AccountsTableCell colSpan={7} className="accounts-table-empty">
+                      Loading receipt history…
+                    </AccountsTableCell>
+                  </AccountsTableRow>
+                ) : receiptHistory.length === 0 ? (
+                  <AccountsTableRow>
+                    <AccountsTableCell colSpan={7} className="accounts-table-empty">
+                      No receipt vouchers recorded for this customer.
+                    </AccountsTableCell>
+                  </AccountsTableRow>
+                ) : (
+                  receiptHistory.map((receipt) => (
+                    <AccountsTableRow key={receipt.receiptVoucherId} className="group">
+                      <AccountsTableCell mono>
+                        <Link
+                          href={receiptViewPath(receipt.receiptVoucherId)}
+                          className="font-semibold text-brand-700 hover:underline"
+                        >
+                          {receipt.receiptNo}
+                        </Link>
+                      </AccountsTableCell>
+                      <AccountsTableCell>{formatReportDate(receipt.receiptDate)}</AccountsTableCell>
+                      <AccountsTableCell align="right" money>
+                        {formatMoney(receipt.amount)}
+                      </AccountsTableCell>
+                      <AccountsTableCell align="right" money>
+                        {formatMoney(receipt.allocatedAmount)}
+                      </AccountsTableCell>
+                      <AccountsTableCell>{receipt.bankAccount}</AccountsTableCell>
+                      <AccountsTableCell mono>{receipt.referenceNo}</AccountsTableCell>
+                      <AccountsTableCell>
+                        <StatusBadge
+                          status={paymentVoucherStatusToBadgeKey(receipt.status)}
+                          label={receipt.statusLabel}
+                          size="sm"
+                          showDot
+                        />
+                      </AccountsTableCell>
+                    </AccountsTableRow>
+                  ))
+                )}
+              </AccountsTableBody>
+            </AccountsTable>
+          </AccountsTableScroll>
+        </section>
       </div>
     </AccountsPageShell>
   );

@@ -352,106 +352,215 @@ export default function CustomerDetailPage() {
       case "overview":
         return (
           <div className="space-y-4">
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-              <RecordSectionCard title="Basic Details" icon={FileText} accent="blue">
-                <RecordKvRow label="Customer Name" value={customer.customerName} highlight />
-                <RecordKvRow
-                  label="Customer Code"
-                  value={customer.customerCode}
-                  mono
-                  copy
-                />
-                <RecordKvRow
-                  label="Mobile"
-                  value={formatMobile(customer.countryCode, customer.mobileNo)}
-                  mono
-                  link
-                  href={`tel:${customer.mobileNo}`}
-                />
-                <RecordKvRow
-                  label="Email"
-                  value={customer.email || "—"}
-                  link={!!customer.email}
-                  href={customer.email ? `mailto:${customer.email}` : undefined}
-                />
-                <RecordKvRow label="Customer Type" value={typeLabel} />
-                <RecordKvRow
-                  label="Status"
-                  value={
-                    <RecordStatusPill
-                      label={STATUS_LABEL[customer.status]}
-                      variant={STATUS_VARIANT[customer.status]}
-                    />
-                  }
-                  isLast
-                />
-              </RecordSectionCard>
-
-              <RecordSectionCard title="Territory & Location" icon={MapPin} accent="purple">
-                <RecordKvRow label="Territory" value={customer.territoryName} highlight />
-                <RecordKvRow label="State" value={customer.stateName} />
-                <RecordKvRow label="District" value={customer.districtName} />
-                <RecordKvRow label="Pin Code" value={(customer as any).pincode ?? "—"} mono />
-                <RecordKvRow label="Address" value={(customer as any).address ?? "—"} isLast />
-              </RecordSectionCard>
-
-              <div className="lg:col-span-2">
-                <RecordSectionCard title="Recent Orders" icon={ShoppingCart} accent="green">
-                  <RecordMiniTable
-                    columns={orderColumns}
-                    rows={[...orders]
-                      .sort((a, b) => b.orderDate.localeCompare(a.orderDate))
-                      .slice(0, 5)}
-                    onRowClick={(r) => router.push(`/sales/orders/${r.id}`)}
-                    viewAllHref={`/sales/orders?customer=${customer.id}`}
-                    viewAllLabel={`View all ${orders.length} orders`}
+            <RecordSectionCard title="Basic Details" icon={FileText} accent="blue">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8">
+                <div>
+                  <RecordKvRow label="Customer Name" value={customer.customerName} highlight />
+                  <RecordKvRow
+                    label="Customer Code"
+                    value={customer.customerCode}
+                    mono
+                    copy
                   />
-                </RecordSectionCard>
+                  <RecordKvRow
+                    label="Mobile"
+                    value={formatMobile(customer.countryCode, customer.mobileNo)}
+                    mono
+                    link
+                    href={`tel:${customer.mobileNo}`}
+                  />
+                </div>
+                <div>
+                  <RecordKvRow
+                    label="Email"
+                    value={customer.email || "—"}
+                    link={!!customer.email}
+                    href={customer.email ? `mailto:${customer.email}` : undefined}
+                  />
+                  <RecordKvRow label="Customer Type" value={typeLabel} />
+                  <RecordKvRow
+                    label="Status"
+                    value={
+                      <RecordStatusPill
+                        label={STATUS_LABEL[customer.status]}
+                        variant={STATUS_VARIANT[customer.status]}
+                      />
+                    }
+                    isLast
+                  />
+                </div>
               </div>
-            </div>
+            </RecordSectionCard>
+
+            <RecordSectionCard title="Summary" icon={CreditCard} accent="orange">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8">
+                <div>
+                  <RecordKvRow label="Credit Limit" value={formatCreditLimit(creditLimitVal)} highlight />
+                  <RecordKvRow label="Payment Terms" value={payLabel} />
+                  <RecordKvRow label="Sales Man" value={mainBranchSalesManName} />
+                </div>
+                <div>
+                  <RecordKvRow label="Created" value={customer.createdAt} mono />
+                  <RecordKvRow label="Updated" value={customer.updatedAt} mono isLast />
+                </div>
+              </div>
+            </RecordSectionCard>
+
+            {/* <RecordSectionCard title="Territory & Location" icon={MapPin} accent="purple">
+              <RecordKvRow label="State" value={customer.stateName} />
+              <RecordKvRow label="District" value={customer.districtName} />
+              <RecordKvRow label="Pin Code" value={(customer as any).pincode ?? "—"} mono />
+              <RecordKvRow label="Address" value={(customer as any).address ?? "—"} isLast />
+            </RecordSectionCard> */}
+
+            {/* <div className="lg:col-span-2">
+              <RecordSectionCard title="Recent Orders" icon={ShoppingCart} accent="green">
+                <RecordMiniTable
+                  columns={orderColumns}
+                  rows={[...orders]
+                    .sort((a, b) => b.orderDate.localeCompare(a.orderDate))
+                    .slice(0, 5)}
+                  onRowClick={(r) => router.push(`/sales/orders/${r.id}`)}
+                  viewAllHref={`/sales/orders?customer=${customer.id}`}
+                  viewAllLabel={`View all ${orders.length} orders`}
+                />
+              </RecordSectionCard>
+            </div> */}
           </div>
         );
 
       case "branch":
         return (
-          <div className="grid grid-cols-1 gap-4">
-            <RecordSectionCard title="Branches" icon={Landmark} accent="purple">
-              {Array.isArray(customer.branches) && customer.branches.length > 0 ? (
-                (customer.branches as Array<Record<string, unknown>>).map((branch, idx) => {
-                  const name = String(branch.branch_name ?? branch.branchName ?? `Branch #${idx + 1}`);
-                  const isMain = Boolean(branch.is_main_branch ?? branch.isMain);
-                  const salesManObj = branch.sales_man as Record<string, unknown> | null | undefined;
-                  const salesman =
-                    (typeof salesManObj?.username === "string" && salesManObj.username) ||
-                    [salesManObj?.first_name, salesManObj?.last_name].filter(Boolean).join(" ") ||
-                    "—";
-                  const billing = [
-                    branch.billing_address_line_1 ?? branch.billingAddress,
-                    branch.billing_city,
-                    branch.billing_state,
-                    branch.billing_pincode,
-                  ]
-                    .map((v) => (typeof v === "string" ? v.trim() : ""))
-                    .filter(Boolean)
-                    .join(", ");
-                  return (
-                    <div key={String(branch.branch_id ?? idx)} className="space-y-0">
-                      <RecordKvRow
-                        label={isMain ? `${name} (Main)` : name}
-                        value={billing || "—"}
-                      />
-                      <RecordKvRow
-                        label="Salesman"
-                        value={salesman}
-                        isLast={idx === (customer.branches?.length ?? 0) - 1}
-                      />
+          <div className="space-y-4">
+            {Array.isArray(customer.branches) && customer.branches.length > 0 ? (
+              (customer.branches as Array<Record<string, unknown>>).map((branch, idx) => {
+                const name = String(branch.branch_name ?? branch.branchName ?? `Branch #${idx + 1}`);
+                const isMain = Boolean(branch.is_main_branch ?? branch.isMain ?? (idx === 0));
+                const salesManObj = branch.sales_man as Record<string, unknown> | null | undefined;
+                const salesman =
+                  (typeof salesManObj?.username === "string" && salesManObj.username) ||
+                  [salesManObj?.first_name, salesManObj?.last_name].filter(Boolean).join(" ") ||
+                  String(branch.salesManName ?? "") ||
+                  "—";
+
+                const billingAddressObj = branch.billingAddress as Record<string, unknown> | undefined;
+                const billingLine1 = String(branch.billing_address_line_1 ?? billingAddressObj?.address ?? "—");
+                const billingLine2 = String(branch.billing_address_line_2 ?? billingAddressObj?.addressLine2 ?? "");
+                const billingCity = String(branch.billing_city ?? billingAddressObj?.city ?? "—");
+                const billingTown = String(branch.billing_town ?? billingAddressObj?.town ?? "");
+                const billingState = String(branch.billing_state ?? billingAddressObj?.state ?? "—");
+                const billingPincode = String(branch.billing_pincode ?? billingAddressObj?.pincode ?? "—");
+                const billingCountry = String(branch.billing_country ?? billingAddressObj?.country ?? "India");
+
+                const shippingAddressObj = branch.shippingAddress as Record<string, unknown> | undefined;
+                const shippingLine1 = String(branch.shipping_address_line_1 ?? shippingAddressObj?.address ?? "—");
+                const shippingLine2 = String(branch.shipping_address_line_2 ?? shippingAddressObj?.addressLine2 ?? "");
+                const shippingCity = String(branch.shipping_city ?? shippingAddressObj?.city ?? "—");
+                const shippingTown = String(branch.shipping_town ?? shippingAddressObj?.town ?? "");
+                const shippingState = String(branch.shipping_state ?? shippingAddressObj?.state ?? "—");
+                const shippingPincode = String(branch.shipping_pincode ?? shippingAddressObj?.pincode ?? "—");
+                const shippingCountry = String(branch.shipping_country ?? shippingAddressObj?.country ?? "India");
+
+                const branchDocs = Array.isArray(branch.documents) ? (branch.documents as Array<Record<string, unknown>>) : [];
+
+                return (
+                  <RecordSectionCard
+                    key={String(branch.branch_id ?? idx)}
+                    title={isMain ? `${name} (Main Branch)` : name}
+                    icon={Landmark}
+                    accent={isMain ? "blue" : "purple"}
+                  >
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8">
+                        <div>
+                          <RecordKvRow label="Branch Name" value={name} highlight />
+                        </div>
+                        <div>
+                          <RecordKvRow label="Assigned Sales Person" value={salesman} isLast />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-border/40">
+                        <div className="rounded-lg border border-border/60 bg-muted/10 p-3 space-y-1">
+                          <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-2">
+                            Billing Address
+                          </p>
+                          <RecordKvRow label="Address Line 1" value={billingLine1} />
+                          {billingLine2 && <RecordKvRow label="Address Line 2" value={billingLine2} />}
+                          <RecordKvRow label="City / Town" value={[billingTown, billingCity].filter(Boolean).join(", ") || "—"} />
+                          <RecordKvRow label="State" value={billingState} />
+                          <RecordKvRow label="Pin Code" value={billingPincode} mono />
+                          <RecordKvRow label="Country" value={billingCountry} isLast />
+                        </div>
+
+                        <div className="rounded-lg border border-border/60 bg-muted/10 p-3 space-y-1">
+                          <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-2">
+                            Shipping Address
+                          </p>
+                          <RecordKvRow label="Address Line 1" value={shippingLine1} />
+                          {shippingLine2 && <RecordKvRow label="Address Line 2" value={shippingLine2} />}
+                          <RecordKvRow label="City / Town" value={[shippingTown, shippingCity].filter(Boolean).join(", ") || "—"} />
+                          <RecordKvRow label="State" value={shippingState} />
+                          <RecordKvRow label="Pin Code" value={shippingPincode} mono />
+                          <RecordKvRow label="Country" value={shippingCountry} isLast />
+                        </div>
+                      </div>
+
+                      {branchDocs.length > 0 && (
+                        <div className="pt-2 border-t border-border/40">
+                          <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-2">
+                            Branch Documents
+                          </p>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                            {branchDocs.map((doc, dIdx) => {
+                              const docTypeObj = doc.document_type as Record<string, unknown> | undefined;
+                              const docTitle = String(docTypeObj?.title ?? doc.documentName ?? `Document #${dIdx + 1}`);
+                              const fileUrl = typeof doc.file_url === "string" ? doc.file_url : typeof doc.fileUrl === "string" ? doc.fileUrl : "";
+                              return (
+                                <div
+                                  key={dIdx}
+                                  className="flex items-center justify-between gap-2 p-2.5 rounded-lg border border-border/60 bg-white"
+                                >
+                                  <div className="min-w-0">
+                                    <p className="text-xs font-medium text-foreground truncate">{docTitle}</p>
+                                    <p className="text-[10px] text-muted-foreground">
+                                      {fileUrl ? "Uploaded" : "Not uploaded"}
+                                    </p>
+                                  </div>
+                                  {fileUrl ? (
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-6 text-[10px] px-2"
+                                      onClick={() => {
+                                        setPreviewDoc({
+                                          title: docTitle,
+                                          fileName: fileUrl.split("/").pop() || "Document",
+                                          fileUrl,
+                                        });
+                                      }}
+                                    >
+                                      View
+                                    </Button>
+                                  ) : (
+                                    <span className="text-[10px] text-muted-foreground italic">Pending</span>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  );
-                })
-              ) : (
+                  </RecordSectionCard>
+                );
+              })
+            ) : (
+              <RecordSectionCard title="Branches" icon={Landmark} accent="purple">
                 <RecordKvRow label="Branches" value="No branches configured" isLast />
-              )}
-            </RecordSectionCard>
+              </RecordSectionCard>
+            )}
           </div>
         );
 
@@ -733,11 +842,12 @@ export default function CustomerDetailPage() {
             ? [{ label: customer.email, icon: Mail, href: `mailto:${customer.email}` }]
             : []),
           {
-            label: [customer.territoryName, customer.stateName].filter(Boolean).join(" · ") || "—",
+            // label: [customer.territoryName, customer.stateName].filter(Boolean).join(" · ") || "—",
+            label: customer.stateName || "—",
             icon: MapPin,
           },
         ]}
-        kpis={kpis}
+        /* kpis={kpis} */
         tabs={tabs}
         activeTab={activeTab}
         onTabChange={setActiveTab}
@@ -748,78 +858,42 @@ export default function CustomerDetailPage() {
             : undefined
         }
         toggleDisabled={!canToggle}
-        onEdit={perms.canEdit ? () => router.push(`/masters/customers/${customer.customerUuid}/edit`) : undefined}
-        secondaryAction={{
-          label: "New Order",
-          onClick: () => router.push(`/sales/orders/new?customerId=${customer.id}`),
-        }}
         moreActions={
           perms.canEdit
             ? [
-              ...(customer.status !== "blocked"
-                ? [
-                  {
-                    label: "Block Customer",
-                    onClick: () => {
-                      setBlockReason("");
-                      setBlockError("");
-                      setBlockOpen(true);
-                    },
-                    destructive: true,
-                  },
-                ]
-                : [
-                  {
-                    label: "Unblock Customer",
-                    onClick: () => updateStatus("active", true),
-                  },
-                ]),
-              ...(customer.status === "draft"
-                ? [
-                  {
-                    label: "Mark Active",
-                    onClick: () => updateStatus("active", true),
-                  },
-                ]
-                : []),
-            ]
-            : undefined
-        }
-        sidebar={{
-          quickActions: [
-            {
-              label: "New Order",
-              icon: ShoppingCart,
-              onClick: () => router.push(`/sales/orders/new?customerId=${customer.customerUuid}`),
-              variant: "primary",
-            },
-            ...(perms.canEdit
-              ? [
                 {
                   label: "Edit Customer",
-                  icon: Pencil,
                   onClick: () => router.push(`/masters/customers/${customer.customerUuid}/edit`),
-                  variant: "outline" as const,
                 },
+                ...(customer.status !== "blocked"
+                  ? [
+                      {
+                        label: "Block Customer",
+                        onClick: () => {
+                          setBlockReason("");
+                          setBlockError("");
+                          setBlockOpen(true);
+                        },
+                        destructive: true,
+                      },
+                    ]
+                  : [
+                      {
+                        label: "Unblock Customer",
+                        onClick: () => updateStatus("active", true),
+                      },
+                    ]),
+                ...(customer.status === "draft"
+                  ? [
+                      {
+                        label: "Mark Active",
+                        onClick: () => updateStatus("active", true),
+                      },
+                    ]
+                  : []),
               ]
-              : []),
-            {
-              label: "View Orders",
-              icon: Eye,
-              onClick: () => router.push(`/sales/orders?customer=${customer.customerUuid}`),
-              variant: "outline" as const,
-            },
-          ],
-          summary: [
-            { label: "Credit Limit", value: formatCreditLimit(creditLimitVal), highlight: true },
-            { label: "Payment Terms", value: payLabel },
-            { label: "Sales Man", value: mainBranchSalesManName },
-            { label: "Territory", value: customer.territoryName || "—" },
-            { label: "Created", value: customer.createdAt },
-            { label: "Updated", value: customer.updatedAt },
-          ],
-          activity: [],
-        }}
+            : undefined
+        }
       >
         {renderTabContent()}
       </RecordDetailPage>

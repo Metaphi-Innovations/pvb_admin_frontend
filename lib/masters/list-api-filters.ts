@@ -303,6 +303,7 @@ export const MASTER_FILTER_FIELD_MAPS = {
     ...AUDIT_FILTER_FIELDS,
   },
   segment: {
+    segmentCode: "segment_code",
     segmentName: "segment_name",
     description: "description",
     status: statusColumnMapper,

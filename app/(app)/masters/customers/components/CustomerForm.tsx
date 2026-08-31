@@ -107,6 +107,11 @@ import {
 	validateEmail,
 	validatePincode,
 	validateIFSC,
+	validateAccountHolderName,
+	validateBankName,
+	validateBranchName,
+	validateAccountNumber,
+	validateSWIFT,
 } from "../customer-data";
 import { loadGeoNodes, getStateSelectOptions } from "../../geography/geo-data";
 import { loadCustomerTypes } from "../../customer-types/customer-type-data";
@@ -1888,7 +1893,7 @@ export function CustomerForm({
 								{/* Account Holder Name */}
 								<div className='space-y-1'>
 									<Label className='text-xs font-medium text-foreground'>
-										Account Holder Name
+										Account Holder Name <span className='text-red-500'>*</span>
 									</Label>
 									<Input
 										disabled={readOnly}
@@ -1902,7 +1907,7 @@ export function CustomerForm({
 								{/* Bank Name */}
 								<div className='space-y-1'>
 									<Label className='text-xs font-medium text-foreground'>
-										Bank Name
+										Bank Name <span className='text-red-500'>*</span>
 									</Label>
 									<Input
 										disabled={readOnly}
@@ -1916,7 +1921,7 @@ export function CustomerForm({
 								{/* Branch Name */}
 								<div className='space-y-1'>
 									<Label className='text-xs font-medium text-foreground'>
-										Branch Name
+										Branch Name <span className='text-red-500'>*</span>
 									</Label>
 									<Input
 										disabled={readOnly}
@@ -1930,7 +1935,7 @@ export function CustomerForm({
 								{/* Account Number */}
 								<div className='space-y-1'>
 									<Label className='text-xs font-medium text-foreground'>
-										Account Number
+										Account Number <span className='text-red-500'>*</span>
 									</Label>
 									<Input
 										disabled={readOnly}
@@ -1944,7 +1949,7 @@ export function CustomerForm({
 								{/* Confirm Account Number */}
 								<div className='space-y-1'>
 									<Label className='text-xs font-medium text-foreground'>
-										Confirm Account Number
+										Confirm Account Number <span className='text-red-500'>*</span>
 									</Label>
 									<Input
 										disabled={readOnly}
@@ -1961,7 +1966,7 @@ export function CustomerForm({
 								{/* IFSC Code */}
 								<div className='space-y-1'>
 									<Label className='text-xs font-medium text-foreground'>
-										IFSC Code
+										IFSC Code <span className='text-red-500'>*</span>
 									</Label>
 									<Input
 										disabled={readOnly}
@@ -1985,8 +1990,8 @@ export function CustomerForm({
 									<Input
 										disabled={readOnly}
 										value={form.swiftCode}
-										onChange={(e) => set("swiftCode", e.target.value)}
-										className={vendorFieldClass("swiftCode")}
+										onChange={(e) => set("swiftCode", e.target.value.toUpperCase())}
+										className={cn(vendorFieldClass("swiftCode"), "font-mono uppercase")}
 										placeholder='Optional'
 									/>
 									<FieldError msg={errors.swiftCode} />
@@ -3052,11 +3057,79 @@ export function validateCustomerForm(
 			advancePercentage: form.advancePercentage,
 		}),
 	);
-	if (form.accountNumber && form.accountNumber !== form.confirmAccountNumber) {
-		e.confirmAccountNumber = "Account number mismatch";
+	// Bank details validation
+	if (!form.accountHolderName.trim()) {
+		e.accountHolderName = "Account holder name is required";
+	} else if (!validateAccountHolderName(form.accountHolderName)) {
+		if (form.accountHolderName.startsWith(" ") || form.accountHolderName.endsWith(" ")) {
+			e.accountHolderName = "Leading or trailing spaces are not allowed";
+		} else if (form.accountHolderName.length < 2 || form.accountHolderName.length > 100) {
+			e.accountHolderName = "Account holder name must be between 2 and 100 characters";
+		} else {
+			e.accountHolderName = "Enter a valid account holder name";
+		}
 	}
-	if (form.ifscCode.trim() && !validateIFSC(form.ifscCode))
-		e.ifscCode = "Invalid IFSC format";
+
+	if (!form.bankName.trim()) {
+		e.bankName = "Bank name is required";
+	} else if (!validateBankName(form.bankName)) {
+		if (form.bankName.startsWith(" ") || form.bankName.endsWith(" ")) {
+			e.bankName = "Leading or trailing spaces are not allowed";
+		} else if (form.bankName.length < 2 || form.bankName.length > 100) {
+			e.bankName = "Bank name must be between 2 and 100 characters";
+		} else {
+			e.bankName = "Enter a valid bank name";
+		}
+	}
+
+	if (!form.branch.trim()) {
+		e.branch = "Branch name is required";
+	} else if (!validateBranchName(form.branch)) {
+		if (form.branch.startsWith(" ") || form.branch.endsWith(" ")) {
+			e.branch = "Leading or trailing spaces are not allowed";
+		} else if (form.branch.length < 2 || form.branch.length > 100) {
+			e.branch = "Branch name must be between 2 and 100 characters";
+		} else {
+			e.branch = "Enter a valid branch name";
+		}
+	}
+
+	if (!form.accountNumber.trim()) {
+		e.accountNumber = "Account number is required";
+	} else if (!validateAccountNumber(form.accountNumber)) {
+		if (/\D/.test(form.accountNumber)) {
+			e.accountNumber = "Account number must contain digits only";
+		} else if (form.accountNumber.length < 9 || form.accountNumber.length > 18) {
+			e.accountNumber = "Account number must be between 9 and 18 digits";
+		} else {
+			e.accountNumber = "Enter a valid account number";
+		}
+	}
+
+	if (!form.confirmAccountNumber.trim()) {
+		e.confirmAccountNumber = "Confirm account number is required";
+	} else if (!validateAccountNumber(form.confirmAccountNumber)) {
+		if (/\D/.test(form.confirmAccountNumber)) {
+			e.confirmAccountNumber = "Account number must contain digits only";
+		} else if (form.confirmAccountNumber.length < 9 || form.confirmAccountNumber.length > 18) {
+			e.confirmAccountNumber = "Account number must be between 9 and 18 digits";
+		} else {
+			e.confirmAccountNumber = "Enter a valid account number";
+		}
+	} else if (form.accountNumber && form.accountNumber !== form.confirmAccountNumber) {
+		e.confirmAccountNumber = "Account numbers do not match.";
+	}
+
+	if (!form.ifscCode.trim()) {
+		e.ifscCode = "IFSC code is required";
+	} else if (!validateIFSC(form.ifscCode.trim().toUpperCase())) {
+		e.ifscCode = "Enter a valid 11-character IFSC code.";
+	}
+
+	if (form.swiftCode.trim() && !validateSWIFT(form.swiftCode.trim().toUpperCase())) {
+		e.swiftCode = "Enter a valid 8 or 11-character SWIFT code.";
+	}
+
 	if (form.status === "blocked" && !form.blockReason.trim())
 		e.blockReason = "Block reason is required when status is Blocked";
 
@@ -3107,17 +3180,23 @@ export function validateCustomerFormStep(
 	}
 
 	if (stepId === "commercial") {
+		const commercialKeys = new Set([
+			"creditLimit",
+			"paymentType",
+			"creditDays",
+			"advancePercentage",
+			"accountHolderName",
+			"bankName",
+			"branch",
+			"accountNumber",
+			"confirmAccountNumber",
+			"ifscCode",
+			"swiftCode",
+			"blockReason",
+		]);
 		for (const [key, message] of Object.entries(all)) {
 			if (
-				[
-					"creditLimit",
-					"paymentType",
-					"creditDays",
-					"advancePercentage",
-					"confirmAccountNumber",
-					"ifscCode",
-					"blockReason",
-				].includes(key) ||
+				commercialKeys.has(key) ||
 				key.startsWith("credit") ||
 				key.startsWith("distributor")
 			) {

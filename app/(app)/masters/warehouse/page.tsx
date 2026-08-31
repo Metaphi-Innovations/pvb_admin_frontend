@@ -361,7 +361,7 @@ export default function WarehouseListPage() {
     {
       key: "status",
       header: "Status",
-      sortable: false,
+      sortable: true,
       filterable: true,
       filterType: "dropdown",
       filterOptions: statusOptions,

@@ -73,6 +73,7 @@ import {
 import { AccountsToast, useAccountsToast } from "@/components/accounts/AccountsToast";
 import { StatusBadge as SharedStatusBadge } from "@/components/ui/StatusBadge";
 import { collectionStatusToBadge } from "@/lib/accounts/accounts-status-badges";
+import { COLLECTION_FOLLOWUP_STATUS_COLUMN_FILTER } from "@/lib/accounts/column-filter-presets";
 import {
   AccountsTablePagination,
 } from "@/components/accounts/AccountsTableListing";
@@ -597,7 +598,7 @@ export default function CollectionTrackingClient() {
         followUpDate: { type: "date" },
         nextFollowUpDate: { type: "date" },
         assignedTo: { type: "text" },
-        status: { type: "status" },
+        status: COLLECTION_FOLLOWUP_STATUS_COLUMN_FILTER,
         remarks: { type: "text" },
       }}
       defaultSortKey="dueDate"

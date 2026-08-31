@@ -578,10 +578,7 @@ export default function CropMasterPage() {
     <ListingContainer
       title="Crop Master"
       titleIcon={Folder}
-      tabs={STATUS_TABS.map((t) => ({
-        value: t.value,
-        label: t.value === statusTab ? `${t.label} (${totalRecords})` : t.label,
-      }))}
+      tabs={STATUS_TABS}
       activeTab={statusTab}
       onTabChange={handleStatusTabChange}
     >

@@ -91,6 +91,12 @@ export function useAccountsColumnFilters<T>({
     [columnConfig],
   );
 
+  const isAmountColumn = useCallback(
+    (columnKey: string, override?: AccountsColumnFilterType): boolean =>
+      resolveFilterType(columnKey, override) === "amount",
+    [resolveFilterType],
+  );
+
   const statusOptionsFor = useCallback(
     (columnKey: string) => columnConfig[columnKey]?.options ?? [],
     [columnConfig],
@@ -121,7 +127,7 @@ export function useAccountsColumnFilters<T>({
       sortDir,
       onSort: handleSort,
       onRemoveSort: removeSort,
-      filterable: opts?.filterable !== false,
+      filterable: opts?.filterable !== false && !isAmountColumn(columnKey, opts?.filterType),
       filterType: resolveFilterType(columnKey, opts?.filterType),
       filterValue: columnFilters[columnKey],
       onFilterChange: (v: AccountsColumnFilters[string]) => setColumnFilter(columnKey, v),
@@ -138,6 +144,7 @@ export function useAccountsColumnFilters<T>({
       setColumnFilter,
       getValueCounts,
       resolveFilterType,
+      isAmountColumn,
       statusOptionsFor,
       optionLabelsFor,
     ],
@@ -155,7 +162,9 @@ export function useAccountsColumnFilters<T>({
     filteredRows,
     getValueCounts,
     resolveFilterType,
+    isAmountColumn,
     statusOptionsFor: (columnKey: string) => columnConfig[columnKey]?.options ?? [],
+    optionLabelsFor,
     headerProps,
   };
 }
