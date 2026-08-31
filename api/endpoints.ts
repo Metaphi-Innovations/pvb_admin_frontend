@@ -163,6 +163,7 @@ export const API_ENDPOINTS = {
       FILTER_DROPDOWN: "/master/scheme/filter-dropdown",
       DROPDOWN: "/master/scheme/dropdown",
       PREVIEW_NUMBER: "/master/scheme/preview-number",
+      ELIGIBLE_PRODUCT_DISCOUNT: "/master/scheme/eligible-product-discount",
     },
     UNIT: {
       LIST: "/master/unit/list",

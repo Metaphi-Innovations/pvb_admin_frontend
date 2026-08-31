@@ -45,6 +45,13 @@ export interface ProcurementAdditionalCharge {
   cgstPct?: number;
   sgstPct?: number;
   igstPct?: number;
+  /** Optional ledger / HSN / GST flags (detail DTO / view columns). */
+  ledgerId?: string;
+  ledgerName?: string;
+  hsnId?: string;
+  hsnCode?: string;
+  gstApplicable?: boolean;
+  gstPct?: number;
 }
 
 export interface AdditionalChargeTaxResult {

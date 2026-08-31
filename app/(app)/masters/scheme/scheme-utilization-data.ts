@@ -8,7 +8,7 @@ export const SCHEME_UTILIZATION_STORAGE_KEY = "ds_scheme_utilization_v1";
 
 export interface SchemeUtilizationRecord {
   id: string;
-  schemeId: number;
+  schemeId: string | number;
   schemeCode: string;
   schemeName: string;
   salesOrderId: number;
@@ -123,9 +123,9 @@ export function syncSchemeUtilizationFromOrder(
   saveSchemeUtilizationRecords([...loadSchemeUtilizationRecords(), ...newRecords]);
 }
 
-export function getUtilizationBySchemeId(schemeId: number): SchemeUtilizationRecord[] {
+export function getUtilizationBySchemeId(schemeId: string | number): SchemeUtilizationRecord[] {
   return loadSchemeUtilizationRecords()
-    .filter((record) => record.schemeId === schemeId)
+    .filter((record) => String(record.schemeId) === String(schemeId))
     .sort((a, b) => b.appliedDate.localeCompare(a.appliedDate));
 }
 
@@ -136,7 +136,7 @@ export function getUtilizationBySchemeCode(schemeCode: string): SchemeUtilizatio
     .sort((a, b) => b.appliedDate.localeCompare(a.appliedDate));
 }
 
-export function getUtilizationSummaryBySchemeId(schemeId: number): SchemeUtilizationSummary {
+export function getUtilizationSummaryBySchemeId(schemeId: string | number): SchemeUtilizationSummary {
   const records = getUtilizationBySchemeId(schemeId);
   const orderNumbers = new Set(records.map((record) => record.salesOrderNumber));
 

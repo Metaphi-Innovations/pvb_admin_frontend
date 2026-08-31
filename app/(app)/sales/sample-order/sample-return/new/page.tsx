@@ -37,17 +37,26 @@ function mapBackendDispatchToFrontend(backendDispatch: any): DispatchRecord {
       ...(item.product_snapshot || {}),
       ...(item.product || {}),
     };
-    const unitPerPacking = Number(
-      item.product?.conversion_qty ||
-      item.product?.unit_per_packing ||
-      item.product_snapshot?.conversion_qty ||
-      item.product_snapshot?.unit_per_packing ||
-      10
+    const unitPerPacking = Math.max(
+      1,
+      Number(
+        item.product_snapshot?.unit_per_packing ||
+        item.product_snapshot?.conversion_qty ||
+        item.product?.unit_per_packing ||
+        item.product?.conversion_qty ||
+        1
+      )
     );
     const baseQty = Number(item.dispatched_base_qty || 0);
     const cases = baseQty / unitPerPacking;
     
-    const unitRate = Number(item.unit_price || item.unit_rate || item.product?.unit_price || 0);
+    const unitRate = Number(
+      item.unit_rate ??
+      item.unit_price ??
+      item.product_snapshot?.unit_price ??
+      item.product?.unit_price ??
+      0
+    );
 
     return {
       product: item.product?.product_name || "Unknown Product",
@@ -124,6 +133,7 @@ export default function NewSampleReturnPage() {
         const rows = await getDispatchDropdown({
           source_type: "sample",
           status: "DISPATCHED,DELIVERED",
+          exclude_fully_returned: true,
         });
         setDeliveredDispatches(rows);
       } catch (err) {

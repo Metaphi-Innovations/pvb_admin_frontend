@@ -967,7 +967,7 @@ export function StockTransferCreate({
                             </div>
                           </td>
                           <td className="px-3 py-2 text-center text-xs font-semibold tabular-nums align-middle">
-                            {line.receivedQty > 0 ? formatStackNum(receivedStack.unitQty) : "—"}
+                            {line.receivedQty > 0 ? formatStackNum(receivedStack.unitQty) : "0"}
                           </td>
                           <td className="px-3 py-2 text-center text-xs font-semibold tabular-nums align-middle">
                             {formatWeightStackPart(receivedStack)}

@@ -23,6 +23,7 @@ import {
   type ReceiptAdjustmentType,
 } from "@/types/receipt-voucher.types";
 import { ReceiptSearchableSelect } from "./ReceiptSearchableSelect";
+import { VoucherLedgerSelect } from "@/components/accounts/voucher-form/VoucherLedgerSelect";
 import {
   createEmptyAdjustment,
   toMoneyNumber,
@@ -77,7 +78,8 @@ export function ReceiptSettlementBreakdown({
   tdsAmount: number;
   /** Underlying adjustment rows (includes system TDS if synced). */
   rows: ReceiptUiAdjustment[];
-  ledgerOptions: { value: string; label: string; sub?: string }[];
+  /** @deprecated Unused — ledger picker uses generic COA dropdown. */
+  ledgerOptions?: { value: string; label: string; sub?: string }[];
   readOnly?: boolean;
   onChange: (rows: ReceiptUiAdjustment[]) => void;
 }) {
@@ -137,9 +139,11 @@ export function ReceiptSettlementBreakdown({
               <th className="px-3 py-2 text-right text-xs font-semibold text-foreground w-[140px]">
                 Amount
               </th>
-              <th className="so-col-actions">
-                <span className="sr-only">Actions</span>
-              </th>
+              {!readOnly ? (
+                <th className="so-col-actions">
+                  <span className="sr-only">Actions</span>
+                </th>
+              ) : null}
             </tr>
           </thead>
           <tbody>
@@ -156,7 +160,7 @@ export function ReceiptSettlementBreakdown({
               <td className="px-3 py-2 text-right text-xs tabular-nums font-semibold text-brand-700">
                 {formatMoney(Math.max(0, bankAmount))}
               </td>
-              <td className="so-col-actions" />
+              {!readOnly ? <td className="so-col-actions" /> : null}
             </tr>
 
             {/* TDS Receivable — auto from allocation TDS */}
@@ -174,7 +178,7 @@ export function ReceiptSettlementBreakdown({
                 <td className="px-3 py-2 text-right text-xs tabular-nums font-semibold text-emerald-800">
                   {formatMoney(tdsAmount)}
                 </td>
-                <td className="so-col-actions" />
+                {!readOnly ? <td className="so-col-actions" /> : null}
               </tr>
             ) : null}
 
@@ -235,19 +239,16 @@ export function ReceiptSettlementBreakdown({
                       readOnly ? (
                         <span className="text-xs">{row.ledger_name || "—"}</span>
                       ) : (
-                        <ReceiptSearchableSelect
-                          label=""
-                          required
+                        <VoucherLedgerSelect
                           value={row.ledger_id}
-                          options={ledgerOptions}
+                          fallbackLabel={row.ledger_name || undefined}
                           placeholder="Select ledger…"
-                          onChange={(id) => {
-                            const opt = ledgerOptions.find((o) => o.value === id);
+                          onChange={(ledger) =>
                             updateManual(row.id, {
-                              ledger_id: id,
-                              ledger_name: opt?.label || "",
-                            });
-                          }}
+                              ledger_id: ledger.ledgerId,
+                              ledger_name: ledger.ledgerName,
+                            })
+                          }
                         />
                       )
                     ) : (
@@ -296,8 +297,8 @@ export function ReceiptSettlementBreakdown({
                       </div>
                     )}
                   </td>
-                  <td className="so-col-actions px-1 py-2">
-                    {!readOnly ? (
+                  {!readOnly ? (
+                    <td className="so-col-actions px-1 py-2">
                       <Button
                         type="button"
                         variant="ghost"
@@ -307,8 +308,8 @@ export function ReceiptSettlementBreakdown({
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </Button>
-                    ) : null}
-                  </td>
+                    </td>
+                  ) : null}
                 </tr>
               );
             })}
@@ -316,7 +317,7 @@ export function ReceiptSettlementBreakdown({
             {manualRows.length === 0 && tdsAmount <= 0 && bankAmount <= 0 ? (
               <tr>
                 <td
-                  colSpan={4}
+                  colSpan={readOnly ? 3 : 4}
                   className="px-3 py-4 text-center text-xs text-muted-foreground"
                 >
                   Settlement components will appear once party amount and Received In are set.
@@ -335,7 +336,7 @@ export function ReceiptSettlementBreakdown({
               <td className="px-3 py-2 text-right text-xs tabular-nums font-bold text-navy-900">
                 {formatMoney(componentTotal)}
               </td>
-              <td className="so-col-actions" />
+              {!readOnly ? <td className="so-col-actions" /> : null}
             </tr>
           </tfoot>
         </table>

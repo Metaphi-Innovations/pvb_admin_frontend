@@ -47,7 +47,7 @@ import {
   type ProductDiscountSchemeLine,
 } from "./scheme-data";
 import { loadSchemeProductSelectOptions } from "./product-discount-scheme";
-import { loadProducts, normalizeProductUnit } from "../products/product-data";
+import { loadProducts } from "../products/product-data";
 
 // ─── Public option lists (business language) ─────────────────────────────────
 
@@ -60,6 +60,10 @@ export const APPLY_DISCOUNT_ON_PRODUCT: SchemeApplyDiscountOn[] = [
   "Product Rate",
   "Product Line Amount",
 ];
+
+/** Special quantity slabs — hardcoded UOM (no Unit master). */
+export const SCHEME_QUANTITY_UOM_OPTIONS = ["Case", "Piece"] as const;
+export type SchemeQuantityUom = (typeof SCHEME_QUANTITY_UOM_OPTIONS)[number];
 
 export const APPLY_DISCOUNT_ON_SPECIAL: SchemeApplyDiscountOn[] = [
   "Product Rate",
@@ -433,36 +437,23 @@ export function emptySpecialDiscountAmountSlab(): SpecialDiscountAmountSlabForm 
 }
 
 export function emptySpecialDiscountQuantitySlab(
-  uom = "",
+  uom: string = "Case",
 ): SpecialDiscountQuantitySlabForm {
   return {
     id: newId("sdq"),
     quantityFrom: "",
     quantityTo: "",
-    uom,
+    uom: uom === "Piece" ? "Piece" : "Case",
     discountType: "Percentage",
     discountValue: "",
   };
 }
 
-/** Derive shared UOM from selected products. Incompatible units → incompatible: true. */
-export function resolveSpecialDiscountUom(productIds: string[]): {
-  uom: string;
-  incompatible: boolean;
-} {
-  if (!productIds.length) return { uom: "", incompatible: false };
-  const byId = new Map(loadProducts().map((p) => [String(p.id), p]));
-  const units: string[] = [];
-  for (const id of productIds) {
-    const product = byId.get(id);
-    const raw = product?.baseUnit?.trim() ?? "";
-    const unit = normalizeProductUnit(raw) || raw;
-    if (!unit) return { uom: "", incompatible: true };
-    units.push(unit);
-  }
-  const unique = [...new Set(units)];
-  if (unique.length !== 1) return { uom: "", incompatible: true };
-  return { uom: unique[0], incompatible: false };
+/** Normalize scheme quantity UOM to Case | Piece. */
+export function normalizeSchemeQuantityUom(value: string): SchemeQuantityUom {
+  const trimmed = value.trim();
+  if (trimmed === "Piece") return "Piece";
+  return "Case";
 }
 
 /** Special Discount always has product applicability (All or Selected). */
@@ -482,12 +473,14 @@ export function applySpecialDiscountBasedOn(
 ): SchemeUnifiedForm {
   if (form.schemeCategory !== "Special Discount") return form;
   if (basedOn === "Sales Quantity") {
-    const { uom } = resolveSpecialDiscountUom(form.productIds);
+    const uom = normalizeSchemeQuantityUom(
+      form.specialDiscountUom || form.specialDiscountQuantitySlabs[0]?.uom || "Case",
+    );
     const quantitySlabs = (
       form.specialDiscountQuantitySlabs.length
         ? form.specialDiscountQuantitySlabs
         : [emptySpecialDiscountQuantitySlab(uom)]
-    ).map((s) => ({ ...s, uom: uom || s.uom }));
+    ).map((s) => ({ ...s, uom: normalizeSchemeQuantityUom(s.uom || uom) }));
     return {
       ...form,
       specialDiscountBasedOn: basedOn,
@@ -511,13 +504,13 @@ export function applySpecialDiscountBasedOn(
   };
 }
 
-/** Keep Special Discount product selection + derived UOM in sync. */
+/** Keep Special Discount product selection in sync (UOM is user-selected Case/Piece). */
 export function applySpecialDiscountProductIds(
   form: SchemeUnifiedForm,
   productIds: string[],
 ): SchemeUnifiedForm {
-  const { uom } = resolveSpecialDiscountUom(productIds);
   const isQty = form.specialDiscountBasedOn === "Sales Quantity";
+  const uom = normalizeSchemeQuantityUom(form.specialDiscountUom || "Case");
   return {
     ...form,
     productIds,
@@ -527,7 +520,7 @@ export function applySpecialDiscountProductIds(
     specialDiscountUom: isQty ? uom : form.specialDiscountUom,
     specialDiscountQuantitySlabs: form.specialDiscountQuantitySlabs.map((s) => ({
       ...s,
-      uom: isQty ? uom : s.uom,
+      uom: isQty ? normalizeSchemeQuantityUom(s.uom || uom) : s.uom,
     })),
   };
 }
@@ -756,8 +749,8 @@ export function createDefaultUnifiedForm(
     paymentCalculationOn: "Amount Received",
     specialDiscountBasedOn: "Sales Amount",
     specialDiscountAmountSlabs: [emptySpecialDiscountAmountSlab()],
-    specialDiscountQuantitySlabs: [emptySpecialDiscountQuantitySlab()],
-    specialDiscountUom: "",
+    specialDiscountQuantitySlabs: [emptySpecialDiscountQuantitySlab("Case")],
+    specialDiscountUom: "Case",
     benefitThrough: benefit.benefitThrough,
     benefitWhen: benefit.benefitWhen,
     excludeFromTurnoverDiscount: false,
@@ -1118,7 +1111,11 @@ function resolveConditionConfig(record: SchemeRecord): SchemeConditionConfig {
         const productIdsForUom = productIds.length
           ? productIds
           : existing.productIds ?? [];
-        const { uom } = resolveSpecialDiscountUom(productIdsForUom);
+        const uom = normalizeSchemeQuantityUom(
+          existing.specialDiscountUom ||
+            existing.specialDiscountQuantitySlabs?.[0]?.uom ||
+            "Case",
+        );
         return {
           ...base,
           productScope: "SELECTED",
@@ -1126,7 +1123,7 @@ function resolveConditionConfig(record: SchemeRecord): SchemeConditionConfig {
           specialDiscountBasedOn: "SALES_QUANTITY",
           specialDiscountQuantitySlabs:
             existing.specialDiscountQuantitySlabs ?? undefined,
-          specialDiscountUom: existing.specialDiscountUom || uom || undefined,
+          specialDiscountUom: uom,
           specialDiscountAmountSlabs: undefined,
           applyDiscountOn: undefined,
         };
@@ -1317,12 +1314,14 @@ export function schemeRecordToUnifiedForm(record: SchemeRecord): SchemeUnifiedFo
     ),
     specialDiscountQuantitySlabs: (() => {
       const basedOn = specialDiscountBasedOnToUI(condition.specialDiscountBasedOn);
-      const ids =
-        basedOn === "Sales Quantity" ? productIds : condition.productIds ?? [];
-      const { uom } = resolveSpecialDiscountUom(ids);
+      const uom = normalizeSchemeQuantityUom(
+        condition.specialDiscountUom ||
+          condition.specialDiscountQuantitySlabs?.[0]?.uom ||
+          "Case",
+      );
       return specialQuantitySlabsToForm(
         condition.specialDiscountQuantitySlabs,
-        condition.specialDiscountUom || uom,
+        uom,
       );
     })(),
     specialDiscountUom: (() => {
@@ -1332,8 +1331,11 @@ export function schemeRecordToUnifiedForm(record: SchemeRecord): SchemeUnifiedFo
       ) {
         return "";
       }
-      const { uom } = resolveSpecialDiscountUom(productIds);
-      return condition.specialDiscountUom || uom || "";
+      return normalizeSchemeQuantityUom(
+        condition.specialDiscountUom ||
+          condition.specialDiscountQuantitySlabs?.[0]?.uom ||
+          "Case",
+      );
     })(),
     benefitThrough: benefit.benefitThrough ?? defaults.benefitThrough,
     benefitWhen: benefit.benefitWhen ?? defaults.benefitWhen,
@@ -1649,10 +1651,14 @@ export function validateUnifiedSchemeForm(form: SchemeUnifiedForm): string | nul
     }
     if (form.schemeCategory === "Special Discount") {
       if (form.specialDiscountBasedOn === "Sales Quantity") {
-        if (!form.specialDiscountUom.trim()) {
-          const { incompatible, uom } = resolveSpecialDiscountUom(form.productIds);
-          if (incompatible || !uom) {
-            return "Selected products must use the same unit of measurement for a quantity-based scheme.";
+        const uom = form.specialDiscountUom.trim();
+        if (!uom || (uom !== "Case" && uom !== "Piece")) {
+          return "Select UOM (Case or Piece) for quantity-based Special Discount.";
+        }
+        for (let i = 0; i < form.specialDiscountQuantitySlabs.length; i++) {
+          const slabUom = form.specialDiscountQuantitySlabs[i].uom.trim();
+          if (!slabUom || (slabUom !== "Case" && slabUom !== "Piece")) {
+            return `Achievement Slab ${i + 1}: Select UOM (Case or Piece).`;
           }
         }
       }
@@ -1680,9 +1686,6 @@ export function validateUnifiedSchemeForm(form: SchemeUnifiedForm): string | nul
           if (!rule.discountType) {
             return `Enter discount for ${productLabel}.`;
           }
-          if (!rule.applyDiscountOn) {
-            return "Select where the discount should be applied.";
-          }
           if (!rule.discountValue.trim()) {
             return `Enter discount for ${productLabel}.`;
           }
@@ -1699,9 +1702,6 @@ export function validateUnifiedSchemeForm(form: SchemeUnifiedForm): string | nul
           }
         }
         break;
-      }
-      if (!form.applyDiscountOn) {
-        return "Select where the discount should be applied.";
       }
       const err = validateDiscountValue(form.discountType, form.discountValue);
       if (err) {
@@ -1824,7 +1824,6 @@ function productsPhrase(form: SchemeUnifiedForm): string {
 export function getProductDiscountRowError(
   rule: ProductDiscountRuleForm,
 ): string | null {
-  if (!rule.applyDiscountOn) return "Select where the discount should be applied.";
   if (!rule.discountValue.trim()) return "Enter discount value.";
   const err = validateDiscountValue(rule.discountType, rule.discountValue, "Discount");
   if (err) {
@@ -2083,8 +2082,11 @@ function buildConditionConfig(form: SchemeUnifiedForm): SchemeConditionConfig {
       };
     case "Special Discount": {
       if (form.specialDiscountBasedOn === "Sales Quantity") {
-        const { uom } = resolveSpecialDiscountUom(form.productIds);
-        const resolvedUom = uom || form.specialDiscountUom;
+        const resolvedUom = normalizeSchemeQuantityUom(
+          form.specialDiscountUom ||
+            form.specialDiscountQuantitySlabs[0]?.uom ||
+            "Case",
+        );
         const quantitySlabs = formSpecialQuantitySlabsToConfig(
           form.specialDiscountQuantitySlabs,
           resolvedUom,
@@ -2094,7 +2096,7 @@ function buildConditionConfig(form: SchemeUnifiedForm): SchemeConditionConfig {
           productIds: form.productIds.length ? form.productIds : undefined,
           specialDiscountBasedOn: "SALES_QUANTITY",
           specialDiscountQuantitySlabs: quantitySlabs,
-          specialDiscountUom: resolvedUom || undefined,
+          specialDiscountUom: resolvedUom,
           discountType: quantitySlabs[0]?.discountType,
           discountValue: quantitySlabs[0]?.discountValue,
         };

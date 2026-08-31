@@ -5,6 +5,7 @@ import {
   resolveSalesOrderDealerPrice,
   lookupEligibleSchemesForSalesOrder,
   buildManualSchemePricingFromOffer,
+  mapCustomerMasterTypeToSchemeType,
   type EligibleProductDiscountSchemeOffer,
 } from "@/app/(app)/masters/scheme/product-discount-scheme";
 import { loadEmployees, type Employee } from "@/app/(app)/user-management/employee/employee-data";
@@ -128,10 +129,12 @@ export interface SalesOrderLineItem {
   finalRate: number;
   schemeCode?: string;
   schemeName?: string;
-  /** Persisted applied scheme reference */
-  appliedSchemeId?: number;
+  /** Persisted applied scheme reference (UUID from Scheme Master) */
+  appliedSchemeId?: string | number;
   appliedSchemeCode?: string;
   appliedSchemeName?: string;
+  /** Snapshot stored with the SO line */
+  schemeSnapshot?: Record<string, unknown>;
   originalDealerPrice?: number;
   finalRateAfterScheme?: number;
   /** "Yes" when user manually applied Product Discount Scheme; "No" otherwise */
@@ -502,27 +505,55 @@ export function calculateDiscountPercentFromValue(quantity: number, unitPrice: n
   return Math.round(Math.min(100, Math.max(0, pct)) * 100) / 100;
 }
 
-/** Sync manual discount % ↔ ₹ and final rate (does not touch Scheme Master fields). */
+/** Rate after scheme (before manual discount). Falls back to unit/dealer price. */
+export function resolveRateAfterScheme(
+  line: Pick<
+    SalesOrderLineItem,
+    | "unitPrice"
+    | "dealerPrice"
+    | "schemeDiscountAmount"
+    | "finalRateAfterScheme"
+    | "schemeApplied"
+    | "schemeCode"
+    | "appliedSchemeId"
+    | "appliedSchemeCode"
+  >,
+): number {
+  if (isProductDiscountSchemeApplied(line)) {
+    if (line.finalRateAfterScheme != null && line.finalRateAfterScheme >= 0) {
+      return line.finalRateAfterScheme;
+    }
+    const base = line.unitPrice || line.dealerPrice || 0;
+    return Math.max(0, base - (line.schemeDiscountAmount || 0));
+  }
+  return line.unitPrice || line.dealerPrice || 0;
+}
+
+/** Sync manual discount % ↔ ₹ and final rate (scheme rate is the base when a scheme is applied). */
 export function syncManualLineDiscount(
   line: SalesOrderLineItem,
 ): Pick<SalesOrderLineItem, "discountType" | "discount" | "discountValue" | "finalRate"> {
   const discountType = normalizeLineDiscountType(line.discountType);
-  const gross = Math.max(0, (line.quantity || 0) * (line.unitPrice || 0));
+  const baseRate = resolveRateAfterScheme(line);
+  const gross = Math.max(0, (line.quantity || 0) * baseRate);
   let discount = Math.max(0, Number(line.discount) || 0);
   let discountValue = Math.max(0, Number(line.discountValue) || 0);
 
   if (discountType === "Flat") {
     discountValue = Math.min(discountValue, gross);
-    discount = calculateDiscountPercentFromValue(line.quantity, line.unitPrice, discountValue);
+    discount =
+      line.quantity > 0
+        ? calculateDiscountPercentFromValue(line.quantity, baseRate, discountValue)
+        : 0;
   } else {
     discount = Math.min(100, discount);
-    discountValue = calculateLineDiscountValue(line.quantity, line.unitPrice, discount);
+    discountValue = calculateLineDiscountValue(line.quantity, baseRate, discount);
   }
 
   const finalRate =
     line.quantity > 0
       ? Math.round(((gross - discountValue) / line.quantity) * 100) / 100
-      : Math.round((line.unitPrice || 0) * (1 - discount / 100) * 100) / 100;
+      : Math.round(baseRate * (1 - discount / 100) * 100) / 100;
 
   return { discountType, discount, discountValue, finalRate };
 }
@@ -598,19 +629,41 @@ export function resolveTaxSupplyType(
 function getLineTaxableAmount(
   line: Pick<
     SalesOrderLineItem,
-    "quantity" | "unitPrice" | "discount" | "finalRate" | "schemeApplied" | "schemeCode"
+    | "quantity"
+    | "unitPrice"
+    | "dealerPrice"
+    | "discount"
+    | "discountValue"
+    | "discountType"
+    | "finalRate"
+    | "finalRateAfterScheme"
+    | "schemeDiscountAmount"
+    | "schemeApplied"
+    | "schemeCode"
+    | "appliedSchemeId"
+    | "appliedSchemeCode"
   >,
 ): number {
-  if (isProductDiscountSchemeApplied(line) && line.finalRate >= 0) {
-    return calculateLineSubtotalFromFinalRate(line.quantity, line.finalRate);
-  }
-  return calculateLineSubtotal(line.quantity, line.unitPrice, line.discount);
+  const synced = syncManualLineDiscount(line as SalesOrderLineItem);
+  return calculateLineSubtotalFromFinalRate(line.quantity, synced.finalRate);
 }
 
 export function computeLineTaxBreakdown(
   line: Pick<
     SalesOrderLineItem,
-    "quantity" | "unitPrice" | "discount" | "finalRate" | "schemeApplied" | "schemeCode"
+    | "quantity"
+    | "unitPrice"
+    | "dealerPrice"
+    | "discount"
+    | "discountValue"
+    | "discountType"
+    | "finalRate"
+    | "finalRateAfterScheme"
+    | "schemeDiscountAmount"
+    | "schemeApplied"
+    | "schemeCode"
+    | "appliedSchemeId"
+    | "appliedSchemeCode"
   >,
   gstRate: string,
   supplyType: TaxSupplyType = "intra",
@@ -669,7 +722,16 @@ export function computeGstAmount(
   supplyType: TaxSupplyType = "intra",
 ): number {
   return computeLineTaxBreakdown(
-    { quantity, unitPrice, discount: discountPercent, finalRate: 0, schemeApplied: "No" },
+    {
+      quantity,
+      unitPrice,
+      dealerPrice: unitPrice,
+      discount: discountPercent,
+      discountValue: 0,
+      schemeDiscountAmount: 0,
+      finalRate: 0,
+      schemeApplied: "No",
+    },
     gstRate,
     supplyType,
     zeroTax,
@@ -687,7 +749,10 @@ export function computeGstAmountFromFinalRate(
     {
       quantity,
       unitPrice: finalRate,
+      dealerPrice: finalRate,
       discount: 0,
+      discountValue: 0,
+      schemeDiscountAmount: 0,
       finalRate,
       schemeApplied: "Yes",
       schemeCode: "x",
@@ -699,7 +764,22 @@ export function computeGstAmountFromFinalRate(
 }
 
 export function computeLineGstAmount(
-  line: Pick<SalesOrderLineItem, "quantity" | "unitPrice" | "discount" | "finalRate" | "schemeApplied" | "schemeCode">,
+  line: Pick<
+    SalesOrderLineItem,
+    | "quantity"
+    | "unitPrice"
+    | "dealerPrice"
+    | "discount"
+    | "discountValue"
+    | "discountType"
+    | "finalRate"
+    | "finalRateAfterScheme"
+    | "schemeDiscountAmount"
+    | "schemeApplied"
+    | "schemeCode"
+    | "appliedSchemeId"
+    | "appliedSchemeCode"
+  >,
   gstRate: string,
   zeroTax = false,
   supplyType: TaxSupplyType = "intra",
@@ -728,25 +808,21 @@ export function applyLineTaxFields(
 }
 
 export function recalculateLineItem(line: SalesOrderLineItem): SalesOrderLineItem {
-  const hasScheme = isProductDiscountSchemeApplied(line);
-  if (hasScheme) {
-    const discountValue = Math.round(line.schemeDiscountAmount * line.quantity * 100) / 100;
-    const lineTotal = calculateLineTotalFromFinalRate(
-      line.quantity,
-      line.finalRate,
-      line.gstAmount,
-    );
-    return { ...line, discountValue, lineTotal };
-  }
-
   const synced = syncManualLineDiscount(line);
-  const lineTotal = calculateLineTotal(
+  const lineTotal = calculateLineTotalFromFinalRate(
     line.quantity,
-    line.unitPrice,
-    synced.discount,
+    synced.finalRate,
     line.gstAmount,
   );
-  return { ...line, ...synced, lineTotal };
+  return {
+    ...line,
+    ...synced,
+    // Keep scheme post-rate stable; finalRate is after scheme + manual.
+    finalRateAfterScheme: isProductDiscountSchemeApplied(line)
+      ? (line.finalRateAfterScheme ?? resolveRateAfterScheme(line))
+      : undefined,
+    lineTotal,
+  };
 }
 
 export function calculateOrderTotal(lines: SalesOrderLineItem[]): number {
@@ -758,6 +834,11 @@ export interface OrderTotalsSummary {
   subtotalBeforeDiscount: number;
   /** @alias subtotalBeforeDiscount */
   productSubtotal: number;
+  /** Scheme discount total (₹) across lines */
+  schemeDiscountTotal: number;
+  /** Manual line discount total (₹) across lines */
+  manualDiscountTotal: number;
+  /** Combined product discounts (scheme + manual) */
   totalItemDiscounts: number;
   /** @alias totalItemDiscounts */
   productDiscountTotal: number;
@@ -842,7 +923,8 @@ export function calculateOrderTotalsSummary(
   options?: { sezLutApplies?: boolean; taxSupplyType?: TaxSupplyType },
 ): OrderTotalsSummary {
   let subtotalBeforeDiscount = 0;
-  let totalItemDiscounts = 0;
+  let schemeDiscountTotal = 0;
+  let manualDiscountTotal = 0;
   let netTotal = 0;
   let totalGst = 0;
   let cgstTotal = 0;
@@ -850,19 +932,23 @@ export function calculateOrderTotalsSummary(
   let igstTotal = 0;
 
   for (const line of lines) {
-    const hasScheme = isProductDiscountSchemeApplied(line);
-    const lineSubtotalBeforeDiscount = line.quantity * line.unitPrice;
-    if (hasScheme) {
-      const lineDiscount = Math.round(line.schemeDiscountAmount * line.quantity * 100) / 100;
-      subtotalBeforeDiscount += lineSubtotalBeforeDiscount;
-      totalItemDiscounts += lineDiscount;
-      netTotal += calculateLineSubtotalFromFinalRate(line.quantity, line.finalRate);
-    } else {
-      const lineDiscount = calculateLineDiscountValue(line.quantity, line.unitPrice, line.discount);
-      subtotalBeforeDiscount += lineSubtotalBeforeDiscount;
-      totalItemDiscounts += lineDiscount;
-      netTotal += calculateLineSubtotal(line.quantity, line.unitPrice, line.discount);
-    }
+    if (!line.productId && !(line.quantity > 0)) continue;
+
+    const synced = syncManualLineDiscount(line);
+    const lineSubtotalBeforeDiscount = Math.max(
+      0,
+      (line.quantity || 0) * (line.unitPrice || line.dealerPrice || 0),
+    );
+    const schemeLineDiscount = isProductDiscountSchemeApplied(line)
+      ? Math.round((line.schemeDiscountAmount || 0) * (line.quantity || 0) * 100) / 100
+      : 0;
+    const manualLineDiscount = Math.max(0, synced.discountValue || 0);
+    const lineNet = calculateLineSubtotalFromFinalRate(line.quantity, synced.finalRate);
+
+    subtotalBeforeDiscount += lineSubtotalBeforeDiscount;
+    schemeDiscountTotal += schemeLineDiscount;
+    manualDiscountTotal += manualLineDiscount;
+    netTotal += lineNet;
     totalGst += line.gstAmount;
     cgstTotal += line.cgstAmount ?? 0;
     sgstTotal += line.sgstAmount ?? 0;
@@ -884,7 +970,10 @@ export function calculateOrderTotalsSummary(
   }
 
   subtotalBeforeDiscount = Math.round(subtotalBeforeDiscount * 100) / 100;
-  totalItemDiscounts = Math.round(totalItemDiscounts * 100) / 100;
+  schemeDiscountTotal = Math.round(schemeDiscountTotal * 100) / 100;
+  manualDiscountTotal = Math.round(manualDiscountTotal * 100) / 100;
+  const totalItemDiscounts =
+    Math.round((schemeDiscountTotal + manualDiscountTotal) * 100) / 100;
   netTotal = Math.round(netTotal * 100) / 100;
   additionalExpensesTotal = Math.round(additionalExpensesTotal * 100) / 100;
   expenseDiscountTotal = Math.round(expenseDiscountTotal * 100) / 100;
@@ -907,6 +996,8 @@ export function calculateOrderTotalsSummary(
   return {
     subtotalBeforeDiscount,
     productSubtotal: subtotalBeforeDiscount,
+    schemeDiscountTotal,
+    manualDiscountTotal,
     totalItemDiscounts,
     productDiscountTotal: totalItemDiscounts,
     netTotal,
@@ -1013,6 +1104,8 @@ export interface SalesOrderPricingContext {
   stateName: string;
   customerMasterType: string;
   orderDate: string;
+  customerId?: string | null;
+  customerTypeId?: string | null;
 }
 
 export function createEmptyLineItem(): SalesOrderLineItem {
@@ -1088,6 +1181,7 @@ function clearLineSchemeFields(dealerPrice: number): Pick<
   | "appliedSchemeId"
   | "appliedSchemeCode"
   | "appliedSchemeName"
+  | "schemeSnapshot"
   | "originalDealerPrice"
   | "finalRateAfterScheme"
   | "schemeApplied"
@@ -1106,6 +1200,7 @@ function clearLineSchemeFields(dealerPrice: number): Pick<
     appliedSchemeId: undefined,
     appliedSchemeCode: undefined,
     appliedSchemeName: undefined,
+    schemeSnapshot: undefined,
     originalDealerPrice: undefined,
     finalRateAfterScheme: undefined,
     schemeApplied: "No",
@@ -1124,6 +1219,88 @@ export function getEligibleSchemesForSalesOrderLine(
   });
 }
 
+/** Map Scheme Master eligible API offer → SO UI offer shape. */
+export function mapEligibleApiOfferToUiOffer(
+  offer: {
+    scheme_id: string;
+    scheme_code: string;
+    scheme_name: string;
+    discount_type: "Percentage" | "Flat" | string;
+    discount_value: number;
+    discount_amount: number;
+    final_rate: number;
+    start_date?: string | null;
+    end_date?: string | null;
+    scheme_snapshot?: Record<string, unknown>;
+  },
+  context: SalesOrderPricingContext,
+  dealerPrice: number,
+  productName = "",
+): EligibleProductDiscountSchemeOffer {
+  const discountType =
+    offer.discount_type === "Flat" || offer.discount_type === "Fixed Amount"
+      ? ("Rupees" as const)
+      : ("Percentage" as const);
+  return {
+    schemeId: offer.scheme_id,
+    schemeCode: offer.scheme_code,
+    schemeName: offer.scheme_name,
+    productName,
+    customerType: mapCustomerMasterTypeToSchemeType(context.customerMasterType),
+    stateName: context.stateName,
+    dealerPrice,
+    discountType,
+    discountValue: Number(offer.discount_value) || 0,
+    discountAmount: Number(offer.discount_amount) || 0,
+    finalSchemePrice: Number(offer.final_rate) || Math.max(0, dealerPrice - (Number(offer.discount_amount) || 0)),
+    startDate: offer.start_date ?? undefined,
+    endDate: offer.end_date ?? undefined,
+    schemeSnapshot: offer.scheme_snapshot,
+  };
+}
+
+/**
+ * Fetch eligible Product Discount schemes from API and return UI offers
+ * (already sorted with highest discount first). Falls back to [] on error.
+ */
+export async function fetchEligibleSchemesForSalesOrderLine(
+  productId: number | string,
+  dealerPrice: number,
+  context: SalesOrderPricingContext,
+  productName = "",
+  signal?: AbortSignal,
+): Promise<{
+  offers: EligibleProductDiscountSchemeOffer[];
+  recommended: EligibleProductDiscountSchemeOffer | null;
+}> {
+  try {
+    const { SchemeListService } = await import("@/services/scheme-list.service");
+    const result = await SchemeListService.eligibleProductDiscount({
+      product_id: String(productId),
+      order_date: context.orderDate,
+      unit_price: dealerPrice > 0 ? dealerPrice : 0,
+      customer_id: context.customerId ?? null,
+      customer_type_id: context.customerTypeId ?? null,
+      state_name: context.stateName,
+      signal,
+    });
+    const offers = result.schemes.map((row) =>
+      mapEligibleApiOfferToUiOffer(row, context, dealerPrice, productName),
+    );
+    const recommended = result.recommended
+      ? mapEligibleApiOfferToUiOffer(
+          result.recommended,
+          context,
+          dealerPrice,
+          productName,
+        )
+      : offers[0] ?? null;
+    return { offers, recommended };
+  } catch {
+    return { offers: [], recommended: null };
+  }
+}
+
 export function applyManualSchemeToLine(
   line: SalesOrderLineItem,
   offer: EligibleProductDiscountSchemeOffer,
@@ -1135,24 +1312,28 @@ export function applyManualSchemeToLine(
   const dealerPrice = offer.dealerPrice;
   const supplyType = options?.supplyType ?? "intra";
 
+  // Keep existing manual discount; scheme is applied on DP first, then manual.
   const updated: SalesOrderLineItem = {
     ...line,
     quantity,
     dealerPrice,
     unitPrice: dealerPrice,
-    discount: schemePricing.discountPercent,
+    discountType: normalizeLineDiscountType(line.discountType),
+    discount: line.discount || 0,
+    discountValue: line.discountValue || 0,
     schemeDiscountPercent: schemePricing.schemeDiscountPercent,
     schemeDiscountAmount: schemePricing.schemeDiscountAmount,
     schemeDiscountType: schemePricing.schemeDiscountType,
     schemeDiscountValue: schemePricing.schemeDiscountValue,
+    finalRateAfterScheme: schemePricing.finalRate,
     finalRate: schemePricing.finalRate,
     schemeCode: schemePricing.schemeCode,
     schemeName: schemePricing.schemeName,
     appliedSchemeId: offer.schemeId,
     appliedSchemeCode: offer.schemeCode,
     appliedSchemeName: offer.schemeName,
+    schemeSnapshot: offer.schemeSnapshot,
     originalDealerPrice: dealerPrice,
-    finalRateAfterScheme: schemePricing.finalRate,
     schemeApplied: "Yes",
     gstAmount: 0,
     lineTotal: 0,
@@ -1176,7 +1357,10 @@ export function removeAppliedSchemeFromLine(
     ...line,
     quantity,
     ...cleared,
-    discountValue: 0,
+    // Preserve manual discount; re-applied on dealer price after scheme clear.
+    discountType: normalizeLineDiscountType(line.discountType),
+    discount: line.discount || 0,
+    discountValue: line.discountValue || 0,
     gstAmount: 0,
     lineTotal: 0,
   };

@@ -116,7 +116,7 @@ function formatDateLabel(value?: string) {
 }
 
 function getBatchComputation(batch: SalesReturnBatchRow, entry?: BatchReturnInput): BatchReturnComputation {
-  const uKey = batch.unitPerPacking || 10;
+  const uKey = Math.max(1, Number(batch.unitPerPacking) || 1);
   const qtyType = entry?.quantityType || "Piece";
   const caseQty = qtyType === "Case" ? parseQty(entry?.returnCaseQty) : 0;
   const looseQty = qtyType === "Piece" ? parseQty(entry?.returnLooseQty) : 0;

@@ -751,9 +751,12 @@ export default function CreditNoteFormPageClient({
     return null;
   };
 
+  const navigatingAwayRef = useRef(false);
+
   const guardBusy = async (fn: () => Promise<void>) => {
     if (submittingRef.current) return;
     submittingRef.current = true;
+    navigatingAwayRef.current = false;
     setBusy(true);
     setError(null);
     try {
@@ -763,20 +766,26 @@ export default function CreditNoteFormPageClient({
       setError(msg);
       showToast(msg, "error");
     } finally {
-      submittingRef.current = false;
-      setBusy(false);
+      // Clearing busy after router navigation can abort soft nav
+      if (!navigatingAwayRef.current) {
+        submittingRef.current = false;
+        setBusy(false);
+      }
     }
   };
 
   const goToList = () => {
-    router.push(CREDIT_NOTES_LIST_PATH);
+    navigatingAwayRef.current = true;
+    router.replace(CREDIT_NOTES_LIST_PATH);
   };
 
   const goToEdit = (id: string) => {
+    navigatingAwayRef.current = true;
     router.replace(`${CREDIT_NOTES_LIST_PATH}/${id}/edit`);
   };
 
   const goToDetail = (id: string) => {
+    navigatingAwayRef.current = true;
     router.replace(`${CREDIT_NOTES_LIST_PATH}/${id}`);
   };
 

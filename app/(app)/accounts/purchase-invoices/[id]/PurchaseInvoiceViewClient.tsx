@@ -5,11 +5,9 @@ import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   FileMinus,
-  Truck,
   CheckCircle2,
   Clock,
   AlertCircle,
-  Receipt,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -51,12 +49,21 @@ import {
 import { DirectPurchaseAttachmentPanel } from "../DirectPurchaseAttachmentPanel";
 import { getBankAccountPrintDetails } from "@/components/accounts/WarehouseMappedBankAccountSelect";
 import { isoToDisplayDate } from "@/lib/accounts/date-display";
+import { VoucherFormSectionCard } from "@/components/accounts/voucher-form/VoucherFormSectionCard";
+import {
+  TransactionViewHero,
+  buildVoucherViewMeta,
+  voucherStatusToBadgeKey,
+} from "@/components/accounts/voucher-form/TransactionViewHero";
+import "@/components/accounts/voucher-form/transaction-view.css";
 
 function Field({ label, value }: { label: string; value?: string | null }) {
   return (
-    <div>
-      <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">{label}</p>
-      <p className="text-xs font-semibold mt-0.5">{value || "—"}</p>
+    <div className="min-w-0 space-y-0.5">
+      <p className="text-[11px] text-muted-foreground font-medium leading-tight">{label}</p>
+      <p className="text-xs font-medium text-foreground truncate leading-snug" title={value || undefined}>
+        {value || "—"}
+      </p>
     </div>
   );
 }
@@ -66,30 +73,40 @@ function DateField({ label, value }: { label: string; value?: string | null }) {
   return <Field label={label} value={display} />;
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="bg-white rounded-xl border border-border shadow-sm overflow-hidden">
-      <div className="px-4 py-3 border-b border-border/60">
-        <h2 className="text-sm font-semibold text-foreground">{title}</h2>
-      </div>
-      <div className="p-4">{children}</div>
-    </div>
-  );
+const POSTING_STATUS_LABELS: Record<string, string> = {
+  POSTED: "Posted",
+  CANCELLED: "Cancelled",
+  PENDING: "Pending",
+  REVERSED: "Reversed",
+};
+
+const BASE_ITEM_COLUMNS = ["#", "Product", "Description", "Qty", "Unit", "Rate", "Taxable"] as const;
+const BASE_CHARGE_COLUMNS = [
+  "#",
+  "Particular / Charge Name",
+  "Ledger",
+  "HSN",
+  "Amount",
+  "GST Applicable",
+  "GST %",
+] as const;
+
+function purchaseItemColumns(interstate: boolean): string[] {
+  return [
+    ...BASE_ITEM_COLUMNS,
+    ...(interstate ? ["IGST"] : ["CGST", "SGST"]),
+    "Total",
+  ];
 }
 
-const ITEM_COLUMNS = [
-  "#",
-  "Product",
-  "Description",
-  "Qty",
-  "Unit",
-  "Rate",
-  "Taxable",
-  "CGST",
-  "SGST",
-  "IGST",
-  "Total",
-] as const;
+function purchaseChargeColumns(interstate: boolean): string[] {
+  return [
+    ...BASE_CHARGE_COLUMNS,
+    ...(interstate ? ["IGST"] : ["CGST", "SGST"]),
+    "Total",
+    "Remarks",
+  ];
+}
 
 function PaymentBadge({ amountPaid, grandTotal }: { amountPaid: number; grandTotal: number }) {
   if (amountPaid >= grandTotal && grandTotal > 0)
@@ -213,7 +230,7 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: st
           <Button
             variant="outline"
             size="sm"
-            className="mt-4 h-9 text-sm font-medium"
+            className="h-9 text-sm font-medium"
             onClick={() => router.push("/accounts/purchase-invoices")}
           >
             Back to List
@@ -225,6 +242,8 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: st
 
   const outstanding = Math.max(0, (invoice.netPayable ?? invoice.grandTotal) - invoice.amountPaid);
   const gst = getPurchaseInvoiceGstBreakup(invoice);
+  const itemColumns = purchaseItemColumns(gst.interstate);
+  const chargeColumns = purchaseChargeColumns(gst.interstate);
   const showMismatchBanner =
     isGrn &&
     detectQuantityMismatch(qtyComparisonRows.map((r) => r.comparison)) &&
@@ -240,6 +259,16 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: st
     igst: invoice.igstTotal,
     roundOff: invoice.roundingAdjustment ?? 0,
   });
+
+  const sourceChip = isDirect
+    ? PURCHASE_SOURCE_TYPE_LABELS.direct_purchase
+    : PURCHASE_SOURCE_TYPE_LABELS.from_grn;
+  const heroChips = [
+    sourceChip,
+    ...(invoice.reverseChargeApplicable ? ["RCM"] : []),
+    ...(invoice.grnNo ? [invoice.grnNo] : []),
+  ];
+  const statusLabel = POSTING_STATUS_LABELS[postingStatus] || postingStatus;
 
   return (
     <PurchaseInvoicePageShell
@@ -271,47 +300,36 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: st
         </div>
       }
     >
-      <div className="w-full space-y-4 pb-6">
+      <div className="w-full space-y-2 pb-6 transaction-voucher-view">
         <PurchaseInvoiceMismatchBanner visible={showMismatchBanner} />
 
-        {/* Status banner */}
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-white px-4 py-3 shadow-sm">
-          <div className="flex items-center gap-3">
-            <div className="rounded-full bg-muted/60 p-2">
-              <Receipt className="w-4 h-4 text-muted-foreground" />
-            </div>
-            <div>
-              <p className="text-sm font-bold">{invoice.invoiceNo}</p>
-              <p className="text-xs text-muted-foreground">{invoice.invoiceDate}</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3 flex-wrap justify-end">
-            {isGrn && <PurchaseInvoiceMatchStatusBadge status={matchStatus} />}
-            {invoice.reverseChargeApplicable && (
-              <Badge className="text-xs h-6 bg-amber-100 text-amber-800 border-amber-200">RCM</Badge>
-            )}
-            <Badge variant="outline" className="text-xs h-6">
-              {isDirect ? PURCHASE_SOURCE_TYPE_LABELS.direct_purchase : PURCHASE_SOURCE_TYPE_LABELS.from_grn}
-            </Badge>
-            {invoice.grnNo && (
-              <Badge variant="outline" className="text-xs h-6 text-blue-700 border-blue-200 gap-1">
-                <Truck className="w-3 h-3" />
-                {invoice.grnNo}
-              </Badge>
-            )}
-            <Badge variant="outline" className="text-xs h-6 capitalize">
-              Posting:{" "}
-              {postingStatus === "POSTED"
-                ? "Posted"
-                : postingStatus === "CANCELLED"
-                  ? "Cancelled"
-                  : postingStatus === "PENDING"
-                    ? "Pending"
-                    : "Reversed"}
-            </Badge>
+        <TransactionViewHero
+          statusKey={voucherStatusToBadgeKey(postingStatus)}
+          statusLabel={statusLabel}
+          chips={heroChips}
+          metaItems={buildVoucherViewMeta({
+            draftNo: invoice.invoiceNo,
+            voucherDate: invoice.invoiceDate
+              ? isoToDisplayDate(invoice.invoiceDate) || invoice.invoiceDate
+              : undefined,
+            branchName: invoice.warehouse || undefined,
+          })}
+          partyLabel={invoice.vendorName}
+          amountLabel="Grand Total"
+          amount={invoice.grandTotal}
+        />
+
+        {isGrn && (
+          <div className="flex flex-wrap items-center gap-2 px-0.5">
+            <PurchaseInvoiceMatchStatusBadge status={matchStatus} />
             <PaymentBadge amountPaid={invoice.amountPaid} grandTotal={invoice.grandTotal} />
           </div>
-        </div>
+        )}
+        {!isGrn && (
+          <div className="flex flex-wrap items-center gap-2 px-0.5">
+            <PaymentBadge amountPaid={invoice.amountPaid} grandTotal={invoice.grandTotal} />
+          </div>
+        )}
 
         {loadError && invoice && (
           <p className="text-xs text-red-700 px-1">{loadError}</p>
@@ -319,7 +337,7 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: st
 
         {/* Document References — GRN only */}
         {isGrn && (invoice.poNumber || invoice.grnNo || invoice.qcNo || invoice.vendorInvoiceNo) && (
-          <Section title="Document References">
+          <VoucherFormSectionCard title="Document References" highlight>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
               <Field label="Supplier Invoice" value={invoice.vendorInvoiceNo} />
               <Field label="Purchase Order" value={invoice.poNumber} />
@@ -348,13 +366,13 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: st
                 </span>
               </div>
             )}
-          </Section>
+          </VoucherFormSectionCard>
         )}
 
         {/* Vendor & Invoice Info */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Section title="Supplier Details">
-            <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+          <VoucherFormSectionCard title="Supplier Details" highlight>
+            <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
               <Field label="Supplier Name" value={invoice.vendorName} />
               <Field label="GSTIN" value={invoice.vendorGst} />
               {isGrn && <Field label="PO Number" value={invoice.poNumber} />}
@@ -363,9 +381,9 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: st
               {isDirect && <Field label="Place of Supply" value={invoice.placeOfSupply} />}
               {isDirect && <Field label="Branch GSTIN" value={invoice.branchGstin} />}
             </div>
-          </Section>
-          <Section title="Invoice Details">
-            <div className="grid grid-cols-2 gap-3">
+          </VoucherFormSectionCard>
+          <VoucherFormSectionCard title="Invoice Details" highlight>
+            <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
               <Field label="Invoice No (Internal)" value={invoice.invoiceNo} />
               <Field label="Supplier Invoice No" value={invoice.vendorInvoiceNo} />
               <DateField label="Supplier Invoice Date" value={invoice.invoiceDate} />
@@ -419,18 +437,22 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: st
                 );
               })()}
             </div>
-          </Section>
+          </VoucherFormSectionCard>
         </div>
 
         {invoice.attachment && (
-          <Section title="Supplier Invoice Attachment">
+          <VoucherFormSectionCard title="Supplier Invoice Attachment" highlight>
             <DirectPurchaseAttachmentPanel attachment={invoice.attachment} />
-          </Section>
+          </VoucherFormSectionCard>
         )}
 
         {/* Line Items */}
-        <Section title={isDirect ? "Purchase Particulars" : "Supplier Invoice Items"}>
-          <div className="overflow-x-auto -mx-4 px-4">
+        <VoucherFormSectionCard
+          title={isDirect ? "Purchase Particulars" : "Supplier Invoice Items"}
+          highlight
+          flush={!isDirect || !invoice.directLines?.length}
+        >
+          <div className={cn("overflow-x-auto", isDirect && invoice.directLines?.length && "px-3.5 py-3")}>
             {isDirect && invoice.directLines?.length ? (
               <div className="space-y-3 text-xs">
                 {invoice.directLines.map((dl) => (
@@ -443,6 +465,12 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: st
                       <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Posting Ledger</p>
                       <p className="mt-0.5">{dl.expenseLedgerName}</p>
                     </div>
+                    {dl.hsnSac ? (
+                      <div>
+                        <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">HSN / SAC</p>
+                        <p className="mt-0.5 font-mono">{dl.hsnSac}</p>
+                      </div>
+                    ) : null}
                     <div>
                       <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Gross / Taxable</p>
                       <p className="mt-0.5 tabular-nums">
@@ -450,29 +478,38 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: st
                       </p>
                     </div>
                     <div>
-                      <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">GST</p>
+                      <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                        {gst.interstate ? "IGST" : "CGST / SGST"}
+                      </p>
                       <p className="mt-0.5 tabular-nums">
                         {invoice.gstApplicable === false
                           ? "Not applicable"
-                          : formatMoney(dl.cgst + dl.sgst + dl.igst)}
+                          : gst.interstate
+                            ? formatMoney(dl.igst)
+                            : `${formatMoney(dl.cgst)} / ${formatMoney(dl.sgst)}`}
                       </p>
                     </div>
                   </div>
                 ))}
                 {invoice.reverseChargeApplicable && (
                   <div className="grid grid-cols-3 gap-2 pt-1 border-t border-border/40">
-                    <div>
-                      <p className="text-[10px] text-muted-foreground">RCM CGST</p>
-                      <p className="tabular-nums">{formatMoney(invoice.rcmCgst ?? 0)}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] text-muted-foreground">RCM SGST</p>
-                      <p className="tabular-nums">{formatMoney(invoice.rcmSgst ?? 0)}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] text-muted-foreground">RCM IGST</p>
-                      <p className="tabular-nums">{formatMoney(invoice.rcmIgst ?? 0)}</p>
-                    </div>
+                    {gst.interstate ? (
+                      <div>
+                        <p className="text-[10px] text-muted-foreground">RCM IGST</p>
+                        <p className="tabular-nums">{formatMoney(invoice.rcmIgst ?? 0)}</p>
+                      </div>
+                    ) : (
+                      <>
+                        <div>
+                          <p className="text-[10px] text-muted-foreground">RCM CGST</p>
+                          <p className="tabular-nums">{formatMoney(invoice.rcmCgst ?? 0)}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-muted-foreground">RCM SGST</p>
+                          <p className="tabular-nums">{formatMoney(invoice.rcmSgst ?? 0)}</p>
+                        </div>
+                      </>
+                    )}
                   </div>
                 )}
                 {invoice.tdsApplicable && (
@@ -500,7 +537,7 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: st
             <table className="w-full text-xs min-w-[1080px]">
               <thead>
                 <tr className="bg-muted/40 border-b border-border">
-                  {ITEM_COLUMNS.map((h) => (
+                  {itemColumns.map((h) => (
                     <th
                       key={h}
                       className={cn(
@@ -519,7 +556,7 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: st
                 {invoice.lineItems.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={ITEM_COLUMNS.length}
+                      colSpan={itemColumns.length}
                       className="px-4 py-8 text-center text-muted-foreground"
                     >
                       No line items on this invoice.
@@ -537,9 +574,20 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: st
                         <td className="px-3 py-2 text-muted-foreground">{line.unit}</td>
                         <td className="px-3 py-2 text-right tabular-nums">{formatMoney(line.unitPrice)}</td>
                         <td className="px-3 py-2 text-right tabular-nums">{formatMoney(split.taxable)}</td>
-                        <td className="px-3 py-2 text-right tabular-nums">{formatMoneyOrDash(split.cgst)}</td>
-                        <td className="px-3 py-2 text-right tabular-nums">{formatMoneyOrDash(split.sgst)}</td>
-                        <td className="px-3 py-2 text-right tabular-nums">{formatMoneyOrDash(split.igst)}</td>
+                        {gst.interstate ? (
+                          <td className="px-3 py-2 text-right tabular-nums">
+                            {formatMoneyOrDash(split.igst)}
+                          </td>
+                        ) : (
+                          <>
+                            <td className="px-3 py-2 text-right tabular-nums">
+                              {formatMoneyOrDash(split.cgst)}
+                            </td>
+                            <td className="px-3 py-2 text-right tabular-nums">
+                              {formatMoneyOrDash(split.sgst)}
+                            </td>
+                          </>
+                        )}
                         <td className="px-3 py-2 text-right tabular-nums font-semibold">
                           {formatMoney(split.lineTotal)}
                         </td>
@@ -551,20 +599,27 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: st
             </table>
             )}
           </div>
-        </Section>
+        </VoucherFormSectionCard>
 
         {invoice.additionalCharges.length > 0 && (
-          <Section title="Additional Charges">
+          <VoucherFormSectionCard title="Additional Charges" highlight flush>
             <div className="overflow-x-auto">
-              <table className="w-full text-xs min-w-[600px]">
+              <table className="w-full text-xs min-w-[1100px]">
                 <thead>
                   <tr className="border-b border-border/60 bg-muted/20">
-                    {["#", "Charge Name", "Taxable Amount", "CGST", "SGST", "IGST", "Total"].map((h) => (
+                    {chargeColumns.map((h) => (
                       <th
                         key={h}
                         className={cn(
                           "px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap",
-                          h === "#" || h === "Charge Name" ? "text-left" : "text-right",
+                          h === "#" ||
+                            h === "Particular / Charge Name" ||
+                            h === "Ledger" ||
+                            h === "HSN" ||
+                            h === "GST Applicable" ||
+                            h === "Remarks"
+                            ? "text-left"
+                            : "text-right",
                         )}
                       >
                         {h}
@@ -575,6 +630,11 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: st
                 <tbody>
                   {invoice.additionalCharges.map((charge, i) => {
                     const taxable = charge.amount;
+                    const gstPct =
+                      charge.gstPct ??
+                      (charge.cgstPct ?? 0) + (charge.sgstPct ?? 0) + (charge.igstPct ?? 0);
+                    const gstApplicable =
+                      charge.gstApplicable ?? gstPct > 0;
                     const cgstAmt = Math.round(taxable * ((charge.cgstPct ?? 0) / 100) * 100) / 100;
                     const sgstAmt = Math.round(taxable * ((charge.sgstPct ?? 0) / 100) * 100) / 100;
                     const igstAmt = Math.round(taxable * ((charge.igstPct ?? 0) / 100) * 100) / 100;
@@ -583,32 +643,50 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: st
                       <tr key={charge.uid} className="border-b border-border/40 last:border-0 hover:bg-muted/20">
                         <td className="px-3 py-2 text-muted-foreground">{i + 1}</td>
                         <td className="px-3 py-2 font-medium">{charge.chargeName}</td>
+                        <td className="px-3 py-2 text-muted-foreground">{charge.ledgerName || "—"}</td>
+                        <td className="px-3 py-2 font-mono text-muted-foreground">{charge.hsnCode || "—"}</td>
                         <td className="px-3 py-2 text-right tabular-nums">{formatMoney(taxable)}</td>
-                        <td className="px-3 py-2 text-right tabular-nums">{cgstAmt > 0 ? formatMoney(cgstAmt) : "—"}</td>
-                        <td className="px-3 py-2 text-right tabular-nums">{sgstAmt > 0 ? formatMoney(sgstAmt) : "—"}</td>
-                        <td className="px-3 py-2 text-right tabular-nums">{igstAmt > 0 ? formatMoney(igstAmt) : "—"}</td>
+                        <td className="px-3 py-2 text-left">{gstApplicable ? "Yes" : "No"}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">
+                          {gstApplicable && gstPct > 0 ? `${gstPct}%` : "—"}
+                        </td>
+                        {gst.interstate ? (
+                          <td className="px-3 py-2 text-right tabular-nums">
+                            {igstAmt > 0 ? formatMoney(igstAmt) : "—"}
+                          </td>
+                        ) : (
+                          <>
+                            <td className="px-3 py-2 text-right tabular-nums">
+                              {cgstAmt > 0 ? formatMoney(cgstAmt) : "—"}
+                            </td>
+                            <td className="px-3 py-2 text-right tabular-nums">
+                              {sgstAmt > 0 ? formatMoney(sgstAmt) : "—"}
+                            </td>
+                          </>
+                        )}
                         <td className="px-3 py-2 text-right tabular-nums font-semibold">{formatMoney(total)}</td>
+                        <td className="px-3 py-2 text-muted-foreground">{charge.remarks || "—"}</td>
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
             </div>
-          </Section>
+          </VoucherFormSectionCard>
         )}
 
         {qtyComparisonRows.length > 0 && invoice.grnNo && (
-          <Section title="Quantity Comparison">
+          <VoucherFormSectionCard title="Quantity Comparison" highlight>
             <p className="text-xs text-muted-foreground mb-3">
               Comparison only — supplier invoice values are not adjusted by GRN or QC.
             </p>
             <PurchaseInvoiceQtyComparisonTable rows={qtyComparisonRows} />
-          </Section>
+          </VoucherFormSectionCard>
         )}
 
         {/* Financials */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Section title="Invoice Amounts">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+          <VoucherFormSectionCard title="Invoice Amounts" highlight>
             <div className="space-y-2 text-xs">
               {isDirect && (
                 <>
@@ -626,9 +704,14 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: st
               )}
               {(!isDirect || invoice.gstApplicable !== false) && (
                 <>
-                  <AmountRow label="CGST" value={formatMoneyOrDash(gst.cgst)} muted />
-                  <AmountRow label="SGST" value={formatMoneyOrDash(gst.sgst)} muted />
-                  <AmountRow label="IGST" value={formatMoneyOrDash(gst.igst)} muted />
+                  {gst.interstate ? (
+                    <AmountRow label="IGST" value={formatMoneyOrDash(gst.igst)} muted />
+                  ) : (
+                    <>
+                      <AmountRow label="CGST" value={formatMoneyOrDash(gst.cgst)} muted />
+                      <AmountRow label="SGST" value={formatMoneyOrDash(gst.sgst)} muted />
+                    </>
+                  )}
                   {isDirect && (
                     <AmountRow
                       label="Total GST"
@@ -666,9 +749,9 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: st
                 )}
               </div>
             </div>
-          </Section>
+          </VoucherFormSectionCard>
 
-          <Section title="Payment Status">
+          <VoucherFormSectionCard title="Payment Status" highlight>
             <div className="space-y-2 text-xs">
               <AmountRow label="Invoice Amount" value={formatMoney(invoice.grandTotal)} />
               <AmountRow label="Amount Paid" value={formatMoney(invoice.amountPaid)} muted />
@@ -684,12 +767,12 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: st
             <div className="mt-3">
               <PaymentBadge amountPaid={invoice.amountPaid} grandTotal={invoice.grandTotal} />
             </div>
-          </Section>
+          </VoucherFormSectionCard>
         </div>
 
         {/* Supplier Ledger Impact */}
-        <Section title="Supplier Ledger Entry">
-          <div className="-mx-4 -mb-4 overflow-x-auto">
+        <VoucherFormSectionCard title="Supplier Ledger Entry" highlight flush>
+          <div className="overflow-x-auto">
             <table className="w-full text-xs min-w-[960px]">
               <thead>
                 <tr className="border-b border-border/30 bg-muted/50">
@@ -738,7 +821,7 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: st
               </tbody>
             </table>
           </div>
-        </Section>
+        </VoucherFormSectionCard>
 
         {/* COA Posting Impact */}
         <LedgerImpactPreview
@@ -749,14 +832,14 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: st
 
         {/* Remarks / Narration */}
         {(invoice.narration || invoice.remarks) && (
-          <Section title={isDirect ? "Narration" : "Remarks"}>
+          <VoucherFormSectionCard title={isDirect ? "Narration" : "Remarks"} highlight>
             <p className="text-xs text-muted-foreground">{invoice.narration || invoice.remarks}</p>
-          </Section>
+          </VoucherFormSectionCard>
         )}
 
         {/* Activity log */}
         {invoice.activity && invoice.activity.length > 0 && (
-          <Section title="Activity">
+          <VoucherFormSectionCard title="Activity" highlight>
             <div className="space-y-2">
               {invoice.activity.map((a, i) => (
                 <div key={i} className="flex items-start gap-2 text-xs">
@@ -773,7 +856,7 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: st
                 </div>
               ))}
             </div>
-          </Section>
+          </VoucherFormSectionCard>
         )}
       </div>
     </PurchaseInvoicePageShell>
