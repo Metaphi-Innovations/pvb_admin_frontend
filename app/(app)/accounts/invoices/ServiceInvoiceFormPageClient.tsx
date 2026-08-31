@@ -461,8 +461,8 @@ export default function ServiceInvoiceFormPageClient() {
       });
 
       dispatchAccountsDataChanged("sales-invoices");
-      router.push("/accounts/transactions/invoices");
-      router.refresh();
+      showToast("Service invoice posted successfully.", "success");
+      router.replace("/accounts/transactions/invoices");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to create service invoice.");
       setSaving(false);

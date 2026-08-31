@@ -20,7 +20,7 @@ import {
   RECEIPT_ADJUSTMENT_TYPE_LABELS,
   type ReceiptAdjustmentType,
 } from "@/types/receipt-voucher.types";
-import { ReceiptSearchableSelect } from "./ReceiptSearchableSelect";
+import { VoucherLedgerSelect } from "@/components/accounts/voucher-form/VoucherLedgerSelect";
 import {
   createEmptyAdjustment,
   type ReceiptUiAdjustment,
@@ -43,12 +43,12 @@ const AMOUNT_INPUT = cn(
 
 export function ReceiptAdjustmentsEditor({
   rows,
-  ledgerOptions,
   readOnly,
   onChange,
 }: {
   rows: ReceiptUiAdjustment[];
-  ledgerOptions: { value: string; label: string; sub?: string }[];
+  /** @deprecated Unused — ledger picker uses generic COA dropdown. */
+  ledgerOptions?: { value: string; label: string; sub?: string }[];
   readOnly?: boolean;
   onChange: (rows: ReceiptUiAdjustment[]) => void;
 }) {
@@ -117,21 +117,23 @@ export function ReceiptAdjustmentsEditor({
 
               <div className="min-w-0">
                 {!hideLedgerPicker && needsLedger ? (
-                  <ReceiptSearchableSelect
-                    label="Ledger"
-                    required
-                    disabled={readOnly}
-                    value={row.ledger_id}
-                    options={ledgerOptions}
-                    placeholder="Select ledger…"
-                    onChange={(id) => {
-                      const opt = ledgerOptions.find((o) => o.value === id);
-                      update(row.id, {
-                        ledger_id: id,
-                        ledger_name: opt?.label || "",
-                      });
-                    }}
-                  />
+                  <div className="space-y-1 min-w-0">
+                    <Label className="text-xs font-medium">
+                      Ledger <span className="text-red-500">*</span>
+                    </Label>
+                    <VoucherLedgerSelect
+                      disabled={readOnly}
+                      value={row.ledger_id}
+                      fallbackLabel={row.ledger_name || undefined}
+                      placeholder="Select ledger…"
+                      onChange={(ledger) =>
+                        update(row.id, {
+                          ledger_id: ledger.ledgerId,
+                          ledger_name: ledger.ledgerName,
+                        })
+                      }
+                    />
+                  </div>
                 ) : (
                   <div className="space-y-1">
                     <Label className="text-xs font-medium">Ledger</Label>

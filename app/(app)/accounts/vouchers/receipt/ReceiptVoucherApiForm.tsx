@@ -12,7 +12,7 @@ import {
 } from "@/app/(app)/accounts/invoices/components/invoice-form-voucher-ui";
 import "@/app/(app)/accounts/invoices/sales-order-invoice-form-compact.css";
 import "../../credit-notes/credit-note-tx.css";
-import "./receipt-voucher-view.css";
+import "@/components/accounts/voucher-form/transaction-view.css";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { VoucherFormSectionCard } from "@/components/accounts/voucher-form/VoucherFormSectionCard";
 import {
@@ -32,6 +32,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { showToast } from "@/lib/toast";
+import { notifyVoucherListingChanged } from "@/lib/accounts/voucher-posting-notify";
 import { useFY } from "@/lib/fy-store";
 import { ReceiptVoucherService } from "@/services/receipt-voucher.service";
 import { CustomerListService } from "@/services/customer-list.service";
@@ -50,6 +51,7 @@ import {
   type ReceiptVoucherDetail,
   type ReceiptVoucherStatus,
 } from "@/types/receipt-voucher.types";
+import { VoucherLedgerSelect } from "@/components/accounts/voucher-form/VoucherLedgerSelect";
 import { ReceiptSearchableSelect } from "./components/ReceiptSearchableSelect";
 import { ReceiptFormActionBar } from "./components/ReceiptFormActionBar";
 import { ReceiptAllocationTable } from "./components/ReceiptAllocationTable";
@@ -99,6 +101,10 @@ export function ReceiptVoucherApiForm({
   onEdit,
 }: ReceiptVoucherApiFormProps) {
   const router = useRouter();
+  const goToList = useCallback(() => {
+    notifyVoucherListingChanged("receipt");
+    router.replace(RECEIPT_LIST_PATH);
+  }, [router]);
   const { selectedFY } = useFY();
   const [form, setForm] = useState<ReceiptFormState>(emptyReceiptForm);
   const [detail, setDetail] = useState<ReceiptVoucherDetail | null>(null);
@@ -139,25 +145,8 @@ export function ReceiptVoucherApiForm({
   const isPostedView = status === "POSTED" && !readOnlyProp;
   const showViewChrome = readOnlyProp || isPostedView;
   const preview = useMemo(() => computeReceiptPreview(form), [form]);
-  /** Manual ledger adjustments only (excludes auto CUSTOMER_TDS). */
-  const manualAdjustmentsTotal = useMemo(() => {
-    let debit = 0;
-    let credit = 0;
-    for (const adj of form.adjustments) {
-      if (adj.adjustment_type === "CUSTOMER_TDS") continue;
-      const amt = toMoneyNumber(adj.amount);
-      if (amt <= 0) continue;
-      if (
-        (adj.adjustment_type === "OTHER" || adj.adjustment_type === "ROUND_OFF") &&
-        adj.entry_type === "CREDIT"
-      ) {
-        credit += amt;
-      } else {
-        debit += amt;
-      }
-    }
-    return debit - credit;
-  }, [form.adjustments]);
+  /** Ledger Entries total (additive with settlement toward composed gross / receipt). */
+  const manualAdjustmentsTotal = preview.ledgerEntriesTotal;
   const isCustomerAdvance =
     form.party_kind === "CUSTOMER" &&
     form.receipt_treatment === "advance_on_account";
@@ -167,11 +156,17 @@ export function ReceiptVoucherApiForm({
     form.party_kind === "SUPPLIER_REFUND";
   const showOnAccountInSummary =
     form.party_kind === "CUSTOMER" && preview.advance > 0.004;
-  /** Soft chip: allocated + on-account matches gross when settlement applies. */
+  /** Settlement + ledger entries must equal gross; receipt amount equals gross (less TDS/discount). */
   const summaryBalanced =
     form.party_kind === "OTHER_LEDGER"
       ? true
-      : Math.abs(preview.totalAllocated + preview.advance - preview.gross) < 0.01;
+      : preview.gross > 0 &&
+        Math.abs(
+          preview.totalAllocated +
+            preview.advance +
+            preview.ledgerEntriesTotal -
+            preview.gross,
+        ) < 0.01;
   const selectedInvoiceIds = useMemo(
     () =>
       form.allocations.filter((a) => a.selected).map((a) => a.open_item_id),
@@ -624,23 +619,26 @@ export function ReceiptVoucherApiForm({
           "success",
         );
       }
-      if (!currentId && !options?.skipNavigate) {
-        router.replace(receiptEditPath(saved.receipt_voucher_id));
+      if (!options?.skipNavigate) {
+        // Leave busy=true — clearing it after replace can abort soft navigation
+        goToList();
+        return saved;
       }
+      setBusy(false);
       return saved;
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Failed to save draft.";
       setError(msg);
       showToast(msg, "error");
-      return null;
-    } finally {
       setBusy(false);
+      return null;
     }
   };
 
   const runAction = async (
     action: () => Promise<ReceiptVoucherDetail>,
     successMsg: string,
+    options?: { keepBusy?: boolean },
   ) => {
     setBusy(true);
     setError(null);
@@ -648,14 +646,14 @@ export function ReceiptVoucherApiForm({
       const result = await action();
       hydrateFromDetail(result);
       showToast(successMsg, "success");
+      if (!options?.keepBusy) setBusy(false);
       return result;
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Action failed.";
       setError(msg);
       showToast(msg, "error");
-      return null;
-    } finally {
       setBusy(false);
+      return null;
     }
   };
 
@@ -677,12 +675,13 @@ export function ReceiptVoucherApiForm({
     const posted = await runAction(
       () => ReceiptVoucherService.post(saved.receipt_voucher_id),
       "Receipt posted successfully.",
+      { keepBusy: true },
     );
-    if (posted?.receipt_voucher_id) {
-      router.replace(receiptViewPath(posted.receipt_voucher_id));
+    if (posted) {
+      goToList();
       return;
     }
-    router.replace(receiptEditPath(saved.receipt_voucher_id));
+    setBusy(false);
   };
 
   /** Post an already-saved voucher without confirmation (approved / view flows). */
@@ -691,10 +690,13 @@ export function ReceiptVoucherApiForm({
     const posted = await runAction(
       () => ReceiptVoucherService.post(currentId),
       "Receipt posted successfully.",
+      { keepBusy: true },
     );
     if (posted?.receipt_voucher_id) {
-      router.replace(receiptViewPath(posted.receipt_voucher_id));
+      goToList();
+      return;
     }
+    setBusy(false);
   };
 
   const title =
@@ -812,8 +814,8 @@ export function ReceiptVoucherApiForm({
         >
           <div
             className={cn(
-              "space-y-2.5",
-              isViewMode && "receipt-voucher-view",
+              isViewMode ? "space-y-2" : "space-y-2.5",
+              isViewMode && "transaction-voucher-view receipt-voucher-view",
             )}
           >
             {error ? <div className={VOUCHER_ERROR_CLASS}>{error}</div> : null}
@@ -931,22 +933,19 @@ export function ReceiptVoucherApiForm({
                 required
               >
                 {form.transaction_mode === "CASH" ? (
-                  <ReceiptSearchableSelect
+                  <VoucherLedgerSelect
                     disabled={!fieldsEditable}
                     value={form.cash_bank_ledger_id}
-                    options={cashLedgers.length ? cashLedgers : manualLedgers}
+                    fallbackLabel={form.cash_bank_ledger_name || undefined}
                     placeholder="Select cash ledger…"
-                    triggerClassName={INVOICE_DETAIL_SELECT_CLASS}
-                    onChange={(id) => {
-                      const opt = (cashLedgers.length ? cashLedgers : manualLedgers).find(
-                        (o) => o.value === id,
-                      );
+                    className={INVOICE_DETAIL_SELECT_CLASS}
+                    onChange={(ledger) =>
                       patch({
-                        cash_bank_ledger_id: id,
-                        cash_bank_ledger_name: opt?.label || "",
+                        cash_bank_ledger_id: ledger.ledgerId,
+                        cash_bank_ledger_name: ledger.ledgerName,
                         bank_account_id: "",
-                      });
-                    }}
+                      })
+                    }
                   />
                 ) : (
                   <ReceiptSearchableSelect
@@ -1083,20 +1082,19 @@ export function ReceiptVoucherApiForm({
 
             {form.party_kind === "OTHER_LEDGER" ? (
               <InvoiceDetailField label="Other Ledger" required>
-                <ReceiptSearchableSelect
+                <VoucherLedgerSelect
                   disabled={!fieldsEditable}
                   value={form.other_ledger_id}
-                  options={manualLedgers}
+                  fallbackLabel={form.other_ledger_name || undefined}
                   placeholder="Select ledger…"
-                  triggerClassName={INVOICE_DETAIL_SELECT_CLASS}
-                  onChange={(id) => {
-                    const opt = manualLedgers.find((o) => o.value === id);
+                  className={INVOICE_DETAIL_SELECT_CLASS}
+                  onChange={(ledger) =>
                     patch({
-                      other_ledger_id: id,
-                      other_ledger_name: opt?.label || "",
+                      other_ledger_id: ledger.ledgerId,
+                      other_ledger_name: ledger.ledgerName,
                       allocations: [],
-                    });
-                  }}
+                    })
+                  }
                 />
               </InvoiceDetailField>
             ) : null}

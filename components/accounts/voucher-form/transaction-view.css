@@ -1,0 +1,328 @@
+/* Shared transaction view — denser layout + readable read-only controls */
+
+.transaction-voucher-view,
+.receipt-voucher-view {
+  --so-ctrl-h: 28px;
+  --cdn-ctrl-h: 28px;
+  --so-label-gap: 2px;
+  --so-helper-h: 0px;
+  --so-field-gap: 0.5rem;
+  --so-field-row-gap: 0.25rem;
+  --cdn-gap-card: 0.5rem;
+  --cdn-pad-card-x: 0.625rem;
+  --cdn-pad-card-y: 0.375rem;
+  --cdn-pad-header-y: 0.25rem;
+}
+
+.transaction-voucher-view input:disabled,
+.transaction-voucher-view textarea:disabled,
+.transaction-voucher-view select:disabled,
+.transaction-voucher-view button:disabled,
+.transaction-voucher-view [disabled],
+.receipt-voucher-view input:disabled,
+.receipt-voucher-view textarea:disabled,
+.receipt-voucher-view select:disabled,
+.receipt-voucher-view button:disabled,
+.receipt-voucher-view [disabled] {
+  opacity: 0.9 !important;
+  color: hsl(var(--foreground)) !important;
+  -webkit-text-fill-color: hsl(var(--foreground));
+  background-color: hsl(var(--muted) / 0.45) !important;
+  border-color: hsl(var(--border)) !important;
+  cursor: default !important;
+}
+
+.transaction-voucher-view input:disabled::placeholder,
+.transaction-voucher-view textarea:disabled::placeholder,
+.receipt-voucher-view input:disabled::placeholder,
+.receipt-voucher-view textarea:disabled::placeholder {
+  color: hsl(var(--muted-foreground)) !important;
+  -webkit-text-fill-color: hsl(var(--muted-foreground));
+  opacity: 1;
+}
+
+.transaction-voucher-view .so-goods-ro,
+.transaction-voucher-view .so-goods-ro-with-info,
+.receipt-voucher-view .so-goods-ro,
+.receipt-voucher-view .so-goods-ro-with-info {
+  background: hsl(var(--muted) / 0.45);
+  color: hsl(var(--foreground));
+  border-color: hsl(var(--border));
+  font-weight: 500;
+  height: var(--so-ctrl-h) !important;
+  min-height: var(--so-ctrl-h) !important;
+  max-height: var(--so-ctrl-h) !important;
+  padding-left: 0.5rem !important;
+  padding-right: 0.5rem !important;
+}
+
+.transaction-voucher-view button:disabled span,
+.transaction-voucher-view [disabled] span,
+.receipt-voucher-view button:disabled span,
+.receipt-voucher-view [disabled] span {
+  color: hsl(var(--foreground)) !important;
+  opacity: 1 !important;
+}
+
+/* Segmented toggles — preserve selected option in view mode */
+.transaction-voucher-view .cnz-gst-toggle button[data-active="true"],
+.receipt-voucher-view .cnz-gst-toggle button[data-active="true"] {
+  background-color: #d96a10 !important;
+  color: #fff !important;
+  -webkit-text-fill-color: #fff;
+  opacity: 1 !important;
+}
+
+.transaction-voucher-view .cnz-gst-toggle button:disabled:not([data-active="true"]),
+.receipt-voucher-view .cnz-gst-toggle button:disabled:not([data-active="true"]) {
+  background-color: transparent !important;
+  color: hsl(var(--foreground)) !important;
+  -webkit-text-fill-color: hsl(var(--foreground));
+}
+
+/* ——— Compact section cards ——— */
+.transaction-voucher-view section.rounded-xl > div:first-child,
+.receipt-voucher-view section.rounded-xl > div:first-child {
+  min-height: 26px !important;
+  padding-top: 0.25rem !important;
+  padding-bottom: 0.25rem !important;
+}
+
+.transaction-voucher-view section.rounded-xl > div:last-child:not(.p-0),
+.receipt-voucher-view section.rounded-xl > div:last-child:not(.p-0) {
+  padding-top: 0.375rem !important;
+  padding-bottom: 0.375rem !important;
+  padding-left: 0.625rem !important;
+  padding-right: 0.625rem !important;
+}
+
+/* ——— Dense field grids (voucher + note + invoice) ——— */
+.transaction-voucher-view .so-invoice-details-grid,
+.receipt-voucher-view .so-invoice-details-grid {
+  row-gap: 0.25rem !important;
+  column-gap: 0.5rem !important;
+}
+
+.transaction-voucher-view .so-invoice-detail-field,
+.receipt-voucher-view .so-invoice-detail-field {
+  grid-template-rows: auto var(--so-ctrl-h) !important;
+  gap: 2px !important;
+}
+
+.transaction-voucher-view .so-goods-field,
+.receipt-voucher-view .so-goods-field {
+  grid-template-rows: auto var(--so-ctrl-h) !important;
+  gap: 2px !important;
+}
+
+.transaction-voucher-view .so-goods-field--view,
+.receipt-voucher-view .so-goods-field--view {
+  grid-template-rows: auto minmax(var(--so-ctrl-h), auto) !important;
+  gap: 2px !important;
+}
+
+.transaction-voucher-view .so-goods-field__helper,
+.receipt-voucher-view .so-goods-field__helper {
+  display: none !important;
+}
+
+.transaction-voucher-view .cdn-field-grid,
+.receipt-voucher-view .cdn-field-grid {
+  gap: 0.35rem 0.75rem !important;
+  justify-items: stretch !important;
+}
+
+.transaction-voucher-view .cdn-field-grid > *,
+.receipt-voucher-view .cdn-field-grid > * {
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+/* View: stretch note field boxes to the column (no short floating inputs) */
+.transaction-voucher-view .cdn-w-xs,
+.transaction-voucher-view .cdn-w-sm,
+.transaction-voucher-view .cdn-w-md,
+.transaction-voucher-view .cdn-w-lg,
+.transaction-voucher-view .cdn-w-ref,
+.receipt-voucher-view .cdn-w-xs,
+.receipt-voucher-view .cdn-w-sm,
+.receipt-voucher-view .cdn-w-md,
+.receipt-voucher-view .cdn-w-lg,
+.receipt-voucher-view .cdn-w-ref {
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+.transaction-voucher-view .cdn-readonly,
+.transaction-voucher-view .voucher-note-readonly,
+.receipt-voucher-view .cdn-readonly,
+.receipt-voucher-view .voucher-note-readonly {
+  height: var(--cdn-ctrl-h) !important;
+  min-height: var(--cdn-ctrl-h) !important;
+  max-height: var(--cdn-ctrl-h) !important;
+  padding: 0 0.5rem !important;
+}
+
+.transaction-voucher-view label,
+.transaction-voucher-view .accounts-form-label,
+.transaction-voucher-view .so-goods-field__label,
+.transaction-voucher-view .so-invoice-detail-label,
+.receipt-voucher-view label,
+.receipt-voucher-view .accounts-form-label,
+.receipt-voucher-view .so-goods-field__label,
+.receipt-voucher-view .so-invoice-detail-label {
+  margin-bottom: 0 !important;
+  min-height: 0 !important;
+  line-height: 1.15 !important;
+}
+
+.transaction-voucher-view input:not([type="checkbox"]):not([type="radio"]),
+.transaction-voucher-view select,
+.transaction-voucher-view button[role="combobox"],
+.receipt-voucher-view input:not([type="checkbox"]):not([type="radio"]),
+.receipt-voucher-view select,
+.receipt-voucher-view button[role="combobox"] {
+  height: var(--so-ctrl-h) !important;
+  min-height: var(--so-ctrl-h) !important;
+  max-height: var(--so-ctrl-h) !important;
+}
+
+.transaction-voucher-view textarea:disabled,
+.receipt-voucher-view textarea:disabled {
+  min-height: 2.5rem !important;
+  max-height: 6rem !important;
+  height: auto !important;
+  padding-top: 0.375rem !important;
+  padding-bottom: 0.375rem !important;
+}
+
+/* ——— View tables: header ↔ cell alignment ——— */
+
+.transaction-voucher-view .accounts-table > thead > tr > th.text-right,
+.transaction-voucher-view .accounts-table > thead > tr > th.text-end,
+.transaction-voucher-view table thead th.text-right,
+.transaction-voucher-view table thead th.text-end,
+.receipt-voucher-view .accounts-table > thead > tr > th.text-right,
+.receipt-voucher-view .accounts-table > thead > tr > th.text-end,
+.receipt-voucher-view table thead th.text-right,
+.receipt-voucher-view table thead th.text-end {
+  text-align: right !important;
+}
+
+.transaction-voucher-view .accounts-table > thead > tr > th.text-center,
+.transaction-voucher-view table thead th.text-center,
+.receipt-voucher-view .accounts-table > thead > tr > th.text-center,
+.receipt-voucher-view table thead th.text-center {
+  text-align: center !important;
+}
+
+.transaction-voucher-view .accounts-table > thead > tr > th.text-left,
+.transaction-voucher-view table thead th.text-left,
+.receipt-voucher-view .accounts-table > thead > tr > th.text-left,
+.receipt-voucher-view table thead th.text-left {
+  text-align: left !important;
+}
+
+.transaction-voucher-view table thead th.cnz-num,
+.transaction-voucher-view table thead th.so-cell-num,
+.receipt-voucher-view table thead th.cnz-num,
+.receipt-voucher-view table thead th.so-cell-num {
+  text-align: right !important;
+}
+
+.transaction-voucher-view table > thead > tr > th,
+.transaction-voucher-view table > tbody > tr > td,
+.receipt-voucher-view table > thead > tr > th,
+.receipt-voucher-view table > tbody > tr > td {
+  padding-left: 0.5rem !important;
+  padding-right: 0.5rem !important;
+  padding-top: 0.375rem !important;
+  padding-bottom: 0.375rem !important;
+  box-sizing: border-box;
+  vertical-align: middle;
+}
+
+.transaction-voucher-view .accounts-table,
+.receipt-voucher-view .accounts-table {
+  border-collapse: collapse;
+  border-spacing: 0;
+}
+
+.transaction-voucher-view .accounts-table > thead > tr > th,
+.receipt-voucher-view .accounts-table > thead > tr > th {
+  position: static;
+  box-shadow: none;
+}
+
+/*
+ * Flatten boxed read-only / disabled controls inside table cells so values
+ * sit under the same edge as the header text (no extra inset from borders).
+ */
+.transaction-voucher-view table tbody td .so-table-ro,
+.transaction-voucher-view table tbody td .so-goods-ro,
+.transaction-voucher-view table tbody td .so-goods-ro-with-info,
+.receipt-voucher-view table tbody td .so-table-ro,
+.receipt-voucher-view table tbody td .so-goods-ro,
+.receipt-voucher-view table tbody td .so-goods-ro-with-info {
+  border: none !important;
+  background: transparent !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+.transaction-voucher-view table tbody td input:disabled:not([type="checkbox"]):not([type="radio"]),
+.transaction-voucher-view table tbody td textarea:disabled,
+.transaction-voucher-view table tbody td select:disabled,
+.transaction-voucher-view table tbody td button:disabled:not([role="switch"]),
+.transaction-voucher-view table tbody td [disabled]:not([role="switch"]):not([type="checkbox"]):not([type="radio"]),
+.receipt-voucher-view table tbody td input:disabled:not([type="checkbox"]):not([type="radio"]),
+.receipt-voucher-view table tbody td textarea:disabled,
+.receipt-voucher-view table tbody td select:disabled,
+.receipt-voucher-view table tbody td button:disabled:not([role="switch"]),
+.receipt-voucher-view table tbody td [disabled]:not([role="switch"]):not([type="checkbox"]):not([type="radio"]) {
+  border-color: transparent !important;
+  background-color: transparent !important;
+  box-shadow: none !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  opacity: 1 !important;
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+}
+
+.transaction-voucher-view table tbody td input:disabled.text-right,
+.transaction-voucher-view table tbody td .text-right input:disabled,
+.receipt-voucher-view table tbody td input:disabled.text-right,
+.receipt-voucher-view table tbody td .text-right input:disabled {
+  text-align: right !important;
+}
+
+.transaction-voucher-view table tbody td button[disabled][role="combobox"],
+.receipt-voucher-view table tbody td button[disabled][role="combobox"] {
+  justify-content: flex-start !important;
+  gap: 0 !important;
+}
+
+.transaction-voucher-view table tbody td button[disabled][role="combobox"] svg,
+.receipt-voucher-view table tbody td button[disabled][role="combobox"] svg {
+  display: none !important;
+}
+
+/* Summary / narration — no tall empty boxes */
+.transaction-voucher-view .so-invoice-summary,
+.receipt-voucher-view .so-invoice-summary {
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+}
+
+.transaction-voucher-view .so-invoice-summary > *,
+.receipt-voucher-view .so-invoice-summary > * {
+  padding-top: 0.125rem !important;
+  padding-bottom: 0.125rem !important;
+}

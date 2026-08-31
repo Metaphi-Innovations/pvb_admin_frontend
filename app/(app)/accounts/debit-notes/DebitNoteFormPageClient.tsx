@@ -1374,16 +1374,18 @@ export default function DebitNoteFormPageClient({
     setError(null);
     setSaving(true);
     try {
-      if (!validateForm()) return;
+      if (!validateForm()) {
+        setSaving(false);
+        return;
+      }
       if (isPendingEntitlement) {
-        const res = await DebitNoteService.createFromPending(
+        await DebitNoteService.createFromPending(
           pendingId,
           buildPendingCreatePayload(),
         );
-        const newId = res?.debit_note_id || res?.id;
         showToast("Debit note saved as draft", "success");
         dispatchAccountsDataChanged("debit-notes");
-        router.push(DEBIT_NOTES_LIST_PATH);
+        router.replace(DEBIT_NOTES_LIST_PATH);
         return;
       }
       const input = buildInput("draft");
@@ -1391,17 +1393,14 @@ export default function DebitNoteFormPageClient({
       if (isEdit && debitNoteId != null) {
         await DebitNoteService.updateDraft(debitNoteId, payload);
         showToast("Debit note updated as draft", "success");
-        router.push(DEBIT_NOTES_LIST_PATH);
       } else {
-        const res = await DebitNoteService.createDirect(payload);
-        const newId = res?.debit_note_id || res?.id;
+        await DebitNoteService.createDirect(payload);
         showToast("Debit note saved as draft", "success");
-        router.push(DEBIT_NOTES_LIST_PATH);
       }
       dispatchAccountsDataChanged("debit-notes");
+      router.replace(DEBIT_NOTES_LIST_PATH);
     } catch (e: any) {
       setError(e.message || "Could not save debit note.");
-    } finally {
       setSaving(false);
     }
   };
@@ -1446,10 +1445,9 @@ export default function DebitNoteFormPageClient({
       dispatchAccountsDataChanged("debit-notes");
       showToast("Debit note submitted for approval", "success");
       setSubmitApproverOpen(false);
-      router.push(DEBIT_NOTES_LIST_PATH);
+      router.replace(DEBIT_NOTES_LIST_PATH);
     } catch (e: any) {
       setError(e.message || "Failed to submit for approval.");
-    } finally {
       setSaving(false);
     }
   };
@@ -1458,7 +1456,10 @@ export default function DebitNoteFormPageClient({
     setError(null);
     setSaving(true);
     try {
-      if (!validateForm()) return;
+      if (!validateForm()) {
+        setSaving(false);
+        return;
+      }
       if (isPendingEntitlement) {
         const res = await DebitNoteService.createFromPending(
           pendingId,
@@ -1467,12 +1468,13 @@ export default function DebitNoteFormPageClient({
         const targetId = res?.debit_note_id || res?.id;
         if (!targetId) {
           setError("Could not determine debit note ID after creation.");
+          setSaving(false);
           return;
         }
         await DebitNoteService.post(targetId);
         dispatchAccountsDataChanged("debit-notes");
         showToast("Debit note posted successfully", "success");
-        router.push(DEBIT_NOTES_LIST_PATH);
+        router.replace(DEBIT_NOTES_LIST_PATH);
         return;
       }
       const input = buildInput("draft");
@@ -1488,13 +1490,13 @@ export default function DebitNoteFormPageClient({
         await DebitNoteService.post(targetId);
         dispatchAccountsDataChanged("debit-notes");
         showToast("Debit note posted successfully", "success");
-        router.push(DEBIT_NOTES_LIST_PATH);
+        router.replace(DEBIT_NOTES_LIST_PATH);
       } else {
         setError("Could not determine debit note ID after creation.");
+        setSaving(false);
       }
     } catch (e: any) {
       setError(e.message || "Could not post debit note.");
-    } finally {
       setSaving(false);
     }
   };

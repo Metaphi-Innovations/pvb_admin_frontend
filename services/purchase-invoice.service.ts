@@ -811,6 +811,13 @@ export function mapPurchaseInvoiceDetailToRecord(
     additionalCharges: (dto.additional_charges || []).map((raw, idx) => {
       const c = raw as Record<string, unknown>;
       const snap = (c.additional_charge_snapshot || {}) as Record<string, unknown>;
+      const ledgerSnap = (c.ledger_snapshot || {}) as Record<string, unknown>;
+      const hsnSnap = (c.hsn_snapshot || {}) as Record<string, unknown>;
+      const gstPct = asNumber(c.gst_rate);
+      const cgstPct = asNumber(c.cgst_rate);
+      const sgstPct = asNumber(c.sgst_rate);
+      const igstPct = asNumber(c.igst_rate);
+      const derivedGstPct = gstPct || cgstPct + sgstPct + igstPct;
       return {
         uid: asString(c.purchase_invoice_additional_charge_id) || `charge-${idx}`,
         chargeName:
@@ -818,10 +825,28 @@ export function mapPurchaseInvoiceDetailToRecord(
           asString(snap.charge_name || snap.chargeName) ||
           `Charge ${idx + 1}`,
         amount: asNumber(c.taxable_amount || c.amount),
-        cgstPct: asNumber(c.cgst_rate),
-        sgstPct: asNumber(c.sgst_rate),
-        igstPct: asNumber(c.igst_rate),
+        cgstPct,
+        sgstPct,
+        igstPct,
         remarks: asString(c.remarks) || undefined,
+        ledgerId:
+          asString(c.ledger_id) ||
+          asString(ledgerSnap.ledger_id || ledgerSnap.id) ||
+          undefined,
+        ledgerName:
+          asString(c.ledger_name) ||
+          asString(ledgerSnap.ledger_name || ledgerSnap.name) ||
+          undefined,
+        hsnId:
+          asString(c.hsn_id) ||
+          asString(hsnSnap.hsn_id || hsnSnap.id) ||
+          undefined,
+        hsnCode:
+          asString(c.hsn_code) ||
+          asString(hsnSnap.hsn_code || hsnSnap.hsnCode || hsnSnap.code) ||
+          undefined,
+        gstApplicable: Boolean(c.gst_applicable) || derivedGstPct > 0,
+        gstPct: derivedGstPct,
       };
     }),
     productAmount: taxable,

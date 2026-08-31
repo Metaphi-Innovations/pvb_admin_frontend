@@ -20,7 +20,7 @@ export function VoucherNoteFieldGrid({
   return (
     <div
       className={cn(
-        "cdn-field-grid grid gap-x-2.5 gap-y-1",
+          "cdn-field-grid grid gap-x-2.5 gap-y-1.5",
         columns === 4
           ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4"
           : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3",
@@ -75,7 +75,7 @@ export function VoucherNoteField({
         htmlFor={htmlFor}
         className={cn(
           ACCOUNTS_FORM_LABEL_CLASS,
-          "inline-flex items-center gap-1 text-muted-foreground font-medium min-h-[1rem]",
+          "inline-flex items-center gap-1 text-muted-foreground font-medium leading-tight",
         )}
       >
         {label}

@@ -2179,10 +2179,17 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
       setSaving(true);
       const status: InvoiceStatus = asDraft ? "draft" : "sent";
 
+      const goToInvoiceList = (message: string) => {
+        dispatchAccountsDataChanged("sales-invoices");
+        showToast(message, "success");
+        // replace + no post-success setState — setSaving(false) after push can abort soft nav
+        router.replace(INVOICES_LIST_PATH);
+      };
+
       if ((isSalesOrderGeneration || isStockTransferGeneration) && !asDraft) {
         const charges = toAdditionalChargePayloadList(additionalExpenses, "INVOICE");
 
-        const created = await SalesInvoiceService.createFromDispatch(sourceDispatchId, {
+        await SalesInvoiceService.createFromDispatch(sourceDispatchId, {
           invoice_date: invoiceDate,
           due_date: dueDate || undefined,
           narration: remarks.trim() || undefined,
@@ -2214,43 +2221,34 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
           round_off_amount: roundOff,
         });
 
-        dispatchAccountsDataChanged("sales-invoices");
-        setSuccess(
+        goToInvoiceList(
           isStockTransferGeneration
             ? "Stock Transfer Invoice generated successfully."
             : "Sales Invoice generated successfully.",
         );
-        router.push(INVOICES_LIST_PATH);
-        router.refresh();
         return;
       }
 
       if (isEdit && invoiceId != null) {
         updateInvoice(invoiceId, buildInput(status));
-        dispatchAccountsDataChanged("sales-invoices");
-        setSuccess(
+        goToInvoiceList(
           asDraft
             ? "Invoice saved as draft."
             : "Invoice saved and posted to ledger successfully.",
         );
-        router.push(INVOICES_LIST_PATH);
-        router.refresh();
-      } else {
-        const rec = await createInvoice(buildInput(status));
-        dispatchAccountsDataChanged("sales-invoices");
-        setSuccess(
-          asDraft
-            ? "Invoice saved as draft."
-            : isSampleOrderGeneration
-              ? "Sample Order Proforma generated — inventory posted at Cost Price."
-              : "Invoice saved and posted to ledger successfully.",
-        );
-        router.push(INVOICES_LIST_PATH);
-        router.refresh();
+        return;
       }
+
+      await createInvoice(buildInput(status));
+      goToInvoiceList(
+        asDraft
+          ? "Invoice saved as draft."
+          : isSampleOrderGeneration
+            ? "Sample Order Proforma generated — inventory posted at Cost Price."
+            : "Invoice saved and posted to ledger successfully.",
+      );
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save invoice.");
-    } finally {
       savingRef.current = false;
       setSaving(false);
     }

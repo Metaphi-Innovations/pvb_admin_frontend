@@ -11,8 +11,14 @@ import {
   InvoiceDetailField,
 } from "@/app/(app)/accounts/invoices/components/invoice-form-voucher-ui";
 import "@/app/(app)/accounts/invoices/sales-order-invoice-form-compact.css";
+import "@/components/accounts/voucher-form/transaction-view.css";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { VoucherFormSectionCard } from "@/components/accounts/voucher-form/VoucherFormSectionCard";
+import {
+  TransactionViewHero,
+  buildVoucherViewMeta,
+  voucherStatusToBadgeKey,
+} from "@/components/accounts/voucher-form/TransactionViewHero";
 import {
   VOUCHER_ERROR_CLASS,
   VOUCHER_MONEY_INPUT_CLASS,
@@ -32,6 +38,7 @@ import {
   type JournalVoucherDetail,
   type JournalVoucherStatus,
 } from "@/types/journal-voucher.types";
+import { VoucherLedgerSelect } from "@/components/accounts/voucher-form/VoucherLedgerSelect";
 import { JournalSearchableSelect } from "./components/JournalSearchableSelect";
 import { JournalFormActionBar } from "./components/JournalFormActionBar";
 import { JournalFormSummary } from "./components/JournalFormSummary";
@@ -106,6 +113,7 @@ export function JournalVoucherApiForm({
   const [reverseDate, setReverseDate] = useState("");
 
   const fieldsEditable = isDraftEditable(status) && !readOnlyProp;
+  const isViewMode = readOnlyProp || !fieldsEditable;
   const showViewChrome = readOnlyProp || !fieldsEditable;
 
   const preview = useMemo(() => computeJournalPreview(form), [form]);
@@ -123,6 +131,7 @@ export function JournalVoucherApiForm({
     form.credit_ledger_name ||
     form.credit_ledger_code ||
     "—";
+  const warehouseName = warehouses.find((w) => w.value === form.warehouse_id)?.label || "";
 
   const patch = useCallback((p: Partial<JournalFormState>) => {
     setForm((prev) => ({ ...prev, ...p }));
@@ -399,22 +408,25 @@ export function JournalVoucherApiForm({
         );
       }
       if (!options?.skipNavigate) {
+        // Leave busy=true — clearing it after replace can abort soft navigation
         goToList();
+        return saved;
       }
+      setBusy(false);
       return saved;
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Failed to save draft.";
       setError(msg);
       showToast(msg, "error");
-      return null;
-    } finally {
       setBusy(false);
+      return null;
     }
   };
 
   const runAction = async (
     action: () => Promise<JournalVoucherDetail>,
     successMsg: string,
+    options?: { keepBusy?: boolean },
   ) => {
     setBusy(true);
     setError(null);
@@ -422,14 +434,14 @@ export function JournalVoucherApiForm({
       const result = await action();
       hydrateFromDetail(result);
       showToast(successMsg, "success");
+      if (!options?.keepBusy) setBusy(false);
       return result;
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Action failed.";
       setError(msg);
       showToast(msg, "error");
-      return null;
-    } finally {
       setBusy(false);
+      return null;
     }
   };
 
@@ -547,7 +559,12 @@ export function JournalVoucherApiForm({
           onBackClick={showViewChrome ? handleBack : fieldsEditable ? handleDiscard : undefined}
           stickyFooter={!showViewChrome || status === "POSTED" ? actionBar : undefined}
         >
-          <div className="space-y-2.5">
+          <div
+            className={cn(
+              isViewMode ? "space-y-2" : "space-y-2.5",
+              isViewMode && "transaction-voucher-view",
+            )}
+          >
             {error ? <div className={VOUCHER_ERROR_CLASS}>{error}</div> : null}
 
             {readOnlyProp && onEdit && !fieldsEditable && isDraftEditable(status) ? (
@@ -558,7 +575,23 @@ export function JournalVoucherApiForm({
               </div>
             ) : null}
 
-        <VoucherFormSectionCard title="Voucher Details">
+            {isViewMode ? (
+              <TransactionViewHero
+                statusKey={voucherStatusToBadgeKey(status)}
+                statusLabel={JOURNAL_STATUS_LABELS[status] || status}
+                metaItems={buildVoucherViewMeta({
+                  draftNo: detail ? formatSrNo(detail.sr_no) : "—",
+                  accountingVoucherNo: detail?.accounting_voucher?.voucher_number,
+                  voucherDate: form.voucher_date,
+                  branchName: warehouseName || undefined,
+                })}
+                partyLabel={`${debitAccountLabel} → ${creditAccountLabel}`}
+                amountLabel="Journal Amount"
+                amount={preview.amount}
+              />
+            ) : null}
+
+        <VoucherFormSectionCard title="Voucher Details" highlight={isViewMode}>
           <div className="so-invoice-details-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
             <InvoiceDetailField label="Voucher Date" required>
               <Input
@@ -597,28 +630,52 @@ export function JournalVoucherApiForm({
           </div>
         </VoucherFormSectionCard>
 
-        <VoucherFormSectionCard title="Journal Entry">
+        <VoucherFormSectionCard title="Journal Entry" highlight={isViewMode}>
           <div className="so-invoice-details-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
             <InvoiceDetailField label="Debit Account" required>
-              <JournalSearchableSelect
+              <VoucherLedgerSelect
                 disabled={!fieldsEditable}
                 value={form.debit_ledger_id}
-                options={debitOptions}
-                placeholder={ledgersLoading ? "Loading ledgers…" : "Select debit account…"}
-                triggerClassName={INVOICE_DETAIL_SELECT_CLASS}
-                onChange={selectDebit}
-                onSearchChange={handleLedgerSearch}
+                fallbackLabel={
+                  form.debit_ledger_name
+                    ? form.debit_ledger_code
+                      ? `${form.debit_ledger_code} · ${form.debit_ledger_name}`
+                      : form.debit_ledger_name
+                    : undefined
+                }
+                placeholder="Select debit account…"
+                className={INVOICE_DETAIL_SELECT_CLASS}
+                onChange={(ledger) =>
+                  patch({
+                    debit_ledger_id: ledger.ledgerId,
+                    debit_ledger_name: ledger.ledgerName,
+                    debit_ledger_code: ledger.ledgerCode || "",
+                    debit_source_entity_type: "",
+                  })
+                }
               />
             </InvoiceDetailField>
             <InvoiceDetailField label="Credit Account" required>
-              <JournalSearchableSelect
+              <VoucherLedgerSelect
                 disabled={!fieldsEditable}
                 value={form.credit_ledger_id}
-                options={creditOptions}
-                placeholder={ledgersLoading ? "Loading ledgers…" : "Select credit account…"}
-                triggerClassName={INVOICE_DETAIL_SELECT_CLASS}
-                onChange={selectCredit}
-                onSearchChange={handleLedgerSearch}
+                fallbackLabel={
+                  form.credit_ledger_name
+                    ? form.credit_ledger_code
+                      ? `${form.credit_ledger_code} · ${form.credit_ledger_name}`
+                      : form.credit_ledger_name
+                    : undefined
+                }
+                placeholder="Select credit account…"
+                className={INVOICE_DETAIL_SELECT_CLASS}
+                onChange={(ledger) =>
+                  patch({
+                    credit_ledger_id: ledger.ledgerId,
+                    credit_ledger_name: ledger.ledgerName,
+                    credit_ledger_code: ledger.ledgerCode || "",
+                    credit_source_entity_type: "",
+                  })
+                }
               />
             </InvoiceDetailField>
             <InvoiceDetailField label="Amount" required>
@@ -645,7 +702,7 @@ export function JournalVoucherApiForm({
         </VoucherFormSectionCard>
 
         <div className="grid grid-cols-1 gap-2.5 items-start lg:grid-cols-[minmax(0,1fr)_300px]">
-          <VoucherFormSectionCard title="Narration & Attachments">
+          <VoucherFormSectionCard title="Narration & Attachments" highlight={isViewMode}>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
               <div className="min-w-0 space-y-0.5">
                 <Label className="text-xs font-medium">
@@ -792,10 +849,13 @@ export function JournalVoucherApiForm({
             const posted = await runAction(
               () => JournalVoucherService.post(currentId),
               "Journal posted successfully.",
+              { keepBusy: true },
             );
             if (posted?.journal_voucher_id) {
               goToList();
+              return;
             }
+            setBusy(false);
           })();
         }}
       />
