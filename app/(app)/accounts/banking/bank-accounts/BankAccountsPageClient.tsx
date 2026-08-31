@@ -376,7 +376,12 @@ function BankAccountsTable({
             onClear={search ? onClearSearch : undefined}
           />
         ) : (
-          rows.map((account) => {
+          rows.map((account, index) => {
+            // Match CSS zebra: index 0 = odd/white, index 1 = even/muted
+            const isEvenRow = index % 2 === 1;
+            const rowBgClass = isEvenRow
+              ? "!bg-muted/20 group-hover:!bg-muted/30"
+              : "!bg-background group-hover:!bg-muted/25";
             const titleParts = [
               account.ledgerName,
               account.ledgerCode ? `(${account.ledgerCode})` : "",
@@ -390,9 +395,13 @@ function BankAccountsTable({
             return (
               <AccountsTableRow
                 key={account.ledgerId || account.bankAccountId || account.ledgerCode}
+                className={cn(
+                  "group",
+                  isEvenRow ? "!bg-muted/20 hover:!bg-muted/30" : "!bg-background hover:!bg-muted/25",
+                )}
                 onClick={() => goToAccount(account.ledgerId, "view")}
               >
-                <AccountsTableCell className="font-semibold whitespace-nowrap max-w-[11rem]">
+                <AccountsTableCell className={cn(rowBgClass, "font-semibold whitespace-nowrap max-w-[11rem]")}>
                   <div className="min-w-0">
                     <span className="block truncate" title={titleParts}>
                       {account.ledgerName || account.accountNickname || "—"}
@@ -404,12 +413,12 @@ function BankAccountsTable({
                     ) : null}
                   </div>
                 </AccountsTableCell>
-                <AccountsTableCell className="whitespace-nowrap max-w-[8rem]">
+                <AccountsTableCell className={cn(rowBgClass, "whitespace-nowrap max-w-[8rem]")}>
                   <span className="block truncate" title={account.bankName || undefined}>
                     {account.bankName || "—"}
                   </span>
                 </AccountsTableCell>
-                <AccountsTableCell className="whitespace-nowrap max-w-[10rem]">
+                <AccountsTableCell className={cn(rowBgClass, "whitespace-nowrap max-w-[10rem]")}>
                   <span
                     className="block truncate"
                     title={account.accountHolderName || undefined}
@@ -417,25 +426,25 @@ function BankAccountsTable({
                     {account.accountHolderName || "—"}
                   </span>
                 </AccountsTableCell>
-                <AccountsTableCell mono className="font-semibold text-brand-700 whitespace-nowrap">
+                <AccountsTableCell mono className={cn(rowBgClass, "font-semibold text-brand-700 whitespace-nowrap")}>
                   {account.accountNumber || "—"}
                 </AccountsTableCell>
-                <AccountsTableCell mono className="whitespace-nowrap">
+                <AccountsTableCell mono className={cn(rowBgClass, "whitespace-nowrap")}>
                   {account.ifsc || "—"}
                 </AccountsTableCell>
-                <AccountsTableCell className="whitespace-nowrap">
+                <AccountsTableCell className={cn(rowBgClass, "whitespace-nowrap")}>
                   {account.accountType && account.accountType !== "—"
                     ? account.accountType
                     : "—"}
                 </AccountsTableCell>
-                <AccountsTableCell align="right" className="whitespace-nowrap">
+                <AccountsTableCell align="right" className={cn(rowBgClass, "whitespace-nowrap")}>
                   <MoneyAmount
                     amount={account.openingBalance}
                     side={account.balanceType}
                     className="text-xs"
                   />
                 </AccountsTableCell>
-                <AccountsTableCell align="right" className="whitespace-nowrap">
+                <AccountsTableCell align="right" className={cn(rowBgClass, "whitespace-nowrap")}>
                   {account.currentBalance != null ? (
                     <MoneyAmount
                       amount={account.currentBalance}
@@ -446,10 +455,10 @@ function BankAccountsTable({
                     <span className="text-muted-foreground">—</span>
                   )}
                 </AccountsTableCell>
-                <AccountsTableCell className={cn("bank-accounts-wh-cell", "whitespace-nowrap")}>
+                <AccountsTableCell className={cn(rowBgClass, "bank-accounts-wh-cell", "whitespace-nowrap")}>
                   <MappedWarehousesCell names={account.mappedWarehouseNames} />
                 </AccountsTableCell>
-                <AccountsTableCell className={cn("bank-accounts-status-cell", "whitespace-nowrap")}>
+                <AccountsTableCell className={cn(rowBgClass, "bank-accounts-status-cell", "whitespace-nowrap")}>
                   <div
                     className="inline-flex items-center"
                     onClick={(e) => e.stopPropagation()}
@@ -467,7 +476,10 @@ function BankAccountsTable({
                     />
                   </div>
                 </AccountsTableCell>
-                <AccountsTableCell align="right" className={accountsActionColClass("multi")}>
+                <AccountsTableCell
+                  align="right"
+                  className={cn(accountsActionColClass("multi"), rowBgClass)}
+                >
                   <AccountsTableActionCell className="!w-auto !min-w-0">
                     <AccountsViewAction
                       title="View"
