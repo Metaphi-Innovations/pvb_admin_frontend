@@ -22,7 +22,6 @@ const TD = "px-3 py-2.5 align-top text-xs";
 
 const REJECT_TYPE_OPTIONS = [
   { label: "Damaged", value: "DAMAGED" },
-  { label: "Expired", value: "EXPIRED" },
 ] as const;
 
 type QtyField = "accepted" | "rejected";

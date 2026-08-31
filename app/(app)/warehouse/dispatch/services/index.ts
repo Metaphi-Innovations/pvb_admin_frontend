@@ -166,6 +166,7 @@ function pickFilterOptionValue(row: Record<string, unknown>, fieldName: string):
 export async function getDispatchDropdown(params?: {
   source_type?: string;
   status?: string;
+  exclude_fully_returned?: boolean;
 }): Promise<DispatchDropdownItem[]> {
   const response = await api.get(API_ENDPOINTS.WAREHOUSE.DISPATCH.DROPDOWN, {
     params: params || {},

@@ -301,6 +301,35 @@ function extractErrorMessage(error: unknown, fallback: string): string {
 export type SchemeCreatePayload = Record<string, unknown>;
 export type SchemeUpdatePayload = Record<string, unknown>;
 
+export interface EligibleProductDiscountApiOffer {
+  scheme_id: string;
+  scheme_code: string;
+  scheme_name: string;
+  discount_type: "Percentage" | "Flat";
+  discount_value: number;
+  discount_amount: number;
+  final_rate: number;
+  start_date: string | null;
+  end_date: string | null;
+  apply_discount_on: string;
+  scheme_snapshot: Record<string, unknown>;
+}
+
+export interface EligibleProductDiscountApiResult {
+  schemes: EligibleProductDiscountApiOffer[];
+  recommended: EligibleProductDiscountApiOffer | null;
+}
+
+export interface EligibleProductDiscountParams {
+  product_id: string;
+  order_date: string;
+  unit_price: number;
+  customer_id?: string | null;
+  customer_type_id?: string | null;
+  state_name?: string | null;
+  signal?: AbortSignal;
+}
+
 export const SchemeListService = {
   async list(params: SchemeListParams): Promise<SchemeListResult> {
     const ordering = encodeURIComponent(params.ordering ?? "");
@@ -429,6 +458,33 @@ export const SchemeListService = {
     const payload = response.data as Record<string, unknown>;
     const data = (payload.data ?? {}) as Record<string, unknown>;
     return asString(data.scheme_code);
+  },
+
+  async eligibleProductDiscount(
+    params: EligibleProductDiscountParams,
+  ): Promise<EligibleProductDiscountApiResult> {
+    const response = await axiosInstance.post(
+      API_ENDPOINTS.MASTER.SCHEME.ELIGIBLE_PRODUCT_DISCOUNT,
+      {
+        product_id: params.product_id,
+        order_date: params.order_date,
+        unit_price: params.unit_price,
+        customer_id: params.customer_id ?? null,
+        customer_type_id: params.customer_type_id ?? null,
+        state_name: params.state_name ?? null,
+      },
+      { signal: params.signal },
+    );
+    const payload = response.data as Record<string, unknown>;
+    const data = (payload.data ?? {}) as Record<string, unknown>;
+    const schemes = Array.isArray(data.schemes)
+      ? (data.schemes as EligibleProductDiscountApiOffer[])
+      : [];
+    const recommended =
+      data.recommended && typeof data.recommended === "object"
+        ? (data.recommended as EligibleProductDiscountApiOffer)
+        : null;
+    return { schemes, recommended };
   },
 
   async summary(signal?: AbortSignal): Promise<SchemeSummary> {
