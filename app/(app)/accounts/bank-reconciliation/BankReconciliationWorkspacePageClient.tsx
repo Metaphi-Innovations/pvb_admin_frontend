@@ -35,9 +35,7 @@ import {
   AccountsTableEmpty,
   ACCOUNTS_DEFAULT_PAGE_SIZE,
 } from "@/components/accounts/AccountsTableListing";
-import {
-  ACCOUNTS_FILTER_CONTROL_CLASS,
-} from "@/components/accounts/ReportFilters";
+import { ACCOUNTS_FILTER_CONTROL_CLASS } from "@/components/accounts/ReportFilters";
 import { Pagination } from "@/components/listing/Pagination";
 import {
   Tooltip,
@@ -47,35 +45,31 @@ import {
 import { formatMoney } from "@/lib/accounts/money-format";
 import { cn } from "@/lib/utils";
 import { SkeletonRow } from "@/components/ui/Loaders";
-import {
-  getBankReconAccountById,
-  getBankReconAccounts,
-  maskAccountNumber,
-} from "./bank-reconciliation-v2-data";
+import { useFY } from "@/lib/fy-store";
 import { RECONCILIATION_LIST_PATH } from "./reconciliation-utils";
 import { BankReconTallyStatusBadge } from "./components/BankReconTallyStatusBadge";
-import { BankReconBrsSummaryCard } from "./components/BankReconBrsSummaryCard";
 import { BankReconTallyUndoDialog } from "./components/BankReconTallyUndoDialog";
 import {
-  getBrsSummary,
-  listBookTransactions,
-  reconcileBankDateBulk,
-  reconcileBankDateOnly,
-} from "@/lib/accounts/bank-recon-tally-service";
+  BankReconModeSwitch,
+  type BankReconWorkspaceMode,
+} from "./components/BankReconModeSwitch";
+import { BankReconCommonSummaryStrip } from "./components/BankReconCommonSummaryStrip";
+import { BankReconStatementMode } from "./components/BankReconStatementMode";
+import { BankReconciliationService } from "@/services/bank-reconciliation.service";
 import {
-  BANK_RECON_TALLY_STATUS_FILTERS,
-  TALLY_EVENT,
-  type BankReconBookTransaction,
-} from "@/lib/accounts/bank-recon-tally-types";
-import { isManualDemoAccount } from "@/lib/accounts/bank-recon-manual-demo-overlay";
+  mapBookEntryToUiRow,
+  mapDashboardItemToWorkspaceAccount,
+  mapDashboardItemToWorkspaceSummary,
+  maskAccountNumber,
+  voucherTypeFilterToApi,
+  type BankReconBookRowUi,
+  type WorkspaceAccountUi,
+  type WorkspaceSummaryUi,
+} from "@/lib/accounts/bank-recon-api-mappers";
+import type { BankReconciliationStatus } from "@/types/bank-reconciliation.types";
 
 function moneyOrDash(n: number): string {
   return n ? formatMoney(n) : "—";
-}
-
-function matchesSearch(hay: string, q: string): boolean {
-  if (!q) return true;
-  return hay.toLowerCase().includes(q);
 }
 
 const VOUCHER_TYPE_FILTERS = [
@@ -84,13 +78,18 @@ const VOUCHER_TYPE_FILTERS = [
   { value: "receipt", label: "Receipt" },
   { value: "contra", label: "Contra" },
   { value: "journal", label: "Journal" },
-  { value: "other", label: "Other" },
 ] as const;
 
 const DIRECTION_FILTERS = [
   { value: "all", label: "All" },
   { value: "deposit", label: "Deposit" },
   { value: "withdrawal", label: "Withdrawal" },
+] as const;
+
+const STATUS_FILTERS = [
+  { value: "all", label: "All" },
+  { value: "UNRECONCILED", label: "Unreconciled" },
+  { value: "RECONCILED", label: "Reconciled" },
 ] as const;
 
 export default function BankReconciliationWorkspacePageClient({
@@ -100,6 +99,7 @@ export default function BankReconciliationWorkspacePageClient({
 }) {
   const router = useRouter();
   const routeParams = useParams();
+  const { selectedFY } = useFY();
   const accountId =
     accountIdProp ??
     (typeof routeParams?.accountId === "string"
@@ -108,8 +108,12 @@ export default function BankReconciliationWorkspacePageClient({
         ? routeParams.accountId[0] ?? ""
         : "");
 
-  const [loading, setLoading] = useState(true);
-  const [tick, setTick] = useState(0);
+  const [accountLoading, setAccountLoading] = useState(true);
+  const [accountError, setAccountError] = useState<string | null>(null);
+  const [account, setAccount] = useState<WorkspaceAccountUi | null>(null);
+  const [summary, setSummary] = useState<WorkspaceSummaryUi | null>(null);
+
+  const [reconMode, setReconMode] = useState<BankReconWorkspaceMode>("manual");
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("UNRECONCILED");
@@ -119,40 +123,46 @@ export default function BankReconciliationWorkspacePageClient({
   const [dateTo, setDateTo] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(ACCOUNTS_DEFAULT_PAGE_SIZE);
+  const [booksLoading, setBooksLoading] = useState(true);
+  const [booksError, setBooksError] = useState<string | null>(null);
+  const [books, setBooks] = useState<BankReconBookRowUi[]>([]);
+  const [booksTotal, setBooksTotal] = useState(0);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkBankDate, setBulkBankDate] = useState("");
-  const [undoLinkId, setUndoLinkId] = useState<string | null>(null);
+  const [undoBankDetailId, setUndoBankDetailId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
-  const allAccounts = useMemo(() => getBankReconAccounts(), [tick]);
-  const account = useMemo(
-    () => allAccounts.find((a) => a.id === accountId) ?? getBankReconAccountById(accountId),
-    [allAccounts, accountId],
-  );
-
-  useEffect(() => {
-    const handler = () => setTick((t) => t + 1);
-    window.addEventListener(TALLY_EVENT, handler);
-    return () => window.removeEventListener(TALLY_EVENT, handler);
-  }, []);
+  const refreshAll = useCallback(() => setRefreshKey((k) => k + 1), []);
 
   useEffect(() => {
     if (!accountId) return;
-    const acct = getBankReconAccountById(accountId);
-    if (acct) {
-      setDateFrom(acct.statementPeriodFrom);
-      setDateTo(acct.statementPeriodTo);
-    }
     setStatusFilter("UNRECONCILED");
     setSelectedIds(new Set());
-    const t = setTimeout(() => setLoading(false), 250);
-    return () => clearTimeout(t);
-  }, [accountId]);
+    setReconMode("manual");
+    setDateFrom(selectedFY.startDate || "");
+    setDateTo(selectedFY.endDate || "");
+  }, [accountId, selectedFY.startDate, selectedFY.endDate]);
+
+  useEffect(() => {
+    if (voucherTypeFilter === "other") {
+      setVoucherTypeFilter("all");
+    }
+  }, [voucherTypeFilter]);
 
   useEffect(() => {
     setPage(1);
     setSelectedIds(new Set());
-  }, [statusFilter, debouncedSearch, dateFrom, dateTo, voucherTypeFilter, directionFilter, accountId]);
+  }, [
+    statusFilter,
+    debouncedSearch,
+    dateFrom,
+    dateTo,
+    voucherTypeFilter,
+    directionFilter,
+    accountId,
+  ]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearch(search), 180);
@@ -165,66 +175,135 @@ export default function BankReconciliationWorkspacePageClient({
     return () => clearTimeout(t);
   }, [toast]);
 
-  const refresh = useCallback(() => setTick((t) => t + 1), []);
-
-  const books = useMemo(() => {
-    void tick;
-    if (!accountId) return [] as BankReconBookTransaction[];
-    return listBookTransactions(accountId, dateFrom || undefined, dateTo || undefined);
-  }, [accountId, dateFrom, dateTo, tick]);
-
-  const brs = useMemo(() => {
-    void tick;
-    if (!accountId) return null;
-    return getBrsSummary(accountId, dateFrom || undefined, dateTo || undefined);
-  }, [accountId, dateFrom, dateTo, tick]);
-
-  const filteredBooks = useMemo(() => {
-    const q = debouncedSearch.trim().toLowerCase();
-    return books.filter((b) => {
-      if (statusFilter === "UNRECONCILED" && b.status === "RECONCILED") return false;
-      if (statusFilter === "RECONCILED" && b.status !== "RECONCILED") return false;
-      if (voucherTypeFilter !== "all") {
-        const code = (b.voucherTypeCode || "").toLowerCase();
-        if (voucherTypeFilter === "other") {
-          if (["payment", "receipt", "contra", "journal"].includes(code)) return false;
-        } else if (code !== voucherTypeFilter) {
-          return false;
-        }
+  const loadAccountAndSummary = useCallback(async () => {
+    if (!accountId) return;
+    setAccountLoading(true);
+    setAccountError(null);
+    try {
+      const [dashboard, matches, unmatched] = await Promise.all([
+        BankReconciliationService.getDashboard(),
+        BankReconciliationService.getMatches({
+          bank_account_id: accountId,
+          page: 1,
+          page_size: 1,
+        }),
+        BankReconciliationService.getStatementLines({
+          bank_account_id: accountId,
+          unmatched_only: true,
+          page: 1,
+          page_size: 1,
+        }),
+      ]);
+      const item = dashboard.items.find((i) => i.bankAccountId === accountId);
+      if (!item) {
+        setAccount(null);
+        setSummary(null);
+        setAccountError(
+          "Bank reconciliation is not enabled for this bank account, or the account was not found.",
+        );
+        return;
       }
-      if (directionFilter === "deposit" && !(b.deposit > 0)) return false;
-      if (directionFilter === "withdrawal" && !(b.withdrawal > 0)) return false;
-      return matchesSearch(
-        `${b.particulars} ${b.voucherNumber} ${b.instrumentNumber} ${b.voucherType}`,
-        q,
+      setAccount(mapDashboardItemToWorkspaceAccount(item));
+      setSummary(
+        mapDashboardItemToWorkspaceSummary(item, {
+          reconciledCount: matches.pagination.total,
+          unmatchedBankEntries: unmatched.pagination.total,
+        }),
       );
-    });
-  }, [books, debouncedSearch, statusFilter, voucherTypeFilter, directionFilter]);
+    } catch (err) {
+      setAccount(null);
+      setSummary(null);
+      setAccountError(err instanceof Error ? err.message : "Failed to load bank account.");
+    } finally {
+      setAccountLoading(false);
+    }
+  }, [accountId]);
 
-  const pageRows = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return filteredBooks.slice(start, start + pageSize);
-  }, [filteredBooks, page, pageSize]);
+  useEffect(() => {
+    void loadAccountAndSummary();
+  }, [loadAccountAndSummary, refreshKey]);
+
+  const loadBooks = useCallback(async () => {
+    if (!accountId || !account) return;
+    setBooksLoading(true);
+    setBooksError(null);
+    try {
+      const reconciliationStatus: BankReconciliationStatus | undefined =
+        statusFilter === "all"
+          ? undefined
+          : (statusFilter as BankReconciliationStatus);
+      const voucherType = voucherTypeFilterToApi(voucherTypeFilter);
+      const data = await BankReconciliationService.getBookEntries({
+        bank_account_id: accountId,
+        date_from: dateFrom || undefined,
+        date_to: dateTo || undefined,
+        reconciliation_status: reconciliationStatus,
+        voucher_type: voucherType,
+        transaction_direction:
+          directionFilter === "deposit"
+            ? "DEPOSIT"
+            : directionFilter === "withdrawal"
+              ? "WITHDRAWAL"
+              : undefined,
+        search: debouncedSearch.trim() || undefined,
+        page,
+        page_size: pageSize,
+        ordering: "-voucher_date",
+      });
+      let items = data.items.map(mapBookEntryToUiRow);
+      setBooks(items);
+      setBooksTotal(data.pagination.total);
+    } catch (err) {
+      setBooks([]);
+      setBooksTotal(0);
+      setBooksError(err instanceof Error ? err.message : "Failed to load book entries.");
+    } finally {
+      setBooksLoading(false);
+    }
+  }, [
+    accountId,
+    account,
+    statusFilter,
+    voucherTypeFilter,
+    directionFilter,
+    dateFrom,
+    dateTo,
+    debouncedSearch,
+    page,
+    pageSize,
+  ]);
+
+  useEffect(() => {
+    if (reconMode === "manual") {
+      void loadBooks();
+    }
+  }, [loadBooks, reconMode, refreshKey]);
+
   const bookById = useMemo(() => new Map(books.map((book) => [book.id, book])), [books]);
 
   const handleInlineBankDateSave = useCallback(
-    (row: BankReconBookTransaction, bankDate: string): string | null => {
+    async (row: BankReconBookRowUi, bankDate: string): Promise<string | null> => {
       if (!bankDate.trim()) return "Bank Date is required.";
-      const result = reconcileBankDateOnly({
-        bankAccountId: row.bankAccountId,
-        bookTransactionId: row.id,
-        bankDate,
-        remarks: "Bank Date updated inline",
-      });
-      if (!result.ok) return result.error;
-      refresh();
-      setToast({ msg: `Reconciled ${row.voucherNumber} with Bank Date ${bankDate}.`, type: "success" });
-      return null;
+      try {
+        await BankReconciliationService.manualReconcile({
+          bank_account_id: row.bankAccountId,
+          bank_detail_ids: [row.id],
+          cleared_date: bankDate,
+        });
+        refreshAll();
+        setToast({
+          msg: `Reconciled ${row.voucherNumber} with Bank Date ${bankDate}.`,
+          type: "success",
+        });
+        return null;
+      } catch (err) {
+        return err instanceof Error ? err.message : "Failed to reconcile.";
+      }
     },
-    [refresh],
+    [refreshAll],
   );
 
-  const handleBulkApply = useCallback(() => {
+  const handleBulkApply = useCallback(async () => {
     if (!accountId) return;
     if (!bulkBankDate.trim()) {
       setToast({ msg: "Enter a common Bank Date for selected rows.", type: "error" });
@@ -238,52 +317,54 @@ export default function BankReconciliationWorkspacePageClient({
       const row = bookById.get(id);
       return row && row.status !== "RECONCILED";
     });
-    const result = reconcileBankDateBulk({
-      bankAccountId: accountId,
-      bookTransactionIds: ids,
-      bankDate: bulkBankDate,
-      remarks: "Bulk Bank Date apply",
-    });
-    if (!result.ok) {
-      setToast({ msg: result.error, type: "error" });
+    if (ids.length === 0) {
+      setToast({ msg: "No unreconciled rows selected.", type: "error" });
       return;
     }
-    setSelectedIds(new Set());
-    refresh();
-    setToast({
-      msg: `Applied Bank Date to ${result.saved} row(s)${result.skipped ? ` · ${result.skipped} skipped` : ""}.`,
-      type: "success",
-    });
-  }, [accountId, bulkBankDate, selectedIds, bookById, refresh]);
+    setSaving(true);
+    try {
+      const result = await BankReconciliationService.manualReconcile({
+        bank_account_id: accountId,
+        bank_detail_ids: ids,
+        cleared_date: bulkBankDate,
+      });
+      setSelectedIds(new Set());
+      refreshAll();
+      setToast({
+        msg: `Marked ${result.reconciledCount} row(s) reconciled.`,
+        type: "success",
+      });
+    } catch (err) {
+      setToast({
+        msg: err instanceof Error ? err.message : "Failed to mark reconciled.",
+        type: "error",
+      });
+    } finally {
+      setSaving(false);
+    }
+  }, [accountId, bulkBankDate, selectedIds, bookById, refreshAll]);
 
   const handleResetFilters = useCallback(() => {
     setSearch("");
     setStatusFilter("UNRECONCILED");
     setVoucherTypeFilter("all");
     setDirectionFilter("all");
-    if (account) {
-      setDateFrom(account.statementPeriodFrom);
-      setDateTo(account.statementPeriodTo);
-    }
+    setDateFrom(selectedFY.startDate || "");
+    setDateTo(selectedFY.endDate || "");
     setBulkBankDate("");
     setSelectedIds(new Set());
-  }, [account]);
+  }, [selectedFY.startDate, selectedFY.endDate]);
 
-  const openVoucher = useCallback((row: BankReconBookTransaction) => {
-    if (isManualDemoAccount(row.bankAccountId) || row.viewHref.startsWith("#recon-voucher:")) {
-      // Ensure draft display stubs exist, then open Payment/Receipt/Contra view.
-      void import("@/lib/accounts/bank-recon-display").then(({ ensureManualDemoDisplayVouchers }) => {
-        ensureManualDemoDisplayVouchers();
-        router.push(`/accounts/vouchers/view/${row.voucherId}`);
-      });
-      return;
-    }
-    window.open(row.viewHref, "_blank", "noopener,noreferrer");
-  }, [router]);
+  const openVoucher = useCallback(
+    (row: BankReconBookRowUi) => {
+      router.push(row.viewHref);
+    },
+    [router],
+  );
 
   const selectablePageIds = useMemo(
-    () => pageRows.filter((row) => row.status !== "RECONCILED").map((row) => row.id),
-    [pageRows],
+    () => books.filter((row) => row.status !== "RECONCILED").map((row) => row.id),
+    [books],
   );
   const allPageSelected = useMemo(
     () => selectablePageIds.length > 0 && selectablePageIds.every((id) => selectedIds.has(id)),
@@ -308,23 +389,42 @@ export default function BankReconciliationWorkspacePageClient({
       return next;
     });
   }, []);
-  const handleUndoOpen = useCallback((linkId: string) => setUndoLinkId(linkId), []);
 
-  if (!account) {
+  if (accountLoading) {
     return (
       <AccountsPageShell
         breadcrumbs={[
           { label: "Accounts", href: "/accounts/masters/chart-of-accounts" },
           { label: "Banking" },
           { label: "Bank Reconciliation", href: RECONCILIATION_LIST_PATH },
-          { label: "Not Found" },
+          { label: "Loading…" },
         ]}
-        title="Bank Account Not Found"
-        description="The selected bank account could not be loaded."
+        title="Bank Reconciliation"
+        description="Loading bank account…"
+        layout="standard"
+      >
+        <div className="py-8 text-center text-sm text-muted-foreground">Loading bank account…</div>
+      </AccountsPageShell>
+    );
+  }
+
+  if (!account || accountError) {
+    return (
+      <AccountsPageShell
+        breadcrumbs={[
+          { label: "Accounts", href: "/accounts/masters/chart-of-accounts" },
+          { label: "Banking" },
+          { label: "Bank Reconciliation", href: RECONCILIATION_LIST_PATH },
+          { label: "Not Available" },
+        ]}
+        title="Bank Account Not Available"
+        description={accountError ?? "The selected bank account could not be loaded."}
         layout="standard"
       >
         <div className="py-8 text-center space-y-3">
-          <p className="text-sm text-muted-foreground">Invalid or missing bank account.</p>
+          <p className="text-sm text-muted-foreground">
+            {accountError ?? "Invalid or missing bank account."}
+          </p>
           <Button asChild size="sm" variant="outline" className="h-8 text-xs">
             <Link href={RECONCILIATION_LIST_PATH}>Back to Bank Reconciliation</Link>
           </Button>
@@ -374,7 +474,7 @@ export default function BankReconciliationWorkspacePageClient({
             <div className="flex items-center gap-1.5">
               <input
                 type="date"
-                value={dateFrom || account.statementPeriodFrom}
+                value={dateFrom}
                 onChange={(e) => setDateFrom(e.target.value)}
                 className={cn(
                   ACCOUNTS_FILTER_CONTROL_CLASS,
@@ -385,7 +485,7 @@ export default function BankReconciliationWorkspacePageClient({
               <span className="text-[10px] text-muted-foreground">to</span>
               <input
                 type="date"
-                value={dateTo || account.statementPeriodTo}
+                value={dateTo}
                 onChange={(e) => setDateTo(e.target.value)}
                 className={cn(
                   ACCOUNTS_FILTER_CONTROL_CLASS,
@@ -407,7 +507,7 @@ export default function BankReconciliationWorkspacePageClient({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {BANK_RECON_TALLY_STATUS_FILTERS.map((o) => (
+                {STATUS_FILTERS.map((o) => (
                   <SelectItem key={o.value} value={o.value}>
                     {o.label}
                   </SelectItem>
@@ -482,95 +582,127 @@ export default function BankReconciliationWorkspacePageClient({
             <RotateCcw className="w-3.5 h-3.5" />
             Reset
           </Button>
+          <BankReconModeSwitch mode={reconMode} onChange={setReconMode} />
         </div>
 
-        {brs && <BankReconBrsSummaryCard key={accountId} summary={brs} />}
+        {summary && (
+          <BankReconCommonSummaryStrip key={`${accountId}-${reconMode}`} mode={reconMode} summary={summary} />
+        )}
 
-        <div className="flex-1 min-h-0 flex flex-col border border-border/70 rounded-lg bg-white overflow-hidden">
-          <div className="h-9 flex-shrink-0 flex items-center gap-3 border-b border-border/60 bg-white px-3">
-            <span className="text-xs text-muted-foreground whitespace-nowrap">
-              <strong className="text-foreground">{filteredBooks.length}</strong>{" "}
-              {statusFilter === "RECONCILED" ? "reconciled" : statusFilter === "all" ? "records" : "pending"}
-            </span>
-            <span className="text-xs text-muted-foreground whitespace-nowrap">
-              <strong className="text-foreground">{selectedIds.size}</strong> selected
-            </span>
-            <div className="flex-1" />
-            <span className="text-[11px] font-medium text-muted-foreground whitespace-nowrap">
-              Bank Date
-            </span>
-            <input
-              type="date"
-              value={bulkBankDate}
-              onChange={(e) => setBulkBankDate(e.target.value)}
-              className="h-8 w-[125px] rounded-lg border border-border/70 bg-white px-2 text-xs"
-              aria-label="Bulk Bank Date"
-            />
-            <Button
-              type="button"
-              size="sm"
-              className="h-8 w-[76px] px-2 text-xs gap-1 bg-brand-600 hover:bg-brand-700 text-white disabled:bg-muted disabled:text-muted-foreground disabled:border disabled:border-border disabled:opacity-100"
-              disabled={selectedIds.size === 0}
-              onClick={handleBulkApply}
-            >
-              <Check className="w-3 h-3" />
-              Apply
-            </Button>
-          </div>
-          <div className="flex-1 min-h-0 overflow-auto">
-            {loading ? (
-              <AccountsTable minWidth={1040} className="bank-recon-grid">
-                <AccountsTableHead>
-                  <AccountsTableHeadRow>
-                    {Array.from({ length: 11 }).map((_, i) => (
-                      <AccountsTableHeadCell key={i}>&nbsp;</AccountsTableHeadCell>
-                    ))}
-                  </AccountsTableHeadRow>
-                </AccountsTableHead>
-                <AccountsTableBody>
-                  {Array.from({ length: 20 }).map((_, i) => (
-                    <SkeletonRow key={i} cols={11} />
-                  ))}
-                </AccountsTableBody>
-              </AccountsTable>
-            ) : (
-              <BooksTable
-                rows={pageRows}
-                empty={filteredBooks.length === 0}
-                selectedIds={selectedIds}
-                allPageSelected={allPageSelected}
-                onToggleAll={handleToggleAll}
-                onToggleOne={handleToggleOne}
-                onInlineSave={handleInlineBankDateSave}
-                onViewVoucher={openVoucher}
-                onUndo={handleUndoOpen}
+        {reconMode === "manual" ? (
+          <div className="flex-1 min-h-0 flex flex-col border border-border/70 rounded-lg bg-white overflow-hidden">
+            <div className="h-9 flex-shrink-0 flex items-center gap-3 border-b border-border/60 bg-white px-3">
+              <span className="text-xs text-muted-foreground whitespace-nowrap">
+                <strong className="text-foreground">{booksTotal}</strong>{" "}
+                {statusFilter === "RECONCILED"
+                  ? "reconciled"
+                  : statusFilter === "all"
+                    ? "records"
+                    : "pending"}
+              </span>
+              <span className="text-xs text-muted-foreground whitespace-nowrap">
+                <strong className="text-foreground">{selectedIds.size}</strong> selected
+              </span>
+              <div className="flex-1" />
+              <span className="text-[11px] font-medium text-muted-foreground whitespace-nowrap">
+                Bank Date
+              </span>
+              <input
+                type="date"
+                value={bulkBankDate}
+                onChange={(e) => setBulkBankDate(e.target.value)}
+                className="h-8 w-[125px] rounded-lg border border-border/70 bg-white px-2 text-xs"
+                aria-label="Bulk Bank Date"
               />
-            )}
+              <Button
+                type="button"
+                size="sm"
+                className="h-8 px-2.5 text-xs gap-1 bg-brand-600 hover:bg-brand-700 text-white disabled:bg-muted disabled:text-muted-foreground disabled:border disabled:border-border disabled:opacity-100"
+                disabled={selectedIds.size === 0 || saving}
+                onClick={() => void handleBulkApply()}
+              >
+                <Check className="w-3 h-3" />
+                Mark Reconciled
+              </Button>
+            </div>
+            <div className="flex-1 min-h-0 overflow-auto">
+              {booksLoading ? (
+                <AccountsTable minWidth={1040} className="bank-recon-grid">
+                  <AccountsTableHead>
+                    <AccountsTableHeadRow>
+                      {Array.from({ length: 11 }).map((_, i) => (
+                        <AccountsTableHeadCell key={i}>&nbsp;</AccountsTableHeadCell>
+                      ))}
+                    </AccountsTableHeadRow>
+                  </AccountsTableHead>
+                  <AccountsTableBody>
+                    {Array.from({ length: 20 }).map((_, i) => (
+                      <SkeletonRow key={i} cols={11} />
+                    ))}
+                  </AccountsTableBody>
+                </AccountsTable>
+              ) : booksError ? (
+                <div className="flex flex-col items-center justify-center gap-2 py-14 text-center">
+                  <p className="text-sm font-medium text-foreground">Unable to load book entries</p>
+                  <p className="text-xs text-muted-foreground">{booksError}</p>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-8 text-xs"
+                    onClick={() => void loadBooks()}
+                  >
+                    Retry
+                  </Button>
+                </div>
+              ) : (
+                <BooksTable
+                  rows={books}
+                  empty={books.length === 0}
+                  selectedIds={selectedIds}
+                  allPageSelected={allPageSelected}
+                  onToggleAll={handleToggleAll}
+                  onToggleOne={handleToggleOne}
+                  onInlineSave={handleInlineBankDateSave}
+                  onViewVoucher={openVoucher}
+                  onUndo={setUndoBankDetailId}
+                />
+              )}
+            </div>
+            <div className="bank-recon-pagination flex-shrink-0">
+              <Pagination
+                page={page}
+                pageSize={pageSize}
+                totalRecords={booksTotal}
+                onPageChange={setPage}
+                onPageSizeChange={(size) => {
+                  setPageSize(size);
+                  setPage(1);
+                }}
+                recordLabel="rows"
+                variant="compact"
+              />
+            </div>
           </div>
-          <div className="bank-recon-pagination flex-shrink-0">
-            <Pagination
-              page={page}
-              pageSize={pageSize}
-              totalRecords={filteredBooks.length}
-              onPageChange={setPage}
-              onPageSizeChange={(size) => {
-                setPageSize(size);
-                setPage(1);
-              }}
-              recordLabel="rows"
-              variant="compact"
-            />
-          </div>
-        </div>
+        ) : (
+          <BankReconStatementMode
+            bankAccountId={accountId}
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            onToast={(msg, type) => setToast({ msg, type })}
+            onRefresh={refreshAll}
+          />
+        )}
       </div>
 
       <BankReconTallyUndoDialog
-        open={!!undoLinkId}
-        onClose={() => setUndoLinkId(null)}
-        linkId={undoLinkId}
+        open={!!undoBankDetailId}
+        onClose={() => setUndoBankDetailId(null)}
+        bankAccountId={accountId}
+        bankDetailId={undoBankDetailId}
         onDone={() => {
-          refresh();
-          setToast({ msg: "Reconciliation undone. Entry is Unreconciled again.", type: "success" });
+          refreshAll();
+          setToast({ msg: "Marked as unreconciled. Entry is Unreconciled again.", type: "success" });
         }}
       />
 
@@ -623,15 +755,15 @@ function BooksTable({
   onViewVoucher,
   onUndo,
 }: {
-  rows: BankReconBookTransaction[];
+  rows: BankReconBookRowUi[];
   empty: boolean;
   selectedIds: Set<string>;
   allPageSelected: boolean;
   onToggleAll: () => void;
   onToggleOne: (id: string) => void;
-  onInlineSave: (row: BankReconBookTransaction, bankDate: string) => string | null;
-  onViewVoucher: (row: BankReconBookTransaction) => void;
-  onUndo: (linkId: string) => void;
+  onInlineSave: (row: BankReconBookRowUi, bankDate: string) => Promise<string | null>;
+  onViewVoucher: (row: BankReconBookRowUi) => void;
+  onUndo: (bankDetailId: string) => void;
 }) {
   return (
     <AccountsTable minWidth={1040} className="bank-recon-grid table-fixed">
@@ -690,26 +822,36 @@ const CompactBookRow = memo(function CompactBookRow({
   onViewVoucher,
   onUndo,
 }: {
-  row: BankReconBookTransaction;
+  row: BankReconBookRowUi;
   selected: boolean;
   onToggle: (id: string) => void;
-  onInlineSave: (row: BankReconBookTransaction, bankDate: string) => string | null;
-  onViewVoucher: (row: BankReconBookTransaction) => void;
-  onUndo: (linkId: string) => void;
+  onInlineSave: (row: BankReconBookRowUi, bankDate: string) => Promise<string | null>;
+  onViewVoucher: (row: BankReconBookRowUi) => void;
+  onUndo: (bankDetailId: string) => void;
 }) {
   const isReconciled = row.status === "RECONCILED";
   const [draft, setDraft] = useState(row.bankDate ?? "");
   const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     setDraft(row.bankDate ?? "");
     setError(null);
   }, [row.bankDate]);
 
-  const save = useCallback(() => {
-    const validationError = onInlineSave(row, draft);
+  const save = useCallback(async () => {
+    setSaving(true);
+    const validationError = await onInlineSave(row, draft);
+    setSaving(false);
     setError(validationError);
   }, [draft, onInlineSave, row]);
+
+  const modeLabel =
+    row.reconciliationMode === "STATEMENT"
+      ? "Statement"
+      : row.reconciliationMode === "MANUAL"
+        ? "Manual"
+        : null;
 
   return (
     <AccountsTableRow className={cn("group", selected && "is-selected")}>
@@ -766,7 +908,7 @@ const CompactBookRow = memo(function CompactBookRow({
               onKeyDown={(event) => {
                 if (event.key === "Enter") {
                   event.preventDefault();
-                  save();
+                  void save();
                 }
               }}
               className={cn(
@@ -782,11 +924,11 @@ const CompactBookRow = memo(function CompactBookRow({
               <TooltipTrigger asChild>
                 <button
                   type="button"
-                  onClick={save}
-                  disabled={!draft}
+                  onClick={() => void save()}
+                  disabled={!draft || saving}
                   className={cn(
                     "h-7 w-7 inline-flex flex-shrink-0 items-center justify-center rounded-md text-brand-700 hover:bg-brand-50",
-                    !draft && "invisible pointer-events-none",
+                    (!draft || saving) && "invisible pointer-events-none",
                   )}
                   aria-label={`Save reconciliation for ${row.voucherNumber}`}
                 >
@@ -799,7 +941,14 @@ const CompactBookRow = memo(function CompactBookRow({
         )}
       </AccountsTableCell>
       <AccountsTableCell align="center">
-        <BankReconTallyStatusBadge status={isReconciled ? "RECONCILED" : "UNRECONCILED"} />
+        <div className="inline-flex flex-col items-center gap-0.5">
+          <BankReconTallyStatusBadge status={isReconciled ? "RECONCILED" : "UNRECONCILED"} />
+          {isReconciled && modeLabel && (
+            <span className="text-[9px] font-semibold text-navy-600 uppercase tracking-wide">
+              {modeLabel}
+            </span>
+          )}
+        </div>
       </AccountsTableCell>
       <AccountsTableCell align="center">
         <RowActions>
@@ -809,8 +958,8 @@ const CompactBookRow = memo(function CompactBookRow({
               <Link href={row.editHref}>Edit Voucher</Link>
             </DropdownMenuItem>
           )}
-          {isReconciled && row.linkId && (
-            <DropdownMenuItem onClick={() => onUndo(row.linkId!)}>Undo Reconciliation</DropdownMenuItem>
+          {isReconciled && (
+            <DropdownMenuItem onClick={() => onUndo(row.id)}>Unreconcile</DropdownMenuItem>
           )}
         </RowActions>
       </AccountsTableCell>

@@ -47,7 +47,7 @@ export function BankReconBrsSummaryCard({ summary }: { summary: BankReconBrsSumm
           strong
         />
         <SummaryMetric
-          label="Expected Bank Balance"
+          label="Bank Statement Balance"
           value={formatMoney(summary.expectedBalanceAsPerBank)}
           strong
         />
