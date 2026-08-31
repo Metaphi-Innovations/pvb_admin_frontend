@@ -2,16 +2,12 @@
 
 import React, { useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
-import { Input } from "@/components/ui/input";
 import { MasterField } from "@/components/masters/MasterModule";
 import { PricingFormSection } from "./PricingFormSection";
-import { ProductMetaPanel } from "./ProductMetaPanel";
 import {
   pricingFormShellClass,
   pricingInput,
-  pricingReadonly,
 } from "./pricing-form-styles";
-import { IndianRupeeInput } from "@/components/ui/IndianRupeeInput";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import { BulkPricingGrid } from "./BulkPricingGrid";
 import { PricingScopeMultiSelect } from "./PricingScopeMultiSelect";
@@ -19,9 +15,6 @@ import {
   PRICING_CUSTOMER_TYPES,
   PRICING_STATES,
   countPricingCombinations,
-  formatIndianRupeeDisplay,
-  getDealerPriceInlineError,
-  getMrpInlineError,
   resolveFormCustomerTypes,
   resolveFormStates,
   syncPricingProductLines,
@@ -108,13 +101,10 @@ export function PricingForm({
       : errors.duplicate);
   const hasScopeConflict = Boolean(conflictMessage);
   const selectedProductId =
-    form.productLines.length > 0
-      ? form.productLines[0].productUuid || String(form.productLines[0].id)
-      : "";
-  const hasProductsSelected = mode === "edit" ? Boolean(form.productId) : form.productLines.length > 0;
-  const editDealerPriceError =
-    errors.dealerPrice || getDealerPriceInlineError(form.dealerPrice, form.mrp);
-  const editMrpError = errors.mrp || getMrpInlineError(form.mrp);
+    form.productLines[0]?.productUuid ||
+    form.productId ||
+    (form.productLines[0] ? String(form.productLines[0].id) : "");
+  const hasProductsSelected = form.productLines.length > 0 || Boolean(form.productId);
   const hasSyncedProductMrp = useRef(false);
   const lastSyncedProductId = useRef("");
   const resolvedCustomerTypeOptions =
@@ -186,16 +176,31 @@ export function PricingForm({
   const handleProductSelectionChange = (selectedId: string) => {
     const selectedIds = selectedId ? [selectedId] : [];
     const next = syncPricingProductLines(form, selectedIds, productCatalog);
-    onChange({
-      ...next,
-      states: [],
-      customerTypes: [],
-      state: "",
-      customerType: "",
-      applyToAllStates: false,
-      applyToAllCustomerTypes: false,
-    });
+    if (mode === "edit") {
+      const line = next.productLines[0];
+      onChange({
+        ...next,
+        productId: selectedId,
+        productCode: line?.productCode || form.productCode,
+        productName: line?.productName || form.productName,
+        sku: line?.sku || form.sku,
+        costPrice: line?.costPrice || form.costPrice,
+        mrp: line?.mrp || form.mrp,
+        dealerPrice: line?.dealerPrice || form.dealerPrice,
+      });
+    } else {
+      onChange({
+        ...next,
+        states: [],
+        customerTypes: [],
+        state: "",
+        customerType: "",
+        applyToAllStates: false,
+        applyToAllCustomerTypes: false,
+      });
+    }
     onClearError?.("productLines");
+    onClearError?.("productId");
     onClearError?.("states");
     onClearError?.("customerTypes");
     onClearError?.("state");
@@ -207,149 +212,34 @@ export function PricingForm({
     handleProductSelectionChange("");
   };
 
-  if (mode === "edit") {
-    return (
-      <div className={pricingFormShellClass}>
-        <PricingFormSection title="Product Information">
-          <ProductMetaPanel
-            items={[
-              { label: "Product Code", value: form.productCode },
-              { label: "Product Name", value: form.productName },
-              { label: "Supplier Name", value: form.supplierName || "—" },
-              { label: "Supplier Code", value: form.supplierCode || "—" },
-              { label: "SKU", value: form.sku },
-              { label: "Category", value: form.category || "—" },
-              { label: "Segment", value: form.segment || "—" },
-              { label: "Pack Size", value: form.packSize || "—" },
-              { label: "Unit", value: form.unit || form.mou || form.baseUnit || "—" },
-              { label: "HSN Code", value: form.hsnCode || "—" },
-              { label: "GST %", value: form.gstPct || "—" },
-            ]}
-          />
-        </PricingFormSection>
-
-        <PricingFormSection title="Pricing Scope">
-          <PricingFormGrid>
-            <MasterField label="State" required error={errors.state}>
-              <FieldWidth size="medium">
-                <AutocompleteSelect
-                  options={stateOptions}
-                  value={form.state}
-                  onChange={(value) => {
-                    onChange({
-                      ...form,
-                      state: value,
-                      states: value ? [value] : [],
-                    });
-                    onClearError?.("state");
-                  }}
-                  placeholder="Select state..."
-                  searchPlaceholder="Search state..."
-                  className={cn(pricingInput(), errors.state && "border-red-400")}
-                  error={Boolean(errors.state)}
-                />
-              </FieldWidth>
-            </MasterField>
-            <MasterField label="Customer Type" required error={errors.customerType}>
-              <FieldWidth size="medium">
-                <AutocompleteSelect
-                  options={resolvedCustomerTypeOptions}
-                  value={form.customerType}
-                  onChange={(value) => {
-                    onChange({
-                      ...form,
-                      customerType: value as PricingForm["customerType"],
-                      customerTypes: value ? [value as PricingCustomerType] : [],
-                    });
-                    onClearError?.("customerType");
-                  }}
-                  placeholder="Select customer type..."
-                  searchPlaceholder="Search customer type..."
-                  className={cn(pricingInput(), errors.customerType && "border-red-400")}
-                  error={Boolean(errors.customerType)}
-                />
-              </FieldWidth>
-            </MasterField>
-          </PricingFormGrid>
-        </PricingFormSection>
-
-        <PricingFormSection title="Price Details">
-          <PricingFormGrid className="md:grid-cols-2 lg:grid-cols-3">
-            <MasterField label="Cost Price">
-              <FieldWidth size="narrow">
-                <Input
-                  readOnly
-                  className={cn(pricingReadonly("text-right font-medium tabular-nums"))}
-                  value={formatIndianRupeeDisplay(form.costPrice)}
-                />
-                <p className="mt-1 text-[10px] text-muted-foreground">From Product Master</p>
-              </FieldWidth>
-            </MasterField>
-
-            <MasterField label="Dealer Price" required error={editDealerPriceError}>
-              <FieldWidth size="narrow">
-                <IndianRupeeInput
-                  value={form.dealerPrice}
-                  onChange={(v) =>
-                    onChange({ ...form, dealerPrice: v, netSellingPrice: v })
-                  }
-                  className={cn(
-                    pricingInput("ring-1 ring-brand-200/80"),
-                    editDealerPriceError && "border-red-400 ring-1 ring-red-300",
-                  )}
-                />
-              </FieldWidth>
-            </MasterField>
-
-            <MasterField label="MRP" error={editMrpError}>
-              <FieldWidth size="narrow">
-                <Input
-                  readOnly
-                  className={cn(
-                    pricingReadonly("text-right font-medium tabular-nums"),
-                    editMrpError && "border-red-400 text-red-600",
-                  )}
-                  value={formatIndianRupeeDisplay(form.mrp)}
-                />
-                <p className="mt-1 text-[10px] text-muted-foreground">From Product Master</p>
-              </FieldWidth>
-            </MasterField>
-          </PricingFormGrid>
-        </PricingFormSection>
-
-        {errors.duplicate && (
-          <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600">
-            {errors.duplicate}
-          </p>
-        )}
-      </div>
-    );
-  }
-
   return (
     <div className={pricingFormShellClass}>
       <PricingFormSection title="Product Selection">
         <div className="space-y-3">
-          <MasterField label="Product" required error={errors.productLines}>
+          <MasterField label="Product" required error={errors.productLines || errors.productId}>
             <AutocompleteSelect
               options={productOptions}
               value={selectedProductId}
               onChange={handleProductSelectionChange}
               placeholder="Search product code, name, or SKU..."
               searchPlaceholder="Search product code, name, SKU, supplier, or HSN..."
-              error={Boolean(errors.productLines)}
-              confirmOnDone
-              className={cn(pricingInput(), errors.productLines && "border-red-400")}
+              error={Boolean(errors.productLines || errors.productId)}
+              className={cn(pricingInput(), (errors.productLines || errors.productId) && "border-red-400")}
             />
           </MasterField>
 
           <BulkPricingGrid
             lines={form.productLines}
             onChange={(productLines) => {
-              onChange({ ...form, productLines });
+              onChange({
+                ...form,
+                productLines,
+                dealerPrice: productLines[0]?.dealerPrice ?? form.dealerPrice,
+              });
               onClearError?.("productLines");
+              onClearError?.("dealerPrice");
             }}
-            onRemoveLine={handleRemoveProductLine}
+            onRemoveLine={mode === "edit" ? undefined : handleRemoveProductLine}
             errors={errors}
           />
         </div>
@@ -357,47 +247,96 @@ export function PricingForm({
 
       {hasProductsSelected && (
         <PricingFormSection title="State and Customer Type">
-          <p className="mb-2.5 text-[11px] leading-relaxed text-muted-foreground">
-            Select one or more states and customer types. Pricing records will be created for
-            every combination of the selected product, states, and customer types.
-          </p>
+          {mode === "add" && (
+            <p className="mb-2.5 text-[11px] leading-relaxed text-muted-foreground">
+              Select one or more states and customer types. Pricing records will be created for
+              every combination of the selected product, states, and customer types.
+            </p>
+          )}
           <PricingFormGrid>
-            <div className="col-span-2 md:col-span-1">
-              <PricingScopeMultiSelect
-                label="State"
-                required
-                options={PRICING_STATES}
-                selected={form.states}
-                onChange={(states) => updateScope({ states })}
-                selectAllLabel="Select All States"
-                placeholder="Select state(s)"
-                invalid={hasScopeConflict}
-                error={hasScopeConflict ? undefined : errors.state}
-              />
-            </div>
+            {mode === "edit" ? (
+              <>
+                <MasterField label="State" required error={errors.state}>
+                  <FieldWidth size="medium">
+                    <AutocompleteSelect
+                      options={stateOptions}
+                      value={form.state}
+                      onChange={(value) => {
+                        onChange({
+                          ...form,
+                          state: value,
+                          states: value ? [value] : [],
+                        });
+                        onClearError?.("state");
+                      }}
+                      placeholder="Select state..."
+                      searchPlaceholder="Search state..."
+                      className={cn(pricingInput(), errors.state && "border-red-400")}
+                      error={Boolean(errors.state)}
+                    />
+                  </FieldWidth>
+                </MasterField>
+                <MasterField label="Customer Type" required error={errors.customerType}>
+                  <FieldWidth size="medium">
+                    <AutocompleteSelect
+                      options={resolvedCustomerTypeOptions}
+                      value={form.customerType}
+                      onChange={(value) => {
+                        onChange({
+                          ...form,
+                          customerType: value as PricingForm["customerType"],
+                          customerTypes: value ? [value as PricingCustomerType] : [],
+                        });
+                        onClearError?.("customerType");
+                      }}
+                      placeholder="Select customer type..."
+                      searchPlaceholder="Search customer type..."
+                      className={cn(pricingInput(), errors.customerType && "border-red-400")}
+                      error={Boolean(errors.customerType)}
+                    />
+                  </FieldWidth>
+                </MasterField>
+              </>
+            ) : (
+              <>
+                <div className="col-span-2 md:col-span-1">
+                  <PricingScopeMultiSelect
+                    label="State"
+                    required
+                    options={PRICING_STATES}
+                    selected={form.states}
+                    onChange={(states) => updateScope({ states })}
+                    selectAllLabel="Select All States"
+                    placeholder="Select state(s)"
+                    invalid={hasScopeConflict}
+                    error={hasScopeConflict ? undefined : errors.state}
+                  />
+                </div>
 
-            <div className="col-span-2 md:col-span-1">
-              <PricingScopeMultiSelect
-                label="Customer Type"
-                required
-                options={customerTypeValues}
-                optionLabels={Object.fromEntries(
-                  resolvedCustomerTypeOptions.map((option) => [option.value, option.label]),
-                )}
-                selected={form.customerTypes}
-                onChange={(customerTypes) =>
-                  updateScope({
-                    customerTypes: customerTypes as PricingCustomerType[],
-                  })
-                }
-                selectAllLabel="Select All Customer Types"
-                placeholder="Select customer type(s)"
-                invalid={hasScopeConflict}
-                error={hasScopeConflict ? undefined : errors.customerType}
-              />
-            </div>
+                <div className="col-span-2 md:col-span-1">
+                  <PricingScopeMultiSelect
+                    label="Customer Type"
+                    required
+                    options={customerTypeValues}
+                    optionLabels={Object.fromEntries(
+                      resolvedCustomerTypeOptions.map((option) => [option.value, option.label]),
+                    )}
+                    selected={form.customerTypes}
+                    onChange={(customerTypes) =>
+                      updateScope({
+                        customerTypes: customerTypes as PricingCustomerType[],
+                      })
+                    }
+                    selectAllLabel="Select All Customer Types"
+                    placeholder="Select customer type(s)"
+                    invalid={hasScopeConflict}
+                    error={hasScopeConflict ? undefined : errors.customerType}
+                  />
+                </div>
+              </>
+            )}
 
-            {combinationCount > 1 && !hasScopeConflict && (
+            {combinationCount > 1 && !hasScopeConflict && mode === "add" && (
               <div className="col-span-2 rounded-lg border border-brand-200 bg-brand-50/60 px-3 py-2 md:col-span-3 lg:col-span-4">
                 <p className="text-xs text-brand-800">
                   Saving will create{" "}

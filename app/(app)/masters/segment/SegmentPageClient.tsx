@@ -39,6 +39,7 @@ import {
   useToggleSegmentStatus,
   useExportSegments,
   useSegmentFilterDropdown,
+  useSegmentPreviewNumber,
 } from "@/hooks/masters";
 import {
   MASTER_FILTER_FIELD_MAPS,
@@ -183,11 +184,15 @@ export default function SegmentMasterPage() {
 
   const listQuery = useSegments(listParams);
   const detailQuery = useSegment(viewId);
+  const previewNumberQuery = useSegmentPreviewNumber(sheetMode === "add");
   const createMutation = useCreateSegment();
   const updateMutation = useUpdateSegment();
   const toggleStatusMutation = useToggleSegmentStatus();
   const exportMutation = useExportSegments();
 
+  const segmentCodeOptionsQuery = useSegmentFilterDropdown("segment_code", {
+    enabled: isFilterOpen("segmentCode"),
+  });
   const segmentNameOptionsQuery = useSegmentFilterDropdown("segment_name", {
     enabled: isFilterOpen("segmentName"),
   });
@@ -198,6 +203,10 @@ export default function SegmentMasterPage() {
     enabled: isFilterOpen("status"),
   });
 
+  const segmentCodeOptions = useMemo(
+    () => segmentCodeOptionsQuery.data ?? [],
+    [segmentCodeOptionsQuery.data],
+  );
   const segmentNameOptions = useMemo(
     () => segmentNameOptionsQuery.data ?? [],
     [segmentNameOptionsQuery.data],
@@ -229,7 +238,8 @@ export default function SegmentMasterPage() {
     : null;
   const viewLoading = Boolean(viewId) && detailQuery.isFetching;
   const saving = createMutation.isPending || updateMutation.isPending;
-    useEffect(() => {
+  
+  useEffect(() => {
     setStatusTab(readStoredStatusTab());
   }, []);
 
@@ -242,6 +252,15 @@ export default function SegmentMasterPage() {
   useEffect(() => {
     setPage(1);
   }, [appliedSearch, apiFilters, pageSize, statusTab, sort.key, sort.direction]);
+
+  useEffect(() => {
+    if (sheetMode === "add" && previewNumberQuery.data) {
+      setForm((prev) => ({
+        ...prev,
+        segmentCode: previewNumberQuery.data || prev.segmentCode,
+      }));
+    }
+  }, [sheetMode, previewNumberQuery.data]);
 
   useEffect(() => {
     if (!viewId) return;
@@ -303,7 +322,10 @@ export default function SegmentMasterPage() {
   };
 
   const openAdd = () => {
-    setForm({ ...DEFAULT_SEGMENT_FORM });
+    setForm({
+      ...DEFAULT_SEGMENT_FORM,
+      segmentCode: previewNumberQuery.data || "Auto-generated",
+    });
     setErrors({});
     setFormError(null);
     setActive(null);
@@ -336,6 +358,24 @@ export default function SegmentMasterPage() {
 
   const columns: ColumnConfig<SegmentRecord>[] = useMemo(
     () => [
+    {
+      key: "segmentCode",
+      header: "Segment Code",
+      sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: segmentCodeOptions,
+      width: "140px",
+      render: (val, row) => (
+        <button
+          type="button"
+          onClick={() => openView(row)}
+          className="text-xs font-mono font-medium text-foreground hover:text-brand-700 hover:underline"
+        >
+          {val ? String(val) : "—"}
+        </button>
+      ),
+    },
     {
       key: "segmentName",
       header: "Segment Name",
@@ -405,6 +445,7 @@ export default function SegmentMasterPage() {
     },
   ],
     [
+      segmentCodeOptions,
       segmentNameOptions,
       descriptionOptions,
       statusOptions,
@@ -526,6 +567,10 @@ export default function SegmentMasterPage() {
         status: active.status,
         basicInfo: [
           {
+            label: "Segment Code",
+            value: active.segmentCode || "—",
+          },
+          {
             label: "Description",
             value: active.description?.trim() ? active.description : "—",
           },
@@ -586,7 +631,7 @@ export default function SegmentMasterPage() {
         addLabel="Add Segment"
         onExport={handleExport}
         emptyMessage="segments"
-        searchPlaceholder="Search segment name or description..."
+        searchPlaceholder="Search segment code, name, or description..."
         currentFilters={filters}
         currentSort={sort}
       onOpenFilter={handleOpenFilter}
@@ -609,7 +654,7 @@ export default function SegmentMasterPage() {
               <NameCodeDescriptionFields
                 form={{
                   name: form.segmentName,
-                  code: form.segmentCode,
+                  code: form.segmentCode || (sheetMode === "add" ? previewNumberQuery.data || "Auto-generated" : ""),
                   description: form.description,
                 }}
                 setForm={(u) =>
@@ -634,7 +679,7 @@ export default function SegmentMasterPage() {
                   name: errors.segmentName,
                 }}
                 labels={{ name: "Segment Name", code: "Segment Code" }}
-                hideCode={sheetMode === "add"}
+                hideCode={false}
                 codeDisabled
               />
             </MasterFormGrid>
