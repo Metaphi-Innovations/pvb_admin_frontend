@@ -111,3 +111,12 @@ export function useSegmentFilterDropdown(
     enabled: options?.enabled ?? true,
   });
 }
+
+export function useSegmentPreviewNumber(enabled = true) {
+  return useQuery({
+    queryKey: [...masterKeys.segments.all(), "preview-number"],
+    queryFn: () => SegmentListService.previewNumber(),
+    enabled,
+    staleTime: 0,
+  });
+}

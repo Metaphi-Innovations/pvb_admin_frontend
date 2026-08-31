@@ -288,6 +288,35 @@ export function validateVendorIFSC(v: string): boolean {
   return /^[A-Z]{4}0[A-Z0-9]{6}$/.test(v.trim().toUpperCase());
 }
 
+export function validateVendorAccountHolderName(v: string): boolean {
+  if (!v || v.length < 2 || v.length > 100) return false;
+  if (v.startsWith(" ") || v.endsWith(" ")) return false;
+  if (!/[a-zA-Z0-9]/.test(v)) return false;
+  return /^[a-zA-Z0-9 .&'\-()/]+$/.test(v);
+}
+
+export function validateVendorBankName(v: string): boolean {
+  if (!v || v.length < 2 || v.length > 100) return false;
+  if (v.startsWith(" ") || v.endsWith(" ")) return false;
+  if (!/[a-zA-Z0-9]/.test(v)) return false;
+  return /^[a-zA-Z0-9 .&'\-/]+$/.test(v);
+}
+
+export function validateVendorBranchName(v: string): boolean {
+  if (!v || v.length < 2 || v.length > 100) return false;
+  if (v.startsWith(" ") || v.endsWith(" ")) return false;
+  if (!/[a-zA-Z0-9]/.test(v)) return false;
+  return /^[a-zA-Z0-9 .&'\-/]+$/.test(v);
+}
+
+export function validateVendorAccountNumber(v: string): boolean {
+  return /^\d{9,18}$/.test(v);
+}
+
+export function validateVendorSWIFT(v: string): boolean {
+  return /^[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?$/.test(v.trim().toUpperCase());
+}
+
 export function validateVendorPincode(v: string): boolean {
   return /^[1-9][0-9]{5}$/.test(v.trim());
 }
@@ -979,20 +1008,47 @@ export function collectVendorFormFieldErrors(
 
   if (!form.accountHolderName.trim()) {
     errors.accountHolderName = "Account holder name is required.";
+  } else if (!validateVendorAccountHolderName(form.accountHolderName)) {
+    errors.accountHolderName =
+      "Enter a valid account holder name (2-100 chars, alphanumeric and . & ' - / ()).";
   }
+
   if (!form.bankName.trim()) {
     errors.bankName = "Bank name is required.";
+  } else if (!validateVendorBankName(form.bankName)) {
+    errors.bankName =
+      "Enter a valid bank name (2-100 chars, alphanumeric and . & ' - /).";
   }
+
   if (!form.branch.trim()) {
     errors.branch = "Branch name is required.";
+  } else if (!validateVendorBranchName(form.branch)) {
+    errors.branch =
+      "Enter a valid branch name (2-100 chars, alphanumeric and . & ' - /).";
   }
+
   if (!form.accountNumber.trim()) {
     errors.accountNumber = "Account number is required.";
+  } else if (!validateVendorAccountNumber(form.accountNumber.trim())) {
+    errors.accountNumber = "Enter a valid 9 to 18-digit account number.";
   }
+
+  if (!form.confirmAccountNumber.trim()) {
+    errors.confirmAccountNumber = "Confirm account number is required.";
+  } else if (form.accountNumber.trim() !== form.confirmAccountNumber.trim()) {
+    errors.confirmAccountNumber = "Account number and confirmation do not match.";
+  }
+
   if (!form.ifscCode.trim()) {
     errors.ifscCode = "IFSC code is required.";
   } else if (!validateVendorIFSC(form.ifscCode)) {
-    errors.ifscCode = "Enter a valid IFSC code.";
+    errors.ifscCode = "Enter a valid 11-character IFSC code (e.g. HDFC0001234).";
+  }
+
+  if (form.swiftCode && form.swiftCode.trim()) {
+    if (!validateVendorSWIFT(form.swiftCode)) {
+      errors.swiftCode = "Enter a valid 8 or 11-character SWIFT code.";
+    }
   }
 
   const documentsMissingUpload = form.documents.filter(
@@ -1012,10 +1068,6 @@ export function collectVendorFormFieldErrors(
   }
   if (form.email.trim() && !validateVendorEmail(form.email)) {
     errors.email = "Enter a valid email address.";
-  }
-
-  if (form.accountNumber && form.accountNumber !== form.confirmAccountNumber) {
-    errors.confirmAccountNumber = "Account number and confirmation do not match.";
   }
 
   form.contacts.forEach((contact, i) => {
@@ -1097,6 +1149,7 @@ export function validateVendorFormStep(
       "accountNumber",
       "confirmAccountNumber",
       "ifscCode",
+      "swiftCode",
     ]);
     for (const [key, message] of Object.entries(all)) {
       if (bankKeys.has(key)) e[key] = message;

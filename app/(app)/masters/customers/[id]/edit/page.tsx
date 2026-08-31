@@ -189,7 +189,21 @@ export default function EditCustomerPage() {
         key.startsWith("mainBranch"),
     );
     const hasCommercialError = Object.keys(fieldErrors).some((key) =>
-      ["creditLimit", "paymentType", "creditDays", "advancePercentage", "ifscCode", "accountNumber", "branch"].includes(key),
+      [
+        "creditLimit",
+        "paymentType",
+        "creditDays",
+        "advancePercentage",
+        "accountHolderName",
+        "bankName",
+        "branch",
+        "accountNumber",
+        "confirmAccountNumber",
+        "ifscCode",
+        "swiftCode",
+      ].includes(key) ||
+      key.startsWith("credit") ||
+      key.startsWith("distributor"),
     );
     if (hasBranchError) return 1;
     if (hasCommercialError) return 2;

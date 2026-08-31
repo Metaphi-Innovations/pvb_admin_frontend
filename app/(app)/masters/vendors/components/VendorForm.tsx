@@ -233,6 +233,7 @@ const FIELD_TAB_MAP: Record<string, TabId> = {
 	accountNumber: "banking",
 	confirmAccountNumber: "banking",
 	ifscCode: "banking",
+	swiftCode: "banking",
 	documents: "documents",
 };
 
@@ -257,6 +258,7 @@ const FIELD_FOCUS_ORDER = [
 	"accountNumber",
 	"confirmAccountNumber",
 	"ifscCode",
+	"swiftCode",
 	"documents",
 ] as const;
 
@@ -1166,7 +1168,9 @@ export function VendorForm({
 									<FieldError msg={errors.accountNumber} />
 								</div>
 								<div className={ERP.field} data-field='confirmAccountNumber'>
-									<Label className={ERP.label}>Confirm Account Number</Label>
+									<Label className={ERP.label}>
+										Confirm Account Number <span className='text-red-500'>*</span>
+									</Label>
 									<Input
 										disabled={readOnly}
 										value={form.confirmAccountNumber}
@@ -1189,15 +1193,16 @@ export function VendorForm({
 									/>
 									<FieldError msg={errors.ifscCode} />
 								</div>
-								<div className={ERP.field}>
+								<div className={ERP.field} data-field='swiftCode'>
 									<Label className={ERP.label}>SWIFT Code</Label>
 									<Input
 										disabled={readOnly}
 										value={form.swiftCode}
 										onChange={(e) => set("swiftCode", e.target.value.toUpperCase())}
-										className={cn(bankFieldClass, "font-mono uppercase")}
+										className={cn(errBank("swiftCode"), "font-mono uppercase")}
 										placeholder='Optional'
 									/>
+									<FieldError msg={errors.swiftCode} />
 								</div>
 							</div>
 						</ErpFormSection>

@@ -24,17 +24,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { MasterListingSheets } from "@/components/masters/MasterListingSheets";
-import { PricingForm as PricingFormFields } from "./components/PricingForm";
-import { MasterDrawerSection } from "@/components/masters/MasterRecordDrawer";
 import {
-  DEFAULT_PRICING_FORM,
-  apiPricingToForm,
-  buildPricingUpdatePayload,
+  MasterRecordDrawer,
+  MasterDrawerSection,
+} from "@/components/masters/MasterRecordDrawer";
+import {
   formatIndianRupeeDisplay,
   getSellingPriceFromRecord,
-  validatePricingForm,
-  type PricingForm,
 } from "./pricing-data";
 import { MasterListing } from "@/components/listing/MasterListing";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
@@ -43,14 +39,12 @@ import { ListingContainer } from "@/components/layout/ListingContainer";
 import { MiniKPICard } from "@/components/ui/KPICard";
 import { MONEY_CELL_CLASS } from "@/lib/accounts/money-format";
 import {
-  useCustomerTypeDropdown,
   useExportPricing,
   usePricing,
   usePricingList,
   usePricingSummary,
   usePricingFilterDropdown,
   useTogglePricingStatus,
-  useUpdatePricing,
   PricingListService,
 } from "@/hooks/masters";
 import type { PricingListRecord } from "@/services/pricing-list.service";
@@ -110,11 +104,9 @@ export default function PricingMasterPage() {
   const [pageSize, setPageSize] = useState(10);
   const [toast, setToast] = useState<ToastState | null>(null);
 
-  const [sheetMode, setSheetMode] = useState<"edit" | "view" | null>(null);
+  const [sheetMode, setSheetMode] = useState<"view" | null>(null);
   const [viewId, setViewId] = useState<string | null>(null);
   const [active, setActive] = useState<PricingListRecord | null>(null);
-  const [form, setForm] = useState<PricingForm>(DEFAULT_PRICING_FORM);
-  const [errors, setErrors] = useState<Record<string, string>>({});
   const [statusTarget, setStatusTarget] = useState<PricingListRecord | null>(null);
 
   const ordering = useMemo(
@@ -147,8 +139,6 @@ export default function PricingMasterPage() {
   const listQuery = usePricingList(listParams);
   const summaryQuery = usePricingSummary();
   const detailQuery = usePricing(viewId);
-  const { data: customerTypes = [] } = useCustomerTypeDropdown();
-  const updateMutation = useUpdatePricing();
   const toggleStatusMutation = useTogglePricingStatus();
   const exportMutation = useExportPricing();
 
@@ -258,23 +248,6 @@ export default function PricingMasterPage() {
     [statusOptionsQuery.data],
   );
 
-  const customerTypeOptions = useMemo(
-    () =>
-      customerTypes.map((item) => ({
-        value: item.customerType,
-        label: item.customerType,
-      })),
-    [customerTypes],
-  );
-
-  const customerTypeIdByName = useMemo(
-    () =>
-      Object.fromEntries(
-        customerTypes.map((item) => [item.customerType, item.id]),
-      ),
-    [customerTypes],
-  );
-
   const records = listQuery.data?.items ?? [];
   const totalRecords = listQuery.data?.total ?? 0;
   const loading = listQuery.isFetching;
@@ -321,7 +294,6 @@ export default function PricingMasterPage() {
     }
     if (detailQuery.data) {
       setActive(detailQuery.data);
-      setForm(apiPricingToForm(detailQuery.data));
       setSheetMode("view");
     }
   }, [viewId, detailQuery.data, detailQuery.isError, detailQuery.error]);
@@ -560,11 +532,7 @@ export default function PricingMasterPage() {
   ];
 
   const openEdit = (row: PricingListRecord) => {
-    setViewId(null);
-    setForm(apiPricingToForm(row));
-    setErrors({});
-    setActive(row);
-    setSheetMode("edit");
+    router.push(`/masters/pricing/${row.pricingUuid || row.id}/edit`);
   };
 
   const openView = useCallback((row: PricingListRecord) => {
@@ -579,34 +547,6 @@ export default function PricingMasterPage() {
     setSheetMode(null);
     setActive(null);
     setViewId(null);
-    setErrors({});
-  };
-
-  const persist = () => {
-    if (!active) return;
-    const fieldErrors = validatePricingForm(form, [], active.id);
-    if (Object.keys(fieldErrors).length > 0) {
-      setErrors(fieldErrors);
-      return;
-    }
-
-    updateMutation.mutate(
-      {
-        id: active.pricingUuid,
-        payload: buildPricingUpdatePayload(form, active, customerTypeIdByName),
-      },
-      {
-        onSuccess: () => {
-          setToast({ msg: "Pricing rule updated successfully", type: "success" });
-          closeSheet();
-        },
-        onError: (error) =>
-          setToast({
-            msg: getErrorMessage(error, "Failed to update pricing rule."),
-            type: "error",
-          }),
-      },
-    );
   };
 
   const handleExport = () => {
@@ -629,7 +569,7 @@ export default function PricingMasterPage() {
     );
   };
 
-  const sheetTitle = sheetMode === "edit" ? "Edit Pricing" : "View Pricing";
+  const sheetTitle = "View Pricing";
 
   const viewDrawer = active
     ? {
@@ -784,44 +724,13 @@ export default function PricingMasterPage() {
         onOpenFilter={handleOpenFilter}
       />
 
-      <MasterListingSheets
-        sheetMode={sheetMode}
-        active={active}
+      <MasterRecordDrawer
+        open={sheetMode === "view"}
+        onOpenChange={(open) => !open && closeSheet()}
         onClose={closeSheet}
         onEdit={() => active && openEdit(active)}
-        onSave={persist}
-        sheetTitle={sheetTitle}
         icon={IndianRupee}
-        viewDrawer={viewDrawer}
-        statusActive={form.status === "active"}
-        onStatusChange={
-          sheetMode === "edit"
-            ? (isActive) =>
-                setForm((prev) => ({
-                  ...prev,
-                  status: isActive ? "active" : "inactive",
-                }))
-            : undefined
-        }
-        formContent={
-          sheetMode === "edit" ? (
-            <PricingFormFields
-              form={form}
-              onChange={setForm}
-              errors={errors}
-              productOptions={[]}
-              customerTypeOptions={customerTypeOptions}
-              mode="edit"
-              onClearError={(key) =>
-                setErrors((prev) => {
-                  const next = { ...prev };
-                  delete next[key];
-                  return next;
-                })
-              }
-            />
-          ) : null
-        }
+        {...viewDrawer}
       />
 
       <Dialog open={!!statusTarget} onOpenChange={(o) => !o && setStatusTarget(null)}>

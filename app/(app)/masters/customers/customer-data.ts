@@ -2206,8 +2206,37 @@ export function validatePincode(v: string): boolean {
 	return /^[1-9][0-9]{5}$/.test(v.trim());
 }
 
+export function validateAccountHolderName(v: string): boolean {
+	if (!v || v.length < 2 || v.length > 100) return false;
+	if (v.startsWith(" ") || v.endsWith(" ")) return false;
+	if (!/[a-zA-Z0-9]/.test(v)) return false;
+	return /^[a-zA-Z0-9 .&'\-()/]+$/.test(v);
+}
+
+export function validateBankName(v: string): boolean {
+	if (!v || v.length < 2 || v.length > 100) return false;
+	if (v.startsWith(" ") || v.endsWith(" ")) return false;
+	if (!/[a-zA-Z0-9]/.test(v)) return false;
+	return /^[a-zA-Z0-9 .&'\-/]+$/.test(v);
+}
+
+export function validateBranchName(v: string): boolean {
+	if (!v || v.length < 2 || v.length > 100) return false;
+	if (v.startsWith(" ") || v.endsWith(" ")) return false;
+	if (!/[a-zA-Z0-9]/.test(v)) return false;
+	return /^[a-zA-Z0-9 .&'\-/]+$/.test(v);
+}
+
+export function validateAccountNumber(v: string): boolean {
+	return /^\d{9,18}$/.test(v);
+}
+
 export function validateIFSC(v: string): boolean {
-	return /^[A-Z]{4}0[A-Z0-9]{6}$/.test(v.trim().toUpperCase());
+	return /^[A-Z]{4}0[A-Z0-9]{6}$/.test(v);
+}
+
+export function validateSWIFT(v: string): boolean {
+	return /^[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?$/.test(v);
 }
 
 /** Only active customers can be used in new transactions */
