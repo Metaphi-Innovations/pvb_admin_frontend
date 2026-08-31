@@ -607,6 +607,20 @@ export const API_ENDPOINTS = {
         STATUS_UPDATE: (bankAccountId: string) =>
           `/accounts/banking/bank-accounts/${bankAccountId}/status`,
       },
+      BANK_RECONCILIATION: {
+        DASHBOARD: "/accounts/bank-reconciliation/dashboard",
+        BOOK_ENTRIES: "/accounts/bank-reconciliation/book-entries",
+        MANUAL_RECONCILE: "/accounts/bank-reconciliation/manual/reconcile",
+        UNRECONCILE: "/accounts/bank-reconciliation/unreconcile",
+        STATEMENT_RECONCILE: "/accounts/bank-reconciliation/statement/reconcile",
+        STATEMENT_UPLOAD: "/accounts/bank-reconciliation/statement/upload",
+        STATEMENT_IMPORTS: "/accounts/bank-reconciliation/statement/imports",
+        STATEMENT_IMPORT_DETAIL: (importId: string) =>
+          `/accounts/bank-reconciliation/statement/imports/${importId}`,
+        STATEMENT_LINES: "/accounts/bank-reconciliation/statement/lines",
+        MATCHES: "/accounts/bank-reconciliation/matches",
+        AUDIT: "/accounts/bank-reconciliation/audit",
+      },
     },
     DEBIT_NOTE: {
       CONFIG: "/accounts/debit-note/config",
