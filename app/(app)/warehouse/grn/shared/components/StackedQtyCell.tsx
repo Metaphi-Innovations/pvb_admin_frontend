@@ -27,7 +27,17 @@ export function StackedQtyCell({
   className?: string;
 }) {
   if (empty || (!(stack.caseQty > 0) && !(stack.unitQty > 0))) {
-    return <span className="text-xs text-muted-foreground">—</span>;
+    return (
+      <div
+        className={cn(
+          "space-y-0.5 leading-tight min-w-[72px]",
+          align === "right" ? "text-right" : align === "left" ? "text-left" : "text-center",
+          className,
+        )}
+      >
+        <span className="text-xs text-muted-foreground">—</span>
+      </div>
+    );
   }
 
   if (labeled) {

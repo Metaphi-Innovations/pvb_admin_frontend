@@ -194,24 +194,29 @@ const ChargeRow = memo(function ChargeRow({
           }
         />
       </td>
-      <td className={cn(cellClass, "min-w-[110px] w-[120px]")}>
-        {renderComputed(
-          row.gstApplicable && calc.cgst > 0 ? formatINR(calc.cgst) : "—",
-          { muted: true },
-        )}
-      </td>
-      <td className={cn(cellClass, "min-w-[110px] w-[120px]")}>
-        {renderComputed(
-          row.gstApplicable && calc.sgst > 0 ? formatINR(calc.sgst) : "—",
-          { muted: true },
-        )}
-      </td>
-      <td className={cn(cellClass, "min-w-[110px] w-[120px]")}>
-        {renderComputed(
-          row.gstApplicable && calc.igst > 0 ? formatINR(calc.igst) : "—",
-          { muted: true },
-        )}
-      </td>
+      {interstate ? (
+        <td className={cn(cellClass, "min-w-[110px] w-[120px]")}>
+          {renderComputed(
+            row.gstApplicable && calc.igst > 0 ? formatINR(calc.igst) : "—",
+            { muted: true },
+          )}
+        </td>
+      ) : (
+        <>
+          <td className={cn(cellClass, "min-w-[110px] w-[120px]")}>
+            {renderComputed(
+              row.gstApplicable && calc.cgst > 0 ? formatINR(calc.cgst) : "—",
+              { muted: true },
+            )}
+          </td>
+          <td className={cn(cellClass, "min-w-[110px] w-[120px]")}>
+            {renderComputed(
+              row.gstApplicable && calc.sgst > 0 ? formatINR(calc.sgst) : "—",
+              { muted: true },
+            )}
+          </td>
+        </>
+      )}
       <td className={cn(cellClass, "min-w-[120px] w-[130px]")}>
         {renderComputed(
           calc.totalAmount > 0 ? formatINR(calc.totalAmount) : "—",
@@ -227,8 +232,8 @@ const ChargeRow = memo(function ChargeRow({
           onChange={(e) => onUpdate(row.id, { remarks: e.target.value })}
         />
       </td>
-      <td className={cn(cellClass, "so-col-actions w-9")}>
-        {!disabled && (
+      {!disabled ? (
+        <td className={cn(cellClass, "so-col-actions w-9")}>
           <button
             type="button"
             onClick={() => onRemove(row.id)}
@@ -237,8 +242,8 @@ const ChargeRow = memo(function ChargeRow({
           >
             <Trash2 className="w-3.5 h-3.5" />
           </button>
-        )}
-      </td>
+        </td>
+      ) : null}
     </tr>
   );
 });
@@ -276,22 +281,49 @@ function GoodsInvoiceAdditionalChargesEditorInner({
     [hsnDropdown],
   );
 
-  const headers = [
-    "Particular",
-    "Additional Charges Ledger",
-    "HSN",
-    "Amount",
-    "GST",
-    "GST %",
-    "CGST",
-    "SGST",
-    "IGST",
-    "Total Amount",
-    "Remark",
-    "",
-  ] as const;
+  const gstHeaders = interstate ? (["IGST"] as const) : (["CGST", "SGST"] as const);
+  const headers = (
+    disabled
+      ? ([
+          "Particular",
+          "Additional Charges Ledger",
+          "HSN",
+          "Amount",
+          "GST",
+          "GST %",
+          ...gstHeaders,
+          "Total Amount",
+          "Remark",
+        ] as const)
+      : ([
+          "Particular",
+          "Additional Charges Ledger",
+          "HSN",
+          "Amount",
+          "GST",
+          "GST %",
+          ...gstHeaders,
+          "Total Amount",
+          "Remark",
+          "",
+        ] as const)
+  );
 
   const rightAlign = new Set(["Amount", "GST %", "CGST", "SGST", "IGST", "Total Amount"]);
+
+  const colClassByHeader: Record<string, string> = {
+    Particular: "min-w-[180px] w-[200px]",
+    "Additional Charges Ledger": "min-w-[240px] w-[260px]",
+    HSN: "min-w-[140px] w-[150px]",
+    Amount: "min-w-[120px] w-[130px]",
+    GST: "min-w-[72px] w-[80px]",
+    "GST %": "min-w-[90px] w-[100px]",
+    CGST: "min-w-[110px] w-[120px]",
+    SGST: "min-w-[110px] w-[120px]",
+    IGST: "min-w-[110px] w-[120px]",
+    "Total Amount": "min-w-[120px] w-[130px]",
+    Remark: "min-w-[160px] w-[180px]",
+  };
 
   const update = useCallback(
     (id: string, patch: Partial<InvoiceAdditionalExpense>) => {
@@ -358,6 +390,7 @@ function GoodsInvoiceAdditionalChargesEditorInner({
                   key={h || "actions"}
                   className={cn(
                     thClass,
+                    colClassByHeader[h],
                     rightAlign.has(h) && "text-right",
                     h === "GST" && "text-center",
                     !h && "so-col-actions",

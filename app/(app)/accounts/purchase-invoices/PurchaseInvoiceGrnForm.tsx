@@ -440,7 +440,7 @@ export function PurchaseInvoiceGrnForm({
           ? "Purchase invoice was already posted for this GRN."
           : "Purchase invoice posted. Supplier outstanding and ledger entries were created.",
       );
-      router.push("/accounts/purchase-invoices");
+      router.replace("/accounts/purchase-invoices");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Save failed.");
       setSaving(false);

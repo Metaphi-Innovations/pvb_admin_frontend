@@ -28,7 +28,6 @@ import {
   type SchemeProductSelectOption,
 } from "../product-discount-scheme";
 import {
-  APPLY_DISCOUNT_ON_PRODUCT,
   CUSTOMER_TYPE_MULTI_OPTIONS,
   resolveCustomerTypeFromMulti,
   DISCOUNT_TYPE_OPTIONS,
@@ -50,13 +49,15 @@ import {
   emptyTurnoverSlab,
   formShowsProductApplicability,
   getProductDiscountRowError,
+  normalizeSchemeQuantityUom,
   productIdsWithDiscountData,
   resolveAutomaticBenefit,
-  resolveSpecialDiscountUom,
+  SCHEME_QUANTITY_UOM_OPTIONS,
   schemeTypeDisplayLabel,
   syncProductDiscountRules,
   type ProductDiscountRuleForm,
   type ProductDiscountSetupMode,
+  type SchemeQuantityUom,
   type SchemeUnifiedForm,
   type SpecialDiscountBasedOnUI,
 } from "../scheme-unified-config";
@@ -64,7 +65,6 @@ import {
   SCHEME_CATEGORIES,
   SCHEME_CUSTOMER_OPTIONS,
   type DiscountType,
-  type SchemeApplyDiscountOn,
   type SchemeCategory,
   type SchemePaymentCalculationOn,
   type SchemePaymentCondition,
@@ -124,19 +124,9 @@ function ProductsApplicability({
   productOptions: SchemeProductSelectOption[];
   showProductError?: boolean;
 }) {
-  const isSpecialQty =
-    form.schemeCategory === "Special Discount" &&
-    form.specialDiscountBasedOn === "Sales Quantity";
-
   const productFieldError =
     showProductError && form.productIds.length === 0
       ? "Please select at least one product (or Select All)."
-      : undefined;
-
-  const { uom, incompatible } = resolveSpecialDiscountUom(form.productIds);
-  const uomError =
-    isSpecialQty && form.productIds.length > 0 && incompatible
-      ? "Selected products must use the same unit of measurement for a quantity-based scheme."
       : undefined;
 
   const [pendingRemoveIds, setPendingRemoveIds] = React.useState<string[] | null>(
@@ -188,17 +178,9 @@ function ProductsApplicability({
           showClearAll
           preferIdentityLabel
           emptyAsSummary={false}
-          error={Boolean(productFieldError || uomError)}
-          errorMessage={productFieldError || uomError}
+          error={Boolean(productFieldError)}
+          errorMessage={productFieldError}
         />
-        {isSpecialQty &&
-        form.productIds.length > 0 &&
-        !incompatible &&
-        uom ? (
-          <p className="text-[10px] text-muted-foreground leading-snug">
-            UOM: {uom} (derived from selected products)
-          </p>
-        ) : null}
       </Field>
 
       {form.schemeCategory === "Product Discount" ? (
@@ -348,28 +330,6 @@ function ProductDiscountConditionFields({
                 className="scheme-ctrl"
               />
             </Field>
-            <Field className="scheme-w-select-md" label="Apply Discount On" required>
-              <Select
-                value={form.applyDiscountOn}
-                onValueChange={(v) =>
-                  onChange({
-                    ...form,
-                    applyDiscountOn: v as SchemeApplyDiscountOn,
-                  })
-                }
-              >
-                <SelectTrigger className={ctrl}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {APPLY_DISCOUNT_ON_PRODUCT.map((o) => (
-                    <SelectItem key={o} value={o} className="text-xs">
-                      {o}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
           </>
         ) : null}
       </div>
@@ -394,7 +354,6 @@ function ProductDiscountConditionFields({
                   <th className="scheme-pd-col-product">Product</th>
                   <th className="scheme-pd-col-type">Discount Type</th>
                   <th className="scheme-pd-col-value">Discount Value</th>
-                  <th className="scheme-pd-col-apply">Apply Discount On</th>
                 </tr>
               </thead>
               <tbody>
@@ -462,27 +421,6 @@ function ProductDiscountConditionFields({
                           }
                           className="scheme-ctrl"
                         />
-                      </td>
-                      <td className="scheme-pd-col-apply">
-                        <Select
-                          value={rule.applyDiscountOn}
-                          onValueChange={(v) =>
-                            updateRule(rule.productId, {
-                              applyDiscountOn: v as SchemeApplyDiscountOn,
-                            })
-                          }
-                        >
-                          <SelectTrigger className={ctrl}>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {APPLY_DISCOUNT_ON_PRODUCT.map((o) => (
-                              <SelectItem key={o} value={o} className="text-xs">
-                                {o}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
                       </td>
                     </tr>
                   );
@@ -556,7 +494,17 @@ function SpecialDiscountConditionFields({
   ) => onChange({ ...form, [key]: value });
 
   const isQty = form.specialDiscountBasedOn === "Sales Quantity";
-  const uom = form.specialDiscountUom;
+  const uom = normalizeSchemeQuantityUom(form.specialDiscountUom || "Case");
+
+  const setQuantityUom = (next: SchemeQuantityUom) => {
+    onChange({
+      ...form,
+      specialDiscountUom: next,
+      specialDiscountQuantitySlabs: form.specialDiscountQuantitySlabs.map(
+        (s) => ({ ...s, uom: next }),
+      ),
+    });
+  };
 
   return (
     <div className="space-y-2">
@@ -589,6 +537,25 @@ function SpecialDiscountConditionFields({
             </SelectContent>
           </Select>
         </Field>
+        {isQty ? (
+          <Field className="scheme-w-select-sm" label="UOM" required>
+            <Select
+              value={uom}
+              onValueChange={(v) => setQuantityUom(v as SchemeQuantityUom)}
+            >
+              <SelectTrigger className={ctrl}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {SCHEME_QUANTITY_UOM_OPTIONS.map((o) => (
+                  <SelectItem key={o} value={o} className="text-xs">
+                    {o}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+        ) : null}
       </div>
 
       <p className="text-[10px] text-muted-foreground leading-snug max-w-xl">
@@ -780,13 +747,35 @@ function SpecialDiscountConditionFields({
                         />
                       </td>
                       <td className="scheme-w-num-cell">
-                        <Input
-                          value={uom || slab.uom || ""}
-                          readOnly
-                          placeholder="—"
-                          className={cn(ctrl, "bg-muted/30")}
-                          tabIndex={-1}
-                        />
+                        <Select
+                          value={normalizeSchemeQuantityUom(slab.uom || uom)}
+                          onValueChange={(v) => {
+                            const next = v as SchemeQuantityUom;
+                            const slabs = [
+                              ...form.specialDiscountQuantitySlabs,
+                            ];
+                            slabs[idx] = { ...slab, uom: next };
+                            onChange({
+                              ...form,
+                              specialDiscountUom: next,
+                              specialDiscountQuantitySlabs: slabs.map((s) => ({
+                                ...s,
+                                uom: next,
+                              })),
+                            });
+                          }}
+                        >
+                          <SelectTrigger className={ctrl}>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {SCHEME_QUANTITY_UOM_OPTIONS.map((o) => (
+                              <SelectItem key={o} value={o} className="text-xs">
+                                {o}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </td>
                       <td>
                         <Select

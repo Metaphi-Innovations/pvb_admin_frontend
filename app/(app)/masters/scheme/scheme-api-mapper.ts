@@ -55,14 +55,6 @@ function fromApiDiscountType(type: unknown): DiscountType {
   return type === "Flat" ? "Fixed Amount" : "Percentage";
 }
 
-function toApplyOn(
-  value: string,
-): "PRODUCT_RATE" | "PRODUCT_LINE_AMOUNT" | "MRP" {
-  if (value === "Product Line Amount") return "PRODUCT_LINE_AMOUNT";
-  if (value === "Invoice Taxable Value" || value === "MRP") return "MRP";
-  return "PRODUCT_RATE";
-}
-
 function fromApplyOn(value: unknown): string {
   if (value === "PRODUCT_LINE_AMOUNT") return "Product Line Amount";
   if (value === "MRP") return "Product Rate";
@@ -207,7 +199,7 @@ function mapSpecialSlabs(form: SchemeUnifiedForm) {
     return form.specialDiscountQuantitySlabs.map((slab, index) => ({
       from_value: parseNum(slab.quantityFrom),
       to_value: openEndedTo(slab.quantityTo),
-      uom_id: slab.uom.trim() || form.specialDiscountUom.trim() || null,
+      uom: slab.uom.trim() || form.specialDiscountUom.trim() || null,
       discount_type: toApiDiscountType(slab.discountType),
       discount_value: parseNum(slab.discountValue),
       sort_order: index,
@@ -231,19 +223,19 @@ function mapProductDiscount(form: SchemeUnifiedForm) {
     );
     return {
       discount_setup: "DIFFERENT_BY_PRODUCT" as const,
-      apply_discount_on: toApplyOn(form.applyDiscountOn),
+      apply_discount_on: "PRODUCT_RATE" as const,
       items: rules.map((rule: ProductDiscountRuleForm) => ({
         product_id: rule.productId,
         discount_type: toApiDiscountType(rule.discountType),
         discount_value: parseNum(rule.discountValue),
-        apply_discount_on: toApplyOn(rule.applyDiscountOn),
+        apply_discount_on: "PRODUCT_RATE" as const,
       })),
     };
   }
 
   return {
     discount_setup: "SAME_FOR_ALL_PRODUCTS" as const,
-    apply_discount_on: toApplyOn(form.applyDiscountOn),
+    apply_discount_on: "PRODUCT_RATE" as const,
     discount_type: toApiDiscountType(form.discountType),
     discount_value: parseNum(form.discountValue),
   };
@@ -514,8 +506,8 @@ export function detailToUnifiedForm(
         slabs.length > 0
           ? slabs.map((item) => {
               const row = item as Record<string, unknown>;
-              const uomId = asString(row.uom_id);
-              if (uomId) form.specialDiscountUom = uomId;
+              const uom = asString(row.uom) || "Case";
+              if (uom) form.specialDiscountUom = uom;
               return {
                 id: asString(row.scheme_slab_id) || `slab-${Math.random()}`,
                 quantityFrom: asString(row.from_value),
@@ -523,12 +515,12 @@ export function detailToUnifiedForm(
                   row.to_value == null || row.to_value === ""
                     ? ""
                     : asString(row.to_value),
-                uom: uomId,
+                uom,
                 discountType: fromApiDiscountType(row.discount_type),
                 discountValue: asString(row.discount_value),
               };
             })
-          : [emptySpecialDiscountQuantitySlab()];
+          : [emptySpecialDiscountQuantitySlab("Case")];
     } else {
       form.specialDiscountAmountSlabs =
         slabs.length > 0

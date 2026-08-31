@@ -9,8 +9,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Calendar, ChevronDown, Download } from "lucide-react";
-import { RecordDetailPage } from "@/components/record-detail";
+import { ChevronDown, Download } from "lucide-react";
 import { loadProducts } from "@/app/(app)/masters/products/product-data";
 import {
   calcLineAmounts,
@@ -26,8 +25,8 @@ import {
 import {
   calcAdditionalExpensesTotals,
   resolveInvoiceAdditionalExpenses,
-  type InvoiceAdditionalExpense,
 } from "./invoice-additional-expenses";
+import { GoodsInvoiceAdditionalChargesEditor } from "./components/GoodsInvoiceAdditionalChargesEditor";
 import { downloadInvoicePdf } from "./invoice-pdf";
 import {
   openProformaInvoicePreview,
@@ -46,7 +45,6 @@ import { formatINR, INVOICES_LIST_PATH } from "./invoice-utils";
 import {
   resolveWorkflowStatus,
   WORKFLOW_STATUS_LABELS,
-  type AccountsVoucherWorkflowStatus,
 } from "@/lib/accounts/accounts-maker-checker";
 import { getInvoiceGstBreakup, getLineGstSplit } from "@/lib/accounts/invoice-gst-breakup";
 import {
@@ -55,14 +53,20 @@ import {
 } from "@/lib/accounts/invoice-type";
 import { formatMoneyOrDash } from "@/lib/accounts/money-format";
 import { GENERAL_LEDGER_HREF } from "@/lib/accounts/general-ledger-data";
+import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { cn } from "@/lib/utils";
 import { getBankAccountPrintDetails } from "@/components/accounts/WarehouseMappedBankAccountSelect";
 import { listBankAccountSelectOptions } from "@/lib/accounts/bank-accounts-data";
 import {
-  InvoiceFormCard,
-  INVOICE_FORM_CARD_TITLE_CLASS,
+  InvoiceFormLayout,
   INVOICE_FORM_GRID_CLASS,
 } from "@/app/(app)/accounts/components/InvoiceFormLayout";
+import { VoucherFormSectionCard } from "@/components/accounts/voucher-form/VoucherFormSectionCard";
+import {
+  TransactionViewHero,
+  buildVoucherViewMeta,
+  voucherStatusToBadgeKey,
+} from "@/components/accounts/voucher-form/TransactionViewHero";
 import {
   formatMonthYear,
   invoiceHasProductDiscount,
@@ -72,6 +76,7 @@ import {
   resolveLineSku,
 } from "./invoice-view-display";
 import "./sales-order-invoice-form-compact.css";
+import "@/components/accounts/voucher-form/transaction-view.css";
 
 function Field({
   label,
@@ -103,16 +108,6 @@ function Field({
       </div>
     </div>
   );
-}
-
-function invoiceStatusVariant(
-  status: AccountsVoucherWorkflowStatus,
-): "active" | "inactive" | "draft" | "blocked" | "neutral" {
-  if (status === "draft") return "draft";
-  if (status === "posted") return "active";
-  if (status === "cancelled" || status === "rejected") return "blocked";
-  if (status === "pending_approval" || status === "sent_back") return "neutral";
-  return "inactive";
 }
 
 function SummaryRow({
@@ -202,9 +197,30 @@ function ProductTable({
     "Line Total",
   ]);
 
+  const colClassByHeader: Record<string, string> = {
+    Product: "so-col-product",
+    SKU: "so-col-sku",
+    "Batch No.": "so-col-batch",
+    HSN: "so-col-hsn",
+    "Qty in Case": "so-col-qty-case",
+    Qty: "so-col-qty",
+    UOM: "so-col-uom",
+    Rate: "so-col-rate",
+    "Gross Amount": "so-col-gross",
+    "Discount %": "so-col-disc-pct",
+    "Discount Amount": "so-col-disc-amt",
+    Taxable: "so-col-taxable",
+    "GST %": "so-col-gst-pct",
+    CGST: "so-col-gst-amt",
+    SGST: "so-col-gst-amt",
+    IGST: "so-col-gst-amt",
+    "Line Total": "so-col-line-total",
+    "Sales Person": "so-col-salesperson",
+  };
+
   return (
     <div className="so-goods-product-table-wrap">
-      <table className="w-full text-xs min-w-[1100px] so-goods-product-table">
+      <table className="w-full text-xs min-w-[1100px] so-goods-product-table table-fixed">
         <thead className="border-b border-border/60 bg-muted/20">
           <tr>
             {headers.map((h) => (
@@ -212,6 +228,7 @@ function ProductTable({
                 key={h}
                 className={cn(
                   "px-2 py-1.5 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap",
+                  colClassByHeader[h],
                   rightAlign.has(h) && "text-right",
                 )}
               >
@@ -258,20 +275,28 @@ function ProductTable({
                       {line.batchNo?.trim() || "—"}
                     </p>
                   </td>
-                  <td className="px-2 py-1.5 align-middle so-cell-num text-muted-foreground">
+                  <td className="px-2 py-1.5 align-middle so-col-hsn text-left text-muted-foreground">
                     {line.hsn?.trim() || "—"}
                   </td>
-                  <td className="px-2 py-1.5 align-middle so-cell-num text-muted-foreground">
+                  <td className="px-2 py-1.5 align-middle so-col-qty-case so-cell-num text-muted-foreground">
                     {line.qtyInCase != null && line.qtyInCase > 0 ? line.qtyInCase : "—"}
                   </td>
-                  <td className="px-2 py-1.5 align-middle so-cell-num tabular-nums">{line.qty}</td>
-                  <td className="px-2 py-1.5 align-middle whitespace-nowrap">{line.unit || "—"}</td>
-                  <td className="px-2 py-1.5 align-middle so-cell-num">{formatINR(line.unitPrice)}</td>
-                  <td className="px-2 py-1.5 align-middle so-cell-num">{formatINR(base)}</td>
-                  <td className="px-2 py-1.5 align-middle so-cell-num tabular-nums">
+                  <td className="px-2 py-1.5 align-middle so-col-qty so-cell-num tabular-nums">
+                    {line.qty}
+                  </td>
+                  <td className="px-2 py-1.5 align-middle so-col-uom whitespace-nowrap">
+                    {line.unit || "—"}
+                  </td>
+                  <td className="px-2 py-1.5 align-middle so-col-rate so-cell-num">
+                    {formatINR(line.unitPrice)}
+                  </td>
+                  <td className="px-2 py-1.5 align-middle so-col-gross so-cell-num">
+                    {formatINR(base)}
+                  </td>
+                  <td className="px-2 py-1.5 align-middle so-col-disc-pct so-cell-num tabular-nums">
                     {discPct > 0 ? `${discPct}%` : "—"}
                   </td>
-                  <td className="px-2 py-1.5 align-middle so-cell-num">
+                  <td className="px-2 py-1.5 align-middle so-col-disc-amt so-cell-num">
                     {discAmt > 0 ? formatINR(discAmt) : "—"}
                   </td>
                   <td className="px-2 py-1.5 align-middle">
@@ -291,28 +316,30 @@ function ProductTable({
                       <span className="text-xs text-muted-foreground">—</span>
                     )}
                   </td>
-                  <td className="px-2 py-1.5 align-middle so-cell-num">{formatINR(split.taxable)}</td>
-                  <td className="px-2 py-1.5 align-middle so-cell-num tabular-nums">
+                  <td className="px-2 py-1.5 align-middle so-col-taxable so-cell-num">
+                    {formatINR(split.taxable)}
+                  </td>
+                  <td className="px-2 py-1.5 align-middle so-col-gst-pct so-cell-num tabular-nums">
                     {line.taxPct > 0 ? `${line.taxPct}%` : "—"}
                   </td>
                   {interstate ? (
-                    <td className="px-2 py-1.5 align-middle so-cell-num text-muted-foreground">
+                    <td className="px-2 py-1.5 align-middle so-col-gst-amt so-cell-num text-muted-foreground">
                       {formatMoneyOrDash(split.igst)}
                     </td>
                   ) : (
                     <>
-                      <td className="px-2 py-1.5 align-middle so-cell-num text-muted-foreground">
+                      <td className="px-2 py-1.5 align-middle so-col-gst-amt so-cell-num text-muted-foreground">
                         {formatMoneyOrDash(split.cgst)}
                       </td>
-                      <td className="px-2 py-1.5 align-middle so-cell-num text-muted-foreground">
+                      <td className="px-2 py-1.5 align-middle so-col-gst-amt so-cell-num text-muted-foreground">
                         {formatMoneyOrDash(split.sgst)}
                       </td>
                     </>
                   )}
-                  <td className="px-2 py-1.5 align-middle so-cell-num font-medium">
+                  <td className="px-2 py-1.5 align-middle so-col-line-total so-cell-num font-medium">
                     {formatINR(split.lineTotal)}
                   </td>
-                  <td className="px-2 py-1.5 align-middle whitespace-nowrap">
+                  <td className="px-2 py-1.5 align-middle so-col-salesperson whitespace-nowrap">
                     {line.salesperson?.trim() || "—"}
                   </td>
                 </tr>
@@ -513,307 +540,263 @@ export default function InvoiceViewPageClient({
     alert(err?.response?.data?.message || err?.message || fallback);
   };
 
-  return (
-    <RecordDetailPage
-      embedded
-      listHref={INVOICES_LIST_PATH}
-      listLabel="Invoices"
-      recordName={record.customerName}
-      recordCode={record.invoiceNo}
-      statusLabel={WORKFLOW_STATUS_LABELS[workflowStatus]}
-      statusVariant={invoiceStatusVariant(workflowStatus)}
-      metaItems={[{ icon: Calendar, label: record.invoiceDate }]}
-      onEdit={
-        actions.includes("edit")
-          ? () => router.push(`${INVOICES_LIST_PATH}/${record.id}/edit`)
-          : undefined
-      }
-      headerActions={
-        canDownloadPi ? (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="h-8 text-xs font-medium gap-1.5">
-                <Download className="w-3.5 h-3.5" /> Download PDF
-                <ChevronDown className="w-3.5 h-3.5" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuItem
-                onClick={() => {
-                  void openProformaInvoicePreview(invoicePdfId).catch((error) =>
-                    handleOfficialPdfError(error, "Failed to open Proforma Invoice."),
-                  );
-                }}
-              >
-                Download Proforma Invoice
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuLabel>Tax Invoice</DropdownMenuLabel>
-              {TAX_INVOICE_COPY_LABELS.map((copyLabel) => (
-                <DropdownMenuItem
-                  key={copyLabel}
-                  onClick={() => {
-                    void openTaxInvoicePreview(invoicePdfId, copyLabel).catch((error) =>
-                      handleOfficialPdfError(error, "Failed to open Tax Invoice."),
-                    );
-                  }}
-                >
-                  {copyLabel}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        ) : (
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 text-xs font-medium gap-1.5"
-            onClick={() => downloadInvoicePdf(record)}
+  const downloadMenu = canDownloadPi ? (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" size="sm" className="h-8 text-xs font-medium gap-1.5">
+          <Download className="w-3.5 h-3.5" /> Download PDF
+          <ChevronDown className="w-3.5 h-3.5" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-56">
+        <DropdownMenuItem
+          onClick={() => {
+            void openProformaInvoicePreview(invoicePdfId).catch((error) =>
+              handleOfficialPdfError(error, "Failed to open Proforma Invoice."),
+            );
+          }}
+        >
+          Download Proforma Invoice
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel>Tax Invoice</DropdownMenuLabel>
+        {TAX_INVOICE_COPY_LABELS.map((copyLabel) => (
+          <DropdownMenuItem
+            key={copyLabel}
+            onClick={() => {
+              void openTaxInvoicePreview(invoicePdfId, copyLabel).catch((error) =>
+                handleOfficialPdfError(error, "Failed to open Tax Invoice."),
+              );
+            }}
           >
-            <Download className="w-3.5 h-3.5" /> Print / PDF
-          </Button>
-        )
-      }
+            {copyLabel}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  ) : (
+    <Button
+      variant="outline"
+      size="sm"
+      className="h-8 text-xs font-medium gap-1.5"
+      onClick={() => downloadInvoicePdf(record)}
     >
-      <div
-        className={cn(
-          "flex flex-col gap-2 so-invoice-view-page",
-          isSalesOrderView && "sales-order-invoice-form-compact",
-        )}
+      <Download className="w-3.5 h-3.5" /> Print / PDF
+    </Button>
+  );
+
+  const stickyFooter = (
+    <div className="flex flex-wrap items-center justify-end gap-2">
+      {actions.includes("edit") ? (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-8 text-xs"
+          onClick={() => router.push(`${INVOICES_LIST_PATH}/${record.id}/edit`)}
+        >
+          Edit
+        </Button>
+      ) : null}
+      {downloadMenu}
+    </div>
+  );
+
+  return (
+    <div className="sales-order-invoice-form-compact h-full min-h-0 flex flex-col w-full">
+      <InvoiceFormLayout
+        title="View Sales Invoice"
+        subtitle={`${record.invoiceNo} · ${WORKFLOW_STATUS_LABELS[workflowStatus]}`}
+        breadcrumb={accountsBreadcrumb("Transactions", "Sales Invoice", INVOICES_LIST_PATH)}
+        backHref={INVOICES_LIST_PATH}
+        stickyFooter={stickyFooter}
       >
-        {/* Customer */}
-        <InvoiceFormCard title="Customer" className="so-invoice-view-card">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-2">
-            <Field label="Customer Name" value={record.customerName} />
-            <Field label="GSTIN" value={gstin} mono />
-            <Field label="Billing Address" value={record.billingAddress} multiline />
-            <Field
-              label="Shipping Address"
-              value={record.shippingAddress || record.billingAddress}
-              multiline
-            />
-          </div>
-        </InvoiceFormCard>
+        <div
+          className={cn(
+            "space-y-2 transaction-voucher-view",
+            isSalesOrderView && "so-invoice-view-page",
+          )}
+        >
+          <TransactionViewHero
+            statusKey={voucherStatusToBadgeKey(workflowStatus)}
+            statusLabel={WORKFLOW_STATUS_LABELS[workflowStatus]}
+            chips={[INVOICE_TYPE_LABELS[invoiceType]]}
+            metaItems={buildVoucherViewMeta({
+              draftNo: record.invoiceNo,
+              accountingVoucherNo: record.postedVoucherNo || null,
+              voucherDate: record.invoiceDate,
+              branchName: record.warehouse || record.branch || undefined,
+            })}
+            partyLabel={record.customerName}
+            amountLabel="Grand Total"
+            amount={gst.invoiceTotal}
+          />
 
-        {/* Invoice Details */}
-        <InvoiceFormCard title="Invoice Details" className="so-invoice-view-card">
-          <div className={INVOICE_FORM_GRID_CLASS}>
-            <Field label="Invoice No." value={record.invoiceNo} mono />
-            <Field label="Invoice Date" value={record.invoiceDate} />
-            <Field label="Due Date" value={record.dueDate} />
-            <Field
-              label="Sales Order No."
-              value={record.salesOrderNo || record.referenceNo}
-              mono
-            />
-            <Field label="Dispatch No." value={record.dispatchNo} mono />
-            <Field
-              label="Bank Account"
-              value={
-                bankDetails
-                  ? `${bankDetails.bankName} · ${bankDetails.accountNumber}`
-                  : record.receivableLedger || ""
-              }
-            />
-            <Field label="Warehouse" value={record.warehouse} />
-            <Field label="Branch" value={record.branch} />
-            <Field label="Place of Supply" value={record.placeOfSupply} />
-            <Field label="Type" value={INVOICE_TYPE_LABELS[invoiceType]} />
-            <Field
-              label="Accounting Voucher"
-              value={
-                record.postedVoucherId ? (
-                  <Link
-                    href={`/accounts/vouchers/view/${record.postedVoucherId}`}
-                    className="font-mono text-brand-700 hover:underline"
-                  >
-                    {record.postedVoucherNo || `V-${record.postedVoucherId}`}
-                  </Link>
-                ) : (
-                  ""
-                )
-              }
-            />
-            <Field
-              label="General Ledger"
-              value={
-                record.customerLedgerUuid ? (
-                  <Link
-                    href={`/accounts/masters/chart-of-accounts?node=${encodeURIComponent(record.customerLedgerUuid)}`}
-                    className="text-brand-700 hover:underline text-xs"
-                  >
-                    Open customer ledger
-                  </Link>
-                ) : record.customerLedgerId ? (
-                  <Link
-                    href={`${GENERAL_LEDGER_HREF}?ledgerId=${record.customerLedgerId}&ledgerType=Customer`}
-                    className="text-brand-700 hover:underline text-xs"
-                  >
-                    Open customer ledger
-                  </Link>
-                ) : (
-                  <Link href={GENERAL_LEDGER_HREF} className="text-brand-700 hover:underline text-xs">
-                    Open General Ledger
-                  </Link>
-                )
-              }
-            />
-          </div>
-        </InvoiceFormCard>
-
-        {/* Transport — when present */}
-        {hasTransport ? (
-          <InvoiceFormCard title="Transport & Statutory Details" className="so-invoice-view-card">
-            <div className={cn(INVOICE_FORM_GRID_CLASS, "lg:grid-cols-3 xl:grid-cols-5")}>
-              <Field label="Transport Mode" value={record.transportMode} />
-              <Field label="Transporter Name" value={record.transporterName} />
-              <Field label="Transporter ID" value={record.transporterId} />
-              <Field label="Vehicle No." value={record.vehicleNo} />
+          <VoucherFormSectionCard title="Customer" highlight>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-2">
+              <Field label="Customer Name" value={record.customerName} />
+              <Field label="GSTIN" value={gstin} mono />
+              <Field label="Billing Address" value={record.billingAddress} multiline />
               <Field
-                label="Distance (KM)"
+                label="Shipping Address"
+                value={record.shippingAddress || record.billingAddress}
+                multiline
+              />
+            </div>
+          </VoucherFormSectionCard>
+
+          <VoucherFormSectionCard title="Invoice Details" highlight>
+            <div className={INVOICE_FORM_GRID_CLASS}>
+              <Field label="Invoice No." value={record.invoiceNo} mono />
+              <Field label="Invoice Date" value={record.invoiceDate} />
+              <Field label="Due Date" value={record.dueDate} />
+              <Field
+                label="Sales Order No."
+                value={record.salesOrderNo || record.referenceNo}
+                mono
+              />
+              <Field label="Dispatch No." value={record.dispatchNo} mono />
+              <Field
+                label="Bank Account"
                 value={
-                  record.distanceKm != null && record.distanceKm > 0
-                    ? String(record.distanceKm)
-                    : ""
+                  bankDetails
+                    ? `${bankDetails.bankName} · ${bankDetails.accountNumber}`
+                    : record.receivableLedger || ""
                 }
               />
-              <Field label="LR / Lorry Receipt No." value={record.lrNo} />
-              <Field label="LR Date" value={record.lrDate} />
-              <Field label="Transport Doc No." value={record.transportDocNo} />
-              <Field label="Transport Doc Date" value={record.transportDocDate} />
-              <Field label="E-Invoice Status" value={record.eInvoiceStatus} />
-              <Field label="E-Invoice No." value={record.eInvoiceNo} mono />
-              <Field label="IRN" value={record.irn} mono />
-              <Field label="E-Way Bill Status" value={record.ewayBillStatus} />
-              <Field label="E-Way Bill No." value={record.ewayBillNo} mono />
-              <Field label="E-Way Expiry" value={record.ewayBillExpiryDate} />
+              <Field label="Warehouse" value={record.warehouse} />
+              <Field label="Branch" value={record.branch} />
+              <Field label="Place of Supply" value={record.placeOfSupply} />
+              <Field label="Type" value={INVOICE_TYPE_LABELS[invoiceType]} />
+              <Field
+                label="Accounting Voucher"
+                value={
+                  record.postedVoucherId ? (
+                    <Link
+                      href={`/accounts/vouchers/view/${record.postedVoucherId}`}
+                      className="font-mono text-brand-700 hover:underline"
+                    >
+                      {record.postedVoucherNo || `V-${record.postedVoucherId}`}
+                    </Link>
+                  ) : (
+                    ""
+                  )
+                }
+              />
+              <Field
+                label="General Ledger"
+                value={
+                  record.customerLedgerUuid ? (
+                    <Link
+                      href={`/accounts/masters/chart-of-accounts?node=${encodeURIComponent(record.customerLedgerUuid)}`}
+                      className="text-brand-700 hover:underline text-xs"
+                    >
+                      Open customer ledger
+                    </Link>
+                  ) : record.customerLedgerId ? (
+                    <Link
+                      href={`${GENERAL_LEDGER_HREF}?ledgerId=${record.customerLedgerId}&ledgerType=Customer`}
+                      className="text-brand-700 hover:underline text-xs"
+                    >
+                      Open customer ledger
+                    </Link>
+                  ) : (
+                    <Link href={GENERAL_LEDGER_HREF} className="text-brand-700 hover:underline text-xs">
+                      Open General Ledger
+                    </Link>
+                  )
+                }
+              />
             </div>
-          </InvoiceFormCard>
-        ) : null}
+          </VoucherFormSectionCard>
 
-        {/* Product Details */}
-        <div className="space-y-2">
-          <h2 className={INVOICE_FORM_CARD_TITLE_CLASS}>Product Details</h2>
-          <ProductTable
-            lines={record.lineItems}
-            interstate={interstate}
-            productCodeById={productCodeById}
-          />
-          <CompactSchemeInformation record={record} />
-        </div>
+          {hasTransport ? (
+            <VoucherFormSectionCard title="Transport & Statutory Details" highlight>
+              <div className={cn(INVOICE_FORM_GRID_CLASS, "lg:grid-cols-3 xl:grid-cols-5")}>
+                <Field label="Transport Mode" value={record.transportMode} />
+                <Field label="Transporter Name" value={record.transporterName} />
+                <Field label="Transporter ID" value={record.transporterId} />
+                <Field label="Vehicle No." value={record.vehicleNo} />
+                <Field
+                  label="Distance (KM)"
+                  value={
+                    record.distanceKm != null && record.distanceKm > 0
+                      ? String(record.distanceKm)
+                      : ""
+                  }
+                />
+                <Field label="LR / Lorry Receipt No." value={record.lrNo} />
+                <Field label="LR Date" value={record.lrDate} />
+                <Field label="Transport Doc No." value={record.transportDocNo} />
+                <Field label="Transport Doc Date" value={record.transportDocDate} />
+                <Field label="E-Invoice Status" value={record.eInvoiceStatus} />
+                <Field label="E-Invoice No." value={record.eInvoiceNo} mono />
+                <Field label="IRN" value={record.irn} mono />
+                <Field label="E-Way Bill Status" value={record.ewayBillStatus} />
+                <Field label="E-Way Bill No." value={record.ewayBillNo} mono />
+                <Field label="E-Way Expiry" value={record.ewayBillExpiryDate} />
+              </div>
+            </VoucherFormSectionCard>
+          ) : null}
 
-        {/* Additional Charges */}
-        {expenses.length > 0 ? (
-          <div className="space-y-2">
-            <h2 className={INVOICE_FORM_CARD_TITLE_CLASS}>Additional Charges</h2>
-            <div className="so-goods-product-table-wrap">
-              <table className="w-full text-xs min-w-[720px]">
-                <thead className="bg-muted/20 border-b border-border/60">
-                  <tr>
-                    {(interstate
-                      ? ["Additional Charge", "Amount", "GST %", "IGST", "Total Amount", "Remarks"]
-                      : [
-                          "Additional Charge",
-                          "Amount",
-                          "GST %",
-                          "CGST",
-                          "SGST",
-                          "Total Amount",
-                          "Remarks",
-                        ]
-                    ).map((h) => (
-                      <th
-                        key={h}
-                        className={cn(
-                          "px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground text-left",
-                          h !== "Additional Charge" && h !== "Remarks" && "text-right",
-                        )}
-                      >
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {expenses.map((e: InvoiceAdditionalExpense) => {
-                    const tax = e.gstApplicable
-                      ? Math.round(e.amount * (e.gstPct / 100) * 100) / 100
-                      : 0;
-                    const half = Math.round((tax / 2) * 100) / 100;
-                    const total = e.amount + tax;
-                    return (
-                      <tr key={e.id} className="border-b border-border/40">
-                        <td className="px-2 py-1.5 font-medium">{e.expenseHead || "—"}</td>
-                        <td className="px-2 py-1.5 text-right tabular-nums">{formatINR(e.amount)}</td>
-                        <td className="px-2 py-1.5 text-right tabular-nums">
-                          {e.gstApplicable ? `${e.gstPct}%` : "—"}
-                        </td>
-                        {interstate ? (
-                          <td className="px-2 py-1.5 text-right tabular-nums">
-                            {formatMoneyOrDash(tax)}
-                          </td>
-                        ) : (
-                          <>
-                            <td className="px-2 py-1.5 text-right tabular-nums">
-                              {formatMoneyOrDash(half)}
-                            </td>
-                            <td className="px-2 py-1.5 text-right tabular-nums">
-                              {formatMoneyOrDash(tax - half)}
-                            </td>
-                          </>
-                        )}
-                        <td className="px-2 py-1.5 text-right tabular-nums font-medium">
-                          {formatINR(total)}
-                        </td>
-                        <td className="px-2 py-1.5 text-muted-foreground">{e.remarks || "—"}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+          <VoucherFormSectionCard title="Product Details" highlight flush>
+            <ProductTable
+              lines={record.lineItems}
+              interstate={interstate}
+              productCodeById={productCodeById}
+            />
+            <div className="px-3 pb-3">
+              <CompactSchemeInformation record={record} />
             </div>
-          </div>
-        ) : null}
+          </VoucherFormSectionCard>
 
-        {/* Narration + Invoice Summary */}
-        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_300px] gap-2.5 items-start">
-          <div className="space-y-2">
-            <h2 className={INVOICE_FORM_CARD_TITLE_CLASS}>Narration</h2>
-            <div className="rounded-lg border border-slate-200 bg-white p-3 min-h-[64px]">
-              <p className="text-xs text-foreground whitespace-pre-wrap">
+          {expenses.length > 0 ? (
+            <VoucherFormSectionCard title="Additional Charges" highlight flush>
+              <GoodsInvoiceAdditionalChargesEditor
+                expenses={expenses}
+                onChange={() => undefined}
+                disabled
+                interstate={interstate}
+                tableVariant="invoice"
+              />
+            </VoucherFormSectionCard>
+          ) : null}
+
+          <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_300px] gap-2.5 items-start">
+            <VoucherFormSectionCard title="Narration" highlight>
+              <p className="text-xs text-foreground whitespace-pre-wrap min-h-[48px]">
                 {narration || "—"}
               </p>
-            </div>
-          </div>
+            </VoucherFormSectionCard>
 
-          <div className="rounded-lg border border-slate-200 bg-white p-3 space-y-1.5 shadow-sm lg:sticky lg:top-3">
-            <h2 className="accounts-card-title">Invoice Summary</h2>
-            <div className="space-y-1 so-invoice-summary">
-              <SummaryRow label="Gross Amount" value={formatINR(productGross || record.subtotal)} />
-              <SummaryRow label="Discount" value={formatINR(displayDiscount)} />
-              <SummaryRow label="Taxable Amount" value={formatINR(gst.taxableValue)} />
-              {interstate ? (
-                <SummaryRow label="Output IGST" value={formatMoneyOrDash(gst.igst)} />
-              ) : (
-                <>
-                  <SummaryRow label="Output CGST" value={formatMoneyOrDash(gst.cgst)} />
-                  <SummaryRow label="Output SGST" value={formatMoneyOrDash(gst.sgst)} />
-                </>
-              )}
-              {(expenseTotals.taxableAmount > 0 || expenses.length > 0) && (
-                <SummaryRow
-                  label="Additional Charges"
-                  value={formatINR(expenseTotals.taxableAmount)}
-                />
-              )}
-              <SummaryRow label="Round Off" value={formatINR(roundOff)} />
-              <SummaryRow label="Grand Total" value={formatINR(gst.invoiceTotal)} grand />
-              <SummaryRow label="Received" value={formatINR(record.amountReceived)} />
-              <SummaryRow label="Balance Due" value={formatINR(record.balanceAmount)} />
-            </div>
+            <VoucherFormSectionCard title="Invoice Summary" highlight>
+              <div className="space-y-1 so-invoice-summary">
+                <SummaryRow label="Gross Amount" value={formatINR(productGross || record.subtotal)} />
+                <SummaryRow label="Discount" value={formatINR(displayDiscount)} />
+                <SummaryRow label="Taxable Amount" value={formatINR(gst.taxableValue)} />
+                {interstate ? (
+                  <SummaryRow label="Output IGST" value={formatMoneyOrDash(gst.igst)} />
+                ) : (
+                  <>
+                    <SummaryRow label="Output CGST" value={formatMoneyOrDash(gst.cgst)} />
+                    <SummaryRow label="Output SGST" value={formatMoneyOrDash(gst.sgst)} />
+                  </>
+                )}
+                {(expenseTotals.taxableAmount > 0 || expenses.length > 0) && (
+                  <SummaryRow
+                    label="Additional Charges"
+                    value={formatINR(expenseTotals.taxableAmount)}
+                  />
+                )}
+                <SummaryRow label="Round Off" value={formatINR(roundOff)} />
+                <SummaryRow label="Grand Total" value={formatINR(gst.invoiceTotal)} grand />
+                <SummaryRow label="Received" value={formatINR(record.amountReceived)} />
+                <SummaryRow label="Balance Due" value={formatINR(record.balanceAmount)} />
+              </div>
+            </VoucherFormSectionCard>
           </div>
         </div>
-      </div>
-    </RecordDetailPage>
+      </InvoiceFormLayout>
+    </div>
   );
 }

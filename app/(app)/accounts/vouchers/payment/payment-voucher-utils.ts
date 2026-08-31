@@ -371,8 +371,10 @@ function normalizePersistedAttachments(value: unknown): PaymentAttachmentMeta[] 
 export function createEmptyAdjustment(
   type: PaymentAdjustmentType = "OTHER",
 ): PaymentUiAdjustment {
+  // OTHER ledger-entry lines are additive to bank outflow (DEBIT).
+  // TDS / Discount Received remain CREDIT (reduce net bank).
   const entryType: PaymentAccountingEntryType =
-    type === "SUPPLIER_TDS" || type === "DISCOUNT_RECEIVED" ? "CREDIT" : "CREDIT";
+    type === "SUPPLIER_TDS" || type === "DISCOUNT_RECEIVED" ? "CREDIT" : "DEBIT";
   return {
     id: `adj-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     adjustment_type: type,
@@ -455,38 +457,54 @@ export function computePaymentPreview(form: PaymentFormState) {
   const { totalAllocated, totalTds, totalDiscount } = computeAllocationTotals(form);
   const adj = computeAdjustmentTotals(form);
   const grossInput = toMoneyNumber(form.gross_party_amount);
+  /** Simplified Ledger Entries (OTHER) — part of gross, not an add-on. */
+  const ledgerEntriesTotal = roundMoney(adj.otherDebit + adj.otherCredit);
 
-  let gross = grossInput;
+  let displayGross = grossInput;
   let advance = 0;
+  /** Party portion posted/saved (= allocated + advance). Ledger sits on top toward display gross. */
+  let payloadGross = 0;
 
   if (form.party_kind === "SUPPLIER") {
     if (form.payment_treatment === "advance_on_account") {
-      gross = grossInput;
-      advance = gross;
+      displayGross = grossInput;
+      // Ledger entries consume part of gross; remainder is supplier advance.
+      advance = roundMoney(Math.max(0, displayGross - ledgerEntriesTotal));
+      payloadGross = advance;
     } else if (grossInput > 0) {
-      gross = grossInput;
-      advance = roundMoney(Math.max(0, gross - totalAllocated));
+      displayGross = grossInput;
+      advance = roundMoney(
+        Math.max(0, displayGross - totalAllocated - ledgerEntriesTotal),
+      );
+      payloadGross = roundMoney(totalAllocated + advance);
     } else {
-      gross = totalAllocated;
+      displayGross = totalAllocated;
       advance = 0;
+      payloadGross = totalAllocated;
     }
   } else if (form.party_kind === "CUSTOMER_REFUND") {
     if (totalAllocated > 0) {
-      gross = totalAllocated;
+      displayGross = roundMoney(totalAllocated + ledgerEntriesTotal);
       advance = 0;
+      payloadGross = totalAllocated;
     } else {
-      gross = grossInput;
+      displayGross = grossInput;
       advance = 0;
+      payloadGross = roundMoney(Math.max(0, grossInput - ledgerEntriesTotal));
     }
   } else {
-    gross = grossInput;
+    displayGross = grossInput;
     advance = 0;
+    payloadGross = roundMoney(Math.max(0, grossInput - ledgerEntriesTotal));
   }
 
-  const netBank = roundMoney(gross - adj.credit + adj.debit);
+  // OTHER DEBIT adds bank back so net bank equals display gross when ledger is within gross.
+  // TDS / Discount CREDIT still reduce net bank.
+  const netBank = roundMoney(payloadGross - adj.credit + adj.debit);
 
   return {
-    gross: roundMoney(gross),
+    gross: roundMoney(displayGross),
+    payloadGross: roundMoney(payloadGross),
     advance: roundMoney(advance),
     totalAllocated,
     totalTds,
@@ -497,6 +515,7 @@ export function computePaymentPreview(form: PaymentFormState) {
     adjDiscount: adj.discount,
     otherDebit: adj.otherDebit,
     otherCredit: adj.otherCredit,
+    ledgerEntriesTotal,
     roundOff: adj.roundOff,
     netBank,
   };
@@ -531,6 +550,33 @@ export function validatePaymentForm(form: PaymentFormState): string | null {
   }
 
   const preview = computePaymentPreview(form);
+
+  if (
+    preview.ledgerEntriesTotal > 0.004 &&
+    toMoneyNumber(form.gross_party_amount) <= 0 &&
+    form.party_kind === "SUPPLIER" &&
+    form.payment_treatment === "against_outstanding" &&
+    preview.totalAllocated <= 0
+  ) {
+    return "Enter Gross Supplier Amount when using Ledger Entries without invoice settlement.";
+  }
+  if (
+    preview.gross > 0 &&
+    preview.totalAllocated + preview.ledgerEntriesTotal > preview.gross + 0.01
+  ) {
+    return "Invoice Settlement + Ledger Entries cannot exceed Gross Amount.";
+  }
+  if (
+    preview.gross > 0 &&
+    Math.abs(
+      preview.totalAllocated +
+        preview.advance +
+        preview.ledgerEntriesTotal -
+        preview.gross,
+    ) > 0.01
+  ) {
+    return "Settlement + Advance + Ledger Entries must equal Gross Amount.";
+  }
 
   if (form.party_kind === "OTHER_LEDGER") {
     if (preview.gross <= 0) return "Gross amount must be greater than zero.";
@@ -695,7 +741,7 @@ export function buildCreatePayload(form: PaymentFormState): CreatePaymentVoucher
     instrument_date:
       form.transaction_mode === "CHEQUE" ? form.cheque_date || null : form.transaction_date || null,
     transaction_date: form.transaction_date || null,
-    gross_party_amount: preview.gross,
+    gross_party_amount: preview.payloadGross,
     advance_amount: form.party_kind === "SUPPLIER" ? preview.advance : 0,
     narration: form.narration.trim() || null,
     remarks: form.remarks.trim() || null,

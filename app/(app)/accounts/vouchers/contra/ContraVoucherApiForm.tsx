@@ -11,8 +11,14 @@ import {
   InvoiceDetailField,
 } from "@/app/(app)/accounts/invoices/components/invoice-form-voucher-ui";
 import "@/app/(app)/accounts/invoices/sales-order-invoice-form-compact.css";
+import "@/components/accounts/voucher-form/transaction-view.css";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { VoucherFormSectionCard } from "@/components/accounts/voucher-form/VoucherFormSectionCard";
+import {
+  TransactionViewHero,
+  buildVoucherViewMeta,
+  voucherStatusToBadgeKey,
+} from "@/components/accounts/voucher-form/TransactionViewHero";
 import {
   VOUCHER_ERROR_CLASS,
   VOUCHER_MONEY_INPUT_CLASS,
@@ -132,6 +138,7 @@ export function ContraVoucherApiForm({
   const [reverseDate, setReverseDate] = useState("");
 
   const fieldsEditable = isDraftEditable(status) && !readOnlyProp;
+  const isViewMode = readOnlyProp || !fieldsEditable;
   const bankSide = hasBankSide(form);
   const crossCashBlocked = isCrossWarehouseCashBlocked(form);
 
@@ -567,22 +574,25 @@ export function ContraVoucherApiForm({
         );
       }
       if (!options?.skipNavigate) {
+        // Leave busy=true — clearing it after replace can abort soft navigation
         goToList();
+        return saved;
       }
+      setBusy(false);
       return saved;
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Failed to save draft.";
       setError(msg);
       showToast(msg, "error");
-      return null;
-    } finally {
       setBusy(false);
+      return null;
     }
   };
 
   const runAction = async (
     action: () => Promise<ContraVoucherDetail>,
     successMsg: string,
+    options?: { keepBusy?: boolean },
   ) => {
     setBusy(true);
     setError(null);
@@ -590,14 +600,14 @@ export function ContraVoucherApiForm({
       const result = await action();
       hydrateFromDetail(result);
       showToast(successMsg, "success");
+      if (!options?.keepBusy) setBusy(false);
       return result;
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Action failed.";
       setError(msg);
       showToast(msg, "error");
-      return null;
-    } finally {
       setBusy(false);
+      return null;
     }
   };
 
@@ -619,12 +629,13 @@ export function ContraVoucherApiForm({
     const posted = await runAction(
       () => ContraVoucherService.post(saved.contra_voucher_id),
       "Contra posted successfully.",
+      { keepBusy: true },
     );
-    if (posted?.contra_voucher_id) {
+    if (posted) {
       goToList();
       return;
     }
-    goToList();
+    setBusy(false);
   };
 
   /** Post an already-saved voucher without confirmation (approved flows). */
@@ -633,10 +644,13 @@ export function ContraVoucherApiForm({
     const posted = await runAction(
       () => ContraVoucherService.post(currentId),
       "Contra posted successfully.",
+      { keepBusy: true },
     );
     if (posted?.contra_voucher_id) {
       goToList();
+      return;
     }
+    setBusy(false);
   };
 
   const title =
@@ -659,7 +673,12 @@ export function ContraVoucherApiForm({
   const showViewChrome = readOnlyProp || !fieldsEditable;
 
   const formBody = (
-    <div className="space-y-2.5">
+    <div
+      className={cn(
+        isViewMode ? "space-y-2" : "space-y-2.5",
+        isViewMode && "transaction-voucher-view",
+      )}
+    >
         {error ? <div className={VOUCHER_ERROR_CLASS}>{error}</div> : null}
 
         {readOnlyProp && onEdit && !fieldsEditable && isDraftEditable(status) ? (
@@ -670,13 +689,37 @@ export function ContraVoucherApiForm({
           </div>
         ) : null}
 
+        {isViewMode ? (
+          <TransactionViewHero
+            statusKey={voucherStatusToBadgeKey(status)}
+            statusLabel={CONTRA_STATUS_LABELS[status] || status}
+            chips={
+              bankSide
+                ? [
+                    CONTRA_BANK_TRANSACTION_MODE_LABELS[form.transaction_mode] ||
+                      form.transaction_mode,
+                  ]
+                : undefined
+            }
+            metaItems={buildVoucherViewMeta({
+              draftNo: detail ? formatSrNo(detail.sr_no) : "—",
+              accountingVoucherNo: detail?.accounting_voucher?.voucher_number,
+              voucherDate: form.voucher_date,
+              branchName: branchContext,
+            })}
+            partyLabel={`${fromAccountLabel} → ${toAccountLabel}`}
+            amountLabel="Transfer Amount"
+            amount={transferAmount}
+          />
+        ) : null}
+
         {crossCashBlocked ? (
           <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800">
             {CROSS_WAREHOUSE_CASH_MESSAGE}
           </div>
         ) : null}
 
-        <VoucherFormSectionCard title="Voucher Details">
+        <VoucherFormSectionCard title="Voucher Details" highlight={isViewMode}>
           <div className="so-invoice-details-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
             <InvoiceDetailField label="Voucher Date" required>
               <Input
@@ -795,7 +838,7 @@ export function ContraVoucherApiForm({
           </div>
         </VoucherFormSectionCard>
 
-        <VoucherFormSectionCard title="Transfer From">
+        <VoucherFormSectionCard title="Transfer From" highlight={isViewMode}>
           <div className="so-invoice-details-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
             <InvoiceDetailField label="From Warehouse / Branch" required>
               <ContraSearchableSelect
@@ -867,7 +910,7 @@ export function ContraVoucherApiForm({
           </div>
         </VoucherFormSectionCard>
 
-        <VoucherFormSectionCard title="Transfer To">
+        <VoucherFormSectionCard title="Transfer To" highlight={isViewMode}>
           <div className="so-invoice-details-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
             <InvoiceDetailField label="To Warehouse / Branch" required>
               <ContraSearchableSelect
@@ -951,7 +994,7 @@ export function ContraVoucherApiForm({
         </VoucherFormSectionCard>
 
         <div className="grid grid-cols-1 gap-2.5 items-start lg:grid-cols-[minmax(0,1fr)_300px]">
-          <VoucherFormSectionCard title="Narration & Attachments">
+          <VoucherFormSectionCard title="Narration & Attachments" highlight={isViewMode}>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
               <div className="min-w-0 space-y-0.5">
                 <Label className="text-xs font-medium">

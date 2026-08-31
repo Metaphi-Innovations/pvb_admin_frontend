@@ -12,8 +12,14 @@ import {
 } from "@/app/(app)/accounts/invoices/components/invoice-form-voucher-ui";
 import "@/app/(app)/accounts/invoices/sales-order-invoice-form-compact.css";
 import "../../credit-notes/credit-note-tx.css";
+import "@/components/accounts/voucher-form/transaction-view.css";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { VoucherFormSectionCard } from "@/components/accounts/voucher-form/VoucherFormSectionCard";
+import {
+  TransactionViewHero,
+  buildVoucherViewMeta,
+  voucherStatusToBadgeKey,
+} from "@/components/accounts/voucher-form/TransactionViewHero";
 import {
   VOUCHER_ERROR_CLASS,
   VOUCHER_MONEY_INPUT_CLASS,
@@ -48,6 +54,7 @@ import {
   type PaymentVoucherDetail,
   type PaymentVoucherStatus,
 } from "@/types/payment-voucher.types";
+import { VoucherLedgerSelect } from "@/components/accounts/voucher-form/VoucherLedgerSelect";
 import { PaymentSearchableSelect } from "./components/PaymentSearchableSelect";
 import { PaymentFormActionBar } from "./components/PaymentFormActionBar";
 import { PaymentAllocationTable } from "./components/PaymentAllocationTable";
@@ -135,11 +142,12 @@ export function PaymentVoucherApiForm({
   const [reverseDate, setReverseDate] = useState("");
 
   const fieldsEditable = isDraftEditable(status) && !readOnlyProp;
+  const isViewMode = readOnlyProp || !fieldsEditable;
   const isPostedView = status === "POSTED" && !readOnlyProp;
   const showViewChrome = readOnlyProp || isPostedView;
   const preview = useMemo(() => computePaymentPreview(form), [form]);
-  /** Net adjustment effect from existing preview: adjCredit − adjDebit. */
-  const adjustmentsTotal = preview.adjCredit - preview.adjDebit;
+  /** Ledger Entries total (additive with settlement toward composed gross / payment). */
+  const adjustmentsTotal = preview.ledgerEntriesTotal;
   const showSupplierInvoiceSettlement =
     form.party_kind === "SUPPLIER" &&
     form.payment_treatment === "against_outstanding";
@@ -148,10 +156,17 @@ export function PaymentVoucherApiForm({
     (form.party_kind === "CUSTOMER_REFUND" && preview.totalAllocated > 0.004);
   const showAdvanceInSummary =
     form.party_kind === "SUPPLIER" && preview.advance > 0.004;
+  /** Settlement + ledger entries must equal gross; payment amount equals gross (less TDS/discount). */
   const summaryBalanced =
     form.party_kind === "OTHER_LEDGER"
       ? true
-      : Math.abs(preview.totalAllocated + preview.advance - preview.gross) < 0.01;
+      : preview.gross > 0 &&
+        Math.abs(
+          preview.totalAllocated +
+            preview.advance +
+            preview.ledgerEntriesTotal -
+            preview.gross,
+        ) < 0.01;
 
   const patch = useCallback((p: Partial<PaymentFormState>) => {
     setForm((prev) => ({ ...prev, ...p }));
@@ -450,6 +465,16 @@ export function PaymentVoucherApiForm({
 
   const warehouseName = warehouses.find((w) => w.value === form.warehouse_id)?.label || "";
 
+  const partyLabel = useMemo(() => {
+    if (form.party_kind === "SUPPLIER") {
+      return suppliers.find((s) => s.value === form.supplier_id)?.label || "";
+    }
+    if (form.party_kind === "CUSTOMER_REFUND") {
+      return customers.find((c) => c.value === form.customer_id)?.label || "";
+    }
+    return form.other_ledger_name || PAYMENT_PARTY_KIND_LABELS.OTHER_LEDGER;
+  }, [form.party_kind, form.supplier_id, form.customer_id, form.other_ledger_name, suppliers, customers]);
+
   const bankOptions = useMemo(() => {
     return bankRows
       .filter(
@@ -529,22 +554,25 @@ export function PaymentVoucherApiForm({
         );
       }
       if (!options?.skipNavigate) {
+        // Leave busy=true — clearing it after replace can abort soft navigation
         goToList();
+        return saved;
       }
+      setBusy(false);
       return saved;
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Failed to save draft.";
       setError(msg);
       showToast(msg, "error");
-      return null;
-    } finally {
       setBusy(false);
+      return null;
     }
   };
 
   const runAction = async (
     action: () => Promise<PaymentVoucherDetail>,
     successMsg: string,
+    options?: { keepBusy?: boolean },
   ) => {
     setBusy(true);
     setError(null);
@@ -552,14 +580,14 @@ export function PaymentVoucherApiForm({
       const result = await action();
       hydrateFromDetail(result);
       showToast(successMsg, "success");
+      if (!options?.keepBusy) setBusy(false);
       return result;
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Action failed.";
       setError(msg);
       showToast(msg, "error");
-      return null;
-    } finally {
       setBusy(false);
+      return null;
     }
   };
 
@@ -581,12 +609,13 @@ export function PaymentVoucherApiForm({
     const posted = await runAction(
       () => PaymentVoucherService.post(saved.payment_voucher_id),
       "Payment posted successfully.",
+      { keepBusy: true },
     );
-    if (posted?.payment_voucher_id) {
+    if (posted) {
       goToList();
       return;
     }
-    goToList();
+    setBusy(false);
   };
 
   /** Post an already-saved voucher without confirmation (approved flows). */
@@ -595,10 +624,13 @@ export function PaymentVoucherApiForm({
     const posted = await runAction(
       () => PaymentVoucherService.post(currentId),
       "Payment posted successfully.",
+      { keepBusy: true },
     );
     if (posted?.payment_voucher_id) {
       goToList();
+      return;
     }
+    setBusy(false);
   };
 
   const title =
@@ -711,7 +743,12 @@ export function PaymentVoucherApiForm({
           onBackClick={showViewChrome ? handleBack : fieldsEditable ? handleDiscard : undefined}
           stickyFooter={!showViewChrome || status === "POSTED" ? actionBar : undefined}
         >
-          <div className="space-y-2.5">
+          <div
+            className={cn(
+              isViewMode ? "space-y-2" : "space-y-2.5",
+              isViewMode && "transaction-voucher-view",
+            )}
+          >
             {error ? <div className={VOUCHER_ERROR_CLASS}>{error}</div> : null}
 
             {readOnlyProp && onEdit && !fieldsEditable && isDraftEditable(status) ? (
@@ -722,7 +759,31 @@ export function PaymentVoucherApiForm({
               </div>
             ) : null}
 
-        <VoucherFormSectionCard title="Voucher Details">
+            {isViewMode ? (
+              <TransactionViewHero
+                statusKey={voucherStatusToBadgeKey(status)}
+                statusLabel={PAYMENT_STATUS_LABELS[status] || status}
+                chips={[
+                  PAYMENT_BANK_TRANSACTION_MODE_LABELS[form.transaction_mode] ||
+                    form.transaction_mode,
+                ]}
+                metaItems={buildVoucherViewMeta({
+                  draftNo: detail ? formatSrNo(detail.sr_no) : "—",
+                  accountingVoucherNo: detail?.accounting_voucher?.voucher_number,
+                  voucherDate: form.transaction_date,
+                  branchName: warehouseName || undefined,
+                })}
+                partyLabel={
+                  partyLabel ||
+                  PAYMENT_PARTY_KIND_LABELS[form.party_kind] ||
+                  undefined
+                }
+                amountLabel="Net Cash / Bank"
+                amount={preview.netBank}
+              />
+            ) : null}
+
+        <VoucherFormSectionCard title="Voucher Details" highlight={isViewMode}>
           <div className="space-y-1.5">
             <div className="so-invoice-details-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
               <InvoiceDetailField label="Draft Payment No.">
@@ -798,7 +859,7 @@ export function PaymentVoucherApiForm({
           </div>
         </VoucherFormSectionCard>
 
-        <VoucherFormSectionCard title="Paid From">
+        <VoucherFormSectionCard title="Paid From" highlight={isViewMode}>
           <div className="space-y-1.5">
             <div className="so-invoice-details-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
               <InvoiceDetailField
@@ -806,22 +867,19 @@ export function PaymentVoucherApiForm({
                 required
               >
                 {form.transaction_mode === "CASH" ? (
-                  <PaymentSearchableSelect
+                  <VoucherLedgerSelect
                     disabled={!fieldsEditable}
                     value={form.cash_bank_ledger_id}
-                    options={cashLedgers.length ? cashLedgers : manualLedgers}
+                    fallbackLabel={form.cash_bank_ledger_name || undefined}
                     placeholder="Select cash ledger…"
-                    triggerClassName={INVOICE_DETAIL_SELECT_CLASS}
-                    onChange={(id) => {
-                      const opt = (cashLedgers.length ? cashLedgers : manualLedgers).find(
-                        (o) => o.value === id,
-                      );
+                    className={INVOICE_DETAIL_SELECT_CLASS}
+                    onChange={(ledger) =>
                       patch({
-                        cash_bank_ledger_id: id,
-                        cash_bank_ledger_name: opt?.label || "",
+                        cash_bank_ledger_id: ledger.ledgerId,
+                        cash_bank_ledger_name: ledger.ledgerName,
                         bank_account_id: "",
-                      });
-                    }}
+                      })
+                    }
                   />
                 ) : (
                   <PaymentSearchableSelect
@@ -894,7 +952,7 @@ export function PaymentVoucherApiForm({
           </div>
         </VoucherFormSectionCard>
 
-        <VoucherFormSectionCard title="Paid To">
+        <VoucherFormSectionCard title="Paid To" highlight={isViewMode}>
           <div className="so-invoice-details-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
             <InvoiceDetailField label="Paid To Type" required>
               <Select
@@ -964,20 +1022,19 @@ export function PaymentVoucherApiForm({
 
             {form.party_kind === "OTHER_LEDGER" ? (
               <InvoiceDetailField label="Other Ledger" required>
-                <PaymentSearchableSelect
+                <VoucherLedgerSelect
                   disabled={!fieldsEditable}
                   value={form.other_ledger_id}
-                  options={manualLedgers}
+                  fallbackLabel={form.other_ledger_name || undefined}
                   placeholder="Select ledger…"
-                  triggerClassName={INVOICE_DETAIL_SELECT_CLASS}
-                  onChange={(id) => {
-                    const opt = manualLedgers.find((o) => o.value === id);
+                  className={INVOICE_DETAIL_SELECT_CLASS}
+                  onChange={(ledger) =>
                     patch({
-                      other_ledger_id: id,
-                      other_ledger_name: opt?.label || "",
+                      other_ledger_id: ledger.ledgerId,
+                      other_ledger_name: ledger.ledgerName,
                       allocations: [],
-                    });
-                  }}
+                    })
+                  }
                 />
               </InvoiceDetailField>
             ) : null}
@@ -1048,22 +1105,22 @@ export function PaymentVoucherApiForm({
           </div>
 
           {form.party_kind === "CUSTOMER_REFUND" && isDirectCustomerRefund ? (
-            <div className="mt-2.5 md:max-w-md">
-              <PaymentSearchableSelect
-                label="Refund / Adjustment Ledger"
-                required
+            <div className="mt-2.5 md:max-w-md space-y-1">
+              <Label className="text-xs font-medium">
+                Refund / Adjustment Ledger <span className="text-red-500">*</span>
+              </Label>
+              <VoucherLedgerSelect
                 disabled={!fieldsEditable}
                 value={form.other_ledger_id}
-                options={manualLedgers}
+                fallbackLabel={form.other_ledger_name || undefined}
                 placeholder="Select refund / adjustment ledger…"
-                triggerClassName={INVOICE_DETAIL_SELECT_CLASS}
-                onChange={(id) => {
-                  const opt = manualLedgers.find((o) => o.value === id);
+                className={INVOICE_DETAIL_SELECT_CLASS}
+                onChange={(ledger) =>
                   patch({
-                    other_ledger_id: id,
-                    other_ledger_name: opt?.label || "",
-                  });
-                }}
+                    other_ledger_id: ledger.ledgerId,
+                    other_ledger_name: ledger.ledgerName,
+                  })
+                }
               />
               <p className="text-[11px] text-muted-foreground mt-1">
                 Direct refund without an existing credit open item. No fake Customer Advance
@@ -1136,7 +1193,8 @@ export function PaymentVoucherApiForm({
 
         {showSupplierInvoiceSettlement ? (
           <VoucherFormSectionCard
-            title="Supplier Outstanding Allocations"
+            title={isViewMode ? "Selected Outstanding Items" : "Supplier Outstanding Allocations"}
+            highlight={isViewMode}
             headerActions={
               outstandingLoading ? (
                 <span className="text-[11px] text-muted-foreground flex items-center gap-1">
@@ -1181,6 +1239,7 @@ export function PaymentVoucherApiForm({
         <VoucherFormSectionCard
           title="Ledger Entries"
           flush
+          highlight={isViewMode}
           headerActions={
             fieldsEditable ? (
               <Button
@@ -1204,7 +1263,7 @@ export function PaymentVoucherApiForm({
         </VoucherFormSectionCard>
 
         <div className="grid grid-cols-1 gap-2.5 items-start lg:grid-cols-[minmax(0,1fr)_300px]">
-          <VoucherFormSectionCard title="Narration & Attachments">
+          <VoucherFormSectionCard title="Narration & Attachments" highlight={isViewMode}>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
               <div className="min-w-0 space-y-0.5">
                 <Label className="text-xs font-medium">Narration</Label>

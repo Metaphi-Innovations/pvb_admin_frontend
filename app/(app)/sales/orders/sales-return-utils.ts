@@ -44,7 +44,6 @@ export function enrichDispatchForReturn(dispatch: DispatchRecord): DispatchRecor
   };
 }
 
-export function calcReturnLineAmount(returnQtyPieces: number, unitRateCase: number): number {
-  const returnQtyCases = returnQtyPieces / 10;
-  return Math.round(returnQtyCases * unitRateCase * 100) / 100;
+export function calcReturnLineAmount(returnQtyPieces: number, unitRatePiece: number): number {
+  return Math.round(Math.max(0, returnQtyPieces) * Math.max(0, unitRatePiece) * 100) / 100;
 }

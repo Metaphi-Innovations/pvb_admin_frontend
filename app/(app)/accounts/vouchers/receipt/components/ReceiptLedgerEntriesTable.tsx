@@ -7,12 +7,11 @@ import {
 } from "@/components/accounts/voucher-simple-form-ui";
 import {
   INVOICE_DETAIL_INPUT_CLASS,
-  INVOICE_DETAIL_SELECT_CLASS,
   InvoiceTableReadonly,
 } from "@/app/(app)/accounts/invoices/components/invoice-form-voucher-ui";
 import { formatMoney } from "@/lib/accounts/money-format";
 import { cn } from "@/lib/utils";
-import { ReceiptSearchableSelect } from "./ReceiptSearchableSelect";
+import { VoucherLedgerSelect } from "@/components/accounts/voucher-form/VoucherLedgerSelect";
 import {
   createEmptyAdjustment,
   toMoneyNumber,
@@ -25,19 +24,17 @@ const AMOUNT_INPUT = cn(
   "text-xs text-right tabular-nums w-full",
 );
 
-const LEDGER_SELECT_CLASS = cn(INVOICE_DETAIL_SELECT_CLASS, "w-full min-w-0");
-
 /**
  * Ledger Entries — optional manual adjustment lines only.
  */
 export function ReceiptLedgerEntriesTable({
   rows,
-  ledgerOptions,
   readOnly,
   onChange,
 }: {
   rows: ReceiptUiAdjustment[];
-  ledgerOptions: { value: string; label: string; sub?: string }[];
+  /** @deprecated Unused — ledger picker uses generic COA dropdown. */
+  ledgerOptions?: { value: string; label: string; sub?: string }[];
   readOnly?: boolean;
   onChange: (rows: ReceiptUiAdjustment[]) => void;
 }) {
@@ -94,20 +91,18 @@ export function ReceiptLedgerEntriesTable({
                     </div>
                   ) : (
                     <div className="w-full min-w-0">
-                      <ReceiptSearchableSelect
+                      <VoucherLedgerSelect
                         value={row.ledger_id}
-                        options={ledgerOptions}
+                        fallbackLabel={row.ledger_name || undefined}
                         placeholder="Select ledger…"
-                        triggerClassName={LEDGER_SELECT_CLASS}
-                        onChange={(id) => {
-                          const opt = ledgerOptions.find((o) => o.value === id);
+                        onChange={(ledger) =>
                           updateManual(row.id, {
-                            ledger_id: id,
-                            ledger_name: opt?.label || "",
+                            ledger_id: ledger.ledgerId,
+                            ledger_name: ledger.ledgerName,
                             adjustment_type: "OTHER",
-                            entry_type: "DEBIT",
-                          });
-                        }}
+                            entry_type: "CREDIT",
+                          })
+                        }
                       />
                     </div>
                   )}
@@ -119,7 +114,13 @@ export function ReceiptLedgerEntriesTable({
                     <Input
                       className={AMOUNT_INPUT}
                       value={row.amount}
-                      onChange={(e) => updateManual(row.id, { amount: e.target.value })}
+                      onChange={(e) =>
+                        updateManual(row.id, {
+                          amount: e.target.value,
+                          adjustment_type: "OTHER",
+                          entry_type: "CREDIT",
+                        })
+                      }
                       placeholder="0.00"
                     />
                   )}

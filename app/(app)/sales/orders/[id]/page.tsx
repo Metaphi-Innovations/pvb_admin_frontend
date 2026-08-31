@@ -50,6 +50,7 @@ import {
   resolveApprovalStatus,
   getProductById,
   isProductDiscountSchemeApplied,
+  normalizeLineDiscountType,
 } from "../orders-data";
 import {
   formatSchemeRupee,
@@ -394,7 +395,8 @@ export default function ViewSalesOrderPage() {
                     <th className="px-4 py-2.5 text-right text-xs font-semibold w-24">Qty (Cases/Loose)</th>
                     <th className="px-4 py-2.5 text-right text-xs font-semibold">DP</th>
                     <th className="px-4 py-2.5 text-left text-xs font-semibold">Offer</th>
-                    <th className="px-4 py-2.5 text-right text-xs font-semibold">Disc. Amt</th>
+                    <th className="px-4 py-2.5 text-right text-xs font-semibold">Scheme Disc.</th>
+                    <th className="px-4 py-2.5 text-right text-xs font-semibold">Manual Disc.</th>
                     <th className="px-4 py-2.5 text-right text-xs font-semibold">Final Rate</th>
                     <th className="px-4 py-2.5 text-right text-xs font-semibold w-24">GST % / Amt</th>
                     <th className="px-4 py-2.5 text-right text-xs font-semibold">Line Total</th>
@@ -449,7 +451,36 @@ export default function ViewSalesOrderPage() {
                           )}
                         </td>
                         <td className="px-4 py-2 text-xs text-right tabular-nums">
-                          {hasScheme ? formatSchemeRupee(line.schemeDiscountAmount) : "—"}
+                          {hasScheme ? (
+                            <div className="flex flex-col items-end gap-0.5">
+                              <span>
+                                {line.schemeDiscountType === "Rupees"
+                                  ? formatSchemeRupee(line.schemeDiscountAmount)
+                                  : `${line.schemeDiscountPercent || line.schemeDiscountValue || 0}%`}
+                              </span>
+                              <span className="text-[10px] text-muted-foreground">
+                                {formatSchemeRupee(line.schemeDiscountAmount)} / unit
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-2 text-xs text-right tabular-nums">
+                          {line.discountValue > 0 || line.discount > 0 ? (
+                            <div className="flex flex-col items-end gap-0.5">
+                              <span>
+                                {normalizeLineDiscountType(line.discountType) === "Flat"
+                                  ? `Fixed · ${formatSchemeRupee(line.discountValue)}`
+                                  : `${line.discount}%`}
+                              </span>
+                              <span className="text-[10px] text-muted-foreground">
+                                {formatSchemeRupee(line.discountValue)}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
                         </td>
                         <td className="px-4 py-2 text-xs text-right tabular-nums font-medium">{formatSchemeRupee(line.finalRate)}</td>
                         <td className="px-4 py-2 text-xs text-right tabular-nums">
@@ -467,6 +498,10 @@ export default function ViewSalesOrderPage() {
             </div>
             <div className="flex justify-end px-4 py-3 border-t border-border bg-muted/20">
               <div className="w-full max-w-xs space-y-1 text-xs">
+                <div className="flex justify-between"><span className="text-muted-foreground">Product Subtotal</span><span>{formatRupee(totals.productSubtotal)}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Scheme Discount</span><span>{formatRupee(totals.schemeDiscountTotal)}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Manual Discount</span><span>{formatRupee(totals.manualDiscountTotal)}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Product Discount Total</span><span>{formatRupee(totals.productDiscountTotal)}</span></div>
                 <div className="flex justify-between"><span className="text-muted-foreground">Net Total</span><span>{formatRupee(totals.netTotal)}</span></div>
                 <div className="flex justify-between"><span className="text-muted-foreground">Total GST</span><span>{formatRupee(totals.totalGst)}</span></div>
                 <div className="flex justify-between font-bold text-brand-700"><span>Grand Total</span><span>{formatRupee(totals.grandTotal)}</span></div>
