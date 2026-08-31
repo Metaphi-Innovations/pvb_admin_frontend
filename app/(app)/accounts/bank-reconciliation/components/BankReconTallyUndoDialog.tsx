@@ -12,37 +12,48 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { undoReconciliation } from "@/lib/accounts/bank-recon-tally-service";
+import { BankReconciliationService } from "@/services/bank-reconciliation.service";
 import { ACCOUNTS_FILTER_LABEL_CLASS } from "@/lib/accounts/accounts-typography";
 
 export function BankReconTallyUndoDialog({
   open,
   onClose,
-  linkId,
+  bankAccountId,
+  bankDetailId,
   onDone,
 }: {
   open: boolean;
   onClose: () => void;
-  linkId: string | null;
+  bankAccountId: string;
+  bankDetailId: string | null;
   onDone: () => void;
 }) {
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const confirm = () => {
-    if (!linkId) return;
-    setSaving(true);
-    setError(null);
-    const res = undoReconciliation({ linkId, reason });
-    setSaving(false);
-    if (!res.ok) {
-      setError(res.error);
+  const confirm = async () => {
+    if (!bankDetailId || !bankAccountId) return;
+    if (!reason.trim()) {
+      setError("Audit reason is required.");
       return;
     }
-    setReason("");
-    onDone();
-    onClose();
+    setSaving(true);
+    setError(null);
+    try {
+      await BankReconciliationService.unreconcile({
+        bank_account_id: bankAccountId,
+        bank_detail_ids: [bankDetailId],
+        reason: reason.trim(),
+      });
+      setReason("");
+      onDone();
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to unreconcile.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -62,11 +73,12 @@ export function BankReconTallyUndoDialog({
             <div className="w-8 h-8 rounded-lg bg-amber-50 border border-amber-200 flex items-center justify-center flex-shrink-0">
               <AlertTriangle className="w-4 h-4 text-amber-500" />
             </div>
-            Undo Reconciliation
+            Unreconcile
           </DialogTitle>
           <DialogDescription className="pt-1 text-xs">
-            This clears the Bank Date and reconciliation link only. The accounting voucher is not
-            deleted, reversed, or modified.
+            Are you sure you want to mark this transaction as unreconciled? This clears the Bank
+            Date and reconciliation link only. The accounting voucher is not deleted, reversed, or
+            modified.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-1.5">
@@ -91,9 +103,9 @@ export function BankReconTallyUndoDialog({
             size="sm"
             className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white"
             disabled={saving || !reason.trim()}
-            onClick={confirm}
+            onClick={() => void confirm()}
           >
-            Undo Reconciliation
+            Unreconcile
           </Button>
         </div>
       </DialogContent>
