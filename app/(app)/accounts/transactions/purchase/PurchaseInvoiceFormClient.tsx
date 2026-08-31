@@ -226,10 +226,9 @@ export default function PurchaseInvoiceFormClient({ invoiceId }: { invoiceId?: n
         });
         if (post) maybePostPurchaseInvoice(created);
       }
-      router.push(PURCHASE_LIST_PATH);
+      router.replace(PURCHASE_LIST_PATH);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Save failed.");
-    } finally {
       setSaving(false);
     }
   };
@@ -456,7 +455,7 @@ export default function PurchaseInvoiceFormClient({ invoiceId }: { invoiceId?: n
                   <td className={cn(INVOICE_FORM_TABLE_TD_CLASS, "text-right tabular-nums font-medium")}>
                     {formatMoney(line.total)}
                   </td>
-                  <td className={INVOICE_FORM_TABLE_TD_CLASS}>
+                  <td className={cn(INVOICE_FORM_TABLE_TD_CLASS, "so-col-actions")}>
                     {lines.length > 1 && (
                       <Button
                         variant="ghost"

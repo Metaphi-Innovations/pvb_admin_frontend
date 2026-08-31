@@ -67,13 +67,27 @@ export interface JournalVoucherListQuery {
   search?: string;
   financial_year_id?: string;
   warehouse_id?: string;
-  status?: JournalVoucherStatus;
+  status?: string;
   debit_ledger_id?: string;
   credit_ledger_id?: string;
+  debit_ledger_names?: string;
+  credit_ledger_names?: string;
   reference_number?: string;
   from_date?: string;
   to_date?: string;
   sr_no?: number;
+  sort_by?:
+    | "sr_no"
+    | "voucher_date"
+    | "amount"
+    | "reference_number"
+    | "status"
+    | "debit_ledger"
+    | "credit_ledger"
+    | "created_at";
+  sort_dir?: "asc" | "desc";
+  amount_min?: number;
+  amount_max?: number;
 }
 
 export interface JournalEligibleLedgersQuery {

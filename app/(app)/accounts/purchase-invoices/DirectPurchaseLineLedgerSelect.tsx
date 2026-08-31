@@ -1,6 +1,6 @@
 "use client";
 
-import { LedgerHierarchySelect } from "@/components/accounts/LedgerHierarchySelect";
+import { GenericLedgerHierarchySelect } from "@/components/accounts/GenericLedgerHierarchySelect";
 import type { LedgerDropdownItem } from "@/services/ledger.service";
 import type { PurchaseNature } from "./purchase-invoices-data";
 import { cn } from "@/lib/utils";
@@ -21,12 +21,15 @@ export function DirectPurchaseLineLedgerSelect({
   const selectedId = typeof value === "string" && value.trim() ? value : null;
 
   return (
-    <LedgerHierarchySelect
+    <GenericLedgerHierarchySelect
       value={selectedId}
       onChange={onChange}
       fallbackLabel={fallbackLabel}
       disabled={disabled}
       className={cn(DP_TABLE_INPUT_CLASS, "text-left")}
+      compact
+      placeholder="Select ledger…"
+      query={{ status: "ACTIVE", allowManualPosting: true }}
     />
   );
 }

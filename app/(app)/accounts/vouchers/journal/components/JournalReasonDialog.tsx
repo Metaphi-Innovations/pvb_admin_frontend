@@ -9,9 +9,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Input } from "@/components/ui/input";
+import { INVOICE_DETAIL_SELECT_CLASS, INVOICE_DETAIL_INPUT_CLASS } from "@/app/(app)/accounts/invoices/components/invoice-form-voucher-ui";
 import {
   Select,
   SelectContent,
@@ -79,12 +80,12 @@ export function JournalReasonDialog({
                 Approver <span className="text-red-500">*</span>
               </Label>
               <Select value={approverId} onValueChange={onApproverChange}>
-                <SelectTrigger className="h-9 text-sm">
+                <SelectTrigger className={INVOICE_DETAIL_SELECT_CLASS}>
                   <SelectValue placeholder="Select approver…" />
                 </SelectTrigger>
                 <SelectContent>
                   {(approvers ?? []).map((a) => (
-                    <SelectItem key={a.value} value={a.value} className="text-sm">
+                    <SelectItem key={a.value} value={a.value}>
                       {a.label}
                     </SelectItem>
                   ))}
@@ -98,7 +99,7 @@ export function JournalReasonDialog({
               <Label className="text-xs font-medium">Reversal Date</Label>
               <Input
                 type="date"
-                className="h-9 text-sm"
+                className={INVOICE_DETAIL_INPUT_CLASS}
                 value={dateValue || ""}
                 onChange={(e) => onDateChange?.(e.target.value)}
               />
@@ -111,7 +112,7 @@ export function JournalReasonDialog({
                 Reason <span className="text-red-500">*</span>
               </Label>
               <Textarea
-                className="text-sm min-h-[80px]"
+                className="text-xs min-h-[72px]"
                 value={reason}
                 onChange={(e) => onReasonChange?.(e.target.value)}
                 placeholder="Enter reason…"

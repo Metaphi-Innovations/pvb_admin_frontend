@@ -152,6 +152,19 @@ export const API_ENDPOINTS = {
       FILTER_DROPDOWN: "/master/additional-charge/filter-dropdown",
       DROPDOWN: "/master/additional-charge/dropdown",
     },
+    SCHEME: {
+      LIST: "/master/scheme/list",
+      SUMMARY: "/master/scheme/summary",
+      CREATE: "/master/scheme/create",
+      UPDATE: (id: string) => `/master/scheme/update/${id}`,
+      STATUS_UPDATE: (id: string) => `/master/scheme/toggle-status/${id}`,
+      VIEW: (id: string) => `/master/scheme/details/${id}`,
+      EXPORT: "/master/scheme/export",
+      FILTER_DROPDOWN: "/master/scheme/filter-dropdown",
+      DROPDOWN: "/master/scheme/dropdown",
+      PREVIEW_NUMBER: "/master/scheme/preview-number",
+      ELIGIBLE_PRODUCT_DISCOUNT: "/master/scheme/eligible-product-discount",
+    },
     UNIT: {
       LIST: "/master/unit/list",
       CREATE: "/master/unit/create",
@@ -612,6 +625,8 @@ export const API_ENDPOINTS = {
       PENDING: "/accounts/debit-note/pending",
       PENDING_BY_ID: (id: string | number) => `/accounts/debit-note/pending/${id}`,
       CREATE_FROM_PENDING: (pendingId: string | number) => `/accounts/debit-note/from-pending/${pendingId}`,
+      ELIGIBLE_PURCHASE_INVOICES: (supplierId: string | number) =>
+        `/accounts/debit-note/supplier/${supplierId}/eligible-purchase-invoices`,
     },
     RECEIPT_VOUCHER: {
       CONFIG: "/accounts/receipt-voucher/config",

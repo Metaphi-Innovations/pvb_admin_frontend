@@ -3,17 +3,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Download, FileText, Paperclip, Plus, Truck } from "lucide-react";
+import { Download, FileText, Paperclip, Plus, Truck, XCircle } from "lucide-react";
 import {
+  AccountsMoreActions,
   AccountsTableActionCell,
   AccountsViewAction,
   accountsActionColClass,
   ACCOUNTS_ACTION_BTN_CLASS,
   ACCOUNTS_ACTION_ICON_CLASS,
 } from "@/components/accounts/AccountsTableActions";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { showToast } from "@/lib/toast";
+import { PurchaseInvoiceCancelDialog } from "./components/PurchaseInvoiceCancelDialog";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import {
   AccountsTable,
@@ -209,13 +213,19 @@ function PostingStatusText({ label }: { label: string }) {
 function ListingRowActions({
   viewHref,
   canDownload,
+  canCancel,
   downloading,
+  actionBusy,
   onDownload,
+  onCancel,
 }: {
   viewHref: string;
   canDownload: boolean;
+  canCancel?: boolean;
   downloading: boolean;
+  actionBusy?: boolean;
   onDownload: () => void;
+  onCancel?: () => void;
 }) {
   return (
     <AccountsTableActionCell>
@@ -231,6 +241,17 @@ function ListingRowActions({
         >
           <Download className={ACCOUNTS_ACTION_ICON_CLASS} />
         </button>
+      ) : null}
+      {canCancel && onCancel ? (
+        <AccountsMoreActions contentClassName="w-44">
+          <DropdownMenuItem
+            className="text-xs gap-2 text-red-600"
+            disabled={actionBusy}
+            onClick={onCancel}
+          >
+            <XCircle className="w-4 h-4" /> Cancel
+          </DropdownMenuItem>
+        </AccountsMoreActions>
       ) : null}
     </AccountsTableActionCell>
   );
@@ -313,6 +334,8 @@ function PurchaseInvoicesTabTable({
   onOpenFilter,
   downloadingId,
   onDownload,
+  actionBusy,
+  onCancel,
 }: {
   toolbarRows: PurchaseInvoiceListRow[];
   loading: boolean;
@@ -322,6 +345,8 @@ function PurchaseInvoicesTabTable({
   onOpenFilter: (key: string) => void;
   downloadingId: string | null;
   onDownload: (row: PurchaseInvoiceListRow) => void;
+  actionBusy?: boolean;
+  onCancel?: (row: PurchaseInvoiceListRow) => void;
 }) {
   const opts = (key: string) => filterOptions[key] || [];
   const filterProps = (key: string) => {
@@ -414,8 +439,15 @@ function PurchaseInvoicesTabTable({
                   <ListingRowActions
                     viewHref={`/accounts/purchase-invoices/${inv.id}`}
                     canDownload={PurchaseInvoiceService.isUuid(inv.id)}
+                    canCancel={
+                      PurchaseInvoiceService.isUuid(inv.id) &&
+                      inv.status === "POSTED" &&
+                      !inv.isPendingGrn
+                    }
                     downloading={downloadingId === inv.id}
+                    actionBusy={actionBusy}
                     onDownload={() => onDownload(inv)}
+                    onCancel={onCancel ? () => onCancel(inv) : undefined}
                   />
                 </AccountsTableCell>
               </AccountsTableRow>
@@ -469,6 +501,7 @@ function GrnPendingTabTable({
               sortable={false}
               filterable={false}
               align="right"
+              className={accountsActionColClass("cta")}
             />
           </AccountsTableHeadRow>
         </AccountsTableHead>
@@ -494,10 +527,10 @@ function GrnPendingTabTable({
                 <AccountsTableCell align="right" money>
                   {formatMoney(Number(grn.total_invoice_amount || 0))}
                 </AccountsTableCell>
-                <AccountsTableCell align="right">
+                <AccountsTableCell align="right" actions="cta">
                   <Button
                     size="sm"
-                    className="h-8 text-xs font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1"
+                    className="h-7 px-2 text-xs font-medium bg-brand-600 hover:bg-brand-700 text-white gap-1 whitespace-nowrap"
                     onClick={() => onCreateInvoice(grn)}
                   >
                     <FileText className="w-3 h-3" />
@@ -542,6 +575,8 @@ function PurchaseInvoicesTabBody({
   exporting,
   onExportExcel,
   onExportCsv,
+  actionBusy,
+  onCancel,
 }: {
   invoices: PurchaseInvoiceListRow[];
   totalRecords: number;
@@ -571,6 +606,8 @@ function PurchaseInvoicesTabBody({
   exporting: boolean;
   onExportExcel: () => void;
   onExportCsv: () => void;
+  actionBusy?: boolean;
+  onCancel?: (row: PurchaseInvoiceListRow) => void;
 }) {
   return (
     <AccountsTableListing
@@ -679,6 +716,8 @@ function PurchaseInvoicesTabBody({
         onOpenFilter={onOpenFilter}
         downloadingId={downloadingId}
         onDownload={onDownload}
+        actionBusy={actionBusy}
+        onCancel={onCancel}
       />
     </AccountsTableListing>
   );
@@ -784,6 +823,10 @@ export default function PurchaseInvoiceListClient() {
   const [error, setError] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [cancelTarget, setCancelTarget] = useState<PurchaseInvoiceListRow | null>(null);
+  const [cancelBusy, setCancelBusy] = useState(false);
+  const cancelBusyRef = useRef(false);
+  const [listRefreshKey, setListRefreshKey] = useState(0);
   const [invoiceFilterOptions, setInvoiceFilterOptions] = useState<FilterValueOptions>({});
   const [invoiceFilterLoading, setInvoiceFilterLoading] = useState<FilterFlagMap>({});
   const [invoiceFilterReady, setInvoiceFilterReady] = useState<FilterFlagMap>({});
@@ -865,6 +908,7 @@ export default function PurchaseInvoiceListClient() {
     invoiceSortKey,
     invoiceSortDir,
     invoiceFiltersKey,
+    listRefreshKey,
   ]);
 
   useEffect(() => {
@@ -1231,6 +1275,8 @@ export default function PurchaseInvoiceListClient() {
                   exporting={exporting}
                   onExportExcel={() => handleExportInvoices("xlsx")}
                   onExportCsv={() => handleExportInvoices("csv")}
+                  actionBusy={cancelBusy}
+                  onCancel={setCancelTarget}
                 />
               </div>
             </AccountsColumnFilterProvider>
@@ -1273,6 +1319,39 @@ export default function PurchaseInvoiceListClient() {
           )}
         </div>
       </AccountsPageShell>
+
+      <PurchaseInvoiceCancelDialog
+        open={!!cancelTarget}
+        onClose={() => {
+          if (!cancelBusy) setCancelTarget(null);
+        }}
+        invoiceNo={cancelTarget?.invoiceNo}
+        busy={cancelBusy}
+        onConfirm={async (payload) => {
+          if (!cancelTarget || cancelBusyRef.current) return;
+          cancelBusyRef.current = true;
+          setCancelBusy(true);
+          try {
+            await PurchaseInvoiceService.cancel(cancelTarget.id, payload);
+            showToast(
+              cancelTarget.invoiceNo
+                ? `Cancelled ${cancelTarget.invoiceNo}`
+                : "Purchase invoice cancelled.",
+              "success",
+            );
+            setCancelTarget(null);
+            setListRefreshKey((k) => k + 1);
+          } catch (e) {
+            showToast(
+              e instanceof Error ? e.message : "Failed to cancel purchase invoice.",
+              "error",
+            );
+          } finally {
+            cancelBusyRef.current = false;
+            setCancelBusy(false);
+          }
+        }}
+      />
     </div>
   );
 }

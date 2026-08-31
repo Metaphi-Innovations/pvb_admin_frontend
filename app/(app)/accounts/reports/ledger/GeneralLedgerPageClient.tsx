@@ -818,7 +818,7 @@ function GeneralLedgerFallback() {
 
 export default function GeneralLedgerPageClient() {
   return (
-    <Suspense fallback={<GeneralLedgerFallback />}>
+    <Suspense fallback={null}>
       <GeneralLedgerPageContent />
     </Suspense>
   );

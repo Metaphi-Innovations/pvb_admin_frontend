@@ -22,6 +22,7 @@ interface SchemeMultiSelectProps {
   maxSelection?: number;
   /** Compact ERP density (Scheme Master unified form). */
   dense?: boolean;
+  required?: boolean;
 }
 
 export function SchemeMultiSelect({
@@ -34,6 +35,7 @@ export function SchemeMultiSelect({
   className,
   maxSelection,
   dense = false,
+  required = false,
 }: SchemeMultiSelectProps) {
   const selected = options.filter((o) => selectedIds.includes(o.id));
   const allSelected = options.length > 0 && selectedIds.length === options.length;
@@ -71,8 +73,13 @@ export function SchemeMultiSelect({
 
   return (
     <div className={cn(dense ? "space-y-0.5" : "space-y-1", className)}>
-      <Label className={cn(dense ? "text-[10px] font-medium text-muted-foreground" : "text-xs font-medium")}>
+      <Label
+        className={cn(
+          dense ? "text-[10px] font-medium text-muted-foreground" : "text-xs font-medium",
+        )}
+      >
         {label}
+        {required ? <span className="text-red-500"> *</span> : null}
       </Label>
       <Popover>
         <PopoverTrigger asChild>
@@ -87,16 +94,26 @@ export function SchemeMultiSelect({
               error && "border-red-400",
             )}
           >
-            <span className={cn("truncate", selected.length === 0 && "text-muted-foreground")}>
+            <span
+              className={cn(
+                "truncate",
+                selected.length === 0 && "text-muted-foreground",
+              )}
+            >
               {summary}
             </span>
             <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
           </button>
         </PopoverTrigger>
-        <PopoverContent align="start" className="w-[var(--radix-popover-trigger-width)] min-w-[16rem] p-0">
+        <PopoverContent
+          align="start"
+          className="w-[var(--radix-popover-trigger-width)] min-w-[16rem] p-0"
+        >
           <div className="flex items-center justify-between border-b border-border px-2.5 py-1.5">
             <div className="flex items-center gap-2">
-              <span className="text-[11px] text-muted-foreground">{selected.length} selected</span>
+              <span className="text-[11px] text-muted-foreground">
+                {selected.length} selected
+              </span>
               {showSelectAll && !allSelected && (
                 <button
                   type="button"
@@ -154,7 +171,9 @@ export function SchemeMultiSelect({
                   <span
                     className={cn(
                       "mt-0.5 inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border",
-                      checked ? "border-brand-600 bg-brand-600 text-white" : "border-border bg-white",
+                      checked
+                        ? "border-brand-600 bg-brand-600 text-white"
+                        : "border-border bg-white",
                     )}
                   >
                     {checked && <Check className="h-2.5 w-2.5" />}
@@ -162,7 +181,9 @@ export function SchemeMultiSelect({
                   <span className="min-w-0">
                     <span className="block text-xs font-medium">{option.name}</span>
                     {option.helper && (
-                      <span className="block text-[10px] text-muted-foreground">{option.helper}</span>
+                      <span className="block text-[10px] text-muted-foreground">
+                        {option.helper}
+                      </span>
                     )}
                   </span>
                 </button>
@@ -171,7 +192,7 @@ export function SchemeMultiSelect({
           </div>
         </PopoverContent>
       </Popover>
-      {error && <p className="text-[10px] text-red-500">{error}</p>}
+      {error ? <p className="text-[10px] text-red-500">{error}</p> : null}
     </div>
   );
 }

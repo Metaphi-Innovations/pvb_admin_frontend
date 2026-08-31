@@ -28,7 +28,6 @@ import {
   type SchemeProductSelectOption,
 } from "../product-discount-scheme";
 import {
-  APPLY_DISCOUNT_ON_PRODUCT,
   CUSTOMER_TYPE_MULTI_OPTIONS,
   resolveCustomerTypeFromMulti,
   DISCOUNT_TYPE_OPTIONS,
@@ -50,13 +49,15 @@ import {
   emptyTurnoverSlab,
   formShowsProductApplicability,
   getProductDiscountRowError,
+  normalizeSchemeQuantityUom,
   productIdsWithDiscountData,
   resolveAutomaticBenefit,
-  resolveSpecialDiscountUom,
+  SCHEME_QUANTITY_UOM_OPTIONS,
   schemeTypeDisplayLabel,
   syncProductDiscountRules,
   type ProductDiscountRuleForm,
   type ProductDiscountSetupMode,
+  type SchemeQuantityUom,
   type SchemeUnifiedForm,
   type SpecialDiscountBasedOnUI,
 } from "../scheme-unified-config";
@@ -64,7 +65,6 @@ import {
   SCHEME_CATEGORIES,
   SCHEME_CUSTOMER_OPTIONS,
   type DiscountType,
-  type SchemeApplyDiscountOn,
   type SchemeCategory,
   type SchemePaymentCalculationOn,
   type SchemePaymentCondition,
@@ -124,26 +124,9 @@ function ProductsApplicability({
   productOptions: SchemeProductSelectOption[];
   showProductError?: boolean;
 }) {
-  const isSpecialQty =
-    form.schemeCategory === "Special Discount" &&
-    form.specialDiscountBasedOn === "Sales Quantity";
-  /** Blank multi-select means all products — except Sales Quantity which requires picks. */
-  const allowsAllWhenBlank = !isSpecialQty;
-
   const productFieldError =
-    showProductError && isSpecialQty && form.productIds.length === 0
-      ? "Select at least one product."
-      : showProductError &&
-          form.schemeCategory === "Product Discount" &&
-          form.discountMode === "PRODUCT_WISE" &&
-          form.productIds.length === 0
-        ? "Select at least one product."
-        : undefined;
-
-  const { uom, incompatible } = resolveSpecialDiscountUom(form.productIds);
-  const uomError =
-    isSpecialQty && form.productIds.length > 0 && incompatible
-      ? "Selected products must use the same unit of measurement for a quantity-based scheme."
+    showProductError && form.productIds.length === 0
+      ? "Please select at least one product (or Select All)."
       : undefined;
 
   const [pendingRemoveIds, setPendingRemoveIds] = React.useState<string[] | null>(
@@ -184,32 +167,20 @@ function ProductsApplicability({
     <>
       <Field className="scheme-w-products">
         <SchemeProductMultiSelect
-          label="Products"
+          label="Products *"
           value={form.productIds}
           onChange={handleProductsChange}
           options={productOptions}
-          placeholder={allowsAllWhenBlank ? "All Products" : "Select products"}
-          searchPlaceholder={
-            allowsAllWhenBlank
-              ? "Leave blank for all products, or search and select specific products."
-              : "Search name, code, or SKU…"
-          }
-          required={isSpecialQty}
+          placeholder="Select products"
+          searchPlaceholder="Search name, code, or SKU… Use Select All for all products."
+          required
           dense
           showClearAll
           preferIdentityLabel
-          emptyAsSummary={allowsAllWhenBlank}
-          error={Boolean(productFieldError || uomError)}
-          errorMessage={productFieldError || uomError}
+          emptyAsSummary={false}
+          error={Boolean(productFieldError)}
+          errorMessage={productFieldError}
         />
-        {isSpecialQty &&
-        form.productIds.length > 0 &&
-        !incompatible &&
-        uom ? (
-          <p className="text-[10px] text-muted-foreground leading-snug">
-            UOM: {uom} (derived from selected products)
-          </p>
-        ) : null}
       </Field>
 
       {form.schemeCategory === "Product Discount" ? (
@@ -359,28 +330,6 @@ function ProductDiscountConditionFields({
                 className="scheme-ctrl"
               />
             </Field>
-            <Field className="scheme-w-select-md" label="Apply Discount On" required>
-              <Select
-                value={form.applyDiscountOn}
-                onValueChange={(v) =>
-                  onChange({
-                    ...form,
-                    applyDiscountOn: v as SchemeApplyDiscountOn,
-                  })
-                }
-              >
-                <SelectTrigger className={ctrl}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {APPLY_DISCOUNT_ON_PRODUCT.map((o) => (
-                    <SelectItem key={o} value={o} className="text-xs">
-                      {o}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
           </>
         ) : null}
       </div>
@@ -405,7 +354,6 @@ function ProductDiscountConditionFields({
                   <th className="scheme-pd-col-product">Product</th>
                   <th className="scheme-pd-col-type">Discount Type</th>
                   <th className="scheme-pd-col-value">Discount Value</th>
-                  <th className="scheme-pd-col-apply">Apply Discount On</th>
                 </tr>
               </thead>
               <tbody>
@@ -473,27 +421,6 @@ function ProductDiscountConditionFields({
                           }
                           className="scheme-ctrl"
                         />
-                      </td>
-                      <td className="scheme-pd-col-apply">
-                        <Select
-                          value={rule.applyDiscountOn}
-                          onValueChange={(v) =>
-                            updateRule(rule.productId, {
-                              applyDiscountOn: v as SchemeApplyDiscountOn,
-                            })
-                          }
-                        >
-                          <SelectTrigger className={ctrl}>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {APPLY_DISCOUNT_ON_PRODUCT.map((o) => (
-                              <SelectItem key={o} value={o} className="text-xs">
-                                {o}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
                       </td>
                     </tr>
                   );
@@ -567,7 +494,17 @@ function SpecialDiscountConditionFields({
   ) => onChange({ ...form, [key]: value });
 
   const isQty = form.specialDiscountBasedOn === "Sales Quantity";
-  const uom = form.specialDiscountUom;
+  const uom = normalizeSchemeQuantityUom(form.specialDiscountUom || "Case");
+
+  const setQuantityUom = (next: SchemeQuantityUom) => {
+    onChange({
+      ...form,
+      specialDiscountUom: next,
+      specialDiscountQuantitySlabs: form.specialDiscountQuantitySlabs.map(
+        (s) => ({ ...s, uom: next }),
+      ),
+    });
+  };
 
   return (
     <div className="space-y-2">
@@ -600,6 +537,25 @@ function SpecialDiscountConditionFields({
             </SelectContent>
           </Select>
         </Field>
+        {isQty ? (
+          <Field className="scheme-w-select-sm" label="UOM" required>
+            <Select
+              value={uom}
+              onValueChange={(v) => setQuantityUom(v as SchemeQuantityUom)}
+            >
+              <SelectTrigger className={ctrl}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {SCHEME_QUANTITY_UOM_OPTIONS.map((o) => (
+                  <SelectItem key={o} value={o} className="text-xs">
+                    {o}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+        ) : null}
       </div>
 
       <p className="text-[10px] text-muted-foreground leading-snug max-w-xl">
@@ -791,13 +747,35 @@ function SpecialDiscountConditionFields({
                         />
                       </td>
                       <td className="scheme-w-num-cell">
-                        <Input
-                          value={uom || slab.uom || ""}
-                          readOnly
-                          placeholder="—"
-                          className={cn(ctrl, "bg-muted/30")}
-                          tabIndex={-1}
-                        />
+                        <Select
+                          value={normalizeSchemeQuantityUom(slab.uom || uom)}
+                          onValueChange={(v) => {
+                            const next = v as SchemeQuantityUom;
+                            const slabs = [
+                              ...form.specialDiscountQuantitySlabs,
+                            ];
+                            slabs[idx] = { ...slab, uom: next };
+                            onChange({
+                              ...form,
+                              specialDiscountUom: next,
+                              specialDiscountQuantitySlabs: slabs.map((s) => ({
+                                ...s,
+                                uom: next,
+                              })),
+                            });
+                          }}
+                        >
+                          <SelectTrigger className={ctrl}>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {SCHEME_QUANTITY_UOM_OPTIONS.map((o) => (
+                              <SelectItem key={o} value={o} className="text-xs">
+                                {o}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </td>
                       <td>
                         <Select
@@ -956,6 +934,12 @@ interface SchemeUnifiedConfigFormProps {
   error?: string;
   /** When editing, scheme type is locked to avoid orphaning specialised line data. */
   lockCategory?: boolean;
+  /** API-backed options (preferred). Falls back to local lists if omitted. */
+  productSelectOptions?: SchemeProductSelectOption[];
+  stateSelectOptions?: { id: string; name: string }[];
+  customerSelectOptions?: { id: string; name: string }[];
+  customerTypeSelectOptions?: { id: string; name: string }[];
+  schemeCategoryOptions?: SchemeCategory[];
 }
 
 export function SchemeUnifiedConfigForm({
@@ -966,12 +950,31 @@ export function SchemeUnifiedConfigForm({
   codePreview,
   error,
   lockCategory = false,
+  productSelectOptions,
+  stateSelectOptions,
+  customerSelectOptions,
+  customerTypeSelectOptions,
+  schemeCategoryOptions,
 }: SchemeUnifiedConfigFormProps) {
-  const stateOptions = useMemo(() => loadSchemeStateOptions(), []);
-  const productOptions = useMemo(() => loadSchemeProductSelectOptions(), []);
+  const stateOptions = useMemo(
+    () => stateSelectOptions ?? loadSchemeStateOptions(),
+    [stateSelectOptions],
+  );
+  const productOptions = useMemo(
+    () => productSelectOptions ?? loadSchemeProductSelectOptions(),
+    [productSelectOptions],
+  );
   const customerOptions = useMemo(
-    () => SCHEME_CUSTOMER_OPTIONS.map((c) => ({ id: c.id, name: c.name })),
-    [],
+    () =>
+      customerSelectOptions ??
+      SCHEME_CUSTOMER_OPTIONS.map((c) => ({ id: c.id, name: c.name })),
+    [customerSelectOptions],
+  );
+  const customerTypeOptions = useMemo(
+    () =>
+      customerTypeSelectOptions ??
+      CUSTOMER_TYPE_MULTI_OPTIONS.map((t) => ({ id: t, name: t })),
+    [customerTypeSelectOptions],
   );
   const usesProducts = formShowsProductApplicability(form);
   const showImpact = categoryShowsImpactFlags(form.schemeCategory);
@@ -988,9 +991,12 @@ export function SchemeUnifiedConfigForm({
     benefitThrough: autoBenefit.benefitThrough,
     benefitWhen: autoBenefit.benefitWhen,
   });
-  const schemeTypeOptions = SCHEME_CATEGORIES.filter(
-    (c) => c !== "Payment Discount" || form.schemeCategory === "Payment Discount",
-  );
+  const schemeTypeOptions = (
+    schemeCategoryOptions ??
+    SCHEME_CATEGORIES.filter(
+      (c) => c !== "Payment Discount" || form.schemeCategory === "Payment Discount",
+    )
+  ) as SchemeCategory[];
 
   const steps = useMemo(() => {
     const list: { id: WizardStepId; title: string }[] = [
@@ -1257,12 +1263,10 @@ export function SchemeUnifiedConfigForm({
           <div className="scheme-row">
             <Field className="scheme-w-customer-type">
               <SchemeMultiSelect
-                label="Customer Type *"
+                label="Customer Type"
                 placeholder="Select customer types"
-                options={CUSTOMER_TYPE_MULTI_OPTIONS.map((t) => ({
-                  id: t,
-                  name: t,
-                }))}
+                required
+                options={customerTypeOptions}
                 selectedIds={form.customerTypes}
                 onChange={(ids) =>
                   onChange({
@@ -1272,6 +1276,11 @@ export function SchemeUnifiedConfigForm({
                     customerIds: [],
                   })
                 }
+                error={
+                  error && /customer type/i.test(error)
+                    ? "Please select at least one customer type (or Select All)."
+                    : undefined
+                }
                 className="w-full"
                 dense
               />
@@ -1279,21 +1288,33 @@ export function SchemeUnifiedConfigForm({
             <Field className="scheme-w-customer">
               <SchemeMultiSelect
                 label="Customers"
-                placeholder="All customers of selected type"
+                placeholder="Select customers"
+                required
                 options={customerOptions}
                 selectedIds={form.customerIds}
                 onChange={(ids) => set("customerIds", ids)}
+                error={
+                  error && /select at least one customer(?! type)/i.test(error)
+                    ? "Please select at least one customer (or Select All)."
+                    : undefined
+                }
                 className="w-full"
                 dense
               />
             </Field>
             <Field className="scheme-w-state">
               <SchemeMultiSelect
-                label="State *"
+                label="State"
                 placeholder="Select states"
+                required
                 options={stateOptions}
                 selectedIds={form.stateNames}
                 onChange={(ids) => set("stateNames", ids)}
+                error={
+                  error && /state/i.test(error)
+                    ? "Please select at least one state (or Select All)."
+                    : undefined
+                }
                 className="w-full"
                 dense
               />
@@ -1304,8 +1325,7 @@ export function SchemeUnifiedConfigForm({
                 onChange={onChange}
                 productOptions={productOptions}
                 showProductError={Boolean(
-                  error &&
-                    /select at least one product/i.test(error),
+                  error && /product/i.test(error),
                 )}
               />
             ) : null}
@@ -1687,36 +1707,44 @@ export function SchemeUnifiedConfigForm({
               <div className="scheme-review-item">
                 <dt>Applicable To</dt>
                 <dd>
-                  {form.customerTypes.length === 0 ||
-                  form.customerTypes.length === CUSTOMER_TYPE_MULTI_OPTIONS.length
-                    ? "All customer types"
-                    : form.customerTypes.join(", ")}
+                  {form.customerTypes.length === 0
+                    ? "Not selected"
+                    : form.customerTypes
+                        .map(
+                          (id) =>
+                            customerTypeOptions.find((o) => o.id === id)?.name ??
+                            id,
+                        )
+                        .join(", ")}
                 </dd>
               </div>
               <div className="scheme-review-item">
                 <dt>Customers</dt>
                 <dd>
                   {form.customerIds.length === 0
-                    ? "All customers of selected type"
+                    ? "Not selected"
                     : form.customerIds
                         .map(
                           (id) =>
-                            SCHEME_CUSTOMER_OPTIONS.find((c) => c.id === id)
-                              ?.name ?? id,
+                            customerOptions.find((c) => c.id === id)?.name ?? id,
                         )
                         .join(", ")}
                 </dd>
               </div>
               <div className="scheme-review-item">
                 <dt>State</dt>
-                <dd>{form.stateNames.length ? form.stateNames.join(", ") : "—"}</dd>
+                <dd>
+                  {form.stateNames.length
+                    ? form.stateNames.join(", ")
+                    : "Not selected"}
+                </dd>
               </div>
               {usesProducts ? (
                 <div className="scheme-review-item">
                   <dt>Products</dt>
                   <dd>
-                    {form.productScope !== "Selected Products"
-                      ? "All Products"
+                    {form.productIds.length === 0
+                      ? "Not selected"
                       : (() => {
                           const names = form.productIds
                             .map(
@@ -1727,7 +1755,9 @@ export function SchemeUnifiedConfigForm({
                                   ?.label,
                             )
                             .filter((n): n is string => Boolean(n));
-                          if (names.length === 0) return "No products selected";
+                          if (names.length === 0) {
+                            return `${form.productIds.length} selected`;
+                          }
                           if (names.length === 1) return names[0];
                           if (names.length === 2)
                             return `${names[0]} and ${names[1]}`;

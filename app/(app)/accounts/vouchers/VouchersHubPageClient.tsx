@@ -6,22 +6,50 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
-import { AccountsRouteLoading } from "@/components/accounts/AccountsRouteLoading";
 import { VoucherFormToastHost } from "@/components/accounts/voucher-form/VoucherFormToastHost";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
+import { dispatchAccountsDataChanged } from "@/lib/accounts/accounts-data-events";
 import { VOUCHER_TYPE_LABELS, type VoucherTypeCode } from "../masters/masters-data";
 import { VoucherListClient } from "./components/VoucherListClient";
-import { ReceiptVoucherListClient } from "./receipt/ReceiptVoucherListClient";
-import { PaymentVoucherListClient } from "./payment/PaymentVoucherListClient";
-import { JournalVoucherListClient } from "./journal/JournalVoucherListClient";
-import { ContraVoucherListClient } from "./contra/ContraVoucherListClient";
 import { voucherTypeToUrl, parseVoucherTypeParam } from "./voucher-routes";
+
+const ReceiptVoucherListClient = dynamic(
+  () =>
+    import("./receipt/ReceiptVoucherListClient").then((m) => ({
+      default: m.ReceiptVoucherListClient,
+    })),
+  { ssr: false, loading: () => null },
+);
+
+const PaymentVoucherListClient = dynamic(
+  () =>
+    import("./payment/PaymentVoucherListClient").then((m) => ({
+      default: m.PaymentVoucherListClient,
+    })),
+  { ssr: false, loading: () => null },
+);
+
+const JournalVoucherListClient = dynamic(
+  () =>
+    import("./journal/JournalVoucherListClient").then((m) => ({
+      default: m.JournalVoucherListClient,
+    })),
+  { ssr: false, loading: () => null },
+);
+
+const ContraVoucherListClient = dynamic(
+  () =>
+    import("./contra/ContraVoucherListClient").then((m) => ({
+      default: m.ContraVoucherListClient,
+    })),
+  { ssr: false, loading: () => null },
+);
 
 const VoucherNewEntry = dynamic(
   () => import("./VoucherNewEntry").then((m) => ({ default: m.VoucherNewEntry })),
   {
     ssr: false,
-    loading: () => <AccountsRouteLoading label="Voucher" />,
+    loading: () => null,
   },
 );
 
@@ -52,7 +80,7 @@ export default function VouchersHubPageClient() {
 
   useEffect(() => {
     if (!tabParam) {
-      router.replace("/accounts/vouchers?tab=journal");
+      router.replace("/accounts/vouchers?tab=journal", { scroll: false });
     }
   }, [tabParam, router]);
 
@@ -61,7 +89,16 @@ export default function VouchersHubPageClient() {
   };
 
   const closeNew = useCallback(() => {
-    router.push(`/accounts/vouchers?tab=${voucherTypeToUrl(activeTab)}&t=${Date.now()}`);
+    const scope =
+      activeTab === "receipt"
+        ? "receipt-vouchers"
+        : activeTab === "payment"
+          ? "payment-vouchers"
+          : activeTab === "contra"
+            ? "contra-vouchers"
+            : "journal-vouchers";
+    dispatchAccountsDataChanged(scope);
+    router.push(`/accounts/vouchers?tab=${voucherTypeToUrl(activeTab)}`);
   }, [activeTab, router]);
 
   const label = VOUCHER_TYPE_LABELS[activeTab];

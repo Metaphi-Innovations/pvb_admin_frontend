@@ -1,19 +1,21 @@
 import dynamic from "next/dynamic";
 import type { ComponentType } from "react";
-import { AccountsRouteLoading } from "@/components/accounts/AccountsRouteLoading";
-import { resolveAccountsNavLabel } from "@/lib/accounts/accounts-nav";
+
+type LazyAccountsPageOptions = {
+  label?: string;
+  pathnameHint?: string;
+  /** @deprecated Page-level loading removed — listings show loading inside tables. */
+  listing?: boolean;
+};
 
 /** Code-split accounts page clients — keeps navigation clicks responsive. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function lazyAccountsPage(
   loader: () => Promise<{ default: ComponentType<any> }>,
-  options?: { label?: string; pathnameHint?: string },
+  _options?: LazyAccountsPageOptions,
 ) {
-  const hint = options?.pathnameHint;
-  const label = options?.label ?? (hint ? resolveAccountsNavLabel(hint) : undefined);
-
   return dynamic(loader, {
     ssr: false,
-    loading: () => <AccountsRouteLoading pathnameHint={hint} label={label} />,
+    loading: () => null,
   });
 }

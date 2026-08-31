@@ -6,17 +6,26 @@ import { CheckCircle2, Save, XCircle } from "lucide-react";
 import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { saveMasterRecords } from "@/lib/masters/common";
 import { SchemeUnifiedConfigForm } from "../components/SchemeUnifiedConfigForm";
-import { loadConsolidatedSchemeRecords } from "../product-near-expiry-scheme";
 import {
   createDefaultUnifiedForm,
-  getUnifiedSchemeCodePreview,
-  unifiedFormToRecord,
   validateUnifiedSchemeForm,
   type SchemeUnifiedForm,
 } from "../scheme-unified-config";
-import { SCHEME_STORAGE_KEY } from "../scheme-data";
+import {
+  API_SCHEME_CATEGORIES,
+  unifiedFormToCreatePayload,
+} from "../scheme-api-mapper";
+import {
+  useCreateScheme,
+  useSchemePreviewNumber,
+  useCustomerTypeDropdown,
+  useCustomerDropdown,
+  useProductDropdown,
+} from "@/hooks/masters";
+import { getErrorMessage } from "@/lib/masters/master-query-errors";
+import { loadSchemeStateOptions } from "../product-discount-scheme";
+import type { SchemeProductSelectOption } from "../product-discount-scheme";
 
 type ToastState = { msg: string; type: "success" | "error" };
 
@@ -43,7 +52,73 @@ export default function SchemeAddPageClient() {
   const [form, setForm] = useState<SchemeUnifiedForm>(() => createDefaultUnifiedForm());
   const [formError, setFormError] = useState("");
   const [toast, setToast] = useState<ToastState | null>(null);
-  const codePreview = useMemo(() => getUnifiedSchemeCodePreview(), []);
+
+  const createMutation = useCreateScheme();
+  const previewQuery = useSchemePreviewNumber();
+  const customerTypeQuery = useCustomerTypeDropdown();
+  const customerQuery = useCustomerDropdown();
+  const productQuery = useProductDropdown();
+
+  const codePreview = previewQuery.data || "SCH-____";
+
+  const customerTypeSelectOptions = useMemo(
+    () =>
+      (customerTypeQuery.data ?? []).map((item) => ({
+        id: item.id,
+        name: item.customerType,
+      })),
+    [customerTypeQuery.data],
+  );
+
+  const customerSelectOptions = useMemo(
+    () =>
+      (customerQuery.data ?? []).map((item) => ({
+        id: item.customer_id,
+        name: `${item.customer_code} — ${item.customer_name}`,
+      })),
+    [customerQuery.data],
+  );
+
+  const productSelectOptions = useMemo<SchemeProductSelectOption[]>(
+    () =>
+      (productQuery.data ?? []).map((p) => {
+        const productName = p.product_name;
+        const productCode = p.product_code || "";
+        const sku = p.sku || "";
+        return {
+          value: p.product_id,
+          label: productName,
+          productName,
+          productCode: productCode || undefined,
+          sku: sku || undefined,
+          category: p.category?.categoryName,
+          segment: p.segment?.segment_name,
+          hsnCode: p.hsn?.hsnCode || p.hsn?.hsn_code || undefined,
+          sublabel: [productCode && `Code: ${productCode}`, sku && `SKU: ${sku}`]
+            .filter(Boolean)
+            .join(" · "),
+          searchText: [productCode, productName, sku].filter(Boolean).join(" ").toLowerCase(),
+        };
+      }),
+    [productQuery.data],
+  );
+
+  const stateSelectOptions = useMemo(() => loadSchemeStateOptions(), []);
+
+  const scopeOptionLists = useMemo(
+    () => ({
+      customerTypeIds: customerTypeSelectOptions.map((o) => o.id),
+      customerIds: customerSelectOptions.map((o) => o.id),
+      stateNames: stateSelectOptions.map((o) => o.id),
+      productIds: productSelectOptions.map((o) => o.value),
+    }),
+    [
+      customerTypeSelectOptions,
+      customerSelectOptions,
+      stateSelectOptions,
+      productSelectOptions,
+    ],
+  );
 
   const showToast = (next: ToastState) => {
     setToast(next);
@@ -57,12 +132,19 @@ export default function SchemeAddPageClient() {
       showToast({ msg: err, type: "error" });
       return;
     }
-    const list = loadConsolidatedSchemeRecords();
-    const startId = list.length ? Math.max(...list.map((r) => r.id)) + 1 : 1;
-    const record = unifiedFormToRecord(form, list, startId);
-    saveMasterRecords(SCHEME_STORAGE_KEY, [...list, record]);
-    showToast({ msg: "Scheme saved as draft", type: "success" });
-    setTimeout(() => router.push("/masters/scheme"), 900);
+
+    const payload = unifiedFormToCreatePayload(form, scopeOptionLists);
+    createMutation.mutate(payload, {
+      onSuccess: () => {
+        showToast({ msg: "Scheme created successfully", type: "success" });
+        setTimeout(() => router.push("/masters/scheme"), 900);
+      },
+      onError: (error) => {
+        const msg = getErrorMessage(error, "Failed to create scheme");
+        setFormError(msg);
+        showToast({ msg, type: "error" });
+      },
+    });
   };
 
   return (
@@ -78,25 +160,28 @@ export default function SchemeAddPageClient() {
           <Button
             type="button"
             size="sm"
-            className="h-7 gap-1 bg-brand-600 text-[11px] text-white hover:bg-brand-700"
             onClick={handleSave}
+            disabled={createMutation.isPending}
           >
-            <Save className="h-3.5 w-3.5" /> Save Draft
+            <Save className="w-3.5 h-3.5 mr-1.5" />
+            {createMutation.isPending ? "Saving..." : "Save Scheme"}
           </Button>
         }
       >
         <SchemeUnifiedConfigForm
           form={form}
-          onChange={(next) => {
-            setForm(next);
-            setFormError("");
-          }}
+          onChange={setForm}
           mode="add"
           codePreview={codePreview}
           error={formError}
+          schemeCategoryOptions={API_SCHEME_CATEGORIES}
+          productSelectOptions={productSelectOptions}
+          stateSelectOptions={stateSelectOptions}
+          customerSelectOptions={customerSelectOptions}
+          customerTypeSelectOptions={customerTypeSelectOptions}
         />
       </FormContainer>
-      {toast ? <Toast toast={toast} /> : null}
+      {toast && <Toast toast={toast} />}
     </>
   );
 }

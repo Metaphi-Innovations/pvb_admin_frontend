@@ -34,6 +34,47 @@ function filterTree(nodes: LedgerDropdownNode[], search: string): LedgerDropdown
     .filter((node): node is LedgerDropdownNode => node != null);
 }
 
+/** Keep only ledgers under given primary-head codes; optionally drop system ledgers. */
+function filterTreeByEligibility(
+  nodes: LedgerDropdownNode[],
+  allowedPrimaryHeadCodes: Set<string> | null,
+  excludeSystemGenerated: boolean,
+  underAllowedHead = false,
+): LedgerDropdownNode[] {
+  return nodes
+    .map((node) => {
+      if (node.type === "PRIMARY_HEAD") {
+        const allowed =
+          !allowedPrimaryHeadCodes ||
+          allowedPrimaryHeadCodes.has((node.code || "").trim().toUpperCase());
+        if (!allowed) return null;
+        return {
+          ...node,
+          children: filterTreeByEligibility(
+            node.children,
+            allowedPrimaryHeadCodes,
+            excludeSystemGenerated,
+            true,
+          ),
+        };
+      }
+      if (node.type === "LEDGER") {
+        if (allowedPrimaryHeadCodes && !underAllowedHead) return null;
+        if (excludeSystemGenerated && node.isSystemGenerated) return null;
+        return node;
+      }
+      const children = filterTreeByEligibility(
+        node.children,
+        allowedPrimaryHeadCodes,
+        excludeSystemGenerated,
+        underAllowedHead,
+      );
+      if (children.length === 0) return null;
+      return { ...node, children };
+    })
+    .filter((node): node is LedgerDropdownNode => node != null);
+}
+
 function collectExpandableKeys(
   nodes: LedgerDropdownNode[],
   types: LedgerDropdownNode["type"][],
@@ -193,6 +234,8 @@ export function GenericLedgerHierarchySelect({
   className,
   compact = true,
   query,
+  allowedPrimaryHeadCodes,
+  excludeSystemGenerated = false,
 }: {
   value: string | null;
   onChange: (ledger: LedgerDropdownItem) => void;
@@ -202,6 +245,10 @@ export function GenericLedgerHierarchySelect({
   className?: string;
   compact?: boolean;
   query?: GenericLedgerDropdownQuery;
+  /** When set, only show ledgers under these primary-head codes (e.g. INC, EXP). */
+  allowedPrimaryHeadCodes?: string[];
+  /** Hide system-controlled ledgers (system_ledger_type / isSystemGenerated). */
+  excludeSystemGenerated?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -209,8 +256,32 @@ export function GenericLedgerHierarchySelect({
   const searchRef = useRef<HTMLInputElement>(null);
   const { data, isLoading } = useGenericLedgerDropdown({ query });
 
-  const ledgers = data?.ledgers ?? [];
-  const tree = data?.tree ?? [];
+  const allowedCodes = useMemo(() => {
+    if (!allowedPrimaryHeadCodes?.length) return null;
+    return new Set(
+      allowedPrimaryHeadCodes.map((c) => c.trim().toUpperCase()).filter(Boolean),
+    );
+  }, [allowedPrimaryHeadCodes]);
+
+  const ledgers = useMemo(() => {
+    const all = data?.ledgers ?? [];
+    return all.filter((ledger) => {
+      if (excludeSystemGenerated && ledger.isSystemGenerated) return false;
+      if (
+        allowedCodes &&
+        !allowedCodes.has((ledger.primaryHead?.code || "").trim().toUpperCase())
+      ) {
+        return false;
+      }
+      return true;
+    });
+  }, [data?.ledgers, allowedCodes, excludeSystemGenerated]);
+
+  const tree = useMemo(() => {
+    const raw = data?.tree ?? [];
+    if (!allowedCodes && !excludeSystemGenerated) return raw;
+    return filterTreeByEligibility(raw, allowedCodes, excludeSystemGenerated);
+  }, [data?.tree, allowedCodes, excludeSystemGenerated]);
 
   const visibleTree = useMemo(() => filterTree(tree, search), [tree, search]);
 

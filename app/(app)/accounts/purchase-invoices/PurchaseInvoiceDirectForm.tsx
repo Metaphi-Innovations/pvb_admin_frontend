@@ -1,23 +1,22 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, Upload, X } from "lucide-react";
+import { AlertCircle, Plus, Upload, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { AccountsDateInput } from "@/components/accounts/AccountsDateInput";
 import { VoucherFormActionBar } from "@/components/accounts/voucher-form/VoucherFormActionBar";
+import { VoucherFormSectionCard } from "@/components/accounts/voucher-form/VoucherFormSectionCard";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
+import { InvoiceFormLayout } from "@/app/(app)/accounts/components/InvoiceFormLayout";
 import {
-  InvoiceFormLayout,
-  InvoiceFormCard,
-  InvoiceFormSection,
-  InvoiceFormField,
-  INVOICE_FORM_GRID_CLASS,
-  INVOICE_FORM_INPUT_CLASS,
-  INVOICE_FORM_LABEL_CLASS,
-} from "@/app/(app)/accounts/components/InvoiceFormLayout";
+  INVOICE_DETAIL_INPUT_CLASS,
+  INVOICE_DETAIL_SELECT_CLASS,
+  InvoiceDetailField,
+} from "@/app/(app)/accounts/invoices/components/invoice-form-voucher-ui";
+import { VOUCHER_INPUT_CLASS } from "@/components/accounts/voucher-simple-form-ui";
 import { DirectPurchaseSupplierSection } from "./DirectPurchaseSupplierSection";
 import { dispatchAccountsDataChanged } from "@/lib/accounts/accounts-data-events";
 import { COMPANY_BILLING } from "@/lib/procurement/config";
@@ -25,13 +24,15 @@ import { useSuppliersDropdown } from "@/hooks/masters/use-supplier";
 import { useWarehousesDropdown } from "@/hooks/masters/use-warehouse-master";
 import { useHsnDropdown } from "@/hooks/masters/use-hsn";
 import { cn } from "@/lib/utils";
-import { PurchaseInvoiceService, type CreateDirectPurchasePayload } from "@/services/purchase-invoice.service";
+import { PurchaseInvoiceService } from "@/services/purchase-invoice.service";
 import { useFY, setStoredFYId, getStoredFYId } from "@/lib/fy-store";
 import {
   GoodsInvoiceAdditionalChargesEditor,
+  validateGoodsAdditionalCharges,
 } from "@/app/(app)/accounts/invoices/components/GoodsInvoiceAdditionalChargesEditor";
 import {
   calcAdditionalExpensesTotals,
+  toAdditionalChargePayloadList,
   type InvoiceAdditionalExpense,
 } from "@/app/(app)/accounts/invoices/invoice-additional-expenses";
 import type { ItcClassification, PurchaseNature } from "./purchase-invoices-data";
@@ -46,7 +47,7 @@ import {
 import { PurchaseInvoiceDirectTotals } from "./PurchaseInvoiceDirectTotals";
 import { PurchaseInvoiceDirectLineTable } from "./PurchaseInvoiceDirectLineTable";
 import { DirectPurchaseSelectField } from "./DirectPurchaseSelectField";
-import { DP_FIELD_CLASS, DP_LABEL_CLASS } from "./direct-purchase-form-ui";
+import { DP_FIELD_CLASS } from "./direct-purchase-form-ui";
 import { roundMoney } from "@/lib/accounts/money-format";
 import "@/app/(app)/accounts/invoices/sales-order-invoice-form-compact.css";
 
@@ -104,6 +105,8 @@ export function PurchaseInvoiceDirectForm({
   const [additionalExpenses, setAdditionalExpenses] = useState<InvoiceAdditionalExpense[]>([]);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const addLineRowRef = useRef<(() => void) | null>(null);
+  const addChargeRowRef = useRef<(() => void) | null>(null);
 
   const interstate = isInterstatePurchase(branchGstin, placeOfSupply);
 
@@ -200,6 +203,11 @@ export function PurchaseInvoiceDirectForm({
       setError("Invoice total must be greater than zero.");
       return false;
     }
+    const chargeErr = validateGoodsAdditionalCharges(additionalExpenses);
+    if (chargeErr) {
+      setError(chargeErr);
+      return false;
+    }
     return true;
   };
 
@@ -221,15 +229,10 @@ export function PurchaseInvoiceDirectForm({
     if (selectedFY?.id) setStoredFYId(selectedFY.id);
     const financialYearId = selectedFY.id || getStoredFYId();
     try {
-      const additionalCharges: CreateDirectPurchasePayload["additional_charges"] & {} = additionalExpenses
-        .filter((e) => e.chargeMasterId && e.amount > 0)
-        .map((e) => ({
-          additional_charge_id: e.chargeMasterId!,
-          amount: e.amount,
-          charge_source: "INVOICE" as const,
-          gst_applicable: e.gstApplicable,
-          gst_rate: e.gstApplicable ? e.gstPct : undefined,
-        }));
+      const additionalCharges = toAdditionalChargePayloadList(
+        additionalExpenses,
+        "INVOICE",
+      );
 
       const created = await PurchaseInvoiceService.createDirectPurchase(
         {
@@ -272,7 +275,7 @@ export function PurchaseInvoiceDirectForm({
           ? "Direct purchase invoice was already posted."
           : "Direct purchase posted. Supplier outstanding and ledger entries were created.",
       );
-      router.push(`/accounts/purchase-invoices/${created.purchase_invoice_id}`);
+      router.replace("/accounts/purchase-invoices");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Post failed.");
       setSaving(false);
@@ -309,178 +312,216 @@ export function PurchaseInvoiceDirectForm({
             </div>
           )}
 
-          <InvoiceFormCard title="Supplier / Invoice Details">
-            <div className={INVOICE_FORM_GRID_CLASS}>
-              <div className="space-y-1">
-                <DirectPurchaseSupplierSection
-                  suppliers={suppliers}
-                  supplierId={supplierId}
-                  onSupplierSelect={setSupplierId}
-                />
+          <VoucherFormSectionCard title="Supplier / Invoice Details">
+            <div className="space-y-1.5">
+              <div className="so-invoice-details-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+                <InvoiceDetailField label="Supplier" required>
+                  <DirectPurchaseSupplierSection
+                    hideLabel
+                    suppliers={suppliers}
+                    supplierId={supplierId}
+                    onSupplierSelect={setSupplierId}
+                    className={INVOICE_DETAIL_SELECT_CLASS}
+                  />
+                </InvoiceDetailField>
+                <InvoiceDetailField label="Warehouse / Branch" required>
+                  <DirectPurchaseSelectField
+                    hideLabel
+                    value={warehouseId}
+                    onChange={setWarehouseId}
+                    options={warehouseOptions}
+                    placeholder="Select warehouse…"
+                    searchPlaceholder="Search warehouses…"
+                    className={INVOICE_DETAIL_SELECT_CLASS}
+                  />
+                </InvoiceDetailField>
+                <InvoiceDetailField label="Supplier Invoice No" required>
+                  <Input
+                    className={INVOICE_DETAIL_INPUT_CLASS}
+                    value={vendorInvoiceNo}
+                    onChange={(e) => setVendorInvoiceNo(e.target.value)}
+                    placeholder="Invoice no."
+                  />
+                </InvoiceDetailField>
+                <InvoiceDetailField label="Invoice Date" required>
+                  <AccountsDateInput
+                    value={invoiceDate}
+                    onChange={setInvoiceDate}
+                    className={INVOICE_DETAIL_INPUT_CLASS}
+                  />
+                </InvoiceDetailField>
               </div>
-              <DirectPurchaseSelectField
-                label="Warehouse / Branch"
-                required
-                value={warehouseId}
-                onChange={setWarehouseId}
-                options={warehouseOptions}
-                placeholder="Select warehouse…"
-                searchPlaceholder="Search warehouses…"
-              />
-              <InvoiceFormField label="Supplier Invoice No" required>
-                <Input
-                  className={cn(INVOICE_FORM_INPUT_CLASS, DP_FIELD_CLASS)}
-                  value={vendorInvoiceNo}
-                  onChange={(e) => setVendorInvoiceNo(e.target.value)}
-                  placeholder="Invoice no."
-                />
-              </InvoiceFormField>
-              <InvoiceFormField label="Invoice Date" required>
-                <AccountsDateInput
-                  value={invoiceDate}
-                  onChange={setInvoiceDate}
-                  className={cn(INVOICE_FORM_INPUT_CLASS, DP_FIELD_CLASS)}
-                />
-              </InvoiceFormField>
-              <InvoiceFormField label="Due Date">
-                <AccountsDateInput
-                  value={dueDate}
-                  onChange={setDueDate}
-                  className={cn(INVOICE_FORM_INPUT_CLASS, DP_FIELD_CLASS)}
-                />
-              </InvoiceFormField>
-              <DirectPurchaseSelectField
-                label="Place of Supply"
-                value={placeOfSupply}
-                onChange={setPlaceOfSupply}
-                options={placeOfSupplyOptions}
-                placeholder="State…"
-                searchPlaceholder="Search…"
-              />
-              <DirectPurchaseSelectField
-                label="Purchase Nature"
-                value={purchaseNature}
-                onChange={(v) => setPurchaseNature(v as PurchaseNature)}
-                options={purchaseNatureOptions}
-                placeholder="Nature…"
-                searchPlaceholder="Search…"
-              />
-              <InvoiceFormField label="Approval">
-                <Input
-                  className={cn(INVOICE_FORM_INPUT_CLASS, DP_FIELD_CLASS)}
-                  value="Approved"
-                  readOnly
-                />
-              </InvoiceFormField>
-              <InvoiceFormField label="Payment">
-                <Input
-                  className={cn(INVOICE_FORM_INPUT_CLASS, DP_FIELD_CLASS)}
-                  value="Unpaid"
-                  readOnly
-                />
-              </InvoiceFormField>
+              <div className="so-invoice-details-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+                <InvoiceDetailField label="Due Date">
+                  <AccountsDateInput
+                    value={dueDate}
+                    onChange={setDueDate}
+                    className={INVOICE_DETAIL_INPUT_CLASS}
+                  />
+                </InvoiceDetailField>
+                <InvoiceDetailField label="Place of Supply">
+                  <DirectPurchaseSelectField
+                    hideLabel
+                    value={placeOfSupply}
+                    onChange={setPlaceOfSupply}
+                    options={placeOfSupplyOptions}
+                    placeholder="State…"
+                    searchPlaceholder="Search…"
+                    className={INVOICE_DETAIL_SELECT_CLASS}
+                  />
+                </InvoiceDetailField>
+                <InvoiceDetailField label="Purchase Nature">
+                  <DirectPurchaseSelectField
+                    hideLabel
+                    value={purchaseNature}
+                    onChange={(v) => setPurchaseNature(v as PurchaseNature)}
+                    options={purchaseNatureOptions}
+                    placeholder="Nature…"
+                    searchPlaceholder="Search…"
+                    className={INVOICE_DETAIL_SELECT_CLASS}
+                  />
+                </InvoiceDetailField>
+                <InvoiceDetailField label="Approval">
+                  <div className="so-goods-ro w-full">Approved</div>
+                </InvoiceDetailField>
+                <InvoiceDetailField label="Payment">
+                  <div className="so-goods-ro w-full">Unpaid</div>
+                </InvoiceDetailField>
+              </div>
             </div>
-          </InvoiceFormCard>
+          </VoucherFormSectionCard>
 
-          <InvoiceFormSection title="Purchase Invoice Items">
-            <div className="overflow-x-auto border border-border rounded-lg bg-white">
-              <PurchaseInvoiceDirectLineTable
-                lines={lines}
-                onChange={setLines}
-                interstate={interstate}
-                purchaseNature={purchaseNature}
-                defaultItc={defaultItc}
-                hsnOptions={hsnOptions}
-              />
-            </div>
-          </InvoiceFormSection>
+          <VoucherFormSectionCard
+            title="Purchase Invoice Items"
+            flush
+            headerActions={
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="so-section-header-btn"
+                onClick={() => addLineRowRef.current?.()}
+              >
+                <Plus /> Add Row
+              </Button>
+            }
+          >
+            <PurchaseInvoiceDirectLineTable
+              lines={lines}
+              onChange={setLines}
+              interstate={interstate}
+              purchaseNature={purchaseNature}
+              defaultItc={defaultItc}
+              hsnOptions={hsnOptions}
+              hideAddButton
+              onBindAddRow={(fn) => {
+                addLineRowRef.current = fn;
+              }}
+            />
+          </VoucherFormSectionCard>
 
-          <InvoiceFormSection title="Additional Charges">
+          <VoucherFormSectionCard
+            title="Additional Charges"
+            flush
+            headerActions={
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="so-section-header-btn"
+                onClick={() => addChargeRowRef.current?.()}
+              >
+                <Plus /> Add Charge
+              </Button>
+            }
+          >
             <GoodsInvoiceAdditionalChargesEditor
               expenses={additionalExpenses}
               onChange={handleExpensesChange}
               disabled={saving}
               interstate={interstate}
+              tableVariant="invoice"
+              hideAddButton
+              onBindAddRow={(fn) => {
+                addChargeRowRef.current = fn;
+              }}
             />
-          </InvoiceFormSection>
+          </VoucherFormSectionCard>
 
-          <div className="flex justify-end">
-            <div className="w-full max-w-[300px] rounded-lg border border-slate-200 bg-white space-y-2 p-3 shadow-sm">
-              <h2 className="accounts-card-title">Amount Summary</h2>
+          <div className="grid grid-cols-1 gap-2.5 items-start lg:grid-cols-[minmax(0,1fr)_300px]">
+            <VoucherFormSectionCard title="Narration / Attachment">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="min-w-0">
+                  <Textarea
+                    className={cn(VOUCHER_INPUT_CLASS, "so-goods-narration min-h-[72px] h-auto resize-y text-xs")}
+                    value={narration}
+                    onChange={(e) => setNarration(e.target.value)}
+                    placeholder="Optional narration for this invoice…"
+                    maxLength={500}
+                  />
+                </div>
+                <div className="min-w-0">
+                  <div
+                    className={cn(
+                      DP_FIELD_CLASS,
+                      "flex items-center gap-2 w-full border border-border bg-white min-h-9",
+                    )}
+                  >
+                    <label
+                      className={cn(
+                        "inline-flex items-center gap-1.5 h-6 px-2 rounded-md border border-border bg-muted/20",
+                        "text-xs font-medium cursor-pointer hover:bg-muted/40 transition-colors whitespace-nowrap flex-shrink-0",
+                        saving && "opacity-50 pointer-events-none",
+                      )}
+                    >
+                      <Upload className="w-3.5 h-3.5 text-muted-foreground" />
+                      Upload File
+                      <input
+                        type="file"
+                        className="hidden"
+                        accept="application/pdf,image/jpeg,image/png,image/webp"
+                        disabled={saving}
+                        onChange={(e) => {
+                          setAttachment(e.target.files?.[0] ?? null);
+                          e.target.value = "";
+                        }}
+                      />
+                    </label>
+                    {attachment ? (
+                      <>
+                        <span
+                          className="text-[13px] font-medium text-foreground truncate min-w-0 flex-1"
+                          title={attachment.name}
+                        >
+                          {attachment.name}
+                        </span>
+                        <button
+                          type="button"
+                          className="p-0.5 rounded-md hover:bg-red-50 text-red-600 flex-shrink-0"
+                          disabled={saving}
+                          onClick={() => setAttachment(null)}
+                          aria-label="Remove attachment"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </>
+                    ) : (
+                      <span className="text-[13px] text-muted-foreground truncate">No file chosen</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </VoucherFormSectionCard>
+
+            <VoucherFormSectionCard title="Summary" className="lg:sticky lg:top-3 lg:z-10">
               <PurchaseInvoiceDirectTotals
                 totals={totals}
                 roundingAdjustment={roundingAdjustment}
                 onRoundingChange={setRoundingAdjustment}
                 additionalChargeTotal={chargeBreakdown.taxableAmount}
               />
-            </div>
+            </VoucherFormSectionCard>
           </div>
-
-          <InvoiceFormSection title="Narration / Attachment">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 rounded-lg border border-slate-200 bg-white p-3">
-              <div className="space-y-1 min-w-0">
-                <Label className={INVOICE_FORM_LABEL_CLASS}>Narration</Label>
-                <Textarea
-                  className={cn(INVOICE_FORM_INPUT_CLASS, "so-goods-narration resize-y min-h-[72px]")}
-                  value={narration}
-                  onChange={(e) => setNarration(e.target.value)}
-                  placeholder="Optional narration for this invoice…"
-                  maxLength={500}
-                />
-              </div>
-              <div className="space-y-1 min-w-0">
-                <Label className={DP_LABEL_CLASS}>Attachment</Label>
-                <div
-                  className={cn(
-                    DP_FIELD_CLASS,
-                    "flex items-center gap-2 w-full border border-border bg-white min-h-9",
-                  )}
-                >
-                  <label
-                    className={cn(
-                      "inline-flex items-center gap-1.5 h-6 px-2 rounded-md border border-border bg-muted/20",
-                      "text-xs font-medium cursor-pointer hover:bg-muted/40 transition-colors whitespace-nowrap flex-shrink-0",
-                      saving && "opacity-50 pointer-events-none",
-                    )}
-                  >
-                    <Upload className="w-3.5 h-3.5 text-muted-foreground" />
-                    Upload File
-                    <input
-                      type="file"
-                      className="hidden"
-                      accept="application/pdf,image/jpeg,image/png,image/webp"
-                      disabled={saving}
-                      onChange={(e) => {
-                        setAttachment(e.target.files?.[0] ?? null);
-                        e.target.value = "";
-                      }}
-                    />
-                  </label>
-                  {attachment ? (
-                    <>
-                      <span
-                        className="text-[13px] font-medium text-foreground truncate min-w-0 flex-1"
-                        title={attachment.name}
-                      >
-                        {attachment.name}
-                      </span>
-                      <button
-                        type="button"
-                        className="p-0.5 rounded-md hover:bg-red-50 text-red-600 flex-shrink-0"
-                        disabled={saving}
-                        onClick={() => setAttachment(null)}
-                        aria-label="Remove attachment"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </>
-                  ) : (
-                    <span className="text-[13px] text-muted-foreground truncate">No file chosen</span>
-                  )}
-                </div>
-              </div>
-            </div>
-          </InvoiceFormSection>
 
           <p className="text-[11px] text-muted-foreground px-0.5">
             Posting creates supplier outstanding (Purchase Payable) and books GST automatically.

@@ -253,7 +253,9 @@ function CreateQcForm() {
           }
         }
 
-        if ((updated.rejectedQty || 0) <= 0) {
+        if ((updated.rejectedQty || 0) > 0 && !updated.rejectType) {
+          updated.rejectType = "DAMAGED";
+        } else if ((updated.rejectedQty || 0) <= 0) {
           updated.rejectType = "";
         }
 
@@ -284,7 +286,7 @@ function CreateQcForm() {
           return `Batch ${item.batchNumber} (${item.productName}): Accepted (${item.acceptedQty}) + Rejected (${item.rejectedQty}) = ${sum}, but GRN Received Qty is ${item.receivedQty}.`;
         }
         if (item.rejectedQty > 0 && !item.rejectType) {
-          return `Batch ${item.batchNumber} (${item.productName}): select Reject Type (Damaged or Expired).`;
+          return `Batch ${item.batchNumber} (${item.productName}): select Reject Type (Damaged).`;
         }
         if (sum > item.receivedQty) {
           return `Batch ${item.batchNumber}: total allocated qty exceeds received qty.`;

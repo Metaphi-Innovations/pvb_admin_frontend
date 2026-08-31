@@ -396,13 +396,14 @@ export default function ProductLinesEditor({
 	};
 
 	const columns = [
-		{ h: "Product", className: "min-w-[160px]" },
+		{ h: "Product", className: "w-[240px]" },
+		{ h: "Stock", className: "w-16" },
 		{ h: "Quantity", className: "w-[160px]" },
-		{ h: "DP", className: "w-24" },
+		{ h: "DP", className: "min-w-[80px]" },
 		{ h: "Disc. %", className: "w-[80px]" },
 		{ h: "Disc. Amt", className: "w-24" },
-		{ h: "Line Total", className: "w-24" },
-		{ h: "", className: "w-10" },
+		{ h: "Line Total", className: "min-w-[90px]" },
+		{ h: "", className: "w-16" },
 	];
 
 	const totalQuantity = lines.reduce((sum, line) => sum + (line.quantity || 0), 0);
@@ -463,12 +464,12 @@ export default function ProductLinesEditor({
 					</>
 				}
 				customTableHead={
-					<tr className="bg-muted/40 border-b border-border/60">
+					<tr className="bg-muted/40">
 						{columns.map(({ h, className }) => (
 							<th
 								key={h || "actions"}
 								className={cn(
-									"px-2 py-2 text-left text-xs font-semibold text-foreground whitespace-nowrap",
+									"px-2 py-2 text-left text-xs font-semibold text-foreground whitespace-nowrap align-middle border-b border-border/60",
 									className,
 								)}
 							>
@@ -489,7 +490,7 @@ export default function ProductLinesEditor({
 								key={line.id}
 								className="border-b border-border/60 hover:bg-muted/10"
 							>
-								<td className="px-2 py-1.5">
+								<td className="px-2 py-1.5 min-w-[180px]">
 									<ProductSelect
 										products={products}
 										value={line.productId}
@@ -503,10 +504,22 @@ export default function ProductLinesEditor({
 										}
 									/>
 								</td>
+								<td className='px-2 py-1.5'>
+									<span
+										className={cn(
+											"text-xs font-medium tabular-nums",
+											line.availableStock === 0
+												? "text-amber-600"
+												: "text-foreground",
+										)}
+									>
+										{line.productId != null ? line.availableStock : "0"}
+									</span>
+								</td>
 								<td className='px-2 py-1.5 min-w-[140px] align-top'>
-									<div className="flex flex-col gap-1 w-full text-right">
+									<div className="flex flex-col gap-1 w-full text-left">
 										{isEditing ? (
-											<div className="flex items-center gap-1 justify-end">
+											<div className="flex items-center gap-1 justify-start">
 												<Input
 													type="number"
 													min={0}
@@ -524,7 +537,7 @@ export default function ProductLinesEditor({
 															updateDraft({ pieceQuantity: num });
 														}
 													}}
-													className="h-7 text-xs w-16 text-right tabular-nums"
+													className="h-7 text-xs w-16 text-left tabular-nums"
 												/>
 												<Select
 													value={draftLine.quantityType || "Piece"}
@@ -573,7 +586,7 @@ export default function ProductLinesEditor({
 													weightStr = `${(draftLine.quantity * product.netWeight).toFixed(2)} ${["ml", "ltr"].includes(uomLower) ? "Ltr" : "Kg"}`;
 												}
 												return (
-													<div className="text-right space-y-0.5 leading-tight text-[10px] text-muted-foreground border-t border-slate-100 pt-1">
+													<div className="text-left space-y-0.5 leading-tight text-[10px] text-muted-foreground border-t border-slate-100 pt-1">
 														<p>
 															Total units: <span className="font-semibold text-foreground">{draftLine.quantity} </span>
 														</p>
@@ -595,7 +608,7 @@ export default function ProductLinesEditor({
 									<span className="text-xs tabular-nums whitespace-nowrap">
 										{line.productId && line.unitPrice > 0
 											? formatRupee(line.unitPrice)
-											: "—"}
+											: "₹0"}
 									</span>
 								</td>
 								<td className="px-2 py-1.5">
@@ -611,18 +624,14 @@ export default function ProductLinesEditor({
 									<span className="text-xs tabular-nums whitespace-nowrap">
 										{line.productId && line.quantity > 0
 											? formatRupee(line.discountValue)
-											: line.productId
-												? formatRupee(0)
-												: "—"}
+											: formatRupee(0)}
 									</span>
 								</td>
 								<td className="px-2 py-1.5">
 									<span className="text-xs font-semibold tabular-nums whitespace-nowrap text-foreground">
 										{line.productId && line.quantity > 0
 											? formatRupee(line.lineTotal)
-											: line.productId
-												? formatRupee(0)
-												: "—"}
+											: formatRupee(0)}
 									</span>
 								</td>
 								<td className="px-2 py-1.5">

@@ -17,6 +17,7 @@ import {
 import {
   AccountsTableEmpty,
   AccountsTableListing,
+  AccountsTableLoading,
   AccountsTablePagination,
 } from "@/components/accounts/AccountsTableListing";
 import {
@@ -475,7 +476,7 @@ function RowActions({
   onPrint: (row: SalesInvoiceListRow) => void;
 }) {
   const invoiceId = String(row.salesInvoiceId || row.invoiceId);
-  const showOfficialDownloads = row.canDownloadPi || row.canDownloadTaxInvoice;
+  const showOfficialDownloads = row.canDownloadPi;
 
   const handleOfficialError = (error: unknown, fallback: string) => {
     const err = error as { response?: { data?: { message?: string } }; message?: string };
@@ -498,35 +499,29 @@ function RowActions({
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
-            {row.canDownloadPi ? (
+            <DropdownMenuItem
+              onClick={() => {
+                void openProformaInvoicePreview(invoiceId).catch((error) =>
+                  handleOfficialError(error, "Failed to open Proforma Invoice."),
+                );
+              }}
+            >
+              Download Proforma Invoice
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel>Tax Invoice</DropdownMenuLabel>
+            {TAX_INVOICE_COPY_LABELS.map((copyLabel) => (
               <DropdownMenuItem
+                key={copyLabel}
                 onClick={() => {
-                  void openProformaInvoicePreview(invoiceId).catch((error) =>
-                    handleOfficialError(error, "Failed to open Proforma Invoice."),
+                  void openTaxInvoicePreview(invoiceId, copyLabel).catch((error) =>
+                    handleOfficialError(error, "Failed to open Tax Invoice."),
                   );
                 }}
               >
-                Download Proforma Invoice
+                {copyLabel}
               </DropdownMenuItem>
-            ) : null}
-            {row.canDownloadTaxInvoice ? (
-              <>
-                {row.canDownloadPi ? <DropdownMenuSeparator /> : null}
-                <DropdownMenuLabel>Tax Invoice</DropdownMenuLabel>
-                {TAX_INVOICE_COPY_LABELS.map((copyLabel) => (
-                  <DropdownMenuItem
-                    key={copyLabel}
-                    onClick={() => {
-                      void openTaxInvoicePreview(invoiceId, copyLabel).catch((error) =>
-                        handleOfficialError(error, "Failed to open Tax Invoice."),
-                      );
-                    }}
-                  >
-                    {copyLabel}
-                  </DropdownMenuItem>
-                ))}
-              </>
-            ) : null}
+            ))}
           </DropdownMenuContent>
         </DropdownMenu>
       ) : row.canPdf ? (
@@ -642,8 +637,8 @@ function SalesInvoicesTable({
 
 
   const emptyStates =
-    !mounted || loading ? (
-      <AccountsTableEmpty colSpan={colSpan} message="Loading invoices…" />
+    loading && toolbarRows.length === 0 ? (
+      <AccountsTableLoading colSpan={colSpan} message="Loading invoices…" />
     ) : error ? (
       <AccountsTableEmpty colSpan={colSpan} message={error} />
     ) : toolbarRows.length === 0 ? (
@@ -717,7 +712,7 @@ function SalesInvoicesTable({
                   <InvoiceStatusBadge status={r.invoiceStatus} />
                 </AccountsTableCell>
                 <StatutoryStatusCells row={r} />
-                <AccountsTableCell align="right">
+                <AccountsTableCell align="right" actions>
                   <RowActions row={r} onCancel={onCancel} onPrint={onPrint} />
                 </AccountsTableCell>
               </AccountsTableRow>
@@ -784,7 +779,7 @@ function SalesInvoicesTable({
                   <InvoiceStatusBadge status={r.invoiceStatus} />
                 </AccountsTableCell>
                 <StatutoryStatusCells row={r} />
-                <AccountsTableCell align="right">
+                <AccountsTableCell align="right" actions>
                   <RowActions row={r} onCancel={onCancel} onPrint={onPrint} />
                 </AccountsTableCell>
               </AccountsTableRow>
@@ -858,7 +853,7 @@ function SalesInvoicesTable({
                 <InvoiceStatusBadge status={r.invoiceStatus} />
               </AccountsTableCell>
               <StatutoryStatusCells row={r} />
-              <AccountsTableCell align="right">
+              <AccountsTableCell align="right" actions>
                 <RowActions row={r} onCancel={onCancel} onPrint={onPrint} />
               </AccountsTableCell>
             </AccountsTableRow>

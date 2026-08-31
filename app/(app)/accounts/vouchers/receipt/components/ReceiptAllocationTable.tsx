@@ -60,7 +60,9 @@ export function ReceiptAllocationTable({
   rows,
   readOnly,
   emptyMessage,
-  showTdsSection = true,
+  /** When false, hides TDS amount column (Receipt create/edit UI simplification). */
+  showTds = false,
+  showTdsSection = false,
   showDiscount = false,
   showSelectColumn = true,
   settlementAmountLabel = "Settlement",
@@ -71,7 +73,9 @@ export function ReceiptAllocationTable({
   rows: ReceiptUiAllocation[];
   readOnly?: boolean;
   emptyMessage?: string;
-  /** Customer receipts show TDS Section; hide for non-TDS contexts if needed. */
+  /** Hide TDS amount column from allocation UI; payload/architecture unchanged. */
+  showTds?: boolean;
+  /** Customer receipts historically showed TDS Section; default off for simplified UI. */
   showTdsSection?: boolean;
   showDiscount?: boolean;
   /** When false, selection is controlled outside (e.g. multi-select). */
@@ -102,28 +106,20 @@ export function ReceiptAllocationTable({
   return (
     <div className="border border-border rounded-xl overflow-hidden w-full">
       <div className="overflow-x-auto">
-        <table className="w-full table-fixed min-w-[720px]">
-          <colgroup>
-            {showSelectColumn ? <col className="w-10" /> : null}
-            <col className="w-[160px]" />
-            <col className="w-[110px]" />
-            <col className="w-[120px]" />
-            <col className="w-[120px]" />
-            <col className="w-[110px]" />
-            {showTdsSection ? <col className="w-[168px]" /> : null}
-            {showDiscount ? <col className="w-[110px]" /> : null}
-          </colgroup>
+        <table className="w-full min-w-[520px]">
           <thead>
             <tr className="bg-muted/40 border-b border-border">
               {showSelectColumn ? (
-                <th className="px-2 py-2 text-left text-xs font-semibold" />
+                <th className="px-2 py-2 text-left text-xs font-semibold w-10" />
               ) : null}
               <th className={TEXT_TH}>Invoice No.</th>
               <th className={cn(TEXT_TH, "px-2")}>Invoice Date</th>
               <th className={AMOUNT_TH}>Outstanding</th>
               <th className={AMOUNT_TH}>{settlementAmountLabel}</th>
-              <th className={AMOUNT_TH}>TDS</th>
-              {showTdsSection ? <th className={SECTION_TH}>TDS Section</th> : null}
+              {showTds ? <th className={AMOUNT_TH}>TDS</th> : null}
+              {showTds && showTdsSection ? (
+                <th className={SECTION_TH}>TDS Section</th>
+              ) : null}
               {showDiscount ? <th className={AMOUNT_TH}>Discount</th> : null}
             </tr>
           </thead>
@@ -133,7 +129,8 @@ export function ReceiptAllocationTable({
                 row.selected &&
                 toMoneyNumber(row.allocated_amount) > row.outstanding_amount + 0.0001;
               const tdsAmt = toMoneyNumber(row.tds_amount);
-              const sectionRequired = showTdsSection && row.selected && tdsAmt > 0;
+              const sectionRequired =
+                showTds && showTdsSection && row.selected && tdsAmt > 0;
               const sectionMissing = sectionRequired && !row.tds_section_id.trim();
               const sectionOptions = mergeSectionOption(
                 tdsSectionOptions,
@@ -184,20 +181,22 @@ export function ReceiptAllocationTable({
                       />
                     )}
                   </td>
-                  <td className={AMOUNT_TD}>
-                    {readOnly ? (
-                      formatMoney(toMoneyNumber(row.tds_amount))
-                    ) : (
-                      <MoneyCellInput
-                        value={row.tds_amount}
-                        disabled={!amountEditable}
-                        onChange={(tds_amount) =>
-                          onChangeAmount(row.open_item_id, { tds_amount })
-                        }
-                      />
-                    )}
-                  </td>
-                  {showTdsSection ? (
+                  {showTds ? (
+                    <td className={AMOUNT_TD}>
+                      {readOnly ? (
+                        formatMoney(toMoneyNumber(row.tds_amount))
+                      ) : (
+                        <MoneyCellInput
+                          value={row.tds_amount}
+                          disabled={!amountEditable}
+                          onChange={(tds_amount) =>
+                            onChangeAmount(row.open_item_id, { tds_amount })
+                          }
+                        />
+                      )}
+                    </td>
+                  ) : null}
+                  {showTds && showTdsSection ? (
                     <td className={SECTION_TD}>
                       {readOnly || !amountEditable ? (
                         <SectionReadOnly

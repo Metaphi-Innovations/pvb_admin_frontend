@@ -17,6 +17,14 @@ import { Input } from "@/components/ui/input";
 
 const REASON_MAX = 2000;
 
+function todayDateInputValue(): string {
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
 export function CreditNoteReverseDialog({
   open,
   onClose,
@@ -29,12 +37,12 @@ export function CreditNoteReverseDialog({
   busy?: boolean;
 }) {
   const [reason, setReason] = useState("");
-  const [reversalDate, setReversalDate] = useState("");
+  const [reversalDate, setReversalDate] = useState(todayDateInputValue);
 
   useEffect(() => {
-    if (!open) {
+    if (open) {
       setReason("");
-      setReversalDate("");
+      setReversalDate(todayDateInputValue());
     }
   }, [open]);
 
@@ -50,30 +58,13 @@ export function CreditNoteReverseDialog({
     >
       <DialogContent className="sm:max-w-[450px]">
         <DialogHeader>
-          <DialogTitle className="text-sm font-bold text-purple-700">Reverse Credit Note</DialogTitle>
+          <DialogTitle className="text-sm font-bold">Reverse Voucher</DialogTitle>
           <DialogDescription className="text-xs">
-            This will reverse the posted Credit Note and its accounting/settlement effect. This action
-            cannot be undone directly.
+            This voucher has already been posted. Continuing will create reversal entries for the
+            ledgers impacted by this voucher. Do you want to continue?
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-3 py-2 text-xs">
-          <div className="space-y-1.5">
-            <Label htmlFor="cn-rev-reason" className="text-xs font-medium">
-              Reversal Reason <span className="text-red-500">*</span>
-            </Label>
-            <Textarea
-              id="cn-rev-reason"
-              className="text-xs min-h-[72px] resize-none"
-              placeholder="Enter reversal reason…"
-              value={reason}
-              maxLength={REASON_MAX}
-              onChange={(e) => setReason(e.target.value)}
-              disabled={busy}
-            />
-            <p className="text-[10px] text-muted-foreground text-right">
-              {trimmed.length}/{REASON_MAX}
-            </p>
-          </div>
           <div className="space-y-1.5">
             <Label htmlFor="cn-rev-date" className="text-xs font-medium">
               Reversal Date
@@ -87,6 +78,23 @@ export function CreditNoteReverseDialog({
               disabled={busy}
             />
           </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="cn-rev-reason" className="text-xs font-medium">
+              Reason <span className="text-red-500">*</span>
+            </Label>
+            <Textarea
+              id="cn-rev-reason"
+              className="text-xs min-h-[72px] resize-none"
+              placeholder="Enter reason…"
+              value={reason}
+              maxLength={REASON_MAX}
+              onChange={(e) => setReason(e.target.value)}
+              disabled={busy}
+            />
+            <p className="text-[10px] text-muted-foreground text-right">
+              {trimmed.length}/{REASON_MAX}
+            </p>
+          </div>
         </div>
         <DialogFooter>
           <Button
@@ -96,22 +104,22 @@ export function CreditNoteReverseDialog({
             onClick={onClose}
             disabled={busy}
           >
-            Cancel
+            Close
           </Button>
           <Button
             size="sm"
-            className="h-8 text-xs bg-purple-700 hover:bg-purple-800 text-white"
+            className="h-8 text-xs bg-red-600 hover:bg-red-700 text-white"
             disabled={!canSubmit}
             onClick={() => {
               if (!canSubmit) return;
               onConfirm({
                 reason: trimmed,
-                ...(reversalDate.trim() ? { reversal_date: reversalDate.trim() } : {}),
+                reversal_date: reversalDate.trim() || todayDateInputValue(),
               });
             }}
           >
             {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : null}
-            Reverse Credit Note
+            Continue / Reverse Voucher
           </Button>
         </DialogFooter>
       </DialogContent>

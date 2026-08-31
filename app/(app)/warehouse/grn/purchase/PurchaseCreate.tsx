@@ -773,14 +773,6 @@ export function PurchaseCreate({
     [getReceivedQtyForProduct, manualRows],
   );
 
-  const getRemainingPoQty = useCallback(
-    (sourceItemId: string) => {
-      const item = items.find((it) => it.sourceItemId === sourceItemId);
-      return item?.pendingQty ?? 0;
-    },
-    [items],
-  );
-
   /** Keep invoice qty in sync with Order Items Summary received qty. */
   const syncInvoiceQtyFromReceived = useCallback(
     (sourceItemId: string, receivedQty: number, currentRows?: ManualInvoiceRow[]) => {
@@ -1838,11 +1830,11 @@ export function PurchaseCreate({
                           </div>
                         </td>
                         <td className="px-3 py-2 text-center text-xs font-semibold tabular-nums align-middle">
-                          {it.receivedQty > 0 ? formatStackNum(receivedStack.unitQty) : "—"}
+                          {it.receivedQty > 0 ? formatStackNum(receivedStack.unitQty) : "0"}
                         </td>
                         <td className="px-3 py-2 text-center text-xs font-semibold tabular-nums align-middle">
-                          {receivedStack.weightQty != null && receivedStack.weightUom
-                            ? formatWeightQty(receivedStack.weightQty, receivedStack.weightUom)
+                          {receivedStack.weightUom
+                            ? `${receivedStack.weightQty != null ? formatStackNum(receivedStack.weightQty) : "0"} ${receivedStack.weightUom}`
                             : "—"}
                         </td>
                       </tr>
@@ -2073,28 +2065,10 @@ export function PurchaseCreate({
                 </thead>
                 <tbody>
                   {manualRows.map((row) => {
-                    const remainingInvoice = row.sourceItemId
-                      ? getRemainingInvoiceQty(row.sourceItemId, row.id)
-                      : undefined;
-                    const remainingPo = row.sourceItemId
-                      ? getRemainingPoQty(row.sourceItemId)
-                      : undefined;
-                    const received = row.sourceItemId
-                      ? getReceivedQtyForProduct(row.sourceItemId)
-                      : undefined;
                     const qtyMeta = row.sourceItemId
                       ? getItemQtyMeta(row.sourceItemId)
                       : { packingSize: 1, quantityType: "CASE" as const };
                     const lineItem = items.find((it) => it.sourceItemId === row.sourceItemId);
-                    const receivedStack = lineItem && received != null
-                      ? itemQtyStack(received, lineItem)
-                      : null;
-                    const remainingInvoiceStack = lineItem && remainingInvoice != null
-                      ? itemQtyStack(remainingInvoice, lineItem)
-                      : null;
-                    const remainingPoStack = lineItem && remainingPo != null
-                      ? itemQtyStack(remainingPo, lineItem)
-                      : null;
                     const rowQtyStack = lineItem
                       ? itemQtyStack(row.quantity, lineItem)
                       : resolveGrnQtyStack(row.quantity, { packingSize: qtyMeta.packingSize });
@@ -2123,16 +2097,7 @@ export function PurchaseCreate({
                           <p className="text-[11px] font-mono text-muted-foreground mt-1 truncate">
                             SKU: {row.productCode?.trim() ? row.productCode : "—"}
                           </p>
-                          {row.sourceItemId && (
-                            <p className="text-[10px] text-amber-700 mt-1">
-                              Received: {receivedStack ? formatQtyStackInline(receivedStack) : "—"}
-                              {" · "}Left to allocate:{" "}
-                              {remainingInvoiceStack ? formatQtyStackInline(remainingInvoiceStack) : "—"}
-                              {remainingPoStack
-                                ? ` · PO pending: ${formatQtyStackInline(remainingPoStack)}`
-                                : ""}
-                            </p>
-                          )}
+
                         </td>
                         <td className="px-3 py-2 w-[160px] min-w-[140px]">
                           <Input

@@ -169,7 +169,7 @@ export function getVoucherFormConfig(voucherType: VoucherTypeCode): VoucherFormT
           "Transfer funds between Bank, Cash-in-Hand, OD and CC accounts — debit one account and credit another for the same amount.",
         detailsSectionTitle: "Transfer Details",
         voucherNumberLabel: "Contra No.",
-        transactionModeLabel: "Mode of Transfer",
+        transactionModeLabel: "Mode of Payment",
         transactionModeOptions: CONTRA_TRANSFER_MODES,
         defaultTransactionMode: "Bank Transfer",
         debitAccountLabel: "Destination Cash / Bank Account",

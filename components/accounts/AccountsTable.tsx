@@ -12,6 +12,10 @@ import type {
 } from "@/lib/accounts/column-filter-types";
 import { AccountsColumnHeader } from "@/components/accounts/AccountsColumnHeader";
 import { useAccountsColumnFilterContext } from "@/components/accounts/AccountsColumnFilterContext";
+import {
+  accountsActionColClass,
+  type AccountsActionColVariant,
+} from "@/components/accounts/AccountsTableActions";
 
 /** Standard accounts table row heights (px) — keep in sync with globals.css */
 export const ACCOUNTS_TABLE_HEADER_HEIGHT = 36;
@@ -146,6 +150,7 @@ export function AccountsTableCell({
   money = false,
   mono = false,
   wrap = false,
+  actions,
   className,
   ...props
 }: React.TdHTMLAttributes<HTMLTableCellElement> & {
@@ -154,7 +159,16 @@ export function AccountsTableCell({
   mono?: boolean;
   /** Allow multi-line content (e.g. name + subtitle) — relaxes fixed row height */
   wrap?: boolean;
+  /** Pin as sticky actions column (right-fixed on horizontal scroll). */
+  actions?: boolean | AccountsActionColVariant;
 }) {
+  const actionClass =
+    actions === true
+      ? accountsActionColClass("multi")
+      : actions
+        ? accountsActionColClass(actions)
+        : undefined;
+
   return (
     <td
       {...props}
@@ -167,6 +181,7 @@ export function AccountsTableCell({
         money && "whitespace-nowrap",
         mono && "font-mono",
         wrap && "!h-auto !min-h-0 py-4 align-top",
+        actionClass,
         className,
       )}
     >

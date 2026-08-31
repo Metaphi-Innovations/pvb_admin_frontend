@@ -1,7 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Textarea } from "@/components/ui/textarea";
+import { VOUCHER_INPUT_CLASS } from "@/components/accounts/voucher-simple-form-ui";
+import { cn as cnMerge } from "@/lib/utils";
+import { VoucherAttachmentSection } from "@/components/accounts/voucher-form/VoucherAttachmentSection";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -15,15 +18,19 @@ import {
 } from "@/components/ui/dialog";
 import { useFormDirtySnapshot } from "@/lib/accounts/use-form-dirty-snapshot";
 import { useTransactionFormCancel } from "@/components/accounts/TransactionFormCancel";
-import { AccountsFormLayout } from "../expenses/components/AccountsFormLayout";
+import { InvoiceFormLayout } from "@/app/(app)/accounts/components/InvoiceFormLayout";
+import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
+import {
+  INVOICE_DETAIL_INPUT_CLASS,
+  INVOICE_DETAIL_SELECT_CLASS,
+  InvoiceDetailField,
+} from "@/app/(app)/accounts/invoices/components/invoice-form-voucher-ui";
 import { SearchableSelect } from "../credit-notes/components/SearchableSelect";
 import {
   buildReferenceFromPurchaseInvoice,
   buildReferenceFromPurchaseReturn,
   createEmptyDebitLine,
   getPendingDebitNoteRow,
-  listCreditablePurchaseInvoices,
-  listPurchaseReturnsForDebitNote,
   newDebitAttachmentId,
   normalizeDebitLine,
   peekNextDebitNoteNo,
@@ -35,60 +42,64 @@ import {
   type DebitReferencePreview,
   type NoteWorkflowStatus,
 } from "./debit-notes-data";
-import { DEBIT_NOTES_BREADCRUMB, DEBIT_NOTES_LIST_PATH, formatINR } from "./note-utils";
+import { DEBIT_NOTES_LIST_PATH, formatINR } from "./note-utils";
 import { dispatchAccountsDataChanged } from "@/lib/accounts/accounts-data-events";
 import { DebitNoteService, mapDebitNoteToRecord } from "@/services/debit-note.service";
-import { SupplierService } from "@/services/supplier.service";
-import { type ChartOfAccount } from "@/app/(app)/accounts/data";
+import { SupplierService, type SupplierDetailRecord } from "@/services/supplier.service";
+import { DebitNoteVendorInfoButton } from "./components/DebitNoteVendorInfoButton";
+import { DebitNoteWarehouseInfoButton } from "./components/DebitNoteWarehouseInfoButton";
+import { DebitNoteAmountSummary } from "./components/DebitNoteAmountSummary";
+import { DebitNoteFormActionBar } from "./components/DebitNoteFormActionBar";
+import { DebitNoteParticularsEditor } from "./components/DebitNoteParticularsEditor";
+import { resolveDebitNoteInterstate } from "./debit-note-interstate";
 import { WarehouseService } from "@/services/warehouse.service";
 import { UserListService } from "@/services/user-list.service";
 import { AccountsToast, useAccountsToast } from "@/components/accounts/AccountsToast";
 import { AccountsDateInput } from "@/components/accounts/AccountsDateInput";
-import { roundMoney } from "@/lib/accounts/money-format";
+import { formatMoney, roundMoney } from "@/lib/accounts/money-format";
 import { VoucherFormSectionCard } from "@/components/accounts/voucher-form/VoucherFormSectionCard";
-import { VoucherGstSummaryCard } from "@/components/accounts/voucher-form/VoucherGstSummaryCard";
 import { VoucherSignedRoundOffInput } from "@/components/accounts/voucher-form/VoucherSignedRoundOffInput";
-import { VoucherAccountingPostingSummary } from "@/components/accounts/voucher-form/VoucherAccountingPostingSummary";
-import { AccountingImpactSection } from "@/components/accounts/AccountingImpactSection";
-import { VoucherNarrationAttachmentsSection } from "@/components/accounts/voucher-form/VoucherNarrationAttachmentsSection";
+import { useRouter } from "next/navigation";
 import {
-  VoucherNoteField,
-  VoucherNoteFieldGrid,
-  VoucherNoteReadOnly,
-} from "@/components/accounts/voucher-form/VoucherNoteFieldGrid";
-import { VoucherFormActionBar } from "@/components/accounts/voucher-form/VoucherFormActionBar";
-import { VoucherNoteSegmentControl } from "@/components/accounts/voucher-form/VoucherNoteSegmentControl";
+  NoteReferenceDocumentDetails,
+} from "@/components/accounts/voucher-form/NoteReferenceDocumentDetails";
 import {
-  NoteParticularsTable,
   computeNoteParticularTotals,
 } from "@/components/accounts/voucher-form/NoteParticularsTable";
-import { NoteReferenceDocumentDetails } from "@/components/accounts/voucher-form/NoteReferenceDocumentDetails";
 import { NoteQuantityLinesTable } from "@/components/accounts/voucher-form/NoteQuantityLinesTable";
 import { mapNoteLineToQuantityView } from "@/components/accounts/voucher-form/note-quantity-line-map";
 import {
   NoteInventoryImpactBanner,
   NoteNoInventoryImpactBanner,
 } from "@/components/accounts/voucher-form/NoteScenarioBanners";
-import { LedgerHierarchySelect } from "@/components/accounts/LedgerHierarchySelect";
+import { GenericLedgerHierarchySelect } from "@/components/accounts/GenericLedgerHierarchySelect";
 import {
   adaptPurchaseInvoiceReference,
   adaptPurchaseReturnReference,
 } from "@/components/accounts/voucher-form/note-reference-model";
-import { defaultVisibilityForType } from "@/components/accounts/voucher-form/voucher-form-shell";
-import "@/components/accounts/voucher-form/note-form-compact.css";
-import {
-  vendorMasterToTransactionFields,
-  getActiveVendorsForTransaction,
-  type VendorTransactionFields,
-} from "@/lib/accounts/transaction-master-fetch";
+import "../credit-notes/credit-note-tx.css";
+import "@/app/(app)/accounts/invoices/sales-order-invoice-form-compact.css";
+import { type VendorTransactionFields } from "@/lib/accounts/transaction-master-fetch";
 import { getPurchaseInvoiceById } from "@/app/(app)/accounts/purchase-invoices/purchase-invoices-data";
 import { resolveWarehouseFromGrnNo } from "@/lib/accounts/bank-warehouse-mapping";
 import { WarehouseMappedBankAccountSelect } from "@/components/accounts/WarehouseMappedBankAccountSelect";
-import "../credit-notes/credit-note-tx.css";
+import { useWarehouse } from "@/hooks/masters/use-warehouse-master";
+import type {
+  DirectDnMode,
+  EligiblePurchaseInvoiceItem,
+} from "@/types/debit-note.types";
 
 type FormMode = "fresh" | "return" | "purchase_invoice";
 type UiRefType = "direct" | "purchase_invoice" | "purchase_return";
 type InvoiceAdjustmentBasis = "quantity" | "amount";
+
+type EligiblePiOption = {
+  purchase_invoice_id: string;
+  purchase_invoice_number: string;
+  purchase_invoice_date: string;
+  supplier_invoice_number: string;
+  outstanding_amount: number | null;
+};
 
 function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
@@ -96,16 +107,29 @@ function isUuid(value: string): boolean {
   );
 }
 
-const REF_TYPE_OPTIONS: { value: UiRefType; label: string }[] = [
-  { value: "direct", label: "Direct" },
-  // { value: "purchase_invoice", label: "Purchase Invoice" }, // DN against PI not used
-  { value: "purchase_return", label: "Purchase Return" },
-];
+function parseOutstandingAmount(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  const n = typeof value === "number" ? value : parseFloat(String(value));
+  return Number.isFinite(n) ? n : null;
+}
 
-const INVOICE_BASIS_OPTIONS: { value: InvoiceAdjustmentBasis; label: string }[] = [
-  { value: "amount", label: "Amount" },
-  { value: "quantity", label: "Quantity" },
-];
+function toDateInput(value: unknown): string {
+  if (value == null || value === "") return "";
+  const s = String(value);
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? "" : d.toISOString().slice(0, 10);
+}
+
+function mapEligiblePurchaseInvoice(item: EligiblePurchaseInvoiceItem): EligiblePiOption {
+  return {
+    purchase_invoice_id: String(item.purchase_invoice_id ?? ""),
+    purchase_invoice_number: String(item.purchase_invoice_number ?? ""),
+    purchase_invoice_date: toDateInput(item.purchase_invoice_date),
+    supplier_invoice_number: String(item.supplier_invoice_number ?? "").trim(),
+    outstanding_amount: parseOutstandingAmount(item.outstanding_amount),
+  };
+}
 
 type DirectExtraCharge = {
   id: string;
@@ -160,8 +184,8 @@ export default function DebitNoteFormPageClient({
       vendorGstCategory: s.registration_type || undefined,
       pan: s.pan_number || "",
       contactPerson: s.contact_person || "",
-      paymentTerms: "Net 30",
-      creditDays: 30,
+      paymentTerms: "",
+      creditDays: 0,
       payableLedger: s.supplier_name,
       billingAddress: formattedAddress,
       shippingAddress: formattedAddress,
@@ -198,18 +222,14 @@ export default function DebitNoteFormPageClient({
   };
 
   const [vendors, setVendors] = useState<any[]>([]);
-  const [purchaseInvoices, setPurchaseInvoices] = useState<any[]>([]);
-  const [purchaseReturns, setPurchaseReturns] = useState<any[]>([]);
   const [warehouseList, setWarehouseList] = useState<any[]>([]);
   const [warehouseId, setWarehouseId] = useState("");
+  const { data: warehouseDetail } = useWarehouse(warehouseId || null);
   const [approvalRequired, setApprovalRequired] = useState(true);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     SupplierService.dropdown().then(setVendors).catch(() => {});
-    setPurchaseInvoices(listCreditablePurchaseInvoices());
-    setPurchaseReturns(listPurchaseReturnsForDebitNote());
-
     WarehouseService.dropdown().then(setWarehouseList).catch(() => {});
     DebitNoteService.getConfig().then((cfg) => setApprovalRequired(cfg.approval_required)).catch(() => {});
   }, []);
@@ -220,6 +240,12 @@ export default function DebitNoteFormPageClient({
     if (isPurchaseInvoice) return "purchase_invoice";
     return "direct";
   });
+  /** Frontend-only Direct DN settlement mode — not a backend field. */
+  const [directMode, setDirectMode] = useState<DirectDnMode>("on_account");
+  const [eligiblePurchaseInvoices, setEligiblePurchaseInvoices] = useState<EligiblePiOption[]>([]);
+  const [eligiblePiLoading, setEligiblePiLoading] = useState(false);
+  const [eligiblePiError, setEligiblePiError] = useState<string | null>(null);
+  const referenceInvoiceIdRef = useRef("");
 
   const isSourceRefMode =
     uiRefType === "purchase_invoice" || uiRefType === "purchase_return";
@@ -240,11 +266,13 @@ export default function DebitNoteFormPageClient({
   const [particularRate, setParticularRate] = useState("");
   const [referenceInvoiceId, setReferenceInvoiceId] = useState("");
   const [referenceReturnId, setReferenceReturnId] = useState("");
+  referenceInvoiceIdRef.current = referenceInvoiceId;
 
   const [debitNoteNo, setDebitNoteNo] = useState("");
   const [debitNoteDate, setDebitNoteDate] = useState(new Date().toISOString().slice(0, 10));
   const [vendorId, setVendorId] = useState("");
   const [vendorFields, setVendorFields] = useState<VendorTransactionFields | null>(null);
+  const [vendorDetail, setVendorDetail] = useState<SupplierDetailRecord | null>(null);
   const [billToId, setBillToId] = useState("");
   const [shipToId, setShipToId] = useState("");
   const [billingAddress, setBillingAddress] = useState("");
@@ -280,30 +308,16 @@ export default function DebitNoteFormPageClient({
   const refControlsLocked = isReturn || isPurchaseInvoice || isPendingEntitlement;
   const alreadyAdjustedNum = parseFloat(alreadyAdjusted) || 0;
 
-  const purchaseInvoiceOptions = useMemo(
-    () =>
-      purchaseInvoices.map((inv) => ({
-        value: String(inv.id),
-        label: inv.invoiceNo,
-        sub: `${inv.vendorName} · ${inv.invoiceDate} · ${formatINR(inv.grandTotal)}`,
-      })),
-    [purchaseInvoices],
-  );
-
-  const purchaseReturnOptions = useMemo(
-    () =>
-      purchaseReturns.map((ret) => ({
-        value: String(ret.id),
-        label: ret.returnNumber,
-        sub: `${ret.supplierName} · ${ret.returnDate} · PO ${ret.poNumber}`,
-      })),
-    [purchaseReturns],
-  );
+  const clearDirectInvoiceSettlement = () => {
+    setReferenceInvoiceId("");
+    setSourceInvoiceId(null);
+  };
 
   const onVendorChange = (id: string, fields: VendorTransactionFields | null) => {
     setVendorId(id);
     if (!fields) {
       setVendorFields(null);
+      setVendorDetail(null);
       return;
     }
     setVendorFields(fields);
@@ -311,6 +325,11 @@ export default function DebitNoteFormPageClient({
     setShipToId(fields.defaultShipToId);
     setBillingAddress(fields.billingAddress);
     setShippingAddress(fields.shippingAddress);
+  };
+
+  const applySupplierDetail = (id: string, supplier: SupplierDetailRecord) => {
+    setVendorDetail(supplier);
+    onVendorChange(id, mapSupplierToTransactionFields(supplier));
   };
 
   const clearReference = () => {
@@ -368,7 +387,7 @@ export default function DebitNoteFormPageClient({
       if (v) {
         SupplierService.view(v.supplier_id)
           .then((supplier) => {
-            onVendorChange(v.supplier_id, mapSupplierToTransactionFields(supplier));
+            applySupplierDetail(v.supplier_id, supplier);
           })
           .catch(() => {});
       } else {
@@ -418,7 +437,7 @@ export default function DebitNoteFormPageClient({
       if (v) {
         SupplierService.view(v.supplier_id)
           .then((supplier) => {
-            onVendorChange(v.supplier_id, mapSupplierToTransactionFields(supplier));
+            applySupplierDetail(v.supplier_id, supplier);
           })
           .catch(() => {});
       } else {
@@ -439,59 +458,68 @@ export default function DebitNoteFormPageClient({
     }
   };
 
-  const onPurchaseInvoiceSelect = (id: string) => {
-    setReferenceInvoiceId(id);
-    setReferenceReturnId("");
-    if (!id) {
-      clearReference();
+  const onDirectModeChange = (next: DirectDnMode) => {
+    if (next === "on_account") {
+      setDirectMode("on_account");
+      clearDirectInvoiceSettlement();
+      setEligiblePurchaseInvoices([]);
+      setEligiblePiError(null);
       return;
     }
-    const preview = buildReferenceFromPurchaseInvoice(Number(id));
-    if (preview) {
-      const loadProductLines = invoiceAdjustmentBasis === "quantity";
-      applyPurchaseInvoicePreview(preview, Number(id), loadProductLines);
-      if (!loadProductLines) {
-        prefillParticularsFromPreview(preview, "Purchase invoice adjustment");
-      } else {
-        setParticular("");
-        setParticularQty("1");
-        setParticularRate("");
-      }
-    }
-  };
-
-  const onPurchaseReturnSelect = (id: string) => {
-    setReferenceReturnId(id);
-    setReferenceInvoiceId("");
-    if (!id) {
-      clearReference();
+    if (!vendorId) {
+      setError("Select a supplier before choosing Against Purchase Invoice.");
+      showToast("Select a supplier first.", "error");
       return;
     }
-    const retId = Number(id);
-    const ret = purchaseReturns.find((r) => r.id === retId);
-    const pending = getPendingDebitNoteRow(retId);
-    const preview = buildReferenceFromPurchaseReturn(retId);
-    if (preview) {
-      applyPreview(
-        preview,
-        retId,
-        pending?.returnNumber ?? ret?.returnNumber ?? `PRET-${retId}`,
-        true,
-      );
-      setParticular("");
-      setParticularQty("1");
-      setParticularRate("");
-    }
+    setError(null);
+    setDirectMode("against_invoice");
   };
 
-  const onUiRefTypeChange = (next: UiRefType) => {
-    if (isReturn || isPurchaseInvoice) return;
-    setUiRefType(next);
-    clearReference();
-    setReferenceInvoiceId("");
-    setReferenceReturnId("");
-    if (next !== "direct") setDirectExtraCharges([]);
-  };
+  useEffect(() => {
+    if (!isDirectMode || directMode !== "against_invoice" || !vendorId) {
+      setEligiblePurchaseInvoices([]);
+      setEligiblePiLoading(false);
+      setEligiblePiError(null);
+      return;
+    }
+    let cancelled = false;
+    setEligiblePurchaseInvoices([]);
+    setEligiblePiLoading(true);
+    setEligiblePiError(null);
+    DebitNoteService.listEligiblePurchaseInvoices(vendorId, { page: 1, page_size: 100 })
+      .then((res) => {
+        if (cancelled) return;
+        const mapped = res.items
+          .map(mapEligiblePurchaseInvoice)
+          .filter((inv) => inv.purchase_invoice_id);
+        const selectedId = referenceInvoiceIdRef.current;
+        if (selectedId && !mapped.some((inv) => inv.purchase_invoice_id === selectedId)) {
+          mapped.unshift({
+            purchase_invoice_id: selectedId,
+            purchase_invoice_number: selectedId,
+            purchase_invoice_date: "",
+            supplier_invoice_number: "",
+            outstanding_amount: null,
+          });
+        }
+        setEligiblePurchaseInvoices(mapped);
+        setEligiblePiLoading(false);
+      })
+      .catch((e: any) => {
+        if (cancelled) return;
+        setEligiblePurchaseInvoices([]);
+        setEligiblePiLoading(false);
+        const msg =
+          e?.response?.data?.message ||
+          e?.message ||
+          "Could not load eligible Purchase Invoices.";
+        setEligiblePiError(msg);
+        showToast(msg, "error");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isDirectMode, directMode, vendorId, showToast]);
 
   useEffect(() => {
     if (!isReturn || returnId == null || isEdit || isPendingEntitlement) return;
@@ -560,7 +588,7 @@ export default function DebitNoteFormPageClient({
           try {
             const supplier = await SupplierService.view(String(supplierId));
             if (!cancelled) {
-              onVendorChange(String(supplierId), mapSupplierToTransactionFields(supplier));
+              applySupplierDetail(String(supplierId), supplier);
             }
           } catch {
             /* vendor name from snapshot still usable */
@@ -662,14 +690,13 @@ export default function DebitNoteFormPageClient({
     if (!isEdit || debitNoteId == null || vendors.length === 0) return;
     DebitNoteService.getById(debitNoteId).then((dn) => {
       const rec = mapDebitNoteToRecord(dn);
-      const fresh = rec.againstType === "standalone_adjustment";
       setDebitNoteNo(rec.debitNoteNo);
       setDebitNoteDate(rec.debitNoteDate);
       setVendorId(rec.vendorId ? String(rec.vendorId) : "");
       if (rec.vendorId) {
         SupplierService.view(String(rec.vendorId))
           .then((supplier) => {
-            onVendorChange(String(rec.vendorId), mapSupplierToTransactionFields(supplier));
+            applySupplierDetail(String(rec.vendorId), supplier);
           })
           .catch(() => {});
       }
@@ -695,6 +722,9 @@ export default function DebitNoteFormPageClient({
 
       if (rec.sourceReturnId) {
         setUiRefType("purchase_return");
+        setDirectMode("on_account");
+        setReferenceInvoiceId("");
+        setSourceInvoiceId(null);
         let loaded = rec.lineItems.length
           ? rec.lineItems.map((l: any) => normalizeDebitLine(l))
           : [];
@@ -710,8 +740,35 @@ export default function DebitNoteFormPageClient({
         setParticularQty("1");
         setParticularRate("");
         setRoundOff(rec.round_off ?? 0);
-      } else if (fresh) {
-        setUiRefType(rec.sourceInvoiceId ? "purchase_invoice" : "direct");
+      } else {
+        // Direct DN draft — infer On-account vs Against Purchase Invoice from stored PI.
+        setUiRefType("direct");
+        const piFromRefs = Array.isArray(dn.references)
+          ? dn.references.find(
+              (r: any) =>
+                String(r.reference_type || "").toUpperCase() === "PURCHASE_INVOICE" &&
+                String(r.relation_type || "").toUpperCase() !== "SOURCE",
+            )
+          : null;
+        const storedPiId =
+          dn.purchase_invoice_id ||
+          piFromRefs?.reference_id ||
+          rec.sourceInvoiceId ||
+          null;
+        const hasSettlementPi = Boolean(storedPiId);
+        setDirectMode(hasSettlementPi ? "against_invoice" : "on_account");
+        if (hasSettlementPi) {
+          setReferenceInvoiceId(String(storedPiId));
+          setSourceInvoiceId(
+            typeof storedPiId === "number"
+              ? storedPiId
+              : Number(storedPiId) || null,
+          );
+        } else {
+          setReferenceInvoiceId("");
+          setSourceInvoiceId(null);
+        }
+
         const line = rec.lineItems[0];
         const taxable = rec.taxableAmount ?? 0;
         const gstOn = (rec.gstAmount ?? 0) > 0 || (line?.taxPct ?? 0) > 0;
@@ -748,75 +805,43 @@ export default function DebitNoteFormPageClient({
             : roundMoney(savedTotal - expected),
         );
         setParticular(rec.reason || line?.productName || "");
-        if (rec.sourceInvoiceId) {
-          const p = buildReferenceFromPurchaseInvoice(rec.sourceInvoiceId);
-          if (p) setReferencePreview(p);
-        }
         setLines([]);
-      } else {
-        setUiRefType("purchase_invoice");
-        const loaded = rec.lineItems.length
-          ? rec.lineItems.map((l: any) => normalizeDebitLine(l))
-          : [];
-        const keepQty =
-          loaded.some((l: any) => (l.invoiceQty ?? 0) > 0) && loaded.length > 0;
-        if (rec.sourceInvoiceId) {
-          const p = buildReferenceFromPurchaseInvoice(rec.sourceInvoiceId);
-          if (p) setReferencePreview(p);
-        }
-        if (keepQty) {
-          setInvoiceAdjustmentBasis("quantity");
-          setLines(loaded);
-          setParticular("");
-          setParticularQty("1");
-          setParticularRate("");
-          setRoundOff(rec.round_off ?? 0);
-        } else {
-          setInvoiceAdjustmentBasis("amount");
-          setLines([]);
-          const line = rec.lineItems[0];
-          const taxable = rec.taxableAmount || 0;
-          const gstOn = (rec.gstAmount ?? 0) > 0 || (line?.taxPct ?? 0) > 0;
-          const gstPctStr =
-            line?.taxPct && line.taxPct > 0
-              ? String(line.taxPct)
-              : taxable > 0 && gstOn
-                ? String(Math.round(((rec.gstAmount ?? 0) / taxable) * 10000) / 100)
-                : "18";
-          if (line && line.returnQty > 0 && line.unitPrice > 0) {
-            setParticularQty(String(line.returnQty));
-            setParticularRate(String(line.unitPrice));
-          } else {
-            setParticularQty("1");
-            setParticularRate(String(taxable || line?.unitPrice || rec.currentDebitAmount || ""));
-          }
-          setGstApplicable(gstOn);
-          setGstPct(gstPctStr);
-          setParticular(line?.productName || rec.reason || "");
-          const qtyStr = line && line.returnQty > 0 ? String(line.returnQty) : "1";
-          const rateStr =
-            line && line.unitPrice > 0
-              ? String(line.unitPrice)
-              : String(taxable || rec.currentDebitAmount || "");
-          const expected = computeNoteParticularTotals(qtyStr, rateStr, gstOn, gstPctStr, false).total;
-          setRoundOff(
-            rec.round_off != null && Math.abs(rec.round_off) > 0.0001
-              ? rec.round_off
-              : roundMoney((rec.currentDebitAmount ?? expected) - expected),
-          );
-        }
+        setReferencePreview(null);
       }
     }).catch(() => {
       router.replace(DEBIT_NOTES_LIST_PATH);
     });
   }, [isEdit, debitNoteId, router, vendors]);
 
+  const directInterstate = useMemo(() => {
+    if (!isDirectMode) return false;
+    const bill =
+      vendorFields?.billToOptions?.find((o) => o.id === billToId) ||
+      vendorFields?.billToOptions?.[0];
+    const fromList = vendors.find((x) => String(x.supplier_id) === String(vendorId));
+    return resolveDebitNoteInterstate({
+      warehouseGstin: warehouseDetail?.gstNumber,
+      warehouseState: warehouseDetail?.state,
+      vendorGstin: vendorFields?.vendorGst || vendorDetail?.gstin_number,
+      vendorState: vendorDetail?.state || bill?.state || fromList?.state,
+    });
+  }, [
+    isDirectMode,
+    warehouseDetail?.gstNumber,
+    warehouseDetail?.state,
+    vendorFields,
+    vendorDetail,
+    billToId,
+    vendors,
+    vendorId,
+  ]);
+
   const particularTotals = computeNoteParticularTotals(
     particularQty,
     particularRate,
     gstApplicable,
     gstPct,
-    false,
+    isDirectMode ? directInterstate : false,
   );
 
   const directExtraChargeRows = useMemo(() => {
@@ -861,25 +886,37 @@ export default function DebitNoteFormPageClient({
   const directMainGst = particularTotals.gstAmount;
   const combinedDirectGst = roundMoney(directMainGst + directExtraGst);
   const pendingCombinedGst = roundMoney(qtyLinesGst + directExtraGst);
+  const prGstTotal = isPendingEntitlement ? pendingCombinedGst : qtyLinesGst;
   const cgstDisplay = usesQuantityLines
-    ? roundMoney((isPendingEntitlement ? pendingCombinedGst : qtyLinesGst) / 2)
-    : roundMoney(combinedDirectGst / 2);
+    ? roundMoney(prGstTotal / 2)
+    : isDirectMode && directInterstate
+      ? 0
+      : roundMoney(combinedDirectGst / 2);
   const sgstDisplay = usesQuantityLines
-    ? roundMoney(
-        (isPendingEntitlement ? pendingCombinedGst : qtyLinesGst) -
-          (isPendingEntitlement ? pendingCombinedGst : qtyLinesGst) / 2,
-      )
-    : roundMoney(combinedDirectGst - combinedDirectGst / 2);
-  const igstDisplay = usesQuantityLines ? 0 : particularTotals.igst;
+    ? roundMoney(prGstTotal - prGstTotal / 2)
+    : isDirectMode && directInterstate
+      ? 0
+      : roundMoney(combinedDirectGst - combinedDirectGst / 2);
+  const igstDisplay = usesQuantityLines
+    ? 0
+    : isDirectMode && directInterstate
+      ? combinedDirectGst
+      : particularTotals.igst;
+  const summaryGst = usesQuantityLines ? prGstTotal : combinedDirectGst;
+  const summaryInterstate = usesQuantityLines ? false : directInterstate;
   const totalDebit = Math.max(
     0,
     (usesQuantityLines
       ? roundMoney(qtyLinesTotal + (isPendingEntitlement ? directExtraTotal : 0))
       : roundMoney(particularTotals.total + directExtraTotal)) + roundOff,
   );
-  const showGst = usesQuantityLines
-    ? qtyLinesGst > 0 || (isPendingEntitlement && directExtraGst > 0)
-    : gstApplicable || directExtraGst > 0;
+  /** Final Debit Note Amount shown in Amount Summary — used as allocated_amount when Against PI. */
+  const finalDebitNoteAmount = totalDebit;
+  const selectedEligiblePi = eligiblePurchaseInvoices.find(
+    (inv) => inv.purchase_invoice_id === referenceInvoiceId,
+  );
+  const invoiceOutstanding =
+    selectedEligiblePi != null ? selectedEligiblePi.outstanding_amount : null;
   const originalNum = parseFloat(originalAmount) || totalDebit;
   const alreadyAdjustedNumSafe = parseFloat(alreadyAdjusted) || 0;
 
@@ -946,6 +983,36 @@ export default function DebitNoteFormPageClient({
     if (referencePreview?.vendorName) return referencePreview.vendorName;
     return "";
   };
+
+  const vendorInfo = useMemo(() => {
+    const fromList = vendors.find((x) => String(x.supplier_id) === String(vendorId));
+    const bill =
+      vendorFields?.billToOptions?.find((o) => o.id === billToId) ||
+      vendorFields?.billToOptions?.[0];
+    return {
+      vendorName:
+        vendorFields?.vendorName || fromList?.supplier_name || referencePreview?.vendorName || "",
+      vendorCode: vendorFields?.vendorCode || fromList?.supplier_code || "",
+      gstin: vendorFields?.vendorGst || referencePreview?.vendorGstin || "",
+      billingAddress: vendorFields?.billingAddress || bill?.formatted || "",
+      state: vendorDetail?.state || bill?.state || fromList?.state || "",
+      supplierType:
+        vendorDetail?.supplier_type?.supplier_type_name ||
+        fromList?.supplier_type?.supplier_type_name ||
+        "",
+      contactPerson: vendorFields?.contactPerson || vendorDetail?.contact_person || "",
+      mobile: vendorFields?.vendorMobile || "",
+      email: vendorFields?.vendorEmail || vendorDetail?.email || "",
+    };
+  }, [
+    vendors,
+    vendorId,
+    vendorFields,
+    billToId,
+    vendorDetail,
+    referencePreview?.vendorGstin,
+    referencePreview?.vendorName,
+  ]);
 
   const warehouseRef = useMemo(() => {
     if (referencePreview?.sourceGrnNo) {
@@ -1131,11 +1198,19 @@ export default function DebitNoteFormPageClient({
       }
     } else {
       if (!particular.trim() && directExtraTotal <= 0) {
-        setError("Enter a particular / description for the adjustment, or add additional charges.");
+        setError(
+          isDirectMode
+            ? "Enter a particular / description for the adjustment."
+            : "Enter a particular / description for the adjustment, or add additional charges.",
+        );
         return false;
       }
       if (particularTotals.total <= 0 && directExtraTotal <= 0) {
-        setError("Enter a valid Qty and Rate for the particular, or add additional charges.");
+        setError(
+          isDirectMode
+            ? "Enter a valid Qty and Rate for the particular."
+            : "Enter a valid Qty and Rate for the particular, or add additional charges.",
+        );
         return false;
       }
       if (particular.trim() && particularTotals.total <= 0 && directExtraTotal <= 0) {
@@ -1152,6 +1227,25 @@ export default function DebitNoteFormPageClient({
         }
         if (!c.ledgerId) {
           setError(`Select a ledger for additional charge "${c.description.trim()}".`);
+          return false;
+        }
+      }
+      if (directMode === "against_invoice") {
+        if (!referenceInvoiceId) {
+          setError("Select a Purchase Invoice or switch to On-account.");
+          return false;
+        }
+        if (finalDebitNoteAmount <= 0) {
+          setError("Debit Note Amount must be greater than zero.");
+          return false;
+        }
+        if (
+          invoiceOutstanding != null &&
+          finalDebitNoteAmount > invoiceOutstanding + 0.009
+        ) {
+          setError(
+            `Debit Note Amount cannot exceed the selected invoice outstanding amount of ${formatMoney(invoiceOutstanding)}.`,
+          );
           return false;
         }
       }
@@ -1254,7 +1348,23 @@ export default function DebitNoteFormPageClient({
       supplier_id: String(input.vendorId),
       narration: input.remarks || null,
       remarks: input.remarks || null,
-      purchase_invoice_id: referenceInvoiceId ? String(referenceInvoiceId) : undefined,
+      purchase_invoice_id:
+        isDirectMode && directMode === "against_invoice" && referenceInvoiceId
+          ? String(referenceInvoiceId)
+          : isDirectMode
+            ? null
+            : referenceInvoiceId
+              ? String(referenceInvoiceId)
+              : undefined,
+      allocated_amount:
+        isDirectMode &&
+        directMode === "against_invoice" &&
+        referenceInvoiceId &&
+        finalDebitNoteAmount > 0
+          ? finalDebitNoteAmount
+          : isDirectMode
+            ? null
+            : undefined,
       round_off_amount: roundOff,
       lines: linesInput,
     };
@@ -1264,16 +1374,18 @@ export default function DebitNoteFormPageClient({
     setError(null);
     setSaving(true);
     try {
-      if (!validateForm()) return;
+      if (!validateForm()) {
+        setSaving(false);
+        return;
+      }
       if (isPendingEntitlement) {
-        const res = await DebitNoteService.createFromPending(
+        await DebitNoteService.createFromPending(
           pendingId,
           buildPendingCreatePayload(),
         );
-        const newId = res?.debit_note_id || res?.id;
         showToast("Debit note saved as draft", "success");
         dispatchAccountsDataChanged("debit-notes");
-        router.push(`${DEBIT_NOTES_LIST_PATH}/${newId}`);
+        router.replace(DEBIT_NOTES_LIST_PATH);
         return;
       }
       const input = buildInput("draft");
@@ -1281,17 +1393,14 @@ export default function DebitNoteFormPageClient({
       if (isEdit && debitNoteId != null) {
         await DebitNoteService.updateDraft(debitNoteId, payload);
         showToast("Debit note updated as draft", "success");
-        router.push(`${DEBIT_NOTES_LIST_PATH}/${debitNoteId}`);
       } else {
-        const res = await DebitNoteService.createDirect(payload);
-        const newId = res?.debit_note_id || res?.id;
+        await DebitNoteService.createDirect(payload);
         showToast("Debit note saved as draft", "success");
-        router.push(`${DEBIT_NOTES_LIST_PATH}/${newId}`);
       }
       dispatchAccountsDataChanged("debit-notes");
+      router.replace(DEBIT_NOTES_LIST_PATH);
     } catch (e: any) {
       setError(e.message || "Could not save debit note.");
-    } finally {
       setSaving(false);
     }
   };
@@ -1336,10 +1445,9 @@ export default function DebitNoteFormPageClient({
       dispatchAccountsDataChanged("debit-notes");
       showToast("Debit note submitted for approval", "success");
       setSubmitApproverOpen(false);
-      router.push(`${DEBIT_NOTES_LIST_PATH}/${createdNoteId}`);
+      router.replace(DEBIT_NOTES_LIST_PATH);
     } catch (e: any) {
       setError(e.message || "Failed to submit for approval.");
-    } finally {
       setSaving(false);
     }
   };
@@ -1348,7 +1456,10 @@ export default function DebitNoteFormPageClient({
     setError(null);
     setSaving(true);
     try {
-      if (!validateForm()) return;
+      if (!validateForm()) {
+        setSaving(false);
+        return;
+      }
       if (isPendingEntitlement) {
         const res = await DebitNoteService.createFromPending(
           pendingId,
@@ -1357,12 +1468,13 @@ export default function DebitNoteFormPageClient({
         const targetId = res?.debit_note_id || res?.id;
         if (!targetId) {
           setError("Could not determine debit note ID after creation.");
+          setSaving(false);
           return;
         }
         await DebitNoteService.post(targetId);
         dispatchAccountsDataChanged("debit-notes");
         showToast("Debit note posted successfully", "success");
-        router.push(`${DEBIT_NOTES_LIST_PATH}/${targetId}`);
+        router.replace(DEBIT_NOTES_LIST_PATH);
         return;
       }
       const input = buildInput("draft");
@@ -1378,13 +1490,13 @@ export default function DebitNoteFormPageClient({
         await DebitNoteService.post(targetId);
         dispatchAccountsDataChanged("debit-notes");
         showToast("Debit note posted successfully", "success");
-        router.push(`${DEBIT_NOTES_LIST_PATH}/${targetId}`);
+        router.replace(DEBIT_NOTES_LIST_PATH);
       } else {
         setError("Could not determine debit note ID after creation.");
+        setSaving(false);
       }
     } catch (e: any) {
       setError(e.message || "Could not post debit note.");
-    } finally {
       setSaving(false);
     }
   };
@@ -1421,6 +1533,7 @@ export default function DebitNoteFormPageClient({
       attachments,
       adjustmentLedgerId,
       uiRefType,
+      directMode,
       referenceInvoiceId,
       referenceReturnId,
       roundOff,
@@ -1440,6 +1553,7 @@ export default function DebitNoteFormPageClient({
       attachments,
       adjustmentLedgerId,
       uiRefType,
+      directMode,
       referenceInvoiceId,
       referenceReturnId,
       roundOff,
@@ -1453,263 +1567,308 @@ export default function DebitNoteFormPageClient({
   });
 
   const stickyActions = (
-    <VoucherFormActionBar
+    <DebitNoteFormActionBar
+      busy={saving || pendingLoading}
+      hasExistingId={isEdit}
       onDiscard={requestCancel}
       onSaveDraft={saveDraft}
-      onSubmitForApproval={submitForApproval}
-      showSubmitForApproval={!isPendingEntitlement}
-      onSaveAndPost={postNote}
-      saveAndPostLabel="Save & Post"
-      discardDisabled={saving}
-      saveDraftDisabled={saving || pendingLoading}
-      saveAndPostDisabled={saving || pendingLoading}
-      submitForApprovalDisabled={saving}
+      onSaveAndPost={!isEdit ? postNote : undefined}
+      onPost={isEdit ? postNote : undefined}
     />
   );
 
-  const vendorLedgerName = vendorFields?.payableLedger || resolveVendorName() || "Not selected";
-  const creditAdjLedger = adjustmentLedgerName || "Not selected";
+  const breadcrumbPage = isEdit
+    ? "Edit Debit Note"
+    : isPendingEntitlement
+      ? "Generate Debit Note"
+      : "Create Debit Note";
 
-  const postingSummary = (
-    <VoucherAccountingPostingSummary
-      compact
-      voucherTypeLabel="Debit Note"
-      debitLedgerLabel="Debit"
-      debitLedgerName={vendorLedgerName || "Not selected"}
-      creditLedgerLabel="Credit"
-      creditLedgerName={creditAdjLedger || "Not selected"}
-      voucherAmount={totalDebit}
-      voucherAmountLabel="Debit Note Amount"
-      gstAdjustments={
-        showGst
-          ? {
-              cgstLabel: "Input CGST Adjustment",
-              cgstAmount: cgstDisplay,
-              sgstLabel: "Input SGST Adjustment",
-              sgstAmount: sgstDisplay,
-              igstLabel: "Input IGST Adjustment",
-              igstAmount: igstDisplay,
-            }
-          : undefined
-      }
-      visibilityItems={defaultVisibilityForType("debit_note", {
-        gstApplicable: showGst,
-      })}
-    />
-  );
-
-
+  const subtitle = isPendingEntitlement
+    ? "Details auto-fetched from pending purchase return."
+    : isFresh
+      ? "Create a direct debit note or link to an outstanding Purchase Invoice."
+      : isPurchaseInvoice
+        ? "Details auto-fetched from linked Purchase Invoice."
+        : "Details auto-fetched from linked Purchase Return.";
 
   return (
     <>
-      <div className="credit-debit-note-form h-full min-h-0 flex flex-col">
+      <div className="sales-order-invoice-form-compact h-full min-h-0 flex flex-col w-full">
         {pendingLoading ? (
           <div className="flex flex-1 items-center justify-center gap-2 p-8 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
             Loading pending debit note…
           </div>
         ) : (
-        <AccountsFormLayout
-          fullWidth
+        <InvoiceFormLayout
           onBackClick={requestCancel}
           title={title}
-          breadcrumb={[...DEBIT_NOTES_BREADCRUMB]}
-          code={debitNoteNo || undefined}
-          headerMeta={
-            <div className="flex items-center gap-1.5">
-              <span className="cdn-chip inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-600">
-                Draft
-              </span>
-              {debitNoteNo ? (
-                <span className="cdn-chip cdn-chip--code inline-flex items-center h-5 px-1.5 rounded border font-mono text-[10px]">
-                  {debitNoteNo}
-                </span>
-              ) : null}
-            </div>
-          }
+          subtitle={subtitle}
+          breadcrumb={accountsBreadcrumb("Transactions", breadcrumbPage, DEBIT_NOTES_LIST_PATH)}
+          backHref={DEBIT_NOTES_LIST_PATH}
           stickyFooter={stickyActions}
         >
-          <div className="cdn-stack pb-20">
+          <div className="space-y-2.5">
             {error ? (
               <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-1.5 text-xs text-red-700">
                 {error}
               </div>
             ) : null}
 
-            <VoucherFormSectionCard title="Basic & Reference Details" compact>
-              <VoucherNoteFieldGrid columns={4}>
-                <VoucherNoteField label="Debit Note Number" width="sm">
-                  <VoucherNoteReadOnly mono>
-                    {debitNoteNo || "…"}
-                  </VoucherNoteReadOnly>
-                </VoucherNoteField>
-                <VoucherNoteField label="Debit Note Date" width="sm">
-                  <AccountsDateInput
-                    value={debitNoteDate}
-                    onChange={setDebitNoteDate}
-                    aria-label="Debit note date"
-                    className="h-[30px] text-xs cdn-control"
-                  />
-                </VoucherNoteField>
-                <VoucherNoteField label="Reference Number" width="md">
-                  <Input
-                    className="h-[30px] text-xs cdn-control"
-                    value={referenceNo}
-                    onChange={(e) => setReferenceNo(e.target.value)}
-                    placeholder="Optional"
-                  />
-                </VoucherNoteField>
-                {isDirectMode ? (
-                  <VoucherNoteField label="Warehouse *" width="md">
-                    <select
-                      className="h-[30px] border rounded px-2 text-xs w-full cdn-control"
-                      value={warehouseId}
-                      onChange={(e) => setWarehouseId(e.target.value)}
-                    >
-                      <option value="">Select Warehouse</option>
-                      {warehouseList.map((w) => (
-                        <option key={w.warehouse_id} value={w.warehouse_id}>
-                          {w.warehouse_name}
-                        </option>
-                      ))}
-                    </select>
-                  </VoucherNoteField>
-                ) : null}
-                {warehouseRef ? (
-                  <VoucherNoteField label="Bank Account (optional — refund only)" width="lg">
-                    <div className="space-y-1">
-                      <WarehouseMappedBankAccountSelect
-                        warehouseRef={warehouseRef}
-                        value={bankAccountId}
-                        onChange={(id) => setBankAccountId(id)}
-                        label=""
-                      />
-                      <p className="text-[10px] text-muted-foreground leading-tight">
-                        Not required for a normal Debit Note (AP + adjustment + GST). Use only if
-                        settling an immediate bank refund with this note.
-                      </p>
+            <VoucherFormSectionCard title="Debit Note Details">
+              <div className="space-y-1.5">
+                <div className="so-invoice-details-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+                  <InvoiceDetailField label="Debit Note Number">
+                    <div className="so-goods-ro so-goods-ro--mono w-full text-brand-700">
+                      {debitNoteNo || "…"}
                     </div>
-                  </VoucherNoteField>
-                ) : null}
-                <VoucherNoteField label="Vendor" required width="md">
-                  {vendorLocked ? (
-                    <VoucherNoteReadOnly>{resolveVendorName() || "—"}</VoucherNoteReadOnly>
-                  ) : (
-                    <SearchableSelect
-                      label=""
-                      options={vendors.map((v) => ({
-                        value: String(v.supplier_id),
-                        label: v.supplier_name,
-                        sub: v.supplier_code,
-                      }))}
-                      value={vendorId}
-                      onChange={(id) => {
-                        SupplierService.view(id)
-                          .then((supplier) => {
-                            onVendorChange(id, mapSupplierToTransactionFields(supplier));
-                          })
-                          .catch(() => {});
-                      }}
-                      placeholder="Select supplier…"
-                      required
+                  </InvoiceDetailField>
+                  <InvoiceDetailField label="Debit Note Date">
+                    <AccountsDateInput
+                      value={debitNoteDate}
+                      onChange={setDebitNoteDate}
+                      aria-label="Debit note date"
+                      className={INVOICE_DETAIL_INPUT_CLASS}
                     />
-                  )}
-                </VoucherNoteField>
-                <VoucherNoteField label="Vendor GSTIN" width="md">
-                  <VoucherNoteReadOnly mono>
-                    {vendorFields?.vendorGst || referencePreview?.vendorGstin || "—"}
-                  </VoucherNoteReadOnly>
-                </VoucherNoteField>
-                <VoucherNoteField label="AP Ledger (Payable)" width="md">
-                  <VoucherNoteReadOnly>
-                    {vendorFields?.payableLedger || resolveVendorName() || "—"}
-                  </VoucherNoteReadOnly>
-                </VoucherNoteField>
-                <VoucherNoteField label="Reference Type" span={2} width="ref">
-                  {refControlsLocked ? (
-                    <VoucherNoteReadOnly>
-                      {isReturn
-                        ? `Purchase Return${sourceReturnNo ? ` · ${sourceReturnNo}` : ""}`
-                        : `Purchase Invoice${
-                            referencePreview?.sourceInvoiceNo
-                              ? ` · ${referencePreview.sourceInvoiceNo}`
-                              : ""
-                          }`}
-                    </VoucherNoteReadOnly>
+                  </InvoiceDetailField>
+                  {isDirectMode || warehouseId ? (
+                    <InvoiceDetailField
+                      label="Warehouse"
+                      required={isDirectMode}
+                      labelExtra={
+                        <DebitNoteWarehouseInfoButton warehouseId={warehouseId || null} />
+                      }
+                    >
+                      {isDirectMode ? (
+                        <SearchableSelect
+                          value={warehouseId}
+                          onChange={setWarehouseId}
+                          options={warehouseList.map((w) => ({
+                            value: String(w.warehouse_id),
+                            label: w.warehouse_name,
+                            sub: w.state || undefined,
+                          }))}
+                          placeholder="Select warehouse"
+                          required
+                          triggerClassName={INVOICE_DETAIL_SELECT_CLASS}
+                        />
+                      ) : (
+                        <div className="so-goods-ro w-full">
+                          {warehouseDetail?.warehouseName ||
+                            warehouseList.find((w) => String(w.warehouse_id) === String(warehouseId))
+                              ?.warehouse_name ||
+                            "—"}
+                        </div>
+                      )}
+                    </InvoiceDetailField>
                   ) : (
-                    <VoucherNoteSegmentControl
-                      hideLabel
-                      label="Reference Type"
-                      name="dn-ref-type"
-                      value={uiRefType}
-                      options={REF_TYPE_OPTIONS}
-                      onChange={onUiRefTypeChange}
-                    />
+                    <InvoiceDetailField label="Reference Number">
+                      <Input
+                        className={INVOICE_DETAIL_INPUT_CLASS}
+                        value={referenceNo}
+                        onChange={(e) => setReferenceNo(e.target.value)}
+                        placeholder="Optional"
+                      />
+                    </InvoiceDetailField>
                   )}
-                </VoucherNoteField>
-                {/* Purchase Invoice reference fields — hidden while DN against PI is not used
-                {!refControlsLocked && uiRefType === "purchase_invoice" ? (
-                  <>
-                    <VoucherNoteField label="Reference Document" span={2} width="ref">
+                  <InvoiceDetailField
+                    label="Vendor"
+                    required
+                    labelExtra={
+                      <DebitNoteVendorInfoButton
+                        enabled={Boolean(vendorId || vendorFields)}
+                        info={vendorInfo}
+                      />
+                    }
+                  >
+                    {vendorLocked ? (
+                      <div className="so-goods-ro w-full">{resolveVendorName() || "—"}</div>
+                    ) : (
                       <SearchableSelect
                         label=""
-                        value={referenceInvoiceId}
-                        onChange={onPurchaseInvoiceSelect}
-                        options={purchaseInvoiceOptions}
-                        placeholder="Select purchase invoice"
-                        required
-                      />
-                    </VoucherNoteField>
-                    <VoucherNoteField label="Adjustment Basis" span={2} width="ref">
-                      <VoucherNoteSegmentControl
-                        hideLabel
-                        label="Adjustment Basis"
-                        name="dn-invoice-basis"
-                        value={invoiceAdjustmentBasis}
-                        options={INVOICE_BASIS_OPTIONS}
-                        onChange={(next) => {
-                          setInvoiceAdjustmentBasis(next);
-                          if (referenceInvoiceId) {
-                            const preview = buildReferenceFromPurchaseInvoice(
-                              Number(referenceInvoiceId),
-                            );
-                            if (preview) {
-                              applyPurchaseInvoicePreview(
-                                preview,
-                                Number(referenceInvoiceId),
-                                next === "quantity",
-                              );
-                              if (next === "quantity") {
-                                setParticular("");
-                                setParticularQty("1");
-                                setParticularRate("");
-                              } else {
-                                prefillParticularsFromPreview(
-                                  preview,
-                                  "Purchase invoice adjustment",
-                                );
-                              }
-                            }
-                          }
+                        options={vendors.map((v) => ({
+                          value: String(v.supplier_id),
+                          label: v.supplier_name,
+                          sub: v.supplier_code,
+                        }))}
+                        value={vendorId}
+                        onChange={(id) => {
+                          if (isDirectMode) clearDirectInvoiceSettlement();
+                          SupplierService.view(id)
+                            .then((supplier) => {
+                              applySupplierDetail(id, supplier);
+                            })
+                            .catch(() => {});
                         }}
+                        placeholder="Select supplier…"
+                        required
+                        triggerClassName={INVOICE_DETAIL_SELECT_CLASS}
                       />
-                    </VoucherNoteField>
-                  </>
-                ) : null}
-                */}
-                {!refControlsLocked && uiRefType === "purchase_return" ? (
-                  <VoucherNoteField label="Reference Document" span={2} width="ref">
-                    <SearchableSelect
-                      label=""
-                      value={referenceReturnId}
-                      onChange={onPurchaseReturnSelect}
-                      options={purchaseReturnOptions}
-                      placeholder="Select purchase return"
-                      required
-                    />
-                  </VoucherNoteField>
-                ) : null}
-              </VoucherNoteFieldGrid>
+                    )}
+                  </InvoiceDetailField>
+                </div>
+
+                <div className="so-invoice-details-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+                  {isDirectMode && !refControlsLocked ? (
+                    <>
+                      <InvoiceDetailField label="Direct Mode">
+                        <div className="cnz-gst-toggle w-full" role="group" aria-label="Direct debit note mode">
+                          <button
+                            type="button"
+                            data-active={directMode === "on_account"}
+                            aria-pressed={directMode === "on_account"}
+                            disabled={saving}
+                            onClick={() => onDirectModeChange("on_account")}
+                          >
+                            On-account
+                          </button>
+                          <button
+                            type="button"
+                            data-active={directMode === "against_invoice"}
+                            aria-pressed={directMode === "against_invoice"}
+                            disabled={saving}
+                            onClick={() => onDirectModeChange("against_invoice")}
+                          >
+                            Against Purchase Invoice
+                          </button>
+                        </div>
+                      </InvoiceDetailField>
+                      {directMode === "against_invoice" ? (
+                        <>
+                          <InvoiceDetailField label="Purchase Invoice" required>
+                            <SearchableSelect
+                              label=""
+                              value={referenceInvoiceId}
+                              onChange={(id) => {
+                                setReferenceInvoiceId(id);
+                                setSourceInvoiceId(id ? Number(id) || null : null);
+                              }}
+                              options={eligiblePurchaseInvoices.map((inv) => ({
+                                value: inv.purchase_invoice_id,
+                                label: inv.purchase_invoice_date
+                                  ? `${inv.purchase_invoice_number} · ${inv.purchase_invoice_date}`
+                                  : inv.purchase_invoice_number,
+                                selectedLabel: inv.purchase_invoice_number,
+                                sub:
+                                  inv.outstanding_amount != null
+                                    ? `Outstanding ${formatMoney(inv.outstanding_amount)}${
+                                        inv.supplier_invoice_number
+                                          ? ` · Supp. Inv. ${inv.supplier_invoice_number}`
+                                          : ""
+                                      }`
+                                    : inv.supplier_invoice_number
+                                      ? `Supp. Inv. ${inv.supplier_invoice_number}`
+                                      : undefined,
+                              }))}
+                              placeholder={
+                                eligiblePiLoading
+                                  ? "Loading invoices…"
+                                  : !vendorId
+                                    ? "Select supplier first"
+                                    : "Select purchase invoice…"
+                              }
+                              disabled={saving || eligiblePiLoading || !vendorId}
+                              required
+                              triggerClassName={INVOICE_DETAIL_SELECT_CLASS}
+                            />
+                            {!eligiblePiLoading &&
+                            !eligiblePiError &&
+                            vendorId &&
+                            eligiblePurchaseInvoices.length === 0 ? (
+                              <p className="text-[10px] text-muted-foreground mt-0.5 leading-snug">
+                                No outstanding Purchase Invoices available for this supplier.
+                              </p>
+                            ) : null}
+                            {eligiblePiError ? (
+                              <p className="text-[10px] text-red-600 mt-0.5 leading-snug">{eligiblePiError}</p>
+                            ) : null}
+                          </InvoiceDetailField>
+                          <InvoiceDetailField label="Outstanding">
+                            <div className="so-goods-ro w-full tabular-nums">
+                              {invoiceOutstanding != null ? formatMoney(invoiceOutstanding) : "—"}
+                            </div>
+                            {referenceInvoiceId &&
+                            invoiceOutstanding == null &&
+                            !eligiblePiLoading ? (
+                              <p className="text-[10px] text-muted-foreground mt-0.5 leading-snug">
+                                This invoice is no longer in the eligible outstanding list.
+                              </p>
+                            ) : null}
+                          </InvoiceDetailField>
+                        </>
+                      ) : (
+                        <>
+                          <InvoiceDetailField label="Reference Number">
+                            <Input
+                              className={INVOICE_DETAIL_INPUT_CLASS}
+                              value={referenceNo}
+                              onChange={(e) => setReferenceNo(e.target.value)}
+                              placeholder="Optional"
+                            />
+                          </InvoiceDetailField>
+                          {warehouseRef ? (
+                            <InvoiceDetailField label="Bank Account (optional — refund only)">
+                              <div className="space-y-1">
+                                <WarehouseMappedBankAccountSelect
+                                  warehouseRef={warehouseRef}
+                                  value={bankAccountId}
+                                  onChange={(id) => setBankAccountId(id)}
+                                  label=""
+                                />
+                                <p className="text-[10px] text-muted-foreground leading-tight">
+                                  Not required for a normal Debit Note (AP + adjustment + GST). Use only if
+                                  settling an immediate bank refund with this note.
+                                </p>
+                              </div>
+                            </InvoiceDetailField>
+                          ) : null}
+                        </>
+                      )}
+                    </>
+                  ) : refControlsLocked || isReturnRefMode ? (
+                    <div className="lg:col-span-2 min-w-0">
+                      <InvoiceDetailField label="Reference Type">
+                        <div className="so-goods-ro w-full">
+                          {isReturnRefMode || isReturn || isPendingEntitlement
+                            ? `Purchase Return${sourceReturnNo ? ` · ${sourceReturnNo}` : ""}`
+                            : `Purchase Invoice${
+                                referencePreview?.sourceInvoiceNo
+                                  ? ` · ${referencePreview.sourceInvoiceNo}`
+                                  : ""
+                              }`}
+                        </div>
+                      </InvoiceDetailField>
+                    </div>
+                  ) : (
+                    <>
+                      <InvoiceDetailField label="Reference Number">
+                        <Input
+                          className={INVOICE_DETAIL_INPUT_CLASS}
+                          value={referenceNo}
+                          onChange={(e) => setReferenceNo(e.target.value)}
+                          placeholder="Optional"
+                        />
+                      </InvoiceDetailField>
+                      {warehouseRef ? (
+                        <InvoiceDetailField label="Bank Account (optional — refund only)">
+                          <div className="space-y-1">
+                            <WarehouseMappedBankAccountSelect
+                              warehouseRef={warehouseRef}
+                              value={bankAccountId}
+                              onChange={(id) => setBankAccountId(id)}
+                              label=""
+                            />
+                            <p className="text-[10px] text-muted-foreground leading-tight">
+                              Not required for a normal Debit Note (AP + adjustment + GST). Use only if
+                              settling an immediate bank refund with this note.
+                            </p>
+                          </div>
+                        </InvoiceDetailField>
+                      ) : null}
+                    </>
+                  )}
+                </div>
+              </div>
             </VoucherFormSectionCard>
 
             {isSourceRefMode ? (
@@ -1728,310 +1887,173 @@ export default function DebitNoteFormPageClient({
             ) : null}
             {isDirectMode || isInvoiceAmountMode ? <NoteNoInventoryImpactBanner /> : null}
 
-            <VoucherFormSectionCard title="Particulars" flush compact>
-              <div className="cnz-items !shadow-none !border-0 !rounded-none">
-                {usesQuantityLines ? (
-                  <div className="space-y-2">
-                    {!isPendingEntitlement ? (
-                      <div className="px-3 pt-2 max-w-sm">
-                        <p className="text-[11px] font-medium text-muted-foreground mb-1">
-                          Adjustment Ledger <span className="text-red-500">*</span>
-                        </p>
-                        <LedgerHierarchySelect
-                          value={adjustmentLedgerId ? String(adjustmentLedgerId) : null}
-                          onChange={(l) => {
-                            setAdjustmentLedgerId(l.ledgerId);
-                            setAdjustmentLedgerName(l.ledgerName);
-                          }}
-                          fallbackLabel={adjustmentLedgerName}
-                          placeholder="Select adjustment ledger"
-                          disabled={saving}
-                          className="h-8 w-full text-left font-normal"
-                          ledgerFilter={(l) => l.allowManualPosting === true}
-                        />
-                      </div>
-                    ) : null}
-                    <NoteQuantityLinesTable
-                      lines={quantityLineViews}
-                      qtyLocked={isReturnRefMode || isPendingEntitlement}
-                      currentQtyLabel="Qty"
-                      onCurrentQtyChange={handleQuantityLineQtyChange}
-                      emptyMessage={quantityLinesEmptyMessage}
-                    />
-                  </div>
-                ) : (
-                  <div className="px-3 py-2 space-y-3">
-                    <NoteParticularsTable
-                      particular={particular}
-                      onParticularChange={setParticular}
-                      adjustmentLedgerId={adjustmentLedgerId}
-                      onAdjustmentLedgerChange={(l) => {
-                        setAdjustmentLedgerId(l.id);
-                        setAdjustmentLedgerName(l.accountName);
-                      }}
-                      adjustmentLedgerName={adjustmentLedgerName}
-                      qty={particularQty}
-                      onQtyChange={setParticularQty}
-                      rate={particularRate}
-                      onRateChange={setParticularRate}
-                      gstPct={gstPct}
-                      onGstPctChange={setGstPct}
-                      gstApplicable={gstApplicable}
-                      onGstApplicableChange={setGstApplicable}
-                      interstate={false}
-                      switchId="dn-gst-applicable"
-                      ledgerFilter={(l) => l.allowManualPosting === true}
-                    />
+            {usesQuantityLines ? (
+              <VoucherFormSectionCard title="Particulars" flush>
+                <div className="w-full space-y-2">
+                  {!isPendingEntitlement ? (
+                    <div className="px-3 pt-2 max-w-sm">
+                      <p className="text-[11px] font-medium text-muted-foreground mb-1">
+                        Adjustment Ledger <span className="text-red-500">*</span>
+                      </p>
+                      <GenericLedgerHierarchySelect
+                        value={adjustmentLedgerId ? String(adjustmentLedgerId) : null}
+                        onChange={(l) => {
+                          setAdjustmentLedgerId(l.ledgerId);
+                          setAdjustmentLedgerName(l.ledgerName);
+                        }}
+                        fallbackLabel={adjustmentLedgerName}
+                        placeholder="Select adjustment ledger…"
+                        disabled={saving}
+                        className="h-8 w-full text-left font-normal text-xs"
+                        compact
+                        query={{ status: "ACTIVE", allowManualPosting: true }}
+                      />
+                    </div>
+                  ) : null}
+                  <NoteQuantityLinesTable
+                    lines={quantityLineViews}
+                    qtyLocked={isReturnRefMode || isPendingEntitlement}
+                    currentQtyLabel="Qty"
+                    onCurrentQtyChange={handleQuantityLineQtyChange}
+                    emptyMessage={quantityLinesEmptyMessage}
+                    className="so-invoice-charges-table-wrap w-full"
+                  />
+                </div>
+              </VoucherFormSectionCard>
+            ) : (
+              <DebitNoteParticularsEditor
+                particular={particular}
+                onParticularChange={setParticular}
+                adjustmentLedgerId={adjustmentLedgerId}
+                onAdjustmentLedgerChange={(l) => {
+                  setAdjustmentLedgerId(l.id);
+                  setAdjustmentLedgerName(l.accountName);
+                }}
+                adjustmentLedgerName={adjustmentLedgerName}
+                qty={particularQty}
+                onQtyChange={setParticularQty}
+                rate={particularRate}
+                onRateChange={setParticularRate}
+                gstPct={gstPct}
+                onGstPctChange={setGstPct}
+                gstApplicable={gstApplicable}
+                onGstApplicableChange={setGstApplicable}
+                interstate={isDirectMode ? directInterstate : false}
+                disabled={saving}
+                switchId="dn-gst-applicable"
+              />
+            )}
 
-                    {isDirectMode ? (
-                      <div className="border rounded-md overflow-hidden">
-                        <div className="flex items-center justify-between px-2.5 py-1.5 bg-muted/30 border-b">
-                          <p className="text-[11px] font-semibold text-foreground">
-                            Additional Charges
-                          </p>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="h-7 text-[11px]"
-                            disabled={!chargesEditable}
-                            onClick={() =>
-                              setDirectExtraCharges((prev) => [
-                                ...prev,
-                                {
-                                  id: newDirectExtraChargeId(),
-                                  description: "",
-                                  ledgerId: null,
-                                  ledgerName: "",
-                                  amount: "",
-                                  gstPct: "0",
-                                },
-                              ])
-                            }
-                          >
-                            + Add charge
-                          </Button>
-                        </div>
-                        {directExtraCharges.length === 0 ? (
-                          <p className="px-2.5 py-2 text-[11px] text-muted-foreground">
-                            Optional freight, packing, or other charges. These post as extra debit note lines.
-                          </p>
-                        ) : (
-                          <table className="w-full text-[11px]">
-                            <thead>
-                              <tr className="border-b bg-muted/20">
-                                <th className="p-1.5 text-left font-medium">Description</th>
-                                <th className="p-1.5 text-left font-medium">Ledger</th>
-                                <th className="p-1.5 text-right font-medium w-24">Taxable</th>
-                                <th className="p-1.5 text-right font-medium w-16">GST %</th>
-                                <th className="p-1.5 text-right font-medium w-10" />
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {directExtraCharges.map((row) => (
-                                <tr key={row.id} className="border-b last:border-0">
-                                  <td className="p-1.5">
-                                    <Input
-                                      className="h-7 text-xs"
-                                      value={row.description}
-                                      placeholder="e.g. Freight"
-                                      disabled={!chargesEditable}
-                                      onChange={(e) =>
-                                        setDirectExtraCharges((prev) =>
-                                          prev.map((c) =>
-                                            c.id === row.id
-                                              ? { ...c, description: e.target.value }
-                                              : c,
-                                          ),
-                                        )
-                                      }
-                                    />
-                                  </td>
-                                  <td className="p-1.5 min-w-[160px]">
-                                    <LedgerHierarchySelect
-                                      value={row.ledgerId}
-                                      onChange={(l) =>
-                                        setDirectExtraCharges((prev) =>
-                                          prev.map((c) =>
-                                            c.id === row.id
-                                              ? {
-                                                  ...c,
-                                                  ledgerId: l.ledgerId,
-                                                  ledgerName: l.ledgerName,
-                                                }
-                                              : c,
-                                          ),
-                                        )
-                                      }
-                                      fallbackLabel={row.ledgerName}
-                                      placeholder="Select ledger"
-                                      disabled={!chargesEditable}
-                                      className="h-7 w-full text-left font-normal text-xs"
-                                      ledgerFilter={(l) => l.allowManualPosting === true}
-                                    />
-                                  </td>
-                                  <td className="p-1.5">
-                                    <Input
-                                      className="h-7 text-xs text-right"
-                                      value={row.amount}
-                                      placeholder="0.00"
-                                      disabled={!chargesEditable}
-                                      onChange={(e) =>
-                                        setDirectExtraCharges((prev) =>
-                                          prev.map((c) =>
-                                            c.id === row.id
-                                              ? { ...c, amount: e.target.value }
-                                              : c,
-                                          ),
-                                        )
-                                      }
-                                    />
-                                  </td>
-                                  <td className="p-1.5">
-                                    <Input
-                                      className="h-7 text-xs text-right"
-                                      value={row.gstPct}
-                                      placeholder="0"
-                                      disabled={!chargesEditable}
-                                      onChange={(e) =>
-                                        setDirectExtraCharges((prev) =>
-                                          prev.map((c) =>
-                                            c.id === row.id
-                                              ? { ...c, gstPct: e.target.value }
-                                              : c,
-                                          ),
-                                        )
-                                      }
-                                    />
-                                  </td>
-                                  <td className="p-1.5 text-right">
-                                    <button
-                                      type="button"
-                                      className="text-[11px] text-red-600 hover:underline"
-                                      disabled={!chargesEditable}
-                                      onClick={() =>
-                                        setDirectExtraCharges((prev) =>
-                                          prev.filter((c) => c.id !== row.id),
-                                        )
-                                      }
-                                    >
-                                      Remove
-                                    </button>
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        )}
-                      </div>
-                    ) : null}
-                  </div>
-                )}
-
-                {isPendingEntitlement ? (
-                  <div className="px-3 pb-3 space-y-3">
-                    {(pendingDetail?.purchase_return_additional_charges || []).length > 0 ? (
-                      <div className="border rounded-md overflow-hidden">
-                        <div className="px-2.5 py-1.5 bg-muted/30 border-b">
-                          <p className="text-[11px] font-semibold text-foreground">
-                            Purchase Return Additional Charges
-                          </p>
-                          <p className="text-[10px] text-muted-foreground">
-                            Charges from the purchase return (display only — not posted).
-                          </p>
-                        </div>
-                        <table className="w-full text-[11px]">
-                          <thead>
-                            <tr className="border-b bg-muted/20">
-                              <th className="p-1.5 text-left font-medium">Charge</th>
-                              <th className="p-1.5 text-right font-medium w-28">Original</th>
-                              <th className="p-1.5 text-right font-medium w-28">Remaining</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {(pendingDetail.purchase_return_additional_charges || []).map(
-                              (charge: any) => {
-                                const chargeId =
-                                  charge.purchase_return_additional_charge_id || charge.id;
-                                if (!chargeId) return null;
-                                const original = parseFloat(
-                                  String(
+            {isPendingEntitlement ? (
+              <div className="space-y-2.5">
+                {(pendingDetail?.purchase_return_additional_charges || []).length > 0 ? (
+                  <VoucherFormSectionCard title="Purchase Return Additional Charges" flush>
+                    <p className="px-3 pt-2 text-[11px] text-muted-foreground">
+                      Charges from the purchase return (display only — not posted).
+                    </p>
+                    <div className="so-invoice-charges-table-wrap w-full">
+                      <table className="so-invoice-table so-invoice-charges-table table-fixed w-full text-xs">
+                        <thead>
+                          <tr>
+                            <th className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground text-left">
+                              Charge
+                            </th>
+                            <th className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground text-right w-28">
+                              Original
+                            </th>
+                            <th className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground text-right w-28">
+                              Remaining
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(pendingDetail.purchase_return_additional_charges || []).map(
+                            (charge: any) => {
+                              const chargeId =
+                                charge.purchase_return_additional_charge_id || charge.id;
+                              if (!chargeId) return null;
+                              const original = parseFloat(
+                                String(
+                                  charge.original_total_amount ??
+                                    charge.original_taxable_amount ??
+                                    "0",
+                                ),
+                              );
+                              const remaining = parseFloat(
+                                String(
+                                  charge.remaining_amount ??
                                     charge.original_total_amount ??
-                                      charge.original_taxable_amount ??
-                                      "0",
-                                  ),
-                                );
-                                const remaining = parseFloat(
-                                  String(
-                                    charge.remaining_amount ??
-                                      charge.original_total_amount ??
-                                      "0",
-                                  ),
-                                );
-                                return (
-                                  <tr key={`pr-display-${chargeId}`} className="border-b last:border-0">
-                                    <td className="p-1.5">
-                                      {charge.description || "Additional charge"}
-                                    </td>
-                                    <td className="p-1.5 text-right tabular-nums">
-                                      {formatINR(original)}
-                                    </td>
-                                    <td className="p-1.5 text-right tabular-nums">
-                                      {formatINR(remaining)}
-                                    </td>
-                                  </tr>
-                                );
-                              },
-                            )}
-                          </tbody>
-                        </table>
-                      </div>
-                    ) : null}
+                                    "0",
+                                ),
+                              );
+                              return (
+                                <tr key={`pr-display-${chargeId}`} className="border-b border-border/40 last:border-0">
+                                  <td className="p-1.5">{charge.description || "Additional charge"}</td>
+                                  <td className="p-1.5 text-right tabular-nums">{formatINR(original)}</td>
+                                  <td className="p-1.5 text-right tabular-nums">{formatINR(remaining)}</td>
+                                </tr>
+                              );
+                            },
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </VoucherFormSectionCard>
+                ) : null}
 
-                    <div className="border rounded-md overflow-hidden">
-                      <div className="flex items-center justify-between px-2.5 py-1.5 bg-muted/30 border-b">
-                        <p className="text-[11px] font-semibold text-foreground">
-                          Additional Charges
-                        </p>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="h-7 text-[11px]"
-                          disabled={!chargesEditable}
-                          onClick={() =>
-                            setDirectExtraCharges((prev) => [
-                              ...prev,
-                              {
-                                id: newDirectExtraChargeId(),
-                                description: "",
-                                ledgerId: null,
-                                ledgerName: "",
-                                amount: "",
-                                gstPct: "0",
-                              },
-                            ])
-                          }
-                        >
-                          + Add charge
-                        </Button>
-                      </div>
-                      {directExtraCharges.length === 0 ? (
-                        <p className="px-2.5 py-2 text-[11px] text-muted-foreground">
-                          Optional freight, packing, or other charges. These post as extra debit note lines.
-                        </p>
-                      ) : (
-                        <table className="w-full text-[11px]">
-                          <thead>
-                            <tr className="border-b bg-muted/20">
-                              <th className="p-1.5 text-left font-medium">Description</th>
-                              <th className="p-1.5 text-left font-medium">Ledger</th>
-                              <th className="p-1.5 text-right font-medium w-24">Taxable</th>
-                              <th className="p-1.5 text-right font-medium w-16">GST %</th>
-                              <th className="p-1.5 text-right font-medium w-10" />
-                            </tr>
-                          </thead>
-                          <tbody>
+                <VoucherFormSectionCard
+                  title="Additional Charges"
+                  flush
+                  headerActions={
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="so-section-header-btn"
+                      disabled={!chargesEditable}
+                      onClick={() =>
+                        setDirectExtraCharges((prev) => [
+                          ...prev,
+                          {
+                            id: newDirectExtraChargeId(),
+                            description: "",
+                            ledgerId: null,
+                            ledgerName: "",
+                            amount: "",
+                            gstPct: "0",
+                          },
+                        ])
+                      }
+                    >
+                      + Add charge
+                    </Button>
+                  }
+                >
+                  {directExtraCharges.length === 0 ? (
+                    <p className="px-3 py-2 text-[11px] text-muted-foreground">
+                      Optional freight, packing, or other charges. These post as extra debit note lines.
+                    </p>
+                  ) : (
+                    <div className="so-invoice-charges-table-wrap w-full">
+                      <table className="so-invoice-table text-xs w-full table-fixed">
+                        <thead>
+                          <tr>
+                            <th className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground text-left">
+                              Description
+                            </th>
+                            <th className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground text-left">
+                              Ledger
+                            </th>
+                            <th className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground text-right w-24">
+                              Taxable
+                            </th>
+                            <th className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground text-right w-16">
+                              GST %
+                            </th>
+                            <th className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground text-right w-10" />
+                          </tr>
+                        </thead>
+                        <tbody>
                             {directExtraCharges.map((row) => (
                               <tr key={row.id} className="border-b last:border-0">
                                 <td className="p-1.5">
@@ -2052,7 +2074,7 @@ export default function DebitNoteFormPageClient({
                                   />
                                 </td>
                                 <td className="p-1.5 min-w-[160px]">
-                                  <LedgerHierarchySelect
+                                  <GenericLedgerHierarchySelect
                                     value={row.ledgerId}
                                     onChange={(l) =>
                                       setDirectExtraCharges((prev) =>
@@ -2068,10 +2090,11 @@ export default function DebitNoteFormPageClient({
                                       )
                                     }
                                     fallbackLabel={row.ledgerName}
-                                    placeholder="Select ledger"
+                                    placeholder="Select ledger…"
                                     disabled={!chargesEditable}
                                     className="h-7 w-full text-left font-normal text-xs"
-                                    ledgerFilter={(l) => l.allowManualPosting === true}
+                                    compact
+                                    query={{ status: "ACTIVE", allowManualPosting: true }}
                                   />
                                 </td>
                                 <td className="p-1.5">
@@ -2126,51 +2149,60 @@ export default function DebitNoteFormPageClient({
                             ))}
                           </tbody>
                         </table>
-                      )}
                     </div>
-                  </div>
-                ) : null}
+                  )}
+                </VoucherFormSectionCard>
               </div>
-              <VoucherGstSummaryCard
-                embedded
-                visible
-                showTaxRows={showGst}
-                taxableAmount={displayTaxable}
-                cgstAmount={cgstDisplay}
-                sgstAmount={sgstDisplay}
-                igstAmount={igstDisplay}
+            ) : null}
+
+            <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_300px] gap-2.5 items-start">
+              <VoucherFormSectionCard title="Narration">
+                <Textarea
+                  className={cnMerge(VOUCHER_INPUT_CLASS, "so-goods-narration min-h-[60px] h-auto resize-y text-xs w-full")}
+                  value={narration || remarks}
+                  onChange={(e) => {
+                    setNarration(e.target.value);
+                    setRemarks(e.target.value);
+                  }}
+                  placeholder="Optional narration…"
+                  maxLength={2000}
+                  disabled={saving}
+                />
+                {/* Attachment UI hidden for now — handlers/state kept for future enablement */}
+                <div className="hidden mt-2.5 pt-2.5 border-t border-border/60">
+                  <VoucherAttachmentSection
+                    files={attachments.map((att) => ({
+                      id: att.id,
+                      fileName: att.fileName,
+                      previewUrl: att.dataUrl,
+                    }))}
+                    readOnly={saving}
+                    onAddFiles={(files) => {
+                      files.forEach((f) => handleFile(f, f.name));
+                    }}
+                    onRemove={(id) =>
+                      setAttachments((prev) => prev.filter((a) => a.id !== id))
+                    }
+                  />
+                </div>
+              </VoucherFormSectionCard>
+              <DebitNoteAmountSummary
+                taxable={displayTaxable}
+                cgst={cgstDisplay}
+                sgst={sgstDisplay}
+                igst={igstDisplay}
+                gst={summaryGst}
                 roundOff={roundOff}
-                grandTotal={totalDebit}
+                total={totalDebit}
+                interstate={summaryInterstate}
+                locked={saving}
                 roundOffSlot={
                   <VoucherSignedRoundOffInput value={roundOff} onChange={setRoundOff} />
                 }
               />
-            </VoucherFormSectionCard>
-
-            <VoucherNarrationAttachmentsSection
-              compact
-              narration={narration || remarks}
-              onNarrationChange={(v) => {
-                setNarration(v);
-                setRemarks(v);
-              }}
-              narrationPlaceholder="Accounting narration for this debit note"
-              attachmentFiles={attachments.map((att) => ({
-                id: att.id,
-                fileName: att.fileName,
-                previewUrl: att.dataUrl,
-              }))}
-              onAddAttachmentFiles={(files) => {
-                files.forEach((f) => handleFile(f, f.name));
-              }}
-              onRemoveAttachment={(id) =>
-                setAttachments((prev) => prev.filter((a) => a.id !== id))
-              }
-            />
-
-            <AccountingImpactSection docKey="debit_note" compact entryPreview={postingSummary} />
+            </div>
           </div>
-        </AccountsFormLayout>
+        </InvoiceFormLayout>
         )}
       </div>
       <AccountsToast toast={toast} onDismiss={dismissToast} />

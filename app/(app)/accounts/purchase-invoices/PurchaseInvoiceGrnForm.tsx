@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Truck,
@@ -12,10 +12,10 @@ import {
   FileText,
   Upload,
   X,
+  Plus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
@@ -25,12 +25,17 @@ import { formatMoney, roundMoney } from "@/lib/accounts/money-format";
 import { normalizeGstAmounts } from "@/lib/accounts/gst-accounting";
 import { AccountsDateInput } from "@/components/accounts/AccountsDateInput";
 import { VoucherFormActionBar } from "@/components/accounts/voucher-form/VoucherFormActionBar";
+import { VoucherFormSectionCard } from "@/components/accounts/voucher-form/VoucherFormSectionCard";
 import { dispatchAccountsDataChanged } from "@/lib/accounts/accounts-data-events";
 import { AccountsToast, type AccountsToastState } from "@/components/accounts/AccountsToast";
 import { useFY, setStoredFYId, getStoredFYId } from "@/lib/fy-store";
+import { InvoiceFormLayout } from "@/app/(app)/accounts/components/InvoiceFormLayout";
 import {
-  InvoiceFormLayout,
-} from "@/app/(app)/accounts/components/InvoiceFormLayout";
+  INVOICE_DETAIL_INPUT_CLASS,
+  InvoiceDetailField,
+  InvoiceTableReadonly,
+} from "@/app/(app)/accounts/invoices/components/invoice-form-voucher-ui";
+import { VOUCHER_INPUT_CLASS } from "@/components/accounts/voucher-simple-form-ui";
 import { PURCHASE_SOURCE_TYPE_LABELS, type PurchaseSourceType } from "./purchase-invoice-types";
 import {
   PurchaseInvoiceService,
@@ -38,14 +43,19 @@ import {
   type EligibleGrnDto,
   type PrepareGrnInvoiceDto,
 } from "@/services/purchase-invoice.service";
-import { GoodsInvoiceAdditionalChargesEditor } from "@/app/(app)/accounts/invoices/components/GoodsInvoiceAdditionalChargesEditor";
 import {
   calcAdditionalExpensesTotals,
+  mapSuggestedAdditionalChargesToExpenses,
+  toAdditionalChargePayloadList,
   type InvoiceAdditionalExpense,
 } from "@/app/(app)/accounts/invoices/invoice-additional-expenses";
+import {
+  GoodsInvoiceAdditionalChargesEditor,
+  validateGoodsAdditionalCharges,
+} from "@/app/(app)/accounts/invoices/components/GoodsInvoiceAdditionalChargesEditor";
 import { PurchaseInvoiceDirectTotals } from "./PurchaseInvoiceDirectTotals";
 import type { DirectPurchaseTotals } from "./purchase-invoice-direct-utils";
-import { DP_FIELD_CLASS, DP_LABEL_CLASS } from "./direct-purchase-form-ui";
+import { DP_FIELD_CLASS } from "./direct-purchase-form-ui";
 import { cn } from "@/lib/utils";
 import "@/app/(app)/accounts/invoices/sales-order-invoice-form-compact.css";
 
@@ -93,15 +103,6 @@ function getItemGstSplit(item: PrepareGrnItem, interstate: boolean) {
     };
   }
   return normalizeGstAmounts(Number(item.gst_amount || 0), interstate);
-}
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="bg-white rounded-lg border border-border/60 p-4 space-y-3">
-      <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</h2>
-      {children}
-    </div>
-  );
 }
 
 function SourceTypeSelector({
@@ -247,11 +248,17 @@ export function PurchaseInvoiceGrnForm({
   const [roundOff, setRoundOff] = useState(0);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const addChargeRowRef = useRef<(() => void) | null>(null);
 
   function applyPrepared(data: PrepareGrnInvoiceDto, fallback?: EligibleGrnDto | null) {
     setPrepared(data);
-    // PO charges stay read-only; editable invoice charges start empty (CN/DN pattern).
-    setAdditionalExpenses([]);
+    // Seed PO suggested charges as editable rows — ledger left blank (no master auto-map).
+    setAdditionalExpenses(
+      mapSuggestedAdditionalChargesToExpenses(
+        data.suggested_additional_charges || [],
+        "purchase_order",
+      ),
+    );
     setRoundOff(0);
     setVendorInvoiceNo(data.supplier_invoice.supplier_invoice_number || "");
     setSupplierInvoiceDate(formatDateOnly(data.supplier_invoice.supplier_invoice_date));
@@ -382,8 +389,6 @@ export function PurchaseInvoiceGrnForm({
     invoiceTotal: roundMoney(subtotal + totalGst + chargeBreakdown.totalAmount),
     netPayable: Math.round(finalTotal * 100) / 100,
   };
-  const poSuggestedCharges = prepared?.suggested_additional_charges || [];
-  const unmappedCharges = poSuggestedCharges.filter((c) => !c.mapping_ok);
   const supplierInvoiceLocked = Boolean(prepared?.supplier_invoice.supplier_invoice_number);
 
   const doSave = async () => {
@@ -403,15 +408,11 @@ export function PurchaseInvoiceGrnForm({
       );
     }
 
-    const additionalCharges: AdditionalChargeInput[] = additionalExpenses
-      .filter((e) => e.chargeMasterId && e.amount > 0)
-      .map((e) => ({
-        additional_charge_id: e.chargeMasterId!,
-        amount: e.amount,
-        charge_source: "INVOICE" as const,
-        gst_applicable: e.gstApplicable,
-        gst_rate: e.gstApplicable ? e.gstPct : undefined,
-      }));
+    const chargeErr = validateGoodsAdditionalCharges(additionalExpenses);
+    if (chargeErr) return setError(chargeErr);
+
+    const additionalCharges: AdditionalChargeInput[] =
+      toAdditionalChargePayloadList(additionalExpenses, "INVOICE");
 
     setSaving(true);
     // Ensure the FY id is in localStorage before axios fires the request.
@@ -439,7 +440,7 @@ export function PurchaseInvoiceGrnForm({
           ? "Purchase invoice was already posted for this GRN."
           : "Purchase invoice posted. Supplier outstanding and ledger entries were created.",
       );
-      router.push(`/accounts/purchase-invoices/${created.purchase_invoice_id}`);
+      router.replace("/accounts/purchase-invoices");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Save failed.");
       setSaving(false);
@@ -494,7 +495,7 @@ export function PurchaseInvoiceGrnForm({
             />
           }
         >
-          <div className="space-y-4 w-full">
+          <div className="space-y-3 w-full">
             <SourceTypeSelector value={sourceType} onChange={onSourceTypeChange} />
 
             {error && (
@@ -504,7 +505,7 @@ export function PurchaseInvoiceGrnForm({
               </div>
             )}
 
-            <Section title={selectedGrn ? "Selected GRN" : "Select GRN"}>
+            <VoucherFormSectionCard title={selectedGrn ? "Selected GRN" : "Select GRN"}>
               {selectedGrn && !showGrnSelector ? (
                 <div className="flex items-center gap-3 rounded-lg border border-brand-200 bg-brand-50 p-3">
                   <div className="rounded p-1.5 bg-brand-600 text-white">
@@ -549,147 +550,148 @@ export function PurchaseInvoiceGrnForm({
                 />
               )}
               {preparing && <p className="text-xs text-muted-foreground">Loading supplier invoice lines…</p>}
-            </Section>
+            </VoucherFormSectionCard>
 
           {prepared && (
             <>
-              <Section title="Supplier & Invoice">
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div>
-                    <Label className="text-xs">Supplier</Label>
-                    <Input
-                      className="h-8 text-xs mt-1 bg-muted/25"
-                      readOnly
-                      value={prepared.supplier.supplier_name || "—"}
-                    />
+              <VoucherFormSectionCard title="Supplier & Invoice">
+                <div className="space-y-1.5">
+                  <div className="so-invoice-details-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+                    <InvoiceDetailField label="Supplier">
+                      <div className="so-goods-ro w-full">{prepared.supplier.supplier_name || "—"}</div>
+                    </InvoiceDetailField>
+                    <InvoiceDetailField label="Warehouse">
+                      <div className="so-goods-ro w-full">{prepared.warehouse.warehouse_name || "—"}</div>
+                    </InvoiceDetailField>
+                    <InvoiceDetailField label="Purchase Order">
+                      <div className="so-goods-ro so-goods-ro--mono w-full">
+                        {prepared.purchase_order?.po_no || "—"}
+                      </div>
+                    </InvoiceDetailField>
+                    <InvoiceDetailField label="Invoice Date" required>
+                      <AccountsDateInput
+                        value={invoiceDate}
+                        onChange={setInvoiceDate}
+                        aria-label="Invoice date"
+                        className={INVOICE_DETAIL_INPUT_CLASS}
+                      />
+                    </InvoiceDetailField>
                   </div>
-                  <div>
-                    <Label className="text-xs">Warehouse</Label>
-                    <Input
-                      className="h-8 text-xs mt-1 bg-muted/25"
-                      readOnly
-                      value={prepared.warehouse.warehouse_name || "—"}
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-xs">Purchase Order</Label>
-                    <Input
-                      className="h-8 text-xs mt-1 bg-muted/25"
-                      readOnly
-                      value={prepared.purchase_order?.po_no || "—"}
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-xs">Invoice Date *</Label>
-                    <AccountsDateInput
-                      value={invoiceDate}
-                      onChange={setInvoiceDate}
-                      aria-label="Invoice date"
-                      className="h-8 text-xs mt-1"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-xs">Supplier Invoice No *</Label>
-                    <Input
-                      className={cn("h-8 text-xs mt-1", supplierInvoiceLocked && "bg-muted/25")}
-                      value={vendorInvoiceNo}
-                      readOnly={supplierInvoiceLocked}
-                      onChange={(e) => setVendorInvoiceNo(e.target.value)}
-                      placeholder="Supplier bill number"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-xs">Supplier Invoice Date</Label>
-                    <AccountsDateInput
-                      value={supplierInvoiceDate}
-                      onChange={setSupplierInvoiceDate}
-                      aria-label="Supplier invoice date"
-                      className="h-8 text-xs mt-1"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-xs">Due Date</Label>
-                    <AccountsDateInput
-                      value={dueDate}
-                      onChange={setDueDate}
-                      aria-label="Due date"
-                      className="h-8 text-xs mt-1"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-xs">Approval</Label>
-                    <Input className="h-8 text-xs mt-1 bg-muted/25" readOnly value="Approved" />
-                  </div>
-                  <div>
-                    <Label className="text-xs">Payment</Label>
-                    <Input className="h-8 text-xs mt-1 bg-muted/25" readOnly value="Unpaid" />
+                  <div className="so-invoice-details-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+                    <InvoiceDetailField label="Supplier Invoice No" required>
+                      {supplierInvoiceLocked ? (
+                        <div className="so-goods-ro so-goods-ro--mono w-full">{vendorInvoiceNo || "—"}</div>
+                      ) : (
+                        <Input
+                          className={INVOICE_DETAIL_INPUT_CLASS}
+                          value={vendorInvoiceNo}
+                          onChange={(e) => setVendorInvoiceNo(e.target.value)}
+                          placeholder="Supplier bill number"
+                        />
+                      )}
+                    </InvoiceDetailField>
+                    <InvoiceDetailField label="Supplier Invoice Date">
+                      <AccountsDateInput
+                        value={supplierInvoiceDate}
+                        onChange={setSupplierInvoiceDate}
+                        aria-label="Supplier invoice date"
+                        className={INVOICE_DETAIL_INPUT_CLASS}
+                      />
+                    </InvoiceDetailField>
+                    <InvoiceDetailField label="Due Date">
+                      <AccountsDateInput
+                        value={dueDate}
+                        onChange={setDueDate}
+                        aria-label="Due date"
+                        className={INVOICE_DETAIL_INPUT_CLASS}
+                      />
+                    </InvoiceDetailField>
+                    <InvoiceDetailField label="Approval">
+                      <div className="so-goods-ro w-full">Approved</div>
+                    </InvoiceDetailField>
+                    <InvoiceDetailField label="Payment">
+                      <div className="so-goods-ro w-full">Unpaid</div>
+                    </InvoiceDetailField>
                   </div>
                 </div>
-              </Section>
+              </VoucherFormSectionCard>
 
-              <Section title="Item Details">
-                <p className="text-xs text-muted-foreground mb-2">
+              <VoucherFormSectionCard title="Item Details" flush>
+                <p className="px-3 pt-2 text-[11px] text-muted-foreground">
                   Quantities and rates are copied from GRN received batches and cannot be edited here.
                 </p>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs min-w-[920px]">
+                <div className="so-invoice-charges-table-wrap w-full">
+                  <table className="so-invoice-table text-xs w-full table-fixed">
+                    <colgroup>
+                      <col className="min-w-[180px]" style={{ width: "28%" }} />
+                      <col style={{ width: "8%" }} />
+                      <col style={{ width: "12%" }} />
+                      <col style={{ width: "7%" }} />
+                      <col style={{ width: "14%" }} />
+                      <col style={{ width: "10%" }} />
+                      <col style={{ width: "10%" }} />
+                      <col style={{ width: "10%" }} />
+                      <col style={{ width: "11%" }} />
+                    </colgroup>
                     <thead>
-                      <tr className="border-b border-border/60">
-                        <th className="pb-2 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                          Item
-                        </th>
-                        <th className="pb-2 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                          Qty
-                        </th>
-                        <th className="pb-2 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                          Rate
-                        </th>
-                        <th className="pb-2 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                          GST %
-                        </th>
-                        <th className="pb-2 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                          Taxable
-                        </th>
-                        <th className="pb-2 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                          CGST
-                        </th>
-                        <th className="pb-2 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                          SGST
-                        </th>
-                        <th className="pb-2 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                          IGST
-                        </th>
-                        <th className="pb-2 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                          Total
-                        </th>
+                      <tr>
+                        {[
+                          "Item",
+                          "Qty",
+                          "Rate",
+                          "GST %",
+                          "Taxable",
+                          "CGST",
+                          "SGST",
+                          "IGST",
+                          "Total",
+                        ].map((label, i) => (
+                          <th
+                            key={label}
+                            className={cn(
+                              "px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap",
+                              i === 0 ? "text-left" : "text-right",
+                            )}
+                          >
+                            {label}
+                          </th>
+                        ))}
                       </tr>
                     </thead>
                     <tbody>
                       {items.map((item, idx) => {
                         const split = getItemGstSplit(item, interstate);
                         return (
-                          <tr key={item.grn_item_id || idx} className="border-b border-border/20">
-                            <td className="py-1.5 pr-2 font-medium">
-                              {snapshotStr(item.product_snapshot, "product_name", "name", "product_code") ||
-                                `Item ${idx + 1}`}
+                          <tr key={item.grn_item_id || idx} className="border-b border-border/40 last:border-0">
+                            <td className="p-1.5 pr-2 font-medium min-w-0">
+                              <span className="block truncate">
+                                {snapshotStr(item.product_snapshot, "product_name", "name", "product_code") ||
+                                  `Item ${idx + 1}`}
+                              </span>
                             </td>
-                            <td className="py-1.5 pr-2 text-right tabular-nums">{Number(item.quantity)}</td>
-                            <td className="py-1.5 pr-2 text-right tabular-nums">{formatMoney(Number(item.rate))}</td>
-                            <td className="py-1.5 pr-2 text-right tabular-nums">{Number(item.gst_rate)}</td>
-                            <td className="py-1.5 pr-2 text-right tabular-nums">
-                              {formatMoney(Number(item.taxable_amount))}
+                            <td className="p-1.5 pr-2 text-right">
+                              <InvoiceTableReadonly value={String(Number(item.quantity))} />
                             </td>
-                            <td className="py-1.5 pr-2 text-right tabular-nums">
-                              {formatMoney(split.cgst)}
+                            <td className="p-1.5 pr-2 text-right">
+                              <InvoiceTableReadonly value={formatMoney(Number(item.rate))} />
                             </td>
-                            <td className="py-1.5 pr-2 text-right tabular-nums">
-                              {formatMoney(split.sgst)}
+                            <td className="p-1.5 pr-2 text-right">
+                              <InvoiceTableReadonly value={String(Number(item.gst_rate))} muted />
                             </td>
-                            <td className="py-1.5 pr-2 text-right tabular-nums">
-                              {formatMoney(split.igst)}
+                            <td className="p-1.5 pr-2 text-right">
+                              <InvoiceTableReadonly value={formatMoney(Number(item.taxable_amount))} />
                             </td>
-                            <td className="py-1.5 pr-2 text-right tabular-nums font-semibold">
-                              {formatMoney(Number(item.line_total))}
+                            <td className="p-1.5 pr-2 text-right">
+                              <InvoiceTableReadonly value={formatMoney(split.cgst)} muted />
+                            </td>
+                            <td className="p-1.5 pr-2 text-right">
+                              <InvoiceTableReadonly value={formatMoney(split.sgst)} muted />
+                            </td>
+                            <td className="p-1.5 pr-2 text-right">
+                              <InvoiceTableReadonly value={formatMoney(split.igst)} muted />
+                            </td>
+                            <td className="p-1.5 pr-2 text-right">
+                              <InvoiceTableReadonly value={formatMoney(Number(item.line_total))} strong />
                             </td>
                           </tr>
                         );
@@ -697,71 +699,103 @@ export function PurchaseInvoiceGrnForm({
                     </tbody>
                   </table>
                 </div>
-              </Section>
+              </VoucherFormSectionCard>
 
-              {poSuggestedCharges.length > 0 ? (
-                <Section title="PO Additional Charges">
-                  <p className="text-[10px] text-muted-foreground -mt-1">
-                    Charges from the purchase order (display only — not posted).
-                  </p>
-                  <div className="border rounded-md overflow-hidden">
-                    <table className="w-full text-[11px]">
-                      <thead>
-                        <tr className="border-b bg-muted/20">
-                          <th className="p-1.5 text-left font-medium">Charge</th>
-                          <th className="p-1.5 text-right font-medium w-28">Amount</th>
-                          <th className="p-1.5 text-right font-medium w-20">GST %</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {poSuggestedCharges.map((charge, idx) => (
-                          <tr
-                            key={`po-charge-${charge.matched_additional_charge_id || charge.charge_name}-${idx}`}
-                            className="border-b last:border-0"
-                          >
-                            <td className="p-1.5">
-                              {charge.charge_name}
-                              {!charge.mapping_ok ? (
-                                <span className="ml-1 text-[10px] text-amber-700">(unmapped)</span>
-                              ) : null}
-                            </td>
-                            <td className="p-1.5 text-right tabular-nums">
-                              {formatMoney(Number(charge.amount || 0))}
-                            </td>
-                            <td className="p-1.5 text-right tabular-nums">
-                              {charge.gst_percent != null && Number(charge.gst_percent) > 0
-                                ? Number(charge.gst_percent)
-                                : "—"}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  {unmappedCharges.length > 0 ? (
-                    <p className="text-xs text-amber-700">
-                      The following PO charges are not in Additional Charge Master:{" "}
-                      {unmappedCharges.map((c) => c.charge_name).join(", ")}
-                    </p>
-                  ) : null}
-                </Section>
-              ) : null}
-
-              <Section title="Additional Charges">
-                <p className="text-[10px] text-muted-foreground -mt-1">
-                  Optional freight, packing, or other charges. These post on the purchase invoice.
-                </p>
+              <VoucherFormSectionCard
+                title="Additional Charges"
+                flush
+                headerActions={
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="so-section-header-btn"
+                    onClick={() => addChargeRowRef.current?.()}
+                  >
+                    <Plus /> Add Charge
+                  </Button>
+                }
+              >
                 <GoodsInvoiceAdditionalChargesEditor
                   expenses={additionalExpenses}
                   onChange={handleExpensesChange}
                   disabled={saving}
                   interstate={interstate}
+                  tableVariant="invoice"
+                  hideAddButton
+                  onBindAddRow={(fn) => {
+                    addChargeRowRef.current = fn;
+                  }}
                 />
-              </Section>
+              </VoucherFormSectionCard>
 
-              <div className="flex justify-end">
-                <div className="w-full max-w-[300px] rounded-lg border border-slate-200 bg-white space-y-2 p-3 shadow-sm">
-                  <h2 className="accounts-card-title">Amount Summary</h2>
+              <div className="grid grid-cols-1 gap-2.5 items-start lg:grid-cols-[minmax(0,1fr)_300px]">
+                <VoucherFormSectionCard title="Narration / Attachment">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="min-w-0">
+                      <Textarea
+                        className={cn(VOUCHER_INPUT_CLASS, "so-goods-narration min-h-[72px] h-auto resize-y text-xs")}
+                        value={remarks}
+                        onChange={(e) => setRemarks(e.target.value)}
+                        placeholder="Optional narration for this invoice…"
+                        maxLength={500}
+                        disabled={saving}
+                      />
+                    </div>
+                    <div className="min-w-0">
+                      <div
+                        className={cn(
+                          DP_FIELD_CLASS,
+                          "flex items-center gap-2 w-full border border-border bg-white min-h-9",
+                        )}
+                      >
+                        <label
+                          className={cn(
+                            "inline-flex items-center gap-1.5 h-6 px-2 rounded-md border border-border bg-muted/20",
+                            "text-xs font-medium cursor-pointer hover:bg-muted/40 transition-colors whitespace-nowrap flex-shrink-0",
+                            saving && "opacity-50 pointer-events-none",
+                          )}
+                        >
+                          <Upload className="w-3.5 h-3.5 text-muted-foreground" />
+                          Upload File
+                          <input
+                            type="file"
+                            className="hidden"
+                            accept="application/pdf,image/jpeg,image/png,image/webp"
+                            disabled={saving}
+                            onChange={(e) => {
+                              setAttachment(e.target.files?.[0] ?? null);
+                              e.target.value = "";
+                            }}
+                          />
+                        </label>
+                        {attachment ? (
+                          <>
+                            <span
+                              className="text-[13px] font-medium text-foreground truncate min-w-0 flex-1"
+                              title={attachment.name}
+                            >
+                              {attachment.name}
+                            </span>
+                            <button
+                              type="button"
+                              className="p-0.5 rounded-md hover:bg-red-50 text-red-600 flex-shrink-0"
+                              disabled={saving}
+                              onClick={() => setAttachment(null)}
+                              aria-label="Remove attachment"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </>
+                        ) : (
+                          <span className="text-[13px] text-muted-foreground truncate">No file chosen</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </VoucherFormSectionCard>
+
+                <VoucherFormSectionCard title="Summary" className="lg:sticky lg:top-3 lg:z-10">
                   <PurchaseInvoiceDirectTotals
                     totals={amountSummaryTotals}
                     roundingAdjustment={roundOff}
@@ -769,75 +803,8 @@ export function PurchaseInvoiceGrnForm({
                     additionalChargeTotal={chargeBreakdown.taxableAmount}
                     readOnly={saving}
                   />
-                </div>
+                </VoucherFormSectionCard>
               </div>
-
-              <Section title="Narration / Attachment">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div className="space-y-1 min-w-0">
-                    <Label className={DP_LABEL_CLASS}>Narration</Label>
-                    <Textarea
-                      className="text-xs min-h-[72px] resize-y"
-                      value={remarks}
-                      onChange={(e) => setRemarks(e.target.value)}
-                      placeholder="Optional narration for this invoice…"
-                      maxLength={500}
-                      disabled={saving}
-                    />
-                  </div>
-                  <div className="space-y-1 min-w-0">
-                    <Label className={DP_LABEL_CLASS}>Attachment</Label>
-                    <div
-                      className={cn(
-                        DP_FIELD_CLASS,
-                        "flex items-center gap-2 w-full border border-border bg-white min-h-9",
-                      )}
-                    >
-                      <label
-                        className={cn(
-                          "inline-flex items-center gap-1.5 h-6 px-2 rounded-md border border-border bg-muted/20",
-                          "text-xs font-medium cursor-pointer hover:bg-muted/40 transition-colors whitespace-nowrap flex-shrink-0",
-                          saving && "opacity-50 pointer-events-none",
-                        )}
-                      >
-                        <Upload className="w-3.5 h-3.5 text-muted-foreground" />
-                        Upload File
-                        <input
-                          type="file"
-                          className="hidden"
-                          accept="application/pdf,image/jpeg,image/png,image/webp"
-                          disabled={saving}
-                          onChange={(e) => {
-                            setAttachment(e.target.files?.[0] ?? null);
-                            e.target.value = "";
-                          }}
-                        />
-                      </label>
-                      {attachment ? (
-                        <>
-                          <span
-                            className="text-[13px] font-medium text-foreground truncate min-w-0 flex-1"
-                            title={attachment.name}
-                          >
-                            {attachment.name}
-                          </span>
-                          <button
-                            type="button"
-                            className="p-0.5 rounded-md hover:bg-red-50 text-red-600 flex-shrink-0"
-                            disabled={saving}
-                            onClick={() => setAttachment(null)}
-                            aria-label="Remove attachment"
-                          >
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-                        </>
-                      ) : (
-                        <span className="text-[13px] text-muted-foreground truncate">No file chosen</span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </Section>
             </>
           )}
           </div>

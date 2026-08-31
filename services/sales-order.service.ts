@@ -1,6 +1,6 @@
 import { axiosInstance } from "@/api/axios";
 import { API_ENDPOINTS } from "@/api/endpoints";
-import { calculateOrderTotalsSummary, isProductDiscountSchemeApplied, normalizeLineDiscountType, resolveTaxSupplyType } from "@/app/(app)/sales/orders/orders-data";
+import { calculateOrderTotalsSummary, isProductDiscountSchemeApplied, normalizeLineDiscountType, resolveTaxSupplyType, syncManualLineDiscount } from "@/app/(app)/sales/orders/orders-data";
 import type { SalesOrder, SalesOrderLineItem, SalesOrderAdditionalExpense } from "@/app/(app)/sales/orders/orders-data";
 import type { SalesOrderFormValues } from "@/app/(app)/sales/orders/components/SalesOrderForm";
 import { getCustomerAddressesForSalesOrder } from "@/app/(app)/sales/orders/sales-order-address-utils";
@@ -40,25 +40,48 @@ function toUuidOrNull(value: unknown): string | null {
   return raw;
 }
 
-/** Map line discount for create/update — prefer scheme fields when scheme applied, else manual %. */
+/** Map line discount for create/update — manual discount only (scheme stored separately). */
 function mapLineDiscountForApi(line: SalesOrderLineItem): {
   discount_type: "Percentage" | "Flat";
   discount_percentage: number;
   discount_amount: number;
 } {
-  const hasScheme = isProductDiscountSchemeApplied(line);
-  if (hasScheme) {
-    const isFlat = line.schemeDiscountType === "Rupees";
-    return {
-      discount_type: isFlat ? "Flat" : "Percentage",
-      discount_percentage: line.schemeDiscountPercent || line.discount || 0,
-      discount_amount: line.discountValue || 0,
-    };
-  }
   return {
     discount_type: normalizeLineDiscountType(line.discountType),
     discount_percentage: line.discount || 0,
     discount_amount: line.discountValue || 0,
+  };
+}
+
+function mapLineSchemeForApi(line: SalesOrderLineItem): {
+  scheme_id: string | null;
+  scheme_snapshot: Record<string, unknown> | null;
+  scheme_discount_type: "Percentage" | "Flat" | null;
+  scheme_discount_value: number | null;
+  scheme_discount_amount: number | null;
+} {
+  if (!isProductDiscountSchemeApplied(line) || !line.appliedSchemeId) {
+    return {
+      scheme_id: null,
+      scheme_snapshot: null,
+      scheme_discount_type: null,
+      scheme_discount_value: null,
+      scheme_discount_amount: null,
+    };
+  }
+  const isFlat = line.schemeDiscountType === "Rupees";
+  return {
+    scheme_id: String(line.appliedSchemeId),
+    scheme_snapshot: (line.schemeSnapshot as Record<string, unknown>) ?? {
+      scheme_id: String(line.appliedSchemeId),
+      scheme_code: line.appliedSchemeCode ?? line.schemeCode ?? "",
+      scheme_name: line.appliedSchemeName ?? line.schemeName ?? "",
+      discount_type: isFlat ? "Flat" : "Percentage",
+      discount_value: String(line.schemeDiscountValue ?? 0),
+    },
+    scheme_discount_type: isFlat ? "Flat" : "Percentage",
+    scheme_discount_value: line.schemeDiscountValue ?? null,
+    scheme_discount_amount: line.schemeDiscountAmount ?? null,
   };
 }
 
@@ -130,11 +153,40 @@ function mapBackendLineItem(raw: Record<string, unknown>, idx: number): SalesOrd
   const discountType = normalizeLineDiscountType(raw.discount_type);
   const discountPct = asNumber(raw.discount_percentage ?? raw.discount);
   const discountValue = asNumber(raw.discount_amount);
-  const perUnitDiscount =
-    quantity > 0 ? discountValue / quantity : unitPrice * (discountPct / 100);
-  const finalRate = Math.max(0, Math.round((unitPrice - perUnitDiscount) * 100) / 100);
 
-  return {
+  const schemeId = raw.scheme_id ? asString(raw.scheme_id) : "";
+  const schemeSnapshot =
+    raw.scheme_snapshot && typeof raw.scheme_snapshot === "object"
+      ? (raw.scheme_snapshot as Record<string, unknown>)
+      : undefined;
+  const schemeDiscountTypeRaw = asString(raw.scheme_discount_type);
+  const schemeDiscountValue = asNumber(raw.scheme_discount_value);
+  const schemeDiscountAmount = asNumber(raw.scheme_discount_amount);
+  const hasScheme = Boolean(schemeId);
+  const schemeDiscountType =
+    schemeDiscountTypeRaw === "Flat" || schemeDiscountTypeRaw === "Fixed Amount"
+      ? ("Rupees" as const)
+      : schemeDiscountTypeRaw === "Percentage"
+        ? ("Percentage" as const)
+        : undefined;
+  const schemeDiscountPercent =
+    hasScheme && schemeDiscountType === "Percentage"
+      ? schemeDiscountValue
+      : hasScheme && unitPrice > 0 && schemeDiscountAmount > 0
+        ? Math.round((schemeDiscountAmount / unitPrice) * 10000) / 100
+        : 0;
+  const rateAfterScheme = hasScheme
+    ? Math.max(0, Math.round((unitPrice - schemeDiscountAmount) * 100) / 100)
+    : unitPrice;
+
+  const schemeCode = asString(
+    schemeSnapshot?.scheme_code ?? raw.scheme_code,
+  );
+  const schemeName = asString(
+    schemeSnapshot?.scheme_name ?? raw.scheme_name,
+  );
+
+  const mappedBase: SalesOrderLineItem = {
     id: asString(raw.id || raw.sales_order_product_id || `line-${idx}`),
     productId: asNumber(raw.product_id) || (raw.product_id as any),
     productCode: asString(raw.product_code || product.product_code || product.code || (raw.product as any)?.product_code),
@@ -151,11 +203,20 @@ function mapBackendLineItem(raw: Record<string, unknown>, idx: number): SalesOrd
     discountType,
     discount: discountPct,
     discountValue,
-    // SO items have no scheme_id — keep scheme fields clear so manual discount stays editable.
-    schemeDiscountPercent: 0,
-    schemeDiscountAmount: 0,
-    finalRate,
-    schemeApplied: "No",
+    schemeDiscountPercent,
+    schemeDiscountAmount,
+    schemeDiscountType,
+    schemeDiscountValue: hasScheme ? schemeDiscountValue : undefined,
+    finalRate: rateAfterScheme,
+    schemeApplied: hasScheme ? "Yes" : "No",
+    schemeCode: hasScheme ? schemeCode : undefined,
+    schemeName: hasScheme ? schemeName : undefined,
+    appliedSchemeId: hasScheme ? schemeId : undefined,
+    appliedSchemeCode: hasScheme ? schemeCode : undefined,
+    appliedSchemeName: hasScheme ? schemeName : undefined,
+    schemeSnapshot,
+    originalDealerPrice: hasScheme ? unitPrice : undefined,
+    finalRateAfterScheme: hasScheme ? rateAfterScheme : undefined,
     uom: asString(product.unit || snapshot.unit || snapshot.base_unit || snapshot.uom),
     unitPackSize:
       asNumber(product.pack_size ?? snapshot.pack_size ?? snapshot.unit_pack_size ?? product.unit_pack_size) ||
@@ -171,6 +232,14 @@ function mapBackendLineItem(raw: Record<string, unknown>, idx: number): SalesOrd
     igstPercentage,
     gstPercentage: gstPercentage || cgstPercentage + sgstPercentage + igstPercentage,
     lineTotal: asNumber(raw.item_total ?? raw.lineTotal),
+  };
+
+  // Apply manual on top of scheme (or DP) so finalRate / display are correct.
+  const synced = syncManualLineDiscount(mappedBase);
+  return {
+    ...mappedBase,
+    ...synced,
+    finalRateAfterScheme: hasScheme ? rateAfterScheme : undefined,
   };
 }
 
@@ -386,6 +455,7 @@ function buildBackendWriteBody(
       quantity_type: line.quantityType,
       unit_price: line.unitPrice,
       ...mapLineDiscountForApi(line),
+      ...mapLineSchemeForApi(line),
       gst_percentage: line.gstPercentage ?? 0,
       gst_amount: line.gstAmount,
       cgst_percentage: line.cgstPercentage ?? 0,
@@ -614,6 +684,7 @@ export const SalesOrderService = {
         quantity_type: line.quantityType,
         unit_price: line.unitPrice,
         ...mapLineDiscountForApi(line),
+        ...mapLineSchemeForApi(line),
         gst_percentage: line.gstPercentage ?? 0,
         gst_amount: line.gstAmount,
         cgst_percentage: line.cgstPercentage ?? 0,

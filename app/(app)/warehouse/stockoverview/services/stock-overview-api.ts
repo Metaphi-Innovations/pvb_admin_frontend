@@ -684,31 +684,31 @@ export const StockOverviewApi = {
     const rawBatches = Array.isArray(data.batches) ? data.batches : null;
     const batches: InventoryBatchBreakdownRow[] | undefined = rawBatches
       ? rawBatches.map((row) => {
-          const r = row as Record<string, unknown>;
-          const status =
-            asString(r.status) || asString(r.condition) || "Available";
-          return {
-            sku: asString(r.sku) || asString(product.sku) || "—",
-            warehouse_id: asString(r.warehouse_id),
-            warehouse_name: asString(r.warehouse_name),
-            batch_no: asString(r.batch_no),
-            manufacture_date: r.manufacture_date
-              ? asString(r.manufacture_date).slice(0, 10)
+        const r = row as Record<string, unknown>;
+        const status =
+          asString(r.status) || asString(r.condition) || "Available";
+        return {
+          sku: asString(r.sku) || asString(product.sku) || "—",
+          warehouse_id: asString(r.warehouse_id),
+          warehouse_name: asString(r.warehouse_name),
+          batch_no: asString(r.batch_no),
+          manufacture_date: r.manufacture_date
+            ? asString(r.manufacture_date).slice(0, 10)
+            : null,
+          expiry_date: r.expiry_date ? asString(r.expiry_date).slice(0, 10) : null,
+          received_qty: toNumber(r.received_qty),
+          available_qty: toNumber(r.available_qty),
+          near_expiry_qty: toNumber(r.near_expiry_qty),
+          expired_qty: toNumber(r.expired_qty),
+          available_cases:
+            r.available_cases != null && r.available_cases !== ""
+              ? toNumber(r.available_cases)
               : null,
-            expiry_date: r.expiry_date ? asString(r.expiry_date).slice(0, 10) : null,
-            received_qty: toNumber(r.received_qty),
-            available_qty: toNumber(r.available_qty),
-            near_expiry_qty: toNumber(r.near_expiry_qty),
-            expired_qty: toNumber(r.expired_qty),
-            available_cases:
-              r.available_cases != null && r.available_cases !== ""
-                ? toNumber(r.available_cases)
-                : null,
-            quantity_type: r.quantity_type != null ? asString(r.quantity_type) : null,
-            status,
-            condition: status,
-          };
-        })
+          quantity_type: r.quantity_type != null ? asString(r.quantity_type) : null,
+          status,
+          condition: status,
+        };
+      })
       : undefined;
 
     return {

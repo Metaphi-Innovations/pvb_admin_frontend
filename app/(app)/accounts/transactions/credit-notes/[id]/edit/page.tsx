@@ -8,7 +8,7 @@ type PageProps = { params: { id: string } };
 export default function EditCreditNotePage({ params }: PageProps) {
   void params.id;
   return (
-    <Suspense fallback={<div className="p-8 text-sm text-muted-foreground">Loading credit note form…</div>}>
+    <Suspense fallback={null}>
       <CreditNoteFormPageClient />
     </Suspense>
   );

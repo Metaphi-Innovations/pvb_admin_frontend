@@ -9,15 +9,17 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { AccountsFormLayout } from "../expenses/components/AccountsFormLayout";
-import { AccountingImpactSection } from "@/components/accounts/AccountingImpactSection";
-import { VoucherAccountingPostingSummary } from "@/components/accounts/voucher-form/VoucherAccountingPostingSummary";
 import { VoucherFormSectionCard } from "@/components/accounts/voucher-form/VoucherFormSectionCard";
 import {
   VoucherNoteField,
   VoucherNoteFieldGrid,
   VoucherNoteReadOnly,
 } from "@/components/accounts/voucher-form/VoucherNoteFieldGrid";
-import { defaultVisibilityForType } from "@/components/accounts/voucher-form/voucher-form-shell";
+import {
+  TransactionViewHero,
+  buildVoucherViewMeta,
+  voucherStatusToBadgeKey,
+} from "@/components/accounts/voucher-form/TransactionViewHero";
 import { AccountsToast, useAccountsToast } from "@/components/accounts/AccountsToast";
 import { CreditNoteCancelDialog } from "./components/CreditNoteCancelDialog";
 import { CreditNoteReverseDialog } from "./components/CreditNoteReverseDialog";
@@ -32,6 +34,7 @@ import { SOURCE_TYPE_LABELS, STATUS_LABELS, statusChipClass } from "./credit-not
 import { formatMoney } from "@/lib/accounts/money-format";
 import "./credit-note-tx.css";
 import "@/components/accounts/voucher-form/note-form-compact.css";
+import "@/components/accounts/voucher-form/transaction-view.css";
 
 function toNum(value: unknown, fallback = 0): number {
   if (value == null || value === "") return fallback;
@@ -71,6 +74,7 @@ type ViewLine = {
   key: string;
   description: string;
   ledgerName: string;
+  hsn: string;
   qty: string;
   gstRate: number;
   taxable: number;
@@ -86,10 +90,13 @@ function mapLines(record: CreditNoteDetailApi): ViewLine[] {
   return lines.map((raw, i) => {
     const l = raw as Record<string, unknown>;
     const ledger = l.ledger as { ledger_name?: string } | undefined;
+    const hsnSnap = l.hsn_snapshot as { hsn_code?: string } | undefined;
     return {
       key: String(l.credit_note_line_id || i),
       description: String(l.description || "—"),
       ledgerName: ledger?.ledger_name || String(l.ledger_name || "—"),
+      hsn:
+        String(l.hsn_code || l.hsn || hsnSnap?.hsn_code || "").trim(),
       qty: l.quantity != null ? String(l.quantity) : "—",
       gstRate: toNum(l.gst_rate),
       taxable: toNum(l.taxable_amount),
@@ -208,9 +215,7 @@ export default function CreditNoteViewPageClient({ creditNoteId }: { creditNoteI
   const cnNo = record.cn_number || "—";
   const customerName = record.customer?.customer_name || "—";
   const sourceLabel = SOURCE_TYPE_LABELS[String(record.source_type)] || record.source_type || "—";
-  const debitLedger = lines[0]?.ledgerName || "Adjustment ledger";
-  const creditLedger = record.party_ledger?.ledger_name || customerName;
-  const showGst = gst > 0.004;
+  const showLineHsn = lines.some((l) => Boolean(l.hsn));
 
   return (
     <>
@@ -270,54 +275,68 @@ export default function CreditNoteViewPageClient({ creditNoteId }: { creditNoteI
                   <Button
                     variant="outline"
                     size="sm"
-                    className="h-8 text-xs text-purple-700 hover:bg-purple-50"
+                    className="h-8 text-xs text-red-600"
                     onClick={() => setReverseOpen(true)}
                     disabled={reverseBusy}
                   >
-                    Reverse
+                    Cancel
                   </Button>
                 ) : null}
               </div>
             </div>
           }
         >
-          <div className="cdn-stack pb-4">
-            <VoucherFormSectionCard title="Basic Details" compact>
+          <div className="cdn-stack transaction-voucher-view pb-4">
+            <TransactionViewHero
+              statusKey={voucherStatusToBadgeKey(status)}
+              statusLabel={STATUS_LABELS[status] || status.replaceAll("_", " ")}
+              chips={[sourceLabel]}
+              metaItems={buildVoucherViewMeta({
+                draftNo: cnNo !== "—" ? cnNo : undefined,
+                voucherDate: toDate(record.cn_date) || undefined,
+                branchName: record.warehouse?.warehouse_name || undefined,
+              })}
+              partyLabel={customerName}
+              amountLabel="CN Amount"
+              amount={total}
+            />
+
+            <VoucherFormSectionCard title="Basic Details" compact highlight>
               <VoucherNoteFieldGrid columns={4}>
-                <VoucherNoteField label="Customer" width="md">
+                <VoucherNoteField label="Customer">
                   <VoucherNoteReadOnly>{customerName}</VoucherNoteReadOnly>
                 </VoucherNoteField>
-                <VoucherNoteField label="Credit Note No." width="sm">
+                <VoucherNoteField label="Credit Note No.">
                   <VoucherNoteReadOnly mono>{cnNo}</VoucherNoteReadOnly>
                 </VoucherNoteField>
-                <VoucherNoteField label="Credit Note Date" width="sm">
+                <VoucherNoteField label="Credit Note Date">
                   <VoucherNoteReadOnly>{toDate(record.cn_date) || "—"}</VoucherNoteReadOnly>
                 </VoucherNoteField>
-                <VoucherNoteField label="Warehouse" width="md">
+                <VoucherNoteField label="Warehouse">
                   <VoucherNoteReadOnly>
                     {record.warehouse?.warehouse_name || "—"}
                   </VoucherNoteReadOnly>
                 </VoucherNoteField>
-                <VoucherNoteField label="Source" width="md">
+                <VoucherNoteField label="Source">
                   <VoucherNoteReadOnly>{sourceLabel}</VoucherNoteReadOnly>
                 </VoucherNoteField>
-                <VoucherNoteField label="Status" width="sm">
+                <VoucherNoteField label="Status">
                   <VoucherNoteReadOnly>
                     {STATUS_LABELS[status] || status.replaceAll("_", " ") || "—"}
                   </VoucherNoteReadOnly>
                 </VoucherNoteField>
                 {returnNos.length ? (
-                  <VoucherNoteField label="Sales Return" width="md">
+                  <VoucherNoteField label="Sales Return">
                     <VoucherNoteReadOnly mono>{returnNos.join(", ")}</VoucherNoteReadOnly>
                   </VoucherNoteField>
                 ) : null}
-                <VoucherNoteField label="Linked Invoice" width="lg">
+                <VoucherNoteField label="Linked Invoice">
                   <VoucherNoteReadOnly mono>
                     {invoiceNos.length ? invoiceNos.join(", ") : "—"}
                   </VoucherNoteReadOnly>
                 </VoucherNoteField>
                 {record.scheme?.scheme_name ? (
-                  <VoucherNoteField label="Scheme" width="md">
+                  <VoucherNoteField label="Scheme">
                     <VoucherNoteReadOnly>{record.scheme.scheme_name}</VoucherNoteReadOnly>
                   </VoucherNoteField>
                 ) : null}
@@ -327,18 +346,20 @@ export default function CreditNoteViewPageClient({ creditNoteId }: { creditNoteI
             <VoucherFormSectionCard
               title={isQty ? "Quantity Particulars" : "Particulars"}
               compact
+              highlight
               flush
             >
               <div className="cnz-table-wrap">
-                <table className={isQty ? "cnz-table cnz-table--qty accounts-table" : "cnz-table cnz-table--amt accounts-table"}>
+                <table className={isQty ? "cnz-table cnz-table--qty" : "cnz-table cnz-table--amt"}>
                   <thead>
                     <tr>
-                      <th>Particular</th>
-                      <th>Ledger</th>
+                      <th className="text-left">Particular</th>
+                      <th className="text-left">Ledger</th>
+                      {showLineHsn ? <th className="text-left">HSN</th> : null}
                       {isQty ? <th className="text-right">Qty</th> : null}
                       <th className="text-right">Taxable</th>
                       <th className="text-right">GST %</th>
-                      {igst > 0 ? (
+                      {interstate ? (
                         <th className="text-right">IGST</th>
                       ) : (
                         <>
@@ -352,7 +373,14 @@ export default function CreditNoteViewPageClient({ creditNoteId }: { creditNoteI
                   <tbody>
                     {lines.length === 0 ? (
                       <tr>
-                        <td colSpan={isQty ? 8 : 7} className="text-muted-foreground text-xs">
+                        <td
+                          colSpan={
+                            (showLineHsn ? 1 : 0) +
+                            (isQty ? 1 : 0) +
+                            (interstate ? 6 : 7)
+                          }
+                          className="text-muted-foreground text-xs"
+                        >
                           No line items.
                         </td>
                       </tr>
@@ -361,10 +389,13 @@ export default function CreditNoteViewPageClient({ creditNoteId }: { creditNoteI
                         <tr key={l.key}>
                           <td>{l.description}</td>
                           <td>{l.ledgerName}</td>
+                          {showLineHsn ? (
+                            <td className="font-mono">{l.hsn || "—"}</td>
+                          ) : null}
                           {isQty ? <td className="cnz-num">{l.qty}</td> : null}
                           <td className="cnz-num">{formatMoney(l.taxable)}</td>
                           <td className="cnz-num">{l.gstRate > 0 ? `${l.gstRate}%` : "—"}</td>
-                          {igst > 0 ? (
+                          {interstate ? (
                             <td className="cnz-num">{formatMoney(l.igst || l.gstAmount)}</td>
                           ) : (
                             <>
@@ -393,48 +424,11 @@ export default function CreditNoteViewPageClient({ creditNoteId }: { creditNoteI
               locked
             />
 
-            <VoucherFormSectionCard title="Narration" compact>
+            <VoucherFormSectionCard title="Narration" compact highlight>
               <p className="text-xs text-foreground whitespace-pre-wrap min-h-[2.5rem]">
                 {record.narration?.trim() || "—"}
               </p>
             </VoucherFormSectionCard>
-
-            <AccountingImpactSection
-              docKey="credit_note"
-              compact
-              entryPreview={
-                <div className="space-y-1">
-                  <p className="text-[10px] text-muted-foreground">
-                    Posted accounting preview. Ledger balances are not edited from this screen.
-                  </p>
-                  <VoucherAccountingPostingSummary
-                    compact
-                    voucherTypeLabel="Credit Note"
-                    debitLedgerLabel="Debit"
-                    debitLedgerName={debitLedger}
-                    creditLedgerLabel="Credit"
-                    creditLedgerName={creditLedger}
-                    voucherAmount={total}
-                    voucherAmountLabel="Credit Note Amount"
-                    gstAdjustments={
-                      showGst
-                        ? {
-                            cgstLabel: "Output CGST",
-                            cgstAmount: cgst,
-                            sgstLabel: "Output SGST",
-                            sgstAmount: sgst,
-                            igstLabel: "Output IGST",
-                            igstAmount: igst,
-                          }
-                        : undefined
-                    }
-                    visibilityItems={defaultVisibilityForType("credit_note", {
-                      gstApplicable: showGst,
-                    })}
-                  />
-                </div>
-              }
-            />
           </div>
         </AccountsFormLayout>
       </div>
@@ -468,11 +462,11 @@ export default function CreditNoteViewPageClient({ creditNoteId }: { creditNoteI
             const next = await CreditNoteListApi.reverse(record.credit_note_id, payload);
             setRecord(next);
             setReverseOpen(false);
-            showToast("Credit Note reversed.");
+            showToast("Credit Note cancelled.");
             await refresh({ silent: true });
           } catch (e) {
             showToast(
-              creditNoteListApiError(e, "Could not reverse this Credit Note."),
+              creditNoteListApiError(e, "Could not cancel this Credit Note."),
               "error",
             );
           } finally {

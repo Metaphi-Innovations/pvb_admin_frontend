@@ -2,16 +2,27 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { Loader2, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
+import { InvoiceFormLayout } from "@/app/(app)/accounts/components/InvoiceFormLayout";
+import {
+  INVOICE_DETAIL_INPUT_CLASS,
+  INVOICE_DETAIL_SELECT_CLASS,
+  InvoiceDetailField,
+} from "@/app/(app)/accounts/invoices/components/invoice-form-voucher-ui";
+import "@/app/(app)/accounts/invoices/sales-order-invoice-form-compact.css";
+import "../../credit-notes/credit-note-tx.css";
+import "@/components/accounts/voucher-form/transaction-view.css";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { VoucherFormSectionCard } from "@/components/accounts/voucher-form/VoucherFormSectionCard";
 import {
+  TransactionViewHero,
+  buildVoucherViewMeta,
+  voucherStatusToBadgeKey,
+} from "@/components/accounts/voucher-form/TransactionViewHero";
+import {
   VOUCHER_ERROR_CLASS,
-  VOUCHER_INPUT_CLASS,
   VOUCHER_MONEY_INPUT_CLASS,
-  VoucherFormField,
 } from "@/components/accounts/voucher-simple-form-ui";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
@@ -25,8 +36,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { showToast } from "@/lib/toast";
-import { useFY } from "@/lib/fy-store";
-import { useTdsDropdown } from "@/hooks/masters";
+import { notifyVoucherListingChanged } from "@/lib/accounts/voucher-posting-notify";
 import { PaymentVoucherService } from "@/services/payment-voucher.service";
 import { CustomerListService } from "@/services/customer-list.service";
 import { SupplierListService } from "@/services/supplier-list.service";
@@ -34,7 +44,6 @@ import { WarehouseService } from "@/services/warehouse.service";
 import { BankAccountsListService } from "@/services/bank-accounts-list.service";
 import { LedgerService } from "@/services/ledger.service";
 import { UserListService } from "@/services/user-list.service";
-import { formatTdsSectionLabel } from "@/services/tds-list.service";
 import {
   PAYMENT_BANK_TRANSACTION_MODE_LABELS,
   PAYMENT_BANK_TRANSACTION_MODES,
@@ -45,12 +54,15 @@ import {
   type PaymentVoucherDetail,
   type PaymentVoucherStatus,
 } from "@/types/payment-voucher.types";
+import { VoucherLedgerSelect } from "@/components/accounts/voucher-form/VoucherLedgerSelect";
 import { PaymentSearchableSelect } from "./components/PaymentSearchableSelect";
 import { PaymentFormActionBar } from "./components/PaymentFormActionBar";
 import { PaymentAllocationTable } from "./components/PaymentAllocationTable";
-import { PaymentAdjustmentsEditor } from "./components/PaymentAdjustmentsEditor";
-import { PaymentSummaryCard } from "./components/PaymentSummaryCard";
-import { PaymentAccountingPreview } from "./components/PaymentAccountingPreview";
+import {
+  PaymentLedgerEntriesTable,
+  createPaymentLedgerEntryRow,
+} from "./components/PaymentLedgerEntriesTable";
+import { PaymentFormSummary } from "./components/PaymentFormSummary";
 import { PaymentReasonDialog } from "./components/PaymentReasonDialog";
 import { PaymentAttachmentsPanel } from "./components/PaymentAttachmentsPanel";
 import {
@@ -92,7 +104,10 @@ export function PaymentVoucherApiForm({
   onEdit,
 }: PaymentVoucherApiFormProps) {
   const router = useRouter();
-  const { selectedFY } = useFY();
+  const goToList = useCallback(() => {
+    notifyVoucherListingChanged("payment");
+    router.replace(PAYMENT_LIST_PATH);
+  }, [router]);
   const [form, setForm] = useState<PaymentFormState>(emptyPaymentForm);
   const [detail, setDetail] = useState<PaymentVoucherDetail | null>(null);
   const [status, setStatus] = useState<PaymentVoucherStatus>("DRAFT");
@@ -113,9 +128,8 @@ export function PaymentVoucherApiForm({
   const [cashLedgers, setCashLedgers] = useState<{ value: string; label: string; sub?: string }[]>([]);
   const [manualLedgers, setManualLedgers] = useState<{ value: string; label: string; sub?: string }[]>([]);
   const [approvers, setApprovers] = useState<{ value: string; label: string }[]>([]);
-  /** Supplier master TDS Section — default only when positive TDS is first entered. */
+  /** Supplier master TDS Section — retained for legacy allocation payload sync (TDS UI hidden). */
   const [partyTdsSectionId, setPartyTdsSectionId] = useState<string | null>(null);
-  const tdsDropdownQuery = useTdsDropdown();
 
   const [submitOpen, setSubmitOpen] = useState(false);
   const [approverId, setApproverId] = useState("");
@@ -128,9 +142,31 @@ export function PaymentVoucherApiForm({
   const [reverseDate, setReverseDate] = useState("");
 
   const fieldsEditable = isDraftEditable(status) && !readOnlyProp;
+  const isViewMode = readOnlyProp || !fieldsEditable;
   const isPostedView = status === "POSTED" && !readOnlyProp;
   const showViewChrome = readOnlyProp || isPostedView;
   const preview = useMemo(() => computePaymentPreview(form), [form]);
+  /** Ledger Entries total (additive with settlement toward composed gross / payment). */
+  const adjustmentsTotal = preview.ledgerEntriesTotal;
+  const showSupplierInvoiceSettlement =
+    form.party_kind === "SUPPLIER" &&
+    form.payment_treatment === "against_outstanding";
+  const showInvoiceSettlementInSummary =
+    showSupplierInvoiceSettlement ||
+    (form.party_kind === "CUSTOMER_REFUND" && preview.totalAllocated > 0.004);
+  const showAdvanceInSummary =
+    form.party_kind === "SUPPLIER" && preview.advance > 0.004;
+  /** Settlement + ledger entries must equal gross; payment amount equals gross (less TDS/discount). */
+  const summaryBalanced =
+    form.party_kind === "OTHER_LEDGER"
+      ? true
+      : preview.gross > 0 &&
+        Math.abs(
+          preview.totalAllocated +
+            preview.advance +
+            preview.ledgerEntriesTotal -
+            preview.gross,
+        ) < 0.01;
 
   const patch = useCallback((p: Partial<PaymentFormState>) => {
     setForm((prev) => ({ ...prev, ...p }));
@@ -397,16 +433,6 @@ export function PaymentVoucherApiForm({
     });
   }, [partyTdsSectionId, fieldsEditable]);
 
-  const tdsSectionOptions = useMemo(
-    () =>
-      (tdsDropdownQuery.data ?? []).map((tds) => ({
-        value: tds.tdsUuid,
-        label: formatTdsSectionLabel(tds),
-        sub: [tds.sectionCode, tds.description].filter(Boolean).join(" · "),
-      })),
-    [tdsDropdownQuery.data],
-  );
-
   const applyAllocationPatch = useCallback(
     (
       openItemId: string,
@@ -439,6 +465,16 @@ export function PaymentVoucherApiForm({
 
   const warehouseName = warehouses.find((w) => w.value === form.warehouse_id)?.label || "";
 
+  const partyLabel = useMemo(() => {
+    if (form.party_kind === "SUPPLIER") {
+      return suppliers.find((s) => s.value === form.supplier_id)?.label || "";
+    }
+    if (form.party_kind === "CUSTOMER_REFUND") {
+      return customers.find((c) => c.value === form.customer_id)?.label || "";
+    }
+    return form.other_ledger_name || PAYMENT_PARTY_KIND_LABELS.OTHER_LEDGER;
+  }, [form.party_kind, form.supplier_id, form.customer_id, form.other_ledger_name, suppliers, customers]);
+
   const bankOptions = useMemo(() => {
     return bankRows
       .filter(
@@ -453,16 +489,6 @@ export function PaymentVoucherApiForm({
         sub: b.ledgerId,
       }));
   }, [bankRows, form.warehouse_id, warehouseName]);
-
-  const partyName = useMemo(() => {
-    if (form.party_kind === "SUPPLIER") {
-      return suppliers.find((s) => s.value === form.supplier_id)?.label || "";
-    }
-    if (form.party_kind === "CUSTOMER_REFUND") {
-      return customers.find((c) => c.value === form.customer_id)?.label || "";
-    }
-    return form.other_ledger_name;
-  }, [form, customers, suppliers]);
 
   const attachmentCount = form.persistedAttachments.length + form.pendingFiles.length;
   const selectedAllocCount = form.allocations.filter((a) => a.selected).length;
@@ -527,23 +553,26 @@ export function PaymentVoucherApiForm({
           "success",
         );
       }
-      if (!currentId && !options?.skipNavigate) {
-        router.replace(paymentEditPath(saved.payment_voucher_id));
+      if (!options?.skipNavigate) {
+        // Leave busy=true — clearing it after replace can abort soft navigation
+        goToList();
+        return saved;
       }
+      setBusy(false);
       return saved;
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Failed to save draft.";
       setError(msg);
       showToast(msg, "error");
-      return null;
-    } finally {
       setBusy(false);
+      return null;
     }
   };
 
   const runAction = async (
     action: () => Promise<PaymentVoucherDetail>,
     successMsg: string,
+    options?: { keepBusy?: boolean },
   ) => {
     setBusy(true);
     setError(null);
@@ -551,14 +580,14 @@ export function PaymentVoucherApiForm({
       const result = await action();
       hydrateFromDetail(result);
       showToast(successMsg, "success");
+      if (!options?.keepBusy) setBusy(false);
       return result;
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Action failed.";
       setError(msg);
       showToast(msg, "error");
-      return null;
-    } finally {
       setBusy(false);
+      return null;
     }
   };
 
@@ -580,12 +609,13 @@ export function PaymentVoucherApiForm({
     const posted = await runAction(
       () => PaymentVoucherService.post(saved.payment_voucher_id),
       "Payment posted successfully.",
+      { keepBusy: true },
     );
-    if (posted?.payment_voucher_id) {
-      router.replace(paymentViewPath(posted.payment_voucher_id));
+    if (posted) {
+      goToList();
       return;
     }
-    router.replace(paymentEditPath(saved.payment_voucher_id));
+    setBusy(false);
   };
 
   /** Post an already-saved voucher without confirmation (approved flows). */
@@ -594,10 +624,13 @@ export function PaymentVoucherApiForm({
     const posted = await runAction(
       () => PaymentVoucherService.post(currentId),
       "Payment posted successfully.",
+      { keepBusy: true },
     );
     if (posted?.payment_voucher_id) {
-      router.replace(paymentViewPath(posted.payment_voucher_id));
+      goToList();
+      return;
     }
+    setBusy(false);
   };
 
   const title =
@@ -605,249 +638,323 @@ export function PaymentVoucherApiForm({
       ? "View Payment Voucher"
       : currentId
         ? "Edit Payment Voucher"
-        : "New Payment Voucher";
+        : "Create Payment Voucher";
+
+  const breadcrumbPage =
+    readOnlyProp || !fieldsEditable
+      ? "View Payment Voucher"
+      : currentId
+        ? "Edit Payment Voucher"
+        : "Create Payment Voucher";
 
   const subtitle = detail
     ? `Draft No. ${formatSrNo(detail.sr_no)} · ${PAYMENT_STATUS_LABELS[status]}`
     : "Create a payment to a supplier, customer refund, or other ledger.";
 
+  const actionBar = (
+    <PaymentFormActionBar
+      status={status}
+      busy={busy}
+      readOnly={showViewChrome}
+      canCancel={canCancelStatus(status) && !!currentId}
+      approvalRequired={approvalRequired}
+      configReady={configReady}
+      hasExistingId={!!currentId}
+      onDiscard={fieldsEditable ? handleDiscard : undefined}
+      onSaveDraft={
+        fieldsEditable && !readOnlyProp ? () => void saveDraft() : undefined
+      }
+      onSubmitForApproval={
+        fieldsEditable && !readOnlyProp ? () => setSubmitOpen(true) : undefined
+      }
+      onSaveAndPost={
+        fieldsEditable && !readOnlyProp && !currentId
+          ? () => void handleSaveAndPost()
+          : undefined
+      }
+      onApprove={
+        !readOnlyProp &&
+        status === "PENDING_APPROVAL" &&
+        approvalRequired &&
+        currentId
+          ? () =>
+              void runAction(
+                () => PaymentVoucherService.approve(currentId!),
+                "Payment approved.",
+              )
+          : undefined
+      }
+      onReject={
+        !readOnlyProp &&
+        status === "PENDING_APPROVAL" &&
+        approvalRequired &&
+        currentId
+          ? () => setRejectOpen(true)
+          : undefined
+      }
+      onPost={
+        fieldsEditable && !readOnlyProp && currentId
+          ? status === "APPROVED"
+            ? () => void handlePostDirect()
+            : status === "DRAFT" || status === "REJECTED" || !status
+              ? () => void handleSaveAndPost()
+              : undefined
+          : undefined
+      }
+      onCancel={
+        !readOnlyProp &&
+        canCancelStatus(status) &&
+        currentId &&
+        !isDraftEditable(status)
+          ? () => setCancelOpen(true)
+          : undefined
+      }
+      onReverse={
+        status === "POSTED" && currentId ? () => setReverseOpen(true) : undefined
+      }
+    />
+  );
+
   if (loading) {
     return (
-      <AccountsPageShell
-        breadcrumbs={accountsBreadcrumb("Vouchers", "Payment Voucher", PAYMENT_LIST_PATH)}
-        title="Payment Voucher"
-        description="Loading…"
-        layout="form"
-      >
-        <div className="flex items-center gap-2 text-sm text-muted-foreground py-10 justify-center">
-          <Loader2 className="w-4 h-4 animate-spin" /> Loading payment…
-        </div>
-      </AccountsPageShell>
+      <div className="sales-order-invoice-form-compact h-full min-h-0 flex flex-col w-full">
+        <InvoiceFormLayout
+          title="Payment Voucher"
+          subtitle="Loading…"
+          breadcrumb={accountsBreadcrumb("Vouchers", "Payment Voucher", PAYMENT_LIST_PATH)}
+          backHref={PAYMENT_LIST_PATH}
+        >
+          <div className="flex items-center gap-2 text-sm text-muted-foreground py-10 justify-center">
+            <Loader2 className="w-4 h-4 animate-spin" /> Loading payment…
+          </div>
+        </InvoiceFormLayout>
+      </div>
     );
   }
 
   return (
-    <AccountsPageShell
-      breadcrumbs={accountsBreadcrumb("Vouchers", "Payment Voucher", PAYMENT_LIST_PATH)}
-      title={title}
-      description={subtitle}
-      layout="form"
-      onBackClick={showViewChrome ? handleBack : undefined}
-      actions={
-        readOnlyProp && onEdit && !fieldsEditable && isDraftEditable(status) ? (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-8 text-xs"
-            onClick={onEdit}
+    <>
+      <div className="sales-order-invoice-form-compact h-full min-h-0 flex flex-col w-full">
+        <InvoiceFormLayout
+          title={title}
+          subtitle={subtitle}
+          breadcrumb={accountsBreadcrumb("Vouchers", breadcrumbPage, PAYMENT_LIST_PATH)}
+          backHref={PAYMENT_LIST_PATH}
+          onBackClick={showViewChrome ? handleBack : fieldsEditable ? handleDiscard : undefined}
+          stickyFooter={!showViewChrome || status === "POSTED" ? actionBar : undefined}
+        >
+          <div
+            className={cn(
+              isViewMode ? "space-y-2" : "space-y-2.5",
+              isViewMode && "transaction-voucher-view",
+            )}
           >
-            Edit
-          </Button>
-        ) : null
-      }
-    >
-      <div className="w-full space-y-3 pb-24">
-        {error ? <div className={VOUCHER_ERROR_CLASS}>{error}</div> : null}
+            {error ? <div className={VOUCHER_ERROR_CLASS}>{error}</div> : null}
 
-        <VoucherFormSectionCard title="Voucher Details">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-2.5">
-            <VoucherFormField label="Voucher Date" required>
-              <Input
-                type="date"
-                className={VOUCHER_INPUT_CLASS}
-                value={form.voucher_date}
-                disabled={!fieldsEditable}
-                onChange={(e) => patch({ voucher_date: e.target.value })}
-              />
-            </VoucherFormField>
-            <VoucherFormField label="Financial Year">
-              <p className="h-8 flex items-center text-xs font-medium">
-                {selectedFY?.label || "—"}
-              </p>
-            </VoucherFormField>
-            <VoucherFormField label="Draft Payment No.">
-              <p className="h-8 flex items-center text-xs font-mono font-semibold text-brand-700">
-                {detail ? formatSrNo(detail.sr_no) : "Auto on save"}
-              </p>
-            </VoucherFormField>
-            {detail?.accounting_voucher?.voucher_number ? (
-              <VoucherFormField label="Accounting Voucher No.">
-                <p className="h-8 flex items-center text-xs font-mono font-semibold text-navy-700">
-                  {detail.accounting_voucher.voucher_number}
-                </p>
-              </VoucherFormField>
+            {readOnlyProp && onEdit && !fieldsEditable && isDraftEditable(status) ? (
+              <div className="flex justify-end">
+                <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={onEdit}>
+                  Edit
+                </Button>
+              </div>
             ) : null}
-            <PaymentSearchableSelect
-              label="Branch / Warehouse"
-              required
-              disabled={!fieldsEditable}
-              value={form.warehouse_id}
-              options={warehouses}
-              placeholder="Select warehouse…"
-              onChange={(id) =>
-                patch({
-                  warehouse_id: id,
-                  bank_account_id: "",
-                  cash_bank_ledger_id:
-                    form.transaction_mode === "CASH" ? form.cash_bank_ledger_id : "",
-                  cash_bank_ledger_name:
-                    form.transaction_mode === "CASH" ? form.cash_bank_ledger_name : "",
-                })
-              }
-            />
-            <div className="space-y-1">
-              <Label className="text-xs font-medium">
-                Mode of Payment <span className="text-red-500">*</span>
-              </Label>
-              <Select
-                value={form.transaction_mode}
-                disabled={!fieldsEditable}
-                onValueChange={(v) => {
-                  const mode = v as PaymentBankTransactionMode;
-                  patch({
-                    transaction_mode: mode,
-                    bank_account_id: mode === "CASH" ? "" : form.bank_account_id,
-                    cheque_number: mode === "CHEQUE" ? form.cheque_number : "",
-                    cheque_date: mode === "CHEQUE" ? form.cheque_date : "",
-                    utr_number: mode === "CASH" ? "" : form.utr_number,
-                  });
-                }}
-              >
-                <SelectTrigger className={VOUCHER_INPUT_CLASS}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {PAYMENT_BANK_TRANSACTION_MODES.map((m) => (
-                    <SelectItem key={m} value={m} className="text-sm">
-                      {PAYMENT_BANK_TRANSACTION_MODE_LABELS[m]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <VoucherFormField label="Transaction Date">
-              <Input
-                type="date"
-                className={VOUCHER_INPUT_CLASS}
-                value={form.transaction_date}
-                disabled={!fieldsEditable}
-                onChange={(e) => patch({ transaction_date: e.target.value })}
+
+            {isViewMode ? (
+              <TransactionViewHero
+                statusKey={voucherStatusToBadgeKey(status)}
+                statusLabel={PAYMENT_STATUS_LABELS[status] || status}
+                chips={[
+                  PAYMENT_BANK_TRANSACTION_MODE_LABELS[form.transaction_mode] ||
+                    form.transaction_mode,
+                ]}
+                metaItems={buildVoucherViewMeta({
+                  draftNo: detail ? formatSrNo(detail.sr_no) : "—",
+                  accountingVoucherNo: detail?.accounting_voucher?.voucher_number,
+                  voucherDate: form.transaction_date,
+                  branchName: warehouseName || undefined,
+                })}
+                partyLabel={
+                  partyLabel ||
+                  PAYMENT_PARTY_KIND_LABELS[form.party_kind] ||
+                  undefined
+                }
+                amountLabel="Net Cash / Bank"
+                amount={preview.netBank}
               />
-            </VoucherFormField>
+            ) : null}
+
+        <VoucherFormSectionCard title="Voucher Details" highlight={isViewMode}>
+          <div className="space-y-1.5">
+            <div className="so-invoice-details-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+              <InvoiceDetailField label="Draft Payment No.">
+                <div className="so-goods-ro so-goods-ro--mono w-full text-brand-700">
+                  {detail ? formatSrNo(detail.sr_no) : "Auto on save"}
+                </div>
+              </InvoiceDetailField>
+              <InvoiceDetailField label="Branch / Warehouse" required>
+                <PaymentSearchableSelect
+                  disabled={!fieldsEditable}
+                  value={form.warehouse_id}
+                  options={warehouses}
+                  placeholder="Select warehouse…"
+                  triggerClassName={INVOICE_DETAIL_SELECT_CLASS}
+                  onChange={(id) =>
+                    patch({
+                      warehouse_id: id,
+                      bank_account_id: "",
+                      cash_bank_ledger_id:
+                        form.transaction_mode === "CASH" ? form.cash_bank_ledger_id : "",
+                      cash_bank_ledger_name:
+                        form.transaction_mode === "CASH" ? form.cash_bank_ledger_name : "",
+                    })
+                  }
+                />
+              </InvoiceDetailField>
+              <InvoiceDetailField label="Mode of Payment" required>
+                <Select
+                  value={form.transaction_mode}
+                  disabled={!fieldsEditable}
+                  onValueChange={(v) => {
+                    const mode = v as PaymentBankTransactionMode;
+                    patch({
+                      transaction_mode: mode,
+                      bank_account_id: mode === "CASH" ? "" : form.bank_account_id,
+                      cheque_number: mode === "CHEQUE" ? form.cheque_number : "",
+                      cheque_date: mode === "CHEQUE" ? form.cheque_date : "",
+                      utr_number: mode === "CASH" ? "" : form.utr_number,
+                    });
+                  }}
+                >
+                  <SelectTrigger className={INVOICE_DETAIL_SELECT_CLASS}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PAYMENT_BANK_TRANSACTION_MODES.map((m) => (
+                      <SelectItem key={m} value={m}>
+                        {PAYMENT_BANK_TRANSACTION_MODE_LABELS[m]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </InvoiceDetailField>
+              <InvoiceDetailField label="Transaction Date">
+                <Input
+                  type="date"
+                  className={INVOICE_DETAIL_INPUT_CLASS}
+                  value={form.transaction_date}
+                  disabled={!fieldsEditable}
+                  onChange={(e) => patch({ transaction_date: e.target.value })}
+                />
+              </InvoiceDetailField>
+            </div>
+            {detail?.accounting_voucher?.voucher_number ? (
+              <div className="so-invoice-details-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+                <InvoiceDetailField label="Accounting Voucher No.">
+                  <div className="so-goods-ro so-goods-ro--mono w-full">
+                    {detail.accounting_voucher.voucher_number}
+                  </div>
+                </InvoiceDetailField>
+              </div>
+            ) : null}
           </div>
         </VoucherFormSectionCard>
 
-        <VoucherFormSectionCard
-          title="Paid From"
-          helper="Select Cash or a configured Bank Account. The selected account is submitted with the voucher."
-        >
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5">
-            <div className="md:col-span-5 min-w-0">
-              {form.transaction_mode === "CASH" ? (
-                <PaymentSearchableSelect
-                  label="Cash Ledger"
-                  required
-                  disabled={!fieldsEditable}
-                  value={form.cash_bank_ledger_id}
-                  options={cashLedgers.length ? cashLedgers : manualLedgers}
-                  placeholder="Select cash ledger…"
-                  onChange={(id) => {
-                    const opt = (cashLedgers.length ? cashLedgers : manualLedgers).find(
-                      (o) => o.value === id,
-                    );
-                    patch({
-                      cash_bank_ledger_id: id,
-                      cash_bank_ledger_name: opt?.label || "",
-                      bank_account_id: "",
-                    });
-                  }}
-                />
-              ) : (
-                <PaymentSearchableSelect
-                  label="Cash / Bank Account"
-                  required
-                  disabled={!fieldsEditable || !form.warehouse_id}
-                  value={form.bank_account_id}
-                  options={bankOptions}
-                  placeholder={
-                    form.warehouse_id
-                      ? "Select bank account…"
-                      : "Select warehouse first…"
-                  }
-                  onChange={(id) => {
-                    const row = bankRows.find((b) => b.bankAccountId === id);
-                    patch({
-                      bank_account_id: id,
-                      cash_bank_ledger_id: row?.ledgerId || "",
-                      cash_bank_ledger_name: row?.label || "",
-                    });
-                  }}
-                />
-              )}
-            </div>
+        <VoucherFormSectionCard title="Paid From" highlight={isViewMode}>
+          <div className="space-y-1.5">
+            <div className="so-invoice-details-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+              <InvoiceDetailField
+                label={form.transaction_mode === "CASH" ? "Cash Ledger" : "Cash / Bank Account"}
+                required
+              >
+                {form.transaction_mode === "CASH" ? (
+                  <VoucherLedgerSelect
+                    disabled={!fieldsEditable}
+                    value={form.cash_bank_ledger_id}
+                    fallbackLabel={form.cash_bank_ledger_name || undefined}
+                    placeholder="Select cash ledger…"
+                    className={INVOICE_DETAIL_SELECT_CLASS}
+                    onChange={(ledger) =>
+                      patch({
+                        cash_bank_ledger_id: ledger.ledgerId,
+                        cash_bank_ledger_name: ledger.ledgerName,
+                        bank_account_id: "",
+                      })
+                    }
+                  />
+                ) : (
+                  <PaymentSearchableSelect
+                    disabled={!fieldsEditable || !form.warehouse_id}
+                    value={form.bank_account_id}
+                    options={bankOptions}
+                    placeholder={
+                      form.warehouse_id
+                        ? "Select bank account…"
+                        : "Select warehouse first…"
+                    }
+                    triggerClassName={INVOICE_DETAIL_SELECT_CLASS}
+                    onChange={(id) => {
+                      const row = bankRows.find((b) => b.bankAccountId === id);
+                      patch({
+                        bank_account_id: id,
+                        cash_bank_ledger_id: row?.ledgerId || "",
+                        cash_bank_ledger_name: row?.label || "",
+                      });
+                    }}
+                  />
+                )}
+              </InvoiceDetailField>
 
-            {form.transaction_mode === "CHEQUE" ? (
-              <>
-                <div className="md:col-span-3 min-w-0">
-                  <VoucherFormField label="Cheque Number" required>
+              {form.transaction_mode === "CHEQUE" ? (
+                <>
+                  <InvoiceDetailField label="Cheque Number" required>
                     <Input
-                      className={VOUCHER_INPUT_CLASS}
+                      className={INVOICE_DETAIL_INPUT_CLASS}
                       value={form.cheque_number}
                       disabled={!fieldsEditable}
                       onChange={(e) => patch({ cheque_number: e.target.value })}
                     />
-                  </VoucherFormField>
-                </div>
-                <div className="md:col-span-2 min-w-0">
-                  <VoucherFormField label="Cheque Date" required>
+                  </InvoiceDetailField>
+                  <InvoiceDetailField label="Cheque Date" required>
                     <Input
                       type="date"
-                      className={VOUCHER_INPUT_CLASS}
+                      className={INVOICE_DETAIL_INPUT_CLASS}
                       value={form.cheque_date}
                       disabled={!fieldsEditable}
                       onChange={(e) => patch({ cheque_date: e.target.value })}
                     />
-                  </VoucherFormField>
-                </div>
-              </>
-            ) : null}
+                  </InvoiceDetailField>
+                </>
+              ) : null}
 
-            {form.transaction_mode !== "CASH" && form.transaction_mode !== "CHEQUE" ? (
-              <>
-                <div className="md:col-span-3 min-w-0">
-                  <VoucherFormField label="UTR Number">
+              {form.transaction_mode !== "CASH" && form.transaction_mode !== "CHEQUE" ? (
+                <>
+                  <InvoiceDetailField label="UTR Number">
                     <Input
-                      className={VOUCHER_INPUT_CLASS}
+                      className={INVOICE_DETAIL_INPUT_CLASS}
                       value={form.utr_number}
                       disabled={!fieldsEditable}
                       onChange={(e) => patch({ utr_number: e.target.value })}
                       placeholder="UTR…"
                     />
-                  </VoucherFormField>
-                </div>
-                <div className="md:col-span-4 min-w-0">
-                  <VoucherFormField label="Transaction Reference">
+                  </InvoiceDetailField>
+                  <InvoiceDetailField label="Transaction Reference">
                     <Input
-                      className={VOUCHER_INPUT_CLASS}
+                      className={INVOICE_DETAIL_INPUT_CLASS}
                       value={form.transaction_reference}
                       disabled={!fieldsEditable}
                       onChange={(e) => patch({ transaction_reference: e.target.value })}
                       placeholder="Reference…"
                     />
-                  </VoucherFormField>
-                </div>
-              </>
-            ) : null}
+                  </InvoiceDetailField>
+                </>
+              ) : null}
+            </div>
           </div>
         </VoucherFormSectionCard>
 
-        <VoucherFormSectionCard title="Paid To">
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5">
-            <div className="md:col-span-3 min-w-0 space-y-1">
-              <Label className="text-xs font-medium">
-                Paid To Type <span className="text-red-500">*</span>
-              </Label>
+        <VoucherFormSectionCard title="Paid To" highlight={isViewMode}>
+          <div className="so-invoice-details-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+            <InvoiceDetailField label="Paid To Type" required>
               <Select
                 value={form.party_kind}
                 disabled={!fieldsEditable}
@@ -865,44 +972,42 @@ export function PaymentVoucherApiForm({
                   });
                 }}
               >
-                <SelectTrigger className={VOUCHER_INPUT_CLASS}>
+                <SelectTrigger className={INVOICE_DETAIL_SELECT_CLASS}>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   {(Object.keys(PAYMENT_PARTY_KIND_LABELS) as PaymentPartyKind[]).map(
                     (k) => (
-                      <SelectItem key={k} value={k} className="text-sm">
+                      <SelectItem key={k} value={k}>
                         {PAYMENT_PARTY_KIND_LABELS[k]}
                       </SelectItem>
                     ),
                   )}
                 </SelectContent>
               </Select>
-            </div>
+            </InvoiceDetailField>
 
             {form.party_kind === "SUPPLIER" ? (
-              <div className="md:col-span-5 min-w-0">
+              <InvoiceDetailField label="Supplier" required>
                 <PaymentSearchableSelect
-                  label="Supplier"
-                  required
                   disabled={!fieldsEditable}
                   value={form.supplier_id}
                   options={suppliers}
                   placeholder="Select supplier…"
+                  triggerClassName={INVOICE_DETAIL_SELECT_CLASS}
                   onChange={(id) => patch({ supplier_id: id, allocations: [] })}
                 />
-              </div>
+              </InvoiceDetailField>
             ) : null}
 
             {form.party_kind === "CUSTOMER_REFUND" ? (
-              <div className="md:col-span-5 min-w-0">
+              <InvoiceDetailField label="Customer" required>
                 <PaymentSearchableSelect
-                  label="Customer"
-                  required
                   disabled={!fieldsEditable}
                   value={form.customer_id}
                   options={customers}
                   placeholder="Select customer…"
+                  triggerClassName={INVOICE_DETAIL_SELECT_CLASS}
                   onChange={(id) =>
                     patch({
                       customer_id: id,
@@ -912,167 +1017,114 @@ export function PaymentVoucherApiForm({
                     })
                   }
                 />
-              </div>
+              </InvoiceDetailField>
             ) : null}
 
             {form.party_kind === "OTHER_LEDGER" ? (
-              <div className="md:col-span-5 min-w-0">
-                <PaymentSearchableSelect
-                  label="Other Ledger"
-                  required
+              <InvoiceDetailField label="Other Ledger" required>
+                <VoucherLedgerSelect
                   disabled={!fieldsEditable}
                   value={form.other_ledger_id}
-                  options={manualLedgers}
+                  fallbackLabel={form.other_ledger_name || undefined}
                   placeholder="Select ledger…"
-                  onChange={(id) => {
-                    const opt = manualLedgers.find((o) => o.value === id);
+                  className={INVOICE_DETAIL_SELECT_CLASS}
+                  onChange={(ledger) =>
                     patch({
-                      other_ledger_id: id,
-                      other_ledger_name: opt?.label || "",
+                      other_ledger_id: ledger.ledgerId,
+                      other_ledger_name: ledger.ledgerName,
                       allocations: [],
-                    });
-                  }}
+                    })
+                  }
                 />
-              </div>
+              </InvoiceDetailField>
             ) : null}
 
-            <div className="md:col-span-2 min-w-0">
-              <VoucherFormField
-                label={
-                  form.party_kind === "SUPPLIER"
-                    ? "Gross Supplier Amount"
-                    : form.party_kind === "CUSTOMER_REFUND"
-                      ? "Gross Refund Amount"
-                      : "Gross Amount"
+            <InvoiceDetailField
+              label={
+                form.party_kind === "SUPPLIER"
+                  ? "Gross Supplier Amount"
+                  : form.party_kind === "CUSTOMER_REFUND"
+                    ? "Gross Refund Amount"
+                    : "Gross Amount"
+              }
+              required={form.party_kind !== "SUPPLIER"}
+            >
+              <Input
+                className={cn(INVOICE_DETAIL_INPUT_CLASS, VOUCHER_MONEY_INPUT_CLASS, "tabular-nums")}
+                value={form.gross_party_amount}
+                disabled={!fieldsEditable}
+                onChange={(e) =>
+                  patch({
+                    gross_party_amount: sanitizeNonNegativeMoneyInput(e.target.value),
+                  })
                 }
-                required={form.party_kind !== "SUPPLIER"}
-              >
-                <Input
-                  className={cn(
-                    VOUCHER_INPUT_CLASS,
-                    VOUCHER_MONEY_INPUT_CLASS,
-                    "w-[160px] max-w-full",
-                  )}
-                  value={form.gross_party_amount}
-                  disabled={!fieldsEditable}
-                  onChange={(e) =>
-                    patch({
-                      gross_party_amount: sanitizeNonNegativeMoneyInput(e.target.value),
-                    })
-                  }
-                  placeholder="0.00"
-                />
-              </VoucherFormField>
-            </div>
+                placeholder="0.00"
+              />
+            </InvoiceDetailField>
 
             {form.party_kind === "SUPPLIER" ? (
-              <div className="md:col-span-2 min-w-0 space-y-1">
-                <Label className="text-xs font-medium">Payment Treatment</Label>
-                <Select
-                  value={form.payment_treatment}
-                  disabled={!fieldsEditable}
-                  onValueChange={(v) =>
-                    patch({
-                      payment_treatment: v as PaymentFormState["payment_treatment"],
-                      allocations:
-                        v === "advance_on_account"
-                          ? form.allocations.map((a) => ({
-                              ...a,
-                              selected: false,
-                              allocated_amount: "",
-                              tds_amount: "0",
-                              tds_section_id: "",
-                              discount_amount: "0",
-                            }))
-                          : form.allocations,
-                    })
-                  }
-                >
-                  <SelectTrigger className={VOUCHER_INPUT_CLASS}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="against_outstanding" className="text-sm">
-                      Against Outstanding
-                    </SelectItem>
-                    <SelectItem value="advance_on_account" className="text-sm">
-                      Advance / On Account
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              <InvoiceDetailField label="Payment Treatment">
+                <div className="cnz-gst-toggle w-full" role="group" aria-label="Payment treatment">
+                  <button
+                    type="button"
+                    data-active={form.payment_treatment === "advance_on_account"}
+                    aria-pressed={form.payment_treatment === "advance_on_account"}
+                    disabled={!fieldsEditable}
+                    onClick={() =>
+                      patch({
+                        payment_treatment: "advance_on_account",
+                        allocations: form.allocations.map((a) => ({
+                          ...a,
+                          selected: false,
+                          allocated_amount: "",
+                          tds_amount: "0",
+                          tds_section_id: "",
+                          discount_amount: "0",
+                        })),
+                      })
+                    }
+                  >
+                    Advance / On Account
+                  </button>
+                  <button
+                    type="button"
+                    data-active={form.payment_treatment === "against_outstanding"}
+                    aria-pressed={form.payment_treatment === "against_outstanding"}
+                    disabled={!fieldsEditable}
+                    onClick={() =>
+                      patch({
+                        payment_treatment: "against_outstanding",
+                      })
+                    }
+                  >
+                    Against Outstanding
+                  </button>
+                </div>
+              </InvoiceDetailField>
             ) : null}
           </div>
 
           {form.party_kind === "CUSTOMER_REFUND" && isDirectCustomerRefund ? (
-            <div className="mt-3 md:max-w-md">
-              <PaymentSearchableSelect
-                label="Refund / Adjustment Ledger"
-                required
+            <div className="mt-2.5 md:max-w-md space-y-1">
+              <Label className="text-xs font-medium">
+                Refund / Adjustment Ledger <span className="text-red-500">*</span>
+              </Label>
+              <VoucherLedgerSelect
                 disabled={!fieldsEditable}
                 value={form.other_ledger_id}
-                options={manualLedgers}
+                fallbackLabel={form.other_ledger_name || undefined}
                 placeholder="Select refund / adjustment ledger…"
-                onChange={(id) => {
-                  const opt = manualLedgers.find((o) => o.value === id);
+                className={INVOICE_DETAIL_SELECT_CLASS}
+                onChange={(ledger) =>
                   patch({
-                    other_ledger_id: id,
-                    other_ledger_name: opt?.label || "",
-                  });
-                }}
+                    other_ledger_id: ledger.ledgerId,
+                    other_ledger_name: ledger.ledgerName,
+                  })
+                }
               />
               <p className="text-[11px] text-muted-foreground mt-1">
                 Direct refund without an existing credit open item. No fake Customer Advance
                 is created.
-              </p>
-            </div>
-          ) : null}
-
-          {form.party_kind === "SUPPLIER" &&
-          form.payment_treatment === "against_outstanding" ? (
-            <div className="mt-3 space-y-2">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold text-foreground">
-                  Supplier Outstanding Allocations
-                </p>
-                {outstandingLoading ? (
-                  <span className="text-[11px] text-muted-foreground flex items-center gap-1">
-                    <Loader2 className="w-3 h-3 animate-spin" /> Loading…
-                  </span>
-                ) : null}
-              </div>
-              <PaymentAllocationTable
-                rows={form.allocations}
-                readOnly={!fieldsEditable}
-                showTdsDiscount
-                tdsSectionOptions={tdsSectionOptions}
-                emptyMessage={
-                  form.supplier_id
-                    ? "No outstanding open items for this supplier."
-                    : "Select a supplier to load outstanding items."
-                }
-                onToggle={(id, selected) => {
-                  setForm((prev) => ({
-                    ...prev,
-                    allocations: prev.allocations.map((a) =>
-                      a.open_item_id === id
-                        ? {
-                            ...a,
-                            selected,
-                            allocated_amount: selected
-                              ? a.allocated_amount || String(a.outstanding_amount)
-                              : "",
-                          }
-                        : a,
-                    ),
-                  }));
-                }}
-                onChangeAmount={applyAllocationPatch}
-              />
-              <p className="text-[11px] text-muted-foreground">
-                Gross settlement {preview.gross.toFixed(2)} · Allocated{" "}
-                {preview.totalAllocated.toFixed(2)} · Supplier Advance {preview.advance.toFixed(2)}{" "}
-                · Net paid {preview.netBank.toFixed(2)}
               </p>
             </div>
           ) : null}
@@ -1103,7 +1155,6 @@ export function PaymentVoucherApiForm({
               <PaymentAllocationTable
                 rows={form.allocations}
                 readOnly={!fieldsEditable}
-                showTdsDiscount={false}
                 emptyMessage={
                   form.customer_id
                     ? "No eligible Customer Advance or Credit Note balance. You can still make a direct refund using a Refund / Adjustment Ledger."
@@ -1140,160 +1191,141 @@ export function PaymentVoucherApiForm({
           ) : null}
         </VoucherFormSectionCard>
 
-        <VoucherFormSectionCard title="Adjustments">
-          <PaymentAdjustmentsEditor
+        {showSupplierInvoiceSettlement ? (
+          <VoucherFormSectionCard
+            title={isViewMode ? "Selected Outstanding Items" : "Supplier Outstanding Allocations"}
+            highlight={isViewMode}
+            headerActions={
+              outstandingLoading ? (
+                <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                  <Loader2 className="w-3 h-3 animate-spin" /> Loading…
+                </span>
+              ) : null
+            }
+          >
+            <PaymentAllocationTable
+              rows={form.allocations}
+              readOnly={!fieldsEditable}
+              simplifiedSettlement
+              emptyMessage={
+                form.supplier_id
+                  ? "No outstanding open items for this supplier."
+                  : "Select a supplier to load outstanding items."
+              }
+              onToggle={(id, selected) => {
+                setForm((prev) => ({
+                  ...prev,
+                  allocations: prev.allocations.map((a) =>
+                    a.open_item_id === id
+                      ? {
+                          ...a,
+                          selected,
+                          allocated_amount: selected
+                            ? a.allocated_amount || String(a.outstanding_amount)
+                            : "",
+                          tds_amount: selected ? a.tds_amount : "0",
+                          tds_section_id: selected ? a.tds_section_id : "",
+                          discount_amount: selected ? a.discount_amount : "0",
+                        }
+                      : a,
+                  ),
+                }));
+              }}
+              onChangeAmount={applyAllocationPatch}
+            />
+          </VoucherFormSectionCard>
+        ) : null}
+
+        <VoucherFormSectionCard
+          title="Ledger Entries"
+          flush
+          highlight={isViewMode}
+          headerActions={
+            fieldsEditable ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="so-section-header-btn"
+                onClick={() => patch({ adjustments: createPaymentLedgerEntryRow(form.adjustments) })}
+              >
+                <Plus /> Add Line
+              </Button>
+            ) : null
+          }
+        >
+          <PaymentLedgerEntriesTable
             rows={form.adjustments}
             ledgerOptions={manualLedgers}
             readOnly={!fieldsEditable}
             onChange={(rows) => patch({ adjustments: rows })}
           />
-          {(preview.totalTds > 0 || preview.totalDiscount > 0) && (
-            <div className="mt-2 text-[11px] text-muted-foreground space-y-0.5">
-              <p>
-                Allocation TDS total: {preview.totalTds.toFixed(2)} (must match Supplier TDS
-                adjustment)
-              </p>
-              <p>
-                Allocation Discount total: {preview.totalDiscount.toFixed(2)} (must match
-                Discount Received adjustment; select a ledger)
-              </p>
-            </div>
-          )}
         </VoucherFormSectionCard>
 
-        <div className="grid grid-cols-1 xl:grid-cols-[minmax(280px,360px)_1fr] gap-3 items-start">
-          <PaymentSummaryCard
-            gross={preview.gross}
-            totalAllocated={preview.totalAllocated}
-            advance={preview.advance}
-            tds={preview.adjTds}
-            discount={preview.adjDiscount}
-            otherDebit={preview.otherDebit}
-            otherCredit={preview.otherCredit}
-            roundOff={preview.roundOff}
-            netBank={preview.netBank}
+        <div className="grid grid-cols-1 gap-2.5 items-start lg:grid-cols-[minmax(0,1fr)_300px]">
+          <VoucherFormSectionCard title="Narration & Attachments" highlight={isViewMode}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+              <div className="min-w-0 space-y-0.5">
+                <Label className="text-xs font-medium">Narration</Label>
+                <Textarea
+                  className={cn(INVOICE_DETAIL_INPUT_CLASS, "so-goods-narration min-h-[60px] h-auto resize-y text-xs w-full")}
+                  rows={2}
+                  value={form.narration}
+                  onChange={(e) => patch({ narration: e.target.value })}
+                  placeholder="Optional narration…"
+                  maxLength={2000}
+                  disabled={!fieldsEditable}
+                />
+              </div>
+              <PaymentAttachmentsPanel
+                persisted={form.persistedAttachments}
+                pending={form.pendingFiles}
+                readOnly={!fieldsEditable}
+                onAddFiles={handleAddAttachmentFiles}
+                onRemovePersisted={handleRemovePersistedAttachment}
+                onRemovePending={handleRemovePendingAttachment}
+              />
+            </div>
+          </VoucherFormSectionCard>
+
+          <PaymentFormSummary
+            grossAmount={preview.gross}
+            invoiceSettlement={preview.totalAllocated}
+            advanceAmount={preview.advance}
+            adjustmentsTotal={adjustmentsTotal}
+            paymentAmount={preview.netBank}
             partyKind={form.party_kind}
+            showInvoiceSettlement={showInvoiceSettlementInSummary}
+            showAdvance={showAdvanceInSummary}
+            balanced={summaryBalanced}
           />
-          <PaymentAccountingPreview form={form} partyLedgerName={partyName} />
         </div>
 
         {detail?.accounting_voucher ? (
-          <VoucherFormSectionCard title="Posted Accounting Voucher">
-            <div className="text-xs space-y-1">
-              <p>
-                <span className="text-muted-foreground">Voucher No.: </span>
-                <span className="font-mono font-semibold text-brand-700">
+          <VoucherFormSectionCard title="Posted Accounting Voucher" highlight>
+            <div className="flex flex-wrap gap-3 text-xs">
+              <div className="rounded-lg border border-brand-100 bg-brand-50/60 px-3 py-2 min-w-[160px]">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-brand-700/80">
+                  Voucher No.
+                </p>
+                <p className="mt-0.5 font-mono font-semibold text-brand-800">
                   {detail.accounting_voucher.voucher_number || "—"}
-                </span>
-              </p>
-              <p>
-                <span className="text-muted-foreground">Status: </span>
-                {detail.accounting_voucher.status || "—"}
-              </p>
+                </p>
+              </div>
+              <div className="rounded-lg border border-emerald-100 bg-emerald-50/70 px-3 py-2 min-w-[140px]">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-800/80">
+                  Status
+                </p>
+                <p className="mt-0.5 font-semibold text-emerald-900">
+                  {detail.accounting_voucher.status || "—"}
+                </p>
+              </div>
             </div>
           </VoucherFormSectionCard>
         ) : null}
-
-        <VoucherFormSectionCard title="Narration and Attachments">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-            <div className="min-w-0 space-y-0.5">
-              <Label className="text-xs font-medium">Narration</Label>
-              <Textarea
-                className="resize-y rounded-lg border border-border min-h-[60px] max-h-36 h-[60px] py-1.5 text-sm focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:border-brand-400"
-                rows={2}
-                value={form.narration}
-                onChange={(e) => patch({ narration: e.target.value })}
-                placeholder="Optional narration…"
-                maxLength={2000}
-                disabled={!fieldsEditable}
-              />
-            </div>
-            <PaymentAttachmentsPanel
-              persisted={form.persistedAttachments}
-              pending={form.pendingFiles}
-              readOnly={!fieldsEditable}
-              onAddFiles={handleAddAttachmentFiles}
-              onRemovePersisted={handleRemovePersistedAttachment}
-              onRemovePending={handleRemovePendingAttachment}
-            />
           </div>
-        </VoucherFormSectionCard>
+        </InvoiceFormLayout>
       </div>
-
-      {(!showViewChrome || status === "POSTED") ? (
-      <div className="fixed bottom-0 inset-x-0 z-40 border-t border-border bg-white/95 backdrop-blur px-4 py-2.5">
-        <div className="w-full">
-          <PaymentFormActionBar
-            status={status}
-            busy={busy}
-            readOnly={showViewChrome}
-            canCancel={canCancelStatus(status) && !!currentId}
-            approvalRequired={approvalRequired}
-            configReady={configReady}
-            hasExistingId={!!currentId}
-            onDiscard={fieldsEditable ? handleDiscard : undefined}
-            onSaveDraft={
-              fieldsEditable && !readOnlyProp ? () => void saveDraft() : undefined
-            }
-            onSubmitForApproval={
-              fieldsEditable && !readOnlyProp && approvalRequired
-                ? () => setSubmitOpen(true)
-                : undefined
-            }
-            onSaveAndPost={
-              fieldsEditable &&
-              !readOnlyProp &&
-              !approvalRequired &&
-              !currentId
-                ? () => void handleSaveAndPost()
-                : undefined
-            }
-            onApprove={
-              !readOnlyProp &&
-              status === "PENDING_APPROVAL" &&
-              approvalRequired &&
-              currentId
-                ? () =>
-                    void runAction(
-                      () => PaymentVoucherService.approve(currentId!),
-                      "Payment approved.",
-                    )
-                : undefined
-            }
-            onReject={
-              !readOnlyProp &&
-              status === "PENDING_APPROVAL" &&
-              approvalRequired &&
-              currentId
-                ? () => setRejectOpen(true)
-                : undefined
-            }
-            onPost={
-              !readOnlyProp && currentId
-                ? status === "APPROVED"
-                  ? () => void handlePostDirect()
-                  : !approvalRequired &&
-                      (status === "DRAFT" || status === "REJECTED" || !status) &&
-                      fieldsEditable
-                    ? () => void handleSaveAndPost()
-                    : undefined
-                : undefined
-            }
-            onCancel={
-              !readOnlyProp &&
-              canCancelStatus(status) &&
-              currentId &&
-              !isDraftEditable(status)
-                ? () => setCancelOpen(true)
-                : undefined
-            }
-            onReverse={
-              status === "POSTED" && currentId ? () => setReverseOpen(true) : undefined
-            }
-          />
-        </div>
-      </div>
-      ) : null}
 
       <PaymentReasonDialog
         open={submitOpen}
@@ -1393,6 +1425,6 @@ export function PaymentVoucherApiForm({
           );
         }}
       />
-    </AccountsPageShell>
+    </>
   );
 }

@@ -398,8 +398,10 @@ function normalizePersistedAttachments(
 export function createEmptyAdjustment(
   type: ReceiptAdjustmentType = "OTHER",
 ): ReceiptUiAdjustment {
+  // OTHER ledger-entry lines are additive to bank inflow (CREDIT).
+  // TDS / Discount / Bank Charges remain DEBIT (reduce net bank).
   const entryType: AccountingEntryType =
-    type === "OTHER" || type === "ROUND_OFF" ? "DEBIT" : "DEBIT";
+    type === "OTHER" || type === "ROUND_OFF" ? "CREDIT" : "DEBIT";
   return {
     id: `adj-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     adjustment_type: type,
@@ -457,40 +459,62 @@ export function computeReceiptPreview(form: ReceiptFormState) {
   const adj = computeAdjustmentTotals(form);
   const grossInput = toMoneyNumber(form.gross_party_amount);
 
-  let gross = grossInput;
+  /** Simplified Ledger Entries (OTHER / round-off) — part of gross, not an add-on. */
+  let ledgerEntriesTotal = 0;
+  for (const row of form.adjustments) {
+    if (row.adjustment_type !== "OTHER" && row.adjustment_type !== "ROUND_OFF") continue;
+    const amt = toMoneyNumber(row.amount);
+    if (amt <= 0) continue;
+    ledgerEntriesTotal += amt;
+  }
+  ledgerEntriesTotal = roundMoney(ledgerEntriesTotal);
+
+  let displayGross = grossInput;
   let advance = 0;
+  let payloadGross = 0;
 
   if (form.party_kind === "CUSTOMER") {
     if (form.receipt_treatment === "advance_on_account") {
-      gross = grossInput;
-      advance = gross;
+      displayGross = grossInput;
+      advance = roundMoney(Math.max(0, displayGross - ledgerEntriesTotal));
+      payloadGross = advance;
+    } else if (grossInput > 0) {
+      displayGross = grossInput;
+      advance = roundMoney(
+        Math.max(0, displayGross - totalAllocated - ledgerEntriesTotal),
+      );
+      payloadGross = roundMoney(totalAllocated + advance);
     } else {
-      if (grossInput > 0) {
-        gross = grossInput;
-        advance = roundMoney(Math.max(0, gross - totalAllocated));
-      } else {
-        gross = totalAllocated;
-        advance = 0;
-      }
+      displayGross = totalAllocated;
+      advance = 0;
+      payloadGross = totalAllocated;
     }
   } else if (form.party_kind === "SUPPLIER_REFUND") {
-    gross = grossInput > 0 ? grossInput : totalAllocated;
+    displayGross = grossInput > 0 ? grossInput : totalAllocated;
     advance = 0;
+    payloadGross =
+      grossInput > 0
+        ? roundMoney(Math.max(0, displayGross - ledgerEntriesTotal))
+        : totalAllocated;
   } else {
-    gross = grossInput;
+    displayGross = grossInput;
     advance = 0;
+    payloadGross = roundMoney(Math.max(0, grossInput - ledgerEntriesTotal));
   }
 
-  const netBank = roundMoney(gross - adj.debit + adj.credit);
+  // OTHER CREDIT adds bank so net receipt equals display gross when ledger is within gross.
+  const netBank = roundMoney(payloadGross - adj.debit + adj.credit);
 
   return {
-    gross: roundMoney(gross),
+    gross: roundMoney(displayGross),
+    payloadGross: roundMoney(payloadGross),
     advance: roundMoney(advance),
     totalAllocated,
     totalTds,
     totalDiscount,
     adjDebit: adj.debit,
     adjCredit: adj.credit,
+    ledgerEntriesTotal,
     netBank,
   };
 }
@@ -608,6 +632,34 @@ export function validateReceiptForm(form: ReceiptFormState): string | null {
 
   const preview = computeReceiptPreview(form);
 
+  if (
+    preview.ledgerEntriesTotal > 0.004 &&
+    toMoneyNumber(form.gross_party_amount) <= 0 &&
+    form.party_kind === "CUSTOMER" &&
+    form.receipt_treatment === "against_outstanding" &&
+    preview.totalAllocated <= 0
+  ) {
+    return "Enter Gross Amount when using Ledger Entries without invoice settlement.";
+  }
+  if (
+    preview.gross > 0 &&
+    preview.totalAllocated + preview.ledgerEntriesTotal > preview.gross + 0.01
+  ) {
+    return "Invoice Settlement + Ledger Entries cannot exceed Gross Amount.";
+  }
+  if (
+    form.party_kind !== "SUPPLIER_REFUND" &&
+    preview.gross > 0 &&
+    Math.abs(
+      preview.totalAllocated +
+        preview.advance +
+        preview.ledgerEntriesTotal -
+        preview.gross,
+    ) > 0.01
+  ) {
+    return "Settlement + On-account + Ledger Entries must equal Gross Amount.";
+  }
+
   if (form.party_kind === "OTHER_LEDGER") {
     if (preview.gross <= 0) return "Gross receipt amount must be greater than zero.";
     if (form.allocations.some((a) => a.selected)) {
@@ -621,8 +673,8 @@ export function validateReceiptForm(form: ReceiptFormState): string | null {
         return "Allocate at least one outstanding item or enter a gross amount that creates advance.";
       }
       const grossInput = toMoneyNumber(form.gross_party_amount);
-      if (grossInput > 0 && preview.totalAllocated > grossInput + 0.01) {
-        return "Total allocated cannot exceed Gross Settlement Amount. Increase gross or reduce allocations.";
+      if (grossInput > 0 && preview.totalAllocated + preview.ledgerEntriesTotal > grossInput + 0.01) {
+        return "Settlement + Ledger Entries cannot exceed Gross Settlement Amount. Increase gross or reduce amounts.";
       }
       for (const row of selectedAllocations(form)) {
         const alloc = toMoneyNumber(row.allocated_amount);
@@ -647,7 +699,7 @@ export function validateReceiptForm(form: ReceiptFormState): string | null {
         return `Allocation for ${row.document_number} exceeds recoverable balance.`;
       }
     }
-    if (preview.gross > 0 && Math.abs(preview.gross - preview.totalAllocated) > 0.01) {
+    if (preview.gross > 0 && Math.abs(preview.payloadGross - preview.totalAllocated) > 0.01) {
       return "Gross refund amount must equal total allocated for Supplier Refund.";
     }
   }
@@ -750,7 +802,7 @@ export function buildCreatePayload(form: ReceiptFormState): CreateReceiptVoucher
   });
 
   return {
-    voucher_date: form.voucher_date,
+    voucher_date: todayDateInput(),
     warehouse_id: form.warehouse_id,
     party_kind: form.party_kind,
     customer_id: form.party_kind === "CUSTOMER" ? form.customer_id : null,
@@ -769,7 +821,7 @@ export function buildCreatePayload(form: ReceiptFormState): CreateReceiptVoucher
     instrument_date:
       form.transaction_mode === "CHEQUE" ? form.cheque_date || null : form.transaction_date || null,
     transaction_date: form.transaction_date || null,
-    gross_party_amount: preview.gross,
+    gross_party_amount: preview.payloadGross,
     advance_amount:
       form.party_kind === "CUSTOMER" ? preview.advance : 0,
     narration: form.narration.trim() || null,
@@ -782,6 +834,7 @@ export function buildCreatePayload(form: ReceiptFormState): CreateReceiptVoucher
 export function buildUpdatePayload(form: ReceiptFormState): UpdateReceiptVoucherPayload {
   return {
     ...buildCreatePayload(form),
+    voucher_date: form.voucher_date || todayDateInput(),
     existing_attachments: form.persistedAttachments,
   };
 }

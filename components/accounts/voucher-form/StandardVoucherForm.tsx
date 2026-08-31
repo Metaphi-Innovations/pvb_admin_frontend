@@ -499,13 +499,10 @@ export function StandardVoucherForm({
     <VoucherFormActionBar
       onDiscard={requestCancel}
       onSaveDraft={onSaveDraftClick}
-      onSubmitForApproval={onSubmitForApprovalClick}
-      showSubmitForApproval={Boolean(VOUCHER_CATEGORY_MAP[voucherType])}
       onSaveAndPost={onPostClick}
       saveAndPostLabel="Save & Post"
       discardDisabled={isSubmitting}
       saveDraftDisabled={isSubmitting}
-      submitForApprovalDisabled={isSubmitting || !canPost}
       saveAndPostDisabled={!canPost || isSubmitting}
     />
   );

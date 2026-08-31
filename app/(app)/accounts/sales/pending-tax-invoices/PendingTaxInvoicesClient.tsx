@@ -17,6 +17,7 @@ import {
 import {
   AccountsTableEmpty,
   AccountsTableListing,
+  AccountsTableLoading,
   AccountsTablePagination,
 } from "@/components/accounts/AccountsTableListing";
 import {
@@ -32,6 +33,7 @@ import {
 } from "@/components/accounts/ReportFilters";
 import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
 import { MoneyAmount } from "@/components/accounts/MoneyAmount";
+import { accountsActionColClass } from "@/components/accounts/AccountsTableActions";
 import { formatMoney } from "@/lib/accounts/money-format";
 import {
   exportTabularReportToPdf,
@@ -471,8 +473,8 @@ function PendingInvoicesTable({
   };
 
   const emptyStates =
-    !mounted || loading ? (
-      <AccountsTableEmpty colSpan={colSpan} message="Loading pending invoices…" />
+    loading && toolbarRows.length === 0 ? (
+      <AccountsTableLoading colSpan={colSpan} message="Loading pending invoices…" />
     ) : error ? (
       <AccountsTableEmpty colSpan={colSpan} message={error} />
     ) : toolbarRows.length === 0 ? (
@@ -503,7 +505,7 @@ function PendingInvoicesTable({
               sortable={false}
               filterable={false}
               align="right"
-              className="accounts-col-actions"
+              className={accountsActionColClass("cta")}
             />
           </AccountsTableHeadRow>
         </AccountsTableHead>
@@ -538,7 +540,7 @@ function PendingInvoicesTable({
                   <MoneyAmount amount={r.invoiceValue} />
                 </AccountsTableCell>
                 <AccountsTableCell>{r.branch || "—"}</AccountsTableCell>
-                <AccountsTableCell align="right">{generateAction(r)}</AccountsTableCell>
+                <AccountsTableCell align="right" actions="cta">{generateAction(r)}</AccountsTableCell>
               </AccountsTableRow>
             ))}
         </AccountsTableBody>
@@ -564,7 +566,7 @@ function PendingInvoicesTable({
               sortable={false}
               filterable={false}
               align="right"
-              className="accounts-col-actions"
+              className={accountsActionColClass("cta")}
             />
           </AccountsTableHeadRow>
         </AccountsTableHead>
@@ -598,7 +600,7 @@ function PendingInvoicesTable({
                 <AccountsTableCell align="right" money className="font-semibold">
                   <MoneyAmount amount={0} />
                 </AccountsTableCell>
-                <AccountsTableCell align="right">{generateAction(r)}</AccountsTableCell>
+                <AccountsTableCell align="right" actions="cta">{generateAction(r)}</AccountsTableCell>
               </AccountsTableRow>
             ))}
         </AccountsTableBody>
@@ -626,7 +628,7 @@ function PendingInvoicesTable({
             sortable={false}
             filterable={false}
             align="right"
-            className="accounts-col-actions"
+            className={accountsActionColClass("cta")}
           />
         </AccountsTableHeadRow>
       </AccountsTableHead>
@@ -653,7 +655,7 @@ function PendingInvoicesTable({
               <AccountsTableCell align="right" money className="font-semibold">
                 <MoneyAmount amount={r.invoiceValue} />
               </AccountsTableCell>
-              <AccountsTableCell align="right">{generateAction(r)}</AccountsTableCell>
+              <AccountsTableCell align="right" actions="cta">{generateAction(r)}</AccountsTableCell>
             </AccountsTableRow>
           ))}
       </AccountsTableBody>

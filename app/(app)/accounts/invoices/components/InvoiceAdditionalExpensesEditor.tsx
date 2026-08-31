@@ -167,7 +167,7 @@ const ExpenseRow = memo(function ExpenseRow({
 					onChange={(e) => onUpdate(row.id, { remarks: e.target.value })}
 				/>
 			</td>
-			<td className="p-2 w-10">
+			<td className="p-2 so-col-actions">
 				{!disabled && !fromSalesOrder && (
 					<button
 						type="button"
@@ -233,7 +233,9 @@ function InvoiceAdditionalExpensesEditorInner({
 						next.gstPct = defaultGstPct;
 					}
 					if (patch.expenseHead && !patch.coaLedgerName) {
-						const ledger = resolveExpenseHeadCoaLedger(patch.expenseHead);
+						const ledger = resolveExpenseHeadCoaLedger(
+							patch.expenseHead as InvoiceExpenseHead | "",
+						);
 						next.coaLedgerId = ledger.coaLedgerId;
 						next.coaLedgerName = ledger.coaLedgerName;
 					}
@@ -264,8 +266,8 @@ function InvoiceAdditionalExpensesEditorInner({
 
 	return (
 		<div className="space-y-2">
-			<div className="overflow-x-auto border border-border/60 rounded-lg bg-white">
-				<table className="w-full text-sm min-w-[980px]">
+			<div className="overflow-x-auto border border-border/60 rounded-lg bg-white so-goods-product-table-wrap">
+				<table className="so-invoice-table w-full text-sm min-w-[980px]">
 					<thead className="border-b border-border/60 bg-muted/20">
 						<tr>
 							{headers.map((h) => (
@@ -274,6 +276,7 @@ function InvoiceAdditionalExpensesEditorInner({
 									className={cn(
 										"px-2.5 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap",
 										rightAlign.has(h) && "text-right",
+										!h && "so-col-actions",
 									)}
 								>
 									{h}

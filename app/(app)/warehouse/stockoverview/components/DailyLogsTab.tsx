@@ -446,6 +446,7 @@ export function DailyLogsTab() {
         <StackedQtyDisplay
           baseQty={Number(row.openingQty) || 0}
           meta={toDailyLogQtyMeta(row)}
+          emptyLabel="0"
           layout="compact"
           className="ml-auto"
         />
@@ -457,17 +458,15 @@ export function DailyLogsTab() {
       sortable: true,
       align: "right",
       width: "140px",
-      render: (_v, row) =>
-        Number(row.dayIn) > 0 ? (
-          <StackedQtyDisplay
-            baseQty={Number(row.dayIn) || 0}
-            meta={toDailyLogQtyMeta(row)}
-            layout="compact"
-            className="ml-auto [&_p:first-child]:text-emerald-700"
-          />
-        ) : (
-          <span className="text-xs text-muted-foreground">—</span>
-        ),
+      render: (_v, row) => (
+        <StackedQtyDisplay
+          baseQty={Number(row.dayIn) || 0}
+          meta={toDailyLogQtyMeta(row)}
+          emptyLabel="0"
+          layout="compact"
+          className="ml-auto [&_p:first-child]:text-emerald-700"
+        />
+      ),
     },
     {
       key: "dayOut",
@@ -475,17 +474,15 @@ export function DailyLogsTab() {
       sortable: true,
       align: "right",
       width: "140px",
-      render: (_v, row) =>
-        Number(row.dayOut) > 0 ? (
-          <StackedQtyDisplay
-            baseQty={Number(row.dayOut) || 0}
-            meta={toDailyLogQtyMeta(row)}
-            layout="compact"
-            className="ml-auto [&_p:first-child]:text-red-700"
-          />
-        ) : (
-          <span className="text-xs text-muted-foreground">—</span>
-        ),
+      render: (_v, row) => (
+        <StackedQtyDisplay
+          baseQty={Number(row.dayOut) || 0}
+          meta={toDailyLogQtyMeta(row)}
+          emptyLabel="0"
+          layout="compact"
+          className="ml-auto [&_p:first-child]:text-red-700"
+        />
+      ),
     },
     {
       key: "closingQty",
@@ -497,6 +494,7 @@ export function DailyLogsTab() {
         <StackedQtyDisplay
           baseQty={Number(row.closingQty) || 0}
           meta={toDailyLogQtyMeta(row)}
+          emptyLabel="0"
           layout="compact"
           className="ml-auto"
         />

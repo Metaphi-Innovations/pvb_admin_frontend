@@ -1,7 +1,6 @@
 /**
- * Goods Sales Invoice Additional Charges editor.
- * Loads options from Additional Charge Master dropdown API.
- * Also used by Service Invoice generate form.
+ * Shared Additional Charges editor for Sales / Service / Purchase invoices.
+ * Particular (free text) + Income/Expense ledger + HSN Master — no Additional Charge Master selector.
  */
 
 "use client";
@@ -11,179 +10,158 @@ import {
   useCallback,
   useEffect,
   useMemo,
-  useState,
   type Dispatch,
   type SetStateAction,
 } from "react";
-import { Check, ChevronsUpDown, Plus, Search, Trash2 } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
+import { GenericLedgerHierarchySelect } from "@/components/accounts/GenericLedgerHierarchySelect";
+import { SearchableSelect } from "@/app/(app)/accounts/credit-notes/components/SearchableSelect";
+import { useHsnDropdown } from "@/hooks/masters/use-hsn";
 import {
   calcAdditionalExpenseRow,
   createEmptyAdditionalExpense,
   type InvoiceAdditionalExpense,
-  type InvoiceExpenseHead,
 } from "../invoice-additional-expenses";
 import { formatINR } from "../invoice-utils";
-import { useAdditionalChargeDropdownResolved } from "@/hooks/masters/use-additional-charge";
-import type { ResolvedAdditionalChargeOption } from "@/services/additional-charge.service";
 
 const NUM_INPUT_CLASS =
   "h-8 text-xs tabular-nums text-right w-full [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none";
 
-function ChargeSelect({
-  row,
-  options,
-  disabled,
-  onSelect,
+const CHARGE_LEDGER_HEADS = ["INC", "EXP"] as const;
+
+function ChargeTableReadonly({
+  value,
+  muted,
+  strong,
 }: {
-  row: InvoiceAdditionalExpense;
-  options: ResolvedAdditionalChargeOption[];
-  disabled?: boolean;
-  onSelect: (charge: ResolvedAdditionalChargeOption) => void;
+  value: string;
+  muted?: boolean;
+  strong?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
-  const [q, setQ] = useState("");
-
-  const selected = options.find((o) => o.chargeId === row.chargeMasterId);
-  const label = selected?.chargeName || row.expenseHead || "Select additional charge…";
-
-  const filtered = useMemo(() => {
-    const s = q.trim().toLowerCase();
-    if (!s) return options;
-    return options.filter(
-      (o) =>
-        o.chargeName.toLowerCase().includes(s) ||
-        o.chargeCode.toLowerCase().includes(s) ||
-        o.ledgerName.toLowerCase().includes(s) ||
-        o.ledgerCode.toLowerCase().includes(s),
-    );
-  }, [options, q]);
-
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          disabled={disabled}
-          title={label}
-          className={cn(
-            "w-full h-8 px-2 text-xs text-left border border-border rounded-lg bg-background",
-            "flex items-center justify-between gap-1 hover:bg-muted/30 transition-colors",
-            disabled && "opacity-60 pointer-events-none",
-          )}
-        >
-          <span className="truncate flex-1">{label}</span>
-          <ChevronsUpDown className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
-        </button>
-      </PopoverTrigger>
-      <PopoverContent align="start" className="w-[340px] p-0 so-charge-popover">
-        <div className="p-2 border-b border-border">
-          <div className="relative">
-            <Search className="w-3.5 h-3.5 absolute left-2.5 top-[7px] text-muted-foreground pointer-events-none" />
-            <input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Search charge, code, ledger…"
-              className="w-full pl-8 pr-3 py-1.5 text-xs focus:outline-none bg-transparent"
-            />
-          </div>
-        </div>
-        <div className="max-h-56 overflow-y-auto py-1">
-          {filtered.length === 0 ? (
-            <p className="px-3 py-4 text-xs text-muted-foreground text-center">No charges match.</p>
-          ) : (
-            filtered.map((opt) => {
-              const active = row.chargeMasterId === opt.chargeId;
-              return (
-                <button
-                  key={opt.chargeId}
-                  type="button"
-                  onClick={() => {
-                    onSelect(opt);
-                    setOpen(false);
-                    setQ("");
-                  }}
-                  className={cn(
-                    "w-full flex items-start gap-2 px-3 py-2 text-left text-xs hover:bg-muted/60 transition-colors",
-                    active && "bg-brand-50",
-                  )}
-                >
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-foreground truncate">{opt.chargeName}</p>
-                    <p
-                      className="text-[10px] text-muted-foreground mt-0.5 truncate"
-                      title={`Ledger: ${opt.ledgerName} — ${opt.ledgerCode}`}
-                    >
-                      Ledger: {opt.ledgerName} — {opt.ledgerCode}
-                    </p>
-                  </div>
-                  {active ? <Check className="w-3.5 h-3.5 text-brand-600 flex-shrink-0 mt-0.5" /> : null}
-                </button>
-              );
-            })
-          )}
-        </div>
-      </PopoverContent>
-    </Popover>
+    <div
+      className={cn(
+        "so-table-ro so-table-ro--right",
+        muted && "so-table-ro--muted",
+        strong && "so-table-ro--strong",
+      )}
+    >
+      {value}
+    </div>
   );
+}
+
+function ledgerSelectValue(ledgerId: string | number | null | undefined): string | null {
+  if (typeof ledgerId === "string" && ledgerId.trim()) return ledgerId.trim();
+  if (typeof ledgerId === "number" && Number.isFinite(ledgerId)) return String(ledgerId);
+  return null;
 }
 
 const ChargeRow = memo(function ChargeRow({
   row,
-  options,
+  hsnOptions,
   disabled,
   interstate,
   onUpdate,
   onRemove,
+  tableVariant = "default",
 }: {
   row: InvoiceAdditionalExpense;
-  options: ResolvedAdditionalChargeOption[];
+  hsnOptions: { value: string; label: string; selectedLabel?: string; sub?: string; gstPercentage: number; hsnCode: string }[];
   disabled?: boolean;
   interstate: boolean;
   onUpdate: (id: string, patch: Partial<InvoiceAdditionalExpense>) => void;
   onRemove: (id: string) => void;
+  tableVariant?: "default" | "invoice";
 }) {
   const calc = calcAdditionalExpenseRow(row, interstate);
-  const fromSalesOrder = row.origin === "sales_order";
-  const mapped = Boolean(row.coaLedgerId && row.coaLedgerCode);
+  const invoiceTable = tableVariant === "invoice";
+  const rowClass = invoiceTable
+    ? "border-b border-border/40 last:border-0"
+    : "border-b border-border/40 last:border-b-0";
+  const cellClass = invoiceTable ? "p-1.5 align-middle" : "px-1.5 py-1.5 align-middle";
+
+  const renderComputed = (value: string, opts?: { muted?: boolean; strong?: boolean }) => {
+    if (invoiceTable) {
+      return <ChargeTableReadonly value={value} muted={opts?.muted} strong={opts?.strong} />;
+    }
+    return (
+      <span
+        className={cn(
+          "block text-right text-xs tabular-nums whitespace-nowrap",
+          opts?.strong ? "font-semibold text-foreground" : "text-muted-foreground",
+        )}
+      >
+        {value}
+      </span>
+    );
+  };
 
   return (
-    <tr className="border-b border-border/40 last:border-b-0">
-      <td className="px-1.5 py-1.5 align-middle so-charge-col">
-        <ChargeSelect
-          row={row}
-          options={options}
-          disabled={disabled || fromSalesOrder}
-          onSelect={(opt) =>
+    <tr className={rowClass}>
+      <td className={cn(cellClass, "min-w-[180px] w-[200px]")}>
+        <Input
+          className="h-8 text-xs"
+          placeholder="e.g. Freight"
+          disabled={disabled}
+          value={row.expenseHead}
+          onChange={(e) => onUpdate(row.id, { expenseHead: e.target.value })}
+        />
+        {row.origin === "sales_order" || row.origin === "purchase_order" ? (
+          <p className="so-product-meta mt-0.5">From {row.origin === "sales_order" ? "Sales Order" : "Purchase Order"}</p>
+        ) : null}
+      </td>
+      <td className={cn(cellClass, "min-w-[240px] w-[260px]")}>
+        <GenericLedgerHierarchySelect
+          value={ledgerSelectValue(row.coaLedgerId)}
+          fallbackLabel={
+            row.coaLedgerName
+              ? row.coaLedgerCode
+                ? `${row.coaLedgerCode} · ${row.coaLedgerName}`
+                : row.coaLedgerName
+              : undefined
+          }
+          disabled={disabled}
+          compact
+          placeholder="Select ledger…"
+          className="h-8 text-xs text-left"
+          query={{ status: "ACTIVE", allowManualPosting: true }}
+          allowedPrimaryHeadCodes={[...CHARGE_LEDGER_HEADS]}
+          onChange={(ledger) =>
             onUpdate(row.id, {
-              expenseHead: opt.chargeName as InvoiceExpenseHead,
-              chargeMasterId: opt.chargeId,
-              chargeCode: opt.chargeCode,
-              coaLedgerId: opt.ledgerId,
-              coaLedgerName: opt.ledgerName,
-              coaLedgerCode: opt.ledgerCode,
-              gstApplicable: opt.gstApplicable,
-              gstPct: opt.gstApplicable ? opt.gstRate : 0,
+              coaLedgerId: ledger.ledgerId,
+              coaLedgerName: ledger.ledgerName,
+              coaLedgerCode: ledger.ledgerCode,
             })
           }
         />
-        {mapped ? (
-          <p
-            className="so-product-meta mt-0.5 truncate"
-            title={`Ledger: ${row.coaLedgerName} — ${row.coaLedgerCode}`}
-          >
-            Ledger: {row.coaLedgerName} — {row.coaLedgerCode}
-          </p>
-        ) : fromSalesOrder ? (
-          <p className="so-product-meta mt-0.5">From Sales Order</p>
-        ) : null}
       </td>
-      <td className="px-1.5 py-1.5 align-middle w-[100px]">
+      <td className={cn(cellClass, "min-w-[140px] w-[150px]")}>
+        <SearchableSelect
+          value={row.hsnId ?? ""}
+          onChange={(id) => {
+            const hit = hsnOptions.find((o) => o.value === id);
+            onUpdate(row.id, {
+              hsnId: id || null,
+              hsnCode: hit?.hsnCode ?? null,
+              ...(row.gstApplicable && hit
+                ? { gstPct: hit.gstPercentage }
+                : {}),
+            });
+          }}
+          options={hsnOptions}
+          placeholder="Select HSN…"
+          disabled={disabled}
+          contentClassName="w-[320px]"
+          triggerClassName="h-8 px-2 text-xs rounded-lg"
+        />
+      </td>
+      <td className={cn(cellClass, "min-w-[120px] w-[130px]")}>
         <AccountsMoneyInput
           className={NUM_INPUT_CLASS}
           value={row.amount || ""}
@@ -191,7 +169,7 @@ const ChargeRow = memo(function ChargeRow({
           onChange={(v) => onUpdate(row.id, { amount: v })}
         />
       </td>
-      <td className="px-1.5 py-1.5 align-middle w-[72px]">
+      <td className={cn(cellClass, "min-w-[72px] w-[80px]")}>
         <div className="flex items-center justify-center h-8">
           <Switch
             checked={row.gstApplicable}
@@ -200,7 +178,7 @@ const ChargeRow = memo(function ChargeRow({
           />
         </div>
       </td>
-      <td className="px-1.5 py-1.5 align-middle w-[56px]">
+      <td className={cn(cellClass, "min-w-[90px] w-[100px]")}>
         <Input
           type="number"
           min={0}
@@ -217,23 +195,35 @@ const ChargeRow = memo(function ChargeRow({
         />
       </td>
       {interstate ? (
-        <td className="px-1.5 py-1.5 align-middle w-[90px] text-right text-xs tabular-nums text-muted-foreground">
-          {row.gstApplicable && calc.igst > 0 ? formatINR(calc.igst) : "—"}
+        <td className={cn(cellClass, "min-w-[110px] w-[120px]")}>
+          {renderComputed(
+            row.gstApplicable && calc.igst > 0 ? formatINR(calc.igst) : "—",
+            { muted: true },
+          )}
         </td>
       ) : (
         <>
-          <td className="px-1.5 py-1.5 align-middle w-[90px] text-right text-xs tabular-nums text-muted-foreground">
-            {row.gstApplicable && calc.cgst > 0 ? formatINR(calc.cgst) : "—"}
+          <td className={cn(cellClass, "min-w-[110px] w-[120px]")}>
+            {renderComputed(
+              row.gstApplicable && calc.cgst > 0 ? formatINR(calc.cgst) : "—",
+              { muted: true },
+            )}
           </td>
-          <td className="px-1.5 py-1.5 align-middle w-[90px] text-right text-xs tabular-nums text-muted-foreground">
-            {row.gstApplicable && calc.sgst > 0 ? formatINR(calc.sgst) : "—"}
+          <td className={cn(cellClass, "min-w-[110px] w-[120px]")}>
+            {renderComputed(
+              row.gstApplicable && calc.sgst > 0 ? formatINR(calc.sgst) : "—",
+              { muted: true },
+            )}
           </td>
         </>
       )}
-      <td className="px-1.5 py-1.5 align-middle w-[110px] text-right text-xs tabular-nums font-semibold">
-        {calc.totalAmount > 0 ? formatINR(calc.totalAmount) : "—"}
+      <td className={cn(cellClass, "min-w-[120px] w-[130px]")}>
+        {renderComputed(
+          calc.totalAmount > 0 ? formatINR(calc.totalAmount) : "—",
+          { strong: calc.totalAmount > 0, muted: calc.totalAmount <= 0 },
+        )}
       </td>
-      <td className="px-1.5 py-1.5 align-middle w-[180px]">
+      <td className={cn(cellClass, "min-w-[160px] w-[180px]")}>
         <Input
           className="h-8 text-xs"
           placeholder="Optional"
@@ -242,8 +232,8 @@ const ChargeRow = memo(function ChargeRow({
           onChange={(e) => onUpdate(row.id, { remarks: e.target.value })}
         />
       </td>
-      <td className="px-1.5 py-1.5 align-middle w-9">
-        {!disabled && !fromSalesOrder && (
+      {!disabled ? (
+        <td className={cn(cellClass, "so-col-actions w-9")}>
           <button
             type="button"
             onClick={() => onRemove(row.id)}
@@ -252,8 +242,8 @@ const ChargeRow = memo(function ChargeRow({
           >
             <Trash2 className="w-3.5 h-3.5" />
           </button>
-        )}
-      </td>
+        </td>
+      ) : null}
     </tr>
   );
 });
@@ -263,41 +253,77 @@ function GoodsInvoiceAdditionalChargesEditorInner({
   onChange,
   disabled,
   interstate = false,
+  tableVariant = "default",
+  hideAddButton = false,
+  onBindAddRow,
 }: {
   expenses: InvoiceAdditionalExpense[];
   onChange: Dispatch<SetStateAction<InvoiceAdditionalExpense[]>>;
   disabled?: boolean;
   interstate?: boolean;
+  /** Match service-invoice line table chrome when embedded in voucher section cards. */
+  tableVariant?: "default" | "invoice";
+  hideAddButton?: boolean;
+  onBindAddRow?: (addRow: () => void) => void;
 }) {
-  const { data: options = [], isLoading, isError } = useAdditionalChargeDropdownResolved();
+  const { data: hsnDropdown = [], isLoading: hsnLoading } = useHsnDropdown();
 
-  const needsEnrichKey = useMemo(
+  const hsnOptions = useMemo(
     () =>
-      expenses
-        .filter((e) => e.chargeMasterId && (!e.coaLedgerId || !e.coaLedgerCode))
-        .map((e) => e.chargeMasterId)
-        .join("|"),
-    [expenses],
+      hsnDropdown.map((h) => ({
+        value: h.id,
+        label: `${h.hsnCode}${h.hsnDescription ? ` — ${h.hsnDescription}` : ""}`,
+        selectedLabel: h.hsnCode,
+        sub: h.codeType === "SAC" ? `SAC · GST ${h.gstPercentage}%` : `HSN · GST ${h.gstPercentage}%`,
+        gstPercentage: h.gstPercentage,
+        hsnCode: h.hsnCode,
+      })),
+    [hsnDropdown],
   );
 
-  useEffect(() => {
-    if (!options.length || !needsEnrichKey) return;
-    onChange((prev) => {
-      const next = enrichExpensesFromChargeMaster(prev, options);
-      const changed = next.some(
-        (row, i) =>
-          row.coaLedgerId !== prev[i]?.coaLedgerId ||
-          row.coaLedgerCode !== prev[i]?.coaLedgerCode,
-      );
-      return changed ? next : prev;
-    });
-  }, [options, needsEnrichKey, onChange]);
-
-  const headers = interstate
-    ? (["Additional Charge", "Amount", "GST", "GST %", "IGST", "Total Amount", "Remarks", ""] as const)
-    : (["Additional Charge", "Amount", "GST", "GST %", "CGST", "SGST", "Total Amount", "Remarks", ""] as const);
+  const gstHeaders = interstate ? (["IGST"] as const) : (["CGST", "SGST"] as const);
+  const headers = (
+    disabled
+      ? ([
+          "Particular",
+          "Additional Charges Ledger",
+          "HSN",
+          "Amount",
+          "GST",
+          "GST %",
+          ...gstHeaders,
+          "Total Amount",
+          "Remark",
+        ] as const)
+      : ([
+          "Particular",
+          "Additional Charges Ledger",
+          "HSN",
+          "Amount",
+          "GST",
+          "GST %",
+          ...gstHeaders,
+          "Total Amount",
+          "Remark",
+          "",
+        ] as const)
+  );
 
   const rightAlign = new Set(["Amount", "GST %", "CGST", "SGST", "IGST", "Total Amount"]);
+
+  const colClassByHeader: Record<string, string> = {
+    Particular: "min-w-[180px] w-[200px]",
+    "Additional Charges Ledger": "min-w-[240px] w-[260px]",
+    HSN: "min-w-[140px] w-[150px]",
+    Amount: "min-w-[120px] w-[130px]",
+    GST: "min-w-[72px] w-[80px]",
+    "GST %": "min-w-[90px] w-[100px]",
+    CGST: "min-w-[110px] w-[120px]",
+    SGST: "min-w-[110px] w-[120px]",
+    IGST: "min-w-[110px] w-[120px]",
+    "Total Amount": "min-w-[120px] w-[130px]",
+    Remark: "min-w-[160px] w-[180px]",
+  };
 
   const update = useCallback(
     (id: string, patch: Partial<InvoiceAdditionalExpense>) => {
@@ -305,24 +331,30 @@ function GoodsInvoiceAdditionalChargesEditorInner({
         prev.map((row) => {
           if (row.id !== id) return row;
           const next = { ...row, ...patch };
-          if (patch.gstApplicable === false) next.gstPct = 0;
-          else if (patch.gstApplicable === true && next.gstPct <= 0) next.gstPct = 18;
+          if (patch.gstApplicable === false) {
+            next.gstPct = 0;
+          } else if (patch.gstApplicable === true && next.gstPct <= 0) {
+            const fromHsn = hsnOptions.find((o) => o.value === next.hsnId);
+            next.gstPct = fromHsn?.gstPercentage || 0;
+          }
           return next;
         }),
       );
     },
-    [onChange],
+    [onChange, hsnOptions],
   );
 
   const addRow = useCallback(() => {
     onChange((prev) => [...prev, createEmptyAdditionalExpense("manual")]);
   }, [onChange]);
 
+  useEffect(() => {
+    onBindAddRow?.(addRow);
+  }, [addRow, onBindAddRow]);
+
   const removeRow = useCallback(
     (id: string) => {
       onChange((prev) => {
-        const target = prev.find((r) => r.id === id);
-        if (target?.origin === "sales_order") return prev;
         const next = prev.filter((r) => r.id !== id);
         return next.length ? next : [createEmptyAdditionalExpense("manual")];
       });
@@ -330,25 +362,38 @@ function GoodsInvoiceAdditionalChargesEditorInner({
     [onChange],
   );
 
+  const invoiceTable = tableVariant === "invoice";
+  const thClass = invoiceTable
+    ? "px-2 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap"
+    : "px-1.5 py-1.5 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap";
+
   return (
-    <div className="space-y-2">
-      {isError ? (
-        <p className="text-xs text-red-600">
-          Failed to load Additional Charge Master. Check API / permissions.
-        </p>
-      ) : null}
-      <div className="so-goods-product-table-wrap">
-        <table className="w-full text-xs table-fixed min-w-[860px]">
-          <thead className="border-b border-border/60 bg-muted/20">
+    <div className={invoiceTable ? undefined : "space-y-2"}>
+      <div
+        className={cn(
+          invoiceTable ? "so-invoice-charges-table-wrap w-full" : "so-goods-product-table-wrap",
+          "overflow-x-auto",
+        )}
+      >
+        <table
+          className={cn(
+            invoiceTable
+              ? "so-invoice-table so-invoice-charges-table text-xs w-full"
+              : "w-full text-xs",
+            "min-w-[1480px]",
+          )}
+        >
+          <thead className={invoiceTable ? undefined : "border-b border-border/60 bg-muted/20"}>
             <tr>
               {headers.map((h) => (
                 <th
                   key={h || "actions"}
                   className={cn(
-                    "px-1.5 py-1.5 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap",
+                    thClass,
+                    colClassByHeader[h],
                     rightAlign.has(h) && "text-right",
                     h === "GST" && "text-center",
-                    h === "Additional Charge" && "so-charge-col",
+                    !h && "so-col-actions",
                   )}
                 >
                   {h === "GST" ? "GST Applicable" : h}
@@ -360,8 +405,8 @@ function GoodsInvoiceAdditionalChargesEditorInner({
             {expenses.length === 0 ? (
               <tr>
                 <td colSpan={headers.length} className="py-6 text-center text-xs text-muted-foreground">
-                  {isLoading
-                    ? "Loading additional charges…"
+                  {hsnLoading
+                    ? "Loading…"
                     : 'No additional charges. Click "+ Add Charge" to add.'}
                 </td>
               </tr>
@@ -370,11 +415,12 @@ function GoodsInvoiceAdditionalChargesEditorInner({
                 <ChargeRow
                   key={row.id}
                   row={row}
-                  options={options}
-                  disabled={disabled || isLoading}
+                  hsnOptions={hsnOptions}
+                  disabled={disabled}
                   interstate={interstate}
                   onUpdate={update}
                   onRemove={removeRow}
+                  tableVariant={tableVariant}
                 />
               ))
             )}
@@ -382,7 +428,7 @@ function GoodsInvoiceAdditionalChargesEditorInner({
         </table>
       </div>
 
-      {!disabled && (
+      {!disabled && !hideAddButton && (
         <div className="flex items-center justify-end">
           <Button
             type="button"
@@ -390,7 +436,6 @@ function GoodsInvoiceAdditionalChargesEditorInner({
             size="sm"
             className="h-8 text-xs font-medium gap-1.5"
             onClick={addRow}
-            disabled={isLoading || options.length === 0}
           >
             <Plus className="w-3.5 h-3.5" /> Add Charge
           </Button>
@@ -402,58 +447,46 @@ function GoodsInvoiceAdditionalChargesEditorInner({
 
 export const GoodsInvoiceAdditionalChargesEditor = memo(GoodsInvoiceAdditionalChargesEditorInner);
 
-/** Validate Goods charge rows before Generate Invoice. */
+/** Validate Additional Charge rows before Generate / Create / Post. */
 export function validateGoodsAdditionalCharges(
   expenses: InvoiceAdditionalExpense[],
 ): string | null {
   for (const row of expenses) {
-    const hasCharge = Boolean(row.chargeMasterId || row.expenseHead?.trim());
+    const particular = (row.expenseHead || "").trim();
+    const hasLedger = Boolean(
+      row.coaLedgerId != null && String(row.coaLedgerId).trim(),
+    );
+    const hasHsn = Boolean(row.hsnId?.trim());
     const hasAmount = row.amount > 0;
-    if (!hasCharge && !hasAmount) continue;
+    const hasContent = Boolean(particular) || hasLedger || hasHsn || hasAmount;
+    if (!hasContent) continue;
 
-    if (!row.chargeMasterId && !row.expenseHead?.trim()) {
-      return "Select an Additional Charge for every charge row with an amount.";
+    if (!particular) {
+      return "Enter Particular for every Additional Charge row.";
     }
-    if (!row.coaLedgerId || !row.coaLedgerCode?.trim()) {
-      return `Select a mapped Additional Charge for "${row.expenseHead || "this row"}".`;
+    if (!hasLedger) {
+      return `Select Additional Charges Ledger for "${particular}".`;
     }
-    if (hasAmount && row.amount <= 0) {
-      return `Enter a valid amount for "${row.expenseHead}".`;
+    if (!hasHsn) {
+      return `Select HSN for "${particular}".`;
+    }
+    if (!(row.amount > 0)) {
+      return `Enter a valid amount for "${particular}".`;
     }
     if (row.gstApplicable && !(row.gstPct > 0)) {
-      return `GST % is required when GST Applicable is Yes for "${row.expenseHead}".`;
+      return `GST % is required when GST Applicable is Yes for "${particular}".`;
     }
   }
   return null;
 }
 
-/** Enrich SO-prefetched / name-only rows from Charge Master dropdown options. */
+/**
+ * @deprecated Legacy master enrichment — ledger must not auto-fill from Additional Charge Master.
+ * Kept as a no-op identity for call-site compatibility.
+ */
 export function enrichExpensesFromChargeMaster(
   expenses: InvoiceAdditionalExpense[],
-  options: ResolvedAdditionalChargeOption[] = [],
+  _options?: unknown[],
 ): InvoiceAdditionalExpense[] {
-  return expenses.map((row) => {
-    if (row.coaLedgerId && row.coaLedgerCode) return row;
-    const byId = row.chargeMasterId
-      ? options.find((o) => o.chargeId === row.chargeMasterId)
-      : undefined;
-    const byName = row.expenseHead
-      ? options.find(
-          (o) => o.chargeName.toLowerCase() === row.expenseHead!.toLowerCase(),
-        )
-      : undefined;
-    const hit = byId ?? byName;
-    if (!hit) return row;
-    return {
-      ...row,
-      expenseHead: hit.chargeName as InvoiceExpenseHead,
-      chargeMasterId: hit.chargeId,
-      chargeCode: hit.chargeCode,
-      coaLedgerId: hit.ledgerId,
-      coaLedgerName: hit.ledgerName,
-      coaLedgerCode: hit.ledgerCode,
-      gstApplicable: row.gstApplicable || hit.gstApplicable,
-      gstPct: row.gstApplicable || hit.gstApplicable ? row.gstPct || hit.gstRate : 0,
-    };
-  });
+  return expenses;
 }

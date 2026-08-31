@@ -65,12 +65,14 @@ export interface EligibleProductDiscountScheme {
 }
 
 export interface EligibleProductDiscountSchemeOffer extends EligibleProductDiscountScheme {
-  schemeId: number;
+  schemeId: string | number;
   productName: string;
   customerType: CustomerType;
   stateName: string;
   startDate?: string;
   endDate?: string;
+  /** Frozen snapshot for SO line persistence */
+  schemeSnapshot?: Record<string, unknown>;
 }
 
 export function formatSchemeOfferLabel(

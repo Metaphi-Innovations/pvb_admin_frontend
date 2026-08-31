@@ -20,7 +20,7 @@ export function VoucherNoteFieldGrid({
   return (
     <div
       className={cn(
-        "cdn-field-grid grid gap-x-2.5 gap-y-1",
+          "cdn-field-grid grid gap-x-2.5 gap-y-1.5",
         columns === 4
           ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4"
           : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3",
@@ -66,8 +66,8 @@ export function VoucherNoteField({
   return (
     <div
       className={cn(
-        "space-y-0.5 min-w-0",
-        span === 2 && "sm:col-span-2",
+        "space-y-0.5 min-w-0 flex flex-col",
+        span === 2 && "sm:col-span-2 lg:col-span-2",
         className,
       )}
     >
@@ -75,13 +75,13 @@ export function VoucherNoteField({
         htmlFor={htmlFor}
         className={cn(
           ACCOUNTS_FORM_LABEL_CLASS,
-          "inline-flex items-center gap-1 text-muted-foreground font-medium",
+          "inline-flex items-center gap-1 text-muted-foreground font-medium leading-tight",
         )}
       >
         {label}
         {required ? <span className="text-red-500 font-normal">*</span> : null}
       </Label>
-      <div className={cn(WIDTH_CLASS[width])}>{children}</div>
+      <div className={cn("min-w-0", WIDTH_CLASS[width])}>{children}</div>
     </div>
   );
 }
@@ -98,7 +98,7 @@ export function VoucherNoteReadOnly({
   return (
     <p
       className={cn(
-        "voucher-note-readonly cdn-readonly text-[12px] font-normal text-foreground leading-snug truncate",
+        "voucher-note-readonly cdn-readonly text-[12px] font-normal text-foreground truncate m-0",
         mono && "cdn-readonly--mono font-mono text-[11px] font-medium",
         className,
       )}

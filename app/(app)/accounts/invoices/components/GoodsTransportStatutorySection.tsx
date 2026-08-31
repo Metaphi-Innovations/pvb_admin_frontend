@@ -80,7 +80,6 @@ function Field({
     <div className={cn("so-goods-field so-transport-cell", className)}>
       <p className="so-goods-field__label">{label}</p>
       <div className="so-goods-field__control">{children}</div>
-      <p className="so-goods-field__helper">&nbsp;</p>
     </div>
   );
 }
@@ -122,7 +121,7 @@ export function GoodsTransportStatutorySection({
   const set = (patch: Partial<GoodsTransportStatutoryState>) => onChange(patch);
 
   return (
-    <div className="so-transport-layout space-y-2">
+    <div className="so-transport-layout space-y-1.5">
       <div
         className={cn(
           "so-transport-grid",

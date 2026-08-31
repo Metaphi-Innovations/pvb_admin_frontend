@@ -1,17 +1,20 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { SearchableSelect } from "./SearchableSelect";
-import { CreditNoteFormApi } from "../credit-note-form-api";
+/**
+ * Direct Credit Note Supporting Ledger selector.
+ * Uses the generic COA hierarchy dropdown, limited to ACTIVE ledgers that allow manual posting.
+ */
+
+import { GenericLedgerHierarchySelect } from "@/components/accounts/GenericLedgerHierarchySelect";
+import { cn } from "@/lib/utils";
 
 export function CreditNoteLedgerSelect({
   value,
   fallbackLabel,
-  label,
   placeholder,
   disabled,
-  required,
   onChange,
+  className,
 }: {
   value: string;
   fallbackLabel?: string;
@@ -20,52 +23,18 @@ export function CreditNoteLedgerSelect({
   disabled?: boolean;
   required?: boolean;
   onChange: (ledgerId: string, ledgerName: string) => void;
+  className?: string;
 }) {
-  const [options, setOptions] = useState<{ value: string; label: string; sub?: string }[]>([]);
-
-  useEffect(() => {
-    let cancelled = false;
-    CreditNoteFormApi.listManualLedgers()
-      .then((rows) => {
-        if (cancelled) return;
-        setOptions(
-          rows.map((r) => ({
-            value: r.ledgerId,
-            label: r.ledgerName,
-            sub: r.ledgerCode,
-          })),
-        );
-      })
-      .catch(() => {
-        if (!cancelled) setOptions([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const merged = useMemo(() => {
-    if (value && !options.some((o) => o.value === value)) {
-      return [
-        { value, label: fallbackLabel || value, sub: "Selected" },
-        ...options,
-      ];
-    }
-    return options;
-  }, [options, value, fallbackLabel]);
-
   return (
-    <SearchableSelect
-      label={label}
-      value={value}
-      onChange={(id) => {
-        const opt = merged.find((o) => o.value === id);
-        onChange(id, opt?.label || fallbackLabel || "");
-      }}
-      options={merged}
-      placeholder={placeholder || "Select ledger…"}
-      required={required}
+    <GenericLedgerHierarchySelect
+      value={value || null}
+      onChange={(ledger) => onChange(ledger.ledgerId, ledger.ledgerName)}
+      fallbackLabel={fallbackLabel}
       disabled={disabled}
+      className={cn("h-[30px] text-xs text-left font-normal", className)}
+      compact
+      placeholder={placeholder || "Select supporting ledger…"}
+      query={{ status: "ACTIVE", allowManualPosting: true }}
     />
   );
 }

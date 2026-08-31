@@ -21,6 +21,7 @@ export function DirectPurchaseSelectField({
   searchPlaceholder = "Search…",
   disabled,
   className,
+  hideLabel = false,
 }: {
   label?: string;
   required?: boolean;
@@ -31,10 +32,11 @@ export function DirectPurchaseSelectField({
   searchPlaceholder?: string;
   disabled?: boolean;
   className?: string;
+  hideLabel?: boolean;
 }) {
   return (
-    <div className="space-y-0.5">
-      {label ? (
+    <div className={hideLabel ? "min-w-0" : "space-y-0.5"}>
+      {!hideLabel && label ? (
         <Label className={DP_LABEL_CLASS}>
           {label} {required && <span className="text-red-500">*</span>}
         </Label>

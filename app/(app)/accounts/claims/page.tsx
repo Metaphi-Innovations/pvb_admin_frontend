@@ -6,7 +6,7 @@ import { Suspense } from "react";
 
 export default function ClaimsPage() {
   return (
-    <Suspense fallback={<div className="p-8 text-sm text-muted-foreground">Loading claims…</div>}>
+    <Suspense fallback={null}>
       <HrClaimsAccountsClient />
     </Suspense>
   );
