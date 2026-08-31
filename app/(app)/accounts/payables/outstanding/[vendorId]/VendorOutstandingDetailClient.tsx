@@ -6,26 +6,45 @@ import { useParams, useSearchParams } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
-import {
-  getVendorOutstandingDetail,
-  getVendorPayablesMeta,
-  getVendorPaymentHistory,
-} from "@/lib/accounts/payables-data";
+import { mapSupplierDetailBillRow } from "@/lib/accounts/payables-api-mappers";
+import type { ApiSupplierDetailBillRow } from "@/types/payables.types";
 import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
-import { formatMoney, MONEY_CELL_CLASS } from "@/lib/accounts/money-format";
+import { formatMoney } from "@/lib/accounts/money-format";
 import { defaultAsOnDate } from "@/lib/accounts/report-date-presets";
-import { StatusBadge } from "@/app/(app)/accounts/components/AccountsUI";
+import { PayablesService } from "@/services/payables.service";
+import type { SupplierOutstandingDetailApi, VendorPaymentHistoryRow } from "@/types/payables.types";
+import {
+  fetchSupplierPaymentHistory,
+  paymentVoucherStatusToBadgeKey,
+} from "@/lib/accounts/outstanding-voucher-history";
+import { paymentViewPath } from "@/app/(app)/accounts/vouchers/payment/payment-voucher-utils";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import { payableStatusToBadge } from "@/lib/accounts/accounts-status-badges";
 import { Button } from "@/components/ui/button";
-import { formatCreditPeriod } from "@/app/(app)/masters/vendors/vendor-data";
 import { cn } from "@/lib/utils";
 import { PartyCrossNavButtons } from "@/components/accounts/PartyCrossNavButtons";
 import { buildPayablesDetailCrossNavLinks } from "@/lib/accounts/party-cross-nav";
+import {
+  AccountsTable,
+  AccountsTableBody,
+  AccountsTableCell,
+  AccountsTableHead,
+  AccountsTableHeadCell,
+  AccountsTableHeadRow,
+  AccountsTableRow,
+  AccountsTableScroll,
+} from "@/components/accounts/AccountsTable";
 
 function formatReportDate(value: string): string {
   if (!value || value === "—") return "—";
   const [y, m, d] = value.slice(0, 10).split("-");
   if (!y || !m || !d) return value;
   return `${d}-${m}-${y}`;
+}
+
+function formatCreditDays(creditDays?: number): string {
+  if (creditDays == null || creditDays <= 0) return "—";
+  return `${creditDays} Days`;
 }
 
 function InfoBlock({ label, value }: { label: string; value: string }) {
@@ -40,38 +59,113 @@ function InfoBlock({ label, value }: { label: string; value: string }) {
 export default function VendorOutstandingDetailClient() {
   const params = useParams();
   const searchParams = useSearchParams();
-  const vendorId = Number(params.vendorId);
-  const highlightBillId = Number(searchParams.get("billId"));
+  const vendorId = String(params.vendorId ?? "");
+  const highlightBillId = searchParams.get("billId") ?? "";
   const [asOnDate] = useState(defaultAsOnDate());
-  const [refreshKey, setRefreshKey] = useState(0);
 
-  const sectionRefresh = useAccountsSectionRefresh();
+  const sectionRefresh = useAccountsSectionRefresh("payables");
+  const [detail, setDetail] = useState<SupplierOutstandingDetailApi | null>(null);
+  const [paymentHistory, setPaymentHistory] = useState<VendorPaymentHistoryRow[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setRefreshKey((k) => k + 1);
-  }, [sectionRefresh]);
+    if (!vendorId) {
+      setDetail(null);
+      setPaymentHistory([]);
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const data = await PayablesService.getSupplierOutstanding(vendorId, asOnDate);
+        if (!cancelled) setDetail(data);
+      } catch (e) {
+        if (!cancelled) {
+          setDetail(null);
+          setError(e instanceof Error ? e.message : "Failed to load supplier outstanding.");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [vendorId, asOnDate, sectionRefresh]);
 
-  const detail = useMemo(
-    () => (Number.isFinite(vendorId) ? getVendorOutstandingDetail(vendorId, asOnDate) : null),
-    [vendorId, asOnDate, refreshKey],
+  useEffect(() => {
+    if (!vendorId) return;
+    let cancelled = false;
+    (async () => {
+      setHistoryLoading(true);
+      setHistoryError(null);
+      try {
+        const history = await fetchSupplierPaymentHistory(vendorId, asOnDate);
+        if (!cancelled) setPaymentHistory(history);
+      } catch (e) {
+        if (!cancelled) {
+          setPaymentHistory([]);
+          setHistoryError(
+            e instanceof Error ? e.message : "Failed to load payment history.",
+          );
+        }
+      } finally {
+        if (!cancelled) setHistoryLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [vendorId, asOnDate, sectionRefresh]);
+
+  const bills = useMemo(
+    () => (detail?.openBills ?? []).map(mapSupplierDetailBillRow),
+    [detail],
   );
 
-  const paymentHistory = useMemo(
-    () => (Number.isFinite(vendorId) ? getVendorPaymentHistory(vendorId) : []),
-    [vendorId, refreshKey],
+  const openBills = useMemo(
+    () => bills.filter((b) => b.outstanding > 0.009),
+    [bills],
   );
 
-  const highlightedBill = useMemo(() => {
-    if (!detail || !Number.isFinite(highlightBillId)) return null;
-    return detail.bills.find((b) => b.billId === highlightBillId) ?? null;
-  }, [detail, highlightBillId]);
+  const highlightedBill = useMemo((): ApiSupplierDetailBillRow | null => {
+    if (!highlightBillId) return null;
+    return (
+      bills.find(
+        (b) =>
+          b.billId === highlightBillId ||
+          b.openItemId === highlightBillId,
+      ) ?? null
+    );
+  }, [bills, highlightBillId]);
+
+  if (loading) {
+    return (
+      <AccountsPageShell
+        breadcrumbs={accountsBreadcrumb("Payables", "Supplier Outstanding", "/accounts/payables/outstanding")}
+        title="Supplier Outstanding Details"
+        description="Loading…"
+        layout="standard"
+      >
+        <div className="p-8 text-center text-sm text-muted-foreground">
+          Loading supplier outstanding…
+        </div>
+      </AccountsPageShell>
+    );
+  }
 
   if (!detail) {
     return (
       <AccountsPageShell
         breadcrumbs={accountsBreadcrumb("Payables", "Supplier Outstanding", "/accounts/payables/outstanding")}
         title="Supplier Not Found"
-        description="No supplier outstanding record for this ID."
+        description={error || "No supplier outstanding record for this ID."}
         layout="standard"
       >
         <div className="p-8 text-center">
@@ -86,22 +180,20 @@ export default function VendorOutstandingDetailClient() {
     );
   }
 
-  const { vendor, bills } = detail;
-  const meta = getVendorPayablesMeta(vendor.id);
-  const openBills = bills.filter((b) => b.outstanding > 0.009);
+  const { supplier } = detail;
   const crossNav = buildPayablesDetailCrossNavLinks({
-    vendorId: vendor.id,
-    ledgerId: detail.ledgerId,
+    vendorId: supplier.supplierId,
   });
+  const displayBills = openBills.length > 0 ? openBills : bills;
 
   return (
     <AccountsPageShell
       breadcrumbs={[
         ...accountsBreadcrumb("Payables", "Supplier Outstanding", "/accounts/payables/outstanding"),
-        { label: vendor.vendorName },
+        { label: supplier.supplierName },
       ]}
       title="Supplier Outstanding Details"
-      description={`${vendor.vendorCode} · Outstanding as on ${formatReportDate(asOnDate)}`}
+      description={`${supplier.supplierCode} · Outstanding as on ${formatReportDate(asOnDate)}`}
       actions={
         <div className="flex items-center gap-2">
           <Link href="/accounts/payables/outstanding">
@@ -109,7 +201,7 @@ export default function VendorOutstandingDetailClient() {
               <ArrowLeft className="w-4 h-4" /> Back
             </Button>
           </Link>
-          <Link href={`/accounts/payables/payment-allocation?vendorId=${vendor.id}`}>
+          <Link href={`/accounts/payables/payment-allocation?vendorId=${supplier.supplierId}`}>
             <Button size="sm" className="h-9 text-sm font-medium bg-brand-600 hover:bg-brand-700 text-white">
               Go to Payment Allocation
             </Button>
@@ -125,14 +217,14 @@ export default function VendorOutstandingDetailClient() {
             Supplier Information
           </p>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <InfoBlock label="Supplier Name" value={vendor.vendorName} />
-            <InfoBlock label="Supplier Code" value={vendor.vendorCode} />
-            <InfoBlock label="GSTIN" value={vendor.gstNumber || "—"} />
-            <InfoBlock label="Territory" value={meta?.territory ?? "—"} />
-            <InfoBlock label="Branch" value={meta?.branch ?? vendor.billingAddress.city} />
-            <InfoBlock label="Credit Period" value={formatCreditPeriod(vendor)} />
-            <InfoBlock label="Purchase Manager" value={meta?.purchaseManager ?? "Purchase Desk"} />
-            <InfoBlock label="Mobile" value={vendor.mobile} />
+            <InfoBlock label="Supplier Name" value={supplier.supplierName} />
+            <InfoBlock label="Supplier Code" value={supplier.supplierCode} />
+            <InfoBlock label="GSTIN" value={supplier.gstin || "—"} />
+            <InfoBlock label="Territory" value={supplier.territory || "—"} />
+            <InfoBlock label="Branch" value={supplier.branch || "—"} />
+            <InfoBlock label="Credit Period" value={formatCreditDays(supplier.creditDays)} />
+            <InfoBlock label="Purchase Manager" value="—" />
+            <InfoBlock label="Mobile" value={supplier.mobile || "—"} />
           </div>
           <PartyCrossNavButtons items={crossNav} label="Go to" />
         </section>
@@ -146,7 +238,10 @@ export default function VendorOutstandingDetailClient() {
               <InfoBlock label="Invoice No." value={highlightedBill.billNo} />
               <InfoBlock label="Invoice Date" value={formatReportDate(highlightedBill.billDate)} />
               <InfoBlock label="Due Date" value={formatReportDate(highlightedBill.dueDate)} />
-              <InfoBlock label="Status" value={highlightedBill.status.replaceAll("_", " ")} />
+              <InfoBlock
+                label="Status"
+                value={payableStatusToBadge(highlightedBill.status).label}
+              />
               <InfoBlock label="Invoice Amount" value={formatMoney(highlightedBill.billAmount)} />
               <InfoBlock label="Paid" value={formatMoney(highlightedBill.paidAmount)} />
               <InfoBlock label="Outstanding" value={formatMoney(highlightedBill.outstanding)} />
@@ -204,65 +299,69 @@ export default function VendorOutstandingDetailClient() {
               Open Invoices
             </p>
           </div>
-          <div className="overflow-x-auto">
-            <table className="accounts-table w-full min-w-[900px]">
-              <thead className="border-b">
-                <tr>
-                  {[
-                    "Invoice No.",
-                    "Invoice Date",
-                    "Invoice Amount",
-                    "Paid",
-                    "Outstanding",
-                    "Due Date",
-                    "Status",
-                    "",
-                  ].map((h) => (
-                    <th key={h || "act"} className="text-left whitespace-nowrap">
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {(openBills.length > 0 ? openBills : bills).map((bill) => (
-                  <tr
-                    key={bill.billId}
-                    className={cn(
-                      "accounts-table-row group",
-                      bill.billId === highlightBillId && "bg-brand-50/50",
-                    )}
-                  >
-                    <td className="px-3 py-2.5 text-xs font-mono font-semibold text-brand-700">
-                      {bill.billNo}
-                    </td>
-                    <td className="px-3 py-2.5 text-xs tabular-nums">{formatReportDate(bill.billDate)}</td>
-                    <td className={cn("px-3 py-2.5 text-xs text-right", MONEY_CELL_CLASS)}>
-                      {formatMoney(bill.billAmount)}
-                    </td>
-                    <td className={cn("px-3 py-2.5 text-xs text-right", MONEY_CELL_CLASS)}>
-                      {formatMoney(bill.paidAmount)}
-                    </td>
-                    <td className={cn("px-3 py-2.5 text-xs text-right font-semibold", MONEY_CELL_CLASS)}>
-                      {formatMoney(bill.outstanding)}
-                    </td>
-                    <td className="px-3 py-2.5 text-xs tabular-nums">{formatReportDate(bill.dueDate)}</td>
-                    <td className="px-3 py-2.5">
-                      <StatusBadge status={bill.status} />
-                    </td>
-                    <td className="px-3 py-2.5 text-right">
-                      <Link
-                        href={`/accounts/purchase-invoices/${bill.billId}`}
-                        className="text-xs text-brand-700 hover:underline"
+          <AccountsTableScroll>
+            <AccountsTable minWidth={900}>
+              <AccountsTableHead>
+                <AccountsTableHeadRow>
+                  <AccountsTableHeadCell>Invoice No.</AccountsTableHeadCell>
+                  <AccountsTableHeadCell>Invoice Date</AccountsTableHeadCell>
+                  <AccountsTableHeadCell align="right">Invoice Amount</AccountsTableHeadCell>
+                  <AccountsTableHeadCell align="right">Paid</AccountsTableHeadCell>
+                  <AccountsTableHeadCell align="right">Outstanding</AccountsTableHeadCell>
+                  <AccountsTableHeadCell>Due Date</AccountsTableHeadCell>
+                  <AccountsTableHeadCell>Status</AccountsTableHeadCell>
+                  <AccountsTableHeadCell align="right" />
+                </AccountsTableHeadRow>
+              </AccountsTableHead>
+              <AccountsTableBody>
+                {displayBills.length === 0 ? (
+                  <AccountsTableRow>
+                    <AccountsTableCell colSpan={8} className="accounts-table-empty">
+                      No open invoices for this supplier.
+                    </AccountsTableCell>
+                  </AccountsTableRow>
+                ) : (
+                  displayBills.map((bill) => {
+                    const badge = payableStatusToBadge(bill.status);
+                    const isHighlighted =
+                      bill.billId === highlightBillId || bill.openItemId === highlightBillId;
+                    return (
+                      <AccountsTableRow
+                        key={bill.openItemId}
+                        className={cn("group", isHighlighted && "bg-brand-50/50")}
                       >
-                        View
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                        <AccountsTableCell mono>
+                          <span className="font-semibold text-brand-700">{bill.billNo}</span>
+                        </AccountsTableCell>
+                        <AccountsTableCell>{formatReportDate(bill.billDate)}</AccountsTableCell>
+                        <AccountsTableCell align="right" money>
+                          {formatMoney(bill.billAmount)}
+                        </AccountsTableCell>
+                        <AccountsTableCell align="right" money>
+                          {formatMoney(bill.paidAmount)}
+                        </AccountsTableCell>
+                        <AccountsTableCell align="right" money className="font-semibold">
+                          {formatMoney(bill.outstanding)}
+                        </AccountsTableCell>
+                        <AccountsTableCell>{formatReportDate(bill.dueDate)}</AccountsTableCell>
+                        <AccountsTableCell>
+                          <StatusBadge status={badge.status} label={badge.label} size="sm" showDot />
+                        </AccountsTableCell>
+                        <AccountsTableCell align="right">
+                          <Link
+                            href={`/accounts/purchase-invoices/${bill.billId}`}
+                            className="text-xs text-brand-700 hover:underline"
+                          >
+                            View
+                          </Link>
+                        </AccountsTableCell>
+                      </AccountsTableRow>
+                    );
+                  })
+                )}
+              </AccountsTableBody>
+            </AccountsTable>
+          </AccountsTableScroll>
         </section>
 
         <section className="rounded-xl border border-border bg-white shadow-sm overflow-hidden">
@@ -270,49 +369,70 @@ export default function VendorOutstandingDetailClient() {
             <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
               Payment History
             </p>
+            {historyError ? (
+              <p className="text-xs text-red-600 mt-1">{historyError}</p>
+            ) : null}
           </div>
-          <div className="overflow-x-auto">
-            <table className="accounts-table w-full min-w-[800px]">
-              <thead className="border-b">
-                <tr>
-                  {["Payment No.", "Date", "Amount", "Allocated", "Bank Account", "Reference", "Status"].map(
-                    (h) => (
-                      <th key={h} className="text-left whitespace-nowrap">
-                        {h}
-                      </th>
-                    ),
-                  )}
-                </tr>
-              </thead>
-              <tbody>
-                {paymentHistory.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="px-4 py-8 text-center text-xs text-muted-foreground">
+          <AccountsTableScroll>
+            <AccountsTable minWidth={800}>
+              <AccountsTableHead>
+                <AccountsTableHeadRow>
+                  <AccountsTableHeadCell>Payment No.</AccountsTableHeadCell>
+                  <AccountsTableHeadCell>Date</AccountsTableHeadCell>
+                  <AccountsTableHeadCell align="right">Amount</AccountsTableHeadCell>
+                  <AccountsTableHeadCell align="right">Allocated</AccountsTableHeadCell>
+                  <AccountsTableHeadCell>Bank Account</AccountsTableHeadCell>
+                  <AccountsTableHeadCell>Reference</AccountsTableHeadCell>
+                  <AccountsTableHeadCell>Status</AccountsTableHeadCell>
+                </AccountsTableHeadRow>
+              </AccountsTableHead>
+              <AccountsTableBody>
+                {historyLoading && paymentHistory.length === 0 ? (
+                  <AccountsTableRow>
+                    <AccountsTableCell colSpan={7} className="accounts-table-empty">
+                      Loading payment history…
+                    </AccountsTableCell>
+                  </AccountsTableRow>
+                ) : paymentHistory.length === 0 ? (
+                  <AccountsTableRow>
+                    <AccountsTableCell colSpan={7} className="accounts-table-empty">
                       No payment vouchers recorded for this supplier.
-                    </td>
-                  </tr>
+                    </AccountsTableCell>
+                  </AccountsTableRow>
                 ) : (
-                  paymentHistory.map((p) => (
-                    <tr key={p.paymentNo} className="accounts-table-row group">
-                      <td className="px-3 py-2.5 text-xs font-mono font-semibold">{p.paymentNo}</td>
-                      <td className="px-3 py-2.5 text-xs tabular-nums">{formatReportDate(p.paymentDate)}</td>
-                      <td className={cn("px-3 py-2.5 text-xs text-right", MONEY_CELL_CLASS)}>
-                        {formatMoney(p.amount)}
-                      </td>
-                      <td className={cn("px-3 py-2.5 text-xs text-right", MONEY_CELL_CLASS)}>
-                        {formatMoney(p.allocatedAmount)}
-                      </td>
-                      <td className="px-3 py-2.5 text-xs">{p.bankAccount}</td>
-                      <td className="px-3 py-2.5 text-xs font-mono">{p.referenceNo}</td>
-                      <td className="px-3 py-2.5">
-                        <StatusBadge status={p.status} />
-                      </td>
-                    </tr>
+                  paymentHistory.map((payment) => (
+                    <AccountsTableRow key={payment.paymentVoucherId} className="group">
+                      <AccountsTableCell mono>
+                        <Link
+                          href={paymentViewPath(payment.paymentVoucherId)}
+                          className="font-semibold text-brand-700 hover:underline"
+                        >
+                          {payment.paymentNo}
+                        </Link>
+                      </AccountsTableCell>
+                      <AccountsTableCell>{formatReportDate(payment.paymentDate)}</AccountsTableCell>
+                      <AccountsTableCell align="right" money>
+                        {formatMoney(payment.amount)}
+                      </AccountsTableCell>
+                      <AccountsTableCell align="right" money>
+                        {formatMoney(payment.allocatedAmount)}
+                      </AccountsTableCell>
+                      <AccountsTableCell>{payment.bankAccount}</AccountsTableCell>
+                      <AccountsTableCell mono>{payment.referenceNo}</AccountsTableCell>
+                      <AccountsTableCell>
+                        <StatusBadge
+                          status={paymentVoucherStatusToBadgeKey(payment.status)}
+                          label={payment.statusLabel}
+                          size="sm"
+                          showDot
+                        />
+                      </AccountsTableCell>
+                    </AccountsTableRow>
                   ))
                 )}
-              </tbody>
-            </table>
-          </div>
+              </AccountsTableBody>
+            </AccountsTable>
+          </AccountsTableScroll>
         </section>
       </div>
     </AccountsPageShell>

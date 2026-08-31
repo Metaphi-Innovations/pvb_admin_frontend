@@ -642,6 +642,35 @@ export const API_ENDPOINTS = {
       ELIGIBLE_PURCHASE_INVOICES: (supplierId: string | number) =>
         `/accounts/debit-note/supplier/${supplierId}/eligible-purchase-invoices`,
     },
+    RECEIVABLES: {
+      CUSTOMER_SUMMARY: "/accounts/receivables/customer-summary",
+      INVOICES: "/accounts/receivables/invoices",
+      AGING: "/accounts/receivables/aging",
+      CUSTOMER_DETAIL: (customerId: string) =>
+        `/accounts/receivables/customers/${customerId}`,
+      INVOICE_DETAIL: (openItemId: string) =>
+        `/accounts/receivables/invoices/${openItemId}`,
+      INVOICE_SETTLEMENTS: (openItemId: string) =>
+        `/accounts/receivables/invoices/${openItemId}/settlements`,
+      FOLLOW_UPS: "/accounts/receivables/follow-ups",
+      FOLLOW_UP_BY_ID: (id: string) => `/accounts/receivables/follow-ups/${id}`,
+      FOLLOW_UP_HISTORY: (id: string) =>
+        `/accounts/receivables/follow-ups/${id}/history`,
+      EXPORT_EXCEL: "/accounts/receivables/export/excel",
+      EXPORT_PDF: "/accounts/receivables/export/pdf",
+    },
+    PAYABLES: {
+      SUPPLIER_SUMMARY: "/accounts/payables/supplier-summary",
+      BILLS: "/accounts/payables/bills",
+      AGING: "/accounts/payables/aging",
+      SUPPLIER_DETAIL: (supplierId: string) =>
+        `/accounts/payables/suppliers/${supplierId}`,
+      BILL_DETAIL: (openItemId: string) => `/accounts/payables/bills/${openItemId}`,
+      BILL_SETTLEMENTS: (openItemId: string) =>
+        `/accounts/payables/bills/${openItemId}/settlements`,
+      EXPORT_EXCEL: "/accounts/payables/export/excel",
+      EXPORT_PDF: "/accounts/payables/export/pdf",
+    },
     RECEIPT_VOUCHER: {
       CONFIG: "/accounts/receipt-voucher/config",
       LIST: "/accounts/receipt-voucher",

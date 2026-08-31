@@ -81,7 +81,7 @@ export function AccountsColumnHeader({
   const sortDir = sortDirProp ?? fromCtx?.sortDir ?? "asc";
   const onSort = onSortProp ?? fromCtx?.onSort;
   const onRemoveSort = onRemoveSortProp ?? fromCtx?.onRemoveSort;
-  const filterable = filterableProp && Boolean(onFilterChangeProp ?? fromCtx?.onFilterChange);
+  const filterable = (fromCtx?.filterable ?? filterableProp) && Boolean(onFilterChangeProp ?? fromCtx?.onFilterChange);
   const filterType = filterTypeProp;
   const filterValue = filterValueProp ?? fromCtx?.filterValue;
   const onFilterChange = onFilterChangeProp ?? fromCtx?.onFilterChange;

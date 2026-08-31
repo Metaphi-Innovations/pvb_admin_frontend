@@ -76,7 +76,7 @@ export function SortTh({
       sortDir={sortDirProp ?? fromCtx?.sortDir ?? "asc"}
       onSort={onSortProp ?? fromCtx?.onSort}
       onRemoveSort={onRemoveSortProp ?? fromCtx?.onRemoveSort}
-      filterable={filterable && Boolean(onFilterChangeProp ?? fromCtx?.onFilterChange)}
+      filterable={(fromCtx?.filterable ?? filterable) && Boolean(onFilterChangeProp ?? fromCtx?.onFilterChange)}
       filterType={filterType}
       filterValue={filterValueProp ?? fromCtx?.filterValue}
       onFilterChange={onFilterChangeProp ?? fromCtx?.onFilterChange}
