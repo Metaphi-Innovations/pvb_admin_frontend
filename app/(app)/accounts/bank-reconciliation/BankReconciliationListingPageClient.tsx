@@ -2,7 +2,6 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -13,11 +12,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-} from "@/components/ui/dropdown-menu";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { AccountsSummaryCards } from "@/components/accounts/AccountsSummaryCards";
 import {
@@ -34,11 +28,7 @@ import {
   SortTh,
   useAccountsFilteredRows,
 } from "@/app/(app)/accounts/components/AccountsUI";
-import {
-  AccountsMoreActions,
-  AccountsTableActionCell,
-  accountsActionColClass,
-} from "@/components/accounts/AccountsTableActions";
+import "./bank-reconciliation-listing.css";
 import {
   AccountsTableEmpty,
   AccountsTableListing,
@@ -76,15 +66,34 @@ const ACCOUNT_TYPE_FILTER_OPTIONS = [
   { value: "Overdraft", label: "Overdraft" },
 ];
 
+const BANK_RECON_LISTING_COL_COUNT = 10;
+const BANK_RECON_LISTING_MIN_WIDTH = 1360;
+
+/** Explicit <col> widths — Action stays compact; data cols keep readable floors. */
+function BankReconListingColGroup() {
+  return (
+    <colgroup>
+      <col className="bank-recon-col-bank" />
+      <col className="bank-recon-col-nickname" />
+      <col className="bank-recon-col-acct-no" />
+      <col className="bank-recon-col-type" />
+      <col className="bank-recon-col-book-bal" />
+      <col className="bank-recon-col-stmt-bal" />
+      <col className="bank-recon-col-diff" />
+      <col className="bank-recon-col-pending" />
+      <col className="bank-recon-col-last-recon" />
+      <col className="bank-recon-listing-action-col-width" />
+    </colgroup>
+  );
+}
+
 function BankAccountTable({
   rows,
-  onOpenReconciliation,
   loading,
   error,
   onRetry,
 }: {
   rows: BankReconListingRowUi[];
-  onOpenReconciliation: (id: string) => void;
   loading: boolean;
   error: string | null;
   onRetry: () => void;
@@ -93,10 +102,11 @@ function BankAccountTable({
 
   if (loading) {
     return (
-      <AccountsTable minWidth={1180}>
+      <AccountsTable minWidth={BANK_RECON_LISTING_MIN_WIDTH}>
+        <BankReconListingColGroup />
         <AccountsTableHead>
           <AccountsTableHeadRow>
-            {Array.from({ length: 10 }).map((_, i) => (
+            {Array.from({ length: BANK_RECON_LISTING_COL_COUNT }).map((_, i) => (
               <AccountsTableHeadCell key={i} sticky={false}>
                 &nbsp;
               </AccountsTableHeadCell>
@@ -105,7 +115,7 @@ function BankAccountTable({
         </AccountsTableHead>
         <AccountsTableBody>
           {Array.from({ length: 5 }).map((_, i) => (
-            <SkeletonRow key={i} cols={10} />
+            <SkeletonRow key={i} cols={BANK_RECON_LISTING_COL_COUNT} />
           ))}
         </AccountsTableBody>
       </AccountsTable>
@@ -125,7 +135,8 @@ function BankAccountTable({
   }
 
   return (
-    <AccountsTable minWidth={1180}>
+    <AccountsTable minWidth={BANK_RECON_LISTING_MIN_WIDTH}>
+      <BankReconListingColGroup />
       <AccountsTableHead>
         <AccountsTableHeadRow>
           <SortTh label="Bank Name" colKey="bankName" />
@@ -147,16 +158,22 @@ function BankAccountTable({
             align="right"
           />
           <SortTh label="Last Reconciled Date" colKey="lastReconciledDate" filterType="date" />
-          <AccountsTableHeadCell className={accountsActionColClass("multi")} sticky>
+          <AccountsTableHeadCell className="bank-recon-listing-action-col" align="center" sticky>
             Action
           </AccountsTableHeadCell>
         </AccountsTableHeadRow>
       </AccountsTableHead>
       <AccountsTableBody>
         {rows.length === 0 ? (
-          <AccountsTableEmpty colSpan={10} message="No bank accounts configured for reconciliation." />
+          <AccountsTableEmpty
+            colSpan={BANK_RECON_LISTING_COL_COUNT}
+            message="No bank accounts configured for reconciliation."
+          />
         ) : filtered.length === 0 ? (
-          <AccountsTableEmpty colSpan={10} message="No accounts match the current filters." />
+          <AccountsTableEmpty
+            colSpan={BANK_RECON_LISTING_COL_COUNT}
+            message="No accounts match the current filters."
+          />
         ) : (
           filtered.map((account) => (
             <AccountsTableRow key={account.id} className="group">
@@ -200,25 +217,14 @@ function BankAccountTable({
                 {account.pendingReconciliationCount}
               </AccountsTableCell>
               <AccountsTableCell>{account.lastReconciledDate ?? "—"}</AccountsTableCell>
-              <AccountsTableCell align="right" className="accounts-table-td-sticky">
-                <AccountsTableActionCell variant="multi">
-                  <Button
-                    asChild
-                    size="sm"
-                    className="h-7 text-[11px] px-2 bg-brand-600 hover:bg-brand-700 text-white"
-                  >
-                    <Link href={bankReconWorkspacePath(account.id)}>Reconcile</Link>
-                  </Button>
-                  <AccountsMoreActions contentClassName="w-48">
-                    <DropdownMenuLabel className="text-[10px] text-muted-foreground uppercase tracking-widest py-1">
-                      Actions
-                    </DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={() => onOpenReconciliation(account.id)}>
-                      Reconcile
-                    </DropdownMenuItem>
-                  </AccountsMoreActions>
-                </AccountsTableActionCell>
+              <AccountsTableCell align="center" className="bank-recon-listing-action-col">
+                <Button
+                  asChild
+                  size="sm"
+                  className="h-7 text-[11px] px-2 bg-brand-600 hover:bg-brand-700 text-white"
+                >
+                  <Link href={bankReconWorkspacePath(account.id)}>Reconcile</Link>
+                </Button>
               </AccountsTableCell>
             </AccountsTableRow>
           ))
@@ -229,7 +235,6 @@ function BankAccountTable({
 }
 
 export default function BankReconciliationListingPageClient() {
-  const router = useRouter();
   const mounted = useClientMounted();
   const { selectedFY } = useFY();
 
@@ -343,13 +348,6 @@ export default function BankReconciliationListingPageClient() {
     URL.revokeObjectURL(url);
   }, [filteredAccounts]);
 
-  const handleOpenReconciliation = useCallback(
-    (accountId: string) => {
-      router.push(bankReconWorkspacePath(accountId));
-    },
-    [router],
-  );
-
   const getCellValue = useCallback(
     (row: BankReconListingRowUi, key: string) =>
       (row as unknown as Record<string, unknown>)[key],
@@ -404,6 +402,7 @@ export default function BankReconciliationListingPageClient() {
         defaultSortKey="bankName"
       >
         <AccountsTableListing
+          className="bank-recon-listing"
           toolbar={
             <AccountsListingToolbar>
               <ReportFilterRow
@@ -454,17 +453,6 @@ export default function BankReconciliationListingPageClient() {
                     initialPreset="this_year"
                   />
                 )}
-                <div className="space-y-0.5">
-                  <span className={ACCOUNTS_FILTER_LABEL_CLASS}>Financial Year</span>
-                  <div
-                    className={cn(
-                      ACCOUNTS_FILTER_CONTROL_CLASS,
-                      "mt-0 flex items-center px-2.5 bg-muted/30 text-xs font-medium",
-                    )}
-                  >
-                    {selectedFY.label}
-                  </div>
-                </div>
                 <ReportFilterResetButton onClick={handleReset} />
                 <Button
                   type="button"
@@ -496,7 +484,6 @@ export default function BankReconciliationListingPageClient() {
         >
           <BankAccountTable
             rows={paginatedRows}
-            onOpenReconciliation={handleOpenReconciliation}
             loading={loading}
             error={error}
             onRetry={() => void loadDashboard()}

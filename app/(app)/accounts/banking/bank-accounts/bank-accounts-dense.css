@@ -103,27 +103,10 @@
 }
 
 /*
- * Uniform body cell backgrounds — border-separate doesn't paint tr zebra onto cells,
- * so sticky Actions (and any other cell) must use the same solid white as the rest.
+ * Sticky Actions — layout only (width / sticky / border / shadow).
+ * Body Action backgrounds come from JSX row-index classes — do NOT set
+ * background-color here or Action becomes a fixed vertical strip.
  */
-.bank-accounts-dense .accounts-table-body > .accounts-table-row > td,
-.bank-accounts-dense .accounts-table > tbody > tr > td {
-  background-color: #ffffff;
-}
-
-.bank-accounts-dense .accounts-table-body > .accounts-table-row:nth-child(even),
-.bank-accounts-dense .accounts-table > tbody > tr:nth-child(even) {
-  background-color: #ffffff;
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .bank-accounts-dense .accounts-table-row:hover > td,
-  .bank-accounts-dense .accounts-table > tbody > tr:hover > td {
-    background-color: #f4f4f5;
-  }
-}
-
-/* Sticky Actions — stays on the right; same white/hover as other columns */
 .bank-accounts-dense .accounts-table th.accounts-col-actions,
 .bank-accounts-dense .accounts-table th.accounts-col-actions-wide {
   position: sticky;
@@ -135,7 +118,7 @@
   max-width: 4.5rem;
   overflow: visible;
   text-overflow: clip;
-  background-color: #fff3e8; /* brand-50 — opaque */
+  background-color: #fff3e8; /* brand-50 header — unchanged */
   border-left: 1px solid #e5e7eb;
   box-shadow: -8px 0 12px -12px rgba(0, 0, 0, 0.25);
 }
@@ -150,7 +133,6 @@
   max-width: 4.5rem;
   overflow: visible;
   text-overflow: clip;
-  background-color: #ffffff;
   border-left: 1px solid #e5e7eb;
   box-shadow: -8px 0 12px -12px rgba(0, 0, 0, 0.25);
 }
@@ -162,19 +144,63 @@
   width: 100%;
 }
 
-.bank-accounts-dense .accounts-table-body > .accounts-table-row:nth-child(even) > td.accounts-col-actions,
-.bank-accounts-dense .accounts-table-body > .accounts-table-row:nth-child(even) > td.accounts-col-actions-wide,
+/*
+ * BODY Action backgrounds — single source of truth for Bank Accounts.
+ *
+ * Root cause (globals.css @layer components):
+ *   .accounts-table td.accounts-col-actions[-wide|-cta] { background-color: #ffffff; }
+ *   …:nth-child(even) > td.accounts-col-actions* { background-color: #f3f4f6; }
+ *   …:hover > td.accounts-col-actions* { background-color: #eceef2; }  ← same for ALL rows
+ * That global hover paints one continuous Action strip.
+ *
+ * color-mix = visual match of muted/N over --background, but fully opaque for sticky.
+ * Higher specificity + !important beats globals (and utility !bg on the same cell).
+ * Header <th> is intentionally NOT targeted.
+ */
+.bank-accounts-dense .accounts-table tbody > .accounts-table-row:nth-child(odd) > td.accounts-col-actions,
+.bank-accounts-dense .accounts-table tbody > .accounts-table-row:nth-child(odd) > td.accounts-col-actions-wide,
+.bank-accounts-dense .accounts-table > tbody > tr:nth-child(odd) > td.accounts-col-actions,
+.bank-accounts-dense .accounts-table > tbody > tr:nth-child(odd) > td.accounts-col-actions-wide {
+  background-color: hsl(var(--background)) !important;
+  background-image: none !important;
+}
+
+.bank-accounts-dense .accounts-table tbody > .accounts-table-row:nth-child(even) > td.accounts-col-actions,
+.bank-accounts-dense .accounts-table tbody > .accounts-table-row:nth-child(even) > td.accounts-col-actions-wide,
 .bank-accounts-dense .accounts-table > tbody > tr:nth-child(even) > td.accounts-col-actions,
 .bank-accounts-dense .accounts-table > tbody > tr:nth-child(even) > td.accounts-col-actions-wide {
-  background-color: #ffffff;
+  /* Opaque equivalent of hsl(var(--muted) / 0.2) over --background */
+  background-color: color-mix(
+    in srgb,
+    hsl(var(--muted)) 20%,
+    hsl(var(--background))
+  ) !important;
+  background-image: none !important;
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .bank-accounts-dense .accounts-table-row:hover > td.accounts-col-actions,
-  .bank-accounts-dense .accounts-table-row:hover > td.accounts-col-actions-wide,
-  .bank-accounts-dense .accounts-table > tbody > tr:hover > td.accounts-col-actions,
-  .bank-accounts-dense .accounts-table > tbody > tr:hover > td.accounts-col-actions-wide {
-    background-color: #f4f4f5;
+  .bank-accounts-dense .accounts-table tbody > .accounts-table-row:nth-child(odd):hover > td.accounts-col-actions,
+  .bank-accounts-dense .accounts-table tbody > .accounts-table-row:nth-child(odd):hover > td.accounts-col-actions-wide,
+  .bank-accounts-dense .accounts-table > tbody > tr:nth-child(odd):hover > td.accounts-col-actions,
+  .bank-accounts-dense .accounts-table > tbody > tr:nth-child(odd):hover > td.accounts-col-actions-wide {
+    background-color: color-mix(
+      in srgb,
+      hsl(var(--muted)) 25%,
+      hsl(var(--background))
+    ) !important;
+    background-image: none !important;
+  }
+
+  .bank-accounts-dense .accounts-table tbody > .accounts-table-row:nth-child(even):hover > td.accounts-col-actions,
+  .bank-accounts-dense .accounts-table tbody > .accounts-table-row:nth-child(even):hover > td.accounts-col-actions-wide,
+  .bank-accounts-dense .accounts-table > tbody > tr:nth-child(even):hover > td.accounts-col-actions,
+  .bank-accounts-dense .accounts-table > tbody > tr:nth-child(even):hover > td.accounts-col-actions-wide {
+    background-color: color-mix(
+      in srgb,
+      hsl(var(--muted)) 30%,
+      hsl(var(--background))
+    ) !important;
+    background-image: none !important;
   }
 }
 
