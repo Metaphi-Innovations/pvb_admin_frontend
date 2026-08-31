@@ -150,6 +150,7 @@ export interface CustomerOutstandingRow {
   territory: string;
   branch: string;
   salesExecutive: string;
+  salespersonId?: string;
   totalInvoiceAmount: number;
   totalTaxableValue: number;
   totalGstAmount: number;

@@ -530,7 +530,7 @@ export function ReportCustomerFilter({
 }: {
   value: string;
   onChange: (value: string) => void;
-  customers: { id: number; customerName: string }[];
+  customers: { id: string | number; customerName: string }[];
 }) {
   return (
     <div className="space-y-0.5 min-w-[160px]">
@@ -618,7 +618,7 @@ export function ReportVendorFilter({
 }: {
   value: string;
   onChange: (value: string) => void;
-  vendors: { id: number; vendorName: string }[];
+  vendors: { id: string | number; vendorName: string }[];
 }) {
   return (
     <div className="space-y-0.5 min-w-[160px]">

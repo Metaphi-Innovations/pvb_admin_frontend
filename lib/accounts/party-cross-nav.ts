@@ -123,24 +123,29 @@ export function buildBillWiseCrossNavLinks(opts: {
 
 /** Quick links on Receivables customer outstanding detail (management screen). */
 export function buildReceivablesDetailCrossNavLinks(opts: {
-  customerId: number;
-  ledgerId: number;
+  customerId: number | string;
+  ledgerId?: number;
 }): PartyCrossNavItem[] {
   const links: PartyCrossNavItem[] = [];
-  if (opts.ledgerId > 0) {
+  const ledgerId = opts.ledgerId ?? 0;
+  if (ledgerId > 0) {
     links.push({
       label: "View Ledger",
-      href: buildGeneralLedgerHref(opts.ledgerId),
+      href: buildGeneralLedgerHref(ledgerId),
     });
     links.push({
       label: "Bill-wise Outstanding",
-      href: billWiseOutstandingHref(opts.ledgerId),
+      href: billWiseOutstandingHref(ledgerId),
     });
   }
-  if (opts.customerId > 0) {
+  const customerId = opts.customerId;
+  if (
+    (typeof customerId === "number" && customerId > 0) ||
+    (typeof customerId === "string" && customerId.trim() !== "")
+  ) {
     links.push({
       label: "Customer Master",
-      href: `/masters/customers/${opts.customerId}`,
+      href: `/masters/customers/${customerId}`,
     });
   }
   return links;
@@ -148,24 +153,29 @@ export function buildReceivablesDetailCrossNavLinks(opts: {
 
 /** Quick links on Payables supplier outstanding detail (management screen). */
 export function buildPayablesDetailCrossNavLinks(opts: {
-  vendorId: number;
-  ledgerId: number;
+  vendorId: number | string;
+  ledgerId?: number;
 }): PartyCrossNavItem[] {
   const links: PartyCrossNavItem[] = [];
-  if (opts.ledgerId > 0) {
+  const ledgerId = opts.ledgerId ?? 0;
+  if (ledgerId > 0) {
     links.push({
       label: "View Ledger",
-      href: buildGeneralLedgerHref(opts.ledgerId),
+      href: buildGeneralLedgerHref(ledgerId),
     });
     links.push({
       label: "Bill-wise Outstanding",
-      href: billWiseOutstandingHref(opts.ledgerId),
+      href: billWiseOutstandingHref(ledgerId),
     });
   }
-  if (opts.vendorId > 0) {
+  const vendorId = opts.vendorId;
+  if (
+    (typeof vendorId === "number" && vendorId > 0) ||
+    (typeof vendorId === "string" && vendorId.trim() !== "")
+  ) {
     links.push({
       label: "Supplier Master",
-      href: `/masters/vendors/${opts.vendorId}`,
+      href: `/masters/vendors/${vendorId}`,
     });
   }
   return links;

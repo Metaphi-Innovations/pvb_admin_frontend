@@ -69,21 +69,6 @@ import {
 } from "@/components/listing";
 import { ListingContainer } from "@/components/layout/ListingContainer";
 
-type StatusTab = "all" | "active" | "inactive";
-const EVENT_TYPE_TAB_KEY = "event-type-list-status-tab";
-
-const STATUS_TABS: { value: StatusTab; label: string }[] = [
-  { value: "all", label: "All" },
-  { value: "active", label: "Active" },
-  { value: "inactive", label: "Inactive" },
-];
-
-function readStoredStatusTab(): StatusTab {
-  if (typeof window === "undefined") return "all";
-  const v = sessionStorage.getItem(EVENT_TYPE_TAB_KEY);
-  return v === "active" || v === "inactive" ? v : "all";
-}
-
 interface ToastState {
   msg: string;
   type: "success" | "error";
@@ -119,7 +104,6 @@ export default function EventTypeMasterPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [toast, setToast] = useState<ToastState | null>(null);
-  const [statusTab, setStatusTab] = useState<StatusTab>("all");
   const [viewId, setViewId] = useState<string | null>(null);
 
   const [sheetMode, setSheetMode] = useState<"add" | "edit" | "view" | null>(null);
@@ -135,14 +119,12 @@ export default function EventTypeMasterPage() {
   );
   const apiFilters = useMemo(
     () =>
-      mergeListRequestFilters(appliedFilters, MASTER_FILTER_FIELD_MAPS.eventType, {
-        statusTab,
-      }),
-    [appliedFilters, statusTab],
+      mergeListRequestFilters(appliedFilters, MASTER_FILTER_FIELD_MAPS.eventType),
+    [appliedFilters],
   );
   const listStatus = useMemo(
-    () => resolveListStatus(appliedFilters, statusTab),
-    [appliedFilters, statusTab],
+    () => resolveListStatus(appliedFilters),
+    [appliedFilters],
   );
 
   const listParams = useMemo<MasterListKeyParams>(
@@ -205,10 +187,6 @@ export default function EventTypeMasterPage() {
     : null;
   const viewLoading = Boolean(viewId) && detailQuery.isFetching;
   const saving = createMutation.isPending || updateMutation.isPending;
-    useEffect(() => {
-    setStatusTab(readStoredStatusTab());
-  }, []);
-
   useEffect(() => {
     if (!toast) return;
     const t = setTimeout(() => setToast(null), 3000);
@@ -217,7 +195,7 @@ export default function EventTypeMasterPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [appliedSearch, apiFilters, pageSize, statusTab, sort.key, sort.direction]);
+  }, [appliedSearch, apiFilters, pageSize, sort.key, sort.direction]);
 
   useEffect(() => {
     if (!viewId) return;
@@ -234,13 +212,6 @@ export default function EventTypeMasterPage() {
       setSheetMode("view");
     }
   }, [viewId, detailQuery.data, detailQuery.isError, detailQuery.error]);
-
-  const handleStatusTabChange = (tab: string) => {
-    const next = tab as StatusTab;
-    setStatusTab(next);
-    sessionStorage.setItem(EVENT_TYPE_TAB_KEY, next);
-    setPage(1);
-  };
 
   const requestStatusToggle = (record: EventTypeRecord) => {
     setStatusTarget(record);
@@ -537,12 +508,6 @@ export default function EventTypeMasterPage() {
     <ListingContainer
       title="Event Type Master"
       titleIcon={CalendarDays}
-      tabs={STATUS_TABS.map((t) => ({
-        value: t.value,
-        label: t.value === statusTab ? `${t.label} (${totalRecords})` : t.label,
-      }))}
-      activeTab={statusTab}
-      onTabChange={handleStatusTabChange}
     >
       {listError ? <p className="mb-2 text-xs text-red-600">{listError}</p> : null}
 

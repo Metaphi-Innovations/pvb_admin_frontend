@@ -276,7 +276,11 @@ export function AccountsColumnarTable({
     <AccountsTable minWidth={minWidth} className={className}>
       <AccountsTableHead>
         <AccountsTableHeadRow>
-          {columns.map((c) => (
+          {columns.map((c) => {
+            const filterType =
+              c.filterType ?? (c.money ? "amount" : c.key.toLowerCase().includes("date") ? "date" : "text");
+            const amountColumn = filterType === "amount" || c.money;
+            return (
             <AccountsColumnHeader
               key={c.key}
               label={c.label}
@@ -287,8 +291,8 @@ export function AccountsColumnarTable({
               sortDir={resolvedSortDir}
               onSort={resolvedOnSort}
               onRemoveSort={resolvedOnRemoveSort}
-              filterable={c.filterable !== false && Boolean(resolvedOnColumnFilterChange)}
-              filterType={c.filterType ?? (c.money ? "amount" : "text")}
+              filterable={c.filterable !== false && !amountColumn && Boolean(resolvedOnColumnFilterChange)}
+              filterType={filterType}
               filterValue={resolvedColumnFilters?.[c.key]}
               onFilterChange={
                 resolvedOnColumnFilterChange ? (v) => resolvedOnColumnFilterChange(c.key, v) : undefined
@@ -296,7 +300,8 @@ export function AccountsColumnarTable({
               valueOptions={resolvedValueOptions?.(c.key)}
               statusOptions={c.statusOptions}
             />
-          ))}
+            );
+          })}
         </AccountsTableHeadRow>
       </AccountsTableHead>
       <AccountsTableBody>
@@ -399,6 +404,17 @@ export function AccountsRichTable<T>({
     onColumnFilterChange ?? (ctx ? (key: string, v: AccountsColumnFilterState | undefined) => ctx.setColumnFilter(key, v) : undefined);
   const resolvedGetValueCounts = ctx?.getValueCounts;
 
+  const isColumnFilterable = (
+    c: AccountsRichColumnDef<T>,
+    filterType: AccountsColumnFilterType,
+  ) => {
+    if (c.filterable === false) return false;
+    if (filterType === "amount") return false;
+    if (columnFilterConfig?.[c.key]?.type === "amount") return false;
+    if (ctx?.isAmountColumn?.(c.key, c.filterType)) return false;
+    return Boolean(resolvedOnColumnFilterChange);
+  };
+
   return (
     <AccountsTable minWidth={minWidth} className={className}>
       <AccountsTableHead>
@@ -429,7 +445,7 @@ export function AccountsRichTable<T>({
                 sortDir={resolvedSortDir}
                 onSort={resolvedOnSort}
                 onRemoveSort={resolvedOnRemoveSort}
-                filterable={c.filterable !== false && Boolean(resolvedOnColumnFilterChange)}
+                filterable={isColumnFilterable(c, filterType)}
                 filterType={filterType}
                 filterValue={resolvedColumnFilters?.[c.key]}
                 onFilterChange={
@@ -438,8 +454,14 @@ export function AccountsRichTable<T>({
                     : undefined
                 }
                 valueOptions={resolvedGetValueCounts?.(c.key)}
-                statusOptions={c.statusOptions ?? columnFilterConfig?.[c.key]?.options}
-                optionLabels={columnFilterConfig?.[c.key]?.optionLabels}
+                statusOptions={
+                  c.statusOptions ??
+                  columnFilterConfig?.[c.key]?.options ??
+                  ctx?.statusOptionsFor(c.key)
+                }
+                optionLabels={
+                  columnFilterConfig?.[c.key]?.optionLabels ?? ctx?.optionLabelsFor(c.key)
+                }
                 className={c.className}
               />
             );

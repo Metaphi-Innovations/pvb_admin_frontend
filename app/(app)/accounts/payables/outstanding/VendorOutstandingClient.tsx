@@ -18,19 +18,26 @@ import {
   ageingBucketColumnKey,
   type AgeingBreakpoints,
 } from "@/lib/accounts/ageing-breakpoints";
+import { computePaymentAllocationSummary } from "@/lib/accounts/payables-data";
+import type {
+  ApiSupplierBillOutstandingRow,
+  ApiVendorAgeingRow,
+  ApiVendorOutstandingRow,
+  PayablesExportView,
+} from "@/types/payables.types";
 import {
-  computeVendorOutstanding,
-  computeSupplierInvoiceOutstanding,
-  computeVendorAgeingRows,
-  computePaymentAllocationSummary,
-  type VendorOutstandingRow,
-  type SupplierInvoiceOutstandingRow,
-  type VendorAgeingRow,
-} from "@/lib/accounts/payables-data";
+  AGING_SORT_KEY_TO_API,
+  BILLS_SORT_KEY_TO_API,
+  SUMMARY_SORT_KEY_TO_API,
+} from "@/lib/accounts/payables-api-mappers";
+import { usePayablesListing } from "@/lib/accounts/use-payables-listing";
 import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
-import { loadVendors } from "@/app/(app)/masters/vendors/vendor-data";
+import { SupplierListService } from "@/services/supplier-list.service";
+import { PayablesService } from "@/services/payables.service";
 import { formatMoneyNumber, MONEY_CELL_CLASS } from "@/lib/accounts/money-format";
 import { defaultAsOnDate } from "@/lib/accounts/report-date-presets";
+import { PAYABLE_STATUS_COLUMN_FILTER } from "@/lib/accounts/column-filter-presets";
+import type { AccountsColumnFilterConfig } from "@/lib/accounts/column-filter-types";
 import {
   AccountsColumnFilterProvider,
   SectionTabs,
@@ -67,21 +74,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { AccountsToast, useAccountsToast } from "@/components/accounts/AccountsToast";
 import { cn } from "@/lib/utils";
-import {
-  exportSupplierOutstandingToExcel,
-  exportSupplierOutstandingToPdf,
-  exportSupplierAgeingToExcel,
-  exportSupplierAgeingToPdf,
-} from "@/lib/accounts/payables-export";
-import {
-  buildReportExcelDocumentHtml,
-  buildStandardReportTableHtml,
-  downloadReportExcelHtml,
-  escapeHtml,
-  exportTabularReportToPdf,
-  todayExportDateSuffix,
-} from "@/lib/accounts/report-export-presentation";
 
 type WorkspaceView = "summary" | "bills" | "ageing";
 type DueStatusFilter = "all" | "overdue" | "not_due";
@@ -122,16 +116,41 @@ function resolveInitialView(searchParams: URLSearchParams): WorkspaceView {
   return "summary";
 }
 
-function statusLabel(status: string): string {
-  return status.replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase());
+function PayablesListSortSync({
+  sortKey,
+  sortDir,
+  onSortChange,
+}: {
+  sortKey: string;
+  sortDir: "asc" | "desc";
+  onSortChange: (sortKey: string, sortDir: "asc" | "desc") => void;
+}) {
+  const ctx = useAccountsColumnFilterContext();
+
+  useEffect(() => {
+    if (!ctx) return;
+    const nextKey = ctx.sortKey || "";
+    const nextDir = ctx.sortDir ?? "asc";
+    if (nextKey !== sortKey || (nextKey !== "" && nextDir !== sortDir)) {
+      onSortChange(nextKey, nextDir);
+    }
+  }, [ctx?.sortKey, ctx?.sortDir, sortKey, sortDir, onSortChange]);
+
+  return null;
 }
 
 function SummaryTable({
+  rows,
+  totalRecords,
+  loading,
   page,
   pageSize,
   onPageChange,
   onPageSizeChange,
 }: {
+  rows: ApiVendorOutstandingRow[];
+  totalRecords: number;
+  loading: boolean;
   page: number;
   pageSize: number;
   onPageChange: (p: number) => void;
@@ -139,17 +158,13 @@ function SummaryTable({
 }) {
   const router = useRouter();
   const ctx = useAccountsColumnFilterContext();
-  const visible = useAccountsFilteredRows<VendorOutstandingRow>([]);
-  const paged = useMemo(
-    () => visible.slice((page - 1) * pageSize, page * pageSize),
-    [visible, page, pageSize],
-  );
+  const visible = useAccountsFilteredRows(rows);
 
   useEffect(() => {
     onPageChange(1);
   }, [ctx?.columnFilters, ctx?.sortKey, ctx?.sortDir, onPageChange]);
 
-  const columns: AccountsRichColumnDef<VendorOutstandingRow>[] = useMemo(
+  const columns: AccountsRichColumnDef<ApiVendorOutstandingRow>[] = useMemo(
     () => [
       {
         key: "vendorName",
@@ -243,20 +258,26 @@ function SummaryTable({
   return (
     <div className="flex flex-col flex-1 min-h-0">
       <AccountsTableScroll>
-        <AccountsRichTable
-          columns={columns}
-          rows={paged}
-          minWidth={1100}
-          getRowKey={(r) => r.vendorId}
-          emptyMessage="No vendors with outstanding balances."
-          onRowClick={(r) => router.push(`/accounts/payables/outstanding/${r.vendorId}`)}
-        />
+        {loading && rows.length === 0 ? (
+          <div className="flex items-center justify-center py-16 text-sm text-muted-foreground">
+            Loading vendor summary…
+          </div>
+        ) : (
+          <AccountsRichTable
+            columns={columns}
+            rows={visible}
+            minWidth={1100}
+            getRowKey={(r) => r.vendorId}
+            emptyMessage="No vendors with outstanding balances."
+            onRowClick={(r) => router.push(`/accounts/payables/outstanding/${r.vendorId}`)}
+          />
+        )}
       </AccountsTableScroll>
-      {visible.length > 0 && (
+      {totalRecords > 0 && (
         <AccountsTablePagination
           page={page}
           pageSize={pageSize}
-          totalRecords={visible.length}
+          totalRecords={totalRecords}
           onPageChange={onPageChange}
           onPageSizeChange={onPageSizeChange}
         />
@@ -266,11 +287,17 @@ function SummaryTable({
 }
 
 function BillTable({
+  rows,
+  totalRecords,
+  loading,
   page,
   pageSize,
   onPageChange,
   onPageSizeChange,
 }: {
+  rows: ApiSupplierBillOutstandingRow[];
+  totalRecords: number;
+  loading: boolean;
   page: number;
   pageSize: number;
   onPageChange: (p: number) => void;
@@ -278,17 +305,13 @@ function BillTable({
 }) {
   const router = useRouter();
   const ctx = useAccountsColumnFilterContext();
-  const visible = useAccountsFilteredRows<SupplierInvoiceOutstandingRow>([]);
-  const paged = useMemo(
-    () => visible.slice((page - 1) * pageSize, page * pageSize),
-    [visible, page, pageSize],
-  );
+  const visible = useAccountsFilteredRows(rows);
 
   useEffect(() => {
     onPageChange(1);
   }, [ctx?.columnFilters, ctx?.sortKey, ctx?.sortDir, onPageChange]);
 
-  const columns: AccountsRichColumnDef<SupplierInvoiceOutstandingRow>[] = useMemo(
+  const columns: AccountsRichColumnDef<ApiSupplierBillOutstandingRow>[] = useMemo(
     () => [
       {
         key: "vendorName",
@@ -377,22 +400,30 @@ function BillTable({
   return (
     <div className="flex flex-col flex-1 min-h-0">
       <AccountsTableScroll>
-        <AccountsRichTable
-          columns={columns}
-          rows={paged}
-          minWidth={1200}
-          getRowKey={(r) => r.billId}
-          emptyMessage="No open purchase bills."
-          onRowClick={(r) =>
-            router.push(`/accounts/payables/outstanding/${r.vendorId}?billId=${r.billId}`)
-          }
-        />
+        {loading && rows.length === 0 ? (
+          <div className="flex items-center justify-center py-16 text-sm text-muted-foreground">
+            Loading bills…
+          </div>
+        ) : (
+          <AccountsRichTable
+            columns={columns}
+            rows={visible}
+            minWidth={1200}
+            getRowKey={(r) => r.openItemId}
+            emptyMessage="No open purchase bills."
+            onRowClick={(r) =>
+              router.push(
+                `/accounts/payables/outstanding/${r.vendorId}?billId=${r.billId}`,
+              )
+            }
+          />
+        )}
       </AccountsTableScroll>
-      {visible.length > 0 && (
+      {totalRecords > 0 && (
         <AccountsTablePagination
           page={page}
           pageSize={pageSize}
-          totalRecords={visible.length}
+          totalRecords={totalRecords}
           onPageChange={onPageChange}
           onPageSizeChange={onPageSizeChange}
         />
@@ -403,12 +434,18 @@ function BillTable({
 
 function AgeingTable({
   columns,
+  rows,
+  totalRecords,
+  loading,
   page,
   pageSize,
   onPageChange,
   onPageSizeChange,
 }: {
-  columns: AccountsRichColumnDef<VendorAgeingRow>[];
+  columns: AccountsRichColumnDef<ApiVendorAgeingRow>[];
+  rows: ApiVendorAgeingRow[];
+  totalRecords: number;
+  loading: boolean;
   page: number;
   pageSize: number;
   onPageChange: (p: number) => void;
@@ -416,11 +453,7 @@ function AgeingTable({
 }) {
   const router = useRouter();
   const ctx = useAccountsColumnFilterContext();
-  const visible = useAccountsFilteredRows<VendorAgeingRow>([]);
-  const paged = useMemo(
-    () => visible.slice((page - 1) * pageSize, page * pageSize),
-    [visible, page, pageSize],
-  );
+  const visible = useAccountsFilteredRows(rows);
 
   useEffect(() => {
     onPageChange(1);
@@ -429,20 +462,26 @@ function AgeingTable({
   return (
     <div className="flex flex-col flex-1 min-h-0">
       <AccountsTableScroll>
-        <AccountsRichTable
-          columns={columns}
-          rows={paged}
-          minWidth={1280}
-          getRowKey={(r) => r.vendorId}
-          emptyMessage="No ageing balances."
-          onRowClick={(r) => router.push(`/accounts/payables/outstanding/${r.vendorId}`)}
-        />
+        {loading && rows.length === 0 ? (
+          <div className="flex items-center justify-center py-16 text-sm text-muted-foreground">
+            Loading ageing…
+          </div>
+        ) : (
+          <AccountsRichTable
+            columns={columns}
+            rows={visible}
+            minWidth={1280}
+            getRowKey={(r) => r.vendorId}
+            emptyMessage="No ageing balances."
+            onRowClick={(r) => router.push(`/accounts/payables/outstanding/${r.vendorId}`)}
+          />
+        )}
       </AccountsTableScroll>
-      {visible.length > 0 && (
+      {totalRecords > 0 && (
         <AccountsTablePagination
           page={page}
           pageSize={pageSize}
-          totalRecords={visible.length}
+          totalRecords={totalRecords}
           onPageChange={onPageChange}
           onPageSizeChange={onPageSizeChange}
         />
@@ -456,6 +495,8 @@ export default function VendorOutstandingClient() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const sectionRefresh = useAccountsSectionRefresh("payables");
+  const { toast, showExportCompleted, showToast, dismissToast } = useAccountsToast();
+  const [exporting, setExporting] = useState(false);
 
   const [view, setView] = useState<WorkspaceView>(() =>
     resolveInitialView(new URLSearchParams(searchParams.toString())),
@@ -473,6 +514,9 @@ export default function VendorOutstandingClient() {
   );
   const [breakpointError, setBreakpointError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [sortKey, setSortKey] = useState("");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [vendors, setVendors] = useState<{ id: string; vendorName: string }[]>([]);
 
   useEffect(() => {
     setView(resolveInitialView(new URLSearchParams(searchParams.toString())));
@@ -496,62 +540,58 @@ export default function VendorOutstandingClient() {
     [router, pathname, searchParams],
   );
 
-  const vendors = useMemo(() => loadVendors(), [refreshKey]);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const items = await SupplierListService.dropdown();
+        if (cancelled) return;
+        setVendors(
+          items.map((s) => ({
+            id: s.supplier_id,
+            vendorName: s.supplierName,
+          })),
+        );
+      } catch {
+        if (!cancelled) setVendors([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshKey]);
+
+  const handleSortChange = useCallback((key: string, dir: "asc" | "desc") => {
+    setSortKey(key);
+    setSortDir(dir);
+    setPage(1);
+  }, []);
+
+  const {
+    loading,
+    error,
+    total,
+    summaryRows,
+    billRows,
+    ageingRows,
+  } = usePayablesListing({
+    view,
+    asOnDate,
+    search,
+    supplierId: vendorId,
+    dueStatus,
+    page,
+    pageSize,
+    sortKey,
+    sortDir,
+    appliedBreakpoints,
+    refreshKey,
+  });
 
   const pendingAllocations = useMemo(() => {
     void refreshKey;
     return computePaymentAllocationSummary().pendingAllocationCount;
   }, [refreshKey, sectionRefresh]);
-
-  const summaryRows = useMemo(() => {
-    void refreshKey;
-    let rows = computeVendorOutstanding(asOnDate).filter((r) => r.outstanding > 0.009);
-    if (vendorId !== "all") rows = rows.filter((r) => String(r.vendorId) === vendorId);
-    if (dueStatus === "overdue") rows = rows.filter((r) => r.overdueAmount > 0.009);
-    if (dueStatus === "not_due") {
-      rows = rows.filter((r) => r.notDueAmount > 0.009 && r.overdueAmount <= 0.009);
-    }
-    if (search.trim()) {
-      const q = search.trim().toLowerCase();
-      rows = rows.filter(
-        (r) =>
-          r.vendorName.toLowerCase().includes(q) || r.vendorCode.toLowerCase().includes(q),
-      );
-    }
-    return rows;
-  }, [asOnDate, vendorId, dueStatus, search, refreshKey, sectionRefresh]);
-
-  const billRows = useMemo(() => {
-    void refreshKey;
-    let rows = computeSupplierInvoiceOutstanding(asOnDate).filter((r) => r.outstanding > 0.009);
-    if (vendorId !== "all") rows = rows.filter((r) => String(r.vendorId) === vendorId);
-    if (dueStatus === "overdue") rows = rows.filter((r) => r.overdueDays > 0);
-    if (dueStatus === "not_due") rows = rows.filter((r) => r.overdueDays <= 0);
-    if (search.trim()) {
-      const q = search.trim().toLowerCase();
-      rows = rows.filter(
-        (r) =>
-          r.vendorName.toLowerCase().includes(q) ||
-          r.vendorCode.toLowerCase().includes(q) ||
-          r.invoiceNo.toLowerCase().includes(q),
-      );
-    }
-    return rows;
-  }, [asOnDate, vendorId, dueStatus, search, refreshKey, sectionRefresh]);
-
-  const ageingRows = useMemo(() => {
-    void refreshKey;
-    let rows = computeVendorAgeingRows(asOnDate, {}, appliedBreakpoints);
-    if (vendorId !== "all") rows = rows.filter((r) => String(r.vendorId) === vendorId);
-    if (search.trim()) {
-      const q = search.trim().toLowerCase();
-      rows = rows.filter(
-        (r) =>
-          r.vendorName.toLowerCase().includes(q) || r.vendorCode.toLowerCase().includes(q),
-      );
-    }
-    return rows;
-  }, [asOnDate, vendorId, search, appliedBreakpoints, refreshKey, sectionRefresh]);
 
   const bucketLabels = useMemo(
     () => getAgeingBucketLabels(appliedBreakpoints),
@@ -563,16 +603,16 @@ export default function VendorOutstandingClient() {
     [appliedBreakpoints],
   );
 
-  const ageingColumns: AccountsRichColumnDef<VendorAgeingRow>[] = useMemo(() => {
+  const ageingColumns: AccountsRichColumnDef<ApiVendorAgeingRow>[] = useMemo(() => {
     const bucketCount = ageingBucketIndices.length;
-    const bucketColumns: AccountsRichColumnDef<VendorAgeingRow>[] = ageingBucketIndices.map(
+    const bucketColumns: AccountsRichColumnDef<ApiVendorAgeingRow>[] = ageingBucketIndices.map(
       (index) => ({
         key: ageingBucketColumnKey(index),
         label: bucketLabels[index] ?? "",
         align: "right" as const,
         filterType: "amount" as const,
         className: "min-w-[120px]",
-        render: (r: VendorAgeingRow) => {
+        render: (r: ApiVendorAgeingRow) => {
           const amount = r.buckets[index] ?? 0;
           const isOldest = index === bucketCount - 1;
           const isLate = index === bucketCount - 2;
@@ -622,143 +662,81 @@ export default function VendorOutstandingClient() {
     setSearch("");
     setVendorId("all");
     setDueStatus("all");
+    setPage(1);
   };
 
-  const exportMeta = useMemo(
-    () => ({
-      reportName:
-        view === "summary"
-          ? "Vendor Outstanding"
-          : view === "bills"
-            ? "Purchase Bill Outstanding"
-            : "Supplier Ageing",
-      financialYear: "All",
-      asOnDate,
-      supplier:
-        vendorId === "all"
-          ? "All suppliers"
-          : (vendors.find((v) => String(v.id) === vendorId)?.vendorName ?? "—"),
-      paymentStatus:
-        dueStatus === "all" ? "All" : dueStatus === "overdue" ? "Overdue" : "Not Due",
-      search,
-      ageingBuckets: ageingBucketIndices.map((i) => bucketLabels[i] ?? "").join(" · "),
-    }),
-    [view, asOnDate, vendorId, vendors, dueStatus, search, ageingBucketIndices, bucketLabels],
-  );
+  const buildExportQuery = useCallback(() => {
+    const viewMap: Record<WorkspaceView, PayablesExportView> = {
+      summary: "summary",
+      bills: "bills",
+      ageing: "ageing",
+    };
+    const sortMap =
+      view === "summary"
+        ? SUMMARY_SORT_KEY_TO_API
+        : view === "bills"
+          ? BILLS_SORT_KEY_TO_API
+          : AGING_SORT_KEY_TO_API;
+    const apiSort = sortKey ? sortMap[sortKey] : undefined;
+    return {
+      view: viewMap[view],
+      search: search.trim() || undefined,
+      supplierId: vendorId !== "all" ? vendorId : undefined,
+      asOfDate: asOnDate,
+      excludeZeroBalance: true,
+      status: dueStatus === "overdue" ? "OVERDUE" : undefined,
+      dueStatus,
+      agingBreakpoints: appliedBreakpoints.join(","),
+      sortBy: apiSort,
+      sortOrder: apiSort ? sortDir : undefined,
+    };
+  }, [
+    view,
+    search,
+    vendorId,
+    asOnDate,
+    dueStatus,
+    appliedBreakpoints,
+    sortKey,
+    sortDir,
+  ]);
 
-  const handleExcel = async () => {
-    if (view === "bills") {
-      await exportSupplierOutstandingToExcel(billRows, exportMeta);
-      return;
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      await PayablesService.exportExcel(buildExportQuery());
+      showExportCompleted();
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Failed to export payables.", "error");
+    } finally {
+      setExporting(false);
     }
-    if (view === "ageing") {
-      await exportSupplierAgeingToExcel(
-        ageingRows,
-        exportMeta,
-        bucketLabels,
-        ageingBucketIndices,
-      );
-      return;
-    }
-    const columns = [
-      { label: "Vendor" },
-      { label: "Code" },
-      { label: "Outstanding (₹)", align: "right" as const, className: "num" },
-      { label: "Overdue (₹)", align: "right" as const, className: "num" },
-      { label: "Not Due (₹)", align: "right" as const, className: "num" },
-      { label: "Oldest Due" },
-      { label: "Last Payment" },
-      { label: "Status" },
-    ];
-    const bodyHtml = summaryRows
-      .map(
-        (r) => `<tr>
-      <td>${escapeHtml(r.vendorName)}</td>
-      <td class="mono">${escapeHtml(r.vendorCode)}</td>
-      <td class="num">${formatMoneyNumber(r.outstanding)}</td>
-      <td class="num">${formatMoneyNumber(r.overdueAmount)}</td>
-      <td class="num">${formatMoneyNumber(r.notDueAmount)}</td>
-      <td>${escapeHtml(r.oldestDueDate)}</td>
-      <td>${escapeHtml(r.lastPaymentDate)}</td>
-      <td>${escapeHtml(statusLabel(r.status))}</td>
-    </tr>`,
-      )
-      .join("");
-    const html = buildReportExcelDocumentHtml({
-      title: exportMeta.reportName,
-      header: {
-        reportTitle: exportMeta.reportName,
-        asOnDate: exportMeta.asOnDate,
-        filters: [
-          { label: "Supplier", value: exportMeta.supplier },
-          { label: "Due Status", value: exportMeta.paymentStatus },
-        ],
-      },
-      bodyHtml: buildStandardReportTableHtml({ columns, bodyHtml }),
-      landscape: true,
-    });
-    downloadReportExcelHtml(html, `Vendor_Outstanding_${todayExportDateSuffix()}.xls`);
   };
 
-  const handlePdf = () => {
-    if (view === "bills") {
-      exportSupplierOutstandingToPdf(billRows, exportMeta);
-      return;
+  const handlePdf = async () => {
+    setExporting(true);
+    try {
+      await PayablesService.exportPdf(buildExportQuery());
+      showExportCompleted();
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Failed to export payables.", "error");
+    } finally {
+      setExporting(false);
     }
-    if (view === "ageing") {
-      exportSupplierAgeingToPdf(ageingRows, exportMeta, bucketLabels, ageingBucketIndices);
-      return;
-    }
-    exportTabularReportToPdf({
-      title: exportMeta.reportName,
-      header: {
-        reportTitle: exportMeta.reportName,
-        asOnDate: exportMeta.asOnDate,
-        filters: [
-          { label: "Supplier", value: exportMeta.supplier },
-          { label: "Due Status", value: exportMeta.paymentStatus },
-        ],
-      },
-      columns: [
-        { label: "Vendor" },
-        { label: "Code" },
-        { label: "Outstanding", align: "right" },
-        { label: "Overdue", align: "right" },
-        { label: "Not Due", align: "right" },
-        { label: "Oldest Due" },
-        { label: "Last Payment" },
-        { label: "Status" },
-      ],
-      bodyHtml: summaryRows
-        .map(
-          (r) => `<tr>
-      <td>${escapeHtml(r.vendorName)}</td>
-      <td>${escapeHtml(r.vendorCode)}</td>
-      <td class="num">${formatMoneyNumber(r.outstanding)}</td>
-      <td class="num">${formatMoneyNumber(r.overdueAmount)}</td>
-      <td class="num">${formatMoneyNumber(r.notDueAmount)}</td>
-      <td>${escapeHtml(formatReportDate(r.oldestDueDate))}</td>
-      <td>${escapeHtml(formatReportDate(r.lastPaymentDate))}</td>
-      <td>${escapeHtml(statusLabel(r.status))}</td>
-    </tr>`,
-        )
-        .join(""),
-      landscape: true,
-    });
   };
 
-  const getSummaryCell = useCallback((row: VendorOutstandingRow, key: string) => {
+  const getSummaryCell = useCallback((row: ApiVendorOutstandingRow, key: string) => {
     if (key === "status") return row.status;
     return (row as unknown as Record<string, unknown>)[key];
   }, []);
 
-  const getBillCell = useCallback((row: SupplierInvoiceOutstandingRow, key: string) => {
+  const getBillCell = useCallback((row: ApiSupplierBillOutstandingRow, key: string) => {
     if (key === "overdueDays") return row.outstanding > 0 ? row.overdueDays : 0;
     if (key === "status") return row.status;
     return (row as unknown as Record<string, unknown>)[key];
   }, []);
 
-  const getAgeingCell = useCallback((row: VendorAgeingRow, key: string) => {
+  const getAgeingCell = useCallback((row: ApiVendorAgeingRow, key: string) => {
     const bucketMatch = /^bucket_(\d+)$/.exec(key);
     if (bucketMatch) return row.buckets[Number(bucketMatch[1])] ?? 0;
     return (row as unknown as Record<string, unknown>)[key];
@@ -767,7 +745,7 @@ export default function VendorOutstandingClient() {
   const providerRows =
     view === "summary" ? summaryRows : view === "bills" ? billRows : ageingRows;
 
-  const columnConfig: Record<string, { type: "text" | "amount" | "date" | "number" | "status" }> =
+  const columnConfig: AccountsColumnFilterConfig =
     view === "summary"
       ? {
           vendorName: { type: "text" },
@@ -777,7 +755,7 @@ export default function VendorOutstandingClient() {
           notDueAmount: { type: "amount" },
           oldestDueDate: { type: "date" },
           lastPaymentDate: { type: "date" },
-          status: { type: "status" },
+          status: PAYABLE_STATUS_COLUMN_FILTER,
         }
       : view === "bills"
         ? {
@@ -790,7 +768,7 @@ export default function VendorOutstandingClient() {
             debitNoteAdjusted: { type: "amount" },
             outstanding: { type: "amount" },
             overdueDays: { type: "number" },
-            status: { type: "status" },
+            status: PAYABLE_STATUS_COLUMN_FILTER,
           }
         : {
             vendorName: { type: "text" },
@@ -817,6 +795,11 @@ export default function VendorOutstandingClient() {
       defaultSortKey={defaultSortKey}
       defaultSortDir="desc"
     >
+      <PayablesListSortSync
+        sortKey={sortKey}
+        sortDir={sortDir}
+        onSortChange={handleSortChange}
+      />
       <AccountsPageShell
         breadcrumbs={accountsBreadcrumb("Payables", "Outstanding")}
         title="Outstanding"
@@ -838,22 +821,35 @@ export default function VendorOutstandingClient() {
           <ReportFilterRow
             end={
               <AccountsExportMenu
-                onExcel={() => void handleExcel()}
-                onPdf={handlePdf}
-                disabled={providerRows.length === 0}
+                onExcel={() => void handleExport()}
+                onPdf={() => void handlePdf()}
+                disabled={loading || exporting}
               />
             }
           >
             <ReportSearchFilter
               value={search}
-              onChange={setSearch}
+              onChange={(v) => {
+                setSearch(v);
+                setPage(1);
+              }}
               placeholder={view === "bills" ? "Search bill, vendor…" : "Search vendor…"}
             />
-            <ReportVendorFilter value={vendorId} onChange={setVendorId} vendors={vendors} />
+            <ReportVendorFilter
+              value={vendorId}
+              onChange={(v) => {
+                setVendorId(v);
+                setPage(1);
+              }}
+              vendors={vendors}
+            />
             {view !== "ageing" && (
               <Select
                 value={dueStatus}
-                onValueChange={(v) => setDueStatus(v as DueStatusFilter)}
+                onValueChange={(v) => {
+                  setDueStatus(v as DueStatusFilter);
+                  setPage(1);
+                }}
               >
                 <SelectTrigger className="h-8 w-[130px] text-xs">
                   <SelectValue placeholder="Due status" />
@@ -865,7 +861,13 @@ export default function VendorOutstandingClient() {
                 </SelectContent>
               </Select>
             )}
-            <ReportAsOnDateFilter value={asOnDate} onChange={setAsOnDate} />
+            <ReportAsOnDateFilter
+              value={asOnDate}
+              onChange={(v) => {
+                setAsOnDate(v);
+                setPage(1);
+              }}
+            />
             <ReportFilterResetButton
               showOnlyWhenActive
               active={hasFilters}
@@ -877,6 +879,11 @@ export default function VendorOutstandingClient() {
         className="h-full min-h-0"
       >
         <AccountsListingTableCard className="flex flex-col flex-1 min-h-0">
+          {error ? (
+            <div className="px-4 py-3 text-xs text-red-600 bg-red-50 border-b border-red-100">
+              {error}
+            </div>
+          ) : null}
           <AccountsListingTabsRow className="flex items-center justify-between gap-2 px-3 py-1.5 border-b border-border/70">
             <SectionTabs
               tabs={VIEW_TABS}
@@ -894,7 +901,10 @@ export default function VendorOutstandingClient() {
                   <AgeingBreakpointPanel
                     draft={breakpointDraft}
                     onDraftChange={setBreakpointDraft}
-                    onApply={setAppliedBreakpoints}
+                    onApply={(bp) => {
+                      setAppliedBreakpoints(bp);
+                      setPage(1);
+                    }}
                     error={breakpointError}
                     onErrorChange={setBreakpointError}
                   />
@@ -904,31 +914,50 @@ export default function VendorOutstandingClient() {
           </AccountsListingTabsRow>
           {view === "summary" && (
             <SummaryTable
+              rows={summaryRows}
+              totalRecords={total}
+              loading={loading}
               page={page}
               pageSize={pageSize}
               onPageChange={setPage}
-              onPageSizeChange={setPageSize}
+              onPageSizeChange={(s) => {
+                setPageSize(s);
+                setPage(1);
+              }}
             />
           )}
           {view === "bills" && (
             <BillTable
+              rows={billRows}
+              totalRecords={total}
+              loading={loading}
               page={page}
               pageSize={pageSize}
               onPageChange={setPage}
-              onPageSizeChange={setPageSize}
+              onPageSizeChange={(s) => {
+                setPageSize(s);
+                setPage(1);
+              }}
             />
           )}
           {view === "ageing" && (
             <AgeingTable
               columns={ageingColumns}
+              rows={ageingRows}
+              totalRecords={total}
+              loading={loading}
               page={page}
               pageSize={pageSize}
               onPageChange={setPage}
-              onPageSizeChange={setPageSize}
+              onPageSizeChange={(s) => {
+                setPageSize(s);
+                setPage(1);
+              }}
             />
           )}
         </AccountsListingTableCard>
       </AccountsPageShell>
+      <AccountsToast toast={toast} onDismiss={dismissToast} />
     </AccountsColumnFilterProvider>
   );
 }
