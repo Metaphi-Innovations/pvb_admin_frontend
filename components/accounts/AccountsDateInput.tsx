@@ -15,6 +15,8 @@ export interface AccountsDateInputProps {
   placeholder?: string;
   id?: string;
   disabled?: boolean;
+  min?: string;
+  max?: string;
   "aria-label"?: string;
   /** @deprecated ignored — compact filter sizing is always used */
   size?: "compact" | "default";
@@ -27,6 +29,8 @@ export function AccountsDateInput({
   placeholder = "dd-mm-yyyy",
   id,
   disabled,
+  min,
+  max,
   "aria-label": ariaLabel,
 }: AccountsDateInputProps) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -75,6 +79,8 @@ export function AccountsDateInput({
         id={id}
         type="date"
         value={value}
+        min={min}
+        max={max}
         onChange={(e) => onChange(e.target.value)}
         onClick={(e) => {
           try {

@@ -867,7 +867,7 @@ export default function SalesInvoicesPageClient() {
   const mounted = useClientMounted();
   const [activeTab, setActiveTab] = useState<SalesInvoiceTabId>("all");
   const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } =
-    useReportDateRange("this_month");
+    useReportDateRange("this_year");
   const [financialYearId, setFinancialYearId] = useState("all");
   const [branches, setBranches] = useState<string[]>([]);
   const [cancelTarget, setCancelTarget] = useState<SalesInvoiceListRow | null>(null);
@@ -1032,15 +1032,15 @@ export default function SalesInvoicesPageClient() {
     }));
     setFinancialYearId("all");
     setBranches([]);
-    setPreset("this_month");
-    const { from, to } = resolveDateRangePreset("this_month");
+    setPreset("this_year");
+    const { from, to } = resolveDateRangePreset("this_year");
     setDateFrom(from);
     setDateTo(to);
   }, [activeTab, setDateFrom, setDateTo, setPreset]);
 
   const hasToolbarFilters =
     Boolean(active.search.trim()) ||
-    preset !== "this_month" ||
+    preset !== "this_year" ||
     financialYearId !== "all" ||
     branches.length > 0;
 

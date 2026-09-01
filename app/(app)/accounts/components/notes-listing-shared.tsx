@@ -43,7 +43,7 @@ export const EMPTY_NOTES_FILTERS: NotesListingFilterState = {
   search: "",
   dateFrom: "",
   dateTo: "",
-  preset: "this_month",
+  preset: "this_year",
   branches: [],
   parties: [],
   sources: [],
@@ -247,7 +247,7 @@ export function NotesListingFilterBar({
   );
 }
 
-export function resetNotesListingFilters(defaultPreset: DateRangePresetId = "this_month"): NotesListingFilterState {
+export function resetNotesListingFilters(defaultPreset: DateRangePresetId = "this_year"): NotesListingFilterState {
   const { from, to } = resolveDateRangePreset(defaultPreset);
   return {
     ...EMPTY_NOTES_FILTERS,

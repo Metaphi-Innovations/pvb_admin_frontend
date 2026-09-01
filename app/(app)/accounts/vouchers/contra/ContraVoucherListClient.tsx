@@ -456,7 +456,7 @@ function ContraListTable({
 
 export function ContraVoucherListClient() {
   const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } =
-    useReportDateRange("this_month");
+    useReportDateRange("this_year");
   const [search, setSearch] = useState("");
   const refreshTick = useAccountsSectionRefresh("contra-vouchers", { apiListing: true });
   const debouncedSearch = useDebouncedValue(search, 300);

@@ -257,7 +257,7 @@ export default function DebitNotesListClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const mounted = useClientMounted();
-  const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_month");
+  const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_year");
   const { permissions } = usePermissions();
 
   const hasCreatePermission = useMemo(() => canCreate(permissions, "accounts", "ledger"), [permissions]);
@@ -266,13 +266,20 @@ export default function DebitNotesListClient() {
   const [moduleTab, setModuleTab] = useState("pending");
   const [statusTab, setStatusTab] = useState("all");
   const [filters, setFilters] = useState<NotesListingFilterState>(() => ({
-    ...resetNotesListingFilters("this_month"),
+    ...resetNotesListingFilters("this_year"),
     dateFrom,
     dateTo,
     preset,
   }));
   const [records, setRecords] = useState<DebitNoteRecord[]>([]);
   const [totalRecords, setTotalRecords] = useState(0);
+  const [statusCounts, setStatusCounts] = useState<Record<string, number>>({
+    all: 0,
+    draft: 0,
+    posted: 0,
+    cancelled: 0,
+    reversed: 0,
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pendingCount, setPendingCount] = useState(0);
@@ -413,8 +420,26 @@ export default function DebitNotesListClient() {
           to_date: filters.dateTo || undefined,
         });
         if (cancelled) return;
-        setRecords(res.items.map(mapDebitNoteToRecord));
+        const mappedRecords = res.items.map(mapDebitNoteToRecord);
+        setRecords(mappedRecords);
         setTotalRecords(res.pagination.total);
+        if (statusTab === "all") {
+          const nextCounts: Record<string, number> = {
+            all: res.pagination.total ?? mappedRecords.length,
+            draft: 0,
+            posted: 0,
+            cancelled: 0,
+            reversed: 0,
+          };
+          mappedRecords.forEach((r) => {
+            const st = String(r.status || "").toLowerCase();
+            if (st === "draft") nextCounts.draft += 1;
+            else if (st === "posted" || st === "approved") nextCounts.posted += 1;
+            else if (st === "cancelled") nextCounts.cancelled += 1;
+            else if (st === "reversed") nextCounts.reversed += 1;
+          });
+          setStatusCounts(nextCounts);
+        }
       } catch (e: any) {
         if (cancelled) return;
         setError(e.message || "Failed to load Debit Notes.");
@@ -437,6 +462,98 @@ export default function DebitNotesListClient() {
     mastersGate,
     filters.parties.length > 0 ? supplierList : null,
     filters.branches.length > 0 ? warehouseList : null,
+  ]);
+
+  // Always fetch pending count on mount and refresh ticks so the Pending badge is accurate on all tabs
+  useEffect(() => {
+    if (!mounted) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await DebitNoteService.listPending({ page: 1, page_size: 1, status: "PENDING" });
+        if (!cancelled && res?.pagination?.total != null) {
+          setPendingCount(res.pagination.total);
+        }
+      } catch {}
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [mounted, listRefreshTick]);
+
+  // Fetch status distribution counts based on active date/party/branch/search filters (independent of statusTab)
+  useEffect(() => {
+    if (!mounted) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const selectedSupplierIds = supplierList
+          .filter((s) => filters.parties.includes(s.supplier_name))
+          .map((s) => s.supplier_id)
+          .filter(Boolean);
+
+        const selectedWarehouseIds = warehouseList
+          .filter((w) => filters.branches.includes(w.warehouse_name))
+          .map((w) => w.warehouse_id)
+          .filter(Boolean);
+
+        const sourceTypes = filters.sources
+          .map((label) => {
+            if (label === "Direct") return "DIRECT" as const;
+            if (label === "Purchase Return") return "PURCHASE_RETURN" as const;
+            return null;
+          })
+          .filter((v): v is "DIRECT" | "PURCHASE_RETURN" => v != null);
+
+        const res = await DebitNoteService.list({
+          page: 1,
+          page_size: 100,
+          search: debouncedSearch.trim() || undefined,
+          supplier_ids: selectedSupplierIds.length ? selectedSupplierIds : undefined,
+          warehouse_ids: selectedWarehouseIds.length ? selectedWarehouseIds : undefined,
+          source_types: sourceTypes.length ? sourceTypes : undefined,
+          dn_number: filters.voucherNo.trim() || undefined,
+          from_date: filters.dateFrom || undefined,
+          to_date: filters.dateTo || undefined,
+        });
+
+        if (cancelled) return;
+
+        const nextCounts: Record<string, number> = {
+          all: res.pagination?.total ?? res.items.length,
+          draft: 0,
+          posted: 0,
+          cancelled: 0,
+          reversed: 0,
+        };
+
+        (res.items || []).forEach((item: any) => {
+          const st = String(item.status || "").toLowerCase();
+          if (st === "draft") nextCounts.draft += 1;
+          else if (st === "posted" || st === "approved") nextCounts.posted += 1;
+          else if (st === "cancelled") nextCounts.cancelled += 1;
+          else if (st === "reversed") nextCounts.reversed += 1;
+        });
+
+        setStatusCounts(nextCounts);
+        setTotalRecords(nextCounts.all);
+      } catch {}
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    mounted,
+    listRefreshTick,
+    filters.dateFrom,
+    filters.dateTo,
+    filters.parties,
+    filters.branches,
+    filters.sources,
+    filters.voucherNo,
+    debouncedSearch,
+    supplierList,
+    warehouseList,
   ]);
 
   const refreshRecords = useCallback(() => {
@@ -522,9 +639,10 @@ export default function DebitNotesListClient() {
   );
 
   const handleExport = async () => {
+    if (!records.length) return;
     setExporting(true);
     try {
-      const { exportDebitNotesToExcel } = require("../../debit-notes/debit-notes-export");
+      const { exportDebitNotesToExcel } = await import("@/app/(app)/accounts/debit-notes/debit-notes-export");
       await exportDebitNotesToExcel(records);
     } finally {
       setExporting(false);
@@ -534,7 +652,7 @@ export default function DebitNotesListClient() {
   const handleResetFilters = () => {
     setStatusTab("all");
     setPage(1);
-    const reset = resetNotesListingFilters("this_month");
+    const reset = resetNotesListingFilters("this_year");
     setPreset(reset.preset);
     setDateFrom(reset.dateFrom);
     setDateTo(reset.dateTo);
@@ -556,7 +674,6 @@ export default function DebitNotesListClient() {
           <NotesListHeaderActions
             onRefresh={handleHeaderRefresh}
             onExportExcel={moduleTab === "records" ? handleExport : undefined}
-            onExportPdf={moduleTab === "records" ? handleExport : undefined}
             exportDisabled={exporting || records.length === 0}
             createLabel="Create Debit Note"
             onCreate={() => router.push(`${LIST_PATH}/new?mode=fresh`)}
@@ -570,7 +687,7 @@ export default function DebitNotesListClient() {
             tabs={[...NOTES_MODULE_TABS]}
             active={moduleTab}
             onChange={setModuleTab}
-            counts={{ pending: pendingCount, records: totalRecords }}
+            counts={{ pending: pendingCount, records: statusCounts.all }}
             compact
           />
 
@@ -596,7 +713,7 @@ export default function DebitNotesListClient() {
                       setPage(1);
                       setStatusTab(tab);
                     }}
-                    counts={counts}
+                    counts={statusCounts}
                     compact
                   />
                 }

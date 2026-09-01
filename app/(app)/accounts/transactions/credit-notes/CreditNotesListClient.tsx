@@ -242,12 +242,17 @@ function applyCreditNoteToolbarFilters(
   return list;
 }
 
-function computeTabCounts(records: CreditNoteListRow[]): Record<string, number> {
+function computeTabCounts(
+  records: CreditNoteListRow[],
+  filters: NotesListingFilterState,
+): Record<string, number> {
+  const base = applyCreditNoteToolbarFilters(records, "all", { ...filters, status: "all" });
   return {
-    all: records.length,
-    draft: records.filter((r) => r.status === "DRAFT").length,
-    posted: records.filter((r) => r.status === "POSTED" || r.status === "APPROVED").length,
-    cancelled: records.filter((r) => r.status === "CANCELLED").length,
+    all: base.length,
+    draft: base.filter((r) => r.status === "DRAFT").length,
+    posted: base.filter((r) => r.status === "POSTED" || r.status === "APPROVED").length,
+    cancelled: base.filter((r) => r.status === "CANCELLED").length,
+    reversed: base.filter((r) => r.status === "REVERSED").length,
   };
 }
 
@@ -439,12 +444,12 @@ export default function CreditNotesListClient() {
   const searchParams = useSearchParams();
   const mounted = useClientMounted();
   const { toast, showToast, dismissToast } = useAccountsToast();
-  const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_month");
+  const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_year");
 
   const [moduleTab, setModuleTab] = useState("pending");
   const [statusTab, setStatusTab] = useState("all");
   const [filters, setFilters] = useState<NotesListingFilterState>(() => ({
-    ...resetNotesListingFilters("this_month"),
+    ...resetNotesListingFilters("this_year"),
     dateFrom,
     dateTo,
     preset,
@@ -504,7 +509,7 @@ export default function CreditNotesListClient() {
     setModuleTab("records");
   }, [searchParams, setDateFrom, setDateTo, setPreset]);
 
-  const counts = useMemo(() => computeTabCounts(records), [records]);
+  const counts = useMemo(() => computeTabCounts(records, filters), [records, filters]);
 
   const partyOptions = useMemo(
     () => uniqueOptionsFromValues(records.map((r) => r.customerName)),
@@ -564,7 +569,7 @@ export default function CreditNotesListClient() {
 
   const handleResetFilters = () => {
     setStatusTab("all");
-    const reset = resetNotesListingFilters("this_month");
+    const reset = resetNotesListingFilters("this_year");
     setPreset(reset.preset);
     setDateFrom(reset.dateFrom);
     setDateTo(reset.dateTo);
@@ -603,7 +608,7 @@ export default function CreditNotesListClient() {
               setModuleTab(tab);
               if (tab === "pending") void refresh();
             }}
-            counts={{ pending: pendingCount, records: records.length }}
+            counts={{ pending: pendingCount, records: counts.all }}
             compact
           />
 
