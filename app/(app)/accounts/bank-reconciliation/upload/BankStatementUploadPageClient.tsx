@@ -254,10 +254,10 @@ function AccountSummaryPanel({
         <SummaryField label="Bank Name" value={account.bankName} />
         <SummaryField label="Account Type" value={account.accountType} />
         <SummaryField label="Book Balance" value={formatMoney(account.bookBalance)} emphasize />
-        <SummaryField label="Last Reconciled" value={account.lastReconciledDate ?? "—"} />
+        <SummaryField label="Last Reconciled" value={formatDisplayDate(account.lastReconciledDate)} />
         <SummaryField
           label="Last Imported Until"
-          value={accountMeta?.lastStatementImportedUntil ?? account.lastStatementImportedUntil ?? "—"}
+          value={formatDisplayDate(accountMeta?.lastStatementImportedUntil ?? account.lastStatementImportedUntil)}
         />
         <SummaryField label="Last Import File" value={accountMeta?.lastImportFileName ?? "—"} />
       </div>

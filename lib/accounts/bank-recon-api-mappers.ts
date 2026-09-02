@@ -4,6 +4,10 @@ import {
   formatDisplayDateRange,
   formatDisplayDateTime,
 } from "@/lib/accounts/date-display";
+import { receiptEditPath, receiptViewPath } from "@/app/(app)/accounts/vouchers/receipt/receipt-voucher-utils";
+import { paymentEditPath, paymentViewPath } from "@/app/(app)/accounts/vouchers/payment/payment-voucher-utils";
+import { contraEditPath, contraViewPath } from "@/app/(app)/accounts/vouchers/contra/contra-voucher-utils";
+import { journalEditPath, journalViewPath } from "@/app/(app)/accounts/vouchers/journal/journal-voucher-utils";
 import type {
   AccountingVoucherTypeApi,
   BookEntryListItem,
@@ -12,6 +16,43 @@ import type {
   StatementImportListItem,
   StatementLineListItem,
 } from "@/types/bank-reconciliation.types";
+
+/** API-backed voucher view URL — never the legacy `/vouchers/view/:numericId` demo route. */
+export function bankReconVoucherViewHref(
+  voucherType: AccountingVoucherTypeApi | string,
+  accountingVoucherId: string,
+): string {
+  switch (String(voucherType).toUpperCase()) {
+    case "RECEIPT":
+      return receiptViewPath(accountingVoucherId);
+    case "PAYMENT":
+      return paymentViewPath(accountingVoucherId);
+    case "CONTRA":
+      return contraViewPath(accountingVoucherId);
+    case "JOURNAL":
+      return journalViewPath(accountingVoucherId);
+    default:
+      return `/accounts/vouchers?voucherId=${encodeURIComponent(accountingVoucherId)}`;
+  }
+}
+
+export function bankReconVoucherEditHref(
+  voucherType: AccountingVoucherTypeApi | string,
+  accountingVoucherId: string,
+): string | null {
+  switch (String(voucherType).toUpperCase()) {
+    case "RECEIPT":
+      return receiptEditPath(accountingVoucherId);
+    case "PAYMENT":
+      return paymentEditPath(accountingVoucherId);
+    case "CONTRA":
+      return contraEditPath(accountingVoucherId);
+    case "JOURNAL":
+      return journalEditPath(accountingVoucherId);
+    default:
+      return null;
+  }
+}
 
 export function parseApiAmount(value: string | null | undefined): number {
   if (value == null || value === "") return 0;
@@ -132,6 +173,9 @@ export function mapBookEntryToUiRow(item: BookEntryListItem): BankReconBookRowUi
     item.utrNumber || item.chequeNumber || item.instrumentReference || "";
   const isReconciled = item.reconciliationStatus === "RECONCILED";
 
+  // Keep original voucher/transaction date separate from bank cleared date.
+  // Bulk manual reconcile may share one clearedDate across rows — that is valid.
+  // Never substitute clearedDate/reconciliationDate for voucherDate.
   return {
     id: item.bankDetailId,
     bankAccountId: item.bankAccountId,
@@ -147,8 +191,8 @@ export function mapBookEntryToUiRow(item: BookEntryListItem): BankReconBookRowUi
     bankDate: item.clearedDate,
     status: isReconciled ? "RECONCILED" : "UNRECONCILED",
     reconciliationMode: item.reconciliationMode,
-    viewHref: `/accounts/vouchers/view/${item.accountingVoucherId}`,
-    editHref: null,
+    viewHref: bankReconVoucherViewHref(item.voucherType, item.accountingVoucherId),
+    editHref: bankReconVoucherEditHref(item.voucherType, item.accountingVoucherId),
   };
 }
 

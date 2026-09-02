@@ -1,5 +1,51 @@
 /* Bank Reconciliation workspace only — high-volume accounting density. */
 
+.bank-recon-dense .bank-recon-grid.accounts-table {
+  width: 100%;
+  min-width: 100%;
+  table-layout: fixed;
+}
+
+.bank-recon-dense .bank-recon-grid col.bank-recon-ws-check {
+  width: 36px;
+}
+
+.bank-recon-dense .bank-recon-grid col.bank-recon-ws-voucher-date {
+  width: 104px;
+}
+
+.bank-recon-dense .bank-recon-grid col.bank-recon-ws-particulars {
+  width: auto;
+}
+
+.bank-recon-dense .bank-recon-grid col.bank-recon-ws-type {
+  width: 84px;
+}
+
+.bank-recon-dense .bank-recon-grid col.bank-recon-ws-voucher-no {
+  width: 100px;
+}
+
+.bank-recon-dense .bank-recon-grid col.bank-recon-ws-instrument {
+  width: 128px;
+}
+
+.bank-recon-dense .bank-recon-grid col.bank-recon-ws-amount {
+  width: 100px;
+}
+
+.bank-recon-dense .bank-recon-grid col.bank-recon-ws-bank-date {
+  width: 148px;
+}
+
+.bank-recon-dense .bank-recon-grid col.bank-recon-ws-status {
+  width: 104px;
+}
+
+.bank-recon-dense .bank-recon-grid col.bank-recon-ws-action {
+  width: 44px;
+}
+
 .bank-recon-dense .bank-recon-grid .accounts-table-th {
   height: 34px;
   min-height: 34px;
@@ -9,6 +55,7 @@
   font-weight: 600;
   text-transform: none;
   letter-spacing: normal;
+  overflow: hidden;
 }
 
 .bank-recon-dense .bank-recon-grid .accounts-table-td {
@@ -22,10 +69,15 @@
   overflow: hidden;
 }
 
-.bank-recon-dense .bank-recon-grid .accounts-table-td-inner {
+.bank-recon-dense .bank-recon-grid .accounts-table-td-inner,
+.bank-recon-dense .bank-recon-grid .accounts-table-th-inner {
   min-width: 0;
-  height: 35px;
+  max-width: 100%;
   overflow: hidden;
+}
+
+.bank-recon-dense .bank-recon-grid .accounts-table-td-inner {
+  height: 35px;
 }
 
 .bank-recon-dense .bank-recon-grid .accounts-table-row {
@@ -69,5 +121,9 @@
 @media (max-width: 1100px) {
   .bank-recon-dense {
     overflow-y: auto;
+  }
+
+  .bank-recon-dense .bank-recon-grid.accounts-table {
+    min-width: 1040px;
   }
 }

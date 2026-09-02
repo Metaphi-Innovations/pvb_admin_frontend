@@ -306,10 +306,6 @@ export default function BankReconciliationWorkspacePageClient({
 
   const handleBulkApply = useCallback(async () => {
     if (!accountId) return;
-    if (!bulkBankDate.trim()) {
-      setToast({ msg: "Enter a common Bank Date for selected rows.", type: "error" });
-      return;
-    }
     if (selectedIds.size === 0) {
       setToast({ msg: "Select at least one unreconciled row.", type: "error" });
       return;
@@ -322,17 +318,21 @@ export default function BankReconciliationWorkspacePageClient({
       setToast({ msg: "No unreconciled rows selected.", type: "error" });
       return;
     }
+    const commonDate = bulkBankDate.trim();
     setSaving(true);
     try {
       const result = await BankReconciliationService.manualReconcile({
         bank_account_id: accountId,
         bank_detail_ids: ids,
-        cleared_date: bulkBankDate,
+        // Mode 1: common date. Mode 2: omit → backend uses each voucher_date.
+        ...(commonDate ? { cleared_date: commonDate } : {}),
       });
       setSelectedIds(new Set());
       refreshAll();
       setToast({
-        msg: `Marked ${result.reconciledCount} row(s) reconciled.`,
+        msg: commonDate
+          ? `Marked ${result.reconciledCount} row(s) reconciled with Bank Date ${formatDisplayDate(commonDate)}.`
+          : `Marked ${result.reconciledCount} row(s) reconciled using each voucher's own date.`,
         type: "success",
       });
     } catch (err) {
@@ -605,15 +605,23 @@ export default function BankReconciliationWorkspacePageClient({
                 <strong className="text-foreground">{selectedIds.size}</strong> selected
               </span>
               <div className="flex-1" />
-              <span className="text-[11px] font-medium text-muted-foreground whitespace-nowrap">
-                Bank Date
-              </span>
+              <div className="flex flex-col items-end gap-0.5 min-w-0">
+                <span
+                  className="text-[11px] font-medium text-muted-foreground whitespace-nowrap"
+                  title="Leave blank to use each voucher's own voucher date"
+                >
+                  Common Bank Date (Optional)
+                </span>
+                <span className="text-[9px] text-muted-foreground/80 whitespace-nowrap hidden sm:inline">
+                  Blank = each voucher&apos;s own date
+                </span>
+              </div>
               <input
                 type="date"
                 value={bulkBankDate}
                 onChange={(e) => setBulkBankDate(e.target.value)}
                 className="h-8 w-[125px] rounded-lg border border-border/70 bg-white px-2 text-xs"
-                aria-label="Bulk Bank Date"
+                aria-label="Common Bank Date (optional). Leave blank to use each voucher's own date."
               />
               <Button
                 type="button"
@@ -621,6 +629,13 @@ export default function BankReconciliationWorkspacePageClient({
                 className="h-8 px-2.5 text-xs gap-1 bg-brand-600 hover:bg-brand-700 text-white disabled:bg-muted disabled:text-muted-foreground disabled:border disabled:border-border disabled:opacity-100"
                 disabled={selectedIds.size === 0 || saving}
                 onClick={() => void handleBulkApply()}
+                title={
+                  selectedIds.size === 0
+                    ? "Select rows first"
+                    : bulkBankDate.trim()
+                      ? `Reconcile selected with ${formatDisplayDate(bulkBankDate)}`
+                      : "Reconcile selected using each voucher's own date"
+                }
               >
                 <Check className="w-3 h-3" />
                 Mark Reconciled
@@ -628,7 +643,20 @@ export default function BankReconciliationWorkspacePageClient({
             </div>
             <div className="flex-1 min-h-0 overflow-auto">
               {booksLoading ? (
-                <AccountsTable minWidth={1040} className="bank-recon-grid">
+                <AccountsTable className="bank-recon-grid">
+                  <colgroup>
+                    <col className="bank-recon-ws-check" />
+                    <col className="bank-recon-ws-voucher-date" />
+                    <col className="bank-recon-ws-particulars" />
+                    <col className="bank-recon-ws-type" />
+                    <col className="bank-recon-ws-voucher-no" />
+                    <col className="bank-recon-ws-instrument" />
+                    <col className="bank-recon-ws-amount" />
+                    <col className="bank-recon-ws-amount" />
+                    <col className="bank-recon-ws-bank-date" />
+                    <col className="bank-recon-ws-status" />
+                    <col className="bank-recon-ws-action" />
+                  </colgroup>
                   <AccountsTableHead>
                     <AccountsTableHeadRow>
                       {Array.from({ length: 11 }).map((_, i) => (
@@ -767,10 +795,23 @@ function BooksTable({
   onUndo: (bankDetailId: string) => void;
 }) {
   return (
-    <AccountsTable minWidth={1040} className="bank-recon-grid table-fixed">
+    <AccountsTable className="bank-recon-grid">
+      <colgroup>
+        <col className="bank-recon-ws-check" />
+        <col className="bank-recon-ws-voucher-date" />
+        <col className="bank-recon-ws-particulars" />
+        <col className="bank-recon-ws-type" />
+        <col className="bank-recon-ws-voucher-no" />
+        <col className="bank-recon-ws-instrument" />
+        <col className="bank-recon-ws-amount" />
+        <col className="bank-recon-ws-amount" />
+        <col className="bank-recon-ws-bank-date" />
+        <col className="bank-recon-ws-status" />
+        <col className="bank-recon-ws-action" />
+      </colgroup>
       <AccountsTableHead>
         <AccountsTableHeadRow>
-          <AccountsTableHeadCell className="w-9" align="center">
+          <AccountsTableHeadCell align="center">
             <input
               type="checkbox"
               className="w-3 h-3 rounded accent-brand-600"
@@ -779,16 +820,16 @@ function BooksTable({
               aria-label="Select all on page"
             />
           </AccountsTableHeadCell>
-          <AccountsTableHeadCell className="w-[82px]">Voucher Date</AccountsTableHeadCell>
+          <AccountsTableHeadCell>Voucher Date</AccountsTableHeadCell>
           <AccountsTableHeadCell>Particulars</AccountsTableHeadCell>
-          <AccountsTableHeadCell className="w-[70px]">Type</AccountsTableHeadCell>
-          <AccountsTableHeadCell className="w-[102px]">Voucher No.</AccountsTableHeadCell>
-          <AccountsTableHeadCell className="w-[112px]">Instrument / UTR</AccountsTableHeadCell>
-          <AccountsTableHeadCell className="w-[88px]" align="right">Deposit</AccountsTableHeadCell>
-          <AccountsTableHeadCell className="w-[88px]" align="right">Withdrawal</AccountsTableHeadCell>
-          <AccountsTableHeadCell className="w-[156px]" align="center">Bank Date</AccountsTableHeadCell>
-          <AccountsTableHeadCell className="w-[96px]" align="center">Status</AccountsTableHeadCell>
-          <AccountsTableHeadCell className="w-11" align="center">Action</AccountsTableHeadCell>
+          <AccountsTableHeadCell>Type</AccountsTableHeadCell>
+          <AccountsTableHeadCell>Voucher No.</AccountsTableHeadCell>
+          <AccountsTableHeadCell>Instrument / UTR</AccountsTableHeadCell>
+          <AccountsTableHeadCell align="right">Deposit</AccountsTableHeadCell>
+          <AccountsTableHeadCell align="right">Withdrawal</AccountsTableHeadCell>
+          <AccountsTableHeadCell align="center">Bank Date</AccountsTableHeadCell>
+          <AccountsTableHeadCell align="center">Status</AccountsTableHeadCell>
+          <AccountsTableHeadCell align="center">Action</AccountsTableHeadCell>
         </AccountsTableHeadRow>
       </AccountsTableHead>
       <AccountsTableBody>
@@ -866,7 +907,9 @@ const CompactBookRow = memo(function CompactBookRow({
           aria-label={`Select ${row.voucherNumber}`}
         />
       </AccountsTableCell>
-      <AccountsTableCell className="whitespace-nowrap tabular-nums">{formatDisplayDate(row.voucherDate)}</AccountsTableCell>
+      <AccountsTableCell className="tabular-nums" title={formatDisplayDate(row.voucherDate)}>
+        {formatDisplayDate(row.voucherDate)}
+      </AccountsTableCell>
       <AccountsTableCell className="min-w-0">
         <Tooltip>
           <TooltipTrigger asChild>
@@ -954,11 +997,6 @@ const CompactBookRow = memo(function CompactBookRow({
       <AccountsTableCell align="center">
         <RowActions>
           <DropdownMenuItem onClick={() => onViewVoucher(row)}>View Details</DropdownMenuItem>
-          {row.editHref && (
-            <DropdownMenuItem asChild>
-              <Link href={row.editHref}>Edit Voucher</Link>
-            </DropdownMenuItem>
-          )}
           {isReconciled && (
             <DropdownMenuItem onClick={() => onUndo(row.id)}>Unreconcile</DropdownMenuItem>
           )}
