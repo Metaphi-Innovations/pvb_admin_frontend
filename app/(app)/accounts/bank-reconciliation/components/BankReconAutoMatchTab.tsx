@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/select";
 import { AccountsSummaryCards } from "@/components/accounts/AccountsSummaryCards";
 import { formatMoney } from "@/lib/accounts/money-format";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 import { cn } from "@/lib/utils";
 import {
   bulkAcceptExactMatches,
@@ -62,7 +63,7 @@ function MatchRow({
         <div>
           <p className="font-medium text-foreground truncate">{stmt.reference || stmt.chequeNo || "No ref"}</p>
           <p className="text-[11px] text-muted-foreground line-clamp-1">{stmt.narration}</p>
-          <p className="text-[11px] text-muted-foreground">{stmt.statementDate} · {stmt.deposit > 0 ? "Deposit" : "Withdrawal"} {formatMoney(amt)}</p>
+          <p className="text-[11px] text-muted-foreground">{formatDisplayDate(stmt.statementDate)} · {stmt.deposit > 0 ? "Deposit" : "Withdrawal"} {formatMoney(amt)}</p>
         </div>
         <div>
           {top ? (

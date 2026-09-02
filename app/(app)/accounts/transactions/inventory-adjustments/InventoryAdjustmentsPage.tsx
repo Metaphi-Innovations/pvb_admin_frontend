@@ -21,6 +21,7 @@ import {
 } from "@/app/(app)/accounts/components/AccountsUI";
 import { loadInventoryAdjustments } from "@/lib/accounts/accounts-mock-data";
 import { formatMoney } from "@/lib/accounts/money-format";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 import {
   ReportFilterRow,
   ReportDateRangeFilter,
@@ -62,7 +63,7 @@ function InventoryAdjustmentsTable({
               <AccountsTableCell mono className="font-semibold text-brand-700">
                 {r.adjustmentNo}
               </AccountsTableCell>
-              <AccountsTableCell>{r.date}</AccountsTableCell>
+              <AccountsTableCell>{formatDisplayDate(r.date)}</AccountsTableCell>
               <AccountsTableCell>{r.warehouse}</AccountsTableCell>
               <AccountsTableCell>{r.type}</AccountsTableCell>
               <AccountsTableCell align="right" money>

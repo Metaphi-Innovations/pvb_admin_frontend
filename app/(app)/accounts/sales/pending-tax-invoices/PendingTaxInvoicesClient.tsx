@@ -35,6 +35,7 @@ import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
 import { MoneyAmount } from "@/components/accounts/MoneyAmount";
 import { accountsActionColClass } from "@/components/accounts/AccountsTableActions";
 import { formatMoney } from "@/lib/accounts/money-format";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 import {
   exportTabularReportToPdf,
   buildReportDocumentHtml,
@@ -157,7 +158,7 @@ async function exportPendingTabExcel(tab: PendingInvoiceTabId, rows: PendingInvo
       "Branch",
     ];
     toRow = (r) => [
-      r.dispatchDate || "—",
+      formatDisplayDate(r.dispatchDate),
       r.dispatchNo,
       r.sourceNo,
       r.partyName,
@@ -176,7 +177,7 @@ async function exportPendingTabExcel(tab: PendingInvoiceTabId, rows: PendingInvo
       "Invoice Value",
     ];
     toRow = (r) => [
-      r.dispatchDate || "—",
+      formatDisplayDate(r.dispatchDate),
       r.dispatchNo,
       r.sourceNo,
       r.fromWarehouse || "—",
@@ -214,7 +215,7 @@ async function exportPendingTabPdf(tab: PendingInvoiceTabId, rows: PendingInvoic
       "Branch",
     ];
     toRow = (r) => [
-      r.dispatchDate || "—",
+      formatDisplayDate(r.dispatchDate),
       r.dispatchNo,
       r.sourceNo,
       r.partyName,
@@ -233,7 +234,7 @@ async function exportPendingTabPdf(tab: PendingInvoiceTabId, rows: PendingInvoic
       "Invoice Value",
     ];
     toRow = (r) => [
-      r.dispatchDate || "—",
+      formatDisplayDate(r.dispatchDate),
       r.dispatchNo,
       r.sourceNo,
       r.fromWarehouse || "—",
@@ -513,7 +514,7 @@ function PendingInvoicesTable({
           {emptyStates ??
             pagedRows.map((r) => (
               <AccountsTableRow key={r.id}>
-                <AccountsTableCell className="tabular-nums">{r.dispatchDate || "—"}</AccountsTableCell>
+                <AccountsTableCell className="tabular-nums">{formatDisplayDate(r.dispatchDate)}</AccountsTableCell>
                 <AccountsTableCell mono>{r.dispatchNo}</AccountsTableCell>
                 <AccountsTableCell mono className="font-semibold text-brand-700">
                   {r.detailHref ? (
@@ -574,7 +575,7 @@ function PendingInvoicesTable({
           {emptyStates ??
             pagedRows.map((r) => (
               <AccountsTableRow key={r.id}>
-                <AccountsTableCell className="tabular-nums">{r.dispatchDate || "—"}</AccountsTableCell>
+                <AccountsTableCell className="tabular-nums">{formatDisplayDate(r.dispatchDate)}</AccountsTableCell>
                 <AccountsTableCell mono>{r.dispatchNo}</AccountsTableCell>
                 <AccountsTableCell mono className="font-semibold text-brand-700">
                   {r.detailHref ? (
@@ -636,7 +637,7 @@ function PendingInvoicesTable({
         {emptyStates ??
           pagedRows.map((r) => (
             <AccountsTableRow key={r.id}>
-              <AccountsTableCell className="tabular-nums">{r.dispatchDate || "—"}</AccountsTableCell>
+              <AccountsTableCell className="tabular-nums">{formatDisplayDate(r.dispatchDate)}</AccountsTableCell>
               <AccountsTableCell mono>{r.dispatchNo}</AccountsTableCell>
               <AccountsTableCell mono className="font-semibold text-brand-700">
                 {r.detailHref ? (

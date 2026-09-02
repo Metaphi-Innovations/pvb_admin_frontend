@@ -62,6 +62,7 @@ import type {
 } from "@/lib/accounts/column-filter-types";
 import { ContraVoucherService } from "@/services/contra-voucher.service";
 import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
+import { formatDisplayDate, toIsoDateOnly } from "@/lib/accounts/date-display";
 import { WarehouseService } from "@/services/warehouse.service";
 import {
   CONTRA_ACCOUNT_TYPE_LABELS,
@@ -372,7 +373,7 @@ function ContraListTable({
                   </Link>
                 </AccountsTableCell>
                 <AccountsTableCell className="tabular-nums text-xs">
-                  {String(row.voucher_date).slice(0, 10)}
+                  {formatDisplayDate(row.voucher_date)}
                 </AccountsTableCell>
                 <AccountsTableCell className="text-xs">
                   {row.from_warehouse?.warehouse_name || "—"}
@@ -816,7 +817,7 @@ export function ContraVoucherListClient() {
 
   const openCancelDialog = useCallback((row: ContraVoucherListItem) => {
     setCancelReason("");
-    setReverseDate(String(row.voucher_date || "").slice(0, 10));
+    setReverseDate(toIsoDateOnly(row.voucher_date));
     setCancelTarget(row);
   }, []);
 
@@ -832,7 +833,7 @@ export function ContraVoucherListClient() {
       if (isPosted) {
         const resolvedDate =
           reverseDate.trim() ||
-          String(cancelTarget.voucher_date || "").slice(0, 10) ||
+          toIsoDateOnly(cancelTarget.voucher_date) ||
           null;
         await ContraVoucherService.reverse(id, {
           reason,
@@ -868,7 +869,7 @@ export function ContraVoucherListClient() {
       case "sr_no":
         return formatSrNo(row.sr_no);
       case "voucher_date":
-        return String(row.voucher_date).slice(0, 10);
+        return toIsoDateOnly(row.voucher_date);
       case "from_warehouse":
         return row.from_warehouse?.warehouse_name || "";
       case "to_warehouse":

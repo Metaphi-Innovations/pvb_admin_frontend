@@ -48,7 +48,7 @@ import {
 } from "../PurchaseInvoiceQtyComparisonTable";
 import { DirectPurchaseAttachmentPanel } from "../DirectPurchaseAttachmentPanel";
 import { getBankAccountPrintDetails } from "@/components/accounts/WarehouseMappedBankAccountSelect";
-import { isoToDisplayDate } from "@/lib/accounts/date-display";
+import { formatDisplayDate, isoToDisplayDate } from "@/lib/accounts/date-display";
 import { VoucherFormSectionCard } from "@/components/accounts/voucher-form/VoucherFormSectionCard";
 import {
   TransactionViewHero,
@@ -786,7 +786,7 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: st
               </thead>
               <tbody>
                 <tr className="border-b border-border/20 hover:bg-muted/20">
-                  <td className="px-3 py-2.5 text-muted-foreground">{invoice.invoiceDate}</td>
+                  <td className="px-3 py-2.5 text-muted-foreground">{formatDisplayDate(invoice.invoiceDate)}</td>
                   <td className="px-3 py-2.5 font-mono font-semibold text-brand-700">{invoice.invoiceNo}</td>
                   <td className="px-3 py-2.5">
                     Purchase from {invoice.vendorName}
@@ -804,7 +804,7 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: st
                 </tr>
                 {invoice.amountPaid > 0 && (
                   <tr className="hover:bg-muted/20">
-                    <td className="px-3 py-2.5 text-muted-foreground">{invoice.invoiceDate}</td>
+                    <td className="px-3 py-2.5 text-muted-foreground">{formatDisplayDate(invoice.invoiceDate)}</td>
                     <td className="px-3 py-2.5 font-mono text-muted-foreground">PYMT</td>
                     <td className="px-3 py-2.5 text-muted-foreground">
                       Payment received against {invoice.invoiceNo}
@@ -847,7 +847,7 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: st
                   <div>
                     <span className="font-medium">{a.action}</span>
                     <span className="text-muted-foreground ml-2">
-                      {a.date} · {a.by}
+                      {formatDisplayDate(a.date)} · {a.by}
                     </span>
                     {a.remarks && (
                       <span className="text-muted-foreground ml-2">— {a.remarks}</span>

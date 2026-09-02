@@ -37,6 +37,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ACCOUNTS_FILTER_LABEL_CLASS } from "@/lib/accounts/accounts-typography";
+import { formatDisplayDate, toIsoDateOnly } from "@/lib/accounts/date-display";
 import { Label } from "@/components/ui/label";
 import { DebitNoteService } from "@/services/debit-note.service";
 import { showToast } from "@/lib/toast";
@@ -118,7 +119,7 @@ function PendingDebitNotesTable({
                   {row.returnNumber}
                 </AccountsTableCell>
                 <AccountsTableCell className="tabular-nums text-xs whitespace-nowrap">
-                  {row.returnDate}
+                  {formatDisplayDate(row.returnDate)}
                 </AccountsTableCell>
                 <AccountsTableCell
                   className="accounts-col-party font-medium truncate text-xs"
@@ -242,9 +243,7 @@ export function PendingDebitNotesPanel({
             returnId: raw.pending_debit_note_id,
             returnNumber:
               raw.purchase_return_number || raw.purchase_return?.return_no || "—",
-            returnDate: returnDateRaw
-              ? new Date(returnDateRaw).toLocaleDateString()
-              : "—",
+            returnDate: toIsoDateOnly(returnDateRaw),
             supplierName: raw.supplier_name || raw.supplier?.supplier_name || "—",
             poNumber: raw.purchase_return?.purchase_order?.po_no || poFromRef || "—",
             grnNo: grnCodes.length ? grnCodes.join(", ") : "—",

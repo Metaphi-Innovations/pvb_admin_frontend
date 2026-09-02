@@ -46,6 +46,7 @@ import {
   AccountsTableScroll,
 } from "@/components/accounts/AccountsTable";
 import { formatMoney } from "@/lib/accounts/money-format";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 import { cn } from "@/lib/utils";
 import {
   getBankReconAccounts,
@@ -861,8 +862,8 @@ export default function BankStatementUploadPageClient() {
                         {previewRows.map((row) => (
                           <AccountsTableRow key={row.rowNumber}>
                             <AccountsTableCell mono>{row.rowNumber}</AccountsTableCell>
-                            <AccountsTableCell>{row.statementDate || "—"}</AccountsTableCell>
-                            <AccountsTableCell>{row.valueDate || "—"}</AccountsTableCell>
+                            <AccountsTableCell>{formatDisplayDate(row.statementDate)}</AccountsTableCell>
+                            <AccountsTableCell>{formatDisplayDate(row.valueDate)}</AccountsTableCell>
                             <AccountsTableCell mono>{row.reference || "—"}</AccountsTableCell>
                             <AccountsTableCell wrap><span className="line-clamp-1 text-[11px]">{row.narration}</span></AccountsTableCell>
                             <AccountsTableCell align="right" money>{row.deposit ? formatMoney(row.deposit) : "—"}</AccountsTableCell>

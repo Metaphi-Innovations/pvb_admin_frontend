@@ -16,6 +16,7 @@ import {
   type VoucherLine,
 } from "@/app/(app)/accounts/vouchers/voucher-data";
 import { ACCOUNTS_CURRENT_USER } from "@/lib/accounts/config";
+import { formatDisplayDateTime } from "@/lib/accounts/date-display";
 import {
   listUnpaidPurchaseInvoicesForVendor,
   listUnpaidSalesInvoicesForCustomer,
@@ -96,7 +97,7 @@ function activity(label: string, detail: string, tone: BankReconActivityEvent["t
     label,
     detail,
     actor: CURRENT_USER,
-    timestamp: new Date().toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }),
+    timestamp: formatDisplayDateTime(new Date()),
     tone,
   };
 }

@@ -34,6 +34,7 @@ import {
 import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
 import { MoneyAmount } from "@/components/accounts/MoneyAmount";
 import { formatMoney } from "@/lib/accounts/money-format";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 import {
   exportTabularReportToPdf,
   buildReportDocumentHtml,
@@ -174,7 +175,7 @@ async function exportSalesInvoiceTabExcel(tab: SalesInvoiceTabId, rows: SalesInv
       "E-Way Bill Status",
     ];
     toRow = (r) => [
-      r.invoiceDate || "—",
+      formatDisplayDate(r.invoiceDate),
       r.invoiceNo,
       r.invoiceTypeLabel,
       [r.referencePrimary, r.referenceSecondary].filter(Boolean).join(" / "),
@@ -200,7 +201,7 @@ async function exportSalesInvoiceTabExcel(tab: SalesInvoiceTabId, rows: SalesInv
       "E-Way Bill Status",
     ];
     toRow = (r) => [
-      r.invoiceDate || "—",
+      formatDisplayDate(r.invoiceDate),
       r.invoiceNo,
       r.orderNo,
       r.dispatchNo,
@@ -226,7 +227,7 @@ async function exportSalesInvoiceTabExcel(tab: SalesInvoiceTabId, rows: SalesInv
       "E-Way Bill Status",
     ];
     toRow = (r) => [
-      r.invoiceDate || "—",
+      formatDisplayDate(r.invoiceDate),
       r.invoiceNo,
       r.orderNo,
       r.dispatchNo,
@@ -270,7 +271,7 @@ async function exportSalesInvoiceTabPdf(tab: SalesInvoiceTabId, rows: SalesInvoi
       "E-Way Bill Status",
     ];
     toRow = (r) => [
-      r.invoiceDate || "—",
+      formatDisplayDate(r.invoiceDate),
       r.invoiceNo,
       r.invoiceTypeLabel,
       [r.referencePrimary, r.referenceSecondary].filter(Boolean).join(" / "),
@@ -296,7 +297,7 @@ async function exportSalesInvoiceTabPdf(tab: SalesInvoiceTabId, rows: SalesInvoi
       "E-Way Bill Status",
     ];
     toRow = (r) => [
-      r.invoiceDate || "—",
+      formatDisplayDate(r.invoiceDate),
       r.invoiceNo,
       r.orderNo,
       r.dispatchNo,
@@ -322,7 +323,7 @@ async function exportSalesInvoiceTabPdf(tab: SalesInvoiceTabId, rows: SalesInvoi
       "E-Way Bill Status",
     ];
     toRow = (r) => [
-      r.invoiceDate || "—",
+      formatDisplayDate(r.invoiceDate),
       r.invoiceNo,
       r.orderNo,
       r.dispatchNo,
@@ -679,7 +680,7 @@ function SalesInvoicesTable({
           {emptyStates ??
             pagedRows.map((r) => (
               <AccountsTableRow key={r.id}>
-                <AccountsTableCell className="tabular-nums">{r.invoiceDate || "—"}</AccountsTableCell>
+                <AccountsTableCell className="tabular-nums">{formatDisplayDate(r.invoiceDate)}</AccountsTableCell>
                 <AccountsTableCell
                   mono
                   className={cn(
@@ -751,7 +752,7 @@ function SalesInvoicesTable({
           {emptyStates ??
             pagedRows.map((r) => (
               <AccountsTableRow key={r.id}>
-                <AccountsTableCell className="tabular-nums">{r.invoiceDate || "—"}</AccountsTableCell>
+                <AccountsTableCell className="tabular-nums">{formatDisplayDate(r.invoiceDate)}</AccountsTableCell>
                 <AccountsTableCell
                   mono
                   className={cn(
@@ -819,7 +820,7 @@ function SalesInvoicesTable({
         {emptyStates ??
           pagedRows.map((r) => (
             <AccountsTableRow key={r.id}>
-              <AccountsTableCell className="tabular-nums">{r.invoiceDate || "—"}</AccountsTableCell>
+              <AccountsTableCell className="tabular-nums">{formatDisplayDate(r.invoiceDate)}</AccountsTableCell>
               <AccountsTableCell
                 mono
                 className={cn(

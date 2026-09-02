@@ -48,6 +48,7 @@ import {
   type StatementBookRowUi,
   type StatementLineRowUi,
 } from "@/lib/accounts/bank-recon-api-mappers";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 
 type StatementTab = "match" | "unmatched" | "reconciled" | "history";
 
@@ -445,7 +446,7 @@ export function BankReconStatementMode({
               <MatchDetailBlock
                 title="PVB Book Entry"
                 rows={[
-                  ["Voucher Date", viewMatch.bookDate],
+                  ["Voucher Date", formatDisplayDate(viewMatch.bookDate)],
                   ["Voucher Type", viewMatch.voucherType],
                   ["Voucher No.", viewMatch.voucherNumber],
                   ["Particular", viewMatch.particulars],
@@ -457,8 +458,8 @@ export function BankReconStatementMode({
                 <MatchDetailBlock
                   title="Matched Bank Statement Entry"
                   rows={[
-                    ["Bank Date", viewMatch.bankDate],
-                    ["Value Date", viewMatch.raw.statementTransactionDate ?? viewMatch.bankDate],
+                    ["Bank Date", formatDisplayDate(viewMatch.bankDate)],
+                    ["Value Date", formatDisplayDate(viewMatch.raw.statementTransactionDate ?? viewMatch.bankDate)],
                     ["Description", viewMatch.bankDescription],
                     ["Reference", viewMatch.instrumentNumber || "—"],
                     [
@@ -685,7 +686,7 @@ function MatchEntriesTab({
                       onChange={() => onSelectBook(row.id)}
                     />
                   </AccountsTableCell>
-                  <AccountsTableCell className="tabular-nums">{row.voucherDate}</AccountsTableCell>
+                  <AccountsTableCell className="tabular-nums">{formatDisplayDate(row.voucherDate)}</AccountsTableCell>
                   <AccountsTableCell className="truncate font-medium">{row.particulars}</AccountsTableCell>
                   <AccountsTableCell>{row.voucherType}</AccountsTableCell>
                   <AccountsTableCell mono className="text-brand-700">{row.voucherNumber}</AccountsTableCell>
@@ -737,8 +738,8 @@ function MatchEntriesTab({
                       onChange={() => onSelectLine(row.id)}
                     />
                   </AccountsTableCell>
-                  <AccountsTableCell className="tabular-nums">{row.bankDate}</AccountsTableCell>
-                  <AccountsTableCell className="tabular-nums">{row.valueDate}</AccountsTableCell>
+                  <AccountsTableCell className="tabular-nums">{formatDisplayDate(row.bankDate)}</AccountsTableCell>
+                  <AccountsTableCell className="tabular-nums">{formatDisplayDate(row.valueDate)}</AccountsTableCell>
                   <AccountsTableCell className="truncate font-medium">{row.description}</AccountsTableCell>
                   <AccountsTableCell className="font-mono text-[10px]">{row.reference}</AccountsTableCell>
                   <AccountsTableCell align="right" money>{moneyOrDash(row.deposit)}</AccountsTableCell>
@@ -834,8 +835,8 @@ function UnmatchedBankTab({ lines }: { lines: StatementLineRowUi[] }) {
           ) : (
             lines.map((row) => (
               <AccountsTableRow key={row.id}>
-                <AccountsTableCell className="tabular-nums">{row.bankDate}</AccountsTableCell>
-                <AccountsTableCell className="tabular-nums">{row.valueDate}</AccountsTableCell>
+                <AccountsTableCell className="tabular-nums">{formatDisplayDate(row.bankDate)}</AccountsTableCell>
+                <AccountsTableCell className="tabular-nums">{formatDisplayDate(row.valueDate)}</AccountsTableCell>
                 <AccountsTableCell className="font-medium">{row.description}</AccountsTableCell>
                 <AccountsTableCell className="font-mono text-[10px]">{row.reference}</AccountsTableCell>
                 <AccountsTableCell align="right" money>{moneyOrDash(row.deposit)}</AccountsTableCell>
@@ -907,8 +908,8 @@ function ReconciledTab({
           ) : (
             matches.map((m) => (
               <AccountsTableRow key={`${m.bankDetailId}-${m.bankStatementLineId ?? "manual"}`}>
-                <AccountsTableCell className="tabular-nums">{m.bookDate}</AccountsTableCell>
-                <AccountsTableCell className="tabular-nums">{m.bankDate}</AccountsTableCell>
+                <AccountsTableCell className="tabular-nums">{formatDisplayDate(m.bookDate)}</AccountsTableCell>
+                <AccountsTableCell className="tabular-nums">{formatDisplayDate(m.bankDate)}</AccountsTableCell>
                 <AccountsTableCell>{m.voucherType}</AccountsTableCell>
                 <AccountsTableCell mono className="text-brand-700">{m.voucherNumber}</AccountsTableCell>
                 <AccountsTableCell className="truncate">{m.particulars}</AccountsTableCell>

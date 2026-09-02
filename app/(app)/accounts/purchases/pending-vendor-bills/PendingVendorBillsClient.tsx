@@ -25,6 +25,7 @@ import {
   useReportDateRange,
 } from "@/components/accounts/ReportFilters";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 import { listPendingVendorBills } from "@/lib/accounts/purchases-workflow-data";
 import {
   AccountsColumnFilterProvider,
@@ -39,7 +40,7 @@ type PendingBillRow = ReturnType<typeof listPendingVendorBills>[number];
 function exportPendingBillsCsv(rows: PendingBillRow[]) {
   const headers = ["GRN No.", "PO Number", "Supplier", "GRN Date", "Items", "Status"];
   const lines = rows.map((r) =>
-    [r.grnNo, r.poNumber, r.vendorName, r.grnDate, r.itemCount, r.status]
+    [r.grnNo, r.poNumber, r.vendorName, formatDisplayDate(r.grnDate), r.itemCount, r.status]
       .map((v) => `"${String(v).replace(/"/g, '""')}"`)
       .join(","),
   );
@@ -112,7 +113,7 @@ function PendingVendorBillsTable({
               <AccountsTableCell mono>{r.grnNo}</AccountsTableCell>
               <AccountsTableCell mono>{r.poNumber}</AccountsTableCell>
               <AccountsTableCell className="accounts-col-party">{r.vendorName}</AccountsTableCell>
-              <AccountsTableCell className="tabular-nums">{r.grnDate}</AccountsTableCell>
+              <AccountsTableCell className="tabular-nums">{formatDisplayDate(r.grnDate)}</AccountsTableCell>
               <AccountsTableCell align="center">{r.itemCount}</AccountsTableCell>
               <AccountsTableCell align="right" actions="cta">
                 <Button asChild size="sm" variant="outline" className="h-7 px-2 text-xs whitespace-nowrap">

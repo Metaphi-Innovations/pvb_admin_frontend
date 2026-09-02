@@ -1,4 +1,9 @@
 import { roundMoney } from "@/lib/accounts/money-format";
+import {
+  formatDisplayDate,
+  formatDisplayDateRange,
+  formatDisplayDateTime,
+} from "@/lib/accounts/date-display";
 import type {
   AccountingVoucherTypeApi,
   BookEntryListItem,
@@ -197,28 +202,11 @@ export function formatImportPeriod(
   from: string | null,
   to: string | null,
 ): string {
-  if (!from && !to) return "—";
-  const fmt = (s: string) => {
-    const [y, m, d] = s.split("-");
-    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    const mi = Number(m) - 1;
-    return `${d}-${months[mi] ?? m}-${y}`;
-  };
-  if (from && to) return `${fmt(from)} to ${fmt(to)}`;
-  return from ? fmt(from) : to ? fmt(to) : "—";
+  return formatDisplayDateRange(from, to);
 }
 
 export function formatApiDateTime(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleString("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: true,
-  });
+  return formatDisplayDateTime(iso);
 }
 
 export interface StatementBookRowUi {

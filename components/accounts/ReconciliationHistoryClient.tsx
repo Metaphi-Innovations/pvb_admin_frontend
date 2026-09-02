@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo, useCallback } from "react";
 import { formatMoney } from "@/lib/accounts/money-format";
+import { formatDisplayDate, formatDisplayDateTime } from "@/lib/accounts/date-display";
 import {
   ACCOUNTS_FILTER_CONTROL_CLASS,
   ACCOUNTS_FILTER_LABEL_CLASS,
@@ -89,7 +90,7 @@ function ReconciliationHistoryTable({ toolbarRows }: { toolbarRows: Reconciliati
         ) : (
           visible.map((entry) => (
             <AccountsTableRow key={entry.transactionId}>
-              <AccountsTableCell>{entry.transactionDate}</AccountsTableCell>
+              <AccountsTableCell>{formatDisplayDate(entry.transactionDate)}</AccountsTableCell>
               <AccountsTableCell className="font-medium">{entry.bankAccountName}</AccountsTableCell>
               <AccountsTableCell wrap>
                 <span className="line-clamp-1">{entry.narration}</span>
@@ -106,7 +107,7 @@ function ReconciliationHistoryTable({ toolbarRows }: { toolbarRows: Reconciliati
                   <span>{entry.categorizedBy}</span>
                 </div>
                 <span className="text-xs text-muted-foreground">
-                  {new Date(entry.categorizedAt).toLocaleString()}
+                  {formatDisplayDateTime(entry.categorizedAt)}
                 </span>
               </AccountsTableCell>
               <AccountsTableCell wrap>
@@ -117,7 +118,7 @@ function ReconciliationHistoryTable({ toolbarRows }: { toolbarRows: Reconciliati
                       <span>{entry.reconciledBy}</span>
                     </div>
                     <span className="text-xs text-muted-foreground">
-                      {new Date(entry.reconciledAt).toLocaleString()}
+                      {formatDisplayDateTime(entry.reconciledAt)}
                     </span>
                   </>
                 ) : (
@@ -180,7 +181,7 @@ export function ReconciliationHistoryClient() {
     ];
     
     const rows = history.map((h) => [
-      h.transactionDate,
+      formatDisplayDate(h.transactionDate),
       h.bankAccountName,
       h.narration,
       h.amount,
@@ -188,9 +189,9 @@ export function ReconciliationHistoryClient() {
       h.ledgerName,
       h.journalEntryNumber,
       h.categorizedBy,
-      h.categorizedAt,
+      formatDisplayDateTime(h.categorizedAt),
       h.reconciledBy,
-      h.reconciledAt,
+      formatDisplayDateTime(h.reconciledAt),
     ]);
 
     const csv = [headers, ...rows].map((row) => row.join(",")).join("\n");

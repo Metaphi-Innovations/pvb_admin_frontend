@@ -43,6 +43,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { formatMoney } from "@/lib/accounts/money-format";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 import { cn } from "@/lib/utils";
 import { SkeletonRow } from "@/components/ui/Loaders";
 import { useFY } from "@/lib/fy-store";
@@ -292,7 +293,7 @@ export default function BankReconciliationWorkspacePageClient({
         });
         refreshAll();
         setToast({
-          msg: `Reconciled ${row.voucherNumber} with Bank Date ${bankDate}.`,
+          msg: `Reconciled ${row.voucherNumber} with Bank Date ${formatDisplayDate(bankDate)}.`,
           type: "success",
         });
         return null;
@@ -865,7 +866,7 @@ const CompactBookRow = memo(function CompactBookRow({
           aria-label={`Select ${row.voucherNumber}`}
         />
       </AccountsTableCell>
-      <AccountsTableCell className="whitespace-nowrap tabular-nums">{row.voucherDate}</AccountsTableCell>
+      <AccountsTableCell className="whitespace-nowrap tabular-nums">{formatDisplayDate(row.voucherDate)}</AccountsTableCell>
       <AccountsTableCell className="min-w-0">
         <Tooltip>
           <TooltipTrigger asChild>
@@ -895,7 +896,7 @@ const CompactBookRow = memo(function CompactBookRow({
       <AccountsTableCell align="right" money>{moneyOrDash(row.withdrawal)}</AccountsTableCell>
       <AccountsTableCell align="center">
         {isReconciled ? (
-          <span className="text-[11px] font-medium tabular-nums whitespace-nowrap">{row.bankDate ?? "—"}</span>
+          <span className="text-[11px] font-medium tabular-nums whitespace-nowrap">{formatDisplayDate(row.bankDate)}</span>
         ) : (
           <div className="flex items-center justify-center gap-1" title={error ?? undefined}>
             <input

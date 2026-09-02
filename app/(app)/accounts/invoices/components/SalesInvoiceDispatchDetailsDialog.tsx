@@ -12,6 +12,7 @@ import { Truck } from "lucide-react";
 import { DispatchDetailsPanel } from "@/app/(app)/sales/orders/components/DispatchDetailsPanel";
 import { getDispatchById, getDispatchByNumber } from "@/lib/accounts/dispatch-invoice-bridge";
 import { hydrateOrders, loadOrders } from "@/app/(app)/sales/orders/orders-data";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 
 interface SalesInvoiceDispatchDetailsDialogProps {
   dispatchId?: string;
@@ -41,13 +42,6 @@ function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
       <span className="so-info-row-value break-words">{value || "—"}</span>
     </div>
   );
-}
-
-function formatDate(iso?: string): string {
-  if (!iso?.trim()) return "—";
-  const [y, m, d] = iso.split("-");
-  if (!y || !m || !d) return iso;
-  return `${d}/${m}/${y}`;
 }
 
 export function SalesInvoiceDispatchDetailsDialog({
@@ -126,14 +120,14 @@ export function SalesInvoiceDispatchDetailsDialog({
       label: "Sales Order No.",
       value: context?.salesOrderNo || dispatch?.salesOrderNumber || "—",
     },
-    { label: "Sales Order Date", value: formatDate(orderDate) },
+    { label: "Sales Order Date", value: formatDisplayDate(orderDate) },
     {
       label: "Dispatch No.",
       value: dispatch?.dispatchNumber || dispatch?.dispatch_no || dispatchNo || "—",
     },
     {
       label: "Dispatch Date",
-      value: formatDate(dispatch?.dispatchDate || dispatch?.dispatch_date),
+      value: formatDisplayDate(dispatch?.dispatchDate || dispatch?.dispatch_date),
     },
     {
       label: "Warehouse",

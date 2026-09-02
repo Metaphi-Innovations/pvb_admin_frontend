@@ -5,6 +5,7 @@ import { ChevronDown } from "lucide-react";
 import { VoucherFormSectionCard } from "@/components/accounts/voucher-form/VoucherFormSectionCard";
 import { InvoiceDetailField } from "@/app/(app)/accounts/invoices/components/invoice-form-voucher-ui";
 import { cn } from "@/lib/utils";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 import type { PendingCreditNoteDetail, SchemeTypeLedgerMapping } from "../credit-note-form-types";
 import {
   formatCnMoney,
@@ -15,7 +16,6 @@ import {
   snapshotStr,
   SOURCE_TYPE_LABELS,
   summaryValue,
-  toDateInput,
   toNum,
 } from "../credit-note-form-utils";
 
@@ -50,7 +50,7 @@ function ContributingInvoices({ refs }: { refs: ReturnType<typeof invoiceRefsOf>
               {ref.reference_code || ref.reference_id}
               {ref.reference_date ? (
                 <span className="ml-2 font-sans text-muted-foreground">
-                  {toDateInput(ref.reference_date)}
+                  {formatDisplayDate(ref.reference_date)}
                 </span>
               ) : null}
             </li>
@@ -150,13 +150,13 @@ export function CreditNoteSourceEntitlementSection({
         {sourceType === "CASH_DISCOUNT" ? (
           <>
             <Info label="Sales Invoice" value={firstInvoice?.reference_code} mono />
-            <Info label="Invoice Date" value={toDateInput(firstInvoice?.reference_date) || "—"} />
+            <Info label="Invoice Date" value={formatDisplayDate(firstInvoice?.reference_date)} />
             <Info label="Receipt reference" value={firstReceipt?.reference_code} mono />
             <Info
               label="Payment / Settlement Date"
               value={
-                toDateInput(firstReceipt?.reference_date) ||
-                summaryValue(summary, "payment_date", "settlement_date") ||
+                formatDisplayDate(firstReceipt?.reference_date) ||
+                formatDisplayDate(summaryValue(summary, "payment_date", "settlement_date")) ||
                 "—"
               }
             />
@@ -205,7 +205,7 @@ export function CreditNoteSourceEntitlementSection({
             />
             <Info
               label="Return Date"
-              value={toDateInput(firstReturn?.reference_date || pending.eligibility_date) || "—"}
+              value={formatDisplayDate(firstReturn?.reference_date || pending.eligibility_date) || "—"}
             />
             <Info label="Eligible / approved CN amount" value={formatCnMoney(pending.eligible_cn_amount)} />
             {customerGstin ? <Info label="Customer GSTIN" value={customerGstin} mono /> : null}

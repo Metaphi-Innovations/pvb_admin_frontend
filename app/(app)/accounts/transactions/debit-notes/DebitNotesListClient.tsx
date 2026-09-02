@@ -32,6 +32,7 @@ import { useReportDateRange } from "@/components/accounts/ReportFilters";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { noteWorkflowStatusToBadge } from "@/lib/accounts/accounts-status-badges";
 import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { useClientMounted } from "@/lib/use-client-mounted";
 import {
@@ -195,7 +196,7 @@ function DebitNotesRecordsTable({
                     {r.branch || "—"}
                   </AccountsTableCell>
                   <AccountsTableCell className="tabular-nums text-xs">
-                    {r.debitNoteDate}
+                    {formatDisplayDate(r.debitNoteDate)}
                   </AccountsTableCell>
                   <AccountsTableCell align="right" money className="text-xs">
                     {formatINR(r.taxableAmount)}

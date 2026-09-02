@@ -26,6 +26,7 @@ import {
   ACCOUNTS_PAGE_SUBTITLE_CLASS,
   ACCOUNTS_PAGE_TITLE_CLASS,
 } from "@/lib/accounts/accounts-typography";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 
 const TABS = [
   { id: "all", label: "All" },
@@ -72,7 +73,7 @@ function TransactionTable({
             {visible.map((r) => (
               <tr key={r.id} className="accounts-table-row group">
                 <td className="px-3 py-2 text-xs font-mono">{r.number}</td>
-                <td className="px-3 py-2 text-xs text-muted-foreground">{r.date}</td>
+                <td className="px-3 py-2 text-xs text-muted-foreground">{formatDisplayDate(r.date)}</td>
                 <td className="px-3 py-2 text-xs">{r.party}</td>
                 <td className="px-3 py-2 text-xs">{r.referenceNo || "—"}</td>
                 <td className="px-3 py-2 text-xs">{r.amount.toFixed(2)}</td>

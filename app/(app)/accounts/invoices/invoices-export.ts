@@ -1,5 +1,6 @@
 import { normalizeInvoice, type InvoiceRecord, getInvoiceAmountBreakup } from "./invoices-data";
 import { INVOICE_AMOUNT_LABELS } from "./invoice-utils";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 
 export async function exportInvoicesToExcel(records: InvoiceRecord[]): Promise<void> {
   const XLSX = await import("xlsx");
@@ -8,7 +9,7 @@ export async function exportInvoicesToExcel(records: InvoiceRecord[]): Promise<v
     const { taxableValue, gstAmount, invoiceTotal } = getInvoiceAmountBreakup(rec);
     return {
       "Invoice No.": rec.invoiceNo,
-      "Invoice Date": rec.invoiceDate,
+      "Invoice Date": formatDisplayDate(rec.invoiceDate),
       "Customer Name": rec.customerName,
       "GST Number": rec.customerGst,
       [INVOICE_AMOUNT_LABELS.taxableValue]: taxableValue,

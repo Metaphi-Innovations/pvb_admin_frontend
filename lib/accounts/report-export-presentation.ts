@@ -1,4 +1,5 @@
 import { ACCOUNTS_CURRENT_USER } from "@/lib/accounts/config";
+import { formatDisplayDate, formatDisplayDateRange, formatDisplayDateTime } from "@/lib/accounts/date-display";
 import { formatMoney, formatMoneyNumber, formatMoneyOrDash } from "@/lib/accounts/money-format";
 import { writeHtmlAndPrint } from "@/lib/pdf/paramverse/shell";
 
@@ -66,10 +67,7 @@ export interface ReportDocumentOptions {
 const INDENT_SPACES = 4;
 
 export function generatedOnLabel(): string {
-  return new Date().toLocaleString("en-IN", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
+  return formatDisplayDateTime(new Date());
 }
 
 export function escapeHtml(value: string): string {
@@ -108,8 +106,8 @@ export function hierarchyRowClass(rowType: HierarchyRowType | "title"): string {
 
 export function resolveReportPeriod(header: ReportHeaderOptions): string {
   if (header.reportPeriod) return header.reportPeriod;
-  if (header.asOnDate) return `As on ${header.asOnDate}`;
-  if (header.dateFrom && header.dateTo) return `${header.dateFrom} to ${header.dateTo}`;
+  if (header.asOnDate) return `As on ${formatDisplayDate(header.asOnDate)}`;
+  if (header.dateFrom && header.dateTo) return formatDisplayDateRange(header.dateFrom, header.dateTo);
   return "";
 }
 

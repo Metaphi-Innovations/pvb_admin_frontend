@@ -4,6 +4,7 @@
  */
 
 import { formatMoney, roundMoney } from "@/lib/accounts/money-format";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 import {
   buildBalanceMessageHtml,
   buildReportDocumentHtml,
@@ -50,11 +51,7 @@ export interface JournalExportSummary {
 }
 
 function formatExportDate(iso: string): string {
-  const d = new Date(iso.length === 10 ? `${iso}T00:00:00` : iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d
-    .toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
-    .replace(/ /g, "-");
+  return formatDisplayDate(iso, iso);
 }
 
 export function vouchersToJournalExportRows(vouchers: AccountingVoucher[]): JournalExportRow[] {

@@ -20,6 +20,7 @@ import {
 } from "@/services/bank-accounts-list.service";
 import { isActiveStatus } from "@/components/listing";
 import { BankAccountToggle } from "@/app/(app)/accounts/banking/bank-accounts/components/BankAccountToggle";
+import { formatDisplayDateTime } from "@/lib/accounts/date-display";
 import { cn } from "@/lib/utils";
 
 function accountTypeLabel(raw: BankAccountApiAccountType | ""): string {
@@ -33,16 +34,7 @@ function formatAuditUser(user: BankAccountDetail["createdBy"]): string {
 }
 
 function formatDateTime(value: string): string {
-  if (!value) return "—";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return value;
-  return d.toLocaleString("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return formatDisplayDateTime(value);
 }
 
 function SectionBlock({

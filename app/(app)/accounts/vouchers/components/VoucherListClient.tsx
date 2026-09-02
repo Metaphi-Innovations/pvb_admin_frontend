@@ -16,6 +16,7 @@ import { summarizeVoucherLedgers } from "@/lib/accounts/voucher-line-helpers";
 import { loadChartOfAccounts } from "@/app/(app)/accounts/data";
 import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
 import { ensureVoucherListingDemoOnPageLoad } from "@/lib/accounts/voucher-listing-demo-seed";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 import { cn } from "@/lib/utils";
 import {
   AccountsColumnHeader,
@@ -152,7 +153,7 @@ function VoucherListTable({
           ) : (
             paged.map((v) => (
               <AccountsTableRow key={v.id}>
-                <AccountsTableCell className="tabular-nums">{v.date}</AccountsTableCell>
+                <AccountsTableCell className="tabular-nums">{formatDisplayDate(v.date)}</AccountsTableCell>
                 <AccountsTableCell mono>
                   <Link
                     href={`/accounts/vouchers/view/${v.id}`}

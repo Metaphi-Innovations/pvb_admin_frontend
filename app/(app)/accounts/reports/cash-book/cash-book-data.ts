@@ -70,14 +70,8 @@ export interface CashBookStatement {
   };
 }
 
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 
 export function formatCashBookDate(iso: string): string {
-  if (!iso) return "—";
-  const parts = iso.split("T")[0].split("-");
-  if (parts.length !== 3) return iso;
-  const [y, m, d] = parts;
-  if (!y || !m || !d) return iso;
-  const monthIdx = parseInt(m, 10) - 1;
-  return `${d}-${MONTHS[monthIdx] || m}-${y}`;
+  return formatDisplayDate(iso);
 }

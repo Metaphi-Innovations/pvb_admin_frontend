@@ -6,6 +6,11 @@ import type { BankReconReviewSnapshot, BankReconSessionRecord } from "@/lib/acco
 import { ACCOUNTS_CURRENT_USER } from "@/lib/accounts/config";
 import { formatMoney } from "@/lib/accounts/money-format";
 import {
+  formatDisplayDate,
+  formatDisplayDateRange,
+  formatDisplayDateTime,
+} from "@/lib/accounts/date-display";
+import {
   ACCOUNTS_COMPANY_NAME,
   buildReportDocumentHtml,
   buildStandardReportTableHtml,
@@ -28,7 +33,7 @@ export async function exportReconciliationReportToExcel(
     ["Account", review.accountNickname],
     ["Account Number", review.maskedAccountNumber],
     ["Reconciliation Number", session.reconciliationNumber ?? "Draft"],
-    ["Period", `${review.periodFrom} to ${review.periodTo}`],
+    ["Period", formatDisplayDateRange(review.periodFrom, review.periodTo)],
     ["Status", session.status],
     ["Book Closing Balance", review.bookClosingBalance],
     ["Adjusted Book Balance", review.formula.adjustedBookBalance],
@@ -39,20 +44,20 @@ export async function exportReconciliationReportToExcel(
   ];
 
   const outstanding = review.outstandingBook.map((o) => ({
-    "Book Date": o.bookDate,
+    "Book Date": formatDisplayDate(o.bookDate),
     "Voucher No.": o.voucherNo,
     Party: o.partyLedger,
     Reference: o.reference,
     Deposit: o.deposit || "",
     Withdrawal: o.withdrawal || "",
-    "Expected Clearing": o.expectedClearingDate ?? "",
+    "Expected Clearing": formatDisplayDate(o.expectedClearingDate),
     Ageing: o.ageingDays,
     Reason: o.reason,
   }));
 
   const stmtOnly = review.statementOnly.map((s) => ({
-    "Statement Date": s.statementDate,
-    "Value Date": s.valueDate,
+    "Statement Date": formatDisplayDate(s.statementDate),
+    "Value Date": formatDisplayDate(s.valueDate),
     Reference: s.reference,
     Narration: s.narration,
     Deposit: s.deposit || "",
@@ -75,7 +80,7 @@ export function exportReconciliationReportToPdf(
 ): void {
   const header: ReportHeaderOptions = {
     reportTitle: "Bank Reconciliation Report",
-    reportPeriod: `${review.periodFrom} to ${review.periodTo}`,
+    reportPeriod: formatDisplayDateRange(review.periodFrom, review.periodTo),
     filters: [
       { label: "Bank", value: `${review.bankName} — ${review.accountNickname}` },
       { label: "Account", value: review.maskedAccountNumber },
@@ -83,9 +88,7 @@ export function exportReconciliationReportToPdf(
       { label: "Status", value: session.status },
       {
         label: "Completed On",
-        value: session.completedOn
-          ? new Date(session.completedOn).toLocaleString("en-IN")
-          : "—",
+        value: session.completedOn ? formatDisplayDateTime(session.completedOn) : "—",
       },
     ],
   };
@@ -186,7 +189,7 @@ export async function exportAuditTrailToExcel(
     wb,
     XLSX.utils.json_to_sheet(
       rows.map((r) => ({
-        "Date & Time": new Date(r.timestamp).toLocaleString("en-IN"),
+        "Date & Time": formatDisplayDateTime(r.timestamp),
         User: r.user,
         Action: r.action,
         Reference: r.reference ?? "",

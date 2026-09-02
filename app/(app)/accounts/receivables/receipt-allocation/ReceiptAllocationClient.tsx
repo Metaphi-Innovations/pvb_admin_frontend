@@ -56,6 +56,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { ACCOUNTS_ACTION_BUTTON_CLASS } from "@/lib/accounts/accounts-typography";
 import { cn } from "@/lib/utils";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 
 const RECEIPT_STATUS_OPTIONS: { value: ReceiptAllocationStatus | "all"; label: string }[] = [
   { value: "all", label: "All statuses" },
@@ -63,12 +64,6 @@ const RECEIPT_STATUS_OPTIONS: { value: ReceiptAllocationStatus | "all"; label: s
   { value: "partially_allocated", label: "Partially Allocated" },
   { value: "fully_allocated", label: "Fully Allocated" },
 ];
-
-function formatReportDate(value: string): string {
-  const [y, m, d] = value.slice(0, 10).split("-");
-  if (!y || !m || !d) return value;
-  return `${d}-${m}-${y}`;
-}
 
 function AvailableReceiptsTable({
   onSelectCustomer,
@@ -102,7 +97,7 @@ function AvailableReceiptsTable({
                 <span className="font-mono text-xs font-semibold">{r.receiptNo}</span>
               </AccountsTableCell>
               <AccountsTableCell>{r.customerName}</AccountsTableCell>
-              <AccountsTableCell>{formatReportDate(r.receiptDate)}</AccountsTableCell>
+              <AccountsTableCell>{formatDisplayDate(r.receiptDate)}</AccountsTableCell>
               <AccountsTableCell align="right">
                 <span className="tabular-nums">{formatMoney(r.unallocatedAmount)}</span>
               </AccountsTableCell>
@@ -189,8 +184,8 @@ function OpenInvoicesAllocationTable({
                   {inv.invoiceNo}
                 </Link>
               </AccountsTableCell>
-              <AccountsTableCell>{formatReportDate(inv.invoiceDate)}</AccountsTableCell>
-              <AccountsTableCell>{formatReportDate(inv.dueDate)}</AccountsTableCell>
+              <AccountsTableCell>{formatDisplayDate(inv.invoiceDate)}</AccountsTableCell>
+              <AccountsTableCell>{formatDisplayDate(inv.dueDate)}</AccountsTableCell>
               <AccountsTableCell align="right">
                 <span className="tabular-nums">{formatMoney(inv.invoiceAmount)}</span>
               </AccountsTableCell>

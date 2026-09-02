@@ -3,6 +3,7 @@
 import type { LucideIcon } from "lucide-react";
 import { Banknote, Building2, CalendarDays, Hash } from "lucide-react";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 import { formatMoney } from "@/lib/accounts/money-format";
 import { cn } from "@/lib/utils";
 
@@ -175,7 +176,7 @@ export function buildVoucherViewMeta(opts: {
     items.push({ icon: Hash, label: "AV", value: opts.accountingVoucherNo, mono: true });
   }
   if (opts.voucherDate) {
-    items.push({ icon: CalendarDays, value: opts.voucherDate });
+    items.push({ icon: CalendarDays, value: formatDisplayDate(opts.voucherDate) });
   }
   if (opts.branchName) {
     items.push({ icon: Building2, value: opts.branchName });

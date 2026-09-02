@@ -48,6 +48,7 @@ import {
   type PendingCreditNoteRow,
 } from "../pending-credit-notes-data";
 import { CREDIT_NOTES_LIST_PATH, formatINR } from "../note-utils";
+import { formatDisplayDate, toIsoDateOnly } from "@/lib/accounts/date-display";
 import { CreditNoteListApi, creditNoteListApiError } from "../credit-note-list-api";
 import { AccountsToast, useAccountsToast } from "@/components/accounts/AccountsToast";
 
@@ -180,7 +181,7 @@ function PendingCreditNotesTable({
                   {schemeFocused ? (
                     <>
                       <AccountsTableCell className="text-xs tabular-nums whitespace-nowrap">
-                        {row.eligibleDate || "—"}
+                        {formatDisplayDate(row.eligibleDate)}
                       </AccountsTableCell>
                       <AccountsTableCell
                         className="accounts-col-party font-medium truncate text-xs"
@@ -340,7 +341,7 @@ export function PendingCreditNotesPanel({
     if (key === "sourceType") return PENDING_CREDIT_SOURCE_LABELS[row.sourceType] || row.sourceType;
     if (key === "linkedInvoices") return row.linkedInvoiceNos.join(", ");
     if (key === "schemeCode") return row.schemeCode || row.referenceNo;
-    if (key === "eligibleDate") return row.eligibleDate || "";
+    if (key === "eligibleDate") return toIsoDateOnly(row.eligibleDate);
     if (key === "eligibleBaseAmount") return row.eligibleBaseAmount ?? row.eligibleCreditAmount;
     return (row as unknown as Record<string, unknown>)[key];
   }, []);
@@ -348,7 +349,7 @@ export function PendingCreditNotesPanel({
   const columnConfig = useMemo((): AccountsColumnFilterConfig => {
     if (schemeFocused) {
       return {
-        eligibleDate: { type: "text" },
+        eligibleDate: { type: "date" },
         customerName: { type: "text" },
         schemeType: { type: "text" },
         schemeName: { type: "text" },

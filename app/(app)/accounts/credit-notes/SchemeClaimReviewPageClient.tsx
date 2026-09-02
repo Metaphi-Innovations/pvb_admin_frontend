@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/dialog";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { cn } from "@/lib/utils";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 import { formatINR, CREDIT_NOTES_BREADCRUMB, CREDIT_NOTES_LIST_PATH } from "./note-utils";
 import {
   approveSchemeEntitlement,
@@ -748,7 +749,7 @@ export default function SchemeClaimReviewPageClient({ entitlementId }: { entitle
             </div>
             <div className="scr-info__field">
               <label>Created Date</label>
-              <p>{record.createdAt ? new Date(record.createdAt).toLocaleDateString() : EM_DASH}</p>
+              <p>{record.createdAt ? formatDisplayDate(record.createdAt) : EM_DASH}</p>
             </div>
             <div className="scr-info__field">
               <label>Calculation Basis</label>
@@ -828,7 +829,7 @@ export default function SchemeClaimReviewPageClient({ entitlementId }: { entitle
                           <td>
                             <span className="scr-doc">{inv.invoiceNumber}</span>
                           </td>
-                          <td className="scr-num">{inv.invoiceDate}</td>
+                          <td className="scr-num">{formatDisplayDate(inv.invoiceDate)}</td>
                           <td className="text-right scr-num">{inv.totalLines}</td>
                           <td className="text-right scr-num">{inv.eligibleLines}</td>
                           <td className="text-right scr-num">{inv.eligibleQuantity}</td>
@@ -1033,7 +1034,7 @@ export default function SchemeClaimReviewPageClient({ entitlementId }: { entitle
                     const docType = resolveDocumentType(row);
                     return (
                       <tr key={`${row.invoiceNo}-${row.invoiceId}`}>
-                        <td className="scr-num">{row.invoiceDate}</td>
+                        <td className="scr-num">{formatDisplayDate(row.invoiceDate)}</td>
                         <td>
                           <span className="scr-doc">{row.invoiceNo}</span>
                         </td>

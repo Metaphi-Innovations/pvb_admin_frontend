@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { formatMoney } from "@/lib/accounts/money-format";
+import { formatDisplayDate, formatDisplayDateTime } from "@/lib/accounts/date-display";
 import {
   getManualDemoAccount,
   getManualDemoMovements,
@@ -41,18 +42,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 }
 
 function formatReconciledAt(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleString("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: true,
-  });
+  return formatDisplayDateTime(iso);
 }
 
 function statusLabel(link: BankReconTallyLink | null): string {
@@ -133,7 +123,7 @@ export function BankReconManualVoucherDialog({
           <div>
             <SectionLabel>Voucher Details</SectionLabel>
             <div className="rounded-xl border border-border bg-muted/20 px-3 py-1">
-              <InfoRow label="Voucher Date" value={book.voucherDate} />
+              <InfoRow label="Voucher Date" value={formatDisplayDate(book.voucherDate)} />
               <InfoRow label="Voucher Type" value={book.voucherType} />
               <InfoRow
                 label="Voucher Number"
@@ -157,7 +147,7 @@ export function BankReconManualVoucherDialog({
               <InfoRow label="Reconciliation Status" value={statusLabel(link)} />
               <InfoRow
                 label="Bank Date"
-                value={isReconciled && link?.bankDate ? link.bankDate : "—"}
+                value={isReconciled && link?.bankDate ? formatDisplayDate(link.bankDate) : "—"}
               />
               <InfoRow
                 label="Reconciled By"

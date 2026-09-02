@@ -33,6 +33,7 @@ import { summarizeVoucherLedgers } from "@/lib/accounts/voucher-line-helpers";
 import { loadChartOfAccounts } from "@/app/(app)/accounts/data";
 import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
 import { ensureVoucherListingDemoOnPageLoad } from "@/lib/accounts/voucher-listing-demo-seed";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 import { cn } from "@/lib/utils";
 import {
   ReportDateRangeFilter,
@@ -184,7 +185,7 @@ function JournalListTable({
                     {v.voucherNumber}
                   </Link>
                 </AccountsTableCell>
-                <AccountsTableCell className="tabular-nums">{v.date}</AccountsTableCell>
+                <AccountsTableCell className="tabular-nums">{formatDisplayDate(v.date)}</AccountsTableCell>
                 <AccountsTableCell className="text-xs max-w-[200px] truncate" title={v.debitLedgerTitle}>
                   {v.debitLedger}
                 </AccountsTableCell>

@@ -3,6 +3,7 @@ import {
   normalizeDebitNote,
   type DebitNoteRecord,
 } from "./debit-notes-data";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 
 export async function exportDebitNotesToExcel(records: DebitNoteRecord[]): Promise<void> {
   const XLSX = await import("xlsx");
@@ -19,7 +20,7 @@ export async function exportDebitNotesToExcel(records: DebitNoteRecord[]): Promi
       "Purchase Invoice": rec.sourceInvoiceNo || "",
       "Purchase Return No.": rec.sourceReturnNo || "",
       Supplier: rec.vendorName,
-      Date: rec.debitNoteDate,
+      Date: formatDisplayDate(rec.debitNoteDate),
       "Taxable Value": rec.taxableAmount,
       CGST: rec.cgstAmount,
       SGST: rec.sgstAmount,

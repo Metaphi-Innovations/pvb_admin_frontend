@@ -5,6 +5,7 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { MoneyAmount, MoneyCell } from "@/components/accounts/MoneyAmount";
 import { formatMoney } from "@/lib/accounts/money-format";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 import type { CoaTransactionRow } from "@/lib/accounts/coa-accounting-view";
 import {
   AccountsTable,
@@ -102,7 +103,7 @@ function CoaTransactionsTableBody({
               key={`${r.voucherNo}-${r.date}-${r.referenceNo}-${i}`}
               className={cn(r.isOpeningRow && "font-medium", !showRunningBalance && "group")}
             >
-              <AccountsTableCell className="whitespace-nowrap">{r.date || "—"}</AccountsTableCell>
+              <AccountsTableCell className="whitespace-nowrap">{formatDisplayDate(r.date)}</AccountsTableCell>
               <AccountsTableCell className="whitespace-nowrap">
                 <VoucherNoCell row={r} />
               </AccountsTableCell>

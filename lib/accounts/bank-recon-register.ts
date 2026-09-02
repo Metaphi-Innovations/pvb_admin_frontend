@@ -11,6 +11,7 @@ import type {
   BankReconTransactionSource,
   BankReconVerificationStatus,
 } from "@/app/(app)/accounts/bank-reconciliation/bank-reconciliation-v2-data";
+import { formatDisplayDateTime } from "@/lib/accounts/date-display";
 import type {
   ExpectedVoucherType,
   ManualAttachmentMeta,
@@ -509,7 +510,7 @@ export function linkManualWithStatement(
         label: "Linked with Statement Import",
         detail: `Statement line linked to manual entry — book date preserved (${manual.bookDate ?? "—"})`,
         actor: importedBy,
-        timestamp: new Date().toLocaleString("en-IN"),
+        timestamp: formatDisplayDateTime(new Date()),
         tone: "emerald" as const,
       },
     ],
@@ -568,7 +569,7 @@ export function createImportedTransaction(
         label: "Statement Imported",
         detail: `Imported from ${fields.importedFileName ?? "bank statement"}`,
         actor: fields.importedBy ?? "User",
-        timestamp: new Date().toLocaleString("en-IN"),
+        timestamp: formatDisplayDateTime(new Date()),
         tone: "blue",
       },
     ],
