@@ -286,9 +286,7 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
   const searchParams = useSearchParams();
   const mounted = useClientMounted();
   const invoiceListingMode = config.invoiceListingMode ?? false;
-  const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange(
-    invoiceListingMode ? "this_year" : "this_month",
-  );
+  const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_year");
   const [search, setSearch] = useState("");
   const [branch, setBranch] = useState("");
   const [warehouse, setWarehouse] = useState("");
@@ -513,14 +511,14 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
                     setPreset,
                     setDateFrom,
                     setDateTo,
-                    invoiceListingMode ? "this_year" : "this_month",
+                    "this_year",
                   );
                 }}
                 filtersActive={accountsListingFiltersActive(
                   { search, preset, dateFrom, dateTo, branch },
                   {
                     search: "",
-                    preset: invoiceListingMode ? "this_year" : "this_month",
+                    preset: "this_year",
                     dateFrom: "",
                     dateTo: "",
                     branch: "",
@@ -569,7 +567,7 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
                   setPreset,
                   setDateFrom,
                   setDateTo,
-                  invoiceListingMode ? "this_year" : "this_month",
+                  "this_year",
                 );
               }}
               onCreate={config.newHref ? () => router.push(config.newHref!) : undefined}

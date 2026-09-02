@@ -15,13 +15,14 @@ import {
   resolveDateRangePreset,
   type DateRangePresetId,
 } from "@/lib/accounts/report-date-presets";
+import { demoFinancialYearStart, demoFinancialYearEnd } from "@/lib/accounts/demo-date-utils";
 import { AccountsDateInput } from "@/components/accounts/AccountsDateInput";
 import {
   ACCOUNTS_FILTER_CONTROL_CLASS,
   ACCOUNTS_FILTER_LABEL_CLASS,
 } from "@/components/accounts/ReportFilters";
 
-export function useInvoiceListingDateRange(initialPreset: DateRangePresetId = "last_month") {
+export function useInvoiceListingDateRange(initialPreset: DateRangePresetId = "this_year") {
   const initial = React.useMemo(() => {
     const { from, to } = resolveDateRangePreset(initialPreset);
     return { preset: initialPreset, from, to };
@@ -63,12 +64,17 @@ export function AccountsInvoiceDateRangeFilter({
       onDateToChange(to);
       return;
     }
-    if (!dateFrom || !dateTo) {
-      const { from, to } = resolveDateRangePreset("last_month");
+    const fyStart = demoFinancialYearStart();
+    const fyEnd = demoFinancialYearEnd();
+    if (!dateFrom || !dateTo || dateFrom < fyStart || dateTo > fyEnd) {
+      const { from, to } = resolveDateRangePreset("this_year");
       onDateFromChange(from);
       onDateToChange(to);
     }
   };
+
+  const min = demoFinancialYearStart();
+  const max = demoFinancialYearEnd();
 
   return (
     <>
@@ -94,7 +100,14 @@ export function AccountsInvoiceDateRangeFilter({
             <Label className={ACCOUNTS_FILTER_LABEL_CLASS}>From Date</Label>
             <AccountsDateInput
               value={dateFrom}
-              onChange={onDateFromChange}
+              min={min}
+              max={dateTo || max}
+              onChange={(val) => {
+                let clamped = val;
+                if (min && clamped && clamped < min) clamped = min;
+                if (max && clamped && clamped > max) clamped = max;
+                onDateFromChange(clamped);
+              }}
               size="default"
               aria-label="From date"
               className="mt-0 w-[120px]"
@@ -104,7 +117,14 @@ export function AccountsInvoiceDateRangeFilter({
             <Label className={ACCOUNTS_FILTER_LABEL_CLASS}>To Date</Label>
             <AccountsDateInput
               value={dateTo}
-              onChange={onDateToChange}
+              min={dateFrom || min}
+              max={max}
+              onChange={(val) => {
+                let clamped = val;
+                if (min && clamped && clamped < min) clamped = min;
+                if (max && clamped && clamped > max) clamped = max;
+                onDateToChange(clamped);
+              }}
               size="default"
               aria-label="To date"
               className="mt-0 w-[120px]"

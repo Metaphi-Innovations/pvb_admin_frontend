@@ -343,7 +343,7 @@ function PaymentListTable({
 
 export function PaymentVoucherListClient() {
   const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } =
-    useReportDateRange("this_month");
+    useReportDateRange("this_year");
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedValue(search, 300);
   const [statusFilter, setStatusFilter] = useState<string>("");

@@ -55,6 +55,14 @@ export type AdditionalChargeInput = {
   additional_charge_id?: string | null;
 };
 
+export type DispatchLineItemOverride = {
+  dispatch_item_id?: string;
+  product_id?: string;
+  discount_percentage?: number | string | null;
+  discount_amount?: number | string | null;
+  rate?: number | string | null;
+};
+
 export type CreateFromDispatchPayload = {
   invoice_date: string;
   due_date?: string | null;
@@ -82,6 +90,7 @@ export type CreateFromDispatchPayload = {
   eway_bill_qr_code?: string | null;
   additional_charges?: AdditionalChargeInput[];
   round_off_amount?: number | string | null;
+  line_item_overrides?: DispatchLineItemOverride[];
 };
 
 export type DirectServiceItemInput = {
@@ -90,6 +99,8 @@ export type DirectServiceItemInput = {
   sac_id: string;
   quantity?: number | string;
   rate: number | string;
+  discount_percentage?: number | string | null;
+  discount_amount?: number | string | null;
   gst_rate?: number | string;
   narration?: string | null;
 };
@@ -977,7 +988,10 @@ export const SalesInvoiceService = {
 
   async previewDispatchTotals(
     dispatchId: string,
-    payload: Pick<CreateFromDispatchPayload, "additional_charges" | "round_off_amount"> = {},
+    payload: Pick<
+      CreateFromDispatchPayload,
+      "additional_charges" | "round_off_amount" | "line_item_overrides"
+    > = {},
   ): Promise<DispatchInvoiceTotalsPreview> {
     try {
       const response = await axiosInstance.post(

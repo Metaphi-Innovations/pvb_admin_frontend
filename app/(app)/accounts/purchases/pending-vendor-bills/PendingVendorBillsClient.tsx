@@ -234,7 +234,7 @@ function PendingVendorBillsContent({
 
 export default function PendingVendorBillsClient() {
   const [search, setSearch] = useState("");
-  const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_month");
+  const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_year");
 
   const allRows = useMemo(() => listPendingVendorBills(), []);
 

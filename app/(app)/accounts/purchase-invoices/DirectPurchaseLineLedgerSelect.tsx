@@ -29,7 +29,7 @@ export function DirectPurchaseLineLedgerSelect({
       className={cn(DP_TABLE_INPUT_CLASS, "text-left")}
       compact
       placeholder="Select ledger…"
-      query={{ status: "ACTIVE", allowManualPosting: true }}
+      query={{ status: "ACTIVE" }}
     />
   );
 }

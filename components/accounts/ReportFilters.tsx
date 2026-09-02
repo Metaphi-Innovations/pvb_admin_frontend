@@ -19,6 +19,7 @@ import {
   resolveDateRangePreset,
   type DateRangePresetId,
 } from "@/lib/accounts/report-date-presets";
+import { demoFinancialYearStart, demoFinancialYearEnd } from "@/lib/accounts/demo-date-utils";
 import {
   loadFinancialYears,
   VOUCHER_TYPE_LABELS,
@@ -34,6 +35,7 @@ import { AccountsDateInput } from "@/components/accounts/AccountsDateInput";
 import { AccountsFilterDateRangeSection } from "@/components/accounts/AccountsFilterDateRangeSection";
 import { Switch } from "@/components/ui/switch";
 import { ReportMultiSelect } from "@/components/accounts/ReportMultiSelect";
+import { ReportSingleSelect } from "@/components/accounts/ReportSingleSelect";
 import type { ReportMultiSelectOption } from "@/lib/accounts/report-multi-filter-utils";
 
 import {
@@ -189,12 +191,17 @@ export function ReportDateRangeFilter({
       return;
     }
     onPresetChange(value);
-    if (!dateFrom || !dateTo) {
-      const { from, to } = resolveDateRangePreset("last_month");
+    const fyStart = demoFinancialYearStart();
+    const fyEnd = demoFinancialYearEnd();
+    if (!dateFrom || !dateTo || dateFrom < fyStart || dateTo > fyEnd) {
+      const { from, to } = resolveDateRangePreset("this_year");
       onDateFromChange(from);
       onDateToChange(to);
     }
   };
+
+  const fyMin = demoFinancialYearStart();
+  const fyMax = demoFinancialYearEnd();
 
   return (
     <div className="space-y-0.5 shrink-0">
@@ -221,7 +228,14 @@ export function ReportDateRangeFilter({
           <>
             <AccountsDateInput
               value={dateFrom}
-              onChange={onDateFromChange}
+              min={fyMin}
+              max={dateTo || fyMax}
+              onChange={(val) => {
+                let clamped = val;
+                if (clamped && clamped < fyMin) clamped = fyMin;
+                if (clamped && clamped > fyMax) clamped = fyMax;
+                onDateFromChange(clamped);
+              }}
               aria-label="From date"
               className={ACCOUNTS_DATE_FILTER_WIDTH_CLASS}
             />
@@ -230,7 +244,14 @@ export function ReportDateRangeFilter({
             </span>
             <AccountsDateInput
               value={dateTo}
-              onChange={onDateToChange}
+              min={dateFrom || fyMin}
+              max={fyMax}
+              onChange={(val) => {
+                let clamped = val;
+                if (clamped && clamped < fyMin) clamped = fyMin;
+                if (clamped && clamped > fyMax) clamped = fyMax;
+                onDateToChange(clamped);
+              }}
               aria-label="To date"
               className={ACCOUNTS_DATE_FILTER_WIDTH_CLASS}
             />
@@ -343,31 +364,35 @@ export function ReportLedgerFilter({
   value,
   onChange,
   ledgers,
+  label = "Ledger",
+  placeholder,
   required = false,
 }: {
   value: string;
   onChange: (value: string) => void;
-  ledgers: { id: number; name: string }[];
+  ledgers: { id: number | string; name: string; group?: string }[];
+  label?: string;
+  placeholder?: string;
   /** When true, hides the "All ledgers" option — ledger selection is mandatory. */
   required?: boolean;
 }) {
+  const selectOptions: ReportMultiSelectOption[] = ledgers.map((l) => ({
+    value: String(l.id),
+    label: l.name,
+    group: l.group,
+  }));
+  const defaultPlaceholder = required ? `Select ${label.toLowerCase()}…` : `All ${label.toLowerCase()}s`;
   return (
-    <div className="space-y-0.5 min-w-[180px]">
-      <span className={filterLabelClass}>Ledger</span>
-      <Select value={value || (required ? undefined : "all")} onValueChange={onChange}>
-        <SelectTrigger className={cn(filterSelectClass, "mt-0 w-[180px]")}>
-          <SelectValue placeholder={required ? "Select ledger…" : "All ledgers"} />
-        </SelectTrigger>
-        <SelectContent>
-          {!required && <SelectItem value="all">All ledgers</SelectItem>}
-          {ledgers.map((l) => (
-            <SelectItem key={l.id} value={String(l.id)}>
-              {l.name}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
+    <ReportSingleSelect
+      label={label}
+      value={value}
+      onChange={onChange}
+      options={selectOptions}
+      placeholder={placeholder || defaultPlaceholder}
+      allLabel={required ? undefined : (placeholder || `All ${label.toLowerCase()}s`)}
+      allowClear={!required}
+      minWidthClass="min-w-[200px]"
+    />
   );
 }
 
@@ -712,16 +737,27 @@ export function ReportIncludeOpeningBalanceToggle({
 export function ReportFromDateFilter({
   value,
   onChange,
+  min = demoFinancialYearStart(),
+  max = demoFinancialYearEnd(),
 }: {
   value: string;
   onChange: (value: string) => void;
+  min?: string;
+  max?: string;
 }) {
   return (
     <div className="space-y-0.5 shrink-0">
       <span className={filterLabelClass}>From Date</span>
       <AccountsDateInput
         value={value}
-        onChange={onChange}
+        min={min}
+        max={max}
+        onChange={(val) => {
+          let clamped = val;
+          if (min && clamped && clamped < min) clamped = min;
+          if (max && clamped && clamped > max) clamped = max;
+          onChange(clamped);
+        }}
         aria-label="From date"
         className={ACCOUNTS_DATE_FILTER_WIDTH_CLASS}
       />
@@ -732,16 +768,27 @@ export function ReportFromDateFilter({
 export function ReportToDateFilter({
   value,
   onChange,
+  min = demoFinancialYearStart(),
+  max = demoFinancialYearEnd(),
 }: {
   value: string;
   onChange: (value: string) => void;
+  min?: string;
+  max?: string;
 }) {
   return (
     <div className="space-y-0.5 shrink-0">
       <span className={filterLabelClass}>To Date</span>
       <AccountsDateInput
         value={value}
-        onChange={onChange}
+        min={min}
+        max={max}
+        onChange={(val) => {
+          let clamped = val;
+          if (min && clamped && clamped < min) clamped = min;
+          if (max && clamped && clamped > max) clamped = max;
+          onChange(clamped);
+        }}
         aria-label="To date"
         className={ACCOUNTS_DATE_FILTER_WIDTH_CLASS}
       />
@@ -1237,7 +1284,7 @@ export function ReportLedgerMultiFilter({
 }: {
   values: string[];
   onChange: (values: string[]) => void;
-  ledgers: { id: number; name: string; group?: string }[];
+  ledgers: { id: number | string; name: string; group?: string }[];
   label?: string;
 }) {
   const selectOptions: ReportMultiSelectOption[] = ledgers.map((l) => ({

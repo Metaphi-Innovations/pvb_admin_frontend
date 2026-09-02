@@ -296,6 +296,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
   const [additionalExpenses, setAdditionalExpenses] = useState<InvoiceAdditionalExpense[]>([
     createEmptyAdditionalExpense(),
   ]);
+  const [soOriginExpenses, setSoOriginExpenses] = useState<InvoiceAdditionalExpense[]>([]);
   const [roundOff, setRoundOff] = useState(0);
   const [backendTotals, setBackendTotals] = useState<DispatchInvoiceTotalsPreview | null>(
     null,
@@ -656,15 +657,14 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
       prefill.sourceType === "sales_order" ||
       prefill.sourceType === "stock_transfer"
     ) {
-      // Seed editable charges from prepare/bridge suggestions (ledger left blank).
       if (prefill.sourceType === "sample_order") {
         setAdditionalExpenses([]);
+        setSoOriginExpenses([]);
         setRoundOff(0);
       } else if (prefill.additionalExpenses?.length) {
-        setAdditionalExpenses(
+        setSoOriginExpenses(
           prefill.additionalExpenses.map((e) => ({
             ...e,
-            // Never auto-fill ledger from legacy master / matched ledger.
             coaLedgerId: null,
             coaLedgerName: "",
             coaLedgerCode: "",
@@ -672,17 +672,23 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
             origin: e.origin === "manual" ? "sales_order" : e.origin || "sales_order",
           })),
         );
+        setAdditionalExpenses([createEmptyAdditionalExpense()]);
       } else {
-        setAdditionalExpenses([]);
+        setSoOriginExpenses([]);
+        setAdditionalExpenses([createEmptyAdditionalExpense()]);
       }
     } else if (prefill.additionalExpenses?.length) {
       setAdditionalExpenses(prefill.additionalExpenses);
+      setSoOriginExpenses([]);
+    } else {
+      setSoOriginExpenses([]);
     }
     setSchemeSettlementEntries(prefill.nearExpirySchemes);
   };
 
   const clearDispatchLinkedFields = () => {
     setSelectedDispatchId("");
+    setSoOriginExpenses([]);
     setSourceDispatchId("");
     setSalesOrderId(null);
     setCustomerLedgerId(null);
@@ -1477,11 +1483,20 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
         Number(c.amount) > 0,
     );
 
+    const lineOverrides = lines.map((l) => ({
+      dispatch_item_id: l.dispatchItemId || undefined,
+      product_id: l.productId ? String(l.productId) : undefined,
+      discount_percentage: l.discountPct != null ? Number(l.discountPct) : undefined,
+      discount_amount: l.discountAmt != null ? Number(l.discountAmt) : undefined,
+      rate: l.unitPrice != null ? Number(l.unitPrice) : undefined,
+    }));
+
     let cancelled = false;
     const timer = window.setTimeout(() => {
       SalesInvoiceService.previewDispatchTotals(sourceDispatchId, {
         additional_charges: charges,
         round_off_amount: roundOff,
+        line_item_overrides: lineOverrides,
       })
         .then((previewTotals) => {
           if (cancelled) return;
@@ -1496,7 +1511,13 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [isDispatchGenerationPreview, sourceDispatchId, additionalExpenses, roundOff]);
+  }, [
+    isDispatchGenerationPreview,
+    sourceDispatchId,
+    additionalExpenses,
+    roundOff,
+    lines,
+  ]);
 
   const accountingPreview = useMemo(() => {
     if (isSalesOrderInvoice) return null;
@@ -1737,7 +1758,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
   const isStockTransferInvoice = invoiceType === "stock_transfer";
 
   const outputGstSplit = useMemo(() => {
-    if (isDispatchGenerationPreview && dispatchTotalsPreview) {
+    if (isDispatchGenerationPreview && !isSalesOrderGeneration && dispatchTotalsPreview) {
       return {
         cgst: dispatchTotalsPreview.cgst,
         sgst: dispatchTotalsPreview.sgst,
@@ -1747,6 +1768,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     return splitInvoiceGst(totals.taxAmount, interstateGst);
   }, [
     isDispatchGenerationPreview,
+    isSalesOrderGeneration,
     dispatchTotalsPreview,
     totals.taxAmount,
     interstateGst,
@@ -2189,6 +2211,14 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
       if ((isSalesOrderGeneration || isStockTransferGeneration) && !asDraft) {
         const charges = toAdditionalChargePayloadList(additionalExpenses, "INVOICE");
 
+        const lineItemOverrides = lines.map((l) => ({
+          dispatch_item_id: l.dispatchItemId || undefined,
+          product_id: l.productId ? String(l.productId) : undefined,
+          discount_percentage: l.discountPct != null ? Number(l.discountPct) : undefined,
+          discount_amount: l.discountAmt != null ? Number(l.discountAmt) : undefined,
+          rate: l.unitPrice != null ? Number(l.unitPrice) : undefined,
+        }));
+
         await SalesInvoiceService.createFromDispatch(sourceDispatchId, {
           invoice_date: invoiceDate,
           due_date: dueDate || undefined,
@@ -2219,6 +2249,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
           eway_bill_status: transport.ewayBillStatus || undefined,
           additional_charges: charges.length > 0 ? charges : undefined,
           round_off_amount: roundOff,
+          line_item_overrides: lineItemOverrides.length > 0 ? lineItemOverrides : undefined,
         });
 
         goToInvoiceList(
@@ -2287,29 +2318,23 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
       ? dispatchTotalsPreview.roundOff
       : roundOff;
   const summaryGrandTotal =
-    isDispatchGenerationPreview && dispatchTotalsPreview
+    isDispatchGenerationPreview && !isSalesOrderGeneration && dispatchTotalsPreview
       ? dispatchTotalsPreview.grandTotal
       : totals.grandTotal;
   const summaryTaxAmount =
-    isDispatchGenerationPreview && dispatchTotalsPreview
+    isDispatchGenerationPreview && !isSalesOrderGeneration && dispatchTotalsPreview
       ? dispatchTotalsPreview.gstAmount
       : totals.taxAmount;
   const summaryGrossAmount =
-    isDispatchGenerationPreview && dispatchTotalsPreview
+    isDispatchGenerationPreview && !isSalesOrderGeneration && dispatchTotalsPreview
       ? dispatchTotalsPreview.grossAmount
       : totals.productSubtotal;
-  const summaryDiscountAmount =
-    isDispatchGenerationPreview && dispatchTotalsPreview
-      ? dispatchTotalsPreview.discountAmount
-      : totals.discountTotal;
-  const summaryAdditionalCharges =
-    isDispatchGenerationPreview && dispatchTotalsPreview
-      ? dispatchTotalsPreview.additionalChargeAmount
-      : totals.expenseTaxable;
-  const summaryTaxableAmount =
-    isDispatchGenerationPreview && dispatchTotalsPreview
-      ? dispatchTotalsPreview.taxableAmount
-      : Math.max(0, totals.productSubtotal - totals.discountTotal + totals.expenseTaxable);
+  const summaryDiscountAmount = totals.discountTotal;
+  const summaryAdditionalCharges = totals.expenseTaxable;
+  const summaryTaxableAmount = Math.max(
+    0,
+    totals.productSubtotal - totals.discountTotal + totals.expenseTaxable,
+  );
 
   const sampleCustomerMeta = useMemo(() => {
     if (!smGen || !customerName.trim()) return { customerType: "", salesperson: "" };
@@ -2659,6 +2684,46 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
 
         {!smGen ? (
         <>
+        {soOriginExpenses.length > 0 ? (
+          <Section
+            title="Sales Order Additional Charges (ERP — Reference Only)"
+            compact={compactGen && (soGen || stGen)}
+            flush={compactGen && (soGen || stGen)}
+          >
+            <div className="overflow-x-auto rounded-lg border border-border/40 bg-muted/10">
+              <table className="w-full text-xs text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-border/60 bg-muted/40">
+                    <th className="px-3 py-2.5 font-semibold text-muted-foreground">Particular (From Sales Order)</th>
+                    <th className="px-3 py-2.5 font-semibold text-right text-muted-foreground">Amount</th>
+                    <th className="px-3 py-2.5 font-semibold text-center text-muted-foreground">GST Applicable</th>
+                    <th className="px-3 py-2.5 font-semibold text-right text-muted-foreground">GST %</th>
+                    <th className="px-3 py-2.5 font-semibold text-right text-muted-foreground">Total</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/20 bg-background/50">
+                  {soOriginExpenses.map((exp, idx) => {
+                    const gstAmount = exp.gstApplicable && exp.gstPct > 0 ? (exp.amount * exp.gstPct) / 100 : 0;
+                    const total = exp.amount + gstAmount;
+                    return (
+                      <tr key={exp.id || idx} className="hover:bg-muted/20 transition-colors">
+                        <td className="px-3 py-2 font-medium text-foreground">
+                          {exp.expenseHead || "Additional Charge"}
+                          <span className="ml-2 text-[10px] text-muted-foreground font-normal bg-muted px-1.5 py-0.5 rounded">ERP Origin</span>
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums font-mono">{formatINR(exp.amount)}</td>
+                        <td className="px-3 py-2 text-center text-muted-foreground">{exp.gstApplicable ? "Yes" : "No"}</td>
+                        <td className="px-3 py-2 text-right tabular-nums font-mono">{exp.gstApplicable && exp.gstPct > 0 ? `${exp.gstPct}%` : "—"}</td>
+                        <td className="px-3 py-2 text-right tabular-nums font-mono font-semibold text-foreground">{formatINR(total)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </Section>
+        ) : null}
+
         <Section
           title="Additional Charges"
           compact={compactGen && (soGen || stGen)}
@@ -2884,12 +2949,12 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
                     <span className="so-summary-value">{formatINR(summaryDiscountAmount)}</span>
                   </div>
                   <div className="flex items-center justify-between gap-4 py-0.5">
-                    <span className="so-summary-label">Taxable Amount</span>
-                    <span className="so-summary-value">{formatINR(summaryTaxableAmount)}</span>
-                  </div>
-                  <div className="flex items-center justify-between gap-4 py-0.5">
                     <span className="so-summary-label">Additional Charges</span>
                     <span className="so-summary-value">{formatINR(summaryAdditionalCharges)}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-4 py-0.5">
+                    <span className="so-summary-label">Taxable Amount</span>
+                    <span className="so-summary-value">{formatINR(summaryTaxableAmount)}</span>
                   </div>
                   {interstateGst ? (
                     <div className="flex items-center justify-between gap-4 py-0.5">
@@ -2935,23 +3000,36 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
                   {formatINR(summaryDiscountAmount)}
                 </span>
               </div>
+              {summaryAdditionalCharges > 0 && (
+                <div className="flex items-center justify-between gap-4 py-0.5">
+                  <span className="text-muted-foreground">Additional Charges</span>
+                  <span className="font-medium tabular-nums">
+                    {formatINR(summaryAdditionalCharges)}
+                  </span>
+                </div>
+              )}
               <div className="flex items-center justify-between gap-4 py-0.5">
                 <span className="text-muted-foreground">Taxable Amount</span>
                 <span className="font-medium tabular-nums">
                   {formatINR(summaryTaxableAmount)}
                 </span>
               </div>
-              <div className="flex items-center justify-between gap-4 py-0.5 border-t border-border/60 pt-1.5">
-                <span className="text-muted-foreground">GST Total</span>
-                <span className="font-medium tabular-nums">{formatINR(summaryTaxAmount)}</span>
-              </div>
-              {summaryAdditionalCharges > 0 && (
+              {interstateGst ? (
                 <div className="flex items-center justify-between gap-4 py-0.5">
-                  <span className="text-muted-foreground">Additional Expenses</span>
-                  <span className="font-medium tabular-nums">
-                    {formatINR(summaryAdditionalCharges)}
-                  </span>
+                  <span className="text-muted-foreground">Output IGST</span>
+                  <span className="font-medium tabular-nums">{formatINR(outputGstSplit.igst)}</span>
                 </div>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between gap-4 py-0.5">
+                    <span className="text-muted-foreground">Output CGST</span>
+                    <span className="font-medium tabular-nums">{formatINR(outputGstSplit.cgst)}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-4 py-0.5">
+                    <span className="text-muted-foreground">Output SGST</span>
+                    <span className="font-medium tabular-nums">{formatINR(outputGstSplit.sgst)}</span>
+                  </div>
+                </>
               )}
               <div className="flex items-center justify-between gap-4 py-0.5">
                 <Label className="text-muted-foreground font-normal text-xs">
@@ -2991,23 +3069,36 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
                   {formatINR(summaryDiscountAmount)}
                 </span>
               </div>
+              {summaryAdditionalCharges > 0 && (
+                <div className="flex items-center justify-between gap-4 py-0.5">
+                  <span className="text-muted-foreground">Additional Charges</span>
+                  <span className="font-medium tabular-nums">
+                    {formatINR(summaryAdditionalCharges)}
+                  </span>
+                </div>
+              )}
               <div className="flex items-center justify-between gap-4 py-0.5">
                 <span className="text-muted-foreground">Taxable Amount</span>
                 <span className="font-medium tabular-nums">
                   {formatINR(summaryTaxableAmount)}
                 </span>
               </div>
-              <div className="flex items-center justify-between gap-4 py-0.5 border-t border-border/60 pt-1.5">
-                <span className="text-muted-foreground">GST Total</span>
-                <span className="font-medium tabular-nums">{formatINR(summaryTaxAmount)}</span>
-              </div>
-              {summaryAdditionalCharges > 0 && (
+              {interstateGst ? (
                 <div className="flex items-center justify-between gap-4 py-0.5">
-                  <span className="text-muted-foreground">Additional Expenses</span>
-                  <span className="font-medium tabular-nums">
-                    {formatINR(summaryAdditionalCharges)}
-                  </span>
+                  <span className="text-muted-foreground">Output IGST</span>
+                  <span className="font-medium tabular-nums">{formatINR(outputGstSplit.igst)}</span>
                 </div>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between gap-4 py-0.5">
+                    <span className="text-muted-foreground">Output CGST</span>
+                    <span className="font-medium tabular-nums">{formatINR(outputGstSplit.cgst)}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-4 py-0.5">
+                    <span className="text-muted-foreground">Output SGST</span>
+                    <span className="font-medium tabular-nums">{formatINR(outputGstSplit.sgst)}</span>
+                  </div>
+                </>
               )}
               <div className="flex items-center justify-between gap-4 py-0.5">
                 <Label className="text-muted-foreground font-normal text-xs">

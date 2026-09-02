@@ -34,7 +34,7 @@ export function CreditNoteLedgerSelect({
       className={cn("h-[30px] text-xs text-left font-normal", className)}
       compact
       placeholder={placeholder || "Select supporting ledger…"}
-      query={{ status: "ACTIVE", allowManualPosting: true }}
+      query={{ status: "ACTIVE" }}
     />
   );
 }

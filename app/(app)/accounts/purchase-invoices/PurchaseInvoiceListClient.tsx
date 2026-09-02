@@ -103,7 +103,7 @@ type Tab = "invoices" | "grn_pending";
 type SourceTypeFilter = "all" | PurchaseSourceType;
 type PurchaseNatureFilter = "all" | "inventory" | PurchaseNature;
 
-const LISTING_DEFAULT_PRESET = "all_transactions" as const;
+const LISTING_DEFAULT_PRESET = "this_year" as const;
 const PURCHASE_INVOICE_DATE_PRESETS = [
   ...INVOICE_LISTING_DATE_PRESETS.filter((option) => option.id !== "custom"),
   { id: "all_transactions" as const, label: "All Transactions" },

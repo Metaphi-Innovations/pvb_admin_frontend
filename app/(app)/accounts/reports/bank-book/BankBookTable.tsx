@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { cn } from "@/lib/utils";
 import { formatBalanceAmount, formatMoney } from "@/lib/accounts/money-format";
 import { MoneyAmount, MoneyCell } from "@/components/accounts/MoneyAmount";
@@ -11,7 +11,6 @@ import {
   AccountsTableCell,
   AccountsTableFoot,
   AccountsTableHead,
-  AccountsTableHeadCell,
   AccountsTableHeadRow,
   AccountsTableRow,
   AccountsTableScroll,
@@ -21,43 +20,107 @@ import {
   AccountsColumnHeader,
   SortTh,
   StatusBadge,
-  useAccountsColumnFilterContext,
-  useAccountsFilteredRows,
 } from "@/app/(app)/accounts/components/AccountsUI";
+import type { AccountsColumnFilterState, ColumnValueOption } from "@/lib/accounts/column-filter-types";
 import type { BankBookDisplayRow, BankBookSummary } from "./bank-book-data";
 import { formatBankBookDate } from "./bank-book-data";
-import { useBankReconDisplay } from "@/components/accounts/useBankReconDisplay";
 
 export function BankBookTable({
   openingRow,
   transactionRows,
   summary,
+  page,
+  pageSize,
+  totalRecords,
+  onPageChange,
+  onPageSizeChange,
+  sortKey,
+  sortDir,
+  onSort,
+  onRemoveSort,
+  filters,
+  onFilterChange,
+  loading = false,
 }: {
   openingRow: BankBookDisplayRow;
   transactionRows: BankBookDisplayRow[];
   summary: BankBookSummary;
+  page: number;
+  pageSize: number;
+  totalRecords: number;
+  onPageChange: (page: number) => void;
+  onPageSizeChange: (pageSize: number) => void;
+  sortKey?: string;
+  sortDir?: "asc" | "desc";
+  onSort?: (key: string) => void;
+  onRemoveSort?: () => void;
+  filters?: {
+    voucherType?: string;
+    voucherNo?: string;
+    particular?: string;
+    reference?: string;
+    bankDate?: string;
+    reconStatus?: string;
+    status?: string;
+  };
+  onFilterChange?: (column: string, value: AccountsColumnFilterState | undefined) => void;
+  loading?: boolean;
 }) {
-  const ctx = useAccountsColumnFilterContext();
-  const columnFilteredRows = useAccountsFilteredRows(transactionRows);
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
-
-  const filteredTotals = useMemo(
-    () => ({
-      totalReceipts: columnFilteredRows.reduce((s, r) => s + r.receipt, 0),
-      totalPayments: columnFilteredRows.reduce((s, r) => s + r.payment, 0),
-    }),
-    [columnFilteredRows],
+  const reconOptions: ColumnValueOption[] = useMemo(
+    () => [
+      { value: "UNRECONCILED", count: 0 },
+      { value: "RECONCILED", count: 0 },
+      { value: "PARTIAL", count: 0 },
+      { value: "DISPUTED", count: 0 },
+    ],
+    []
   );
 
-  const paginatedTransactions = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return columnFilteredRows.slice(start, start + pageSize);
-  }, [columnFilteredRows, page, pageSize]);
+  const statusOptions: ColumnValueOption[] = useMemo(
+    () => [
+      { value: "POSTED", count: 0 },
+      { value: "DRAFT", count: 0 },
+      { value: "CANCELLED", count: 0 },
+      { value: "REVERSED", count: 0 },
+    ],
+    []
+  );
 
-  useEffect(() => {
-    setPage(1);
-  }, [ctx?.columnFilters, ctx?.sortKey, ctx?.sortDir]);
+  const particularOptions: ColumnValueOption[] = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const r of transactionRows) {
+      if (r.particular && r.particular.trim()) {
+        counts.set(r.particular, (counts.get(r.particular) || 0) + 1);
+      }
+    }
+    return Array.from(counts.entries())
+      .map(([value, count]) => ({ value, count }))
+      .sort((a, b) => a.value.localeCompare(b.value));
+  }, [transactionRows]);
+
+  const referenceOptions: ColumnValueOption[] = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const r of transactionRows) {
+      if (r.reference && r.reference !== "—" && r.reference.trim()) {
+        counts.set(r.reference, (counts.get(r.reference) || 0) + 1);
+      }
+    }
+    return Array.from(counts.entries())
+      .map(([value, count]) => ({ value, count }))
+      .sort((a, b) => a.value.localeCompare(b.value));
+  }, [transactionRows]);
+
+  const voucherNoOptions: ColumnValueOption[] = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const r of transactionRows) {
+      if (r.voucherNo && r.voucherNo !== "—" && r.voucherNo.trim()) {
+        counts.set(r.voucherNo, (counts.get(r.voucherNo) || 0) + 1);
+      }
+    }
+    return Array.from(counts.entries())
+      .map(([value, count]) => ({ value, count }))
+      .sort((a, b) => a.value.localeCompare(b.value));
+  }, [transactionRows]);
 
   return (
     <>
@@ -65,50 +128,183 @@ export function BankBookTable({
         <AccountsTable minWidth={1400} className="text-xs">
           <AccountsTableHead>
             <AccountsTableHeadRow>
-              <SortTh label="Date" colKey="date" filterType="date" />
-              <SortTh label="Voucher Type" colKey="voucherType" />
-              <SortTh label="Voucher No." colKey="voucherNo" />
-              <SortTh label="Particular" colKey="particular" />
-              <SortTh label="Reference" colKey="reference" />
-              <SortTh label="Receipt" colKey="receipt" filterType="amount" align="right" />
-              <SortTh label="Payment" colKey="payment" filterType="amount" align="right" />
+              <SortTh
+                label="Date"
+                colKey="date"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onSort={onSort}
+                onRemoveSort={onRemoveSort}
+                filterable={false}
+              />
+              <SortTh
+                label="Voucher Type"
+                colKey="voucherType"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onSort={onSort}
+                onRemoveSort={onRemoveSort}
+                filterable={false}
+              />
+              <SortTh
+                label="Voucher No."
+                colKey="voucherNo"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onSort={onSort}
+                onRemoveSort={onRemoveSort}
+                filterType="text"
+                valueOptions={voucherNoOptions}
+                filterValue={
+                  filters?.voucherNo
+                    ? {
+                        type: "text",
+                        textValue: filters.voucherNo,
+                        selectedValues: filters.voucherNo.split(",").filter(Boolean),
+                      }
+                    : undefined
+                }
+                onFilterChange={(val) => onFilterChange?.("voucherNo", val)}
+              />
+              <SortTh
+                label="Particular"
+                colKey="particular"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onSort={onSort}
+                onRemoveSort={onRemoveSort}
+                filterType="text"
+                valueOptions={particularOptions}
+                filterValue={
+                  filters?.particular
+                    ? {
+                        type: "text",
+                        textValue: filters.particular,
+                        selectedValues: filters.particular.split(",").filter(Boolean),
+                      }
+                    : undefined
+                }
+                onFilterChange={(val) => onFilterChange?.("particular", val)}
+              />
+              <SortTh
+                label="Reference"
+                colKey="reference"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onSort={onSort}
+                onRemoveSort={onRemoveSort}
+                filterType="text"
+                valueOptions={referenceOptions}
+                filterValue={
+                  filters?.reference
+                    ? {
+                        type: "text",
+                        textValue: filters.reference,
+                        selectedValues: filters.reference.split(",").filter(Boolean),
+                      }
+                    : undefined
+                }
+                onFilterChange={(val) => onFilterChange?.("reference", val)}
+              />
+              <SortTh
+                label="Receipt"
+                colKey="receipt"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onSort={onSort}
+                onRemoveSort={onRemoveSort}
+                filterable={false}
+                align="right"
+              />
+              <SortTh
+                label="Payment"
+                colKey="payment"
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onSort={onSort}
+                onRemoveSort={onRemoveSort}
+                filterable={false}
+                align="right"
+              />
               <AccountsColumnHeader
                 label="Running Balance"
                 colKey="runningBalance"
-                sortable={false}
+                sortable={true}
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onSort={onSort}
+                onRemoveSort={onRemoveSort}
                 filterable={false}
                 align="right"
               />
               <AccountsColumnHeader
                 label="Bank Date"
                 colKey="bankDate"
-                sortable={false}
-                filterable={false}
+                sortable={true}
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onSort={onSort}
+                onRemoveSort={onRemoveSort}
+                filterType="date"
+                filterValue={
+                  filters?.bankDate
+                    ? { type: "date", dateFrom: filters.bankDate, dateTo: filters.bankDate }
+                    : undefined
+                }
+                onFilterChange={(val) => onFilterChange?.("bankDate", val)}
               />
               <AccountsColumnHeader
                 label="Recon Status"
                 colKey="reconStatus"
-                sortable={false}
-                filterable={false}
+                sortable={true}
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onSort={onSort}
+                onRemoveSort={onRemoveSort}
+                filterType="status"
+                valueOptions={reconOptions}
+                filterValue={
+                  filters?.reconStatus
+                    ? {
+                        type: "status",
+                        selectedValues: filters.reconStatus.split(",").filter(Boolean),
+                      }
+                    : undefined
+                }
+                onFilterChange={(val) => onFilterChange?.("reconStatus", val)}
               />
               <AccountsColumnHeader
                 label="Status"
                 colKey="status"
-                sortable={false}
-                filterable={false}
+                sortable={true}
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onSort={onSort}
+                onRemoveSort={onRemoveSort}
+                filterType="status"
+                valueOptions={statusOptions}
+                filterValue={
+                  filters?.status
+                    ? {
+                        type: "status",
+                        selectedValues: filters.status.split(",").filter(Boolean),
+                      }
+                    : undefined
+                }
+                onFilterChange={(val) => onFilterChange?.("status", val)}
               />
             </AccountsTableHeadRow>
           </AccountsTableHead>
           <AccountsTableBody>
-            <BankBookTableRow row={openingRow} />
-            {transactionRows.length > 0 && columnFilteredRows.length === 0 ? (
+            {page === 1 && <BankBookTableRow row={openingRow} />}
+            {transactionRows.length === 0 ? (
               <AccountsTableRow>
                 <AccountsTableCell colSpan={11} className="accounts-table-empty">
-                  No records match the column filters.
+                  {loading ? "Loading transactions..." : "No Bank Book transactions found for the selected period."}
                 </AccountsTableCell>
               </AccountsTableRow>
             ) : (
-              paginatedTransactions.map((row, index) => (
+              transactionRows.map((row, index) => (
                 <BankBookTableRow key={`${row.rowKey}-${index}`} row={row} />
               ))
             )}
@@ -116,13 +312,13 @@ export function BankBookTable({
           <AccountsTableFoot>
             <AccountsTableRow className="bg-muted/20 font-semibold">
               <AccountsTableCell colSpan={5} className="text-xs text-foreground py-2">
-                Total
+                Total (Summary)
               </AccountsTableCell>
               <AccountsTableCell align="right" money className="py-2">
-                {formatMoney(filteredTotals.totalReceipts)}
+                {formatMoney(summary.totalReceipts)}
               </AccountsTableCell>
               <AccountsTableCell align="right" money className="py-2">
-                {formatMoney(filteredTotals.totalPayments)}
+                {formatMoney(summary.totalPayments)}
               </AccountsTableCell>
               <AccountsTableCell align="right" className="tabular-nums whitespace-nowrap py-2">
                 <MoneyAmount
@@ -137,14 +333,14 @@ export function BankBookTable({
           </AccountsTableFoot>
         </AccountsTable>
       </AccountsTableScroll>
-      {columnFilteredRows.length > 0 && (
+      {totalRecords > 0 && (
         <div className="flex-shrink-0 border-t border-border">
           <AccountsTablePagination
             page={page}
             pageSize={pageSize}
-            totalRecords={columnFilteredRows.length}
-            onPageChange={setPage}
-            onPageSizeChange={setPageSize}
+            totalRecords={totalRecords}
+            onPageChange={onPageChange}
+            onPageSizeChange={onPageSizeChange}
             recordLabel="transactions"
           />
         </div>
@@ -153,12 +349,38 @@ export function BankBookTable({
   );
 }
 
+function ReconStatusBadge({ status }: { status: string }) {
+  const normalized = (status || "").toUpperCase();
+  if (normalized === "RECONCILED") {
+    return (
+      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+        Reconciled
+      </span>
+    );
+  }
+  if (normalized === "DISPUTED") {
+    return (
+      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-rose-50 text-rose-700 border border-rose-200">
+        Disputed
+      </span>
+    );
+  }
+  if (normalized === "PARTIAL") {
+    return (
+      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200">
+        Partial
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-muted text-muted-foreground border border-border">
+      Unreconciled
+    </span>
+  );
+}
+
 function BankBookTableRow({ row }: { row: BankBookDisplayRow }) {
   const isOpening = row.kind === "opening";
-  const recon = useBankReconDisplay(
-    isOpening ? null : row.voucherId,
-    isOpening ? null : row.voucherNo,
-  );
 
   return (
     <AccountsTableRow
@@ -185,7 +407,7 @@ function BankBookTableRow({ row }: { row: BankBookDisplayRow }) {
         )}
       </AccountsTableCell>
       <AccountsTableCell
-        className={cn("py-2 max-w-[180px] truncate", isOpening && "text-muted-foreground")}
+        className={cn("py-2 max-w-[200px] truncate", isOpening && "text-muted-foreground")}
         title={row.particular}
       >
         {row.particularLedgerId && !isOpening ? (
@@ -222,14 +444,14 @@ function BankBookTableRow({ row }: { row: BankBookDisplayRow }) {
         )}
       </AccountsTableCell>
       <AccountsTableCell className="whitespace-nowrap py-2 tabular-nums text-[11px]">
-        {isOpening ? "—" : recon.isReconciled && recon.bankDate ? recon.bankDate : "—"}
+        {isOpening ? "—" : row.bankDate ? formatBankBookDate(row.bankDate) : "—"}
       </AccountsTableCell>
       <AccountsTableCell className="whitespace-nowrap py-2 text-[11px]">
-        {isOpening ? "—" : recon.statusLabel}
+        {isOpening ? "—" : <ReconStatusBadge status={row.reconStatus} />}
       </AccountsTableCell>
       {!isOpening && row.status && row.status !== "—" ? (
         <AccountsTableCell className="whitespace-nowrap py-2">
-          <StatusBadge status="posted" />
+          <StatusBadge status={row.status.toLowerCase()} />
         </AccountsTableCell>
       ) : (
         <AccountsTableCell className="py-2 text-muted-foreground">—</AccountsTableCell>

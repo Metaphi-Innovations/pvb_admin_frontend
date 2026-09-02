@@ -230,7 +230,7 @@ export function VoucherListClient({ voucherType, embedded }: VoucherListClientPr
   const sectionRefresh = useAccountsSectionRefresh();
   const mounted = useClientMounted();
   const [search, setSearch] = useState("");
-  const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_month");
+  const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_year");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(ACCOUNTS_DEFAULT_PAGE_SIZE);
 

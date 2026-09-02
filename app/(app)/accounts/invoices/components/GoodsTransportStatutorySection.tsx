@@ -14,6 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { AccountsDateInput } from "@/components/accounts/AccountsDateInput";
 import { cn } from "@/lib/utils";
 
 const TRANSPORT_MODES = ["Road", "Rail", "Air", "Ship", "Other"] as const;
@@ -185,7 +186,12 @@ export function GoodsTransportStatutorySection({
           <CtrlInput value={value.lrNo} onChange={(v) => set({ lrNo: v })} placeholder="LR number" />
         </Field>
         <Field label="LR Date" className="so-span-1">
-          <CtrlInput type="date" value={value.lrDate} onChange={(v) => set({ lrDate: v })} />
+          <AccountsDateInput
+            className="h-8 text-xs w-full"
+            value={value.lrDate}
+            onChange={(v) => set({ lrDate: v })}
+            aria-label="LR Date"
+          />
         </Field>
         <Field label="Transport Doc No." className="so-span-1">
           <CtrlInput
@@ -195,10 +201,11 @@ export function GoodsTransportStatutorySection({
           />
         </Field>
         <Field label="Transport Doc Date" className="so-span-1">
-          <CtrlInput
-            type="date"
+          <AccountsDateInput
+            className="h-8 text-xs w-full"
             value={value.transportDocDate}
             onChange={(v) => set({ transportDocDate: v })}
+            aria-label="Transport Doc Date"
           />
         </Field>
       </div>
