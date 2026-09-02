@@ -686,6 +686,13 @@ export const API_ENDPOINTS = {
       EXPORT_EXCEL: "/accounts/payables/export/excel",
       EXPORT_PDF: "/accounts/payables/export/pdf",
     },
+    BILL_WISE_OUTSTANDING: {
+      LIST: "/accounts/bill-wise-outstanding",
+      BY_PARTY: (partyLedgerId: string) =>
+        `/accounts/bill-wise-outstanding/party/${partyLedgerId}`,
+      DETAIL: (openItemId: string) =>
+        `/accounts/bill-wise-outstanding/${openItemId}`,
+    },
     RECEIPT_VOUCHER: {
       CONFIG: "/accounts/receipt-voucher/config",
       LIST: "/accounts/receipt-voucher",
