@@ -34,13 +34,11 @@ export function formatDate(value: unknown): string {
   if (!raw) return "-";
   const parsed = new Date(raw);
   if (Number.isNaN(parsed.getTime())) return "-";
-  return parsed
-    .toLocaleDateString("en-GB", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    })
-    .replaceAll(" ", "-");
+  return parsed.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
 }
 
 export function formatCurrency(value: unknown): string {

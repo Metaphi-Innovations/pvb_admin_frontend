@@ -83,7 +83,7 @@ export async function exportCashBookToExcel(
   summary: CashBookSummary,
   meta: CashBookExportMeta,
 ): Promise<void> {
-  const safeName = summary.ledgerCode.replace(/[^\w-]+/g, "_");
+  const safeName = (summary.ledgerCode || summary.ledgerName || "All").replace(/[^\w-]+/g, "_");
   const html = buildReportExcelDocumentHtml({
     title: `Cash Book — ${summary.ledgerName}`,
     header: buildHeaderOptions(summary, meta),

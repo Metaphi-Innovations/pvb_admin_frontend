@@ -26,7 +26,7 @@ export function AccountsDateInput({
   value,
   onChange,
   className,
-  placeholder = "dd-mm-yyyy",
+  placeholder = "dd/mm/yyyy",
   id,
   disabled,
   min,

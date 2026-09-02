@@ -622,6 +622,21 @@ export const API_ENDPOINTS = {
         MATCHES: "/accounts/bank-reconciliation/matches",
         AUDIT: "/accounts/bank-reconciliation/audit",
       },
+      BANK_BOOK: {
+        LIST: "/accounts/banking/bank-book",
+        VOUCHER_TYPES: "/accounts/banking/bank-book/voucher-types",
+        DETAIL: (voucherId: string) => `/accounts/banking/bank-book/${voucherId}`,
+        EXPORT_EXCEL: "/accounts/banking/bank-book/export/excel",
+        EXPORT_PDF: "/accounts/banking/bank-book/export/pdf",
+      },
+      CASH_BOOK: {
+        LIST: "/accounts/banking/cash-book",
+        LEDGERS: "/accounts/banking/cash-book/ledgers",
+        VOUCHER_TYPES: "/accounts/banking/cash-book/voucher-types",
+        EXPORT: "/accounts/banking/cash-book/export",
+        EXPORT_EXCEL: "/accounts/banking/cash-book/export/excel",
+        EXPORT_PDF: "/accounts/banking/cash-book/export/pdf",
+      },
     },
     DEBIT_NOTE: {
       CONFIG: "/accounts/debit-note/config",

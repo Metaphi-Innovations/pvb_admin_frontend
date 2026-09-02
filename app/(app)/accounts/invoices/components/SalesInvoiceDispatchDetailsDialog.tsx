@@ -47,7 +47,7 @@ function formatDate(iso?: string): string {
   if (!iso?.trim()) return "—";
   const [y, m, d] = iso.split("-");
   if (!y || !m || !d) return iso;
-  return `${d}-${m}-${y}`;
+  return `${d}/${m}/${y}`;
 }
 
 export function SalesInvoiceDispatchDetailsDialog({

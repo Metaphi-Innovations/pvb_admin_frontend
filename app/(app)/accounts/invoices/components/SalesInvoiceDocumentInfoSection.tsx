@@ -12,13 +12,14 @@ import {
 import { SalesInvoiceDispatchSelect } from "./SalesInvoiceDispatchSelect";
 import { SalesInvoiceDispatchDetailsDialog } from "./SalesInvoiceDispatchDetailsDialog";
 import type { PendingDispatchInvoiceRow } from "@/lib/accounts/dispatch-invoice-bridge";
+import { AccountsDateInput } from "@/components/accounts/AccountsDateInput";
 import { cn } from "@/lib/utils";
 
 function formatDisplayDate(iso: string): string {
   if (!iso) return "—";
   const [y, m, d] = iso.split("-");
   if (!y || !m || !d) return iso;
-  return `${d}-${m}-${y}`;
+  return `${d}/${m}/${y}`;
 }
 
 export interface SalesInvoiceDocumentInfoSectionProps {
@@ -112,12 +113,11 @@ function SalesInvoiceDocumentInfoSectionInner({
               Invoice Date{invoiceDateRequired ? <span className="text-red-500 ml-0.5">*</span> : null}
             </p>
             <div className="so-goods-field__control">
-              <InvoiceFormInput
-                type="date"
+              <AccountsDateInput
                 className="h-8 w-full"
                 value={invoiceDate}
-                onChange={(e) => onInvoiceDateChange(e.target.value)}
-                required={invoiceDateRequired}
+                onChange={onInvoiceDateChange}
+                aria-label="Invoice Date"
               />
             </div>
           </div>
@@ -125,12 +125,7 @@ function SalesInvoiceDocumentInfoSectionInner({
           <div className="so-goods-field so-w-date">
             <p className="so-goods-field__label">Due Date</p>
             <div className="so-goods-field__control">
-              <InvoiceFormInput
-                type="date"
-                value={dueDate}
-                disabled
-                className="h-8 w-full bg-slate-50 text-slate-700"
-              />
+              <div className="so-goods-ro w-full">{formatDisplayDate(dueDate)}</div>
             </div>
             <p className="so-goods-field__helper">Net {creditDays} days</p>
           </div>
@@ -232,24 +227,16 @@ function SalesInvoiceDocumentInfoSectionInner({
           />
         </InvoiceFormField>
         <InvoiceFormField label="Invoice Date" required={invoiceDateRequired}>
-          <InvoiceFormInput
-            type="date"
+          <AccountsDateInput
             value={invoiceDate}
-            onChange={(e) => onInvoiceDateChange(e.target.value)}
-            required={invoiceDateRequired}
+            onChange={onInvoiceDateChange}
+            aria-label="Invoice Date"
           />
         </InvoiceFormField>
-        <InvoiceFormField label="Due Date">
-          <InvoiceFormInput
-            type="date"
-            value={dueDate}
-            disabled
-            className="bg-slate-50 text-slate-700"
-          />
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Auto-calculated · Net {creditDays} days
-          </p>
-        </InvoiceFormField>
+        <InvoiceFormReadOnly label="Due Date" value={formatDisplayDate(dueDate)} />
+        <p className="text-xs text-muted-foreground mt-0.5">
+          Auto-calculated · Net {creditDays} days
+        </p>
 
         <InvoiceFormReadOnly label="Sales Order No." value={salesOrderRef || "—"} mono />
 

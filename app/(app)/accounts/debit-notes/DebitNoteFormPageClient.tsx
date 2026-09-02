@@ -1906,7 +1906,7 @@ export default function DebitNoteFormPageClient({
                         disabled={saving}
                         className="h-8 w-full text-left font-normal text-xs"
                         compact
-                        query={{ status: "ACTIVE", allowManualPosting: true }}
+                        query={{ status: "ACTIVE" }}
                       />
                     </div>
                   ) : null}

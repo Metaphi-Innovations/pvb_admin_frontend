@@ -103,7 +103,7 @@ export function NoteParticularsTable({
                 disabled={disabled}
                 className="h-[28px] w-full text-left font-normal text-xs"
                 compact
-                query={{ status: "ACTIVE", allowManualPosting: true }}
+                query={{ status: "ACTIVE" }}
               />
             </td>
             <td className="px-2 py-1 text-right" style={{ width: 64 }}>
