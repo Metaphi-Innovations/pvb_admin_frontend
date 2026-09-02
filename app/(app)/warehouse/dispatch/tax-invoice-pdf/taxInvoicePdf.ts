@@ -5,6 +5,7 @@ import {
   asText,
   buildParamversePdfDocument,
   escapeHtml,
+  escapeSrcAttr,
   formatAmountInWords,
   formatCurrency,
   formatDate,
@@ -466,8 +467,8 @@ export function mapDispatchToTaxInvoice(
   );
 
   return {
-    logoSrc: undefined,
     ...PARAMVERSE_COMPANY,
+    logoSrc: undefined,
     copyLabel: "Duplicate for Warehouse",
     invoiceNo,
     invoiceDate: formatDisplayDate(
@@ -875,7 +876,7 @@ export function buildTaxInvoiceHtml(
             metaFieldHtml("E-Way Bill Expiry Date", data.ewayBillExpiry, { dotted: true }),
           ].join("")}</div>
           <div class="ti-qr">
-            <img src="${escapeHtml(qrSrc)}" alt="E-Invoice QR" width="30" height="30" />
+            <img src="${escapeSrcAttr(qrSrc)}" alt="E-Invoice QR" width="30" height="30" />
           </div>
         </div>
         <div class="ti-irn">
@@ -889,7 +890,7 @@ export function buildTaxInvoiceHtml(
   const bodyHtml = `
     <div class="ti-header">
       <div class="ti-logo">
-        ${data.logoSrc ? `<img src="${escapeHtml(data.logoSrc)}" alt="Logo" />` : ""}
+        ${data.logoSrc ? `<img src="${escapeSrcAttr(data.logoSrc)}" alt="Logo" />` : ""}
       </div>
       <div class="ti-company">
         <div class="ti-company-name">${escapeHtml(data.companyName || PARAMVERSE_COMPANY.companyName)}</div>
@@ -1005,7 +1006,7 @@ export function buildTaxInvoiceHtml(
 
       .ti-header {
         display: grid;
-        grid-template-columns: 100px 1fr auto;
+        grid-template-columns: 72px 1fr auto;
         gap: 8px;
         align-items: end;
         padding-bottom: 5px;
@@ -1014,15 +1015,15 @@ export function buildTaxInvoiceHtml(
       }
       .ti-logo {
         border-right: 1px solid var(--ti-border);
-        padding-right: 8px;
+        padding-right: 6px;
         display: flex;
         align-items: flex-end;
         justify-content: flex-start;
-        min-height: 42px;
+        min-height: 32px;
       }
       .ti-logo img {
-        max-height: 42px;
-        max-width: 96px;
+        max-height: 32px;
+        max-width: 70px;
         width: auto;
         height: auto;
         object-fit: contain;

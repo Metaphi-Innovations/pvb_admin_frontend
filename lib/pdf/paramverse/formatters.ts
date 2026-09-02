@@ -29,6 +29,21 @@ export function escapeHtml(value: unknown): string {
     .replaceAll("'", "&#39;");
 }
 
+/** Escape for double-quoted src/href attributes; preserves data/HTTP URLs. */
+export function escapeSrcAttr(value: unknown): string {
+  const raw = String(value ?? "");
+  if (!raw) return "";
+  if (
+    raw.startsWith("data:") ||
+    raw.startsWith("blob:") ||
+    raw.startsWith("http://") ||
+    raw.startsWith("https://")
+  ) {
+    return raw.replaceAll('"', "&quot;");
+  }
+  return escapeHtml(raw);
+}
+
 const ISO_DATE_PREFIX_RE = /^(\d{4})-(\d{2})-(\d{2})/;
 
 /** Format date for PDF/display as DD/MM/YYYY without timezone shift on date-only values. */

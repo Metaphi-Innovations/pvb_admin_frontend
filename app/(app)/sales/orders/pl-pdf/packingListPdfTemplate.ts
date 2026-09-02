@@ -4,6 +4,7 @@ import {
   asText,
   buildParamversePdfDocument,
   escapeHtml,
+  escapeSrcAttr,
 } from "@/lib/pdf/paramverse";
 
 export interface PackingListPartyBlock {
@@ -151,7 +152,7 @@ export function buildPackingListPdfHtml(data: PackingListPdfData): string {
       <div class="pl-header-left">
         <div class="pl-logo">${
           data.logoSrc
-            ? `<img src="${escapeHtml(data.logoSrc)}" alt="Logo" />`
+            ? `<img src="${escapeSrcAttr(data.logoSrc)}" alt="Logo" />`
             : ""
         }</div>
         <div class="pl-company-name">${escapeHtml(data.companyName)}</div>
@@ -251,8 +252,8 @@ export function buildPackingListPdfHtml(data: PackingListPdfData): string {
       }
       .pl-logo { margin-bottom: 4px; }
       .pl-logo img {
-        max-height: 42px;
-        max-width: 58px;
+        max-height: 32px;
+        max-width: 48px;
         object-fit: contain;
         display: block;
       }
