@@ -40,10 +40,13 @@ export interface NoteQuantityLinesTableProps {
   readOnly?: boolean;
   /** When true, current qty cannot be edited (return-sourced lines). */
   qtyLocked?: boolean;
+  /** When true, GST % can be edited (CGST/SGST/IGST remain computed). */
+  gstEditable?: boolean;
   currentQtyLabel?: string;
   /** @deprecated Eligibility columns removed — kept for call-site compat. */
   previouslyAdjustedLabel?: string;
   onCurrentQtyChange?: (lineId: string, qty: number) => void;
+  onTaxPctChange?: (lineId: string, taxPct: number) => void;
   emptyMessage?: string;
   className?: string;
 }
@@ -54,12 +57,22 @@ function fmtQty(n: number): string {
   return Number.isInteger(n) ? String(n) : n.toFixed(2);
 }
 
+function fmtDate(raw?: string): string {
+  const s = raw?.trim();
+  if (!s) return "—";
+  // Prefer YYYY-MM-DD when ISO-like
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  return s;
+}
+
 export function NoteQuantityLinesTable({
   lines,
   readOnly,
   qtyLocked,
+  gstEditable,
   currentQtyLabel = "Qty",
   onCurrentQtyChange,
+  onTaxPctChange,
   emptyMessage = "No product lines.",
   className,
 }: NoteQuantityLinesTableProps) {
@@ -72,22 +85,26 @@ export function NoteQuantityLinesTable({
   }
 
   const lockQty = readOnly || qtyLocked;
+  const canEditGst = Boolean(gstEditable) && !readOnly;
 
   return (
     <div className={cn("overflow-x-auto", className)}>
-      <table className="w-full min-w-[880px] accounts-table">
+      <table className="w-full min-w-[1080px] accounts-table">
         <thead>
           <tr className="accounts-table-head-row bg-muted/40 border-b border-border">
-            <th className="accounts-table-th text-left">Product</th>
-            <th className="accounts-table-th text-right">{currentQtyLabel}</th>
-            <th className="accounts-table-th text-left">UOM</th>
-            <th className="accounts-table-th text-right">Rate</th>
-            <th className="accounts-table-th text-right">Basic Amount</th>
-            <th className="accounts-table-th text-right">GST %</th>
-            <th className="accounts-table-th text-right">CGST</th>
-            <th className="accounts-table-th text-right">SGST</th>
-            <th className="accounts-table-th text-right">IGST</th>
-            <th className="accounts-table-th text-right">Line Total</th>
+            <th className="accounts-table-th !text-left">Product</th>
+            <th className="accounts-table-th !text-left">Batch</th>
+            <th className="accounts-table-th !text-left">Expiry</th>
+            <th className="accounts-table-th !text-left">HSN</th>
+            <th className="accounts-table-th !text-right">{currentQtyLabel}</th>
+            <th className="accounts-table-th !text-left">UOM</th>
+            <th className="accounts-table-th !text-right">Rate</th>
+            <th className="accounts-table-th !text-right">Basic Amount</th>
+            <th className="accounts-table-th cn-gst-pct-th !text-right">GST %</th>
+            <th className="accounts-table-th !text-right">CGST</th>
+            <th className="accounts-table-th !text-right">SGST</th>
+            <th className="accounts-table-th !text-right">IGST</th>
+            <th className="accounts-table-th !text-right">Line Total</th>
           </tr>
         </thead>
         <tbody>
@@ -111,6 +128,15 @@ export function NoteQuantityLinesTable({
                       SKU: {line.sku}
                     </p>
                   ) : null}
+                </td>
+                <td className="px-2 py-1.5 text-[12px] font-mono text-muted-foreground whitespace-nowrap">
+                  {line.batchNo?.trim() || "—"}
+                </td>
+                <td className="px-2 py-1.5 text-[12px] text-muted-foreground whitespace-nowrap">
+                  {fmtDate(line.expiryDate)}
+                </td>
+                <td className="px-2 py-1.5 text-[12px] font-mono text-muted-foreground whitespace-nowrap">
+                  {line.hsn?.trim() || "—"}
                 </td>
                 <td className="px-2 py-1.5 text-right">
                   {lockQty ? (
@@ -148,8 +174,32 @@ export function NoteQuantityLinesTable({
                 <td className="px-2 py-1.5 text-right tabular-nums text-[12px]">
                   {formatMoney(line.taxable)}
                 </td>
-                <td className="px-2 py-1.5 text-right tabular-nums text-[12px]">
-                  {line.taxPct > 0 ? `${line.taxPct}%` : "—"}
+                <td className="px-2 py-1.5 text-right cn-gst-pct-cell">
+                  {canEditGst ? (
+                    <Input
+                      type="number"
+                      min={0}
+                      max={100}
+                      step={0.01}
+                      className="cn-gst-pct-input h-[30px] text-xs font-normal"
+                      value={line.taxPct > 0 || line.taxPct === 0 ? String(line.taxPct) : ""}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        if (raw === "") {
+                          onTaxPctChange?.(line.id, 0);
+                          return;
+                        }
+                        const v = parseFloat(raw);
+                        onTaxPctChange?.(line.id, Number.isFinite(v) ? Math.max(0, v) : 0);
+                      }}
+                      aria-label={`GST % for ${line.productName}`}
+                      inputMode="decimal"
+                    />
+                  ) : (
+                    <span className="tabular-nums text-[12px]">
+                      {line.taxPct > 0 ? `${line.taxPct}%` : "—"}
+                    </span>
+                  )}
                 </td>
                 <td className="px-2 py-1.5 text-right tabular-nums text-[12px] text-muted-foreground">
                   {formatMoney(line.cgst)}

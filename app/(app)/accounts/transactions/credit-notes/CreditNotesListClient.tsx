@@ -329,7 +329,7 @@ function CreditNotesRecordsTable({
             <SortTh label="CGST" colKey="cgstAmount" filterType="amount" align="right" />
             <SortTh label="SGST" colKey="sgstAmount" filterType="amount" align="right" />
             <SortTh label="IGST" colKey="igstAmount" filterType="amount" align="right" />
-            <SortTh label="Total" colKey="currentCreditAmount" filterType="amount" align="right" />
+            <SortTh label="Total" colKey="currentCreditAmount" filterType="amount" align="right" className="min-w-[6.5rem]" />
             <SortTh
               label="Status"
               colKey="status"

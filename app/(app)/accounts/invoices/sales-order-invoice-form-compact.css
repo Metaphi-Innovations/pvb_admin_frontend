@@ -1007,6 +1007,48 @@ div:has(> .accounts-module-shell):has(.invoice-form-shell) {
   white-space: nowrap;
 }
 
+.sales-order-invoice-form-compact .so-invoice-table thead th.text-right,
+.sales-order-invoice-form-compact .so-invoice-table thead th.\!text-right {
+  text-align: right !important;
+}
+
+.sales-order-invoice-form-compact .so-invoice-table thead th.text-center,
+.sales-order-invoice-form-compact .so-invoice-table thead th.\!text-center {
+  text-align: center !important;
+}
+
+.sales-order-invoice-form-compact .so-invoice-table thead th.text-left,
+.sales-order-invoice-form-compact .so-invoice-table thead th.\!text-left {
+  text-align: left !important;
+}
+
+/* Pending CN/DN — GST % editable cell: compact, right-aligned under header */
+.sales-order-invoice-form-compact .cn-gst-pct-th {
+  width: 4rem !important;
+  max-width: 4.25rem !important;
+  text-align: right !important;
+}
+
+.sales-order-invoice-form-compact .cn-gst-pct-cell {
+  width: 4rem;
+  max-width: 4.25rem;
+  text-align: right !important;
+}
+
+.sales-order-invoice-form-compact .cn-gst-pct-input,
+.sales-order-invoice-form-compact input.cn-gst-pct-input {
+  width: 3.25rem !important;
+  min-width: 3.25rem !important;
+  max-width: 3.25rem !important;
+  margin-left: auto !important;
+  margin-right: 0 !important;
+  display: block !important;
+  text-align: right !important;
+  padding-left: 0.35rem !important;
+  padding-right: 0.35rem !important;
+  box-sizing: border-box !important;
+}
+
 .sales-order-invoice-form-compact .so-invoice-table tbody tr {
   border-bottom: 1px solid hsl(var(--border) / 0.4);
 }
@@ -1100,4 +1142,39 @@ div:has(> .accounts-module-shell):has(.invoice-form-shell) {
   text-transform: uppercase;
   color: hsl(var(--muted-foreground));
   white-space: nowrap;
+}
+
+.sales-order-invoice-form-compact .accounts-table .accounts-table-th.\!text-right,
+.sales-order-invoice-form-compact .accounts-table th.text-right {
+  text-align: right !important;
+}
+
+.sales-order-invoice-form-compact .accounts-table .accounts-table-th.\!text-left,
+.sales-order-invoice-form-compact .accounts-table th.text-left {
+  text-align: left !important;
+}
+
+.sales-order-invoice-form-compact .accounts-table .cn-gst-pct-th {
+  width: 4rem !important;
+  max-width: 4.25rem !important;
+  text-align: right !important;
+}
+
+.sales-order-invoice-form-compact .accounts-table .cn-gst-pct-cell {
+  width: 4rem;
+  max-width: 4.25rem;
+}
+
+.sales-order-invoice-form-compact .accounts-table .cn-gst-pct-input,
+.sales-order-invoice-form-compact .accounts-table input.cn-gst-pct-input {
+  width: 3.25rem !important;
+  min-width: 3.25rem !important;
+  max-width: 3.25rem !important;
+  margin-left: auto !important;
+  margin-right: 0 !important;
+  display: block !important;
+  text-align: right !important;
+  padding-left: 0.35rem !important;
+  padding-right: 0.35rem !important;
+  box-sizing: border-box !important;
 }

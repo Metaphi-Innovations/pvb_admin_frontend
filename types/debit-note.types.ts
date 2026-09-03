@@ -81,6 +81,11 @@ export interface CreateDebitNoteFromPendingPayload {
   remarks?: string | null;
   /** Signed round-off; when omitted backend applies nearest-rupee auto round-off. */
   round_off_amount?: number | string | null;
+  /** Optional GST % overrides for pending product lines. */
+  line_gst_overrides?: Array<{
+    pending_debit_note_line_id: string;
+    gst_rate: number | string;
+  }>;
   /** @deprecated Prefer free-form extra_charges. Kept for older clients. */
   additional_charges?: Array<{
     purchase_return_additional_charge_id: string;

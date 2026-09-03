@@ -31,6 +31,43 @@ export function toMoneyNumber(value: unknown): number {
   return Number.isFinite(n) ? roundMoney(n) : 0;
 }
 
+/**
+ * Manual ledger lines that sit inside the UI Gross Amount envelope
+ * (matches computePaymentPreview ledgerEntriesTotal = otherDebit + otherCredit).
+ * Backend `gross_party_amount` is party-only; display gross = party + these lines.
+ */
+export function sumPaymentLedgerEntriesAmount(
+  adjustments: Array<{
+    adjustment_type: string;
+    amount: unknown;
+  }>,
+): number {
+  let total = 0;
+  for (const adj of adjustments) {
+    const amt = toMoneyNumber(adj.amount);
+    if (amt <= 0) continue;
+    if (
+      adj.adjustment_type === "SUPPLIER_TDS" ||
+      adj.adjustment_type === "DISCOUNT_RECEIVED" ||
+      adj.adjustment_type === "ROUND_OFF"
+    ) {
+      continue;
+    }
+    total += amt;
+  }
+  return roundMoney(total);
+}
+
+/** UI Gross Amount = persisted party gross + ledger entries. */
+export function displayGrossFromPartyAndLedger(
+  partyGross: unknown,
+  adjustments: Array<{ adjustment_type: string; amount: unknown }>,
+): number {
+  return roundMoney(
+    toMoneyNumber(partyGross) + sumPaymentLedgerEntriesAmount(adjustments),
+  );
+}
+
 export function sanitizeNonNegativeMoneyInput(raw: string): string {
   const cleaned = raw.replace(/[^\d.]/g, "");
   const firstDot = cleaned.indexOf(".");
@@ -283,7 +320,13 @@ export function mapDetailToForm(detail: PaymentVoucherDetail): PaymentFormState 
       snapshotLabel(detail.other_ledger_snapshot, "ledger_name", "ledgerName") ||
       "",
     payment_treatment: treatment,
-    gross_party_amount: String(toMoneyNumber(detail.gross_party_amount)),
+    // Form Gross = party (API gross_party_amount) + ledger entries.
+    gross_party_amount: String(
+      displayGrossFromPartyAndLedger(
+        detail.gross_party_amount,
+        detail.adjustments ?? [],
+      ),
+    ),
     advance_amount: String(advance),
     narration: detail.narration || "",
     remarks: detail.remarks || "",
@@ -470,12 +513,12 @@ export function computePaymentPreview(form: PaymentFormState) {
   const { totalAllocated, totalTds, totalDiscount } = computeAllocationTotals(form);
   const adj = computeAdjustmentTotals(form);
   const grossInput = toMoneyNumber(form.gross_party_amount);
-  /** Simplified Ledger Entries (OTHER) — part of gross, not an add-on. */
-  const ledgerEntriesTotal = roundMoney(adj.otherDebit + adj.otherCredit);
+  /** Ledger Entries (OTHER) — part of UI gross; party payload excludes them. */
+  const ledgerEntriesTotal = sumPaymentLedgerEntriesAmount(form.adjustments);
 
   let displayGross = grossInput;
   let advance = 0;
-  /** Party portion posted/saved (= allocated + advance). Ledger sits on top toward display gross. */
+  /** Party portion posted/saved (= allocated + advance). */
   let payloadGross = 0;
 
   if (form.party_kind === "SUPPLIER") {
@@ -795,7 +838,8 @@ export function buildCreatePayload(form: PaymentFormState): CreatePaymentVoucher
     instrument_date:
       form.transaction_mode === "CHEQUE" ? form.cheque_date || null : form.transaction_date || null,
     transaction_date: form.transaction_date || null,
-    // Backend: allocated_amount + advance_amount = gross_party_amount (Supplier).
+    // API gross_party_amount is party-only (allocated + advance). Form Gross =
+    // party + ledger; ledger lines are sent separately in adjustments.
     // Mixed = allocations.length > 0 AND advance_amount > 0 — no MIXED enum sent.
     gross_party_amount: preview.payloadGross,
     advance_amount: form.party_kind === "SUPPLIER" ? preview.advance : 0,

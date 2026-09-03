@@ -116,7 +116,7 @@ function PendingCreditNotesTable({
 
   return (
     <>
-      <AccountsTable minWidth={schemeFocused ? 1180 : 980}>
+      <AccountsTable minWidth={schemeFocused ? 1180 : 1040}>
         <AccountsTableHead>
           <AccountsTableHeadRow>
             {schemeFocused ? (
@@ -150,9 +150,9 @@ function PendingCreditNotesTable({
                 <SortTh label="Customer" colKey="customerName" className="accounts-col-party" />
                 <SortTh label="Reference" colKey="referenceNo" />
                 <SortTh label="Invoice(s)" colKey="linkedInvoices" />
-                <SortTh label="Eligible" colKey="eligibleCreditAmount" filterType="amount" align="right" />
-                <SortTh label="GST" colKey="gstAmount" filterType="amount" align="right" />
-                <SortTh label="Total" colKey="totalAmount" filterType="amount" align="right" />
+                <SortTh label="Eligible" colKey="eligibleCreditAmount" filterType="amount" align="right" className="min-w-[6.5rem]" />
+                <SortTh label="GST" colKey="gstAmount" filterType="amount" align="right" className="min-w-[5.5rem]" />
+                <SortTh label="Total" colKey="totalAmount" filterType="amount" align="right" className="min-w-[6.5rem]" />
               </>
             )}
             <AccountsColumnHeader
@@ -246,13 +246,13 @@ function PendingCreditNotesTable({
                           ? row.linkedInvoiceNos.join(", ")
                           : "—"}
                       </AccountsTableCell>
-                      <AccountsTableCell align="right" money className="text-xs tabular-nums">
+                      <AccountsTableCell align="right" money className="text-xs tabular-nums min-w-[6.5rem]">
                         {formatINR(row.eligibleCreditAmount)}
                       </AccountsTableCell>
-                      <AccountsTableCell align="right" money className="text-xs tabular-nums">
+                      <AccountsTableCell align="right" money className="text-xs tabular-nums min-w-[5.5rem]">
                         {formatINR(row.gstAmount)}
                       </AccountsTableCell>
-                      <AccountsTableCell align="right" money className="text-xs font-medium tabular-nums">
+                      <AccountsTableCell align="right" money className="text-xs font-medium tabular-nums min-w-[6.5rem]">
                         {formatINR(row.totalAmount)}
                       </AccountsTableCell>
                     </>

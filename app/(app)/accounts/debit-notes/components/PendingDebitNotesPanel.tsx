@@ -81,7 +81,7 @@ function PendingDebitNotesTable({
 
   return (
     <>
-      <AccountsTable minWidth={1040}>
+      <AccountsTable minWidth={1100}>
         <AccountsTableHead>
           <AccountsTableHeadRow>
             <SortTh label="Return No." colKey="returnNumber" />
@@ -91,9 +91,9 @@ function PendingDebitNotesTable({
             <SortTh label="GRN No." colKey="grnNo" />
             <SortTh label="Dispatch" colKey="dispatchNo" />
             <SortTh label="Qty" colKey="totalReturnQty" filterType="amount" align="right" />
-            <SortTh label="Taxable" colKey="taxableAmount" filterType="amount" align="right" />
-            <SortTh label="GST" colKey="gstAmount" filterType="amount" align="right" />
-            <SortTh label="Total" colKey="totalAmount" filterType="amount" align="right" />
+            <SortTh label="Taxable" colKey="taxableAmount" filterType="amount" align="right" className="min-w-[6.5rem]" />
+            <SortTh label="GST" colKey="gstAmount" filterType="amount" align="right" className="min-w-[5.5rem]" />
+            <SortTh label="Total" colKey="totalAmount" filterType="amount" align="right" className="min-w-[6.5rem]" />
             <AccountsColumnHeader
               label="Actions"
               colKey="_actions"
@@ -139,13 +139,13 @@ function PendingDebitNotesTable({
                 <AccountsTableCell align="right" className="tabular-nums text-xs">
                   {row.totalReturnQty}
                 </AccountsTableCell>
-                <AccountsTableCell align="right" money className="text-xs tabular-nums">
+                <AccountsTableCell align="right" money className="text-xs tabular-nums min-w-[6.5rem]">
                   {formatINR(row.taxableAmount)}
                 </AccountsTableCell>
-                <AccountsTableCell align="right" money className="text-xs tabular-nums">
+                <AccountsTableCell align="right" money className="text-xs tabular-nums min-w-[5.5rem]">
                   {formatINR(row.gstAmount)}
                 </AccountsTableCell>
-                <AccountsTableCell align="right" money className="text-xs font-medium tabular-nums">
+                <AccountsTableCell align="right" money className="text-xs font-medium tabular-nums min-w-[6.5rem]">
                   {formatINR(row.totalAmount)}
                 </AccountsTableCell>
                 <AccountsTableCell align="right" className={accountsActionColClass("single")}>

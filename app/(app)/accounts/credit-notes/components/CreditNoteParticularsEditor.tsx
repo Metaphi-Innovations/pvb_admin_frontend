@@ -19,14 +19,18 @@ import {
   formatCnMoney,
   lineBatchNo,
   lineExpiry,
+  lineHsnCode,
   lineLedgerName,
   lineProductName,
+  lineProductSku,
   lineQty,
   lineTaxable,
   particularsColumnsForSource,
+  pendingLineKey,
   toNum,
 } from "../credit-note-form-utils";
 import { cn } from "@/lib/utils";
+import { computeNoteParticularTotals } from "@/components/accounts/voucher-form/NoteParticularsTable";
 
 const INPUT_CLASS = cn(VOUCHER_INPUT_CLASS, "text-xs");
 
@@ -104,21 +108,27 @@ export function CreditNoteParticularsEditor({
   sourceType,
   interstate,
   editable,
+  gstEditable,
   directLines,
   pendingLines,
   onDirectLinesChange,
+  onPendingLineGstChange,
 }: {
   sourceType: string;
   interstate: boolean;
   editable: boolean;
+  /** When true, GST % on pending/return lines can be edited even if other columns are locked. */
+  gstEditable?: boolean;
   directLines: DirectLineDraft[];
   pendingLines: CreditNoteFormLine[];
   onDirectLinesChange: (lines: DirectLineDraft[]) => void;
+  onPendingLineGstChange?: (lineKey: string, gstRate: string) => void;
 }) {
   const isDirect = sourceType === "DIRECT" || sourceType === "SALES_INVOICE";
+  const canEditGst = Boolean(gstEditable);
   const gstOn = isDirect
     ? directLines.some((l) => l.gst_applicable)
-    : pendingLines.some((l) => toNum(l.gst_amount) > 0);
+    : pendingLines.some((l) => toNum(l.gst_rate) > 0 || toNum(l.gst_amount) > 0);
   const columns = particularsColumnsForSource(sourceType, {
     gstOn,
     interstate,
@@ -246,12 +256,13 @@ export function CreditNoteParticularsEditor({
         );
       case "gst_rate":
         return (
-          <Cell key={col} align="right">
+          <Cell key={col} align="right" className="cn-gst-pct-cell">
             <Input
-              className={cn(INPUT_CLASS, "text-right tabular-nums w-16 ml-auto")}
+              className={cn(INPUT_CLASS, "cn-gst-pct-input")}
               value={line.gst_rate}
               onChange={(e) => updateLine(line.key, { gst_rate: e.target.value })}
               disabled={!editable || !line.gst_applicable}
+              inputMode="decimal"
             />
           </Cell>
         );
@@ -291,11 +302,40 @@ export function CreditNoteParticularsEditor({
           : toNum(line.quantity ?? line.eligible_quantity) > 0 && lineTaxable(line) > 0
             ? formatCnMoney(lineTaxable(line) / Math.max(lineQty(line), 1))
             : "—";
+    const gstRateStr = String(line.gst_rate ?? "");
+    const preview =
+      sourceType === "SALES_RETURN"
+        ? computeNoteParticularTotals(
+            "1",
+            String(lineTaxable(line)),
+            toNum(line.gst_rate) > 0,
+            gstRateStr || "0",
+            interstate,
+          )
+        : null;
     switch (col) {
       case "particular":
         return <ReadCell key={col} value={line.description || "—"} />;
-      case "product":
-        return <ReadCell key={col} value={lineProductName(line)} />;
+      case "product": {
+        const sku = lineProductSku(line);
+        const hsn = lineHsnCode(line);
+        return (
+          <Cell key={col} className="min-w-0">
+            <div className="so-goods-ro so-goods-ro--multiline w-full min-w-0 text-left !flex !flex-col !items-start !justify-center gap-0.5 py-1">
+              <p className="w-full truncate text-[12px] font-medium leading-snug text-foreground">
+                {lineProductName(line)}
+              </p>
+              {sku || hsn ? (
+                <p className="w-full truncate text-[10px] leading-tight text-muted-foreground">
+                  {[sku ? `SKU: ${sku}` : null, hsn ? `HSN: ${hsn}` : null]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </p>
+              ) : null}
+            </div>
+          </Cell>
+        );
+      }
       case "batch":
         return <ReadCell key={col} value={lineBatchNo(line)} />;
       case "expiry":
@@ -316,8 +356,58 @@ export function CreditNoteParticularsEditor({
         return <ReadCell key={col} value={lineLedgerName(line)} />;
       case "gst":
         return <ReadCell key={col} align="right" value={formatCnMoney(line.gst_amount)} muted />;
+      case "gst_rate":
+        return (
+          <Cell key={col} align="right" className="cn-gst-pct-cell">
+            <Input
+              className={cn(INPUT_CLASS, "cn-gst-pct-input")}
+              value={gstRateStr}
+              onChange={(e) =>
+                onPendingLineGstChange?.(pendingLineKey(line), e.target.value)
+              }
+              disabled={!canEditGst}
+              inputMode="decimal"
+            />
+          </Cell>
+        );
+      case "cgst":
+        return (
+          <ReadCell
+            key={col}
+            align="right"
+            value={formatCnMoney(preview ? preview.cgst : line.cgst_amount)}
+            muted
+          />
+        );
+      case "sgst":
+        return (
+          <ReadCell
+            key={col}
+            align="right"
+            value={formatCnMoney(preview ? preview.sgst : line.sgst_amount)}
+            muted
+          />
+        );
+      case "igst":
+        return (
+          <ReadCell
+            key={col}
+            align="right"
+            value={formatCnMoney(preview ? preview.igst : line.igst_amount)}
+            muted
+          />
+        );
       case "cn_amount":
-        return <ReadCell key={col} align="right" value={formatCnMoney(line.line_total)} strong />;
+        return (
+          <ReadCell
+            key={col}
+            align="right"
+            value={formatCnMoney(
+              preview ? preview.lineTotal : line.line_total,
+            )}
+            strong
+          />
+        );
       default:
         return null;
     }
@@ -351,13 +441,24 @@ export function CreditNoteParticularsEditor({
                   className={cn(
                     "px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap",
                     colAlign(col) === "right"
-                      ? "text-right"
+                      ? "!text-right"
                       : colAlign(col) === "center"
-                        ? "text-center"
-                        : "text-left",
+                        ? "!text-center"
+                        : "!text-left",
                     col === "particular" && "w-[22%]",
+                    col === "product" && "w-[16%]",
+                    col === "batch" && "w-[7%]",
+                    col === "expiry" && "w-[8%]",
+                    col === "qty" && "w-[4.5rem]",
+                    col === "rate_benefit" && "w-[8%]",
+                    col === "eligible_base" && "w-[10%]",
                     col === "ledger" && "w-[18%]",
                     col === "gst_toggle" && "w-[4.5rem]",
+                    col === "gst_rate" && "cn-gst-pct-th w-[4rem]",
+                    col === "cgst" && "w-[9%]",
+                    col === "sgst" && "w-[9%]",
+                    col === "igst" && "w-[9%]",
+                    col === "cn_amount" && "w-[10%]",
                     col === "actions" && "so-col-actions",
                   )}
                 >

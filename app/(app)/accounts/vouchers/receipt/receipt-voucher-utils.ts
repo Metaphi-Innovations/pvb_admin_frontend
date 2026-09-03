@@ -33,6 +33,36 @@ export function toMoneyNumber(value: unknown): number {
   return Number.isFinite(n) ? roundMoney(n) : 0;
 }
 
+/**
+ * Ledger Entries (OTHER / ROUND_OFF) that sit inside the UI Gross Amount envelope.
+ * Backend `gross_party_amount` is party-only (allocated + advance); display gross =
+ * party + these ledger lines.
+ */
+export function sumReceiptLedgerEntriesAmount(
+  adjustments: Array<{ adjustment_type: string; amount: unknown }>,
+): number {
+  let total = 0;
+  for (const row of adjustments) {
+    if (row.adjustment_type !== "OTHER" && row.adjustment_type !== "ROUND_OFF") {
+      continue;
+    }
+    const amt = toMoneyNumber(row.amount);
+    if (amt <= 0) continue;
+    total += amt;
+  }
+  return roundMoney(total);
+}
+
+/** UI Gross Amount = persisted party gross + ledger entries. */
+export function displayGrossFromPartyAndLedger(
+  partyGross: unknown,
+  adjustments: Array<{ adjustment_type: string; amount: unknown }>,
+): number {
+  return roundMoney(
+    toMoneyNumber(partyGross) + sumReceiptLedgerEntriesAmount(adjustments),
+  );
+}
+
 /** Keep editable money fields free of a sticky leading zero (avoids typing 0112). */
 export function sanitizeMoneyInput(raw: string): string {
   let v = raw.replace(/[^\d.]/g, "");
@@ -305,7 +335,13 @@ export function mapDetailToForm(detail: ReceiptVoucherDetail): ReceiptFormState 
       snapshotLabel(detail.other_ledger_snapshot, "ledger_name", "ledgerName") ||
       "",
     receipt_treatment: treatment,
-    gross_party_amount: String(toMoneyNumber(detail.gross_party_amount)),
+    // Form Gross = party (API gross_party_amount) + ledger entries.
+    gross_party_amount: String(
+      displayGrossFromPartyAndLedger(
+        detail.gross_party_amount,
+        detail.adjustments ?? [],
+      ),
+    ),
     advance_amount: String(advance),
     narration: detail.narration || "",
     remarks: detail.remarks || "",
@@ -470,20 +506,13 @@ export function computeAdjustmentTotals(form: ReceiptFormState) {
 export function computeReceiptPreview(form: ReceiptFormState) {
   const { totalAllocated, totalTds, totalDiscount } = computeAllocationTotals(form);
   const adj = computeAdjustmentTotals(form);
+  // Form field is full UI gross (party + ledger). API payload uses party only.
   const grossInput = toMoneyNumber(form.gross_party_amount);
-
-  /** Simplified Ledger Entries (OTHER / round-off) — part of gross, not an add-on. */
-  let ledgerEntriesTotal = 0;
-  for (const row of form.adjustments) {
-    if (row.adjustment_type !== "OTHER" && row.adjustment_type !== "ROUND_OFF") continue;
-    const amt = toMoneyNumber(row.amount);
-    if (amt <= 0) continue;
-    ledgerEntriesTotal += amt;
-  }
-  ledgerEntriesTotal = roundMoney(ledgerEntriesTotal);
+  const ledgerEntriesTotal = sumReceiptLedgerEntriesAmount(form.adjustments);
 
   let displayGross = grossInput;
   let advance = 0;
+  /** Party portion saved as API `gross_party_amount` (= allocated + advance). */
   let payloadGross = 0;
 
   if (form.party_kind === "CUSTOMER") {
@@ -871,7 +900,8 @@ export function buildCreatePayload(form: ReceiptFormState): CreateReceiptVoucher
     instrument_date:
       form.transaction_mode === "CHEQUE" ? form.cheque_date || null : form.transaction_date || null,
     transaction_date: form.transaction_date || null,
-    // Backend: allocated_amount + advance_amount = gross_party_amount (Customer).
+    // API gross_party_amount is party-only (allocated + advance). Form Gross =
+    // party + ledger; ledger lines are sent separately in adjustments.
     // Mixed = allocations.length > 0 AND advance_amount > 0 — no MIXED enum sent.
     gross_party_amount: preview.payloadGross,
     advance_amount: form.party_kind === "CUSTOMER" ? preview.advance : 0,
