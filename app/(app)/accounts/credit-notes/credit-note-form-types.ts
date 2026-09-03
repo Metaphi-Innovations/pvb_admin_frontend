@@ -298,6 +298,11 @@ export interface UpdateDraftCreditNotePayload {
   round_off_amount?: number | string | null;
   lines?: DirectCnLineInput[];
   references?: CnReferenceInput[];
+  /** Recalculate GST on pending-generated product lines (backend authoritative). */
+  line_gst_overrides?: Array<{
+    credit_note_line_id: string;
+    gst_rate: number | string;
+  }>;
 }
 
 export interface CreateFromPendingPayload {
@@ -306,6 +311,11 @@ export interface CreateFromPendingPayload {
   remarks?: string | null;
   /** Signed round-off override; when omitted, backend applies auto nearest-rupee. */
   round_off_amount?: number | string | null;
+  /** Optional GST % overrides for pending product lines. */
+  line_gst_overrides?: Array<{
+    pending_credit_note_line_id: string;
+    gst_rate: number | string;
+  }>;
   /** @deprecated Prefer free-form extra_charges. Kept for older clients. */
   additional_charges?: Array<{
     sales_invoice_additional_charge_id: string;

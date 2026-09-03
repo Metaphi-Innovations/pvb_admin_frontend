@@ -61,6 +61,7 @@ import { LedgerImpactPreview, type LedgerImpactLine } from "@/components/account
 import { InvoiceTypeBadge } from "@/components/accounts/InvoiceTypeBadge";
 import { parseDocumentsListingFiltersFromSearch } from "@/lib/accounts/documents-listing-filter-query";
 import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 import type { AccountsDataScope } from "@/lib/accounts/accounts-data-events";
 
 export interface TransactionRow {
@@ -250,7 +251,7 @@ function exportTransactionRows(
         r.sourceNo ?? "",
         r.dispatchNo ?? "",
         r.party,
-        r.date,
+        formatDisplayDate(r.date),
         r.taxableValue ?? "",
         r.cgst ?? "",
         r.sgst ?? "",
@@ -264,7 +265,7 @@ function exportTransactionRows(
     const base = [
       ...(showInvoiceTypeColumn ? [r.invoiceType === "stock_transfer" ? "Stock Transfer" : "Sales"] : []),
       r.number,
-      r.date,
+      formatDisplayDate(r.date),
       r.party,
     ];
     const amounts = showGstColumns
@@ -942,7 +943,7 @@ function TransactionListTable<T>({
                 </>
               )}
               <AccountsTableCell>{r.party}</AccountsTableCell>
-              <AccountsTableCell>{r.date}</AccountsTableCell>
+              <AccountsTableCell>{formatDisplayDate(r.date)}</AccountsTableCell>
               {showGstColumns ? (
                 showGstSplitColumns ? (
                   <>

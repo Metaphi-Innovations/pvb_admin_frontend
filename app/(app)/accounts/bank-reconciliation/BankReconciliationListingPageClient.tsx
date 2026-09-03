@@ -46,6 +46,7 @@ import {
 import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
 import { AccountsListingDateFilter } from "@/components/accounts/AccountsListingFilter";
 import { formatMoney } from "@/lib/accounts/money-format";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 import { useFY } from "@/lib/fy-store";
 import { useClientMounted } from "@/lib/use-client-mounted";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
@@ -67,9 +68,9 @@ const ACCOUNT_TYPE_FILTER_OPTIONS = [
 ];
 
 const BANK_RECON_LISTING_COL_COUNT = 10;
-const BANK_RECON_LISTING_MIN_WIDTH = 1360;
+const BANK_RECON_LISTING_MIN_WIDTH = 1100;
 
-/** Explicit <col> widths — Action stays compact; data cols keep readable floors. */
+/** Explicit <col> widths — table is width:100% / fixed; Action stays compact. */
 function BankReconListingColGroup() {
   return (
     <colgroup>
@@ -177,10 +178,19 @@ function BankAccountTable({
         ) : (
           filtered.map((account) => (
             <AccountsTableRow key={account.id} className="group">
-              <AccountsTableCell className="font-medium">{account.bankName}</AccountsTableCell>
-              <AccountsTableCell>{account.accountNickname}</AccountsTableCell>
-              <AccountsTableCell mono>{account.maskedAccountNumber}</AccountsTableCell>
-              <AccountsTableCell>{account.accountType}</AccountsTableCell>
+              <AccountsTableCell className="bank-recon-cell-truncate font-medium" title={account.bankName}>
+                {account.bankName}
+              </AccountsTableCell>
+              <AccountsTableCell
+                className="bank-recon-cell-truncate"
+                title={account.accountNickname}
+              >
+                {account.accountNickname}
+              </AccountsTableCell>
+              <AccountsTableCell mono className="bank-recon-cell-truncate">
+                {account.maskedAccountNumber}
+              </AccountsTableCell>
+              <AccountsTableCell className="bank-recon-cell-truncate">{account.accountType}</AccountsTableCell>
               <AccountsTableCell align="right" money>
                 {account.bookLedgerLinked && account.bookBalance != null ? (
                   formatMoney(account.bookBalance)
@@ -216,7 +226,9 @@ function BankAccountTable({
               <AccountsTableCell align="right">
                 {account.pendingReconciliationCount}
               </AccountsTableCell>
-              <AccountsTableCell>{account.lastReconciledDate ?? "—"}</AccountsTableCell>
+              <AccountsTableCell>
+                {formatDisplayDate(account.lastReconciledDate)}
+              </AccountsTableCell>
               <AccountsTableCell align="center" className="bank-recon-listing-action-col">
                 <Button
                   asChild
@@ -334,7 +346,7 @@ export default function BankReconciliationListingPageClient() {
       a.statementBalanceDisplay ?? "Not Available",
       a.differenceDisplay ?? "",
       a.pendingReconciliationCount,
-      a.lastReconciledDate ?? "",
+      formatDisplayDate(a.lastReconciledDate, ""),
     ]);
     const csv = [headers, ...lines]
       .map((row) => row.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(","))

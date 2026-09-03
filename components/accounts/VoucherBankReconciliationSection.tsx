@@ -6,6 +6,7 @@ import {
   getBankReconDisplayForVoucher,
   type BankReconDisplayInfo,
 } from "@/lib/accounts/bank-recon-display";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 import { TALLY_EVENT } from "@/lib/accounts/bank-recon-tally-types";
 
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
@@ -52,7 +53,14 @@ export function VoucherBankReconciliationSection({
       </p>
       <div className="rounded-xl border border-border bg-muted/20 px-3 py-1">
         <InfoRow label="Status" value={info.statusLabel} />
-        <InfoRow label="Bank Date" value={info.isReconciled && info.bankDate ? info.bankDate : "—"} />
+        <InfoRow
+          label="Bank Date"
+          value={
+            info.isReconciled && info.bankDate
+              ? formatDisplayDate(info.bankDate)
+              : "—"
+          }
+        />
         <InfoRow
           label="Reconciled By"
           value={info.isReconciled && info.reconciledBy ? info.reconciledBy : "—"}

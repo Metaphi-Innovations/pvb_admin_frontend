@@ -57,15 +57,8 @@ import { PurchaseInvoiceDirectTotals } from "./PurchaseInvoiceDirectTotals";
 import type { DirectPurchaseTotals } from "./purchase-invoice-direct-utils";
 import { DP_FIELD_CLASS } from "./direct-purchase-form-ui";
 import { cn } from "@/lib/utils";
+import { formatDisplayDate, formatDateInput, todayIsoDate } from "@/lib/accounts/date-display";
 import "@/app/(app)/accounts/invoices/sales-order-invoice-form-compact.css";
-
-function formatDateOnly(value: string | null | undefined): string {
-  if (!value) return "";
-  if (/^\d{4}-\d{2}-\d{2}/.test(value)) return value.slice(0, 10);
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return "";
-  return parsed.toISOString().slice(0, 10);
-}
 
 function snapshotStr(snapshot: Record<string, unknown> | null | undefined, ...keys: string[]): string {
   if (!snapshot) return "";
@@ -195,7 +188,7 @@ function GrnSelector({
               <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
                 <span className="flex items-center gap-1">
                   <Calendar className="w-3 h-3" />
-                  {formatDateOnly(grn.grn_date) || "—"}
+                  {formatDisplayDate(grn.grn_date)}
                 </span>
                 <span className="flex items-center gap-1">
                   <Building2 className="w-3 h-3" />
@@ -261,8 +254,8 @@ export function PurchaseInvoiceGrnForm({
     );
     setRoundOff(0);
     setVendorInvoiceNo(data.supplier_invoice.supplier_invoice_number || "");
-    setSupplierInvoiceDate(formatDateOnly(data.supplier_invoice.supplier_invoice_date));
-    setInvoiceDate(formatDateOnly(data.grn.grn_date) || new Date().toISOString().slice(0, 10));
+    setSupplierInvoiceDate(formatDateInput(data.supplier_invoice.supplier_invoice_date));
+    setInvoiceDate(formatDateInput(data.grn.grn_date) || todayIsoDate());
     setDueDate("");
     setShowGrnSelector(false);
     setSelectedGrn(
@@ -519,7 +512,7 @@ export function PurchaseInvoiceGrnForm({
                       </Badge>
                     </div>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      {selectedGrn.supplier_name} · {selectedGrn.warehouse_name} · {formatDateOnly(selectedGrn.grn_date)}
+                      {selectedGrn.supplier_name} · {selectedGrn.warehouse_name} · {formatDisplayDate(selectedGrn.grn_date)}
                     </p>
                   </div>
                   <Button

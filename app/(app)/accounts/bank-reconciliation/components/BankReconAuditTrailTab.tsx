@@ -14,6 +14,7 @@ import {
 } from "@/components/accounts/AccountsTable";
 import { ReportFilterRow, ReportSearchFilter } from "@/components/accounts/ReportFilters";
 import { aggregateAuditTrail } from "@/lib/accounts/bank-recon-completion-service";
+import { formatDisplayDateTime } from "@/lib/accounts/date-display";
 import { ensureBankReconCompletionSeeded } from "@/lib/accounts/bank-recon-completion-demo-seed";
 import { exportAuditTrailToExcel } from "@/lib/accounts/bank-recon-completion-export";
 
@@ -108,7 +109,7 @@ export function BankReconAuditTrailTab({ bankAccountId, registerTick = 0 }: Bank
               filtered.map((r) => (
                 <AccountsTableRow key={r.id}>
                   <AccountsTableCell className="text-xs whitespace-nowrap">
-                    {new Date(r.timestamp).toLocaleString("en-IN")}
+                    {formatDisplayDateTime(r.timestamp)}
                   </AccountsTableCell>
                   <AccountsTableCell className="text-xs">{r.user}</AccountsTableCell>
                   <AccountsTableCell className="text-xs font-medium">{r.action}</AccountsTableCell>

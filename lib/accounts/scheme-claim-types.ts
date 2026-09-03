@@ -3,6 +3,8 @@
  * Accounts must NOT recalculate eligibility; display + review only.
  */
 
+import { formatDisplayDate } from "./date-display";
+
 export type SchemeCalculationType =
   | "QUANTITY_BASED"
   | "TURNOVER_BASED"
@@ -138,7 +140,11 @@ export function formatClaimDisplay(value: unknown): string {
   if (typeof value === "number" && Number.isFinite(value)) {
     return String(value);
   }
-  return String(value);
+  const s = String(value);
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+    return formatDisplayDate(s);
+  }
+  return s;
 }
 
 export function getEntitlementClaimNumber(ent: SchemeClaimDisplaySource): string {

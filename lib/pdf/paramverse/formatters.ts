@@ -29,16 +29,39 @@ export function escapeHtml(value: unknown): string {
     .replaceAll("'", "&#39;");
 }
 
+/** Escape for double-quoted src/href attributes; preserves data/HTTP URLs. */
+export function escapeSrcAttr(value: unknown): string {
+  const raw = String(value ?? "");
+  if (!raw) return "";
+  if (
+    raw.startsWith("data:") ||
+    raw.startsWith("blob:") ||
+    raw.startsWith("http://") ||
+    raw.startsWith("https://")
+  ) {
+    return raw.replaceAll('"', "&quot;");
+  }
+  return escapeHtml(raw);
+}
+
+const ISO_DATE_PREFIX_RE = /^(\d{4})-(\d{2})-(\d{2})/;
+
+/** Format date for PDF/display as DD/MM/YYYY without timezone shift on date-only values. */
 export function formatDate(value: unknown): string {
   const raw = String(value ?? "").trim();
   if (!raw) return "-";
+
+  const isoMatch = ISO_DATE_PREFIX_RE.exec(raw);
+  if (isoMatch) {
+    return `${isoMatch[3]}/${isoMatch[2]}/${isoMatch[1]}`;
+  }
+
   const parsed = new Date(raw);
   if (Number.isNaN(parsed.getTime())) return "-";
-  return parsed.toLocaleDateString("en-GB", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
+  const d = String(parsed.getDate()).padStart(2, "0");
+  const m = String(parsed.getMonth() + 1).padStart(2, "0");
+  const y = parsed.getFullYear();
+  return `${d}/${m}/${y}`;
 }
 
 export function formatCurrency(value: unknown): string {

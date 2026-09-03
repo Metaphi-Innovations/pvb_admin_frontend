@@ -60,6 +60,7 @@ import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
 import { useLazyFilterColumns } from "@/lib/masters/use-lazy-filter-columns";
 import { formatMoney } from "@/lib/accounts/money-format";
+import { formatDisplayDate, toIsoDateOnly } from "@/lib/accounts/date-display";
 import { cn } from "@/lib/utils";
 import { PURCHASE_SOURCE_TYPE_LABELS, type PurchaseNature, type PurchaseSourceType } from "./purchase-invoice-types";
 import { downloadPurchaseInvoicePdf } from "./purchase-invoice-pdf";
@@ -150,11 +151,7 @@ const LISTING_SELECT_TRIGGER_CLASS = cn(
 );
 
 function formatDateOnly(value: string | null | undefined): string {
-  if (!value) return "—";
-  if (/^\d{4}-\d{2}-\d{2}/.test(value)) return value.slice(0, 10);
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toISOString().slice(0, 10);
+  return formatDisplayDate(value, "—");
 }
 
 function isQcCompletedStatus(status: string | null | undefined): boolean {
@@ -413,7 +410,7 @@ function PurchaseInvoicesTabTable({
                 </AccountsTableCell>
                 <AccountsTableCell className="font-medium">{inv.vendorName}</AccountsTableCell>
                 <AccountsTableCell className="text-muted-foreground">{inv.vendorInvoiceNo || "—"}</AccountsTableCell>
-                <AccountsTableCell>{inv.invoiceDate || "—"}</AccountsTableCell>
+                <AccountsTableCell>{formatDisplayDate(inv.invoiceDate)}</AccountsTableCell>
                 <AccountsTableCell>{inv.purchaseNatureLabel}</AccountsTableCell>
                 <AccountsTableCell align="right" money>
                   {formatMoney(inv.taxableAmount)}
@@ -424,7 +421,7 @@ function PurchaseInvoicesTabTable({
                 <AccountsTableCell align="right" money>
                   {formatMoney(inv.netPayable)}
                 </AccountsTableCell>
-                <AccountsTableCell>{inv.dueDate || "—"}</AccountsTableCell>
+                <AccountsTableCell>{formatDisplayDate(inv.dueDate)}</AccountsTableCell>
                 <AccountsTableCell>
                   <ApprovalStatusBadge status={inv.approvalStatus} />
                 </AccountsTableCell>
@@ -1154,7 +1151,7 @@ export default function PurchaseInvoiceListClient() {
   }, []);
 
   const getGrnCellValue = useCallback((row: EligibleGrnDto, key: string) => {
-    if (key === "grn_date") return formatDateOnly(row.grn_date);
+    if (key === "grn_date") return toIsoDateOnly(row.grn_date);
     if (key === "total_received_qty") return Number(row.total_received_qty || 0);
     if (key === "total_invoice_amount") return Number(row.total_invoice_amount || 0);
     if (key === "po_no") return row.po_no || "";

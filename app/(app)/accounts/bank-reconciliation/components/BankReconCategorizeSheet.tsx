@@ -24,6 +24,7 @@ import {
 import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
 import { GroupedLedgerSelect } from "@/components/accounts/GroupedLedgerSelect";
 import { formatMoney } from "@/lib/accounts/money-format";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 import { cn } from "@/lib/utils";
 import type { BankReconTransactionRecord } from "@/lib/accounts/bank-recon-register";
 import {
@@ -346,8 +347,8 @@ export function BankReconCategorizeSheet({
         <SheetBody className="space-y-4">
           <div className="rounded-xl border border-border bg-muted/20 p-3">
             <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Bank Transaction</p>
-            <DetailRow label="Statement Date" value={transaction.statementDate} />
-            <DetailRow label="Value Date" value={transaction.valueDate || "—"} />
+            <DetailRow label="Statement Date" value={formatDisplayDate(transaction.statementDate)} />
+            <DetailRow label="Value Date" value={formatDisplayDate(transaction.valueDate)} />
             <DetailRow
               label="Amount"
               value={

@@ -50,6 +50,7 @@ export interface LedgerDetailDto {
   description?: string | null;
   accountSubGroupId: string;
   sourceType?: string | null;
+  sourceEntityType?: string | null;
   sourceEntityId?: string | null;
   sourceEntityCode?: string | null;
   status?: string;

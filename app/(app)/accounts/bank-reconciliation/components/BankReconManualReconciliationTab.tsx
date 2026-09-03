@@ -24,6 +24,7 @@ import {
   ACCOUNTS_FILTER_LABEL_CLASS,
 } from "@/components/accounts/ReportFilters";
 import { formatMoney, formatMoneyOrDash } from "@/lib/accounts/money-format";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 import { cn } from "@/lib/utils";
 import {
   getBankReconAccountById,
@@ -316,7 +317,7 @@ export function BankReconManualReconciliationTab({
                       onChange={() => toggleBook(b.id)}
                     />
                   </td>
-                  <td className="px-2 py-1.5 whitespace-nowrap">{b.bookDate}</td>
+                  <td className="px-2 py-1.5 whitespace-nowrap">{formatDisplayDate(b.bookDate)}</td>
                   {!compact && (
                     <td className="px-2 py-1.5">
                       <p className="font-mono text-brand-700 font-semibold">{b.voucherNo}</p>
@@ -414,8 +415,8 @@ export function BankReconManualReconciliationTab({
                       onChange={() => toggleStmt(s.id)}
                     />
                   </td>
-                  <td className="px-2 py-1.5 whitespace-nowrap">{s.statementDate}</td>
-                  <td className="px-2 py-1.5 whitespace-nowrap">{s.valueDate}</td>
+                  <td className="px-2 py-1.5 whitespace-nowrap">{formatDisplayDate(s.statementDate)}</td>
+                  <td className="px-2 py-1.5 whitespace-nowrap">{formatDisplayDate(s.valueDate)}</td>
                   <td className="px-2 py-1.5 max-w-[100px] truncate">{s.reference || s.chequeNo || "—"}</td>
                   <td className="px-2 py-1.5 text-right tabular-nums">{formatMoneyOrDash(s.deposit)}</td>
                   <td className="px-2 py-1.5 text-right tabular-nums">{formatMoneyOrDash(s.withdrawal)}</td>

@@ -5,6 +5,7 @@ import { useCallback } from "react";
 import { ExternalLink } from "lucide-react";
 import { MoneyCell } from "@/components/accounts/MoneyAmount";
 import { formatMoney, balanceSideLabel } from "@/lib/accounts/money-format";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 import type { StatementRow } from "@/lib/accounts/ledger-detail-utils";
 import {
   AccountsTable,
@@ -68,7 +69,7 @@ function LedgerTransactionsTableBody({ toolbarRows }: { toolbarRows: StatementRo
             const isOpening = row.voucherType === "Opening Balance" || row.voucherType === "Opening";
             return (
               <AccountsTableRow key={`${row.id ?? row.voucherNo}-${i}`}>
-                <AccountsTableCell className="whitespace-nowrap">{row.date}</AccountsTableCell>
+                <AccountsTableCell className="whitespace-nowrap">{formatDisplayDate(row.date)}</AccountsTableCell>
                 <AccountsTableCell mono>
                   {row.href && !isOpening ? (
                     <Link href={row.href} className="text-brand-700 hover:underline font-semibold">

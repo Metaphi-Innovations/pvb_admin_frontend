@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { formatMoney } from "@/lib/accounts/money-format";
+import { formatDisplayDate, formatDisplayDateTime } from "@/lib/accounts/date-display";
 import {
   enrichBookRows,
   enrichStatementRows,
@@ -87,10 +88,10 @@ export function BankReconManualReconDetailsSheet({
               <div className="grid grid-cols-2 gap-2 rounded-xl border border-border bg-muted/20 p-3">
                 <div><p className="text-muted-foreground">Match Type</p><p className="font-semibold">{group.matchType}</p></div>
                 <div><p className="text-muted-foreground">Method</p><p className="font-semibold">{group.reconciliationMethod}</p></div>
-                <div><p className="text-muted-foreground">Reconciliation Date</p><p className="font-semibold">{group.reconciliationDate}</p></div>
+                <div><p className="text-muted-foreground">Reconciliation Date</p><p className="font-semibold">{formatDisplayDate(group.reconciliationDate)}</p></div>
                 <div><p className="text-muted-foreground">Total Amount</p><p className="font-semibold">{formatMoney(group.totalBookAmount)}</p></div>
                 <div><p className="text-muted-foreground">Created By</p><p className="font-semibold">{group.createdBy}</p></div>
-                <div><p className="text-muted-foreground">Created On</p><p className="font-semibold">{new Date(group.createdOn).toLocaleString("en-IN")}</p></div>
+                <div><p className="text-muted-foreground">Created On</p><p className="font-semibold">{formatDisplayDateTime(group.createdOn)}</p></div>
               </div>
 
               {group.remarks ? (
@@ -110,7 +111,7 @@ export function BankReconManualReconDetailsSheet({
                       <div key={a.id} className="rounded-lg border border-border px-3 py-2">
                         <p className="font-semibold">{book?.voucherNo ?? a.bookTargetId}</p>
                         {stmt ? <p className="text-[11px] text-muted-foreground">↔ {stmt.reference || stmt.id}</p> : <p className="text-[11px] text-teal-700">Manual clearing (no statement)</p>}
-                        <p className="text-[11px] mt-1">Applied: <span className="font-semibold">{formatMoney(a.allocatedAmount)}</span> · Date: {a.reconciliationDate}</p>
+                        <p className="text-[11px] mt-1">Applied: <span className="font-semibold">{formatMoney(a.allocatedAmount)}</span> · Date: {formatDisplayDate(a.reconciliationDate)}</p>
                       </div>
                     );
                   })}
@@ -131,7 +132,7 @@ export function BankReconManualReconDetailsSheet({
                         <div>
                           <p className="font-medium">{e.action}</p>
                           <p className="text-[11px] text-muted-foreground">{e.bookReference} {e.statementReference ? `· ${e.statementReference}` : ""}</p>
-                          <p className="text-[10px] text-muted-foreground">{new Date(e.timestamp).toLocaleString("en-IN")} · {e.user}</p>
+                          <p className="text-[10px] text-muted-foreground">{formatDisplayDateTime(e.timestamp)} · {e.user}</p>
                         </div>
                       </div>
                     ))

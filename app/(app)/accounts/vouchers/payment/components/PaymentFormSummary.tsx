@@ -63,7 +63,7 @@ export function PaymentFormSummary({
   const showAdjustments = Math.abs(adjustmentsTotal) > 0.004;
   const settlementLabel =
     partyKind === "CUSTOMER_REFUND" ? "Refund Settlement" : "Invoice Settlement";
-  const advanceLabel = "Supplier Advance";
+  const advanceLabel = "Supplier Advance / On Account";
 
   return (
     <VoucherFormSectionCard title="Amount Summary" className={cn("lg:sticky lg:top-3 lg:z-10", className)}>

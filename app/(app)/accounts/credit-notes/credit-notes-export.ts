@@ -4,6 +4,7 @@ import {
   type CreditNoteRecord,
 } from "./credit-notes-data";
 import { formatLinkedInvoiceNos } from "./components/LinkedInvoicesMultiSelect";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 
 /** Listing export — filtered records with source and tax columns. */
 export async function exportCreditNotesToExcel(records: CreditNoteRecord[]): Promise<void> {
@@ -25,7 +26,7 @@ export async function exportCreditNotesToExcel(records: CreditNoteRecord[]): Pro
       "Sales Return No.": rec.sourceReturnNo || "",
       "Scheme Name": rec.schemeName || "",
       Customer: rec.customerName,
-      Date: rec.creditNoteDate,
+      Date: formatDisplayDate(rec.creditNoteDate),
       "Taxable Value": rec.taxableValue,
       CGST: rec.cgstAmount,
       SGST: rec.sgstAmount,

@@ -33,6 +33,36 @@ export function toMoneyNumber(value: unknown): number {
   return Number.isFinite(n) ? roundMoney(n) : 0;
 }
 
+/**
+ * Ledger Entries (OTHER / ROUND_OFF) that sit inside the UI Gross Amount envelope.
+ * Backend `gross_party_amount` is party-only (allocated + advance); display gross =
+ * party + these ledger lines.
+ */
+export function sumReceiptLedgerEntriesAmount(
+  adjustments: Array<{ adjustment_type: string; amount: unknown }>,
+): number {
+  let total = 0;
+  for (const row of adjustments) {
+    if (row.adjustment_type !== "OTHER" && row.adjustment_type !== "ROUND_OFF") {
+      continue;
+    }
+    const amt = toMoneyNumber(row.amount);
+    if (amt <= 0) continue;
+    total += amt;
+  }
+  return roundMoney(total);
+}
+
+/** UI Gross Amount = persisted party gross + ledger entries. */
+export function displayGrossFromPartyAndLedger(
+  partyGross: unknown,
+  adjustments: Array<{ adjustment_type: string; amount: unknown }>,
+): number {
+  return roundMoney(
+    toMoneyNumber(partyGross) + sumReceiptLedgerEntriesAmount(adjustments),
+  );
+}
+
 /** Keep editable money fields free of a sticky leading zero (avoids typing 0112). */
 export function sanitizeMoneyInput(raw: string): string {
   let v = raw.replace(/[^\d.]/g, "");
@@ -230,14 +260,27 @@ export function mapOpenItemsToAllocations(
   });
 }
 
+/** Derive UI treatment from persisted allocations + advance (no backend MIXED enum). */
+export function deriveReceiptTreatmentFromAmounts(
+  partyKind: ReceiptPartyKind,
+  allocated: number,
+  advance: number,
+): ReceiptTreatmentUi {
+  if (partyKind !== "CUSTOMER") return "against_outstanding";
+  if (allocated <= 0 && advance > 0) return "advance_on_account";
+  if (allocated > 0 && advance > 0) return "mixed_allocation";
+  return "against_outstanding";
+}
+
 export function mapDetailToForm(detail: ReceiptVoucherDetail): ReceiptFormState {
   const base = emptyReceiptForm();
   const allocated = toMoneyNumber(detail.allocated_amount);
   const advance = toMoneyNumber(detail.advance_amount);
-  const treatment: ReceiptTreatmentUi =
-    detail.party_kind === "CUSTOMER" && allocated <= 0 && advance > 0
-      ? "advance_on_account"
-      : "against_outstanding";
+  const treatment = deriveReceiptTreatmentFromAmounts(
+    detail.party_kind,
+    allocated,
+    advance,
+  );
 
   const allocationsFromDetail: ReceiptUiAllocation[] = (detail.allocations ?? []).map(
     (a) => {
@@ -292,7 +335,13 @@ export function mapDetailToForm(detail: ReceiptVoucherDetail): ReceiptFormState 
       snapshotLabel(detail.other_ledger_snapshot, "ledger_name", "ledgerName") ||
       "",
     receipt_treatment: treatment,
-    gross_party_amount: String(toMoneyNumber(detail.gross_party_amount)),
+    // Form Gross = party (API gross_party_amount) + ledger entries.
+    gross_party_amount: String(
+      displayGrossFromPartyAndLedger(
+        detail.gross_party_amount,
+        detail.adjustments ?? [],
+      ),
+    ),
     advance_amount: String(advance),
     narration: detail.narration || "",
     remarks: detail.remarks || "",
@@ -457,20 +506,13 @@ export function computeAdjustmentTotals(form: ReceiptFormState) {
 export function computeReceiptPreview(form: ReceiptFormState) {
   const { totalAllocated, totalTds, totalDiscount } = computeAllocationTotals(form);
   const adj = computeAdjustmentTotals(form);
+  // Form field is full UI gross (party + ledger). API payload uses party only.
   const grossInput = toMoneyNumber(form.gross_party_amount);
-
-  /** Simplified Ledger Entries (OTHER / round-off) — part of gross, not an add-on. */
-  let ledgerEntriesTotal = 0;
-  for (const row of form.adjustments) {
-    if (row.adjustment_type !== "OTHER" && row.adjustment_type !== "ROUND_OFF") continue;
-    const amt = toMoneyNumber(row.amount);
-    if (amt <= 0) continue;
-    ledgerEntriesTotal += amt;
-  }
-  ledgerEntriesTotal = roundMoney(ledgerEntriesTotal);
+  const ledgerEntriesTotal = sumReceiptLedgerEntriesAmount(form.adjustments);
 
   let displayGross = grossInput;
   let advance = 0;
+  /** Party portion saved as API `gross_party_amount` (= allocated + advance). */
   let payloadGross = 0;
 
   if (form.party_kind === "CUSTOMER") {
@@ -478,12 +520,18 @@ export function computeReceiptPreview(form: ReceiptFormState) {
       displayGross = grossInput;
       advance = roundMoney(Math.max(0, displayGross - ledgerEntriesTotal));
       payloadGross = advance;
-    } else if (grossInput > 0) {
+    } else if (form.receipt_treatment === "mixed_allocation") {
+      // Remaining allocatable party amount after invoice settlement → Customer Advance.
       displayGross = grossInput;
       advance = roundMoney(
         Math.max(0, displayGross - totalAllocated - ledgerEntriesTotal),
       );
       payloadGross = roundMoney(totalAllocated + advance);
+    } else if (grossInput > 0) {
+      // Against Outstanding: no silent residual advance — allocations must cover gross.
+      displayGross = grossInput;
+      advance = 0;
+      payloadGross = roundMoney(totalAllocated);
     } else {
       displayGross = totalAllocated;
       advance = 0;
@@ -504,6 +552,12 @@ export function computeReceiptPreview(form: ReceiptFormState) {
 
   // OTHER CREDIT adds bank so net receipt equals display gross when ledger is within gross.
   const netBank = roundMoney(payloadGross - adj.debit + adj.credit);
+  const unallocated = roundMoney(
+    Math.max(
+      0,
+      displayGross - totalAllocated - advance - ledgerEntriesTotal,
+    ),
+  );
 
   return {
     gross: roundMoney(displayGross),
@@ -516,6 +570,7 @@ export function computeReceiptPreview(form: ReceiptFormState) {
     adjCredit: adj.credit,
     ledgerEntriesTotal,
     netBank,
+    unallocated,
   };
 }
 
@@ -636,7 +691,8 @@ export function validateReceiptForm(form: ReceiptFormState): string | null {
     preview.ledgerEntriesTotal > 0.004 &&
     toMoneyNumber(form.gross_party_amount) <= 0 &&
     form.party_kind === "CUSTOMER" &&
-    form.receipt_treatment === "against_outstanding" &&
+    (form.receipt_treatment === "against_outstanding" ||
+      form.receipt_treatment === "mixed_allocation") &&
     preview.totalAllocated <= 0
   ) {
     return "Enter Gross Amount when using Ledger Entries without invoice settlement.";
@@ -669,12 +725,35 @@ export function validateReceiptForm(form: ReceiptFormState): string | null {
 
   if (form.party_kind === "CUSTOMER") {
     if (form.receipt_treatment === "against_outstanding") {
-      if (preview.totalAllocated <= 0 && preview.advance <= 0) {
-        return "Allocate at least one outstanding item or enter a gross amount that creates advance.";
+      if (preview.totalAllocated <= 0) {
+        return "Select and allocate at least one outstanding invoice.";
       }
       const grossInput = toMoneyNumber(form.gross_party_amount);
-      if (grossInput > 0 && preview.totalAllocated + preview.ledgerEntriesTotal > grossInput + 0.01) {
+      if (grossInput > 0 && preview.unallocated > 0.01) {
+        return "Against Outstanding requires invoice settlement to equal Gross Amount (no residual On Account). Use Mixed Allocation to leave a remainder as Advance.";
+      }
+      if (
+        grossInput > 0 &&
+        preview.totalAllocated + preview.ledgerEntriesTotal > grossInput + 0.01
+      ) {
         return "Settlement + Ledger Entries cannot exceed Gross Settlement Amount. Increase gross or reduce amounts.";
+      }
+      for (const row of selectedAllocations(form)) {
+        const alloc = toMoneyNumber(row.allocated_amount);
+        if (alloc <= 0) return "Allocation amount must be greater than zero.";
+        if (alloc > row.outstanding_amount + 0.0001) {
+          return `Allocation for ${row.document_number} exceeds outstanding.`;
+        }
+      }
+    } else if (form.receipt_treatment === "mixed_allocation") {
+      if (preview.gross <= 0) {
+        return "Gross Amount is required for Mixed Allocation.";
+      }
+      if (preview.totalAllocated <= 0) {
+        return "Mixed Allocation requires at least one invoice settlement (or switch to Advance / On Account).";
+      }
+      if (preview.totalAllocated >= preview.gross - preview.ledgerEntriesTotal - 0.01) {
+        return "Mixed Allocation needs a remaining Advance amount. Reduce invoice settlement or switch to Against Outstanding.";
       }
       for (const row of selectedAllocations(form)) {
         const alloc = toMoneyNumber(row.allocated_amount);
@@ -821,9 +900,11 @@ export function buildCreatePayload(form: ReceiptFormState): CreateReceiptVoucher
     instrument_date:
       form.transaction_mode === "CHEQUE" ? form.cheque_date || null : form.transaction_date || null,
     transaction_date: form.transaction_date || null,
+    // API gross_party_amount is party-only (allocated + advance). Form Gross =
+    // party + ledger; ledger lines are sent separately in adjustments.
+    // Mixed = allocations.length > 0 AND advance_amount > 0 — no MIXED enum sent.
     gross_party_amount: preview.payloadGross,
-    advance_amount:
-      form.party_kind === "CUSTOMER" ? preview.advance : 0,
+    advance_amount: form.party_kind === "CUSTOMER" ? preview.advance : 0,
     narration: form.narration.trim() || null,
     remarks: form.remarks.trim() || null,
     allocations,

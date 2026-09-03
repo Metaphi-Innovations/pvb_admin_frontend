@@ -31,6 +31,7 @@ import {
 import { useReportDateRange } from "@/components/accounts/ReportFilters";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
+import { formatDisplayDate, toIsoDateOnly } from "@/lib/accounts/date-display";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { useClientMounted } from "@/lib/use-client-mounted";
 import type { StatusKey } from "@/lib/tokens";
@@ -116,9 +117,7 @@ function toNum(value: unknown, fallback = 0): number {
 }
 
 function toDate(value: unknown): string {
-  if (!value) return "";
-  const s = String(value);
-  return /^\d{4}-\d{2}-\d{2}/.test(s) ? s.slice(0, 10) : s;
+  return toIsoDateOnly(value);
 }
 
 function mapCreditNoteListRow(raw: CreditNoteListApiRow): CreditNoteListRow {
@@ -264,7 +263,7 @@ async function exportCreditNoteListRows(rows: CreditNoteListRow[]): Promise<void
       Source: sourceLabel(r.source_type),
       Customer: r.customerName,
       Warehouse: r.warehouse,
-      Date: r.creditNoteDate,
+      Date: formatDisplayDate(r.creditNoteDate),
       "Taxable Value": r.taxableValue,
       CGST: r.cgstAmount,
       SGST: r.sgstAmount,
@@ -330,7 +329,7 @@ function CreditNotesRecordsTable({
             <SortTh label="CGST" colKey="cgstAmount" filterType="amount" align="right" />
             <SortTh label="SGST" colKey="sgstAmount" filterType="amount" align="right" />
             <SortTh label="IGST" colKey="igstAmount" filterType="amount" align="right" />
-            <SortTh label="Total" colKey="currentCreditAmount" filterType="amount" align="right" />
+            <SortTh label="Total" colKey="currentCreditAmount" filterType="amount" align="right" className="min-w-[6.5rem]" />
             <SortTh
               label="Status"
               colKey="status"
@@ -380,7 +379,7 @@ function CreditNotesRecordsTable({
                   </AccountsTableCell>
                   <AccountsTableCell className="truncate text-xs">{r.warehouse || "—"}</AccountsTableCell>
                   <AccountsTableCell className="tabular-nums text-xs whitespace-nowrap">
-                    {r.creditNoteDate || "—"}
+                    {formatDisplayDate(r.creditNoteDate)}
                   </AccountsTableCell>
                   <AccountsTableCell align="right" money className="text-xs">
                     {formatINR(r.taxableValue)}

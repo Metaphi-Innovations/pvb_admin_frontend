@@ -11,6 +11,7 @@ import { resolveAutoPartyFromLedger } from "@/lib/accounts/voucher-ledger-groups
 import { getCustomerById, getVendorById } from "@/lib/accounts/transaction-master-fetch";
 import type { ChartOfAccount } from "@/app/(app)/accounts/data";
 import { cn } from "@/lib/utils";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 import { ExternalLink } from "lucide-react";
 
 export interface VoucherDocAllocation {
@@ -33,9 +34,7 @@ interface VoucherDocumentAllocationPanelProps {
 }
 
 function formatDocDate(value: string): string {
-  const [y, m, d] = value.slice(0, 10).split("-");
-  if (!y || !m || !d) return value;
-  return `${d}-${m}-${y}`;
+  return formatDisplayDate(value);
 }
 
 export function VoucherDocumentAllocationPanel({

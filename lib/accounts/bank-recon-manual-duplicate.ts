@@ -3,6 +3,7 @@
  */
 
 import type { BankReconTransactionRecord } from "@/lib/accounts/bank-recon-register";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 import type { DuplicateCheckResult } from "@/lib/accounts/bank-recon-manual-types";
 import { normalizeReferenceForCompare } from "@/lib/accounts/bank-recon-manual-types";
 
@@ -58,7 +59,7 @@ function summarizeExisting(t: BankReconTransactionRecord): string {
   const dir = t.deposit > 0 ? "Deposit" : "Withdrawal";
   const ref = t.reference || t.utrNumber || t.chequeNo || "No reference";
   const num = t.manualTransactionNumber ?? t.id;
-  return `${num} · ${ref} · ${dir} ₹${amt.toLocaleString("en-IN")} · ${t.bookDate ?? t.statementDate}`;
+  return `${num} · ${ref} · ${dir} ₹${amt.toLocaleString("en-IN")} · ${formatDisplayDate(t.bookDate ?? t.statementDate)}`;
 }
 
 export function checkManualDuplicate(input: {

@@ -46,6 +46,7 @@ import {
   AccountsTableScroll,
 } from "@/components/accounts/AccountsTable";
 import { formatMoney } from "@/lib/accounts/money-format";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 import { cn } from "@/lib/utils";
 import {
   getBankReconAccounts,
@@ -253,10 +254,10 @@ function AccountSummaryPanel({
         <SummaryField label="Bank Name" value={account.bankName} />
         <SummaryField label="Account Type" value={account.accountType} />
         <SummaryField label="Book Balance" value={formatMoney(account.bookBalance)} emphasize />
-        <SummaryField label="Last Reconciled" value={account.lastReconciledDate ?? "—"} />
+        <SummaryField label="Last Reconciled" value={formatDisplayDate(account.lastReconciledDate)} />
         <SummaryField
           label="Last Imported Until"
-          value={accountMeta?.lastStatementImportedUntil ?? account.lastStatementImportedUntil ?? "—"}
+          value={formatDisplayDate(accountMeta?.lastStatementImportedUntil ?? account.lastStatementImportedUntil)}
         />
         <SummaryField label="Last Import File" value={accountMeta?.lastImportFileName ?? "—"} />
       </div>
@@ -861,8 +862,8 @@ export default function BankStatementUploadPageClient() {
                         {previewRows.map((row) => (
                           <AccountsTableRow key={row.rowNumber}>
                             <AccountsTableCell mono>{row.rowNumber}</AccountsTableCell>
-                            <AccountsTableCell>{row.statementDate || "—"}</AccountsTableCell>
-                            <AccountsTableCell>{row.valueDate || "—"}</AccountsTableCell>
+                            <AccountsTableCell>{formatDisplayDate(row.statementDate)}</AccountsTableCell>
+                            <AccountsTableCell>{formatDisplayDate(row.valueDate)}</AccountsTableCell>
                             <AccountsTableCell mono>{row.reference || "—"}</AccountsTableCell>
                             <AccountsTableCell wrap><span className="line-clamp-1 text-[11px]">{row.narration}</span></AccountsTableCell>
                             <AccountsTableCell align="right" money>{row.deposit ? formatMoney(row.deposit) : "—"}</AccountsTableCell>

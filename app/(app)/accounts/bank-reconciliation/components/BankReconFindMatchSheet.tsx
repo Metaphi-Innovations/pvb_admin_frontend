@@ -14,6 +14,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { formatMoney, formatMoneyOrDash } from "@/lib/accounts/money-format";
+import { formatDisplayDate, formatDisplayDateRange, formatDisplayDateTime } from "@/lib/accounts/date-display";
 import { cn } from "@/lib/utils";
 import { acceptMatch, findAlternativeMatches } from "@/lib/accounts/bank-recon-match-service";
 import { getBankReconTransactionById } from "@/lib/accounts/bank-recon-register";
@@ -127,7 +128,7 @@ export function BankReconFindMatchSheet({
                         selectedId === c.id && "bg-brand-50/60",
                       )}
                     >
-                      <td className="px-2 py-2">{c.bookTarget.bookDate}</td>
+                      <td className="px-2 py-2">{formatDisplayDate(c.bookTarget.bookDate)}</td>
                       <td className="px-2 py-2 font-mono text-brand-700">{c.bookTarget.voucherNo}</td>
                       <td className="px-2 py-2">{c.bookTarget.partyLedger}</td>
                       <td className="px-2 py-2">{c.bookTarget.reference || c.bookTarget.chequeNo || "—"}</td>

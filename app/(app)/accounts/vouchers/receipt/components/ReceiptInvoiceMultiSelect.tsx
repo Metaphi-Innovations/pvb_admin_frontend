@@ -6,6 +6,7 @@ import { INVOICE_DETAIL_SELECT_CLASS } from "@/app/(app)/accounts/invoices/compo
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { formatMoney } from "@/lib/accounts/money-format";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 import { cn } from "@/lib/utils";
 import type { ReceiptUiAllocation } from "../receipt-voucher-utils";
 
@@ -169,7 +170,7 @@ export function ReceiptInvoiceMultiSelect({
                       </span>
                       <span className="block text-[11px] text-muted-foreground truncate">
                         {[
-                          row.document_date || null,
+                          formatDisplayDate(row.document_date) || null,
                           `Outstanding ${formatMoney(row.outstanding_amount)}`,
                         ]
                           .filter(Boolean)

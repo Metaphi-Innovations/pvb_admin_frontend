@@ -59,6 +59,7 @@ import type {
 import { collectColumnValueCounts } from "@/lib/accounts/column-filter-engine";
 import { JournalVoucherService } from "@/services/journal-voucher.service";
 import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
+import { formatDisplayDate, toIsoDateOnly } from "@/lib/accounts/date-display";
 import {
   JOURNAL_STATUS_LABELS,
   type JournalVoucherListItem,
@@ -288,7 +289,7 @@ function JournalListTable({
                   </Link>
                 </AccountsTableCell>
                 <AccountsTableCell className="tabular-nums text-xs">
-                  {String(row.voucher_date).slice(0, 10)}
+                  {formatDisplayDate(row.voucher_date)}
                 </AccountsTableCell>
                 <AccountsTableCell className="text-xs max-w-[180px] truncate">
                   {ledgerDisplayName({
@@ -508,7 +509,7 @@ export function JournalVoucherListClient() {
       case "sr_no":
         return formatSrNo(row.sr_no);
       case "voucher_date":
-        return String(row.voucher_date).slice(0, 10);
+        return toIsoDateOnly(row.voucher_date);
       case "debit_ledger":
         return ledgerDisplayName({
           ledger: row.debit_ledger,

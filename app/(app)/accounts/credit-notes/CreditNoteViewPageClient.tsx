@@ -32,6 +32,7 @@ import {
 } from "./credit-note-list-api";
 import { SOURCE_TYPE_LABELS, STATUS_LABELS, statusChipClass } from "./credit-note-form-utils";
 import { formatMoney } from "@/lib/accounts/money-format";
+import { formatDisplayDate, toIsoDateOnly } from "@/lib/accounts/date-display";
 import "./credit-note-tx.css";
 import "@/components/accounts/voucher-form/note-form-compact.css";
 import "@/components/accounts/voucher-form/transaction-view.css";
@@ -44,9 +45,7 @@ function toNum(value: unknown, fallback = 0): number {
 }
 
 function toDate(value: unknown): string {
-  if (!value) return "";
-  const s = String(value);
-  return /^\d{4}-\d{2}-\d{2}/.test(s) ? s.slice(0, 10) : s;
+  return toIsoDateOnly(value);
 }
 
 function isUuid(value: string): boolean {
@@ -310,7 +309,7 @@ export default function CreditNoteViewPageClient({ creditNoteId }: { creditNoteI
                   <VoucherNoteReadOnly mono>{cnNo}</VoucherNoteReadOnly>
                 </VoucherNoteField>
                 <VoucherNoteField label="Credit Note Date">
-                  <VoucherNoteReadOnly>{toDate(record.cn_date) || "—"}</VoucherNoteReadOnly>
+                  <VoucherNoteReadOnly>{formatDisplayDate(record.cn_date)}</VoucherNoteReadOnly>
                 </VoucherNoteField>
                 <VoucherNoteField label="Warehouse">
                   <VoucherNoteReadOnly>

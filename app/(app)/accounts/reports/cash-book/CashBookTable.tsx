@@ -306,7 +306,7 @@ function CashBookTableRow({ row }: { row: CashBookDisplayRow }) {
 
   return (
     <AccountsTableRow className={cn(isOpening && "bg-muted/20 font-medium")}>
-      <AccountsTableCell className="whitespace-nowrap py-2">{row.date}</AccountsTableCell>
+      <AccountsTableCell className="whitespace-nowrap py-2">{formatCashBookDate(row.date)}</AccountsTableCell>
       <AccountsTableCell className="whitespace-nowrap py-2">{row.voucherType}</AccountsTableCell>
       <AccountsTableCell className="whitespace-nowrap py-2">
         {row.voucherNo === "—" ? (

@@ -13,14 +13,8 @@ import { SalesInvoiceDispatchSelect } from "./SalesInvoiceDispatchSelect";
 import { SalesInvoiceDispatchDetailsDialog } from "./SalesInvoiceDispatchDetailsDialog";
 import type { PendingDispatchInvoiceRow } from "@/lib/accounts/dispatch-invoice-bridge";
 import { AccountsDateInput } from "@/components/accounts/AccountsDateInput";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 import { cn } from "@/lib/utils";
-
-function formatDisplayDate(iso: string): string {
-  if (!iso) return "—";
-  const [y, m, d] = iso.split("-");
-  if (!y || !m || !d) return iso;
-  return `${d}/${m}/${y}`;
-}
 
 export interface SalesInvoiceDocumentInfoSectionProps {
   isEdit: boolean;

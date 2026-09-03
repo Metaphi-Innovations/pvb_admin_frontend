@@ -18,6 +18,7 @@ import {
 } from "@/lib/accounts/bank-recon-manual-types";
 import type { UnpaidInvoiceOption } from "@/app/(app)/accounts/bank-reconciliation/bank-reconciliation-data";
 import { buildAllocationSummary } from "@/app/(app)/accounts/bank-reconciliation/components/InvoiceAllocationPanel";
+import { formatDisplayDate, formatDisplayDateTime } from "@/lib/accounts/date-display";
 import {
   createTransactionId,
   getBankReconTransactionById,
@@ -35,7 +36,7 @@ function nowIso(): string {
 }
 
 function nowDisplay(): string {
-  return new Date().toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" });
+  return formatDisplayDateTime(new Date());
 }
 
 function activity(
