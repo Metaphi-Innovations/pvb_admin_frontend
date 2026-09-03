@@ -105,6 +105,8 @@ export interface TaxInvoiceViewModel {
   lines: TaxInvoiceLineItem[];
   hsnSummary: TaxInvoiceHsnSummaryRow[];
   bank: typeof DEFAULT_BANK;
+  /** From sales_invoice.narration, fallback remarks. Empty when absent. */
+  narration: string;
   terms: string;
   summary: {
     grossAmount: number;
@@ -520,6 +522,14 @@ export function mapDispatchToTaxInvoice(
     lines,
     hsnSummary: Array.from(hsnMap.values()),
     bank: { ...DEFAULT_BANK },
+    narration: (() => {
+      const inv = readRecord(dispatch?.sales_invoice);
+      const fromNarration = String(inv.narration ?? "").trim();
+      if (fromNarration) return fromNarration;
+      return String(
+        inv.remarks ?? dispatch?.remarks ?? dispatch?.narration ?? "",
+      ).trim();
+    })(),
     terms: DEFAULT_TI_DECLARATION,
     summary: {
       grossAmount,
@@ -930,14 +940,23 @@ export function buildTaxInvoiceHtml(
 
         <div class="ti-panel">
           <div class="ti-panel-h">Bank Details</div>
-          <div class="ti-panel-b ti-bank-grid">
-            <div class="ti-kv"><div class="k">Account Name</div><div class="v">${escapeHtml(data.bank.accountName)}</div></div>
-            <div class="ti-kv"><div class="k">Bank Name</div><div class="v">${escapeHtml(data.bank.bankName)}</div></div>
-            <div class="ti-kv"><div class="k">A/C No.</div><div class="v">${escapeHtml(data.bank.accountNo)}</div></div>
-            <div class="ti-kv"><div class="k">IFSC</div><div class="v">${escapeHtml(data.bank.ifsc)}</div></div>
-            <div class="ti-kv span-2"><div class="k">Branch</div><div class="v">${escapeHtml(data.bank.branch)}</div></div>
+          <div class="ti-panel-b ti-bank-body ti-bank-grid">
+            <div class="ti-kv ti-kv-inline"><span class="k">Account Name</span><span class="v">${escapeHtml(data.bank.accountName)}</span></div>
+            <div class="ti-kv ti-kv-inline"><span class="k">Bank Name</span><span class="v">${escapeHtml(data.bank.bankName)}</span></div>
+            <div class="ti-kv ti-kv-inline"><span class="k">A/C No.</span><span class="v">${escapeHtml(data.bank.accountNo)}</span></div>
+            <div class="ti-kv ti-kv-inline"><span class="k">IFSC</span><span class="v">${escapeHtml(data.bank.ifsc)}</span></div>
+            <div class="ti-kv ti-kv-inline span-2"><span class="k">Branch</span><span class="v">${escapeHtml(data.bank.branch)}</span></div>
           </div>
         </div>
+
+        ${(() => {
+          const narrationText = asText(data.narration, "").trim();
+          if (!narrationText) return "";
+          return `<div class="ti-panel">
+          <div class="ti-panel-h">Narration</div>
+          <div class="ti-panel-b ti-narration-body">${escapeHtml(narrationText).replace(/\r\n|\r|\n/g, "<br/>")}</div>
+        </div>`;
+        })()}
 
         <div class="ti-panel">
           <div class="ti-panel-h">Terms &amp; Declaration</div>
@@ -1299,10 +1318,21 @@ export function buildTaxInvoiceHtml(
         border-bottom: 1px solid var(--ti-border);
       }
       .ti-panel-b { padding: 6px 8px; }
+      .ti-panel-b.ti-bank-body { padding: 4px 7px; }
+      .ti-panel-b.ti-narration-body {
+        padding: 4px 7px;
+        font-size: 6.8px;
+        line-height: 1.4;
+        color: #262626;
+        font-weight: 400;
+        white-space: pre-wrap;
+        word-break: break-word;
+        overflow-wrap: anywhere;
+      }
       .ti-bank-grid {
         display: grid;
         grid-template-columns: 1fr 1fr;
-        gap: 6px 14px;
+        gap: 2px 12px;
       }
       .ti-bank-grid .span-2 { grid-column: 1 / -1; }
       .ti-kv .k {
@@ -1317,6 +1347,24 @@ export function buildTaxInvoiceHtml(
         font-weight: 700;
         margin-top: 1px;
         color: var(--ti-text);
+        word-break: break-word;
+      }
+      .ti-bank-grid .ti-kv-inline {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 0 4px;
+        min-width: 0;
+      }
+      .ti-bank-grid .ti-kv-inline .k {
+        margin: 0;
+        flex-shrink: 0;
+      }
+      .ti-bank-grid .ti-kv-inline .k::after { content: ":"; }
+      .ti-bank-grid .ti-kv-inline .v {
+        margin-top: 0;
+        font-size: 7px;
+        min-width: 0;
       }
       .ti-terms {
         font-size: 6.6px;

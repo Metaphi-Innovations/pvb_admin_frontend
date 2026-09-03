@@ -1057,13 +1057,16 @@ div:has(> .accounts-module-shell):has(.invoice-form-shell) {
 .sales-order-invoice-form-compact .so-invoice-details-grid .cnz-gst-toggle {
   width: 100%;
   max-width: 100%;
-  height: var(--so-ctrl-h, 32px);
+  height: auto;
   min-height: var(--so-ctrl-h, 32px);
 }
 
 .sales-order-invoice-form-compact .cnz-gst-toggle button {
-  font-size: 11px !important;
+  font-size: 10px !important;
   font-weight: 600 !important;
+  line-height: 1.15 !important;
+  white-space: nowrap;
+  padding: 0 0.35rem !important;
 }
 
 /* Credit Note — GST switch in particulars table (preserve pill shape) */

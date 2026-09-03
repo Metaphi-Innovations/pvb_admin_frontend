@@ -51,9 +51,11 @@ import {
   PAYMENT_STATUS_LABELS,
   type PaymentBankTransactionMode,
   type PaymentPartyKind,
+  type PaymentTreatmentUi,
   type PaymentVoucherDetail,
   type PaymentVoucherStatus,
 } from "@/types/payment-voucher.types";
+import { formatMoney } from "@/lib/accounts/money-format";
 import { VoucherLedgerSelect } from "@/components/accounts/voucher-form/VoucherLedgerSelect";
 import { PaymentSearchableSelect } from "./components/PaymentSearchableSelect";
 import { PaymentFormActionBar } from "./components/PaymentFormActionBar";
@@ -148,14 +150,22 @@ export function PaymentVoucherApiForm({
   const preview = useMemo(() => computePaymentPreview(form), [form]);
   /** Ledger Entries total (additive with settlement toward composed gross / payment). */
   const adjustmentsTotal = preview.ledgerEntriesTotal;
+  const isSupplierMixed =
+    form.party_kind === "SUPPLIER" &&
+    form.payment_treatment === "mixed_allocation";
   const showSupplierInvoiceSettlement =
     form.party_kind === "SUPPLIER" &&
-    form.payment_treatment === "against_outstanding";
+    (form.payment_treatment === "against_outstanding" ||
+      form.payment_treatment === "mixed_allocation");
   const showInvoiceSettlementInSummary =
     showSupplierInvoiceSettlement ||
+    preview.totalAllocated > 0.004 ||
     (form.party_kind === "CUSTOMER_REFUND" && preview.totalAllocated > 0.004);
   const showAdvanceInSummary =
-    form.party_kind === "SUPPLIER" && preview.advance > 0.004;
+    form.party_kind === "SUPPLIER" &&
+    (form.payment_treatment === "advance_on_account" ||
+      form.payment_treatment === "mixed_allocation" ||
+      preview.advance > 0.004);
   /** Settlement + ledger entries must equal gross; payment amount equals gross (less TDS/discount). */
   const summaryBalanced =
     form.party_kind === "OTHER_LEDGER"
@@ -171,6 +181,42 @@ export function PaymentVoucherApiForm({
   const patch = useCallback((p: Partial<PaymentFormState>) => {
     setForm((prev) => ({ ...prev, ...p }));
   }, []);
+
+  const clearAllocationSelections = useCallback(
+    (allocations: PaymentFormState["allocations"]) =>
+      allocations.map((a) => ({
+        ...a,
+        selected: false,
+        allocated_amount: "",
+        tds_amount: "0",
+        tds_section_id: "",
+        discount_amount: "0",
+      })),
+    [],
+  );
+
+  const applyPaymentTreatment = useCallback(
+    (next: PaymentTreatmentUi) => {
+      setForm((prev) => {
+        if (prev.payment_treatment === next) return prev;
+        if (next === "advance_on_account") {
+          return {
+            ...prev,
+            payment_treatment: next,
+            allocations: clearAllocationSelections(prev.allocations),
+            advance_amount: "0",
+          };
+        }
+        // against_outstanding / mixed_allocation: keep invoice rows; advance
+        // is derived by computePaymentPreview (0 vs remaining).
+        return {
+          ...prev,
+          payment_treatment: next,
+        };
+      });
+    },
+    [clearAllocationSelections],
+  );
 
   const hydrateFromDetail = useCallback((d: PaymentVoucherDetail) => {
     setForm((prev) => {
@@ -378,7 +424,10 @@ export function PaymentVoucherApiForm({
   useEffect(() => {
     if (!fieldsEditable) return;
     if (form.party_kind === "SUPPLIER" && form.supplier_id) {
-      if (form.payment_treatment === "against_outstanding") {
+      if (
+        form.payment_treatment === "against_outstanding" ||
+        form.payment_treatment === "mixed_allocation"
+      ) {
         void loadSupplierOutstanding(form.supplier_id);
       }
     }
@@ -1063,44 +1112,39 @@ export function PaymentVoucherApiForm({
             </InvoiceDetailField>
 
             {form.party_kind === "SUPPLIER" ? (
-              <InvoiceDetailField label="Payment Treatment">
-                <div className="cnz-gst-toggle w-full" role="group" aria-label="Payment treatment">
-                  <button
-                    type="button"
-                    data-active={form.payment_treatment === "advance_on_account"}
-                    aria-pressed={form.payment_treatment === "advance_on_account"}
-                    disabled={!fieldsEditable}
-                    onClick={() =>
-                      patch({
-                        payment_treatment: "advance_on_account",
-                        allocations: form.allocations.map((a) => ({
-                          ...a,
-                          selected: false,
-                          allocated_amount: "",
-                          tds_amount: "0",
-                          tds_section_id: "",
-                          discount_amount: "0",
-                        })),
-                      })
-                    }
-                  >
-                    Advance / On Account
-                  </button>
-                  <button
-                    type="button"
-                    data-active={form.payment_treatment === "against_outstanding"}
-                    aria-pressed={form.payment_treatment === "against_outstanding"}
-                    disabled={!fieldsEditable}
-                    onClick={() =>
-                      patch({
-                        payment_treatment: "against_outstanding",
-                      })
-                    }
-                  >
-                    Against Outstanding
-                  </button>
-                </div>
-              </InvoiceDetailField>
+              <div className="min-w-0 sm:col-span-2 lg:col-span-2">
+                <InvoiceDetailField label="Payment Treatment">
+                  <div className="cnz-gst-toggle w-full" role="group" aria-label="Payment treatment">
+                    <button
+                      type="button"
+                      data-active={form.payment_treatment === "advance_on_account"}
+                      aria-pressed={form.payment_treatment === "advance_on_account"}
+                      disabled={!fieldsEditable}
+                      onClick={() => applyPaymentTreatment("advance_on_account")}
+                    >
+                      Advance / On Account
+                    </button>
+                    <button
+                      type="button"
+                      data-active={form.payment_treatment === "against_outstanding"}
+                      aria-pressed={form.payment_treatment === "against_outstanding"}
+                      disabled={!fieldsEditable}
+                      onClick={() => applyPaymentTreatment("against_outstanding")}
+                    >
+                      Against Outstanding
+                    </button>
+                    <button
+                      type="button"
+                      data-active={form.payment_treatment === "mixed_allocation"}
+                      aria-pressed={form.payment_treatment === "mixed_allocation"}
+                      disabled={!fieldsEditable}
+                      onClick={() => applyPaymentTreatment("mixed_allocation")}
+                    >
+                      Mixed Allocation
+                    </button>
+                  </div>
+                </InvoiceDetailField>
+              </div>
             ) : null}
           </div>
 
@@ -1203,36 +1247,77 @@ export function PaymentVoucherApiForm({
               ) : null
             }
           >
-            <PaymentAllocationTable
-              rows={form.allocations}
-              readOnly={!fieldsEditable}
-              simplifiedSettlement
-              emptyMessage={
-                form.supplier_id
-                  ? "No outstanding open items for this supplier."
-                  : "Select a supplier to load outstanding items."
-              }
-              onToggle={(id, selected) => {
-                setForm((prev) => ({
-                  ...prev,
-                  allocations: prev.allocations.map((a) =>
-                    a.open_item_id === id
-                      ? {
-                          ...a,
-                          selected,
-                          allocated_amount: selected
-                            ? a.allocated_amount || String(a.outstanding_amount)
-                            : "",
-                          tds_amount: selected ? a.tds_amount : "0",
-                          tds_section_id: selected ? a.tds_section_id : "",
-                          discount_amount: selected ? a.discount_amount : "0",
-                        }
-                      : a,
-                  ),
-                }));
-              }}
-              onChangeAmount={applyAllocationPatch}
-            />
+            <div className="space-y-3">
+              <PaymentAllocationTable
+                rows={form.allocations}
+                readOnly={!fieldsEditable}
+                simplifiedSettlement
+                emptyMessage={
+                  form.supplier_id
+                    ? "No outstanding open items for this supplier."
+                    : "Select a supplier to load outstanding items."
+                }
+                onToggle={(id, selected) => {
+                  setForm((prev) => ({
+                    ...prev,
+                    allocations: prev.allocations.map((a) =>
+                      a.open_item_id === id
+                        ? {
+                            ...a,
+                            selected,
+                            allocated_amount: selected
+                              ? a.allocated_amount || String(a.outstanding_amount)
+                              : "",
+                            tds_amount: selected ? a.tds_amount : "0",
+                            tds_section_id: selected ? a.tds_section_id : "",
+                            discount_amount: selected ? a.discount_amount : "0",
+                          }
+                        : a,
+                    ),
+                  }));
+                }}
+                onChangeAmount={applyAllocationPatch}
+              />
+              <div className="rounded-lg border border-border/70 bg-muted/20 px-3 py-2 space-y-1">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                  Allocation Summary
+                </p>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-xs tabular-nums">
+                  <span className="text-muted-foreground">Gross / Allocatable Amount</span>
+                  <span className="text-right font-medium text-foreground">
+                    {formatMoney(preview.gross)}
+                  </span>
+                  <span className="text-muted-foreground">Invoice Settlement</span>
+                  <span className="text-right font-medium text-foreground">
+                    {formatMoney(preview.totalAllocated)}
+                  </span>
+                  <span className="text-muted-foreground">Supplier Advance / On Account</span>
+                  <span className="text-right font-medium text-foreground">
+                    {formatMoney(preview.advance)}
+                  </span>
+                  <span className="text-muted-foreground">Unallocated</span>
+                  <span
+                    className={cn(
+                      "text-right font-semibold",
+                      preview.unallocated > 0.004
+                        ? "text-amber-700"
+                        : "text-foreground",
+                    )}
+                  >
+                    {formatMoney(preview.unallocated)}
+                  </span>
+                </div>
+                {isSupplierMixed ? (
+                  <p className="text-[11px] text-muted-foreground pt-0.5">
+                    Remaining Amount {formatMoney(preview.advance)} treated as{" "}
+                    <span className="font-medium text-foreground">
+                      Supplier Advance / On Account
+                    </span>
+                    .
+                  </p>
+                ) : null}
+              </div>
+            </div>
           </VoucherFormSectionCard>
         ) : null}
 

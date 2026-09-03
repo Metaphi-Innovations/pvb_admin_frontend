@@ -48,9 +48,11 @@ import {
   RECEIPT_STATUS_LABELS,
   type BankTransactionMode,
   type ReceiptPartyKind,
+  type ReceiptTreatmentUi,
   type ReceiptVoucherDetail,
   type ReceiptVoucherStatus,
 } from "@/types/receipt-voucher.types";
+import { formatMoney } from "@/lib/accounts/money-format";
 import { VoucherLedgerSelect } from "@/components/accounts/voucher-form/VoucherLedgerSelect";
 import { ReceiptSearchableSelect } from "./components/ReceiptSearchableSelect";
 import { ReceiptFormActionBar } from "./components/ReceiptFormActionBar";
@@ -150,12 +152,19 @@ export function ReceiptVoucherApiForm({
   const isCustomerAdvance =
     form.party_kind === "CUSTOMER" &&
     form.receipt_treatment === "advance_on_account";
+  const isCustomerMixed =
+    form.party_kind === "CUSTOMER" &&
+    form.receipt_treatment === "mixed_allocation";
   const showInvoiceSettlement =
     (form.party_kind === "CUSTOMER" &&
-      form.receipt_treatment === "against_outstanding") ||
+      (form.receipt_treatment === "against_outstanding" ||
+        form.receipt_treatment === "mixed_allocation")) ||
     form.party_kind === "SUPPLIER_REFUND";
   const showOnAccountInSummary =
-    form.party_kind === "CUSTOMER" && preview.advance > 0.004;
+    form.party_kind === "CUSTOMER" &&
+    (form.receipt_treatment === "advance_on_account" ||
+      form.receipt_treatment === "mixed_allocation" ||
+      preview.advance > 0.004);
   /** Settlement + ledger entries must equal gross; receipt amount equals gross (less TDS/discount). */
   const summaryBalanced =
     form.party_kind === "OTHER_LEDGER"
@@ -200,6 +209,42 @@ export function ReceiptVoucherApiForm({
   const patch = useCallback((p: Partial<ReceiptFormState>) => {
     setForm((prev) => ({ ...prev, ...p }));
   }, []);
+
+  const clearAllocationSelections = useCallback(
+    (allocations: ReceiptUiAllocation[]): ReceiptUiAllocation[] =>
+      allocations.map((a) => ({
+        ...a,
+        selected: false,
+        allocated_amount: "",
+        tds_amount: "",
+        tds_section_id: "",
+        discount_amount: "",
+      })),
+    [],
+  );
+
+  const applyReceiptTreatment = useCallback(
+    (next: ReceiptTreatmentUi) => {
+      setForm((prev) => {
+        if (prev.receipt_treatment === next) return prev;
+        if (next === "advance_on_account") {
+          return {
+            ...prev,
+            receipt_treatment: next,
+            allocations: clearAllocationSelections(prev.allocations),
+            advance_amount: "0",
+          };
+        }
+        // against_outstanding / mixed_allocation: keep invoice rows; advance
+        // is derived by computeReceiptPreview (0 vs remaining).
+        return {
+          ...prev,
+          receipt_treatment: next,
+        };
+      });
+    },
+    [clearAllocationSelections],
+  );
 
   const handleInvoiceSelection = useCallback((ids: string[]) => {
     const idSet = new Set(ids);
@@ -440,7 +485,10 @@ export function ReceiptVoucherApiForm({
   useEffect(() => {
     if (!fieldsEditable) return;
     if (form.party_kind === "CUSTOMER" && form.customer_id) {
-      if (form.receipt_treatment === "against_outstanding") {
+      if (
+        form.receipt_treatment === "against_outstanding" ||
+        form.receipt_treatment === "mixed_allocation"
+      ) {
         void loadCustomerOutstanding(form.customer_id);
       }
     }
@@ -1121,44 +1169,39 @@ export function ReceiptVoucherApiForm({
             </InvoiceDetailField>
 
             {form.party_kind === "CUSTOMER" ? (
-              <InvoiceDetailField label="Receipt Treatment">
-                <div className="cnz-gst-toggle w-full" role="group" aria-label="Receipt treatment">
-                  <button
-                    type="button"
-                    data-active={form.receipt_treatment === "advance_on_account"}
-                    aria-pressed={form.receipt_treatment === "advance_on_account"}
-                    disabled={!fieldsEditable}
-                    onClick={() =>
-                      patch({
-                        receipt_treatment: "advance_on_account",
-                        allocations: form.allocations.map((a) => ({
-                          ...a,
-                          selected: false,
-                          allocated_amount: "",
-                          tds_amount: "",
-                          tds_section_id: "",
-                          discount_amount: "",
-                        })),
-                      })
-                    }
-                  >
-                    Advance / On Account
-                  </button>
-                  <button
-                    type="button"
-                    data-active={form.receipt_treatment === "against_outstanding"}
-                    aria-pressed={form.receipt_treatment === "against_outstanding"}
-                    disabled={!fieldsEditable}
-                    onClick={() =>
-                      patch({
-                        receipt_treatment: "against_outstanding",
-                      })
-                    }
-                  >
-                    Against Outstanding
-                  </button>
-                </div>
-              </InvoiceDetailField>
+              <div className="min-w-0 sm:col-span-2 lg:col-span-2">
+                <InvoiceDetailField label="Receipt Treatment">
+                  <div className="cnz-gst-toggle w-full" role="group" aria-label="Receipt treatment">
+                    <button
+                      type="button"
+                      data-active={form.receipt_treatment === "advance_on_account"}
+                      aria-pressed={form.receipt_treatment === "advance_on_account"}
+                      disabled={!fieldsEditable}
+                      onClick={() => applyReceiptTreatment("advance_on_account")}
+                    >
+                      Advance / On Account
+                    </button>
+                    <button
+                      type="button"
+                      data-active={form.receipt_treatment === "against_outstanding"}
+                      aria-pressed={form.receipt_treatment === "against_outstanding"}
+                      disabled={!fieldsEditable}
+                      onClick={() => applyReceiptTreatment("against_outstanding")}
+                    >
+                      Against Outstanding
+                    </button>
+                    <button
+                      type="button"
+                      data-active={form.receipt_treatment === "mixed_allocation"}
+                      aria-pressed={form.receipt_treatment === "mixed_allocation"}
+                      disabled={!fieldsEditable}
+                      onClick={() => applyReceiptTreatment("mixed_allocation")}
+                    >
+                      Mixed Allocation
+                    </button>
+                  </div>
+                </InvoiceDetailField>
+              </div>
             ) : null}
           </div>
         </VoucherFormSectionCard>
@@ -1233,6 +1276,47 @@ export function ReceiptVoucherApiForm({
                     onToggle={() => undefined}
                     onChangeAmount={applyAllocationPatch}
                   />
+                  {form.party_kind === "CUSTOMER" ? (
+                    <div className="rounded-lg border border-border/70 bg-muted/20 px-3 py-2 space-y-1">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                        Allocation Summary
+                      </p>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-xs tabular-nums">
+                        <span className="text-muted-foreground">Gross Amount</span>
+                        <span className="text-right font-medium text-foreground">
+                          {formatMoney(preview.gross)}
+                        </span>
+                        <span className="text-muted-foreground">Invoice Settlement</span>
+                        <span className="text-right font-medium text-foreground">
+                          {formatMoney(preview.totalAllocated)}
+                        </span>
+                        <span className="text-muted-foreground">Advance / On Account</span>
+                        <span className="text-right font-medium text-foreground">
+                          {formatMoney(preview.advance)}
+                        </span>
+                        <span className="text-muted-foreground">Unallocated</span>
+                        <span
+                          className={cn(
+                            "text-right font-semibold",
+                            preview.unallocated > 0.004
+                              ? "text-amber-700"
+                              : "text-foreground",
+                          )}
+                        >
+                          {formatMoney(preview.unallocated)}
+                        </span>
+                      </div>
+                      {isCustomerMixed ? (
+                        <p className="text-[11px] text-muted-foreground pt-0.5">
+                          Remaining Amount {formatMoney(preview.advance)} treated as{" "}
+                          <span className="font-medium text-foreground">
+                            Advance / On Account
+                          </span>
+                          .
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
               ) : (
                 <p className="text-[11px] text-muted-foreground">

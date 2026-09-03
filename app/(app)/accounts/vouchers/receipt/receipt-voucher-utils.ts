@@ -230,14 +230,27 @@ export function mapOpenItemsToAllocations(
   });
 }
 
+/** Derive UI treatment from persisted allocations + advance (no backend MIXED enum). */
+export function deriveReceiptTreatmentFromAmounts(
+  partyKind: ReceiptPartyKind,
+  allocated: number,
+  advance: number,
+): ReceiptTreatmentUi {
+  if (partyKind !== "CUSTOMER") return "against_outstanding";
+  if (allocated <= 0 && advance > 0) return "advance_on_account";
+  if (allocated > 0 && advance > 0) return "mixed_allocation";
+  return "against_outstanding";
+}
+
 export function mapDetailToForm(detail: ReceiptVoucherDetail): ReceiptFormState {
   const base = emptyReceiptForm();
   const allocated = toMoneyNumber(detail.allocated_amount);
   const advance = toMoneyNumber(detail.advance_amount);
-  const treatment: ReceiptTreatmentUi =
-    detail.party_kind === "CUSTOMER" && allocated <= 0 && advance > 0
-      ? "advance_on_account"
-      : "against_outstanding";
+  const treatment = deriveReceiptTreatmentFromAmounts(
+    detail.party_kind,
+    allocated,
+    advance,
+  );
 
   const allocationsFromDetail: ReceiptUiAllocation[] = (detail.allocations ?? []).map(
     (a) => {
@@ -478,12 +491,18 @@ export function computeReceiptPreview(form: ReceiptFormState) {
       displayGross = grossInput;
       advance = roundMoney(Math.max(0, displayGross - ledgerEntriesTotal));
       payloadGross = advance;
-    } else if (grossInput > 0) {
+    } else if (form.receipt_treatment === "mixed_allocation") {
+      // Remaining allocatable party amount after invoice settlement → Customer Advance.
       displayGross = grossInput;
       advance = roundMoney(
         Math.max(0, displayGross - totalAllocated - ledgerEntriesTotal),
       );
       payloadGross = roundMoney(totalAllocated + advance);
+    } else if (grossInput > 0) {
+      // Against Outstanding: no silent residual advance — allocations must cover gross.
+      displayGross = grossInput;
+      advance = 0;
+      payloadGross = roundMoney(totalAllocated);
     } else {
       displayGross = totalAllocated;
       advance = 0;
@@ -504,6 +523,12 @@ export function computeReceiptPreview(form: ReceiptFormState) {
 
   // OTHER CREDIT adds bank so net receipt equals display gross when ledger is within gross.
   const netBank = roundMoney(payloadGross - adj.debit + adj.credit);
+  const unallocated = roundMoney(
+    Math.max(
+      0,
+      displayGross - totalAllocated - advance - ledgerEntriesTotal,
+    ),
+  );
 
   return {
     gross: roundMoney(displayGross),
@@ -516,6 +541,7 @@ export function computeReceiptPreview(form: ReceiptFormState) {
     adjCredit: adj.credit,
     ledgerEntriesTotal,
     netBank,
+    unallocated,
   };
 }
 
@@ -636,7 +662,8 @@ export function validateReceiptForm(form: ReceiptFormState): string | null {
     preview.ledgerEntriesTotal > 0.004 &&
     toMoneyNumber(form.gross_party_amount) <= 0 &&
     form.party_kind === "CUSTOMER" &&
-    form.receipt_treatment === "against_outstanding" &&
+    (form.receipt_treatment === "against_outstanding" ||
+      form.receipt_treatment === "mixed_allocation") &&
     preview.totalAllocated <= 0
   ) {
     return "Enter Gross Amount when using Ledger Entries without invoice settlement.";
@@ -669,12 +696,35 @@ export function validateReceiptForm(form: ReceiptFormState): string | null {
 
   if (form.party_kind === "CUSTOMER") {
     if (form.receipt_treatment === "against_outstanding") {
-      if (preview.totalAllocated <= 0 && preview.advance <= 0) {
-        return "Allocate at least one outstanding item or enter a gross amount that creates advance.";
+      if (preview.totalAllocated <= 0) {
+        return "Select and allocate at least one outstanding invoice.";
       }
       const grossInput = toMoneyNumber(form.gross_party_amount);
-      if (grossInput > 0 && preview.totalAllocated + preview.ledgerEntriesTotal > grossInput + 0.01) {
+      if (grossInput > 0 && preview.unallocated > 0.01) {
+        return "Against Outstanding requires invoice settlement to equal Gross Amount (no residual On Account). Use Mixed Allocation to leave a remainder as Advance.";
+      }
+      if (
+        grossInput > 0 &&
+        preview.totalAllocated + preview.ledgerEntriesTotal > grossInput + 0.01
+      ) {
         return "Settlement + Ledger Entries cannot exceed Gross Settlement Amount. Increase gross or reduce amounts.";
+      }
+      for (const row of selectedAllocations(form)) {
+        const alloc = toMoneyNumber(row.allocated_amount);
+        if (alloc <= 0) return "Allocation amount must be greater than zero.";
+        if (alloc > row.outstanding_amount + 0.0001) {
+          return `Allocation for ${row.document_number} exceeds outstanding.`;
+        }
+      }
+    } else if (form.receipt_treatment === "mixed_allocation") {
+      if (preview.gross <= 0) {
+        return "Gross Amount is required for Mixed Allocation.";
+      }
+      if (preview.totalAllocated <= 0) {
+        return "Mixed Allocation requires at least one invoice settlement (or switch to Advance / On Account).";
+      }
+      if (preview.totalAllocated >= preview.gross - preview.ledgerEntriesTotal - 0.01) {
+        return "Mixed Allocation needs a remaining Advance amount. Reduce invoice settlement or switch to Against Outstanding.";
       }
       for (const row of selectedAllocations(form)) {
         const alloc = toMoneyNumber(row.allocated_amount);
@@ -821,9 +871,10 @@ export function buildCreatePayload(form: ReceiptFormState): CreateReceiptVoucher
     instrument_date:
       form.transaction_mode === "CHEQUE" ? form.cheque_date || null : form.transaction_date || null,
     transaction_date: form.transaction_date || null,
+    // Backend: allocated_amount + advance_amount = gross_party_amount (Customer).
+    // Mixed = allocations.length > 0 AND advance_amount > 0 — no MIXED enum sent.
     gross_party_amount: preview.payloadGross,
-    advance_amount:
-      form.party_kind === "CUSTOMER" ? preview.advance : 0,
+    advance_amount: form.party_kind === "CUSTOMER" ? preview.advance : 0,
     narration: form.narration.trim() || null,
     remarks: form.remarks.trim() || null,
     allocations,

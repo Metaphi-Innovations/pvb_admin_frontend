@@ -2222,8 +2222,8 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
         await SalesInvoiceService.createFromDispatch(sourceDispatchId, {
           invoice_date: invoiceDate,
           due_date: dueDate || undefined,
-          narration: remarks.trim() || undefined,
-          remarks: remarks.trim() || undefined,
+          narration: narration.trim() || undefined,
+          remarks: narration.trim() || remarks.trim() || undefined,
           transporter: transport.transporterName.trim() || undefined,
           transporter_id: transport.transporterId.trim() || undefined,
           transport_mode: transport.transportMode.trim() || undefined,
