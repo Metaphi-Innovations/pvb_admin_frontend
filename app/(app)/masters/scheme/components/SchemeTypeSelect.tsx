@@ -21,7 +21,7 @@ const SCHEME_TYPE_DESCRIPTIONS: Record<SchemeType, string> = {
   "Turnover Discount Scheme": "Turnover slabs; settles via Credit Note at period end.",
   "Payment Discount Scheme": "Payment-days slabs; settles via Credit Note on receipt allocation.",
   "Special Discount Scheme":
-    "Achievement-based special discount (sales amount or quantity slabs); settles via Credit Note.",
+    "Achievement-based special discount (sales amount or quantity; with or without slabs). One invoice or period; manual or automatic Credit Note entitlement.",
 };
 
 interface SchemeTypeSelectProps {

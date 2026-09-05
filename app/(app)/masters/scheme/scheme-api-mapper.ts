@@ -305,8 +305,34 @@ export function unifiedFormToCreatePayload(
             form.specialDiscountBasedOn === "Sales Quantity"
               ? "SALES_QUANTITY"
               : "SALES_AMOUNT",
+          has_slabs: form.specialHasSlabs,
+          threshold_value: form.specialHasSlabs
+            ? null
+            : parseNum(form.specialThresholdValue),
+          discount_type: form.specialHasSlabs
+            ? null
+            : toApiDiscountType(form.discountType),
+          discount_value: form.specialHasSlabs
+            ? null
+            : parseNum(form.discountValue),
+          uom:
+            form.specialHasSlabs ||
+            form.specialDiscountBasedOn !== "Sales Quantity"
+              ? null
+              : form.specialDiscountUom.trim() || "Case",
+          product_evaluation_mode: form.specialCombineProducts
+            ? "COMBINED"
+            : "INDIVIDUAL",
+          evaluation_scope:
+            form.specialEvaluationScope === "One Invoice"
+              ? "PER_INVOICE"
+              : "SCHEME_PERIOD",
+          settlement_run_mode:
+            form.specialSettlementRunMode === "Automatic"
+              ? "AUTOMATIC"
+              : "MANUAL",
         },
-        slabs: mapSpecialSlabs(form),
+        slabs: form.specialHasSlabs ? mapSpecialSlabs(form) : [],
       };
     default:
       return { ...common, scheme_type };
@@ -501,12 +527,46 @@ export function detailToUnifiedForm(
     form.specialDiscountBasedOn =
       basedOn === "SALES_QUANTITY" ? "Sales Quantity" : "Sales Amount";
 
+    form.specialHasSlabs =
+      specialConfig?.has_slabs === undefined ||
+      specialConfig?.has_slabs === null
+        ? true
+        : Boolean(specialConfig.has_slabs);
+
+    form.specialThresholdValue =
+      specialConfig?.threshold_value != null &&
+      specialConfig.threshold_value !== ""
+        ? asString(specialConfig.threshold_value)
+        : "";
+
+    if (
+      !form.specialHasSlabs &&
+      specialConfig?.discount_type != null
+    ) {
+      form.discountType = fromApiDiscountType(specialConfig.discount_type);
+      form.discountValue = asString(specialConfig.discount_value ?? "");
+    }
+
+    const evalScope = asString(specialConfig?.evaluation_scope);
+    form.specialEvaluationScope =
+      evalScope === "PER_INVOICE" ? "One Invoice" : "Multiple Invoices";
+
+    const runMode = asString(specialConfig?.settlement_run_mode);
+    form.specialSettlementRunMode =
+      runMode === "AUTOMATIC" ? "Automatic" : "Manual";
+
+    form.specialCombineProducts =
+      asString(specialConfig?.product_evaluation_mode) !== "INDIVIDUAL";
+
     if (form.specialDiscountBasedOn === "Sales Quantity") {
+      const configUom = asString(specialConfig?.uom);
+      if (configUom) form.specialDiscountUom = configUom;
+
       form.specialDiscountQuantitySlabs =
         slabs.length > 0
           ? slabs.map((item) => {
               const row = item as Record<string, unknown>;
-              const uom = asString(row.uom) || "Case";
+              const uom = asString(row.uom) || form.specialDiscountUom || "Case";
               if (uom) form.specialDiscountUom = uom;
               return {
                 id: asString(row.scheme_slab_id) || `slab-${Math.random()}`,

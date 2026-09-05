@@ -514,6 +514,8 @@ export const API_ENDPOINTS = {
       ELIGIBLE_DISPATCHES: "/accounts/sales-invoice/eligible-dispatches",
       PREPARE_DISPATCH: (dispatchId: string) =>
         `/accounts/sales-invoice/dispatch/${dispatchId}/prepare`,
+      ELIGIBLE_CN_SCHEMES: (dispatchId: string) =>
+        `/accounts/sales-invoice/dispatch/${dispatchId}/eligible-cn-schemes`,
       PREVIEW_DISPATCH_TOTALS: (dispatchId: string) =>
         `/accounts/sales-invoice/dispatch/${dispatchId}/preview-totals`,
       CREATE_FROM_DISPATCH: (dispatchId: string) =>

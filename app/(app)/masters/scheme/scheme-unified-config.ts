@@ -38,6 +38,9 @@ import {
   type SchemeSpecialDiscountAmountSlab,
   type SchemeSpecialDiscountBasedOn,
   type SchemeSpecialDiscountQuantitySlab,
+  type SchemeSpecialEvaluationScope,
+  type SchemeSpecialSettlementRunMode,
+  type SchemeSpecialProductEvaluationMode,
   type SchemeTurnoverCalculationOn,
   type SchemeTurnoverConfigSlab,
   type SchemeTurnoverPeriodUI,
@@ -140,6 +143,45 @@ export const SPECIAL_DISCOUNT_BASED_ON_OPTIONS: SpecialDiscountBasedOnUI[] = [
   "Sales Quantity",
 ];
 
+export type SpecialEvaluationScopeUI = "One Invoice" | "Multiple Invoices";
+export type SpecialSettlementRunModeUI = "Automatic" | "Manual";
+
+export const SPECIAL_EVALUATION_SCOPE_OPTIONS: SpecialEvaluationScopeUI[] = [
+  "One Invoice",
+  "Multiple Invoices",
+];
+
+export const SPECIAL_SETTLEMENT_RUN_MODE_OPTIONS: SpecialSettlementRunModeUI[] = [
+  "Automatic",
+  "Manual",
+];
+
+export function specialEvaluationScopeToStorage(
+  ui: SpecialEvaluationScopeUI,
+): SchemeSpecialEvaluationScope {
+  return ui === "One Invoice" ? "PER_INVOICE" : "SCHEME_PERIOD";
+}
+
+export function specialEvaluationScopeToUI(
+  value?: SchemeSpecialEvaluationScope | string,
+): SpecialEvaluationScopeUI {
+  return value === "PER_INVOICE" || value === "One Invoice"
+    ? "One Invoice"
+    : "Multiple Invoices";
+}
+
+export function specialSettlementRunModeToStorage(
+  ui: SpecialSettlementRunModeUI,
+): SchemeSpecialSettlementRunMode {
+  return ui === "Automatic" ? "AUTOMATIC" : "MANUAL";
+}
+
+export function specialSettlementRunModeToUI(
+  value?: SchemeSpecialSettlementRunMode | string,
+): SpecialSettlementRunModeUI {
+  return value === "AUTOMATIC" || value === "Automatic" ? "Automatic" : "Manual";
+}
+
 export function specialDiscountBasedOnToStorage(
   ui: SpecialDiscountBasedOnUI,
 ): SchemeSpecialDiscountBasedOn {
@@ -213,6 +255,16 @@ export type SchemeUnifiedForm = {
   paymentCalculationOn: SchemePaymentCalculationOn;
   /** Special Discount only — achievement basis. */
   specialDiscountBasedOn: SpecialDiscountBasedOnUI;
+  /** Special Discount — use achievement slabs. */
+  specialHasSlabs: boolean;
+  /** Special Discount — flat threshold when specialHasSlabs is false. */
+  specialThresholdValue: string;
+  /** Special Discount — One Invoice vs Multiple Invoices (scheme period). */
+  specialEvaluationScope: SpecialEvaluationScopeUI;
+  /** Special Discount — Automatic vs Manual entitlement. */
+  specialSettlementRunMode: SpecialSettlementRunModeUI;
+  /** Special Discount — combine tagged products for threshold. */
+  specialCombineProducts: boolean;
   /** Special Discount only — amount achievement slabs (session-kept when switching). */
   specialDiscountAmountSlabs: SpecialDiscountAmountSlabForm[];
   /** Special Discount only — quantity achievement slabs (session-kept when switching). */
@@ -748,6 +800,11 @@ export function createDefaultUnifiedForm(
     requiredPaymentPercentage: "",
     paymentCalculationOn: "Amount Received",
     specialDiscountBasedOn: "Sales Amount",
+    specialHasSlabs: true,
+    specialThresholdValue: "",
+    specialEvaluationScope: "Multiple Invoices",
+    specialSettlementRunMode: "Manual",
+    specialCombineProducts: true,
     specialDiscountAmountSlabs: [emptySpecialDiscountAmountSlab()],
     specialDiscountQuantitySlabs: [emptySpecialDiscountQuantitySlab("Case")],
     specialDiscountUom: "Case",
@@ -1309,6 +1366,20 @@ export function schemeRecordToUnifiedForm(record: SchemeRecord): SchemeUnifiedFo
     specialDiscountBasedOn: specialDiscountBasedOnToUI(
       condition.specialDiscountBasedOn,
     ),
+    specialHasSlabs: condition.specialHasSlabs !== false,
+    specialThresholdValue:
+      condition.specialThresholdValue != null &&
+      condition.specialThresholdValue > 0
+        ? String(condition.specialThresholdValue)
+        : "",
+    specialEvaluationScope: specialEvaluationScopeToUI(
+      condition.specialEvaluationScope,
+    ),
+    specialSettlementRunMode: specialSettlementRunModeToUI(
+      condition.specialSettlementRunMode,
+    ),
+    specialCombineProducts:
+      condition.specialProductEvaluationMode !== "INDIVIDUAL",
     specialDiscountAmountSlabs: specialAmountSlabsToForm(
       condition.specialDiscountAmountSlabs,
     ),
@@ -1655,10 +1726,12 @@ export function validateUnifiedSchemeForm(form: SchemeUnifiedForm): string | nul
         if (!uom || (uom !== "Case" && uom !== "Piece")) {
           return "Select UOM (Case or Piece) for quantity-based Special Discount.";
         }
-        for (let i = 0; i < form.specialDiscountQuantitySlabs.length; i++) {
-          const slabUom = form.specialDiscountQuantitySlabs[i].uom.trim();
-          if (!slabUom || (slabUom !== "Case" && slabUom !== "Piece")) {
-            return `Achievement Slab ${i + 1}: Select UOM (Case or Piece).`;
+        if (form.specialHasSlabs) {
+          for (let i = 0; i < form.specialDiscountQuantitySlabs.length; i++) {
+            const slabUom = form.specialDiscountQuantitySlabs[i].uom.trim();
+            if (!slabUom || (slabUom !== "Case" && slabUom !== "Piece")) {
+              return `Achievement Slab ${i + 1}: Select UOM (Case or Piece).`;
+            }
           }
         }
       }
@@ -1743,6 +1816,15 @@ export function validateUnifiedSchemeForm(form: SchemeUnifiedForm): string | nul
       break;
     }
     case "Special Discount": {
+      if (!form.specialHasSlabs) {
+        const threshold = parseNum(form.specialThresholdValue);
+        if (threshold <= 0) {
+          return "Enter a qualification threshold greater than zero.";
+        }
+        const err = validateDiscountValue(form.discountType, form.discountValue);
+        if (err) return err;
+        break;
+      }
       if (form.specialDiscountBasedOn === "Sales Quantity") {
         const slabErr = validateSpecialDiscountQuantitySlabs(
           form.specialDiscountQuantitySlabs,
@@ -1944,6 +2026,28 @@ export function buildSchemeWorkingSummary(form: SchemeUnifiedForm): string {
         form.startDate || form.endDate
           ? `Scheme period ${form.startDate || "—"} to ${form.endDate || "—"}.`
           : "Scheme period is defined by Valid From / Valid To.";
+      const scopeLabel =
+        form.specialEvaluationScope === "One Invoice"
+          ? "Evaluated per invoice"
+          : "Evaluated across invoices in the scheme period";
+      const runLabel =
+        form.specialSettlementRunMode === "Automatic"
+          ? "automatic entitlement"
+          : "manual settlement";
+      const combineLabel = form.specialCombineProducts
+        ? "combined across selected products"
+        : "per product individually";
+
+      if (!form.specialHasSlabs) {
+        const threshold = parseNum(form.specialThresholdValue);
+        const disc = formatDiscount(form.discountType, form.discountValue);
+        const basis =
+          form.specialDiscountBasedOn === "Sales Quantity"
+            ? `${threshold} ${form.specialDiscountUom || "qty"}`
+            : formatMoney(threshold);
+        return `Special Discount (no slabs) — qualify at ${basis} ${combineLabel} for ${disc}. ${scopeLabel}; ${runLabel}. ${period}`;
+      }
+
       if (form.specialDiscountBasedOn === "Sales Quantity") {
         const uom = form.specialDiscountUom || "UOM";
         const slabs = formSpecialQuantitySlabsToConfig(
@@ -1959,7 +2063,7 @@ export function buildSchemeWorkingSummary(form: SchemeUnifiedForm): string {
           })
           .join(". ");
         const count = form.productIds.length;
-        return `Special Discount based on Sales Quantity for ${count} selected product${count === 1 ? "" : "s"}. ${period} Achievement: ${slabLines || "—"}. Entitlement is based on net sold quantity (invoice qty − returned qty) during the scheme period; settlement is via Credit Note (manual).`;
+        return `Special Discount based on Sales Quantity for ${count} selected product${count === 1 ? "" : "s"} (${combineLabel}). ${scopeLabel}; ${runLabel}. ${period} Achievement: ${slabLines || "—"}.`;
       }
       const slabs = formSpecialAmountSlabsToConfig(form.specialDiscountAmountSlabs);
       const slabLines = slabs
@@ -1974,7 +2078,7 @@ export function buildSchemeWorkingSummary(form: SchemeUnifiedForm): string {
         form.productScope === "Selected Products"
           ? ` for ${form.productIds.length} selected product${form.productIds.length === 1 ? "" : "s"}`
           : " for all products";
-      return `Special Discount based on Sales Amount${productPart}. ${period} Achievement: ${slabLines || "—"}. Entitlement is based on eligible taxable sales (taxable sales − sales returns, excluding GST) during the scheme period; settlement is via Credit Note (manual).`;
+      return `Special Discount based on Sales Amount${productPart} (${combineLabel}). ${scopeLabel}; ${runLabel}. ${period} Achievement: ${slabLines || "—"}.`;
     }
   }
 }
@@ -2081,29 +2185,56 @@ function buildConditionConfig(form: SchemeUnifiedForm): SchemeConditionConfig {
         paymentCalculationOn: form.paymentCalculationOn,
       };
     case "Special Discount": {
+      const productEvaluationMode: SchemeSpecialProductEvaluationMode =
+        form.specialCombineProducts ? "COMBINED" : "INDIVIDUAL";
+      const commonSpecial = {
+        specialHasSlabs: form.specialHasSlabs,
+        specialThresholdValue: form.specialHasSlabs
+          ? undefined
+          : parseNum(form.specialThresholdValue),
+        specialEvaluationScope: specialEvaluationScopeToStorage(
+          form.specialEvaluationScope,
+        ),
+        specialSettlementRunMode: specialSettlementRunModeToStorage(
+          form.specialSettlementRunMode,
+        ),
+        specialProductEvaluationMode: productEvaluationMode,
+        discountType: form.discountType,
+        discountValue: form.specialHasSlabs
+          ? undefined
+          : parseNum(form.discountValue),
+      };
+
       if (form.specialDiscountBasedOn === "Sales Quantity") {
         const resolvedUom = normalizeSchemeQuantityUom(
           form.specialDiscountUom ||
             form.specialDiscountQuantitySlabs[0]?.uom ||
             "Case",
         );
-        const quantitySlabs = formSpecialQuantitySlabsToConfig(
-          form.specialDiscountQuantitySlabs,
-          resolvedUom,
-        );
+        const quantitySlabs = form.specialHasSlabs
+          ? formSpecialQuantitySlabsToConfig(
+              form.specialDiscountQuantitySlabs,
+              resolvedUom,
+            )
+          : undefined;
         return {
           productScope: "SELECTED",
           productIds: form.productIds.length ? form.productIds : undefined,
           specialDiscountBasedOn: "SALES_QUANTITY",
           specialDiscountQuantitySlabs: quantitySlabs,
           specialDiscountUom: resolvedUom,
-          discountType: quantitySlabs[0]?.discountType,
-          discountValue: quantitySlabs[0]?.discountValue,
+          ...commonSpecial,
+          discountType: form.specialHasSlabs
+            ? quantitySlabs?.[0]?.discountType
+            : form.discountType,
+          discountValue: form.specialHasSlabs
+            ? quantitySlabs?.[0]?.discountValue
+            : parseNum(form.discountValue),
         };
       }
-      const amountSlabs = formSpecialAmountSlabsToConfig(
-        form.specialDiscountAmountSlabs,
-      );
+      const amountSlabs = form.specialHasSlabs
+        ? formSpecialAmountSlabsToConfig(form.specialDiscountAmountSlabs)
+        : undefined;
       const amountScope: "ALL" | "SELECTED" =
         form.productScope === "Selected Products" ? "SELECTED" : "ALL";
       const amountProductIds =
@@ -2113,8 +2244,13 @@ function buildConditionConfig(form: SchemeUnifiedForm): SchemeConditionConfig {
         productIds: amountProductIds.length ? amountProductIds : undefined,
         specialDiscountBasedOn: "SALES_AMOUNT",
         specialDiscountAmountSlabs: amountSlabs,
-        discountType: amountSlabs[0]?.discountType,
-        discountValue: amountSlabs[0]?.discountValue,
+        ...commonSpecial,
+        discountType: form.specialHasSlabs
+          ? amountSlabs?.[0]?.discountType
+          : form.discountType,
+        discountValue: form.specialHasSlabs
+          ? amountSlabs?.[0]?.discountValue
+          : parseNum(form.discountValue),
       };
     }
   }

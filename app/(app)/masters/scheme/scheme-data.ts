@@ -190,6 +190,15 @@ export interface SchemeTurnoverConfigSlab {
 /** Special Discount — achievement basis (not a direct invoice discount). */
 export type SchemeSpecialDiscountBasedOn = "SALES_AMOUNT" | "SALES_QUANTITY";
 
+/** Special Discount — one invoice vs scheme period aggregation. */
+export type SchemeSpecialEvaluationScope = "PER_INVOICE" | "SCHEME_PERIOD";
+
+/** Special Discount — auto entitlement vs manual review. */
+export type SchemeSpecialSettlementRunMode = "AUTOMATIC" | "MANUAL";
+
+/** Special Discount — combine tagged products vs evaluate each alone. */
+export type SchemeSpecialProductEvaluationMode = "COMBINED" | "INDIVIDUAL";
+
 export interface SchemeSpecialDiscountAmountSlab {
   id: string;
   eligibleSalesFrom: number;
@@ -231,6 +240,16 @@ export interface SchemeConditionConfig {
   paymentCalculationOn?: SchemePaymentCalculationOn;
   /** Special Discount only — Sales Amount vs Sales Quantity achievement. */
   specialDiscountBasedOn?: SchemeSpecialDiscountBasedOn;
+  /** Special Discount — use achievement slabs (true) or flat threshold (false). */
+  specialHasSlabs?: boolean;
+  /** Special Discount — flat threshold value when specialHasSlabs is false. */
+  specialThresholdValue?: number;
+  /** Special Discount — one invoice vs scheme period. */
+  specialEvaluationScope?: SchemeSpecialEvaluationScope;
+  /** Special Discount — automatic vs manual entitlement. */
+  specialSettlementRunMode?: SchemeSpecialSettlementRunMode;
+  /** Special Discount — combine products vs individual. */
+  specialProductEvaluationMode?: SchemeSpecialProductEvaluationMode;
   /** Special Discount — amount achievement slabs (when based on Sales Amount). */
   specialDiscountAmountSlabs?: SchemeSpecialDiscountAmountSlab[];
   /** Special Discount — quantity achievement slabs (when based on Sales Quantity). */
