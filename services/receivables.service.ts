@@ -56,11 +56,19 @@ async function withReceivablesError<T>(
 }
 
 function buildQueryParams(
-  params: Record<string, string | number | boolean | undefined | null>,
+  params: Record<
+    string,
+    string | number | boolean | string[] | undefined | null
+  >,
 ): Record<string, string | number | boolean> {
   const out: Record<string, string | number | boolean> = {};
   for (const [key, value] of Object.entries(params)) {
     if (value === undefined || value === null || value === "") continue;
+    if (Array.isArray(value)) {
+      if (value.length === 0) continue;
+      out[key] = value.join(",");
+      continue;
+    }
     out[key] = value;
   }
   return out;
@@ -110,6 +118,7 @@ export const ReceivablesService = {
           params: buildQueryParams({
             search: query.search,
             customerId: query.customerId,
+            customerIds: query.customerIds,
             salespersonId: query.salespersonId,
             branchId: query.branchId,
             warehouseId: query.warehouseId,
@@ -135,6 +144,7 @@ export const ReceivablesService = {
         params: buildQueryParams({
           search: query.search,
           customerId: query.customerId,
+          customerIds: query.customerIds,
           branchId: query.branchId,
           warehouseId: query.warehouseId,
           invoiceDateFrom: query.invoiceDateFrom,
@@ -161,9 +171,13 @@ export const ReceivablesService = {
         params: buildQueryParams({
           search: query.search,
           customerId: query.customerId,
+          customerIds: query.customerIds,
           branchId: query.branchId,
           warehouseId: query.warehouseId,
+          salespersonId: query.salespersonId,
           asOfDate: query.asOfDate,
+          excludeZeroBalance: query.excludeZeroBalance,
+          status: query.status,
           agingBreakpoints: query.agingBreakpoints,
           page: query.page,
           page_size: query.page_size,
@@ -293,6 +307,7 @@ export const ReceivablesService = {
             view: query.view,
             search: query.search,
             customerId: query.customerId,
+            customerIds: query.customerIds,
             salespersonId: query.salespersonId,
             branchId: query.branchId,
             warehouseId: query.warehouseId,
@@ -329,6 +344,7 @@ export const ReceivablesService = {
             view: query.view,
             search: query.search,
             customerId: query.customerId,
+            customerIds: query.customerIds,
             salespersonId: query.salespersonId,
             branchId: query.branchId,
             warehouseId: query.warehouseId,

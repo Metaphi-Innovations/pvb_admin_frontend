@@ -21,6 +21,7 @@ import {
 } from "@/lib/accounts/inventory-accounting-data";
 import { loadStockOpeningRows } from "@/lib/accounts/stock-opening-data";
 import { roundMoney } from "@/lib/accounts/money-format";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 import { matchesMultiFilter } from "@/lib/accounts/report-multi-filter-utils";
 
 export type StockLedgerTransactionType =
@@ -735,10 +736,7 @@ export function computeStockLedgerSummary(rows: StockLedgerRow[]): StockLedgerSu
 }
 
 export function formatStockLedgerDate(iso: string): string {
-  if (!iso) return "—";
-  return new Date(`${iso}T12:00:00`)
-    .toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
-    .replace(/ /g, "-");
+  return formatDisplayDate(iso);
 }
 
 export function formatQty(value: number, showZero = false): string {

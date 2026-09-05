@@ -12,6 +12,7 @@ import {
   mapSettlementToReceiptHistory,
 } from "@/lib/accounts/receivables-api-mappers";
 import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 import { formatMoney } from "@/lib/accounts/money-format";
 import { ReceivablesService } from "@/services/receivables.service";
 import {
@@ -33,12 +34,6 @@ import {
 } from "@/components/accounts/AccountsTable";
 import type { InvoiceReceiptHistoryRow } from "@/lib/accounts/receivables-data";
 import type { ReceivableInvoiceApiRow } from "@/types/receivables.types";
-
-function formatReportDate(value: string): string {
-  const [y, m, d] = value.slice(0, 10).split("-");
-  if (!y || !m || !d) return value;
-  return `${d}-${m}-${y}`;
-}
 
 function ReceiptHistoryTable({ rows }: { rows: InvoiceReceiptHistoryRow[] }) {
   const visible = useAccountsFilteredRows(rows);
@@ -70,7 +65,7 @@ function ReceiptHistoryTable({ rows }: { rows: InvoiceReceiptHistoryRow[] }) {
                 <AccountsTableCell>
                   <span className="font-mono text-xs font-semibold text-brand-700">{r.receiptNo}</span>
                 </AccountsTableCell>
-                <AccountsTableCell>{formatReportDate(r.receiptDate)}</AccountsTableCell>
+                <AccountsTableCell>{formatDisplayDate(r.receiptDate)}</AccountsTableCell>
                 <AccountsTableCell align="right">
                   <span className="tabular-nums">{formatMoney(r.amount)}</span>
                 </AccountsTableCell>
@@ -245,8 +240,8 @@ export default function InvoiceOutstandingDetailClient() {
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 text-xs">
             {[
               ["Invoice No.", mappedInvoice.invoiceNo],
-              ["Invoice Date", formatReportDate(mappedInvoice.invoiceDate)],
-              ["Due Date", formatReportDate(mappedInvoice.dueDate)],
+              ["Invoice Date", formatDisplayDate(mappedInvoice.invoiceDate)],
+              ["Due Date", formatDisplayDate(mappedInvoice.dueDate)],
               ["Invoice Amount", formatMoney(mappedInvoice.invoiceAmount)],
               ["Received", formatMoney(mappedInvoice.receivedAmount)],
               ["Outstanding", formatMoney(mappedInvoice.outstandingAmount)],

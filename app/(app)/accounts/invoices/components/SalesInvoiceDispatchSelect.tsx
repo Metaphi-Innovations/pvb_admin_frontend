@@ -7,17 +7,12 @@ import {
   listPendingDispatchesForCustomer,
   type PendingDispatchInvoiceRow,
 } from "@/lib/accounts/dispatch-invoice-bridge";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 import { formatMoney } from "@/lib/accounts/money-format";
-
-function formatDispatchDate(iso: string): string {
-  const [y, m, d] = iso.split("-");
-  if (!y || !m || !d) return iso;
-  return `${d}-${m}-${y}`;
-}
 
 export function formatPendingDispatchLabel(row: PendingDispatchInvoiceRow): string {
   const qtyLabel = `${row.totalQty} ${row.qtyUnit}`;
-  return `${row.dispatchNo} | ${row.soNumber} | ${formatDispatchDate(row.dispatchDate)} | ${row.warehouse} | ${qtyLabel} | ${formatMoney(row.invoiceValue)}`;
+  return `${row.dispatchNo} | ${row.soNumber} | ${formatDisplayDate(row.dispatchDate)} | ${row.warehouse} | ${qtyLabel} | ${formatMoney(row.invoiceValue)}`;
 }
 
 export interface SalesInvoiceDispatchSelectProps {

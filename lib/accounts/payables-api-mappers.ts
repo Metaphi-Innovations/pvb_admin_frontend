@@ -1,10 +1,17 @@
-import type { AgeingBreakpoints } from "@/lib/accounts/ageing-breakpoints";
+import {
+  getApiAgeingBucketKeys,
+  type AgeingBreakpoints,
+} from "@/lib/accounts/ageing-breakpoints";
 import type { PayableStatus } from "@/lib/accounts/payables-data";
 import type {
+  AgingApiBillRow,
   AgingApiRow,
+  AgingBucketMap,
   ApiPayableStatus,
   ApiSupplierBillOutstandingRow,
   ApiSupplierDetailBillRow,
+  ApiVendorAgeingBillRow,
+  ApiVendorAgeingGroup,
   ApiVendorAgeingRow,
   ApiVendorOutstandingRow,
   PayableBillApiRow,
@@ -19,19 +26,9 @@ export function isUuid(value: string): boolean {
   return UUID_RE.test(value.trim());
 }
 
-/** Backend ageing bucket keys (matches payables.utils buildAgingBucketLabels). */
+/** @deprecated Prefer getApiAgeingBucketKeys from ageing-breakpoints. */
 export function buildBackendAgingBucketLabels(breakpoints: number[]): string[] {
-  const labels: string[] = [];
-  for (let i = 0; i < breakpoints.length; i++) {
-    const start = breakpoints[i]!;
-    const next = breakpoints[i + 1];
-    if (next == null) {
-      labels.push(`${start}+`);
-    } else {
-      labels.push(`${start}-${next - 1}`);
-    }
-  }
-  return labels;
+  return getApiAgeingBucketKeys(breakpoints);
 }
 
 export function mapApiPayableStatus(status: ApiPayableStatus | "CLEAR"): PayableStatus {
@@ -83,18 +80,97 @@ export function mapPayableBillRow(row: PayableBillApiRow): ApiSupplierBillOutsta
   };
 }
 
-export function mapPayablesAgingRow(
+function moneyAmount(value: unknown): number {
+  if (value == null) return 0;
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function mapBucketAmounts(
+  source: AgingBucketMap | undefined,
+  bucketKeys: string[],
+): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const key of bucketKeys) {
+    out[key] = moneyAmount(source?.[key]);
+  }
+  return out;
+}
+
+function mapAgingBillRow(
+  row: AgingApiBillRow,
+  bucketKeys: string[],
+): ApiVendorAgeingBillRow {
+  return {
+    openItemId: row.openItemId,
+    billId: row.billId ?? null,
+    billNumber: row.billNumber ?? "",
+    billDate: row.billDate ?? "",
+    dueDate: row.dueDate ?? "",
+    originalAmount: moneyAmount(row.originalAmount),
+    settledAmount: moneyAmount(row.settledAmount),
+    outstandingAmount: moneyAmount(row.outstandingAmount),
+    ageDays: row.ageDays ?? null,
+    notDueAmount: moneyAmount(row.notDueAmount),
+    buckets: mapBucketAmounts(row.buckets, bucketKeys),
+  };
+}
+
+/**
+ * Maps a supplier ageing group from the API.
+ * Bucket amounts are keyed by backend labels (e.g. "0-30"), not display strings.
+ * Does not calculate ageing — only formats and preserves backend allocations.
+ */
+export function mapAgingVendorGroup(
   row: AgingApiRow,
   breakpoints: AgeingBreakpoints,
-): ApiVendorAgeingRow {
-  const backendLabels = buildBackendAgingBucketLabels(breakpoints);
-  const buckets = backendLabels.map((label) => row.buckets[label] ?? 0);
+): ApiVendorAgeingGroup {
+  const bucketKeys = getApiAgeingBucketKeys(breakpoints);
+  const totalsSource = row.totals ?? {
+    totalOutstanding: row.totalOutstanding,
+    notDueAmount: row.notDueAmount ?? 0,
+    buckets: row.buckets,
+  };
+  const bills = (row.bills ?? []).map((bill) => mapAgingBillRow(bill, bucketKeys));
+  const totals = {
+    totalOutstanding: moneyAmount(totalsSource.totalOutstanding),
+    notDueAmount: moneyAmount(totalsSource.notDueAmount),
+    buckets: mapBucketAmounts(totalsSource.buckets, bucketKeys),
+  };
+
+  if (process.env.NODE_ENV !== "production") {
+    const bucketSum = Object.values(totals.buckets).reduce((s, v) => s + v, 0);
+    const reconstructed = Math.round((totals.notDueAmount + bucketSum) * 100) / 100;
+    if (Math.abs(reconstructed - totals.totalOutstanding) > 0.02) {
+      console.warn("[payables ageing] vendor totals mismatch", row.supplierId, {
+        totalOutstanding: totals.totalOutstanding,
+        reconstructed,
+      });
+    }
+  }
+
   return {
     vendorId: row.supplierId,
     vendorName: row.supplierName,
     vendorCode: row.supplierCode,
-    buckets,
-    totalOutstanding: row.totalOutstanding,
+    bills,
+    totals,
+    bucketKeys,
+  };
+}
+
+/** @deprecated Use mapAgingVendorGroup for the grouped Ageing View. */
+export function mapPayablesAgingRow(
+  row: AgingApiRow,
+  breakpoints: AgeingBreakpoints,
+): ApiVendorAgeingRow {
+  const group = mapAgingVendorGroup(row, breakpoints);
+  return {
+    vendorId: group.vendorId,
+    vendorName: group.vendorName,
+    vendorCode: group.vendorCode,
+    buckets: group.bucketKeys.map((key) => group.totals.buckets[key] ?? 0),
+    totalOutstanding: group.totals.totalOutstanding,
   };
 }
 

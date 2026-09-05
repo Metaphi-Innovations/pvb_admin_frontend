@@ -6,14 +6,14 @@ import type { AgeingBreakpoints } from "@/lib/accounts/ageing-breakpoints";
 import {
   AGING_SORT_KEY_TO_API,
   BILLS_SORT_KEY_TO_API,
+  mapAgingVendorGroup,
   mapPayableBillRow,
-  mapPayablesAgingRow,
   mapSupplierSummaryRow,
   SUMMARY_SORT_KEY_TO_API,
 } from "@/lib/accounts/payables-api-mappers";
 import type {
   ApiSupplierBillOutstandingRow,
-  ApiVendorAgeingRow,
+  ApiVendorAgeingGroup,
   ApiVendorOutstandingRow,
 } from "@/types/payables.types";
 import { PayablesService } from "@/services/payables.service";
@@ -24,7 +24,7 @@ export function usePayablesListing(options: {
   view: WorkspaceView;
   asOnDate: string;
   search: string;
-  supplierId: string;
+  supplierIds: string[];
   dueStatus: "all" | "overdue" | "not_due";
   page: number;
   pageSize: number;
@@ -37,7 +37,7 @@ export function usePayablesListing(options: {
     view,
     asOnDate,
     search,
-    supplierId,
+    supplierIds,
     dueStatus,
     page,
     pageSize,
@@ -54,7 +54,7 @@ export function usePayablesListing(options: {
   const [total, setTotal] = useState(0);
   const [summaryRows, setSummaryRows] = useState<ApiVendorOutstandingRow[]>([]);
   const [billRows, setBillRows] = useState<ApiSupplierBillOutstandingRow[]>([]);
-  const [ageingRows, setAgeingRows] = useState<ApiVendorAgeingRow[]>([]);
+  const [ageingRows, setAgeingRows] = useState<ApiVendorAgeingGroup[]>([]);
 
   const sortParams = useMemo(() => {
     const map =
@@ -75,8 +75,11 @@ export function usePayablesListing(options: {
     return undefined;
   }, [dueStatus]);
 
+  const supplierIdsKey = supplierIds.join(",");
+
   useEffect(() => {
     const ac = new AbortController();
+    const selectedSupplierIds = supplierIds.length > 0 ? supplierIds : undefined;
     (async () => {
       setLoading(true);
       setError(null);
@@ -84,7 +87,7 @@ export function usePayablesListing(options: {
         if (view === "summary") {
           const res = await PayablesService.getSupplierSummary({
             search: debouncedSearch.trim() || undefined,
-            supplierId: supplierId !== "all" ? supplierId : undefined,
+            supplierIds: selectedSupplierIds,
             asOfDate: asOnDate,
             excludeZeroBalance: true,
             status: dueStatusApi,
@@ -108,7 +111,7 @@ export function usePayablesListing(options: {
         if (view === "bills") {
           const res = await PayablesService.listBills({
             search: debouncedSearch.trim() || undefined,
-            supplierId: supplierId !== "all" ? supplierId : undefined,
+            supplierIds: selectedSupplierIds,
             asOfDate: asOnDate,
             status: dueStatusApi,
             page,
@@ -128,7 +131,7 @@ export function usePayablesListing(options: {
 
         const res = await PayablesService.getAging({
           search: debouncedSearch.trim() || undefined,
-          supplierId: supplierId !== "all" ? supplierId : undefined,
+          supplierIds: selectedSupplierIds,
           asOfDate: asOnDate,
           agingBreakpoints: appliedBreakpoints.join(","),
           page,
@@ -138,7 +141,7 @@ export function usePayablesListing(options: {
         });
         if (ac.signal.aborted) return;
         const rows = (res.data ?? []).map((row) =>
-          mapPayablesAgingRow(row, appliedBreakpoints),
+          mapAgingVendorGroup(row, appliedBreakpoints),
         );
         setAgeingRows(rows);
         setTotal(res.pagination?.total ?? rows.length);
@@ -157,7 +160,7 @@ export function usePayablesListing(options: {
   }, [
     view,
     debouncedSearch,
-    supplierId,
+    supplierIdsKey,
     dueStatus,
     dueStatusApi,
     asOnDate,

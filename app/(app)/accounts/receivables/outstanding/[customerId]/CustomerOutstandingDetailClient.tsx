@@ -7,6 +7,7 @@ import { ArrowLeft, Receipt } from "lucide-react";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 import { formatMoney } from "@/lib/accounts/money-format";
 import { ReceivablesService } from "@/services/receivables.service";
 import type {
@@ -41,13 +42,6 @@ import {
   AccountsViewAction,
   accountsActionColClass,
 } from "@/components/accounts/AccountsTableActions";
-
-function formatReportDate(value: string): string {
-  if (!value || value === "—") return "—";
-  const [y, m, d] = value.slice(0, 10).split("-");
-  if (!y || !m || !d) return value;
-  return `${d}-${m}-${y}`;
-}
 
 export default function CustomerOutstandingDetailClient() {
   const params = useParams();
@@ -331,7 +325,7 @@ export default function CustomerOutstandingDetailClient() {
                           </Link>
                         </AccountsTableCell>
                         <AccountsTableCell>
-                          {formatReportDate(invoice.invoiceDate)}
+                          {formatDisplayDate(invoice.invoiceDate)}
                         </AccountsTableCell>
                         <AccountsTableCell align="right" money>
                           {formatMoney(invoice.invoiceAmount)}
@@ -343,7 +337,7 @@ export default function CustomerOutstandingDetailClient() {
                           {formatMoney(invoice.outstanding)}
                         </AccountsTableCell>
                         <AccountsTableCell>
-                          {formatReportDate(invoice.dueDate)}
+                          {formatDisplayDate(invoice.dueDate)}
                         </AccountsTableCell>
                         <AccountsTableCell align="right">
                           <AccountsTableActionCell variant="single">
@@ -414,7 +408,7 @@ export default function CustomerOutstandingDetailClient() {
                         </Link>
                       </AccountsTableCell>
                       <AccountsTableCell>
-                        {formatReportDate(receipt.receiptDate)}
+                        {formatDisplayDate(receipt.receiptDate)}
                       </AccountsTableCell>
                       <AccountsTableCell align="right" money>
                         {formatMoney(receipt.amount)}

@@ -1,4 +1,5 @@
 import { demoDateAt, demoTimestamp } from "@/lib/accounts/demo-date-utils";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 /**
  * Audit trail — accounting voucher alteration register (Tally/Busy style).
  * Particular = changed field name; Before/After = field values only (never sentences / JSON).
@@ -653,10 +654,7 @@ export function appendAuditTrailEntry(
 }
 
 export function formatAuditTrailDate(iso: string): string {
-  const [date] = iso.split("T");
-  if (!date) return iso;
-  const [y, m, d] = date.split("-");
-  return `${d}-${m}-${y}`;
+  return formatDisplayDate(iso, iso);
 }
 
 export function formatAuditTrailTime(iso: string): string {

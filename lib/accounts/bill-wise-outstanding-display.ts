@@ -1,4 +1,5 @@
 import type { StatusKey } from "@/lib/tokens";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 import type {
   BillWiseOutstandingRowApi,
   BillWiseOutstandingSummaryApi,
@@ -12,10 +13,7 @@ import type {
 } from "@/types/payables.types";
 
 export function formatOutstandingReportDate(value?: string | null): string {
-  if (!value || value === "—") return "—";
-  const [y, m, d] = value.slice(0, 10).split("-");
-  if (!y || !m || !d) return value;
-  return `${d}-${m}-${y}`;
+  return formatDisplayDate(value);
 }
 
 export function formatAgeingDays(days: number): string {

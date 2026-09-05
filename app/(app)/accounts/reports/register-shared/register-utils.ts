@@ -1,4 +1,5 @@
 import { loadFinancialYears } from "@/app/(app)/accounts/masters/masters-data";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 import { roundMoney } from "@/lib/accounts/money-format";
 import {
   matchesMultiFilter,
@@ -12,13 +13,7 @@ import type {
 } from "./register-types";
 
 export function formatRegisterDate(iso: string): string {
-  return new Date(`${iso}T12:00:00`)
-    .toLocaleDateString("en-IN", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    })
-    .replace(/ /g, "-");
+  return formatDisplayDate(iso, iso);
 }
 
 function matchesSearch(search: string, parts: (string | number | undefined | null)[]): boolean {

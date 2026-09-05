@@ -51,6 +51,7 @@ import {
   REPORT_BRANCH_OPTIONS,
 } from "@/components/accounts/ReportFilters";
 import { accountsBreadcrumb, CHART_OF_ACCOUNTS_HREF } from "@/lib/accounts/accounts-nav";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 import { formatMoney } from "@/lib/accounts/money-format";
 import { useClientMounted } from "@/lib/use-client-mounted";
 import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
@@ -114,13 +115,6 @@ const BILL_WISE_COLUMN_CONFIG: AccountsColumnFilterConfig = {
   daysOverdue: { type: "number" },
   status: { type: "status" },
 };
-
-function formatReportDate(value: string): string {
-  if (!value || value === "—") return "—";
-  const [y, m, d] = value.slice(0, 10).split("-");
-  if (!y || !m || !d) return value;
-  return `${d}-${m}-${y}`;
-}
 
 function statusPillClass(status: string): string {
   const s = status.toLowerCase();
@@ -686,8 +680,8 @@ function BillWiseOutstandingBody({
       .map((row) => {
         const cells = [
           `<td class="mono">${escapeHtml(row.documentNo)}</td>`,
-          `<td>${escapeHtml(formatReportDate(row.documentDate))}</td>`,
-          `<td>${escapeHtml(formatReportDate(row.dueDate))}</td>`,
+          `<td>${escapeHtml(formatDisplayDate(row.documentDate))}</td>`,
+          `<td>${escapeHtml(formatDisplayDate(row.dueDate))}</td>`,
           `<td class="num">${escapeHtml(formatMoney(row.documentAmount))}</td>`,
           `<td class="num">${escapeHtml(formatMoney(row.adjustedAmount))}</td>`,
           `<td class="num">${escapeHtml(formatMoney(row.outstandingAmount))}</td>`,
@@ -903,8 +897,8 @@ function BillWiseOutstandingBody({
                           {row.documentNo}
                         </span>
                       </AccountsTableCell>
-                      <AccountsTableCell>{formatReportDate(row.documentDate)}</AccountsTableCell>
-                      <AccountsTableCell>{formatReportDate(row.dueDate)}</AccountsTableCell>
+                      <AccountsTableCell>{formatDisplayDate(row.documentDate)}</AccountsTableCell>
+                      <AccountsTableCell>{formatDisplayDate(row.dueDate)}</AccountsTableCell>
                       <AccountsTableCell align="right">
                         <span className="tabular-nums">{formatMoney(row.documentAmount)}</span>
                       </AccountsTableCell>
@@ -996,11 +990,11 @@ function BillWiseOutstandingBody({
             <div className="space-y-2 text-xs">
               <div className="flex justify-between gap-3">
                 <span className="text-muted-foreground">Invoice Date</span>
-                <span className="font-medium">{formatReportDate(viewRow.documentDate)}</span>
+                <span className="font-medium">{formatDisplayDate(viewRow.documentDate)}</span>
               </div>
               <div className="flex justify-between gap-3">
                 <span className="text-muted-foreground">Due Date</span>
-                <span className="font-medium">{formatReportDate(viewRow.dueDate)}</span>
+                <span className="font-medium">{formatDisplayDate(viewRow.dueDate)}</span>
               </div>
               <div className="flex justify-between gap-3">
                 <span className="text-muted-foreground">Original Amount</span>

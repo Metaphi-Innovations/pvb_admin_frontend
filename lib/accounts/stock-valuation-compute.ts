@@ -13,6 +13,7 @@ import {
   getStockStatus as getBatchExpiryStatus,
 } from "@/lib/accounts/inventory-accounting-data";
 import { roundMoney } from "@/lib/accounts/money-format";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 import { matchesMultiFilter } from "@/lib/accounts/report-multi-filter-utils";
 import {
   buildStockLedgerRows,
@@ -747,10 +748,7 @@ export function computeStockValuationTotals(rows: StockValuationRow[]): StockVal
 }
 
 export function formatStockValuationDate(value: string): string {
-  if (!value) return "—";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return value;
-  return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+  return formatDisplayDate(value);
 }
 
 export function formatQtyWithUnit(qty: number, unit: string): string {

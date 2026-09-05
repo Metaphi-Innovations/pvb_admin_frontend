@@ -4,7 +4,11 @@
 
 export type AgeingBreakpoints = number[];
 
-export const DEFAULT_AGEING_BREAKPOINTS: AgeingBreakpoints = [0, 30, 60, 90];
+/**
+ * Default breakpoints aligned with the receivables backend
+ * (`DEFAULT_AGING_BREAKPOINTS` → labels 0-30, 31-60, 61-90, 91+).
+ */
+export const DEFAULT_AGEING_BREAKPOINTS: AgeingBreakpoints = [0, 31, 61, 91];
 
 export interface GeneratedAgeingBucket {
   index: number;
@@ -17,33 +21,60 @@ export interface AgeingBucketRow {
   buckets: number[];
 }
 
+/**
+ * API bucket keys matching backend `buildAgingBucketLabels`.
+ * Example: [0, 31, 61, 91] → ["0-30", "31-60", "61-90", "91+"]
+ */
+export function getApiAgeingBucketKeys(breakpoints: AgeingBreakpoints): string[] {
+  const labels: string[] = [];
+  for (let i = 0; i < breakpoints.length; i++) {
+    const start = breakpoints[i]!;
+    const next = breakpoints[i + 1];
+    if (next == null) {
+      labels.push(`${start}+`);
+    } else {
+      labels.push(`${start}-${next - 1}`);
+    }
+  }
+  return labels;
+}
+
+/** Human-readable column header for an API bucket key. */
+export function formatApiAgeingBucketLabel(apiKey: string): string {
+  if (apiKey.endsWith("+")) {
+    const start = Number(apiKey.slice(0, -1));
+    if (Number.isFinite(start) && start > 0) {
+      return `Above ${start - 1} Days`;
+    }
+    return `${apiKey} Days`;
+  }
+  return `${apiKey.replace("-", "–")} Days`;
+}
+
 export function generateAgeingBucketsFromBreakpoints(
   breakpoints: AgeingBreakpoints,
 ): GeneratedAgeingBucket[] {
-  const sorted = [...breakpoints];
-  const buckets: GeneratedAgeingBucket[] = [];
-
-  for (let i = 0; i < sorted.length; i++) {
-    if (i < sorted.length - 1) {
-      const from = i === 0 ? sorted[i] : sorted[i] + 1;
-      const to = sorted[i + 1];
-      buckets.push({
-        index: i,
-        label: `${from}–${to} Days`,
-        from,
-        to,
-      });
-    } else {
-      buckets.push({
-        index: i,
-        label: `Above ${sorted[i]} Days`,
-        from: sorted[i] + 1,
+  const keys = getApiAgeingBucketKeys(breakpoints);
+  return keys.map((key, index) => {
+    if (key.endsWith("+")) {
+      const from = Number(key.slice(0, -1));
+      return {
+        index,
+        label: formatApiAgeingBucketLabel(key),
+        from: Number.isFinite(from) ? from : breakpoints[index] ?? 0,
         to: null,
-      });
+      };
     }
-  }
-
-  return buckets;
+    const [fromStr, toStr] = key.split("-");
+    const from = Number(fromStr);
+    const to = Number(toStr);
+    return {
+      index,
+      label: formatApiAgeingBucketLabel(key),
+      from: Number.isFinite(from) ? from : 0,
+      to: Number.isFinite(to) ? to : null,
+    };
+  });
 }
 
 export function getAgeingBucketLabels(breakpoints: AgeingBreakpoints): string[] {
@@ -82,12 +113,11 @@ export function effectiveOverdueDays(daysOverdue: number, asOfDate: string, dueD
 }
 
 export function classifyAgeingBucketIndex(days: number, breakpoints: AgeingBreakpoints): number {
-  for (let i = 0; i < breakpoints.length - 1; i++) {
-    const from = i === 0 ? breakpoints[i] : breakpoints[i] + 1;
-    const to = breakpoints[i + 1];
-    if (days >= from && days <= to) return i;
+  if (days < 0) return -1;
+  for (let i = breakpoints.length - 1; i >= 0; i--) {
+    if (days >= breakpoints[i]!) return i;
   }
-  return breakpoints.length - 1;
+  return 0;
 }
 
 export function emptyAgeingBuckets(count: number): number[] {

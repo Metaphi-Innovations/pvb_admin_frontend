@@ -51,11 +51,19 @@ async function withPayablesError<T>(
 }
 
 function buildQueryParams(
-  params: Record<string, string | number | boolean | undefined | null>,
+  params: Record<
+    string,
+    string | number | boolean | string[] | undefined | null
+  >,
 ): Record<string, string | number | boolean> {
   const out: Record<string, string | number | boolean> = {};
   for (const [key, value] of Object.entries(params)) {
     if (value === undefined || value === null || value === "") continue;
+    if (Array.isArray(value)) {
+      if (value.length === 0) continue;
+      out[key] = value.join(",");
+      continue;
+    }
     out[key] = value;
   }
   return out;
@@ -105,6 +113,7 @@ export const PayablesService = {
           params: buildQueryParams({
             search: query.search,
             supplierId: query.supplierId,
+            supplierIds: query.supplierIds,
             branchId: query.branchId,
             warehouseId: query.warehouseId,
             asOfDate: query.asOfDate,
@@ -129,6 +138,7 @@ export const PayablesService = {
         params: buildQueryParams({
           search: query.search,
           supplierId: query.supplierId,
+          supplierIds: query.supplierIds,
           branchId: query.branchId,
           warehouseId: query.warehouseId,
           invoiceDateFrom: query.invoiceDateFrom,
@@ -155,6 +165,7 @@ export const PayablesService = {
         params: buildQueryParams({
           search: query.search,
           supplierId: query.supplierId,
+          supplierIds: query.supplierIds,
           branchId: query.branchId,
           warehouseId: query.warehouseId,
           asOfDate: query.asOfDate,
@@ -220,6 +231,7 @@ export const PayablesService = {
             view: query.view,
             search: query.search,
             supplierId: query.supplierId,
+            supplierIds: query.supplierIds,
             branchId: query.branchId,
             warehouseId: query.warehouseId,
             asOfDate: query.asOfDate,
@@ -255,6 +267,7 @@ export const PayablesService = {
             view: query.view,
             search: query.search,
             supplierId: query.supplierId,
+            supplierIds: query.supplierIds,
             branchId: query.branchId,
             warehouseId: query.warehouseId,
             asOfDate: query.asOfDate,

@@ -25,6 +25,7 @@ import {
 } from "@/lib/accounts/receivables-data";
 import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
 import { loadCustomers } from "@/app/(app)/masters/customers/customer-data";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 import { formatMoney } from "@/lib/accounts/money-format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -114,13 +115,6 @@ function computeOverdueDays(r: CollectionFollowUp): number {
   return 0;
 }
 
-function formatReportDate(value: string): string {
-  if (!value || value === "—") return "—";
-  const [y, m, d] = value.slice(0, 10).split("-");
-  if (!y || !m || !d) return value;
-  return `${d}-${m}-${y}`;
-}
-
 function CollectionExport({
   exportMeta,
 }: {
@@ -141,10 +135,10 @@ function CollectionExport({
         Customer: r.customerName,
         "Invoice No.": r.invoiceNo || "—",
         "Outstanding Amount": formatExportAmount(r.outstandingAmount),
-        "Due Date": r.dueDate || "—",
+        "Due Date": formatDisplayDate(r.dueDate),
         "Overdue Days": computeOverdueDays(r),
-        "Last Follow-up": r.followUpDate,
-        "Next Follow-up": r.nextFollowUpDate || "—",
+        "Last Follow-up": formatDisplayDate(r.followUpDate),
+        "Next Follow-up": formatDisplayDate(r.nextFollowUpDate),
         "Assigned To": r.assignedTo,
         Status: STATUS_OPTIONS.find((s) => s.value === r.status)?.label ?? r.status,
         Remarks: r.remarks,
@@ -171,9 +165,9 @@ function CollectionExport({
         r.customerName,
         r.invoiceNo || "—",
         formatExportAmount(r.outstandingAmount),
-        formatReportDate(r.dueDate),
-        formatReportDate(r.followUpDate),
-        formatReportDate(r.nextFollowUpDate),
+        formatDisplayDate(r.dueDate),
+        formatDisplayDate(r.followUpDate),
+        formatDisplayDate(r.nextFollowUpDate),
         r.assignedTo,
         STATUS_OPTIONS.find((s) => s.value === r.status)?.label ?? r.status,
         r.remarks,
@@ -291,7 +285,7 @@ function CollectionTable({
                     <AccountsTableCell align="right">
                       <span className="tabular-nums">{formatMoney(r.outstandingAmount)}</span>
                     </AccountsTableCell>
-                    <AccountsTableCell>{formatReportDate(r.dueDate)}</AccountsTableCell>
+                    <AccountsTableCell>{formatDisplayDate(r.dueDate)}</AccountsTableCell>
                     <AccountsTableCell align="center">
                       <span
                         className={
@@ -303,8 +297,8 @@ function CollectionTable({
                         {overdueDays > 0 ? overdueDays : "—"}
                       </span>
                     </AccountsTableCell>
-                    <AccountsTableCell>{formatReportDate(r.followUpDate)}</AccountsTableCell>
-                    <AccountsTableCell>{formatReportDate(r.nextFollowUpDate)}</AccountsTableCell>
+                    <AccountsTableCell>{formatDisplayDate(r.followUpDate)}</AccountsTableCell>
+                    <AccountsTableCell>{formatDisplayDate(r.nextFollowUpDate)}</AccountsTableCell>
                     <AccountsTableCell>
                       {(() => {
                         const badge = collectionStatusToBadge(r.status);
@@ -798,7 +792,7 @@ export default function CollectionTrackingClient() {
                 <div key={h.id} className="rounded-lg border border-border/60 p-3 text-xs space-y-1">
                   <div className="flex items-center justify-between gap-2">
                     <StatusBadge status={h.status} />
-                    <span className="text-muted-foreground">{formatReportDate(h.date)}</span>
+                    <span className="text-muted-foreground">{formatDisplayDate(h.date)}</span>
                   </div>
                   <p>{h.remarks}</p>
                   <p className="text-xs text-muted-foreground">By {h.updatedBy}</p>

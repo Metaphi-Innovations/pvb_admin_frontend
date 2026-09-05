@@ -13,6 +13,7 @@ import {
   type CashFlowLineId,
 } from "@/lib/accounts/cash-flow-coa-mapping";
 import { formatMoney, roundMoney } from "@/lib/accounts/money-format";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 
 export type { CashFlowFilters } from "@/lib/accounts/cash-flow-compute";
 
@@ -94,12 +95,7 @@ export function computeCashFlowPreviousPeriod(dateFrom: string, dateTo: string):
 }
 
 export function formatCashFlowPeriodDate(iso: string): string {
-  const d = new Date(`${iso}T00:00:00`);
-  return d.toLocaleDateString("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
+  return formatDisplayDate(iso, iso);
 }
 
 export function formatCashFlowPeriodLabel(dateFrom: string, dateTo: string): string {

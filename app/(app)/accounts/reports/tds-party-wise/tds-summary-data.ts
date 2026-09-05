@@ -8,6 +8,7 @@ import {
   type FinancialYear,
 } from "@/app/(app)/accounts/masters/masters-data";
 import { matchesMultiFilter } from "@/lib/accounts/report-multi-filter-utils";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 import { getActiveFinancialYearId } from "@/lib/accounts/day-book-data";
 import {
   loadTdsPartyWiseRows,
@@ -115,13 +116,7 @@ export function formatTdsMonthLabel(iso: string): string {
 }
 
 export function formatTdsInvoiceDate(iso: string): string {
-  const d = parseIsoDate(iso);
-  if (!d) return iso || "—";
-  return d.toLocaleDateString("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
+  return formatDisplayDate(iso);
 }
 
 export function monthKeyFromIso(iso: string): string {
