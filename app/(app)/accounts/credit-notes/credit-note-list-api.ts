@@ -205,4 +205,89 @@ export const CreditNoteListApi = {
     >(`${CN}/${id}/reverse`, body);
     return unwrapCreditNoteDetail(unwrapData(response));
   },
+
+  async listTurnoverSchemes(): Promise<Array<{
+    scheme_id: string;
+    scheme_code: string;
+    scheme_name: string;
+    start_date: string;
+    end_date: string;
+    slabs: Array<{
+      scheme_slab_id: string;
+      from_value: number;
+      to_value: number | null;
+      discount_type: string;
+      discount_value: number;
+    }>;
+  }>> {
+    const response = await axiosInstance.get<ApiResponse<any>>(`${CN}/turnover-schemes`);
+    return unwrapData(response) ?? [];
+  },
+
+  async previewTurnoverScheme(payload: {
+    scheme_id: string;
+    from_date?: string;
+    to_date?: string;
+    customer_id?: string | null;
+  }): Promise<{
+    scheme: {
+      scheme_id: string;
+      scheme_code: string;
+      scheme_name: string;
+      period_from: string;
+      period_to: string;
+      period_key: string;
+    };
+    summary: {
+      total_customers_checked: number;
+      eligible_customers_count: number;
+      total_taxable_credit_amount: number;
+    };
+    calculations: Array<{
+      customer_id: string;
+      customer_code: string;
+      customer_name: string;
+      qualifying_invoices_count: number;
+      qualifying_turnover: number;
+      achieved_slab: {
+        from_value: number;
+        to_value: number | null;
+        discount_type: string;
+        discount_value: number;
+      } | null;
+      discount_percentage: number;
+      taxable_credit_amount: number;
+      status: "ELIGIBLE" | "BELOW_THRESHOLD" | "ALREADY_GENERATED" | "NO_INVOICES";
+      existing_pending_id?: string | null;
+      contributing_invoices: Array<{
+        sales_invoice_id: string;
+        invoice_number: string;
+        invoice_date: string;
+        taxable_amount: number;
+        warehouse_id: string;
+      }>;
+    }>;
+  }> {
+    const response = await axiosInstance.post<ApiResponse<any>>(`${CN}/turnover-schemes/preview`, payload);
+    return unwrapData(response);
+  },
+
+  async calculateTurnoverScheme(payload: {
+    scheme_id: string;
+    from_date?: string;
+    to_date?: string;
+    customer_id?: string | null;
+    remarks?: string | null;
+  }): Promise<{
+    scheme_id: string;
+    scheme_name: string;
+    period_key: string;
+    generated_count: number;
+    skipped_count: number;
+    generated_pending_ids: string[];
+    message: string;
+  }> {
+    const response = await axiosInstance.post<ApiResponse<any>>(`${CN}/turnover-schemes/calculate`, payload);
+    return unwrapData(response);
+  },
 };

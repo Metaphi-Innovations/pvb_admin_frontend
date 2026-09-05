@@ -124,7 +124,8 @@ export function CreditNoteParticularsEditor({
   onDirectLinesChange: (lines: DirectLineDraft[]) => void;
   onPendingLineGstChange?: (lineKey: string, gstRate: string) => void;
 }) {
-  const isDirect = sourceType === "DIRECT" || sourceType === "SALES_INVOICE";
+  const isDirect = sourceType !== "SALES_RETURN";
+  const canAddRemoveLines = (sourceType === "DIRECT" || sourceType === "SALES_INVOICE") && editable;
   const canEditGst = Boolean(gstEditable);
   const gstOn = isDirect
     ? directLines.some((l) => l.gst_applicable)
@@ -132,7 +133,7 @@ export function CreditNoteParticularsEditor({
   const columns = particularsColumnsForSource(sourceType, {
     gstOn,
     interstate,
-    editable: editable && isDirect,
+    editable: canAddRemoveLines,
   });
 
   const updateLine = (key: string, patch: Partial<DirectLineDraft>) => {
@@ -141,6 +142,7 @@ export function CreditNoteParticularsEditor({
 
   const addLine = () => {
     const last = directLines[directLines.length - 1];
+    const isDirectSource = !sourceType || sourceType === "DIRECT" || sourceType === "SALES_INVOICE";
     onDirectLinesChange([
       ...directLines,
       {
@@ -148,7 +150,7 @@ export function CreditNoteParticularsEditor({
         description: "",
         ledger_id: last?.ledger_id || "",
         ledger_name: last?.ledger_name || "",
-        quantity: "1",
+        quantity: isDirectSource ? "1" : "",
         rate: "",
         taxable_amount: "",
         gst_applicable: last?.gst_applicable ?? false,
@@ -418,7 +420,7 @@ export function CreditNoteParticularsEditor({
       title="Particulars"
       flush
       headerActions={
-        isDirect && editable ? (
+        canAddRemoveLines ? (
           <Button
             type="button"
             variant="outline"
