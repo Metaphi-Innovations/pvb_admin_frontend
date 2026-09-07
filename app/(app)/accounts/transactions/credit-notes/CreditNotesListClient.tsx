@@ -31,6 +31,7 @@ import {
 import { useReportDateRange } from "@/components/accounts/ReportFilters";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
+import { formatDisplayDate, toIsoDateOnly } from "@/lib/accounts/date-display";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { useClientMounted } from "@/lib/use-client-mounted";
 import type { StatusKey } from "@/lib/tokens";
@@ -116,9 +117,7 @@ function toNum(value: unknown, fallback = 0): number {
 }
 
 function toDate(value: unknown): string {
-  if (!value) return "";
-  const s = String(value);
-  return /^\d{4}-\d{2}-\d{2}/.test(s) ? s.slice(0, 10) : s;
+  return toIsoDateOnly(value);
 }
 
 function mapCreditNoteListRow(raw: CreditNoteListApiRow): CreditNoteListRow {
@@ -242,12 +241,17 @@ function applyCreditNoteToolbarFilters(
   return list;
 }
 
-function computeTabCounts(records: CreditNoteListRow[]): Record<string, number> {
+function computeTabCounts(
+  records: CreditNoteListRow[],
+  filters: NotesListingFilterState,
+): Record<string, number> {
+  const base = applyCreditNoteToolbarFilters(records, "all", { ...filters, status: "all" });
   return {
-    all: records.length,
-    draft: records.filter((r) => r.status === "DRAFT").length,
-    posted: records.filter((r) => r.status === "POSTED" || r.status === "APPROVED").length,
-    cancelled: records.filter((r) => r.status === "CANCELLED").length,
+    all: base.length,
+    draft: base.filter((r) => r.status === "DRAFT").length,
+    posted: base.filter((r) => r.status === "POSTED" || r.status === "APPROVED").length,
+    cancelled: base.filter((r) => r.status === "CANCELLED").length,
+    reversed: base.filter((r) => r.status === "REVERSED").length,
   };
 }
 
@@ -259,7 +263,7 @@ async function exportCreditNoteListRows(rows: CreditNoteListRow[]): Promise<void
       Source: sourceLabel(r.source_type),
       Customer: r.customerName,
       Warehouse: r.warehouse,
-      Date: r.creditNoteDate,
+      Date: formatDisplayDate(r.creditNoteDate),
       "Taxable Value": r.taxableValue,
       CGST: r.cgstAmount,
       SGST: r.sgstAmount,
@@ -325,7 +329,7 @@ function CreditNotesRecordsTable({
             <SortTh label="CGST" colKey="cgstAmount" filterType="amount" align="right" />
             <SortTh label="SGST" colKey="sgstAmount" filterType="amount" align="right" />
             <SortTh label="IGST" colKey="igstAmount" filterType="amount" align="right" />
-            <SortTh label="Total" colKey="currentCreditAmount" filterType="amount" align="right" />
+            <SortTh label="Total" colKey="currentCreditAmount" filterType="amount" align="right" className="min-w-[6.5rem]" />
             <SortTh
               label="Status"
               colKey="status"
@@ -375,7 +379,7 @@ function CreditNotesRecordsTable({
                   </AccountsTableCell>
                   <AccountsTableCell className="truncate text-xs">{r.warehouse || "—"}</AccountsTableCell>
                   <AccountsTableCell className="tabular-nums text-xs whitespace-nowrap">
-                    {r.creditNoteDate || "—"}
+                    {formatDisplayDate(r.creditNoteDate)}
                   </AccountsTableCell>
                   <AccountsTableCell align="right" money className="text-xs">
                     {formatINR(r.taxableValue)}
@@ -439,12 +443,12 @@ export default function CreditNotesListClient() {
   const searchParams = useSearchParams();
   const mounted = useClientMounted();
   const { toast, showToast, dismissToast } = useAccountsToast();
-  const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_month");
+  const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_year");
 
   const [moduleTab, setModuleTab] = useState("pending");
   const [statusTab, setStatusTab] = useState("all");
   const [filters, setFilters] = useState<NotesListingFilterState>(() => ({
-    ...resetNotesListingFilters("this_month"),
+    ...resetNotesListingFilters("this_year"),
     dateFrom,
     dateTo,
     preset,
@@ -504,7 +508,7 @@ export default function CreditNotesListClient() {
     setModuleTab("records");
   }, [searchParams, setDateFrom, setDateTo, setPreset]);
 
-  const counts = useMemo(() => computeTabCounts(records), [records]);
+  const counts = useMemo(() => computeTabCounts(records, filters), [records, filters]);
 
   const partyOptions = useMemo(
     () => uniqueOptionsFromValues(records.map((r) => r.customerName)),
@@ -564,7 +568,7 @@ export default function CreditNotesListClient() {
 
   const handleResetFilters = () => {
     setStatusTab("all");
-    const reset = resetNotesListingFilters("this_month");
+    const reset = resetNotesListingFilters("this_year");
     setPreset(reset.preset);
     setDateFrom(reset.dateFrom);
     setDateTo(reset.dateTo);
@@ -603,7 +607,7 @@ export default function CreditNotesListClient() {
               setModuleTab(tab);
               if (tab === "pending") void refresh();
             }}
-            counts={{ pending: pendingCount, records: records.length }}
+            counts={{ pending: pendingCount, records: counts.all }}
             compact
           />
 

@@ -31,8 +31,14 @@ export type PaymentAdjustmentType =
 
 export type PaymentAccountingEntryType = "DEBIT" | "CREDIT";
 
-/** Frontend-only treatment control for Supplier payments (not a backend DTO field). */
-export type PaymentTreatmentUi = "against_outstanding" | "advance_on_account";
+/**
+ * Frontend-only treatment control for Supplier payments (not a backend DTO field).
+ * Backend receives allocations[] + advance_amount; mixed is inferred when both > 0.
+ */
+export type PaymentTreatmentUi =
+  | "against_outstanding"
+  | "advance_on_account"
+  | "mixed_allocation";
 
 export interface PaymentVoucherConfig {
   approval_required: boolean;

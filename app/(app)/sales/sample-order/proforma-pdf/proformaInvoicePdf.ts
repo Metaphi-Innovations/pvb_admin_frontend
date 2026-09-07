@@ -542,6 +542,11 @@ export function mapSampleOrderToProforma(
     lines,
     hsnSummary: Array.from(hsnMap.values()),
     bank: { ...DEFAULT_BANK },
+    narration: (() => {
+      const fromNarration = String(order.narration ?? "").trim();
+      if (fromNarration) return fromNarration;
+      return String(order.remarks ?? "").trim();
+    })(),
     terms: PROFORMA_TERMS,
     summary: {
       grossAmount,

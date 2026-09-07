@@ -4,13 +4,7 @@ import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
 import { formatMoney } from "@/lib/accounts/money-format";
 import { cn } from "@/lib/utils";
 import type { UnpaidInvoiceOption } from "../bank-reconciliation-data";
-
-function formatDisplayDate(iso: string): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString("en-IN", { day: "2-digit", month: "2-digit", year: "numeric" });
-}
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 
 export function ManualInvoiceAllocationTable({
   invoices,

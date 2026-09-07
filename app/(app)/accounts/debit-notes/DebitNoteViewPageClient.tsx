@@ -17,6 +17,7 @@ import {
   voucherStatusToBadgeKey,
 } from "@/components/accounts/voucher-form/TransactionViewHero";
 import { DEBIT_NOTES_BREADCRUMB, DEBIT_NOTES_LIST_PATH, formatINR } from "./note-utils";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 import { LedgerImpactPreview } from "@/components/accounts/LedgerImpactPreview";
 import { debitNoteImpactResolved } from "@/lib/accounts/resolved-impact-previews";
 import "../credit-notes/credit-note-workspace.css";
@@ -531,7 +532,7 @@ export default function DebitNoteViewPageClient({ debitNoteId }: { debitNoteId: 
                     <span className="text-purple-600 block">Reversed Date</span>
                     <span>
                       {record.reversed_at
-                        ? new Date(record.reversed_at).toLocaleDateString()
+                        ? formatDisplayDate(record.reversed_at)
                         : "—"}
                     </span>
                   </div>
@@ -567,7 +568,7 @@ export default function DebitNoteViewPageClient({ debitNoteId }: { debitNoteId: 
                   <VoucherNoteReadOnly>{record.vendorName}</VoucherNoteReadOnly>
                 </VoucherNoteField>
                 <VoucherNoteField label="Debit Note Date">
-                  <VoucherNoteReadOnly>{record.debitNoteDate}</VoucherNoteReadOnly>
+                  <VoucherNoteReadOnly>{formatDisplayDate(record.debitNoteDate)}</VoucherNoteReadOnly>
                 </VoucherNoteField>
                 <VoucherNoteField label="Debit Note No.">
                   <VoucherNoteReadOnly mono>{record.debitNoteNo}</VoucherNoteReadOnly>
@@ -875,7 +876,7 @@ export default function DebitNoteViewPageClient({ debitNoteId }: { debitNoteId: 
                           <tr key={ref.id} className="border-b hover:bg-muted/10">
                             <td className="p-2 font-medium">{ref.reference_type}</td>
                             <td className="p-2 font-mono">{ref.reference_code || "—"}</td>
-                            <td className="p-2">{ref.reference_date || "—"}</td>
+                            <td className="p-2">{formatDisplayDate(ref.reference_date)}</td>
                             <td className="p-2">{ref.relation_type}</td>
                             <td className="p-2 text-right tabular-nums">
                               {ref.allocated_amount ? formatINR(ref.allocated_amount) : "—"}

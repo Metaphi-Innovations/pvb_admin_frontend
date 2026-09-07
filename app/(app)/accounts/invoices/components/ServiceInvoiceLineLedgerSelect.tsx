@@ -29,7 +29,7 @@ export function ServiceInvoiceLineLedgerSelect({
       className={cn("h-8 text-xs text-left", className)}
       compact
       placeholder="Select ledger…"
-      query={{ status: "ACTIVE", allowManualPosting: true }}
+      query={{ status: "ACTIVE" }}
     />
   );
 }

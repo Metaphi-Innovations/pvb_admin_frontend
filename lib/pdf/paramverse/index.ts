@@ -4,6 +4,7 @@ export type { ParamverseCompany } from "./company";
 export {
   asText,
   escapeHtml,
+  escapeSrcAttr,
   formatAmountInWords,
   formatCurrency,
   formatDate,

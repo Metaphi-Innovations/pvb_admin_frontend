@@ -59,21 +59,16 @@ export function mapNoteLineToQuantityView(
   const taxPct = line.taxPct || 0;
   const basic = roundMoney(qty * rate);
   const taxAmt =
-    line.gstAmount && line.gstAmount > 0
-      ? line.gstAmount
-      : taxPct > 0
-        ? roundMoney(basic * (taxPct / 100))
+    taxPct > 0
+      ? roundMoney(basic * (taxPct / 100))
+      : line.gstAmount && line.gstAmount > 0
+        ? line.gstAmount
         : 0;
   const interstate = opts?.interstate ?? false;
   const cgst = !interstate && taxAmt > 0 ? roundMoney(taxAmt / 2) : 0;
   const sgst = !interstate && taxAmt > 0 ? roundMoney(taxAmt - cgst) : 0;
   const igst = interstate ? taxAmt : 0;
-  const lineTotal =
-    line.creditAmount && line.creditAmount > 0
-      ? line.creditAmount
-      : line.debitAmount && line.debitAmount > 0
-        ? line.debitAmount
-        : roundMoney(basic + taxAmt);
+  const lineTotal = roundMoney(basic + taxAmt);
 
   return {
     id: line.id,

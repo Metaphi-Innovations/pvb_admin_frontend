@@ -1,4 +1,4 @@
-import { escapeHtml, asText } from "./formatters";
+import { escapeHtml, escapeSrcAttr, asText } from "./formatters";
 import type { ParamverseCompany } from "./company";
 import { PARAMVERSE_COMPANY } from "./company";
 
@@ -17,7 +17,7 @@ export function renderParamverseHeader(input: PdfHeaderInput): string {
   return `
   <div class="pv-header">
     <div class="pv-logo">
-      ${input.logoSrc ? `<img src="${escapeHtml(input.logoSrc)}" alt="Logo" />` : ""}
+      ${input.logoSrc ? `<img src="${escapeSrcAttr(input.logoSrc)}" alt="Logo" />` : ""}
     </div>
     <div>
       <div class="pv-company-name">${escapeHtml(company.companyName)}</div>

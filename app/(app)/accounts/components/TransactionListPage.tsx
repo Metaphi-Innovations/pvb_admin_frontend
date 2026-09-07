@@ -61,6 +61,7 @@ import { LedgerImpactPreview, type LedgerImpactLine } from "@/components/account
 import { InvoiceTypeBadge } from "@/components/accounts/InvoiceTypeBadge";
 import { parseDocumentsListingFiltersFromSearch } from "@/lib/accounts/documents-listing-filter-query";
 import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 import type { AccountsDataScope } from "@/lib/accounts/accounts-data-events";
 
 export interface TransactionRow {
@@ -250,7 +251,7 @@ function exportTransactionRows(
         r.sourceNo ?? "",
         r.dispatchNo ?? "",
         r.party,
-        r.date,
+        formatDisplayDate(r.date),
         r.taxableValue ?? "",
         r.cgst ?? "",
         r.sgst ?? "",
@@ -264,7 +265,7 @@ function exportTransactionRows(
     const base = [
       ...(showInvoiceTypeColumn ? [r.invoiceType === "stock_transfer" ? "Stock Transfer" : "Sales"] : []),
       r.number,
-      r.date,
+      formatDisplayDate(r.date),
       r.party,
     ];
     const amounts = showGstColumns
@@ -286,9 +287,7 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
   const searchParams = useSearchParams();
   const mounted = useClientMounted();
   const invoiceListingMode = config.invoiceListingMode ?? false;
-  const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange(
-    invoiceListingMode ? "this_year" : "this_month",
-  );
+  const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_year");
   const [search, setSearch] = useState("");
   const [branch, setBranch] = useState("");
   const [warehouse, setWarehouse] = useState("");
@@ -513,14 +512,14 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
                     setPreset,
                     setDateFrom,
                     setDateTo,
-                    invoiceListingMode ? "this_year" : "this_month",
+                    "this_year",
                   );
                 }}
                 filtersActive={accountsListingFiltersActive(
                   { search, preset, dateFrom, dateTo, branch },
                   {
                     search: "",
-                    preset: invoiceListingMode ? "this_year" : "this_month",
+                    preset: "this_year",
                     dateFrom: "",
                     dateTo: "",
                     branch: "",
@@ -569,7 +568,7 @@ export function TransactionListPage<T>({ config }: { config: TransactionListConf
                   setPreset,
                   setDateFrom,
                   setDateTo,
-                  invoiceListingMode ? "this_year" : "this_month",
+                  "this_year",
                 );
               }}
               onCreate={config.newHref ? () => router.push(config.newHref!) : undefined}
@@ -944,7 +943,7 @@ function TransactionListTable<T>({
                 </>
               )}
               <AccountsTableCell>{r.party}</AccountsTableCell>
-              <AccountsTableCell>{r.date}</AccountsTableCell>
+              <AccountsTableCell>{formatDisplayDate(r.date)}</AccountsTableCell>
               {showGstColumns ? (
                 showGstSplitColumns ? (
                   <>

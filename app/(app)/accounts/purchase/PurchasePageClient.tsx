@@ -36,6 +36,7 @@ import {
   PURCHASE_LIST_PATH,
   PURCHASE_PAYMENT_STATUS_LABELS,
 } from "./purchase-utils";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 import { cn } from "@/lib/utils";
 
 export default function PurchasePageClient() {
@@ -159,7 +160,7 @@ export default function PurchasePageClient() {
                     <tr key={r.id} className="accounts-table-row group">
                       <td className="px-2.5 py-2 text-xs font-mono font-medium">{r.invoiceNo}</td>
                       <td className="px-2.5 py-2 text-xs font-mono">{r.vendorInvoiceNo || "—"}</td>
-                      <td className="px-2.5 py-2 text-xs text-muted-foreground">{r.invoiceDate}</td>
+                      <td className="px-2.5 py-2 text-xs text-muted-foreground">{formatDisplayDate(r.invoiceDate)}</td>
                       <td className="px-2.5 py-2 text-xs">{r.vendorName}</td>
                       <td className="px-2.5 py-2 text-xs font-mono">{r.poNumber || "—"}</td>
                       <td className="px-2.5 py-2 text-xs">{PURCHASE_SOURCE_LABELS[r.source]}</td>

@@ -197,14 +197,23 @@ export interface AuditHistoryResponse {
 
 export interface ManualReconcilePayload {
   bank_account_id: string;
-  bank_detail_ids: string[];
-  cleared_date: string;
+  bank_detail_ids?: string[];
+  /** Common cleared date (Mode 1). Omit/null → backend uses each voucher's voucher_date. */
+  cleared_date?: string | null;
+  /** Optional per-detail dates (advanced). Prefer bank_detail_ids + optional cleared_date. */
+  bank_details?: Array<{
+    bank_detail_id: string;
+    cleared_date?: string | null;
+  }>;
   remarks?: string | null;
 }
 
 export interface ManualReconcileResponse {
   reconciledCount: number;
-  clearedDate: string;
+  /** Present when a common cleared_date was applied; null when per-voucher dates were used. */
+  clearedDate: string | null;
+  /** True when cleared dates came from each voucher's own voucher_date. */
+  usedVoucherDates?: boolean;
   reconciliationDate: string;
   mode: "MANUAL";
 }

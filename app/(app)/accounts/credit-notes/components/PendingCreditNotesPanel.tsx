@@ -9,6 +9,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Eye } from "lucide-react";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   AccountsGenerateAction,
   AccountsTableActionCell,
   ACCOUNTS_ACTION_BTN_CLASS,
@@ -48,8 +54,11 @@ import {
   type PendingCreditNoteRow,
 } from "../pending-credit-notes-data";
 import { CREDIT_NOTES_LIST_PATH, formatINR } from "../note-utils";
+import { formatDisplayDate, toIsoDateOnly } from "@/lib/accounts/date-display";
 import { CreditNoteListApi, creditNoteListApiError } from "../credit-note-list-api";
 import { AccountsToast, useAccountsToast } from "@/components/accounts/AccountsToast";
+import { Calculator } from "lucide-react";
+import { TurnoverSchemeCalculationModal } from "./TurnoverSchemeCalculationModal";
 
 /* Toolbar Source options — restore with ReportMoreFilters when needed.
 const SOURCE_FILTER_OPTIONS: { value: Exclude<PendingSourceFilter, "all">; label: string }[] = [
@@ -115,7 +124,7 @@ function PendingCreditNotesTable({
 
   return (
     <>
-      <AccountsTable minWidth={schemeFocused ? 1180 : 980}>
+      <AccountsTable minWidth={schemeFocused ? 1180 : 1040}>
         <AccountsTableHead>
           <AccountsTableHeadRow>
             {schemeFocused ? (
@@ -149,9 +158,9 @@ function PendingCreditNotesTable({
                 <SortTh label="Customer" colKey="customerName" className="accounts-col-party" />
                 <SortTh label="Reference" colKey="referenceNo" />
                 <SortTh label="Invoice(s)" colKey="linkedInvoices" />
-                <SortTh label="Eligible" colKey="eligibleCreditAmount" filterType="amount" align="right" />
-                <SortTh label="GST" colKey="gstAmount" filterType="amount" align="right" />
-                <SortTh label="Total" colKey="totalAmount" filterType="amount" align="right" />
+                <SortTh label="Eligible" colKey="eligibleCreditAmount" filterType="amount" align="right" className="min-w-[6.5rem]" />
+                <SortTh label="GST" colKey="gstAmount" filterType="amount" align="right" className="min-w-[5.5rem]" />
+                <SortTh label="Total" colKey="totalAmount" filterType="amount" align="right" className="min-w-[6.5rem]" />
               </>
             )}
             <AccountsColumnHeader
@@ -180,7 +189,7 @@ function PendingCreditNotesTable({
                   {schemeFocused ? (
                     <>
                       <AccountsTableCell className="text-xs tabular-nums whitespace-nowrap">
-                        {row.eligibleDate || "—"}
+                        {formatDisplayDate(row.eligibleDate)}
                       </AccountsTableCell>
                       <AccountsTableCell
                         className="accounts-col-party font-medium truncate text-xs"
@@ -240,18 +249,43 @@ function PendingCreditNotesTable({
                       <AccountsTableCell mono className="font-semibold text-brand-700 truncate text-xs">
                         {row.referenceNo}
                       </AccountsTableCell>
-                      <AccountsTableCell mono className="truncate text-xs" title={row.linkedInvoiceNos.join(", ") || undefined}>
-                        {row.linkedInvoiceNos.length
-                          ? row.linkedInvoiceNos.join(", ")
-                          : "—"}
+                      <AccountsTableCell mono className="text-xs">
+                        {row.linkedInvoiceNos.length === 0 ? (
+                          "—"
+                        ) : row.linkedInvoiceNos.length <= 2 ? (
+                          <span>{row.linkedInvoiceNos.join(", ")}</span>
+                        ) : (
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span>{row.linkedInvoiceNos.slice(0, 2).join(", ")}</span>
+                            <TooltipProvider delayDuration={150}>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="cursor-pointer inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-brand-50 text-brand-700 border border-brand-200 hover:bg-brand-100">
+                                    +{row.linkedInvoiceNos.length - 2} more
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="max-w-xs max-h-48 overflow-y-auto">
+                                  <p className="font-semibold mb-1 text-[11px]">All Linked Invoices ({row.linkedInvoiceNos.length}):</p>
+                                  <div className="flex flex-wrap gap-1 font-mono text-[10px]">
+                                    {row.linkedInvoiceNos.map((inv) => (
+                                      <span key={inv} className="bg-muted px-1 py-0.5 rounded">
+                                        {inv}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </div>
+                        )}
                       </AccountsTableCell>
-                      <AccountsTableCell align="right" money className="text-xs tabular-nums">
+                      <AccountsTableCell align="right" money className="text-xs tabular-nums min-w-[6.5rem]">
                         {formatINR(row.eligibleCreditAmount)}
                       </AccountsTableCell>
-                      <AccountsTableCell align="right" money className="text-xs tabular-nums">
+                      <AccountsTableCell align="right" money className="text-xs tabular-nums min-w-[5.5rem]">
                         {formatINR(row.gstAmount)}
                       </AccountsTableCell>
-                      <AccountsTableCell align="right" money className="text-xs font-medium tabular-nums">
+                      <AccountsTableCell align="right" money className="text-xs font-medium tabular-nums min-w-[6.5rem]">
                         {formatINR(row.totalAmount)}
                       </AccountsTableCell>
                     </>
@@ -308,6 +342,7 @@ export function PendingCreditNotesPanel({
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [loading, setLoading] = useState(true);
+  const [turnoverModalOpen, setTurnoverModalOpen] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -340,7 +375,7 @@ export function PendingCreditNotesPanel({
     if (key === "sourceType") return PENDING_CREDIT_SOURCE_LABELS[row.sourceType] || row.sourceType;
     if (key === "linkedInvoices") return row.linkedInvoiceNos.join(", ");
     if (key === "schemeCode") return row.schemeCode || row.referenceNo;
-    if (key === "eligibleDate") return row.eligibleDate || "";
+    if (key === "eligibleDate") return toIsoDateOnly(row.eligibleDate);
     if (key === "eligibleBaseAmount") return row.eligibleBaseAmount ?? row.eligibleCreditAmount;
     return (row as unknown as Record<string, unknown>)[key];
   }, []);
@@ -348,7 +383,7 @@ export function PendingCreditNotesPanel({
   const columnConfig = useMemo((): AccountsColumnFilterConfig => {
     if (schemeFocused) {
       return {
-        eligibleDate: { type: "text" },
+        eligibleDate: { type: "date" },
         customerName: { type: "text" },
         schemeType: { type: "text" },
         schemeName: { type: "text" },
@@ -397,6 +432,16 @@ export function PendingCreditNotesPanel({
               placeholder="Search reference, customer, invoice, scheme…"
               className="min-w-[180px] flex-1 max-w-sm"
             />
+            <div className="ml-auto flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setTurnoverModalOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-brand-50 border border-brand-200 text-brand-700 hover:bg-brand-100 dark:bg-brand-950/50 dark:border-brand-800 dark:text-brand-300 transition-colors shadow-sm"
+              >
+                <Calculator className="w-3.5 h-3.5" />
+                Calculate Turnover Scheme
+              </button>
+            </div>
             {/* Toolbar Source / More Filters — same filter lives on the Source column.
             <ReportMoreFilters activeCount={activeSourceCount}>
               <div className="px-1 space-y-2">
@@ -446,6 +491,15 @@ export function PendingCreditNotesPanel({
           />
         </AccountsColumnFilterProvider>
       </AccountsTableListing>
+      <TurnoverSchemeCalculationModal
+        open={turnoverModalOpen}
+        onClose={() => setTurnoverModalOpen(false)}
+        onSuccess={(msg) => {
+          showToast(msg, "success");
+          void refresh();
+        }}
+        onError={(err) => showToast(err, "error")}
+      />
       <AccountsToast toast={toast} onDismiss={dismissToast} />
     </>
   );

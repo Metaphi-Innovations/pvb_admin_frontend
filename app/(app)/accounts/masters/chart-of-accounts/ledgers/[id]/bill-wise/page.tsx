@@ -6,14 +6,14 @@ import BillWiseOutstandingPageClient from "../../BillWiseOutstandingPageClient";
 
 export default function BillWiseOutstandingPage() {
   const { id } = useParams<{ id: string }>();
-  const ledgerId = Number(id);
+  const ledgerKey = decodeURIComponent(String(id ?? "")).trim();
   const [from, setFrom] = useState<string | null | undefined>(undefined);
 
   useEffect(() => {
     setFrom(new URLSearchParams(window.location.search).get("from"));
   }, []);
 
-  if (!Number.isFinite(ledgerId)) {
+  if (!ledgerKey) {
     return (
       <div className="py-16 text-center">
         <p className="text-sm text-muted-foreground">Invalid ledger.</p>
@@ -29,5 +29,5 @@ export default function BillWiseOutstandingPage() {
     );
   }
 
-  return <BillWiseOutstandingPageClient ledgerId={ledgerId} from={from} />;
+  return <BillWiseOutstandingPageClient ledgerKey={ledgerKey} from={from} />;
 }

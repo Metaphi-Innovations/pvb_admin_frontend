@@ -1,8 +1,12 @@
-import { getAgeingBucketLabels, type AgeingBreakpoints } from "@/lib/accounts/ageing-breakpoints";
+import {
+  getApiAgeingBucketKeys,
+  type AgeingBreakpoints,
+} from "@/lib/accounts/ageing-breakpoints";
 import { formatSettlementMode } from "@/lib/accounts/outstanding-voucher-history";
 import type {
   ApiCollectionFollowUpRow,
-  ApiCustomerAgeingRow,
+  ApiCustomerAgeingGroup,
+  ApiCustomerAgeingInvoiceRow,
   ApiCustomerInvoiceOutstandingRow,
   ApiCustomerOutstandingRow,
   ApiInvoiceOutstandingRow,
@@ -12,7 +16,9 @@ import type {
   ReceivableStatus,
 } from "@/lib/accounts/receivables-data";
 import type {
+  AgingApiInvoiceRow,
   AgingApiRow,
+  AgingBucketMap,
   ApiFollowUpStatus,
   ApiReceivableStatus,
   CustomerDetailInvoiceApiRow,
@@ -121,21 +127,111 @@ export function mapReceivableInvoiceRow(row: ReceivableInvoiceApiRow): ApiInvoic
   };
 }
 
-export function mapAgingRow(
+function moneyAmount(value: unknown): number {
+  if (value == null) return 0;
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function mapBucketAmounts(
+  source: AgingBucketMap | undefined,
+  bucketKeys: string[],
+): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const key of bucketKeys) {
+    out[key] = moneyAmount(source?.[key]);
+  }
+  return out;
+}
+
+function mapAgingInvoiceRow(
+  row: AgingApiInvoiceRow,
+  bucketKeys: string[],
+): ApiCustomerAgeingInvoiceRow {
+  return {
+    openItemId: row.openItemId,
+    invoiceId: row.invoiceId ?? null,
+    invoiceNumber: row.invoiceNumber ?? "",
+    invoiceDate: row.invoiceDate ?? "",
+    dueDate: row.dueDate ?? "",
+    originalAmount: moneyAmount(row.originalAmount),
+    settledAmount: moneyAmount(row.settledAmount),
+    outstandingAmount: moneyAmount(row.outstandingAmount),
+    ageDays: row.ageDays ?? null,
+    notDueAmount: moneyAmount(row.notDueAmount),
+    buckets: mapBucketAmounts(row.buckets, bucketKeys),
+  };
+}
+
+/**
+ * Maps a customer ageing group from the API.
+ * Bucket amounts are keyed by backend labels (e.g. "0-30"), not display strings.
+ */
+export function mapAgingCustomerGroup(
   row: AgingApiRow,
   breakpoints: AgeingBreakpoints,
-): ApiCustomerAgeingRow {
-  const labels = getAgeingBucketLabels(breakpoints);
-  const buckets = labels.map((label) => row.buckets[label] ?? 0);
+): ApiCustomerAgeingGroup {
+  const bucketKeys = getApiAgeingBucketKeys(breakpoints);
+  const totalsSource = row.totals ?? {
+    totalOutstanding: row.totalOutstanding,
+    notDueAmount: row.notDueAmount ?? 0,
+    buckets: row.buckets,
+  };
+  const invoices = (row.invoices ?? []).map((inv) =>
+    mapAgingInvoiceRow(inv, bucketKeys),
+  );
+  const totals = {
+    totalOutstanding: moneyAmount(totalsSource.totalOutstanding),
+    notDueAmount: moneyAmount(totalsSource.notDueAmount),
+    buckets: mapBucketAmounts(totalsSource.buckets, bucketKeys),
+  };
+
+  if (process.env.NODE_ENV !== "production") {
+    const bucketSum = Object.values(totals.buckets).reduce((s, v) => s + v, 0);
+    const reconstructed = Math.round((totals.notDueAmount + bucketSum) * 100) / 100;
+    if (Math.abs(reconstructed - totals.totalOutstanding) > 0.02) {
+      console.warn(
+        "[receivables ageing] customer totals mismatch",
+        row.customerId,
+        { totalOutstanding: totals.totalOutstanding, reconstructed },
+      );
+    }
+  }
+
   return {
     customerId: row.customerId,
     customerName: row.customerName,
     customerCode: row.customerCode,
+    invoices,
+    totals,
+    bucketKeys,
+  };
+}
+
+/** @deprecated Use mapAgingCustomerGroup for the grouped Ageing View. */
+export function mapAgingRow(
+  row: AgingApiRow,
+  breakpoints: AgeingBreakpoints,
+): {
+  customerId: string;
+  customerName: string;
+  customerCode: string;
+  territory: string;
+  salesExecutive: string;
+  buckets: number[];
+  totalOutstanding: number;
+  oldestInvoiceDate: string;
+} {
+  const group = mapAgingCustomerGroup(row, breakpoints);
+  return {
+    customerId: group.customerId,
+    customerName: group.customerName,
+    customerCode: group.customerCode,
     territory: "—",
     salesExecutive: "—",
-    buckets,
-    totalOutstanding: row.totalOutstanding,
-    oldestInvoiceDate: "—",
+    buckets: group.bucketKeys.map((key) => group.totals.buckets[key] ?? 0),
+    totalOutstanding: group.totals.totalOutstanding,
+    oldestInvoiceDate: group.invoices[0]?.invoiceDate || "—",
   };
 }
 

@@ -4,6 +4,7 @@ import React, { useMemo, useState } from "react";
 import { Tag } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatMoney } from "@/lib/accounts/money-format";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 import { cn } from "@/lib/utils";
 import { loadBankReconTransactions, type BankReconTransactionRecord } from "@/lib/accounts/bank-recon-register";
 import { canCategorizeTransaction } from "@/lib/accounts/bank-recon-categorize-service";
@@ -61,7 +62,7 @@ export function BankReconCategorizeTab({ bankAccountId, onRefresh, registerTick 
                   <p className="font-medium truncate">{txn.reference || txn.chequeNo || "No reference"}</p>
                   <p className="text-[11px] text-muted-foreground line-clamp-1">{txn.narration}</p>
                   <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                    <span className="text-[11px] text-muted-foreground">{txn.statementDate}</span>
+                    <span className="text-[11px] text-muted-foreground">{formatDisplayDate(txn.statementDate)}</span>
                     <BankReconSourceBadge source={txn.source} />
                     <BankReconMatchStatusBadge status={txn.matchStatus} />
                   </div>

@@ -11,6 +11,7 @@ import {
   billWiseOutstandingHref,
   type BillWisePartyKind,
 } from "@/lib/accounts/bill-wise-outstanding";
+import { resolvePartyLedgerUuidFromCoaId } from "@/lib/accounts/resolve-party-ledger";
 
 export interface PartyCrossNavItem {
   label: string;
@@ -125,17 +126,32 @@ export function buildBillWiseCrossNavLinks(opts: {
 export function buildReceivablesDetailCrossNavLinks(opts: {
   customerId: number | string;
   ledgerId?: number;
+  /** Backend AccountLedger UUID — preferred for Bill-wise Outstanding href. */
+  partyLedgerId?: string | null;
 }): PartyCrossNavItem[] {
   const links: PartyCrossNavItem[] = [];
   const ledgerId = opts.ledgerId ?? 0;
+  const apiNodeId =
+    opts.partyLedgerId && String(opts.partyLedgerId).trim()
+      ? String(opts.partyLedgerId).trim()
+      : ledgerId > 0
+        ? resolvePartyLedgerUuidFromCoaId(ledgerId)
+        : null;
+
+  if (apiNodeId || ledgerId > 0) {
+    links.push({
+      label: "Bill-wise Outstanding",
+      href: billWiseOutstandingHref(
+        apiNodeId || ledgerId,
+        undefined,
+        apiNodeId,
+      ),
+    });
+  }
   if (ledgerId > 0) {
     links.push({
       label: "View Ledger",
       href: buildGeneralLedgerHref(ledgerId),
-    });
-    links.push({
-      label: "Bill-wise Outstanding",
-      href: billWiseOutstandingHref(ledgerId),
     });
   }
   const customerId = opts.customerId;
@@ -155,17 +171,32 @@ export function buildReceivablesDetailCrossNavLinks(opts: {
 export function buildPayablesDetailCrossNavLinks(opts: {
   vendorId: number | string;
   ledgerId?: number;
+  /** Backend AccountLedger UUID — preferred for Bill-wise Outstanding href. */
+  partyLedgerId?: string | null;
 }): PartyCrossNavItem[] {
   const links: PartyCrossNavItem[] = [];
   const ledgerId = opts.ledgerId ?? 0;
+  const apiNodeId =
+    opts.partyLedgerId && String(opts.partyLedgerId).trim()
+      ? String(opts.partyLedgerId).trim()
+      : ledgerId > 0
+        ? resolvePartyLedgerUuidFromCoaId(ledgerId)
+        : null;
+
+  if (apiNodeId || ledgerId > 0) {
+    links.push({
+      label: "Bill-wise Outstanding",
+      href: billWiseOutstandingHref(
+        apiNodeId || ledgerId,
+        undefined,
+        apiNodeId,
+      ),
+    });
+  }
   if (ledgerId > 0) {
     links.push({
       label: "View Ledger",
       href: buildGeneralLedgerHref(ledgerId),
-    });
-    links.push({
-      label: "Bill-wise Outstanding",
-      href: billWiseOutstandingHref(ledgerId),
     });
   }
   const vendorId = opts.vendorId;

@@ -121,6 +121,8 @@ export interface InvoiceLineItem {
 	unit: string;
 	unitPrice: number;
 	discountPct: number;
+	/** Optional calculated discount amount in ₹ */
+	discountAmt?: number;
 	taxPct: number;
 	amount: number;
 	/** Stored GST split from backend (when posted via API). */
@@ -129,6 +131,8 @@ export interface InvoiceLineItem {
 	igstAmount?: number;
 	creditedQty?: number;
 	creditedAmount?: number;
+	/** Dispatch item UUID when prepared from dispatch API. */
+	dispatchItemId?: string;
 	/** Dispatch batch snapshot (Sales Order generation). */
 	batchNo?: string;
 	manufacturingDate?: string;

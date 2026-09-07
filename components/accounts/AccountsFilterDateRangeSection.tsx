@@ -11,6 +11,7 @@ import {
   ACCOUNTS_DATE_FILTER_WIDTH_CLASS,
   ACCOUNTS_FILTER_LABEL_CLASS,
 } from "@/lib/accounts/accounts-typography";
+import { demoFinancialYearStart, demoFinancialYearEnd } from "@/lib/accounts/demo-date-utils";
 
 export function AccountsFilterDateRangeSection({
   dateFrom,
@@ -18,12 +19,16 @@ export function AccountsFilterDateRangeSection({
   onDateFromChange,
   onDateToChange,
   showLabel = true,
+  min = demoFinancialYearStart(),
+  max = demoFinancialYearEnd(),
 }: {
   dateFrom: string;
   dateTo: string;
   onDateFromChange: (value: string) => void;
   onDateToChange: (value: string) => void;
   showLabel?: boolean;
+  min?: string;
+  max?: string;
   /** @deprecated ignored — all date inputs use compact filter sizing */
   size?: "compact" | "default";
 }) {
@@ -33,7 +38,14 @@ export function AccountsFilterDateRangeSection({
       <div className="flex items-center gap-1.5">
         <AccountsDateInput
           value={dateFrom}
-          onChange={onDateFromChange}
+          min={min}
+          max={dateTo || max}
+          onChange={(val) => {
+            let clamped = val;
+            if (min && clamped && clamped < min) clamped = min;
+            if (max && clamped && clamped > max) clamped = max;
+            onDateFromChange(clamped);
+          }}
           aria-label="From date"
           className={ACCOUNTS_DATE_FILTER_WIDTH_CLASS}
         />
@@ -42,7 +54,14 @@ export function AccountsFilterDateRangeSection({
         </span>
         <AccountsDateInput
           value={dateTo}
-          onChange={onDateToChange}
+          min={dateFrom || min}
+          max={max}
+          onChange={(val) => {
+            let clamped = val;
+            if (min && clamped && clamped < min) clamped = min;
+            if (max && clamped && clamped > max) clamped = max;
+            onDateToChange(clamped);
+          }}
           aria-label="To date"
           className={ACCOUNTS_DATE_FILTER_WIDTH_CLASS}
         />

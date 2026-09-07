@@ -1,6 +1,7 @@
 "use client";
 
 import { formatMoney } from "@/lib/accounts/money-format";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { formatTdsSectionSnapshotLabel } from "@/services/tds-list.service";
@@ -161,7 +162,7 @@ export function ReceiptAllocationTable({
                     {row.document_number}
                   </td>
                   <td className={cn(TEXT_TD, "px-2 whitespace-nowrap")}>
-                    {row.document_date || "—"}
+                    {formatDisplayDate(row.document_date)}
                   </td>
                   <td className={cn(AMOUNT_TD, "font-medium")}>
                     {formatMoney(row.outstanding_amount)}

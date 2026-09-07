@@ -55,6 +55,14 @@ export type AdditionalChargeInput = {
   additional_charge_id?: string | null;
 };
 
+export type DispatchLineItemOverride = {
+  dispatch_item_id?: string;
+  product_id?: string;
+  discount_percentage?: number | string | null;
+  discount_amount?: number | string | null;
+  rate?: number | string | null;
+};
+
 export type CreateFromDispatchPayload = {
   invoice_date: string;
   due_date?: string | null;
@@ -82,6 +90,9 @@ export type CreateFromDispatchPayload = {
   eway_bill_qr_code?: string | null;
   additional_charges?: AdditionalChargeInput[];
   round_off_amount?: number | string | null;
+  line_item_overrides?: DispatchLineItemOverride[];
+  /** Near Expiry / Special — when set, automatic schemes are skipped. */
+  selected_cn_scheme_id?: string | null;
 };
 
 export type DirectServiceItemInput = {
@@ -90,6 +101,8 @@ export type DirectServiceItemInput = {
   sac_id: string;
   quantity?: number | string;
   rate: number | string;
+  discount_percentage?: number | string | null;
+  discount_amount?: number | string | null;
   gst_rate?: number | string;
   narration?: string | null;
 };
@@ -120,6 +133,44 @@ export type SalesInvoiceCreateResult = {
   accounting_voucher_id?: string;
   voucher_number?: string;
   already_posted?: boolean;
+  cn_scheme?: {
+    applied: boolean;
+    scheme_id: string | null;
+    scheme_type: string | null;
+    pending_credit_note_id: string | null;
+    skipped_reason?: string;
+  } | null;
+};
+
+export type EligibleInvoiceCnSchemeOffer = {
+  scheme_id: string;
+  scheme_code: string;
+  scheme_name: string;
+  scheme_type: "NEAR_EXPIRY" | "SPECIAL_SCHEME";
+  run_mode: "AUTOMATIC" | "MANUAL";
+  will_auto_apply: boolean;
+  based_on?: "SALES_AMOUNT" | "SALES_QUANTITY" | null;
+  evaluation_scope?: "PER_INVOICE" | "SCHEME_PERIOD" | null;
+  discount_type: "Percentage" | "Flat" | null;
+  discount_value: number | null;
+  estimated_benefit_amount: number;
+  summary: string;
+  qualifying_lines: Array<{
+    product_id: string;
+    product_code: string;
+    product_name: string;
+    quantity: number;
+    taxable_amount: number;
+    batch_number?: string | null;
+    batch_expiry_date?: string | null;
+    remaining_expiry_days?: number | null;
+    line_benefit_amount: number;
+  }>;
+};
+
+export type EligibleInvoiceCnSchemesResult = {
+  schemes: EligibleInvoiceCnSchemeOffer[];
+  default_auto_scheme_id: string | null;
 };
 
 export type SalesInvoiceCancelResult = {
@@ -977,7 +1028,10 @@ export const SalesInvoiceService = {
 
   async previewDispatchTotals(
     dispatchId: string,
-    payload: Pick<CreateFromDispatchPayload, "additional_charges" | "round_off_amount"> = {},
+    payload: Pick<
+      CreateFromDispatchPayload,
+      "additional_charges" | "round_off_amount" | "line_item_overrides"
+    > = {},
   ): Promise<DispatchInvoiceTotalsPreview> {
     try {
       const response = await axiosInstance.post(
@@ -992,6 +1046,29 @@ export const SalesInvoiceService = {
     } catch (error) {
       throw new Error(
         extractErrorMessage(error, "Failed to preview dispatch invoice totals."),
+      );
+    }
+  },
+
+  async getEligibleCnSchemes(
+    dispatchId: string,
+    invoiceDate?: string,
+  ): Promise<EligibleInvoiceCnSchemesResult> {
+    try {
+      const qs = invoiceDate
+        ? `?invoice_date=${encodeURIComponent(invoiceDate)}`
+        : "";
+      const response = await axiosInstance.get(
+        `${API_ENDPOINTS.ACCOUNTS.SALES_INVOICE.ELIGIBLE_CN_SCHEMES(dispatchId)}${qs}`,
+      );
+      const data = unwrapData(response);
+      return (data ?? {
+        schemes: [],
+        default_auto_scheme_id: null,
+      }) as EligibleInvoiceCnSchemesResult;
+    } catch (error) {
+      throw new Error(
+        extractErrorMessage(error, "Failed to load eligible schemes."),
       );
     }
   },

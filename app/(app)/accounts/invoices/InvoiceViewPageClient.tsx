@@ -75,6 +75,7 @@ import {
   resolveDisplayDiscountPct,
   resolveLineSku,
 } from "./invoice-view-display";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 import "./sales-order-invoice-form-compact.css";
 import "@/components/accounts/voucher-form/transaction-view.css";
 
@@ -648,8 +649,8 @@ export default function InvoiceViewPageClient({
           <VoucherFormSectionCard title="Invoice Details" highlight>
             <div className={INVOICE_FORM_GRID_CLASS}>
               <Field label="Invoice No." value={record.invoiceNo} mono />
-              <Field label="Invoice Date" value={record.invoiceDate} />
-              <Field label="Due Date" value={record.dueDate} />
+              <Field label="Invoice Date" value={formatDisplayDate(record.invoiceDate)} />
+              <Field label="Due Date" value={formatDisplayDate(record.dueDate)} />
               <Field
                 label="Sales Order No."
                 value={record.salesOrderNo || record.referenceNo}
@@ -726,15 +727,15 @@ export default function InvoiceViewPageClient({
                   }
                 />
                 <Field label="LR / Lorry Receipt No." value={record.lrNo} />
-                <Field label="LR Date" value={record.lrDate} />
+                <Field label="LR Date" value={formatDisplayDate(record.lrDate)} />
                 <Field label="Transport Doc No." value={record.transportDocNo} />
-                <Field label="Transport Doc Date" value={record.transportDocDate} />
+                <Field label="Transport Doc Date" value={formatDisplayDate(record.transportDocDate)} />
                 <Field label="E-Invoice Status" value={record.eInvoiceStatus} />
                 <Field label="E-Invoice No." value={record.eInvoiceNo} mono />
                 <Field label="IRN" value={record.irn} mono />
                 <Field label="E-Way Bill Status" value={record.ewayBillStatus} />
                 <Field label="E-Way Bill No." value={record.ewayBillNo} mono />
-                <Field label="E-Way Expiry" value={record.ewayBillExpiryDate} />
+                <Field label="E-Way Expiry" value={formatDisplayDate(record.ewayBillExpiryDate)} />
               </div>
             </VoucherFormSectionCard>
           ) : null}

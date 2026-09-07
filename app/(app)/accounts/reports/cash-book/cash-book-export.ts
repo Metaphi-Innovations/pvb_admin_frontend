@@ -12,6 +12,7 @@ import {
   todayExportDateSuffix,
 } from "@/lib/accounts/report-export-presentation";
 import type { CashBookDisplayRow, CashBookSummary } from "./cash-book-data";
+import { formatCashBookDate } from "./cash-book-data";
 
 export interface CashBookExportMeta {
   dateFrom: string;
@@ -55,7 +56,7 @@ function buildCashBookBodyHtml(rows: CashBookDisplayRow[], summary: CashBookSumm
     .map(
       (r) => `
     <tr class="${r.kind === "opening" ? "summary-row" : ""}">
-      <td>${escapeHtml(r.date)}</td>
+      <td>${escapeHtml(formatCashBookDate(r.date))}</td>
       <td>${escapeHtml(r.kind === "opening" ? "—" : r.voucherNo)}</td>
       <td>${escapeHtml(r.voucherType)}</td>
       <td>${escapeHtml(r.particular)}</td>
@@ -83,7 +84,7 @@ export async function exportCashBookToExcel(
   summary: CashBookSummary,
   meta: CashBookExportMeta,
 ): Promise<void> {
-  const safeName = summary.ledgerCode.replace(/[^\w-]+/g, "_");
+  const safeName = (summary.ledgerCode || summary.ledgerName || "All").replace(/[^\w-]+/g, "_");
   const html = buildReportExcelDocumentHtml({
     title: `Cash Book — ${summary.ledgerName}`,
     header: buildHeaderOptions(summary, meta),

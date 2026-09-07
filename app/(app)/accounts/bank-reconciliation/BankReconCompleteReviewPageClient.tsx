@@ -24,6 +24,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { formatMoney } from "@/lib/accounts/money-format";
+import { formatDisplayDate, formatDisplayDateRange, formatDisplayDateTime } from "@/lib/accounts/date-display";
 import { cn } from "@/lib/utils";
 import { ACCOUNTS_ACTION_BUTTON_CLASS } from "@/lib/accounts/accounts-typography";
 import {
@@ -312,7 +313,7 @@ export default function BankReconCompleteReviewPageClient({
                 <p className="font-medium">{review.maskedAccountNumber}</p>
                 <p className="text-muted-foreground">Period</p>
                 <p className="font-medium">
-                  {review.periodFrom} — {review.periodTo}
+                  {formatDisplayDateRange(review.periodFrom, review.periodTo)}
                 </p>
                 <p className="text-muted-foreground">Previous Reconciled</p>
                 <p className="font-medium">{review.previousReconciliationDate ?? "—"}</p>
@@ -563,7 +564,7 @@ export default function BankReconCompleteReviewPageClient({
                   Completed On:{" "}
                   <strong>
                     {session.completedOn
-                      ? new Date(session.completedOn).toLocaleString("en-IN")
+                      ? formatDisplayDateTime(session.completedOn)
                       : "—"}
                   </strong>
                 </p>

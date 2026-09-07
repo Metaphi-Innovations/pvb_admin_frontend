@@ -50,8 +50,8 @@ import {
   ReportStatusMultiFilter,
   REPORT_BRANCH_OPTIONS,
 } from "@/components/accounts/ReportFilters";
-import { PartyCrossNavButtons } from "@/components/accounts/PartyCrossNavButtons";
 import { accountsBreadcrumb, CHART_OF_ACCOUNTS_HREF } from "@/lib/accounts/accounts-nav";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 import { formatMoney } from "@/lib/accounts/money-format";
 import { useClientMounted } from "@/lib/use-client-mounted";
 import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
@@ -62,7 +62,13 @@ import {
   type BillWiseOutstandingView,
 } from "@/lib/accounts/bill-wise-outstanding";
 import { isBillWiseDemoDocumentId } from "@/lib/accounts/bill-wise-demo-data";
-import { buildBillWiseCrossNavLinks } from "@/lib/accounts/party-cross-nav";
+import { BillWiseOutstandingPanel } from "@/components/accounts/outstanding/BillWiseOutstandingPanel";
+import { PayablesBillWiseOutstandingPanel } from "@/components/accounts/outstanding/PayablesBillWiseOutstandingPanel";
+import {
+  resolveBillWiseLedgerContext,
+  type ResolvedBillWiseLedgerContext,
+} from "@/lib/accounts/resolve-party-ledger";
+import { useCoaNavigation } from "@/components/accounts/CoaNavigationContext";
 import { defaultDayBookFyDateRange } from "@/lib/accounts/day-book-data";
 import {
   DAY_BOOK_DATE_RANGE_PRESET_OPTIONS,
@@ -109,13 +115,6 @@ const BILL_WISE_COLUMN_CONFIG: AccountsColumnFilterConfig = {
   daysOverdue: { type: "number" },
   status: { type: "status" },
 };
-
-function formatReportDate(value: string): string {
-  if (!value || value === "—") return "—";
-  const [y, m, d] = value.slice(0, 10).split("-");
-  if (!y || !m || !d) return value;
-  return `${d}-${m}-${y}`;
-}
 
 function statusPillClass(status: string): string {
   const s = status.toLowerCase();
@@ -221,14 +220,132 @@ function filterBillWiseReferences(
 }
 
 export default function BillWiseOutstandingPageClient({
-  ledgerId,
+  ledgerKey,
   from,
 }: {
-  ledgerId: number;
+  /** Local COA numeric id OR backend AccountLedger UUID. */
+  ledgerKey: string;
   from?: string | null;
 }) {
   const mounted = useClientMounted();
   const sectionRefresh = useAccountsSectionRefresh();
+  const { records: coaRecords, coaReady } = useCoaNavigation();
+  const numericLedgerId = Number(ledgerKey);
+  const ledgerId =
+    Number.isFinite(numericLedgerId) && numericLedgerId > 0
+      ? numericLedgerId
+      : -1;
+
+  const [resolved, setResolved] = useState<ResolvedBillWiseLedgerContext | null>(
+    null,
+  );
+  const [resolveLoading, setResolveLoading] = useState(true);
+  const [resolveError, setResolveError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!mounted || !ledgerKey) {
+      setResolved(null);
+      setResolveLoading(false);
+      return;
+    }
+    // Wait for live COA tree when the route key is a hashed numeric id so we
+    // can map it to AccountLedger UUID (apiNodeId). UUID keys can resolve immediately.
+    const keyIsUuid =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        ledgerKey,
+      );
+    if (!keyIsUuid && !coaReady) {
+      setResolveLoading(true);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      setResolveLoading(true);
+      setResolveError(null);
+      try {
+        const ctx = await resolveBillWiseLedgerContext(
+          ledgerKey,
+          coaRecords.length > 0 ? coaRecords : null,
+        );
+        if (!cancelled) setResolved(ctx);
+      } catch (e) {
+        if (!cancelled) {
+          setResolved(null);
+          setResolveError(
+            e instanceof Error
+              ? e.message
+              : "Failed to resolve party ledger for bill-wise outstanding.",
+          );
+        }
+      } finally {
+        if (!cancelled) setResolveLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    mounted,
+    ledgerKey,
+    sectionRefresh,
+    coaReady,
+    // Length only — avoid re-resolving on unstable empty-array identity before tree loads.
+    coaRecords.length,
+  ]);
+
+  const backHref =
+    from === "gl"
+      ? `/accounts/reports/general-ledger?ledgerId=${encodeURIComponent(ledgerKey)}`
+      : `${CHART_OF_ACCOUNTS_HREF}?node=${encodeURIComponent(
+          String(resolved?.coaLedgerId ?? ledgerKey),
+        )}`;
+
+  const apiPage =
+    mounted && !resolveLoading && resolved ? (
+      resolved.kind === "customer" ? (
+        <BillWiseOutstandingPanel
+          partyLedgerId={resolved.partyLedgerId}
+          partyCode={resolved.partyCode}
+          partyName={resolved.partyName}
+          partyKind="customer"
+          backHref={backHref}
+          docLabel="Invoice"
+          refreshKey={sectionRefresh}
+        />
+      ) : resolved.supplierId ? (
+        <PayablesBillWiseOutstandingPanel
+          supplierId={resolved.supplierId}
+          partyCode={resolved.partyCode}
+          partyName={resolved.partyName}
+          backHref={backHref}
+          refreshKey={sectionRefresh}
+        />
+      ) : (
+        <AccountsPageShell
+          breadcrumbs={[
+            ...accountsBreadcrumb("Chart of Accounts", resolved.partyName, backHref),
+            { label: "Bill-wise Outstanding" },
+          ]}
+          title="Bill-wise Outstanding"
+          description={`${resolved.partyCode} · ${resolved.partyName} · Supplier`}
+          actions={
+            <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" asChild>
+              <Link href={backHref}>
+                <ArrowLeft className="w-3.5 h-3.5" />
+                Back
+              </Link>
+            </Button>
+          }
+          layout="standard"
+        >
+          <div className="rounded-lg border border-border bg-white p-4 text-sm text-muted-foreground">
+            Supplier master link is missing for this ledger. Open the supplier
+            outstanding screen from Payables, or re-sync the supplier ledger.
+          </div>
+        </AccountsPageShell>
+      )
+    ) : null;
+
   const [viewRow, setViewRow] = useState<BillWiseReferenceRow | null>(null);
   const [datesReady, setDatesReady] = useState(false);
   const [preset, setPreset] = useState<DateRangePresetId>("custom");
@@ -252,7 +369,10 @@ export default function BillWiseOutstandingPageClient({
   }, []);
 
   const view = useMemo(
-    () => (mounted && Number.isFinite(ledgerId) ? getBillWiseOutstandingForLedger(ledgerId) : null),
+    () =>
+      mounted && ledgerId > 0
+        ? getBillWiseOutstandingForLedger(ledgerId)
+        : null,
     [mounted, ledgerId, sectionRefresh],
   );
 
@@ -288,19 +408,6 @@ export default function BillWiseOutstandingPageClient({
       partyBranch,
     });
   }, [view, datesReady, dateFrom, dateTo, statuses, search, branches, partyBranch]);
-
-  const crossNav = useMemo(
-    () =>
-      view
-        ? buildBillWiseCrossNavLinks({
-            partyKind: view.partyKind,
-            partyId: view.partyId,
-            partyName: view.partyName,
-            ledgerId: view.ledgerId,
-          })
-        : [],
-    [view],
-  );
 
   const handleFinancialYearChange = useCallback((fyId: string) => {
     setFinancialYearId(fyId);
@@ -364,14 +471,41 @@ export default function BillWiseOutstandingPageClient({
     ].filter((item): item is ReportFilterSummaryItem => item != null);
   }, [branches, statuses, statusOptions]);
 
-  const backHref =
-    from === "gl"
-      ? `/accounts/reports/general-ledger?ledgerId=${ledgerId}`
-      : `${CHART_OF_ACCOUNTS_HREF}?node=${ledgerId}`;
-
-  if (!mounted) {
+  // Prefer API panel once party ledger UUID is resolved. Local demo is fallback only.
+  if (!mounted || resolveLoading) {
     return (
       <div className="py-16 text-center text-sm text-muted-foreground">Loading…</div>
+    );
+  }
+
+  if (apiPage) return apiPage;
+
+  if (resolveError) {
+    return (
+      <AccountsPageShell
+        breadcrumbs={accountsBreadcrumb("Chart of Accounts", "Bill-wise Outstanding")}
+        title="Bill-wise Outstanding"
+        description="Could not load bill-wise outstanding for this ledger."
+        actions={
+          <Button variant="outline" size="sm" className="h-8 text-xs" asChild>
+            <Link href={backHref}>
+              <ArrowLeft className="w-3.5 h-3.5 mr-1" />
+              Back
+            </Link>
+          </Button>
+        }
+        layout="standard"
+      >
+        <div className="rounded-lg border border-border bg-white p-8 text-center space-y-4">
+          <p className="text-sm text-muted-foreground">{resolveError}</p>
+          <Button variant="outline" size="sm" className="h-8 text-xs" asChild>
+            <Link href={backHref}>
+              <ArrowLeft className="w-3.5 h-3.5 mr-1" />
+              Back
+            </Link>
+          </Button>
+        </div>
+      </AccountsPageShell>
     );
   }
 
@@ -413,7 +547,6 @@ export default function BillWiseOutstandingPageClient({
         view={view}
         docLabel={docLabel}
         backHref={backHref}
-        crossNav={crossNav}
         filteredReferences={filteredReferences}
         hasFilters={hasFilters}
         clearFilters={clearFilters}
@@ -451,7 +584,6 @@ function BillWiseOutstandingBody({
   view,
   docLabel,
   backHref,
-  crossNav,
   filteredReferences,
   hasFilters,
   clearFilters,
@@ -484,7 +616,6 @@ function BillWiseOutstandingBody({
   view: BillWiseOutstandingView;
   docLabel: string;
   backHref: string;
-  crossNav: ReturnType<typeof buildBillWiseCrossNavLinks>;
   filteredReferences: BillWiseReferenceRow[];
   hasFilters: boolean;
   clearFilters: () => void;
@@ -549,8 +680,8 @@ function BillWiseOutstandingBody({
       .map((row) => {
         const cells = [
           `<td class="mono">${escapeHtml(row.documentNo)}</td>`,
-          `<td>${escapeHtml(formatReportDate(row.documentDate))}</td>`,
-          `<td>${escapeHtml(formatReportDate(row.dueDate))}</td>`,
+          `<td>${escapeHtml(formatDisplayDate(row.documentDate))}</td>`,
+          `<td>${escapeHtml(formatDisplayDate(row.dueDate))}</td>`,
           `<td class="num">${escapeHtml(formatMoney(row.documentAmount))}</td>`,
           `<td class="num">${escapeHtml(formatMoney(row.adjustedAmount))}</td>`,
           `<td class="num">${escapeHtml(formatMoney(row.outstandingAmount))}</td>`,
@@ -698,8 +829,6 @@ function BillWiseOutstandingBody({
           />
           <SummaryCard label="Total Overdue" value={formatMoney(summary.totalOverdue)} />
         </div>
-
-        <PartyCrossNavButtons items={crossNav} label="Go to" />
       </div>
 
       <div className="flex-1 min-h-0 flex flex-col">
@@ -768,8 +897,8 @@ function BillWiseOutstandingBody({
                           {row.documentNo}
                         </span>
                       </AccountsTableCell>
-                      <AccountsTableCell>{formatReportDate(row.documentDate)}</AccountsTableCell>
-                      <AccountsTableCell>{formatReportDate(row.dueDate)}</AccountsTableCell>
+                      <AccountsTableCell>{formatDisplayDate(row.documentDate)}</AccountsTableCell>
+                      <AccountsTableCell>{formatDisplayDate(row.dueDate)}</AccountsTableCell>
                       <AccountsTableCell align="right">
                         <span className="tabular-nums">{formatMoney(row.documentAmount)}</span>
                       </AccountsTableCell>
@@ -861,11 +990,11 @@ function BillWiseOutstandingBody({
             <div className="space-y-2 text-xs">
               <div className="flex justify-between gap-3">
                 <span className="text-muted-foreground">Invoice Date</span>
-                <span className="font-medium">{formatReportDate(viewRow.documentDate)}</span>
+                <span className="font-medium">{formatDisplayDate(viewRow.documentDate)}</span>
               </div>
               <div className="flex justify-between gap-3">
                 <span className="text-muted-foreground">Due Date</span>
-                <span className="font-medium">{formatReportDate(viewRow.dueDate)}</span>
+                <span className="font-medium">{formatDisplayDate(viewRow.dueDate)}</span>
               </div>
               <div className="flex justify-between gap-3">
                 <span className="text-muted-foreground">Original Amount</span>

@@ -230,7 +230,7 @@ export default function CustomerDetailPage() {
     );
   }
 
-  const gst = null; // GST master lookup not available via API record
+  const gst = null; // GST master lookup not available via API record testing
   const tds = null; // TDS master lookup not available via API record
   const payLabel = "—"; // payment terms label not available via API record
   const typeLabel = customer.customerType || "—";
@@ -240,8 +240,8 @@ export default function CustomerDetailPage() {
   const mainBranch =
     Array.isArray(customer.branches)
       ? (customer.branches as Array<Record<string, unknown>>).find(
-          (b) => Boolean(b.is_main_branch ?? b.isMain),
-        ) ?? (customer.branches as Array<Record<string, unknown>>)[0]
+        (b) => Boolean(b.is_main_branch ?? b.isMain),
+      ) ?? (customer.branches as Array<Record<string, unknown>>)[0]
       : undefined;
   const mainBranchSalesMan = mainBranch?.sales_man as Record<string, unknown> | null | undefined;
   const mainBranchSalesManName =
@@ -861,37 +861,37 @@ export default function CustomerDetailPage() {
         moreActions={
           perms.canEdit
             ? [
-                {
-                  label: "Edit Customer",
-                  onClick: () => router.push(`/masters/customers/${customer.customerUuid}/edit`),
-                },
-                ...(customer.status !== "blocked"
-                  ? [
-                      {
-                        label: "Block Customer",
-                        onClick: () => {
-                          setBlockReason("");
-                          setBlockError("");
-                          setBlockOpen(true);
-                        },
-                        destructive: true,
-                      },
-                    ]
-                  : [
-                      {
-                        label: "Unblock Customer",
-                        onClick: () => updateStatus("active", true),
-                      },
-                    ]),
-                ...(customer.status === "draft"
-                  ? [
-                      {
-                        label: "Mark Active",
-                        onClick: () => updateStatus("active", true),
-                      },
-                    ]
-                  : []),
-              ]
+              {
+                label: "Edit Customer",
+                onClick: () => router.push(`/masters/customers/${customer.customerUuid}/edit`),
+              },
+              ...(customer.status !== "blocked"
+                ? [
+                  {
+                    label: "Block Customer",
+                    onClick: () => {
+                      setBlockReason("");
+                      setBlockError("");
+                      setBlockOpen(true);
+                    },
+                    destructive: true,
+                  },
+                ]
+                : [
+                  {
+                    label: "Unblock Customer",
+                    onClick: () => updateStatus("active", true),
+                  },
+                ]),
+              ...(customer.status === "draft"
+                ? [
+                  {
+                    label: "Mark Active",
+                    onClick: () => updateStatus("active", true),
+                  },
+                ]
+                : []),
+            ]
             : undefined
         }
       >

@@ -36,7 +36,7 @@ export function VoucherLedgerSelect({
       compact
       placeholder={placeholder}
       className={cn("h-[30px] text-xs text-left font-normal w-full min-w-0", className)}
-      query={{ status: "ACTIVE", allowManualPosting: true }}
+      query={{ status: "ACTIVE" }}
       excludeSystemGenerated={excludeSystemGenerated}
       allowedPrimaryHeadCodes={allowedPrimaryHeadCodes}
     />

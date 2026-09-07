@@ -148,6 +148,22 @@ export function lineProductName(line: CreditNoteFormLine): string {
   );
 }
 
+export function lineProductSku(line: CreditNoteFormLine): string {
+  return (
+    line.product?.product_code ||
+    snapshotStr(line.product_snapshot, "sku", "product_code", "product_sku") ||
+    ""
+  );
+}
+
+export function lineHsnCode(line: CreditNoteFormLine): string {
+  return (
+    snapshotStr(line.hsn_snapshot, "hsn_code", "code", "hsn") ||
+    snapshotStr(line.product_snapshot, "hsn_code", "hsn") ||
+    ""
+  );
+}
+
 export function lineBatchNo(line: CreditNoteFormLine): string {
   return snapshotStr(line.batch_snapshot, "batch_no", "batch_number") || "—";
 }
@@ -155,6 +171,21 @@ export function lineBatchNo(line: CreditNoteFormLine): string {
 export function lineExpiry(line: CreditNoteFormLine): string {
   const raw = snapshotStr(line.batch_snapshot, "expiry_date");
   return raw ? toDateInput(raw) || raw : "—";
+}
+
+export function lineUnitRate(line: CreditNoteFormLine): string {
+  const qty = lineQty(line);
+  const taxable = lineTaxable(line);
+  if (qty > 0 && taxable > 0) {
+    return formatCnMoney(taxable / qty);
+  }
+  if (line.discount_type === "Percentage") {
+    return `${toNum(line.discount_value)}%`;
+  }
+  if (line.discount_value != null) {
+    return formatCnMoney(line.discount_value);
+  }
+  return "—";
 }
 
 export function lineLedgerName(line: CreditNoteFormLine): string {
@@ -181,6 +212,23 @@ export function particularsColumnsForSource(
   const interstate = Boolean(opts?.interstate);
   const editable = Boolean(opts?.editable);
 
+  if (source === "SALES_RETURN") {
+    const cols: ParticularColumnKey[] = [
+      "product",
+      "batch",
+      "expiry",
+      "qty",
+      "rate_benefit",
+      "eligible_base",
+      "gst_rate",
+    ];
+    if (interstate) cols.push("igst");
+    else cols.push("cgst", "sgst");
+    cols.push("cn_amount");
+    return cols;
+  }
+
+  // Direct Credit Note / Sales Invoice keeps QTY and RATE / BENEFIT
   if (!source || source === "DIRECT" || source === "SALES_INVOICE") {
     const cols: ParticularColumnKey[] = [
       "particular",
@@ -200,22 +248,62 @@ export function particularsColumnsForSource(
     return cols;
   }
 
-  if (source === "NEAR_EXPIRY") {
-    return ["product", "batch", "expiry", "qty", "eligible_base", "rate_benefit", "gst", "cn_amount"];
+  // Scheme credit notes: user requested "dont want the qty and rate / benefit"
+  const cols: ParticularColumnKey[] = [
+    "particular",
+    "ledger",
+    "eligible_base",
+    "gst_toggle",
+  ];
+  if (gstOn) {
+    cols.push("gst_rate");
+    if (interstate) cols.push("igst");
+    else cols.push("cgst", "sgst");
   }
-  if (source === "SPECIAL_SCHEME") {
-    return ["product", "qty", "eligible_base", "rate_benefit", "ledger", "gst", "cn_amount"];
+  cols.push("cn_amount");
+  return cols;
+}
+
+/** Preview GST split for a pending/return CN line after GST % change. */
+export function applyPendingLineGstPreview(
+  line: CreditNoteFormLine,
+  gstRateRaw: string | number,
+  interstate: boolean,
+): CreditNoteFormLine {
+  const taxable = lineTaxable(line);
+  const rate = Math.max(0, toNum(gstRateRaw));
+  const gstAmount = Math.round(((taxable * rate) / 100) * 100) / 100;
+  let cgst = 0;
+  let sgst = 0;
+  let igst = 0;
+  if (gstAmount > 0) {
+    if (interstate) igst = gstAmount;
+    else {
+      cgst = Math.round((gstAmount / 2) * 100) / 100;
+      sgst = Math.round((gstAmount - cgst) * 100) / 100;
+    }
   }
-  if (source === "SALES_RETURN") {
-    return ["product", "qty", "eligible_base", "gst", "cn_amount"];
-  }
-  if (source === "CASH_DISCOUNT") {
-    return ["particular", "eligible_base", "rate_benefit", "ledger", "gst", "cn_amount"];
-  }
-  if (source === "TURNOVER_DISCOUNT") {
-    return ["particular", "eligible_base", "rate_benefit", "ledger", "gst", "cn_amount"];
-  }
-  return ["particular", "eligible_base", "gst", "cn_amount"];
+  const halfRate = Math.round((rate / 2) * 10000) / 10000;
+  return {
+    ...line,
+    gst_rate: rate,
+    cgst_rate: interstate ? 0 : halfRate,
+    sgst_rate: interstate ? 0 : halfRate,
+    igst_rate: interstate ? rate : 0,
+    cgst_amount: cgst,
+    sgst_amount: sgst,
+    igst_amount: igst,
+    gst_amount: gstAmount,
+    line_total: Math.round((taxable + gstAmount) * 100) / 100,
+  };
+}
+
+export function pendingLineKey(line: CreditNoteFormLine): string {
+  return (
+    line.pending_credit_note_line_id ||
+    line.credit_note_line_id ||
+    `line-${line.line_number ?? 0}`
+  );
 }
 
 export function columnLabel(key: ParticularColumnKey): string {

@@ -130,7 +130,7 @@ const ChargeRow = memo(function ChargeRow({
           compact
           placeholder="Select ledger…"
           className="h-8 text-xs text-left"
-          query={{ status: "ACTIVE", allowManualPosting: true }}
+          query={{ status: "ACTIVE" }}
           allowedPrimaryHeadCodes={[...CHARGE_LEDGER_HEADS]}
           onChange={(ledger) =>
             onUpdate(row.id, {

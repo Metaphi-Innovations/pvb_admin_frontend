@@ -35,6 +35,7 @@ export const INVOICE_LISTING_DATE_PRESETS: { id: DateRangePresetId; label: strin
   { id: "this_week", label: "This Week" },
   { id: "this_month", label: "This Month" },
   { id: "last_month", label: "Last Month" },
+  { id: "this_year", label: "This Year" },
   { id: "custom", label: "Custom Range" },
 ];
 
@@ -84,11 +85,7 @@ export function resolveDateRangePreset(
     }
     case "this_quarter":
       return { from: formatIsoDate(startOfQuarter(refDate)), to };
-    case "this_year": {
-      const d = new Date(refDate);
-      d.setMonth(0, 1);
-      return { from: formatIsoDate(d), to };
-    }
+    case "this_year":
     case "this_financial_year":
       return { from: demoFinancialYearStart(refDate), to };
     case "all_transactions":

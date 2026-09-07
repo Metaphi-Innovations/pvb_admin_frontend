@@ -1,225 +1,161 @@
-/* Bank Reconciliation listing — compact sticky Action column with row-matched backgrounds */
-
-
-
-/*
-
- * Do NOT use table-layout:fixed here — it compressed long headers
-
- * ("Balance as per Books", "Bank Statement Balance").
-
- *
-
- * Override shared `.accounts-table { width: 100% }` with max-content so
-
- * leftover viewport width is NOT redistributed into columns (which made
-
- * Action stretch under table-layout:auto). Horizontal scroll handles overflow.
-
- */
+/* Bank Reconciliation listing — full-width table + opaque sticky Action */
 
 .bank-recon-listing .accounts-table {
-
-  width: max-content;
-
-  min-width: 1360px;
-
-  table-layout: auto;
-
+  width: 100%;
+  min-width: 1100px;
+  table-layout: fixed;
 }
 
-
-
-/* Data column floor widths — keep headers readable; scroll when needed */
-
+/* Percentage widths fill the card; Action stays compact. */
 .bank-recon-listing .accounts-table col.bank-recon-col-bank {
-
-  width: 140px;
-
-  min-width: 140px;
-
+  width: 11%;
 }
 
 .bank-recon-listing .accounts-table col.bank-recon-col-nickname {
-
-  width: 150px;
-
-  min-width: 150px;
-
+  width: 15%;
 }
 
 .bank-recon-listing .accounts-table col.bank-recon-col-acct-no {
-
-  width: 110px;
-
-  min-width: 110px;
-
+  width: 9%;
 }
 
 .bank-recon-listing .accounts-table col.bank-recon-col-type {
-
-  width: 110px;
-
-  min-width: 110px;
-
+  width: 8%;
 }
 
 .bank-recon-listing .accounts-table col.bank-recon-col-book-bal {
-
-  width: 160px;
-
-  min-width: 160px;
-
+  width: 11%;
 }
 
 .bank-recon-listing .accounts-table col.bank-recon-col-stmt-bal {
-
-  width: 170px;
-
-  min-width: 170px;
-
+  width: 12%;
 }
 
 .bank-recon-listing .accounts-table col.bank-recon-col-diff {
-
-  width: 110px;
-
-  min-width: 110px;
-
+  width: 8%;
 }
 
 .bank-recon-listing .accounts-table col.bank-recon-col-pending {
-
-  width: 110px;
-
-  min-width: 110px;
-
+  width: 8%;
 }
 
 .bank-recon-listing .accounts-table col.bank-recon-col-last-recon {
-
-  width: 150px;
-
-  min-width: 150px;
-
+  width: 10%;
 }
-
-
 
 .bank-recon-listing .accounts-table col.bank-recon-listing-action-col-width,
-
 .bank-recon-listing .accounts-table th.bank-recon-listing-action-col,
-
 .bank-recon-listing .accounts-table td.bank-recon-listing-action-col {
-
   width: 100px;
-
   min-width: 100px;
-
   max-width: 100px;
-
   white-space: nowrap;
-
 }
 
-
-
-.bank-recon-listing .accounts-table th.bank-recon-listing-action-col,
-
-.bank-recon-listing .accounts-table td.bank-recon-listing-action-col {
-
-  position: sticky;
-
-  right: 0;
-
-  z-index: 20;
-
-  box-sizing: border-box;
-
-  padding-left: 0.25rem;
-
-  padding-right: 0.25rem;
-
-  border-left: 1px solid hsl(var(--border));
-
-  box-shadow: -4px 0 6px -2px rgb(0 0 0 / 0.08);
-
+/* Header cells: keep label + sort/filter on one line without overlapping neighbours */
+.bank-recon-listing .accounts-table th {
   overflow: hidden;
-
 }
 
+.bank-recon-listing .accounts-table th .accounts-table-th-inner {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
 
+.bank-recon-listing .accounts-table th .accounts-table-th-inner > span,
+.bank-recon-listing .accounts-table th .accounts-table-th-inner > button {
+  flex-shrink: 0;
+}
+
+.bank-recon-listing .accounts-table th .accounts-table-th-inner > span:first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Body cells truncate long text instead of wrapping / colliding */
+.bank-recon-listing .accounts-table td {
+  overflow: hidden;
+}
+
+.bank-recon-listing .accounts-table td .accounts-table-td-inner {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.bank-recon-listing .accounts-table td.bank-recon-cell-truncate .accounts-table-td-inner {
+  display: block;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/*
+ * Sticky Action — fully opaque, theme-aware.
+ * Body matches white/zebra rows; header matches brand-50 table header.
+ */
+.bank-recon-listing .accounts-table th.bank-recon-listing-action-col,
+.bank-recon-listing .accounts-table td.bank-recon-listing-action-col {
+  position: sticky;
+  right: 0;
+  z-index: 20;
+  box-sizing: border-box;
+  padding-left: 0.25rem;
+  padding-right: 0.25rem;
+  border-left: 1px solid hsl(var(--border));
+  box-shadow: -4px 0 6px -2px rgb(0 0 0 / 0.08);
+  overflow: hidden;
+  background-color: hsl(var(--card));
+  background-clip: padding-box;
+}
 
 .bank-recon-listing .accounts-table th.bank-recon-listing-action-col {
-
   z-index: 40;
-
-  background-color: #fff3e8;
-
+  background-color: hsl(28 100% 95%);
 }
-
-
 
 .bank-recon-listing .accounts-table th.bank-recon-listing-action-col.accounts-table-th-sticky {
-
   z-index: 50;
-
 }
-
-
 
 .bank-recon-listing .accounts-table td.bank-recon-listing-action-col .accounts-table-td-inner,
-
 .bank-recon-listing .accounts-table th.bank-recon-listing-action-col .accounts-table-th-inner {
-
   justify-content: center;
-
 }
-
-
-
-/* Explicit cell backgrounds so sticky Action matches zebra striping on the row */
 
 .bank-recon-listing .accounts-table tbody > .accounts-table-row > td,
-
 .bank-recon-listing .accounts-table > tbody > tr > td {
-
-  background-color: hsl(var(--background));
-
+  background-color: hsl(var(--card));
 }
-
-
 
 .bank-recon-listing .accounts-table tbody > .accounts-table-row:nth-child(even) > td,
-
 .bank-recon-listing .accounts-table > tbody > tr:nth-child(even) > td {
-
-  background-color: hsl(var(--muted) / 0.2);
-
+  background-color: color-mix(in srgb, hsl(var(--muted)) 20%, hsl(var(--card)));
 }
-
-
 
 @media (hover: hover) and (pointer: fine) {
-
   .bank-recon-listing .accounts-table tbody > .accounts-table-row:hover > td,
-
   .bank-recon-listing .accounts-table > tbody > tr:hover > td {
-
-    background-color: hsl(var(--muted) / 0.25);
-
+    background-color: color-mix(in srgb, hsl(var(--muted)) 25%, hsl(var(--card)));
   }
-
-
 
   .bank-recon-listing .accounts-table tbody > .accounts-table-row:nth-child(even):hover > td,
-
   .bank-recon-listing .accounts-table > tbody > tr:nth-child(even):hover > td {
-
-    background-color: hsl(var(--muted) / 0.3);
-
+    background-color: color-mix(in srgb, hsl(var(--muted)) 30%, hsl(var(--card)));
   }
-
 }
 
+.bank-recon-listing .accounts-table tbody > .accounts-table-row.is-selected > td,
+.bank-recon-listing .accounts-table > tbody > tr.is-selected > td {
+  background-color: color-mix(in srgb, hsl(28 100% 95%) 80%, hsl(var(--card)));
+}
 
+@media (hover: hover) and (pointer: fine) {
+  .bank-recon-listing .accounts-table tbody > .accounts-table-row.is-selected:hover > td,
+  .bank-recon-listing .accounts-table > tbody > tr.is-selected:hover > td {
+    background-color: color-mix(in srgb, hsl(28 100% 95%) 90%, hsl(var(--card)));
+  }
+}

@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import { formatMoney } from "@/lib/accounts/money-format";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 import { cn } from "@/lib/utils";
 import { acceptMatch } from "@/lib/accounts/bank-recon-match-service";
 import type { MatchRejectReason, StatementMatchGroup } from "@/lib/accounts/bank-recon-match-types";
@@ -118,7 +119,7 @@ export function BankReconMatchReviewSheet({
               <div className="rounded-xl border border-border p-3 bg-muted/20">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Statement Transaction</p>
                 <p className="text-xs font-semibold">{stmt.reference || stmt.chequeNo || "—"}</p>
-                <p className="text-[11px] text-muted-foreground mt-1">{stmt.statementDate} · Value {stmt.valueDate || "—"}</p>
+                <p className="text-[11px] text-muted-foreground mt-1">{formatDisplayDate(stmt.statementDate)} · Value {formatDisplayDate(stmt.valueDate)}</p>
                 <p className="text-[11px] mt-1 line-clamp-2">{stmt.narration}</p>
                 <p className={cn("text-sm font-bold mt-2", stmt.deposit > 0 ? "text-emerald-700" : "text-red-700")}>
                   {stmt.deposit > 0 ? "Deposit" : "Withdrawal"} {formatMoney(stmtAmt)}
@@ -130,7 +131,7 @@ export function BankReconMatchReviewSheet({
                 <div className="rounded-xl border border-border p-3 bg-brand-50/30">
                   <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Book Transaction</p>
                   <p className="text-xs font-semibold">{candidate.bookTarget.voucherNo}</p>
-                  <p className="text-[11px] text-muted-foreground mt-1">{candidate.bookTarget.bookDate} · {candidate.bookTarget.voucherType}</p>
+                  <p className="text-[11px] text-muted-foreground mt-1">{formatDisplayDate(candidate.bookTarget.bookDate)} · {candidate.bookTarget.voucherType}</p>
                   <p className="text-[11px] mt-1">{candidate.bookTarget.partyLedger}</p>
                   <p className="text-[11px]">Ref: {candidate.bookTarget.reference || candidate.bookTarget.chequeNo || "—"}</p>
                   <p className={cn("text-sm font-bold mt-2", candidate.bookTarget.deposit > 0 ? "text-emerald-700" : "text-red-700")}>

@@ -533,11 +533,12 @@
   }
 
   .accounts-col-actions {
-    @apply min-w-[2.25rem] w-9 max-w-[2.25rem];
+    /* Fits a single action icon + the "Actions" header without spilling into Total */
+    @apply min-w-[4.5rem] w-[4.5rem] max-w-[4.5rem];
   }
 
   .accounts-col-actions-wide {
-    @apply min-w-[5.25rem] w-[5.25rem] max-w-[5.25rem];
+    @apply min-w-[5.5rem] w-[5.5rem] max-w-[5.5rem];
   }
 
   .accounts-col-actions-cta {
@@ -562,6 +563,7 @@
     background-color: #fff3e8;
     box-shadow: -4px 0 6px -2px rgb(0 0 0 / 0.08);
     white-space: nowrap;
+    overflow: hidden;
   }
 
   .accounts-table th.accounts-col-actions.accounts-table-th-sticky,

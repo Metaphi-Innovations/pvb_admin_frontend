@@ -15,7 +15,7 @@ export function paramverseBaseCss(): string {
     .pv-sheet { width: 100%; }
     .pv-header {
       display: grid;
-      grid-template-columns: 68px 1fr auto;
+      grid-template-columns: 56px 1fr auto;
       gap: 10px;
       align-items: start;
       margin-bottom: 8px;
@@ -23,8 +23,8 @@ export function paramverseBaseCss(): string {
       border-bottom: 1.5px solid #1a1a1a;
     }
     .pv-logo img {
-      max-height: 52px;
-      max-width: 68px;
+      max-height: 36px;
+      max-width: 56px;
       object-fit: contain;
       display: block;
     }

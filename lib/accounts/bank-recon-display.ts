@@ -5,6 +5,9 @@
  */
 
 import {
+  formatDisplayDateTime,
+} from "@/lib/accounts/date-display";
+import {
   getAllManualDemoMovements,
   getManualDemoAccount,
   manualDemoBookId,
@@ -116,18 +119,7 @@ export function getBankReconDisplayForVoucher(opts: {
 }
 
 export function formatBankReconAt(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleString("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: true,
-  });
+  return formatDisplayDateTime(iso);
 }
 
 function voucherTypeCode(m: ManualDemoBookMovement): VoucherTypeCode {

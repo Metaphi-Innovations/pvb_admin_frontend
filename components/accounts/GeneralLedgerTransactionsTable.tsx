@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { MoneyAmount, MoneyCell } from "@/components/accounts/MoneyAmount";
 import { AccountsViewAction, accountsActionColClass } from "@/components/accounts/AccountsTableActions";
 import type { GeneralLedgerRow } from "@/lib/accounts/general-ledger-data";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 import {
   AccountsTable,
   AccountsTableBody,
@@ -104,7 +105,7 @@ function GeneralLedgerTransactionsTableBody({
               )}
               onClick={() => !row.isOpeningRow && onRowClick?.(row)}
             >
-              <AccountsTableCell className="whitespace-nowrap py-2">{row.date || "—"}</AccountsTableCell>
+              <AccountsTableCell className="whitespace-nowrap py-2">{formatDisplayDate(row.date)}</AccountsTableCell>
               <AccountsTableCell className="whitespace-nowrap py-2">
                 <VoucherCell row={row} onOpen={onRowClick} />
               </AccountsTableCell>

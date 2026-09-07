@@ -35,7 +35,7 @@ export function BillWiseOutstandingButton({
       size="sm"
       className={cn("h-8 text-xs gap-1.5", className)}
     >
-      <Link href={billWiseOutstandingHref(ledger.id, from)}>
+      <Link href={billWiseOutstandingHref(ledger.id, from, ledger.apiNodeId)}>
         <ListOrdered className="w-3.5 h-3.5" />
         Bill-wise Outstanding
       </Link>

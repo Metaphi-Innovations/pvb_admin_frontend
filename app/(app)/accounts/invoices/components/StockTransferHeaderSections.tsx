@@ -7,13 +7,7 @@
 
 import { WarehouseMappedBankAccountSelect } from "@/components/accounts/WarehouseMappedBankAccountSelect";
 import { InvoiceFormInput } from "@/app/(app)/accounts/components/InvoiceFormLayout";
-
-function formatDisplayDate(iso: string): string {
-  if (!iso) return "—";
-  const [y, m, d] = iso.split("-");
-  if (!y || !m || !d) return iso;
-  return `${d}-${m}-${y}`;
-}
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 
 export function StockTransferWarehouseDetailsSection({
   sourceWarehouse,

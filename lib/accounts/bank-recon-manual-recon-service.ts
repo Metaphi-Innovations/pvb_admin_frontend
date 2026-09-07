@@ -5,6 +5,7 @@
 import type { BankReconActivityEvent } from "@/app/(app)/accounts/bank-reconciliation/bank-reconciliation-v2-data";
 import { getBankReconAccountById } from "@/app/(app)/accounts/bank-reconciliation/bank-reconciliation-v2-data";
 import { ACCOUNTS_CURRENT_USER } from "@/lib/accounts/config";
+import { formatDisplayDateTime } from "@/lib/accounts/date-display";
 import { resolveCoaLedgerForV2BankAccount } from "@/lib/accounts/bank-recon-account-bridge";
 import {
   bookRowToTarget,
@@ -85,7 +86,7 @@ function activity(label: string, detail: string, tone: BankReconActivityEvent["t
     label,
     detail,
     actor: CURRENT_USER,
-    timestamp: new Date().toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }),
+    timestamp: formatDisplayDateTime(new Date()),
     tone,
   };
 }

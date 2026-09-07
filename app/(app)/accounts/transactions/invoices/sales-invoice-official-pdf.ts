@@ -35,7 +35,10 @@ async function fetchPreview(
   url: string,
   params?: Record<string, string>,
 ): Promise<{ html: string; fileName: string }> {
-  const response = await axiosInstance.get(url, { params });
+  const response = await axiosInstance.get(url, {
+    params,
+    timeout: 120000,
+  });
   const data = response.data?.data || {};
   return {
     html: String(data.html || ""),

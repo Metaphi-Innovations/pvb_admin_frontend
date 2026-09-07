@@ -57,6 +57,7 @@ import type {
 } from "@/lib/accounts/column-filter-types";
 import { ReceiptVoucherService } from "@/services/receipt-voucher.service";
 import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
+import { formatDisplayDate, toIsoDateOnly } from "@/lib/accounts/date-display";
 import { WarehouseService } from "@/services/warehouse.service";
 import { CustomerListService } from "@/services/customer-list.service";
 import { SupplierListService } from "@/services/supplier-list.service";
@@ -274,7 +275,7 @@ function ReceiptListTable({
                   </Link>
                 </AccountsTableCell>
                 <AccountsTableCell className="tabular-nums text-xs">
-                  {String(row.voucher_date).slice(0, 10)}
+                  {formatDisplayDate(row.voucher_date)}
                 </AccountsTableCell>
                 <AccountsTableCell className="text-xs">
                   {row.warehouse?.warehouse_name || "—"}
@@ -343,7 +344,7 @@ function ReceiptListTable({
 
 export function ReceiptVoucherListClient() {
   const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } =
-    useReportDateRange("this_month");
+    useReportDateRange("this_year");
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedValue(search, 300);
   const [statusFilter, setStatusFilter] = useState<string>("");
@@ -505,7 +506,7 @@ export function ReceiptVoucherListClient() {
       case "sr_no":
         return formatSrNo(row.sr_no);
       case "voucher_date":
-        return String(row.voucher_date).slice(0, 10);
+        return toIsoDateOnly(row.voucher_date);
       case "warehouse":
         return row.warehouse?.warehouse_name || "";
       case "party_kind":

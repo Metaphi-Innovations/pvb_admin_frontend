@@ -71,7 +71,9 @@ export function ReceiptFormSummary({
         {showInvoiceSettlement ? (
           <SummaryRow label="Invoice Settlement" value={invoiceSettlement} />
         ) : null}
-        {showOnAccount ? <SummaryRow label="On-account Amount" value={onAccountAmount} /> : null}
+        {showOnAccount ? (
+          <SummaryRow label="Advance / On Account" value={onAccountAmount} />
+        ) : null}
         {showAdjustments ? <SummaryRow label="Adjustments" value={adjustmentsTotal} /> : null}
         <SummaryRow label="Receipt Amount" value={receiptAmount} strong />
       </div>

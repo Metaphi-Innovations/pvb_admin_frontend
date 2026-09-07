@@ -33,20 +33,31 @@ export function buildParamversePdfDocument(input: PdfDocumentShellInput): string
 
 export async function loadNavbarLogoDataUrl(): Promise<string | undefined> {
   if (typeof window === "undefined") return undefined;
-  const path = "/images/dharitri%20sutra.png";
-  try {
-    const response = await fetch(path);
-    if (!response.ok) return undefined;
-    const blob = await response.blob();
-    return await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result || ""));
-      reader.onerror = () => reject(reader.error);
-      reader.readAsDataURL(blob);
-    });
-  } catch {
-    return `${window.location.origin}${path}`;
+  const candidates = [
+    "/images/company-logo.png",
+    "/images/dharitri%20sutra.png",
+    "/images/dharitri%20sutra.jpeg",
+  ];
+
+  for (const path of candidates) {
+    try {
+      const response = await fetch(path);
+      if (!response.ok) continue;
+      const blob = await response.blob();
+      if (!blob.size) continue;
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ""));
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(blob);
+      });
+      if (dataUrl.startsWith("data:")) return dataUrl;
+    } catch {
+      /* try next */
+    }
   }
+
+  return `${window.location.origin}/images/company-logo.png`;
 }
 
 export function openPdfPrintWindow(preparingLabel = "Preparing PDF..."): Window | null {

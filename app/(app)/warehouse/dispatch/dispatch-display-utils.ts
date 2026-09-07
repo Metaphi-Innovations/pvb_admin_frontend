@@ -38,9 +38,9 @@ export function formatDateOnly(value: unknown): string {
   const raw = String(value);
   const date = new Date(raw.includes("T") ? raw : `${raw}T00:00:00`);
   if (Number.isNaN(date.getTime())) return raw;
-  return date.toLocaleDateString("en-IN", {
+  return date.toLocaleDateString("en-GB", {
     day: "2-digit",
-    month: "short",
+    month: "2-digit",
     year: "numeric",
   });
 }

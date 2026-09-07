@@ -10,6 +10,7 @@ import {
   type UnpaidInvoiceOption,
 } from "@/app/(app)/accounts/bank-reconciliation/bank-reconciliation-data";
 import { ACCOUNTS_CURRENT_USER } from "@/lib/accounts/config";
+import { formatDisplayDateTime } from "@/lib/accounts/date-display";
 import {
   categorizeBankTransaction,
   canCategorizeTransaction,
@@ -59,7 +60,7 @@ function activity(
     label,
     detail,
     actor: CURRENT_USER,
-    timestamp: new Date().toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }),
+    timestamp: formatDisplayDateTime(new Date()),
     tone,
   };
 }

@@ -9,6 +9,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { formatMoney, formatMoneyOrDash } from "@/lib/accounts/money-format";
+import { formatDisplayDate, formatDisplayDateTime } from "@/lib/accounts/date-display";
 import { cn } from "@/lib/utils";
 import {
   Calendar,
@@ -81,7 +82,7 @@ export function BankReconTransactionDetailSheet({
             <div className="flex-1 min-w-0">
               <SheetTitle className="text-base truncate">Transaction Details</SheetTitle>
               <SheetDescription className="line-clamp-2 mt-0.5">
-                {displayRef} · {transaction.bookDate || transaction.statementDate || "—"}
+                {displayRef} · {formatDisplayDate(transaction.bookDate || transaction.statementDate)}
               </SheetDescription>
             </div>
           </div>
@@ -107,12 +108,12 @@ export function BankReconTransactionDetailSheet({
               {transaction.transactionMode ? (
                 <DetailRow label="Transaction Mode" value={transaction.transactionMode} />
               ) : null}
-              <DetailRow label="Book Date" value={transaction.bookDate ?? "—"} />
+              <DetailRow label="Book Date" value={formatDisplayDate(transaction.bookDate)} />
               <DetailRow label="Transaction Date" value={transaction.transactionDate ?? "—"} />
               <DetailRow label="Expected Clearing Date" value={transaction.expectedClearingDate ?? "—"} />
-              <DetailRow label="Statement Date" value={transaction.statementDate || "—"} />
-              <DetailRow label="Value Date" value={transaction.valueDate || "—"} />
-              <DetailRow label="Reconciliation Date" value={transaction.reconciliationDate ?? "—"} />
+              <DetailRow label="Statement Date" value={formatDisplayDate(transaction.statementDate)} />
+              <DetailRow label="Value Date" value={formatDisplayDate(transaction.valueDate)} />
+              <DetailRow label="Reconciliation Date" value={formatDisplayDate(transaction.reconciliationDate)} />
               <DetailRow label="Reference Number" value={transaction.reference || "—"} />
               {transaction.utrNumber ? <DetailRow label="UTR Number" value={transaction.utrNumber} /> : null}
               <DetailRow label="Cheque Number" value={transaction.chequeNo ?? "—"} />
@@ -192,7 +193,7 @@ export function BankReconTransactionDetailSheet({
                 {transaction.createdOn ? (
                   <DetailRow
                     label="Created On"
-                    value={new Date(transaction.createdOn).toLocaleString("en-IN")}
+                    value={formatDisplayDateTime(transaction.createdOn)}
                   />
                 ) : null}
                 {transaction.updatedBy ? (
@@ -201,7 +202,7 @@ export function BankReconTransactionDetailSheet({
                 {transaction.updatedOn ? (
                   <DetailRow
                     label="Last Updated On"
-                    value={new Date(transaction.updatedOn).toLocaleString("en-IN")}
+                    value={formatDisplayDateTime(transaction.updatedOn)}
                   />
                 ) : null}
                 {transaction.cancelReason ? (
@@ -234,7 +235,7 @@ export function BankReconTransactionDetailSheet({
                 {transaction.relatedRecord.matchedOn ? (
                   <DetailRow
                     label="Matched On"
-                    value={new Date(transaction.relatedRecord.matchedOn).toLocaleString("en-IN")}
+                    value={formatDisplayDateTime(transaction.relatedRecord.matchedOn)}
                   />
                 ) : null}
               </div>

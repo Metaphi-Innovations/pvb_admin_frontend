@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { formatMoney, formatMoneyOrDash } from "@/lib/accounts/money-format";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 import { cn } from "@/lib/utils";
 import { acceptMatch, findAlternativeMatches } from "@/lib/accounts/bank-recon-match-service";
 import { getBankReconTransactionById, type BankReconTransactionRecord } from "@/lib/accounts/bank-recon-register";
@@ -240,7 +241,7 @@ export function BankReconActionPanel({
           </div>
           <p className="line-clamp-2 text-muted-foreground leading-snug">{transaction.narration}</p>
           <div className="flex items-center justify-between pt-0.5">
-            <span>{transaction.statementDate}</span>
+            <span>{formatDisplayDate(transaction.statementDate)}</span>
             <span className="font-semibold tabular-nums">{formatMoney(stmtAmount)}</span>
           </div>
         </div>

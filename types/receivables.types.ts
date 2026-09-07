@@ -78,6 +78,31 @@ export interface AgingBucketMap {
   [bucketLabel: string]: number;
 }
 
+/** Invoice / open-item row inside a customer ageing group (API). */
+export interface AgingApiInvoiceRow {
+  openItemId: string;
+  invoiceId?: string | null;
+  invoiceNumber: string;
+  invoiceDate: string;
+  dueDate?: string;
+  originalAmount: number;
+  settledAmount: number;
+  outstandingAmount: number;
+  ageDays?: number | null;
+  notDueAmount?: number;
+  buckets: AgingBucketMap;
+}
+
+export interface AgingApiCustomerTotals {
+  totalOutstanding: number;
+  notDueAmount: number;
+  buckets: AgingBucketMap;
+}
+
+/**
+ * Customer-wise ageing group from GET /receivables/aging.
+ * Top-level totalOutstanding / buckets / notDueAmount mirror `totals` for older consumers.
+ */
 export interface AgingApiRow {
   customerId: string;
   customerName: string;
@@ -85,6 +110,8 @@ export interface AgingApiRow {
   totalOutstanding: number;
   buckets: AgingBucketMap;
   notDueAmount?: number;
+  invoices: AgingApiInvoiceRow[];
+  totals: AgingApiCustomerTotals;
 }
 
 export interface InvoiceSettlementApiRow {
@@ -182,6 +209,7 @@ export interface FollowUpHistoryApiRow {
 export interface CustomerSummaryQuery {
   search?: string;
   customerId?: string;
+  customerIds?: string[];
   salespersonId?: string;
   branchId?: string;
   warehouseId?: string;
@@ -197,6 +225,7 @@ export interface CustomerSummaryQuery {
 export interface ReceivableInvoicesQuery {
   search?: string;
   customerId?: string;
+  customerIds?: string[];
   branchId?: string;
   warehouseId?: string;
   invoiceDateFrom?: string;
@@ -214,9 +243,13 @@ export interface ReceivableInvoicesQuery {
 export interface AgingQuery {
   search?: string;
   customerId?: string;
+  customerIds?: string[];
   branchId?: string;
   warehouseId?: string;
+  salespersonId?: string;
   asOfDate?: string;
+  excludeZeroBalance?: boolean;
+  status?: string;
   agingBreakpoints?: string;
   page?: number;
   page_size?: number;
@@ -244,6 +277,7 @@ export interface ReceivablesExportQuery {
   view: ReceivablesExportView;
   search?: string;
   customerId?: string;
+  customerIds?: string[];
   salespersonId?: string;
   branchId?: string;
   warehouseId?: string;
@@ -274,6 +308,7 @@ export interface CreateFollowUpPayload {
 }
 
 export interface UpdateFollowUpPayload {
+  openItemId?: string | null;
   status?: ApiFollowUpStatus;
   nextFollowUpDate?: string | null;
   promisedPaymentDate?: string | null;
@@ -316,6 +351,36 @@ export interface ApiInvoiceOutstandingRow {
   status: import("@/lib/accounts/receivables-data").ReceivableStatus;
 }
 
+export interface ApiCustomerAgeingInvoiceRow {
+  openItemId: string;
+  invoiceId: string | null;
+  invoiceNumber: string;
+  invoiceDate: string;
+  dueDate: string;
+  originalAmount: number;
+  settledAmount: number;
+  outstandingAmount: number;
+  ageDays: number | null;
+  notDueAmount: number;
+  /** Amounts keyed by API bucket labels (e.g. "0-30", "91+"). */
+  buckets: Record<string, number>;
+}
+
+export interface ApiCustomerAgeingGroup {
+  customerId: string;
+  customerName: string;
+  customerCode: string;
+  invoices: ApiCustomerAgeingInvoiceRow[];
+  totals: {
+    totalOutstanding: number;
+    notDueAmount: number;
+    buckets: Record<string, number>;
+  };
+  /** Ordered API bucket keys for this response (from applied breakpoints). */
+  bucketKeys: string[];
+}
+
+/** @deprecated Prefer ApiCustomerAgeingGroup — flat customer row used by older Ageing View. */
 export interface ApiCustomerAgeingRow {
   customerId: string;
   customerName: string;

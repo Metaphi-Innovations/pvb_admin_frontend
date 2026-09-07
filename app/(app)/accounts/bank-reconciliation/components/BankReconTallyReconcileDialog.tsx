@@ -16,6 +16,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { formatMoney } from "@/lib/accounts/money-format";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 import { cn } from "@/lib/utils";
 import {
   AMOUNT_MISMATCH_MESSAGE,
@@ -175,7 +176,7 @@ export function BankReconTallyReconcileDialog({
             <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">
               Book Transaction
             </p>
-            <Detail label="Voucher Date" value={book.voucherDate} />
+            <Detail label="Voucher Date" value={formatDisplayDate(book.voucherDate)} />
             <Detail label="Voucher Type" value={book.voucherType} />
             <Detail
               label="Voucher Number"
@@ -223,7 +224,7 @@ export function BankReconTallyReconcileDialog({
                       )}
                     >
                       <div className="flex items-center justify-between gap-2">
-                        <span className="font-medium">{c.bankDate}</span>
+                        <span className="font-medium">{formatDisplayDate(c.bankDate)}</span>
                         <span className="tabular-nums">
                           {c.deposit > 0
                             ? `Dep ${formatMoney(c.deposit)}`
@@ -272,7 +273,7 @@ export function BankReconTallyReconcileDialog({
             <div className="space-y-1">
               <Label className={ACCOUNTS_FILTER_LABEL_CLASS}>Selected Statement</Label>
               <div className="h-8 px-2.5 flex items-center text-[11px] border border-border rounded-lg bg-muted/20 truncate">
-                {selected ? selected.bankDate : "None — Bank Date only"}
+                {selected ? formatDisplayDate(selected.bankDate) : "None — Bank Date only"}
               </div>
             </div>
           </div>

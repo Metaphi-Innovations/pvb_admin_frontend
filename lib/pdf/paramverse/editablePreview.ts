@@ -207,12 +207,17 @@ export function openEditablePdfPreview<T extends Record<string, unknown>>(
     // ── State ──
     let cleanedUp = false;
     let zoomPercent = 100;
+    let previewObjectUrl: string | null = null;
 
     const cleanup = () => {
       if (cleanedUp) return;
       cleanedUp = true;
       window.removeEventListener("keydown", keyHandler);
       overlay.removeEventListener("click", closeOnOverlayClick);
+      if (previewObjectUrl) {
+        URL.revokeObjectURL(previewObjectUrl);
+        previewObjectUrl = null;
+      }
       overlay.remove();
       document.body.style.overflow = "";
     };
@@ -288,12 +293,19 @@ export function openEditablePdfPreview<T extends Record<string, unknown>>(
 
     const renderPreview = () => {
       try {
-        iframe.srcdoc = initialHtml;
+        if (previewObjectUrl) {
+          URL.revokeObjectURL(previewObjectUrl);
+          previewObjectUrl = null;
+        }
+        // Blob URL avoids iframe srcdoc size limits that can drop large embedded logos.
+        const blob = new Blob([initialHtml], { type: "text/html;charset=utf-8" });
+        previewObjectUrl = URL.createObjectURL(blob);
         iframe.onload = () => {
           injectPreviewGutter();
           fitWidth();
           setEditMode();
         };
+        iframe.src = previewObjectUrl;
         return true;
       } catch (error) {
         status.style.color = "#b91c1c";

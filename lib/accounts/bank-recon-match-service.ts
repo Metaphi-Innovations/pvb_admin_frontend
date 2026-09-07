@@ -4,6 +4,7 @@
 
 import type { BankReconActivityEvent } from "@/app/(app)/accounts/bank-reconciliation/bank-reconciliation-v2-data";
 import { ACCOUNTS_CURRENT_USER } from "@/lib/accounts/config";
+import { formatDisplayDateTime } from "@/lib/accounts/date-display";
 import {
   getBankReconTransactionById,
   linkManualWithStatement,
@@ -45,7 +46,7 @@ import type {
 const CURRENT_USER = ACCOUNTS_CURRENT_USER;
 
 function nowDisplay(): string {
-  return new Date().toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" });
+  return formatDisplayDateTime(new Date());
 }
 
 function activity(

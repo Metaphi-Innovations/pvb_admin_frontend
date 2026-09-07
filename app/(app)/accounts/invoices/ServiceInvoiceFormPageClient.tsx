@@ -13,6 +13,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
+import { AccountsDateInput } from "@/components/accounts/AccountsDateInput";
+import { isoToDisplayDate } from "@/lib/accounts/date-display";
 import { InvoiceFormLayout } from "@/app/(app)/accounts/components/InvoiceFormLayout";
 import { VoucherFormActionBar } from "@/components/accounts/voucher-form/VoucherFormActionBar";
 import { VoucherFormSectionCard } from "@/components/accounts/voucher-form/VoucherFormSectionCard";
@@ -41,6 +43,7 @@ import { SearchableSelect } from "@/app/(app)/accounts/credit-notes/components/S
 import { inferInterstateFromPlaceOfSupply } from "@/lib/accounts/gst-accounting";
 import { splitInvoiceGst } from "@/lib/accounts/invoice-gst-breakup";
 import { formatINR } from "@/app/(app)/accounts/invoices/invoice-utils";
+import { roundMoney } from "@/lib/accounts/money-format";
 import { cn } from "@/lib/utils";
 import "./sales-order-invoice-form-compact.css";
 import {
@@ -218,7 +221,7 @@ export default function ServiceInvoiceFormPageClient() {
         expenseTotals.taxableAmount +
         expenseTotals.gstAmount +
         roundOff) *
-        100,
+      100,
     ) / 100;
   const gstSplit = useMemo(() => splitInvoiceGst(taxAmount, interstate), [taxAmount, interstate]);
   const summaryGrossAmount = lineTotals.subtotal;
@@ -322,25 +325,25 @@ export default function ServiceInvoiceFormPageClient() {
       branches.find((b) => b.is_main_branch) || branches[0] || null;
     const billing = mainBranch
       ? [
-          mainBranch.billing_address_line_1,
-          mainBranch.billing_address_line_2,
-          mainBranch.billing_city,
-          mainBranch.billing_state,
-          mainBranch.billing_pincode,
-        ]
-          .filter(Boolean)
-          .join(", ")
+        mainBranch.billing_address_line_1,
+        mainBranch.billing_address_line_2,
+        mainBranch.billing_city,
+        mainBranch.billing_state,
+        mainBranch.billing_pincode,
+      ]
+        .filter(Boolean)
+        .join(", ")
       : String(customerDetails.registered_gst_address ?? "");
     const shipping = mainBranch
       ? [
-          mainBranch.shipping_address_line_1,
-          mainBranch.shipping_address_line_2,
-          mainBranch.shipping_city,
-          mainBranch.shipping_state,
-          mainBranch.shipping_pincode,
-        ]
-          .filter(Boolean)
-          .join(", ")
+        mainBranch.shipping_address_line_1,
+        mainBranch.shipping_address_line_2,
+        mainBranch.shipping_city,
+        mainBranch.shipping_state,
+        mainBranch.shipping_pincode,
+      ]
+        .filter(Boolean)
+        .join(", ")
       : billing;
     setCustomerGst(String(customerDetails.gstin_no ?? ""));
     setBillingAddress(billing);
@@ -448,14 +451,22 @@ export default function ServiceInvoiceFormPageClient() {
         customer_id: customerId,
         narration: narration.trim() || undefined,
         remarks: referenceNo.trim() || undefined,
-        items: serviceLines.map((line) => ({
-          service_ledger_id: line.incomeLedgerId!,
-          service_name: line.productName.trim(),
-          sac_id: line.sacId!,
-          quantity: line.qty || 1,
-          rate: line.unitPrice,
-          gst_rate: line.taxPct,
-        })),
+        items: serviceLines.map((line) => {
+          const discountAmt =
+            line.discountPct && line.discountPct > 0
+              ? roundMoney(((line.qty || 1) * line.unitPrice * line.discountPct) / 100)
+              : 0;
+          return {
+            service_ledger_id: line.incomeLedgerId!,
+            service_name: line.productName.trim(),
+            sac_id: line.sacId!,
+            quantity: line.qty || 1,
+            rate: line.unitPrice,
+            discount_percentage: line.discountPct || 0,
+            discount_amount: discountAmt,
+            gst_rate: line.taxPct,
+          };
+        }),
         additional_charges: charges.length > 0 ? charges : undefined,
         round_off_amount: roundOff,
       });
@@ -471,393 +482,393 @@ export default function ServiceInvoiceFormPageClient() {
 
   return (
     <div className="sales-order-invoice-form-compact h-full min-h-0 flex flex-col w-full">
-    <InvoiceFormLayout
-      title="Create Service Invoice"
-      subtitle="Accounts → Transactions → Sales Invoice → Service"
-      breadcrumb={accountsBreadcrumb("Transactions", "Sales Invoice")}
-      backHref="/accounts/transactions/invoices"
-      stickyFooter={
-        <VoucherFormActionBar
-          onDiscard={() => router.push("/accounts/transactions/invoices")}
-          onSaveDraft={() => showToast("Draft is not supported for service invoices. Use Post Invoice.", "info")}
-          onSaveAndPost={saveAndPost}
-          saveAndPostLabel="Post Invoice"
-          discardDisabled={saving}
-          saveDraftDisabled
-          saveAndPostDisabled={saving}
-        />
-      }
-    >
-      <div className="space-y-3">
-        <VoucherFormSectionCard title="Invoice Details">
-          <div className="space-y-1.5">
-            <div className="so-invoice-details-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
-              <InvoiceDetailField label="Invoice No.">
-                <div className="so-goods-ro so-goods-ro--mono w-full text-brand-700">
-                  Auto-generated on post
-                </div>
-              </InvoiceDetailField>
-              <InvoiceDetailField label="Invoice Date" required>
-                <Input
-                  type="date"
-                  className={INVOICE_DETAIL_INPUT_CLASS}
-                  value={invoiceDate}
-                  onChange={(e) => setInvoiceDate(e.target.value)}
-                />
-              </InvoiceDetailField>
-              <InvoiceDetailField label="Due Date">
-                <div className="so-goods-ro w-full">{dueDate || "—"}</div>
-              </InvoiceDetailField>
-              <InvoiceDetailField
-                label="Customer"
-                required
-                labelExtra={
-                  <ServiceInvoiceCustomerInfoButton
-                    enabled={Boolean(customerId)}
-                    info={{
-                      customerName,
-                      customerCode,
-                      gstin: customerGst,
-                      billingAddress,
-                      shippingAddress,
-                      state: placeOfSupply,
-                      branch,
-                      customerType: customerTypeName,
-                      paymentTerms: customerPaymentTerms,
-                      linkedLedger: linkedLedgerLabel,
-                    }}
+      <InvoiceFormLayout
+        title="Create Service Invoice"
+        subtitle="Accounts → Transactions → Sales Invoice → Service"
+        breadcrumb={accountsBreadcrumb("Transactions", "Sales Invoice")}
+        backHref="/accounts/transactions/invoices"
+        stickyFooter={
+          <VoucherFormActionBar
+            onDiscard={() => router.push("/accounts/transactions/invoices")}
+            onSaveDraft={() => showToast("Draft is not supported for service invoices. Use Post Invoice.", "info")}
+            onSaveAndPost={saveAndPost}
+            saveAndPostLabel="Post Invoice"
+            discardDisabled={saving}
+            saveDraftDisabled
+            saveAndPostDisabled={saving}
+          />
+        }
+      >
+        <div className="space-y-3">
+          <VoucherFormSectionCard title="Invoice Details">
+            <div className="space-y-1.5">
+              <div className="so-invoice-details-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+                <InvoiceDetailField label="Invoice No.">
+                  <div className="so-goods-ro so-goods-ro--mono w-full text-brand-700">
+                    Auto-generated on post
+                  </div>
+                </InvoiceDetailField>
+                <InvoiceDetailField label="Invoice Date" required>
+                  <AccountsDateInput
+                    className={INVOICE_DETAIL_INPUT_CLASS}
+                    value={invoiceDate}
+                    onChange={setInvoiceDate}
+                    aria-label="Invoice Date"
                   />
-                }
-              >
-                <SearchableSelect
-                  value={customerId ?? ""}
-                  onChange={(id) => applyCustomer(id || null)}
-                  options={customerOptions}
-                  placeholder="Select customer…"
-                  triggerClassName={INVOICE_DETAIL_SELECT_CLASS}
-                />
-              </InvoiceDetailField>
+                </InvoiceDetailField>
+                <InvoiceDetailField label="Due Date">
+                  <div className="so-goods-ro w-full">{isoToDisplayDate(dueDate) || "—"}</div>
+                </InvoiceDetailField>
+                <InvoiceDetailField
+                  label="Customer"
+                  required
+                  labelExtra={
+                    <ServiceInvoiceCustomerInfoButton
+                      enabled={Boolean(customerId)}
+                      info={{
+                        customerName,
+                        customerCode,
+                        gstin: customerGst,
+                        billingAddress,
+                        shippingAddress,
+                        state: placeOfSupply,
+                        branch,
+                        customerType: customerTypeName,
+                        paymentTerms: customerPaymentTerms,
+                        linkedLedger: linkedLedgerLabel,
+                      }}
+                    />
+                  }
+                >
+                  <SearchableSelect
+                    value={customerId ?? ""}
+                    onChange={(id) => applyCustomer(id || null)}
+                    options={customerOptions}
+                    placeholder="Select customer…"
+                    triggerClassName={INVOICE_DETAIL_SELECT_CLASS}
+                  />
+                </InvoiceDetailField>
+              </div>
+              <div className="so-invoice-details-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+                <InvoiceDetailField
+                  label="Warehouse"
+                  required
+                  labelExtra={
+                    <ServiceInvoiceWarehouseInfoButton warehouseId={warehouseId} />
+                  }
+                >
+                  <SearchableSelect
+                    value={warehouseId ?? ""}
+                    onChange={(id) => setWarehouseId(id || null)}
+                    options={warehouseOptions}
+                    placeholder="Select warehouse…"
+                    triggerClassName={INVOICE_DETAIL_SELECT_CLASS}
+                  />
+                </InvoiceDetailField>
+                <InvoiceDetailField label="Manual Reference No.">
+                  <Input
+                    className={INVOICE_DETAIL_INPUT_CLASS}
+                    value={referenceNo}
+                    onChange={(e) => setReferenceNo(e.target.value)}
+                    placeholder="Optional"
+                  />
+                </InvoiceDetailField>
+              </div>
             </div>
-            <div className="so-invoice-details-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
-              <InvoiceDetailField
-                label="Warehouse"
-                required
-                labelExtra={
-                  <ServiceInvoiceWarehouseInfoButton warehouseId={warehouseId} />
-                }
-              >
-                <SearchableSelect
-                  value={warehouseId ?? ""}
-                  onChange={(id) => setWarehouseId(id || null)}
-                  options={warehouseOptions}
-                  placeholder="Select warehouse…"
-                  triggerClassName={INVOICE_DETAIL_SELECT_CLASS}
-                />
-              </InvoiceDetailField>
-              <InvoiceDetailField label="Manual Reference No.">
-                <Input
-                  className={INVOICE_DETAIL_INPUT_CLASS}
-                  value={referenceNo}
-                  onChange={(e) => setReferenceNo(e.target.value)}
-                  placeholder="Optional"
-                />
-              </InvoiceDetailField>
-            </div>
-          </div>
-          {selectedFY?.label ? (
-            <p className="text-[11px] text-muted-foreground mt-2">
-              Working FY:{" "}
-              <span className="font-medium text-foreground">{selectedFY.label}</span>
-            </p>
-          ) : null}
-        </VoucherFormSectionCard>
+            {selectedFY?.label ? (
+              <p className="text-[11px] text-muted-foreground mt-2">
+                Working FY:{" "}
+                <span className="font-medium text-foreground">{selectedFY.label}</span>
+              </p>
+            ) : null}
+          </VoucherFormSectionCard>
 
-        <VoucherFormSectionCard
-          title="Service Lines"
-          flush
-          headerActions={
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="so-section-header-btn"
-              onClick={addLine}
-            >
-              <Plus /> Add Service Line
-            </Button>
-          }
-        >
-          <div className="so-goods-product-table-wrap overflow-x-auto">
-            <table className="so-invoice-table text-xs w-max min-w-[1520px]">
-              <thead>
-                <tr>
-                  {[
-                    { label: "Service Description", align: "left" as const, className: "min-w-[180px]" },
-                    { label: "Income Ledger", align: "left" as const, className: "min-w-[220px]" },
-                    { label: "SAC Code", align: "left" as const, className: "min-w-[120px]" },
-                    { label: "Qty", align: "right" as const, className: "min-w-[65px]" },
-                    { label: "UOM", align: "left" as const, className: "min-w-[70px]" },
-                    { label: "Rate", align: "right" as const, className: "min-w-[90px]" },
-                    { label: "Disc %", align: "right" as const, className: "min-w-[70px]" },
-                    { label: "Disc Amt", align: "right" as const, className: "min-w-[90px]" },
-                    { label: "Taxable", align: "right" as const, className: "min-w-[95px]" },
-                    { label: "GST %", align: "right" as const, className: "min-w-[70px]" },
-                    ...(interstate
-                      ? [{ label: "IGST", align: "right" as const, className: "min-w-[90px]" }]
-                      : [
+          <VoucherFormSectionCard
+            title="Service Lines"
+            flush
+            headerActions={
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="so-section-header-btn"
+                onClick={addLine}
+              >
+                <Plus /> Add Service Line
+              </Button>
+            }
+          >
+            <div className="so-goods-product-table-wrap overflow-x-auto">
+              <table className="so-invoice-table text-xs w-max min-w-[1520px]">
+                <thead>
+                  <tr>
+                    {[
+                      { label: "Service Description", align: "left" as const, className: "min-w-[180px]" },
+                      { label: "Income Ledger", align: "left" as const, className: "min-w-[220px]" },
+                      { label: "SAC Code", align: "left" as const, className: "min-w-[120px]" },
+                      { label: "Qty", align: "right" as const, className: "min-w-[65px]" },
+                      { label: "UOM", align: "left" as const, className: "min-w-[70px]" },
+                      { label: "Rate", align: "right" as const, className: "min-w-[90px]" },
+                      { label: "Disc %", align: "right" as const, className: "min-w-[70px]" },
+                      { label: "Disc Amt", align: "right" as const, className: "min-w-[90px]" },
+                      { label: "Taxable", align: "right" as const, className: "min-w-[95px]" },
+                      { label: "GST %", align: "right" as const, className: "min-w-[70px]" },
+                      ...(interstate
+                        ? [{ label: "IGST", align: "right" as const, className: "min-w-[90px]" }]
+                        : [
                           { label: "CGST", align: "right" as const, className: "min-w-[90px]" },
                           { label: "SGST", align: "right" as const, className: "min-w-[90px]" },
                         ]),
-                    { label: "Line Total", align: "right" as const, className: "min-w-[110px]" },
-                    { label: "", align: "left" as const, className: "so-col-actions" },
-                  ].map((h) => (
-                    <th
-                      key={h.label || "del"}
-                      className={cn(
-                        "px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap",
-                        h.align === "right" ? "text-right" : "text-left",
-                        h.className,
-                      )}
-                    >
-                      {h.label}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {lines.map((line) => {
-                  const { discountAmt, taxable } = calcLineAmounts(line);
-                  const split = calcGstLineSplit(line, interstate);
-                  return (
-                    <tr key={line.id} className="border-b border-border/40 last:border-0">
-                      <td className="p-1.5 min-w-[180px] w-[180px]">
-                        <Input
-                          className={cn(VOUCHER_INPUT_CLASS, "text-xs")}
-                          value={line.productName}
-                          onChange={(e) =>
-                            updateLine(line.id, {
-                              productName: e.target.value,
-                              description: e.target.value,
-                            })
-                          }
-                          placeholder="Service description"
-                        />
-                      </td>
-                      <td className="p-1.5 min-w-[220px] max-w-[240px] w-[220px] overflow-hidden">
-                        <ServiceInvoiceLineLedgerSelect
-                          value={isLedgerUuid(line.incomeLedgerId) ? line.incomeLedgerId : null}
-                          fallbackLabel={line.incomeLedgerName || undefined}
-                          onChange={(ledger) =>
-                            updateLine(line.id, {
-                              incomeLedgerId: ledger.ledgerId,
-                              incomeLedgerName: ledger.ledgerName,
-                            })
-                          }
-                        />
-                      </td>
-                      <td className="p-1.5 min-w-[120px] max-w-[130px] w-[120px] overflow-hidden">
-                        <SearchableSelect
-                          label=""
-                          value={line.sacId ?? ""}
-                          onChange={(id) => {
-                            const sac = sacOptions.find((s) => s.id === id);
-                            updateLine(line.id, {
-                              sacId: id || null,
-                              hsn: sac?.hsnCode ?? line.hsn,
-                              taxPct: sac?.gstPercentage ?? line.taxPct,
-                            });
-                          }}
-                          options={sacSelectOptions}
-                          placeholder="Select SAC…"
-                          contentClassName="w-[340px]"
-                          triggerClassName={cn(VOUCHER_INPUT_CLASS, "text-xs")}
-                        />
-                      </td>
-                      <td className="p-1.5 min-w-[65px] w-[65px]">
-                        <Input
-                          type="number"
-                          min={0}
-                          step={0.01}
-                          className={cn(VOUCHER_INPUT_CLASS, "text-xs text-right tabular-nums")}
-                          value={line.qty || ""}
-                          onChange={(e) =>
-                            updateLine(line.id, { qty: parseFloat(e.target.value) || 0 })
-                          }
-                        />
-                      </td>
-                      <td className="p-1.5 min-w-[70px] w-[70px]">
-                        <Input
-                          className={cn(VOUCHER_INPUT_CLASS, "text-xs")}
-                          value={line.unit}
-                          onChange={(e) => updateLine(line.id, { unit: e.target.value })}
-                        />
-                      </td>
-                      <td className="p-1.5 min-w-[90px] w-[90px]">
-                        <AccountsMoneyInput
-                          className={cn(VOUCHER_INPUT_CLASS, "text-xs text-right")}
-                          value={line.unitPrice || ""}
-                          onChange={(v) => updateLine(line.id, { unitPrice: v })}
-                        />
-                      </td>
-                      <td className="p-1.5 min-w-[70px] w-[70px]">
-                        <Input
-                          type="number"
-                          min={0}
-                          max={100}
-                          step={0.01}
-                          className={cn(VOUCHER_INPUT_CLASS, "text-xs text-right")}
-                          value={line.discountPct || ""}
-                          onChange={(e) =>
-                            updateLine(line.id, {
-                              discountPct: parseFloat(e.target.value) || 0,
-                            })
-                          }
-                        />
-                      </td>
-                      <td className="p-1.5 min-w-[90px] w-[90px]">
-                        <InvoiceTableReadonly value={formatINR(discountAmt)} muted />
-                      </td>
-                      <td className="p-1.5 min-w-[95px] w-[95px]">
-                        <InvoiceTableReadonly value={formatINR(taxable)} />
-                      </td>
-                      <td className="p-1.5 min-w-[70px] w-[70px]">
-                        <Input
-                          type="number"
-                          min={0}
-                          max={100}
-                          step={0.01}
-                          className={cn(VOUCHER_INPUT_CLASS, "text-xs text-right")}
-                          value={line.taxPct || ""}
-                          onChange={(e) =>
-                            updateLine(line.id, { taxPct: parseFloat(e.target.value) || 0 })
-                          }
-                        />
-                      </td>
-                      {interstate ? (
-                        <td className="p-1.5 min-w-[90px] w-[90px]">
-                          <InvoiceTableReadonly value={formatINR(split.igst)} muted />
+                      { label: "Line Total", align: "right" as const, className: "min-w-[110px]" },
+                      { label: "", align: "left" as const, className: "so-col-actions" },
+                    ].map((h) => (
+                      <th
+                        key={h.label || "del"}
+                        className={cn(
+                          "px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap",
+                          h.align === "right" ? "text-right" : "text-left",
+                          h.className,
+                        )}
+                      >
+                        {h.label}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {lines.map((line) => {
+                    const { discountAmt, taxable } = calcLineAmounts(line);
+                    const split = calcGstLineSplit(line, interstate);
+                    return (
+                      <tr key={line.id} className="border-b border-border/40 last:border-0">
+                        <td className="p-1.5 min-w-[180px] w-[180px]">
+                          <Input
+                            className={cn(VOUCHER_INPUT_CLASS, "text-xs")}
+                            value={line.productName}
+                            onChange={(e) =>
+                              updateLine(line.id, {
+                                productName: e.target.value,
+                                description: e.target.value,
+                              })
+                            }
+                            placeholder="Service description"
+                          />
                         </td>
-                      ) : (
-                        <>
+                        <td className="p-1.5 min-w-[220px] max-w-[240px] w-[220px] overflow-hidden">
+                          <ServiceInvoiceLineLedgerSelect
+                            value={isLedgerUuid(line.incomeLedgerId) ? line.incomeLedgerId : null}
+                            fallbackLabel={line.incomeLedgerName || undefined}
+                            onChange={(ledger) =>
+                              updateLine(line.id, {
+                                incomeLedgerId: ledger.ledgerId,
+                                incomeLedgerName: ledger.ledgerName,
+                              })
+                            }
+                          />
+                        </td>
+                        <td className="p-1.5 min-w-[120px] max-w-[130px] w-[120px] overflow-hidden">
+                          <SearchableSelect
+                            label=""
+                            value={line.sacId ?? ""}
+                            onChange={(id) => {
+                              const sac = sacOptions.find((s) => s.id === id);
+                              updateLine(line.id, {
+                                sacId: id || null,
+                                hsn: sac?.hsnCode ?? line.hsn,
+                                taxPct: sac?.gstPercentage ?? line.taxPct,
+                              });
+                            }}
+                            options={sacSelectOptions}
+                            placeholder="Select SAC…"
+                            contentClassName="w-[340px]"
+                            triggerClassName={cn(VOUCHER_INPUT_CLASS, "text-xs")}
+                          />
+                        </td>
+                        <td className="p-1.5 min-w-[65px] w-[65px]">
+                          <Input
+                            type="number"
+                            min={0}
+                            step={0.01}
+                            className={cn(VOUCHER_INPUT_CLASS, "text-xs text-right tabular-nums")}
+                            value={line.qty || ""}
+                            onChange={(e) =>
+                              updateLine(line.id, { qty: parseFloat(e.target.value) || 0 })
+                            }
+                          />
+                        </td>
+                        <td className="p-1.5 min-w-[70px] w-[70px]">
+                          <Input
+                            className={cn(VOUCHER_INPUT_CLASS, "text-xs")}
+                            value={line.unit}
+                            onChange={(e) => updateLine(line.id, { unit: e.target.value })}
+                          />
+                        </td>
+                        <td className="p-1.5 min-w-[90px] w-[90px]">
+                          <AccountsMoneyInput
+                            className={cn(VOUCHER_INPUT_CLASS, "text-xs text-right")}
+                            value={line.unitPrice || ""}
+                            onChange={(v) => updateLine(line.id, { unitPrice: v })}
+                          />
+                        </td>
+                        <td className="p-1.5 min-w-[70px] w-[70px]">
+                          <Input
+                            type="number"
+                            min={0}
+                            max={100}
+                            step={0.01}
+                            className={cn(VOUCHER_INPUT_CLASS, "text-xs text-right")}
+                            value={line.discountPct || ""}
+                            onChange={(e) =>
+                              updateLine(line.id, {
+                                discountPct: parseFloat(e.target.value) || 0,
+                              })
+                            }
+                          />
+                        </td>
+                        <td className="p-1.5 min-w-[90px] w-[90px]">
+                          <InvoiceTableReadonly value={formatINR(discountAmt)} muted />
+                        </td>
+                        <td className="p-1.5 min-w-[95px] w-[95px]">
+                          <InvoiceTableReadonly value={formatINR(taxable)} />
+                        </td>
+                        <td className="p-1.5 min-w-[70px] w-[70px]">
+                          <Input
+                            type="number"
+                            min={0}
+                            max={100}
+                            step={0.01}
+                            className={cn(VOUCHER_INPUT_CLASS, "text-xs text-right")}
+                            value={line.taxPct || ""}
+                            onChange={(e) =>
+                              updateLine(line.id, { taxPct: parseFloat(e.target.value) || 0 })
+                            }
+                          />
+                        </td>
+                        {interstate ? (
                           <td className="p-1.5 min-w-[90px] w-[90px]">
-                            <InvoiceTableReadonly value={formatINR(split.cgst)} muted />
+                            <InvoiceTableReadonly value={formatINR(split.igst)} muted />
                           </td>
-                          <td className="p-1.5 min-w-[90px] w-[90px]">
-                            <InvoiceTableReadonly value={formatINR(split.sgst)} muted />
-                          </td>
-                        </>
-                      )}
-                      <td className="p-1.5 min-w-[110px] w-[110px]">
-                        <InvoiceTableReadonly value={formatINR(split.lineTotal)} strong />
-                      </td>
-                      <td className="p-1.5 so-col-actions">
-                        <button
-                          type="button"
-                          className="p-1 rounded hover:bg-red-50 text-muted-foreground hover:text-red-600"
-                          onClick={() => removeLine(line.id)}
-                          aria-label="Delete line"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </VoucherFormSectionCard>
+                        ) : (
+                          <>
+                            <td className="p-1.5 min-w-[90px] w-[90px]">
+                              <InvoiceTableReadonly value={formatINR(split.cgst)} muted />
+                            </td>
+                            <td className="p-1.5 min-w-[90px] w-[90px]">
+                              <InvoiceTableReadonly value={formatINR(split.sgst)} muted />
+                            </td>
+                          </>
+                        )}
+                        <td className="p-1.5 min-w-[110px] w-[110px]">
+                          <InvoiceTableReadonly value={formatINR(split.lineTotal)} strong />
+                        </td>
+                        <td className="p-1.5 so-col-actions">
+                          <button
+                            type="button"
+                            className="p-1 rounded hover:bg-red-50 text-muted-foreground hover:text-red-600"
+                            onClick={() => removeLine(line.id)}
+                            aria-label="Delete line"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </VoucherFormSectionCard>
 
-        <VoucherFormSectionCard
-          title="Additional Charges"
-          flush
-          headerActions={
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="so-section-header-btn"
-              onClick={() => addChargeRowRef.current?.()}
-            >
-              <Plus /> Add Charge
-            </Button>
-          }
-        >
-          <GoodsInvoiceAdditionalChargesEditor
-            expenses={additionalExpenses}
-            onChange={setAdditionalExpenses}
-            interstate={interstate}
-            tableVariant="invoice"
-            hideAddButton
-            onBindAddRow={(fn) => {
-              addChargeRowRef.current = fn;
-            }}
-          />
-        </VoucherFormSectionCard>
-
-        <div className="grid grid-cols-1 gap-2.5 items-start lg:grid-cols-[minmax(0,1fr)_300px]">
-          <VoucherFormSectionCard title="Narration">
-            <Textarea
-              className={cn(VOUCHER_INPUT_CLASS, "so-goods-narration min-h-[60px] h-auto resize-y")}
-              value={narration}
-              onChange={(e) => setNarration(e.target.value)}
-              placeholder="Optional narration for this invoice…"
-              maxLength={500}
+          <VoucherFormSectionCard
+            title="Additional Charges"
+            flush
+            headerActions={
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="so-section-header-btn"
+                onClick={() => addChargeRowRef.current?.()}
+              >
+                <Plus /> Add Charge
+              </Button>
+            }
+          >
+            <GoodsInvoiceAdditionalChargesEditor
+              expenses={additionalExpenses}
+              onChange={setAdditionalExpenses}
+              interstate={interstate}
+              tableVariant="invoice"
+              hideAddButton
+              onBindAddRow={(fn) => {
+                addChargeRowRef.current = fn;
+              }}
             />
           </VoucherFormSectionCard>
 
-          <VoucherFormSectionCard title="Summary" className="lg:sticky lg:top-3 lg:z-10">
-            <div className="space-y-1.5 so-invoice-summary">
-              <div className="flex items-center justify-between gap-4 py-0.5">
-                <span className="so-summary-label">Gross Amount</span>
-                <span className="so-summary-value">{formatINR(summaryGrossAmount)}</span>
-              </div>
-              <div className="flex items-center justify-between gap-4 py-0.5">
-                <span className="so-summary-label">Discount</span>
-                <span className="so-summary-value">{formatINR(summaryDiscountAmount)}</span>
-              </div>
-              <div className="flex items-center justify-between gap-4 py-0.5">
-                <span className="so-summary-label">Taxable Amount</span>
-                <span className="so-summary-value">{formatINR(summaryTaxableAmount)}</span>
-              </div>
-              <div className="flex items-center justify-between gap-4 py-0.5">
-                <span className="so-summary-label">Additional Charges</span>
-                <span className="so-summary-value">{formatINR(summaryAdditionalCharges)}</span>
-              </div>
-              {interstate ? (
+          <div className="grid grid-cols-1 gap-2.5 items-start lg:grid-cols-[minmax(0,1fr)_300px]">
+            <VoucherFormSectionCard title="Narration">
+              <Textarea
+                className={cn(VOUCHER_INPUT_CLASS, "so-goods-narration min-h-[60px] h-auto resize-y")}
+                value={narration}
+                onChange={(e) => setNarration(e.target.value)}
+                placeholder="Optional narration for this invoice…"
+                maxLength={500}
+              />
+            </VoucherFormSectionCard>
+
+            <VoucherFormSectionCard title="Summary" className="lg:sticky lg:top-3 lg:z-10">
+              <div className="space-y-1.5 so-invoice-summary">
                 <div className="flex items-center justify-between gap-4 py-0.5">
-                  <span className="so-summary-label">Output IGST</span>
-                  <span className="so-summary-value">{formatINR(gstSplit.igst)}</span>
+                  <span className="so-summary-label">Gross Amount</span>
+                  <span className="so-summary-value">{formatINR(summaryGrossAmount)}</span>
                 </div>
-              ) : (
-                <>
+                <div className="flex items-center justify-between gap-4 py-0.5">
+                  <span className="so-summary-label">Discount</span>
+                  <span className="so-summary-value">{formatINR(summaryDiscountAmount)}</span>
+                </div>
+                <div className="flex items-center justify-between gap-4 py-0.5">
+                  <span className="so-summary-label">Additional Charges</span>
+                  <span className="so-summary-value">{formatINR(summaryAdditionalCharges)}</span>
+                </div>
+                <div className="flex items-center justify-between gap-4 py-0.5">
+                  <span className="so-summary-label">Taxable Amount</span>
+                  <span className="so-summary-value">{formatINR(summaryTaxableAmount)}</span>
+                </div>
+                {interstate ? (
                   <div className="flex items-center justify-between gap-4 py-0.5">
-                    <span className="so-summary-label">Output CGST</span>
-                    <span className="so-summary-value">{formatINR(gstSplit.cgst)}</span>
+                    <span className="so-summary-label">Output IGST</span>
+                    <span className="so-summary-value">{formatINR(gstSplit.igst)}</span>
                   </div>
-                  <div className="flex items-center justify-between gap-4 py-0.5">
-                    <span className="so-summary-label">Output SGST</span>
-                    <span className="so-summary-value">{formatINR(gstSplit.sgst)}</span>
-                  </div>
-                </>
-              )}
-              <div className="flex items-center justify-between gap-4 py-0.5">
-                <Label className="so-summary-label">Round Off</Label>
-                <AccountsMoneyInput
-                  className={CHARGE_INPUT_CLASS}
-                  value={roundOff || ""}
-                  onChange={(v) => setRoundOff(v)}
-                />
+                ) : (
+                  <>
+                    <div className="flex items-center justify-between gap-4 py-0.5">
+                      <span className="so-summary-label">Output CGST</span>
+                      <span className="so-summary-value">{formatINR(gstSplit.cgst)}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-4 py-0.5">
+                      <span className="so-summary-label">Output SGST</span>
+                      <span className="so-summary-value">{formatINR(gstSplit.sgst)}</span>
+                    </div>
+                  </>
+                )}
+                <div className="flex items-center justify-between gap-4 py-0.5">
+                  <Label className="so-summary-label">Round Off</Label>
+                  <AccountsMoneyInput
+                    className={CHARGE_INPUT_CLASS}
+                    value={roundOff || ""}
+                    onChange={(v) => setRoundOff(v)}
+                  />
+                </div>
+                <div className="flex items-center justify-between gap-4 py-1.5 border-t border-border/60">
+                  <span className="so-grand-total-label">Grand Total</span>
+                  <span className="so-grand-total-value">{formatINR(grandTotal)}</span>
+                </div>
               </div>
-              <div className="flex items-center justify-between gap-4 py-1.5 border-t border-border/60">
-                <span className="so-grand-total-label">Grand Total</span>
-                <span className="so-grand-total-value">{formatINR(grandTotal)}</span>
-              </div>
-            </div>
-          </VoucherFormSectionCard>
+            </VoucherFormSectionCard>
+          </div>
         </div>
-      </div>
-    </InvoiceFormLayout>
+      </InvoiceFormLayout>
     </div>
   );
 }

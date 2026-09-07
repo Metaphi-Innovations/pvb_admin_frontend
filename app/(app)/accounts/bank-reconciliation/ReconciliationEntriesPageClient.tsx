@@ -19,12 +19,7 @@ import { CategorizeEntryPanel } from "./components/CategorizeEntryPanel";
 import { MatchEntryModal } from "./components/MatchEntryModal";
 import { formatINR, monthYearLabel, RECONCILIATION_LIST_PATH } from "./reconciliation-utils";
 import { cn } from "@/lib/utils";
-
-function formatDisplayDate(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString("en-IN", { day: "2-digit", month: "2-digit", year: "numeric" });
-}
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 
 function StatementDetailsCell({ entry }: { entry: BankStatementEntry }) {
   return (

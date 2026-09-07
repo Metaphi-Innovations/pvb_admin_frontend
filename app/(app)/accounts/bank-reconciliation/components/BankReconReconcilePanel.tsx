@@ -16,6 +16,7 @@ import {
 import { GroupedLedgerSelect } from "@/components/accounts/GroupedLedgerSelect";
 import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
 import { formatMoney } from "@/lib/accounts/money-format";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 import { cn } from "@/lib/utils";
 import { loadChartOfAccounts } from "@/app/(app)/accounts/data";
 import { getBankReconTransactionById, type BankReconTransactionRecord } from "@/lib/accounts/bank-recon-register";
@@ -222,7 +223,7 @@ export function BankReconReconcilePanel({
           <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">
             Bank Transaction
           </p>
-          <DetailRow label="Date" value={transaction.statementDate || "—"} />
+          <DetailRow label="Date" value={formatDisplayDate(transaction.statementDate)} />
           <DetailRow label="Narration" value={<span className="line-clamp-2 font-normal">{transaction.narration}</span>} />
           <DetailRow
             label="Reference"

@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo, useCallback } from "react";
 import { formatMoney } from "@/lib/accounts/money-format";
+import { formatDisplayDate, formatDisplayDateTime } from "@/lib/accounts/date-display";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -179,7 +180,7 @@ function CategorizationPanel({ transaction, open, onClose, onSave }: Categorizat
           <div className="rounded-lg border border-border/60 bg-muted/30 p-4 space-y-2 text-sm">
             <div className="flex justify-between">
               <span className="text-muted-foreground">Date:</span>
-              <span className="font-medium">{transaction.transactionDate}</span>
+              <span className="font-medium">{formatDisplayDate(transaction.transactionDate)}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Amount:</span>
@@ -320,12 +321,12 @@ function CategorizationPanel({ transaction, open, onClose, onSave }: Categorizat
               <p className="font-medium">Status: <StatusBadge status={transaction.status} /></p>
               {transaction.categorizedBy && (
                 <p className="text-muted-foreground">
-                  Categorized by {transaction.categorizedBy} on {new Date(transaction.categorizedAt).toLocaleDateString()}
+                  Categorized by {transaction.categorizedBy} on {formatDisplayDate(transaction.categorizedAt)}
                 </p>
               )}
               {transaction.reconciledBy && (
                 <p className="text-muted-foreground">
-                  Reconciled by {transaction.reconciledBy} on {new Date(transaction.reconciledAt).toLocaleDateString()}
+                  Reconciled by {transaction.reconciledBy} on {formatDisplayDate(transaction.reconciledAt)}
                 </p>
               )}
             </div>
@@ -435,7 +436,7 @@ function BankTransactionsTable({
               className="cursor-pointer"
               onClick={() => onOpenCategorization(txn)}
             >
-              <AccountsTableCell>{txn.transactionDate}</AccountsTableCell>
+              <AccountsTableCell>{formatDisplayDate(txn.transactionDate)}</AccountsTableCell>
               <AccountsTableCell wrap>
                 <span className="font-medium line-clamp-1">{txn.narration}</span>
                 <span className="text-xs text-muted-foreground">{txn.bankAccountName}</span>

@@ -50,6 +50,14 @@ export function demoFinancialYearStart(ref = new Date()): string {
   return `${fyStartYear}-04-01`;
 }
 
+/** Indian FY closing date (Mar 31) for the FY containing ref */
+export function demoFinancialYearEnd(ref = new Date()): string {
+  const month = ref.getMonth();
+  const year = ref.getFullYear();
+  const fyEndYear = month >= 3 ? year + 1 : year;
+  return `${fyEndYear}-03-31`;
+}
+
 /** A day in the previous calendar month */
 export function demoLastMonthDay(dayOfMonth: number, ref = new Date()): string {
   const d = new Date(ref);
@@ -109,7 +117,7 @@ export function applyRelativeInvoiceDates<
       Math.round(
         (new Date(`${spec.dueDate}T12:00:00`).getTime() -
           new Date(`${spec.invoiceDate}T12:00:00`).getTime()) /
-          86400000,
+        86400000,
       ),
     );
     return {

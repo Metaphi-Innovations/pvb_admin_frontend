@@ -32,8 +32,14 @@ export type ReceiptAdjustmentType =
 
 export type AccountingEntryType = "DEBIT" | "CREDIT";
 
-/** Frontend-only treatment control for Customer receipts (not a backend DTO field). */
-export type ReceiptTreatmentUi = "against_outstanding" | "advance_on_account";
+/**
+ * Frontend-only treatment control for Customer receipts (not a backend DTO field).
+ * Backend receives allocations[] + advance_amount; mixed is inferred when both > 0.
+ */
+export type ReceiptTreatmentUi =
+  | "against_outstanding"
+  | "advance_on_account"
+  | "mixed_allocation";
 
 export interface ReceiptVoucherConfig {
   approval_required: boolean;

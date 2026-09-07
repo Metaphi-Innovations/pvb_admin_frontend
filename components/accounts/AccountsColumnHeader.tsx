@@ -118,7 +118,7 @@ export function AccountsColumnHeader({
     >
       <div
         className={cn(
-          "inline-flex items-center gap-0.5 max-w-full",
+          "inline-flex items-center gap-0.5 max-w-full min-w-0",
           align === "right" && "justify-end",
           align === "center" && "justify-center",
         )}
@@ -128,7 +128,7 @@ export function AccountsColumnHeader({
           type="button"
           onClick={handleSortClick}
           className={cn(
-            "inline-flex items-center gap-0.5 whitespace-nowrap text-left",
+            "inline-flex items-center gap-0.5 whitespace-nowrap text-left min-w-0",
             sortable && "cursor-pointer hover:text-brand-700",
             align === "right" && "text-right",
           )}

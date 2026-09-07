@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
 import { formatMoney, roundMoney } from "@/lib/accounts/money-format";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 import type { ChartOfAccount } from "@/app/(app)/accounts/data";
 import type { VoucherEntryAllocation } from "@/lib/accounts/voucher-form-model";
 import { useOpenVoucherDocuments } from "@/components/accounts/VoucherInlineDocumentSelect";
@@ -28,10 +29,7 @@ interface VoucherEntryAllocationDialogProps {
 }
 
 function formatDocDate(iso: string): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+  return formatDisplayDate(iso);
 }
 
 export function VoucherEntryAllocationDialog({

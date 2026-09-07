@@ -1,4 +1,5 @@
 import { sanitizeCellValue } from "./sanitize";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 import type { StatementFileType } from "./types";
 
 const MONTH_MAP: Record<string, string> = {
@@ -99,8 +100,7 @@ export function autoDetectDateFormat(samples: string[]): string {
 }
 
 export function formatIsoForDisplay(iso: string): string {
-  const [y, m, d] = iso.split("-");
-  return `${d}-${m}-${y}`;
+  return formatDisplayDate(iso);
 }
 
 export function compareIsoDates(a: string, b: string): number {

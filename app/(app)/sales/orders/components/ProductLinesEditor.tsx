@@ -465,11 +465,15 @@ export default function ProductLinesEditor({
 	const openSchemeDialog = async (line: SalesOrderLineItem) => {
 		const eligible = await getLineEligibleSchemes(line);
 		if (eligible.length > 0) {
+			const activeCode = line.appliedSchemeCode ?? line.schemeCode;
+			const matched = activeCode
+				? eligible.find((o) => o.schemeCode === activeCode)
+				: undefined;
 			setSchemeDialog({
 				lineId: line.id,
 				mode: "apply",
 				offers: eligible,
-				selectedOffer: eligible[0],
+				selectedOffer: matched ?? eligible[0],
 			});
 			return;
 		}
@@ -1044,24 +1048,22 @@ export default function ProductLinesEditor({
 								<td className='px-2 py-1.5'>
 									{line.productId ? (
 										hasScheme ? (
-											<div className='flex flex-col gap-0.5 max-w-[140px]'>
-												<Badge className='w-fit px-1.5 py-0 text-[10px] font-semibold bg-emerald-600 hover:bg-emerald-600'>
+											<button
+												type='button'
+												onClick={() => openSchemeDialog(line)}
+												className='flex flex-col gap-0.5 max-w-[140px] text-left group hover:opacity-90 transition-opacity'
+												title='View scheme details'
+											>
+												<Badge className='w-fit px-1.5 py-0 text-[10px] font-semibold bg-emerald-600 hover:bg-emerald-600 cursor-pointer'>
 													Applied
 												</Badge>
-												<span className='text-[10px] font-mono text-brand-700 truncate'>
+												<span className='text-[10px] font-mono text-brand-700 truncate group-hover:underline'>
 													{line.appliedSchemeCode ?? line.schemeCode}
 												</span>
 												<span className='text-[10px] text-emerald-700 tabular-nums'>
 													{formatSchemeRupee(line.schemeDiscountAmount)} off
 												</span>
-												<button
-													type='button'
-													onClick={() => handleRemoveScheme(line)}
-													className='text-[10px] font-medium text-red-600 hover:text-red-700 hover:underline text-left w-fit'
-												>
-													Remove scheme
-												</button>
-											</div>
+											</button>
 										) : hasEligibleScheme ? (
 											<div className='flex flex-col gap-0.5 max-w-[140px]'>
 												<button

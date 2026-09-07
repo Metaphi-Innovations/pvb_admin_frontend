@@ -83,8 +83,16 @@ export interface BillWiseOutstandingView {
   onAccountAdvances: BillWiseOnAccountAdvanceRow[];
 }
 
-export function billWiseOutstandingHref(ledgerId: number, from?: "coa" | "gl"): string {
-  const base = `${CHART_OF_ACCOUNTS_HREF}/ledgers/${ledgerId}/bill-wise`;
+export function billWiseOutstandingHref(
+  ledgerId: number | string,
+  from?: "coa" | "gl",
+  apiNodeId?: string | null,
+): string {
+  const key =
+    apiNodeId && String(apiNodeId).trim()
+      ? String(apiNodeId).trim()
+      : String(ledgerId);
+  const base = `${CHART_OF_ACCOUNTS_HREF}/ledgers/${encodeURIComponent(key)}/bill-wise`;
   return from ? `${base}?from=${from}` : base;
 }
 

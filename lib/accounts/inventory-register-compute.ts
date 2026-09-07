@@ -16,6 +16,7 @@ import {
 import {
   matchesMultiFilter,
 } from "@/lib/accounts/report-multi-filter-utils";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 
 export interface InventoryRegisterFilters {
   dateFrom: string;
@@ -330,10 +331,7 @@ export function getInventoryRegisterCategoryOptions(): string[] {
 }
 
 export function formatInventoryRegisterDate(iso: string): string {
-  if (!iso) return "—";
-  return new Date(`${iso}T12:00:00`)
-    .toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
-    .replace(/ /g, "-");
+  return formatDisplayDate(iso);
 }
 
 export function formatQty(value: number, showZero = false): string {
