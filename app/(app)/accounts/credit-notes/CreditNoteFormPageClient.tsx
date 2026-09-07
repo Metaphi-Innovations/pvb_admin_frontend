@@ -465,7 +465,8 @@ export default function CreditNoteFormPageClient({
                   const gstApplicable = toNum(l.gst_rate) > 0 || toNum(l.gst_amount) > 0;
                   return {
                     key: l.pending_credit_note_line_id || `line-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-                    description: l.description || p.scheme?.scheme_name || "Scheme Credit",
+                    // Particulars are user-entered for scheme CNs — do not autofill scheme name.
+                    description: "",
                     ledger_id: l.ledger_id || defaultLedgerId,
                     ledger_name: l.ledger?.ledger_name || defaultLedgerName,
                     quantity: "",
@@ -481,7 +482,7 @@ export default function CreditNoteFormPageClient({
               setDirectLines([
                 {
                   key: `line-${Date.now()}`,
-                  description: p.scheme?.scheme_name || "Scheme Credit Note",
+                  description: "",
                   ledger_id: defaultLedgerId,
                   ledger_name: defaultLedgerName,
                   quantity: "",

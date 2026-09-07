@@ -703,6 +703,8 @@ export const API_ENDPOINTS = {
       UPDATE: (id: string) => `/accounts/receipt-voucher/${id}`,
       CUSTOMER_OUTSTANDING: (customerId: string) =>
         `/accounts/receipt-voucher/customer/${customerId}/outstanding`,
+      ELIGIBLE_CASH_DISCOUNT_SCHEMES:
+        "/accounts/receipt-voucher/eligible-cash-discount-schemes",
       SUPPLIER_RECOVERABLE: (supplierId: string) =>
         `/accounts/receipt-voucher/supplier/${supplierId}/recoverable`,
       SUBMIT: (id: string) => `/accounts/receipt-voucher/${id}/submit`,
