@@ -1201,7 +1201,7 @@ export function ReportCustomerMultiFilter({
 }: {
   values: string[];
   onChange: (values: string[]) => void;
-  customers: { id: number; customerName: string; customerCode?: string }[];
+  customers: { id: string | number; customerName: string; customerCode?: string }[];
 }) {
   const selectOptions: ReportMultiSelectOption[] = customers.map((c) => ({
     value: String(c.id),
@@ -1228,7 +1228,7 @@ export function ReportVendorMultiFilter({
 }: {
   values: string[];
   onChange: (values: string[]) => void;
-  vendors: { id: number; vendorName: string; vendorCode?: string }[];
+  vendors: { id: string | number; vendorName: string; vendorCode?: string }[];
 }) {
   const selectOptions: ReportMultiSelectOption[] = vendors.map((v) => ({
     value: String(v.id),

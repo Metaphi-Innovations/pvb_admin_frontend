@@ -9,6 +9,7 @@ import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { mapSupplierDetailBillRow } from "@/lib/accounts/payables-api-mappers";
 import type { ApiSupplierDetailBillRow } from "@/types/payables.types";
 import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 import { formatMoney } from "@/lib/accounts/money-format";
 import { defaultAsOnDate } from "@/lib/accounts/report-date-presets";
 import { PayablesService } from "@/services/payables.service";
@@ -36,13 +37,6 @@ import {
   AccountsTableRow,
   AccountsTableScroll,
 } from "@/components/accounts/AccountsTable";
-
-function formatReportDate(value: string): string {
-  if (!value || value === "—") return "—";
-  const [y, m, d] = value.slice(0, 10).split("-");
-  if (!y || !m || !d) return value;
-  return `${d}-${m}-${y}`;
-}
 
 function formatCreditDays(creditDays?: number): string {
   if (creditDays == null || creditDays <= 0) return "—";
@@ -217,7 +211,7 @@ export default function VendorOutstandingDetailClient() {
         { label: supplier.supplierName },
       ]}
       title="Supplier Outstanding Details"
-      description={`${supplier.supplierCode} · Outstanding as on ${formatReportDate(asOnDate)}`}
+      description={`${supplier.supplierCode} · Outstanding as on ${formatDisplayDate(asOnDate)}`}
       actions={
         <div className="flex items-center gap-2">
           <Link href="/accounts/payables/outstanding">
@@ -260,8 +254,8 @@ export default function VendorOutstandingDetailClient() {
             </p>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <InfoBlock label="Invoice No." value={highlightedBill.billNo} />
-              <InfoBlock label="Invoice Date" value={formatReportDate(highlightedBill.billDate)} />
-              <InfoBlock label="Due Date" value={formatReportDate(highlightedBill.dueDate)} />
+              <InfoBlock label="Invoice Date" value={formatDisplayDate(highlightedBill.billDate)} />
+              <InfoBlock label="Due Date" value={formatDisplayDate(highlightedBill.dueDate)} />
               <InfoBlock
                 label="Status"
                 value={payableStatusToBadge(highlightedBill.status).label}
@@ -363,7 +357,7 @@ export default function VendorOutstandingDetailClient() {
                             {bill.billNo}
                           </Link>
                         </AccountsTableCell>
-                        <AccountsTableCell>{formatReportDate(bill.billDate)}</AccountsTableCell>
+                        <AccountsTableCell>{formatDisplayDate(bill.billDate)}</AccountsTableCell>
                         <AccountsTableCell align="right" money>
                           {formatMoney(bill.billAmount)}
                         </AccountsTableCell>
@@ -373,7 +367,7 @@ export default function VendorOutstandingDetailClient() {
                         <AccountsTableCell align="right" money>
                           <span className="font-semibold">{formatMoney(bill.outstanding)}</span>
                         </AccountsTableCell>
-                        <AccountsTableCell>{formatReportDate(bill.dueDate)}</AccountsTableCell>
+                        <AccountsTableCell>{formatDisplayDate(bill.dueDate)}</AccountsTableCell>
                         <AccountsTableCell>
                           <StatusBadge
                             status={badge.status}
@@ -445,7 +439,7 @@ export default function VendorOutstandingDetailClient() {
                           {payment.paymentNo}
                         </Link>
                       </AccountsTableCell>
-                      <AccountsTableCell>{formatReportDate(payment.paymentDate)}</AccountsTableCell>
+                      <AccountsTableCell>{formatDisplayDate(payment.paymentDate)}</AccountsTableCell>
                       <AccountsTableCell align="right" money>
                         {formatMoney(payment.amount)}
                       </AccountsTableCell>

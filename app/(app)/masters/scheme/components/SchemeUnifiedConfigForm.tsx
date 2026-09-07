@@ -34,6 +34,8 @@ import {
   PAYMENT_CALCULATION_ON_OPTIONS,
   PAYMENT_CONDITION_OPTIONS,
   SPECIAL_DISCOUNT_BASED_ON_OPTIONS,
+  SPECIAL_EVALUATION_SCOPE_OPTIONS,
+  SPECIAL_SETTLEMENT_RUN_MODE_OPTIONS,
   SCHEME_TYPE_DISPLAY_LABELS,
   applyDiscountSetupMode,
   applySchemeTypeChange,
@@ -60,6 +62,8 @@ import {
   type SchemeQuantityUom,
   type SchemeUnifiedForm,
   type SpecialDiscountBasedOnUI,
+  type SpecialEvaluationScopeUI,
+  type SpecialSettlementRunModeUI,
 } from "../scheme-unified-config";
 import {
   SCHEME_CATEGORIES,
@@ -495,6 +499,7 @@ function SpecialDiscountConditionFields({
 
   const isQty = form.specialDiscountBasedOn === "Sales Quantity";
   const uom = normalizeSchemeQuantityUom(form.specialDiscountUom || "Case");
+  const hasSlabs = form.specialHasSlabs;
 
   const setQuantityUom = (next: SchemeQuantityUom) => {
     onChange({
@@ -506,8 +511,96 @@ function SpecialDiscountConditionFields({
     });
   };
 
+  const helpText = (() => {
+    const scopeBit =
+      form.specialEvaluationScope === "One Invoice"
+        ? "on a single invoice"
+        : "across invoices during Valid From–Valid To";
+    const runBit =
+      form.specialSettlementRunMode === "Automatic"
+        ? "Entitlement is created automatically"
+        : "Entitlement requires manual settlement via Credit Note";
+    const combineBit = form.specialCombineProducts
+      ? "combined across selected products"
+      : "per product";
+    if (isQty) {
+      return `Net sold quantity (invoice qty − returned qty) ${scopeBit} determines qualification (${combineBit}). ${runBit}.`;
+    }
+    return `Eligible Net Taxable Sales (Taxable Sales − Sales Returns, excluding GST) ${scopeBit} determines qualification (${combineBit}). ${runBit}.`;
+  })();
+
   return (
     <div className="space-y-2">
+      <div className="scheme-row">
+        <Field className="scheme-w-select-md" label="Evaluate On" required>
+          <Select
+            value={form.specialEvaluationScope}
+            onValueChange={(v) =>
+              set("specialEvaluationScope", v as SpecialEvaluationScopeUI)
+            }
+          >
+            <SelectTrigger className={ctrl}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {SPECIAL_EVALUATION_SCOPE_OPTIONS.map((o) => (
+                <SelectItem key={o} value={o} className="text-xs">
+                  {o}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
+        <Field className="scheme-w-select-md" label="Entitlement Mode" required>
+          <Select
+            value={form.specialSettlementRunMode}
+            onValueChange={(v) =>
+              set("specialSettlementRunMode", v as SpecialSettlementRunModeUI)
+            }
+          >
+            <SelectTrigger className={ctrl}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {SPECIAL_SETTLEMENT_RUN_MODE_OPTIONS.map((o) => (
+                <SelectItem key={o} value={o} className="text-xs">
+                  {o}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
+      </div>
+
+      <div className="scheme-row items-center gap-6">
+        <div className="flex items-center gap-2 min-h-[28px]">
+          <Switch
+            checked={form.specialHasSlabs}
+            onCheckedChange={(v) => set("specialHasSlabs", v)}
+            id="special-has-slabs"
+          />
+          <Label
+            htmlFor="special-has-slabs"
+            className="text-[11px] font-medium cursor-pointer"
+          >
+            Use Achievement Slabs
+          </Label>
+        </div>
+        <div className="flex items-center gap-2 min-h-[28px]">
+          <Switch
+            checked={form.specialCombineProducts}
+            onCheckedChange={(v) => set("specialCombineProducts", v)}
+            id="special-combine-products"
+          />
+          <Label
+            htmlFor="special-combine-products"
+            className="text-[11px] font-medium cursor-pointer"
+          >
+            Combine selected products
+          </Label>
+        </div>
+      </div>
+
       <div className="scheme-row">
         <Field
           className="scheme-w-select-md"
@@ -559,16 +652,60 @@ function SpecialDiscountConditionFields({
       </div>
 
       <p className="text-[10px] text-muted-foreground leading-snug max-w-xl">
-        {isQty
-          ? "Net sold quantity (invoice qty − returned qty) during Valid From–Valid To determines the achieved slab. Discount is entitlement only — settled later via Credit Note."
-          : "Eligible Net Taxable Sales (Taxable Sales − Sales Returns, excluding GST) during Valid From–Valid To determines the achieved slab. Discount is entitlement only — settled later via Credit Note."}
+        {helpText}
       </p>
 
-      <p className="text-[10px] font-bold uppercase tracking-widest text-foreground">
-        Achievement Slabs
-      </p>
+      {!hasSlabs ? (
+        <div className="scheme-row">
+          <Field
+            className="scheme-w-num-cell"
+            label={isQty ? "Min. Quantity" : "Min. Sales Value"}
+            required
+          >
+            <SchemeNumberField
+              value={form.specialThresholdValue}
+              onChange={(v) => set("specialThresholdValue", v)}
+              placeholder={isQty ? "Qty" : "₹"}
+              min={0}
+              className="scheme-ctrl"
+            />
+          </Field>
+          <Field className="scheme-w-select-sm" label="Discount Type" required>
+            <Select
+              value={form.discountType}
+              onValueChange={(v) => set("discountType", v as DiscountType)}
+            >
+              <SelectTrigger className={ctrl}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {DISCOUNT_TYPE_OPTIONS.map((o) => (
+                  <SelectItem key={o} value={o} className="text-xs">
+                    {o}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field className="scheme-w-num-cell" label="Discount Value" required>
+            <SchemeNumberField
+              value={form.discountValue}
+              onChange={(v) => set("discountValue", v)}
+              placeholder={form.discountType === "Fixed Amount" ? "₹" : "%"}
+              min={0}
+              className="scheme-ctrl"
+            />
+          </Field>
+        </div>
+      ) : null}
 
-      {!isQty ? (
+      {hasSlabs ? (
+        <p className="text-[10px] font-bold uppercase tracking-widest text-foreground">
+          Achievement Slabs
+        </p>
+      ) : null}
+
+      {hasSlabs && !isQty ? (
         <>
           <div className="scheme-slab-wrap">
             <table className="scheme-slab-table">
@@ -696,7 +833,7 @@ function SpecialDiscountConditionFields({
             </Button>
           </div>
         </>
-      ) : (
+      ) : hasSlabs ? (
         <>
           <div className="scheme-slab-wrap">
             <table className="scheme-slab-table">
@@ -866,7 +1003,7 @@ function SpecialDiscountConditionFields({
             </Button>
           </div>
         </>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -1880,10 +2017,39 @@ export function SchemeUnifiedConfigForm({
                   {form.specialDiscountBasedOn}
                 </p>
                 <p>
+                  <span className="font-semibold text-foreground">Evaluate On: </span>
+                  {form.specialEvaluationScope}
+                  {" · "}
+                  <span className="font-semibold text-foreground">Mode: </span>
+                  {form.specialSettlementRunMode}
+                </p>
+                <p>
+                  <span className="font-semibold text-foreground">Products: </span>
+                  {form.specialCombineProducts
+                    ? "Combined threshold"
+                    : "Individual threshold"}
+                </p>
+                <p>
                   <span className="font-semibold text-foreground">Scheme Period: </span>
                   {form.startDate || "—"} to {form.endDate || "—"}
                 </p>
-                {form.specialDiscountBasedOn === "Sales Quantity" ? (
+                {!form.specialHasSlabs ? (
+                  <p>
+                    <span className="font-semibold text-foreground">
+                      Flat threshold:{" "}
+                    </span>
+                    {form.specialDiscountBasedOn === "Sales Quantity"
+                      ? `${form.specialThresholdValue || "—"} ${form.specialDiscountUom || "qty"}`
+                      : `₹${form.specialThresholdValue || "—"}`}
+                    {" → "}
+                    {formatSlabDiscountLabel(
+                      form.discountType,
+                      form.discountValue,
+                    )}
+                  </p>
+                ) : null}
+                {form.specialHasSlabs &&
+                form.specialDiscountBasedOn === "Sales Quantity" ? (
                   <p>
                     <span className="font-semibold text-foreground">Products: </span>
                     {form.productIds.length
@@ -1894,7 +2060,8 @@ export function SchemeUnifiedConfigForm({
                       : ""}
                   </p>
                 ) : null}
-                {form.specialDiscountBasedOn === "Sales Amount" ? (
+                {form.specialHasSlabs &&
+                form.specialDiscountBasedOn === "Sales Amount" ? (
                   form.specialDiscountAmountSlabs.some(
                     (s) =>
                       s.eligibleSalesFrom.trim() || s.discountValue.trim(),
@@ -1941,7 +2108,9 @@ export function SchemeUnifiedConfigForm({
                       </ul>
                     </div>
                   ) : null
-                ) : form.specialDiscountQuantitySlabs.some(
+                ) : form.specialHasSlabs &&
+                  form.specialDiscountBasedOn === "Sales Quantity" &&
+                  form.specialDiscountQuantitySlabs.some(
                     (s) => s.quantityFrom.trim() || s.discountValue.trim(),
                   ) ? (
                   <div>
@@ -1949,35 +2118,40 @@ export function SchemeUnifiedConfigForm({
                     <ul className="mt-0.5 list-none space-y-0.5">
                       {form.specialDiscountQuantitySlabs
                         .filter(
-                          (s) => s.quantityFrom.trim() && s.discountValue.trim(),
+                          (s) =>
+                            s.quantityFrom.trim() && s.discountValue.trim(),
                         )
                         .map((s) => {
-                          const uom =
-                            form.specialDiscountUom || s.uom || "UOM";
                           const disc = formatSlabDiscountLabel(
                             s.discountType,
                             s.discountValue,
                           );
+                          const uomLabel =
+                            form.specialDiscountUom || s.uom || "UOM";
                           if (!s.quantityTo.trim()) {
                             return (
                               <li key={s.id}>
-                                {s.quantityFrom}+ {uom} → {disc}
+                                {s.quantityFrom}+ {uomLabel} → {disc}
                               </li>
                             );
                           }
                           return (
                             <li key={s.id}>
-                              {s.quantityFrom}–{s.quantityTo} {uom} → {disc}
+                              {s.quantityFrom}–{s.quantityTo} {uomLabel} →{" "}
+                              {disc}
                             </li>
                           );
                         })}
                     </ul>
                   </div>
                 ) : null}
-                <p>
-                  {form.specialDiscountBasedOn === "Sales Quantity"
-                    ? "Net sold quantity (after deducting sales returns) during the scheme period will determine the achieved slab."
-                    : "Eligible taxable sales during the scheme period (after deducting sales returns) will determine the achieved slab."}
+                <p className="text-muted-foreground">
+                  {form.specialEvaluationScope === "One Invoice"
+                    ? "Qualification is checked on each invoice."
+                    : "Qualification uses net sales/qty during the scheme period."}{" "}
+                  {form.specialSettlementRunMode === "Automatic"
+                    ? "Entitlement is created automatically."
+                    : "Settlement is via Credit Note (manual)."}
                 </p>
               </div>
             ) : (

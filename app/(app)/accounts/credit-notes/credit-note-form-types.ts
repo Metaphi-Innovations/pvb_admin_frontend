@@ -311,6 +311,8 @@ export interface CreateFromPendingPayload {
   remarks?: string | null;
   /** Signed round-off override; when omitted, backend applies auto nearest-rupee. */
   round_off_amount?: number | string | null;
+  /** Optional custom direct lines (for Scheme CNs with editable particulars). */
+  lines?: DirectCnLineInput[];
   /** Optional GST % overrides for pending product lines. */
   line_gst_overrides?: Array<{
     pending_credit_note_line_id: string;

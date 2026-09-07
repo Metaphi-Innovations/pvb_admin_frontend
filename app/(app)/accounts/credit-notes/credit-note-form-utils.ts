@@ -212,6 +212,23 @@ export function particularsColumnsForSource(
   const interstate = Boolean(opts?.interstate);
   const editable = Boolean(opts?.editable);
 
+  if (source === "SALES_RETURN") {
+    const cols: ParticularColumnKey[] = [
+      "product",
+      "batch",
+      "expiry",
+      "qty",
+      "rate_benefit",
+      "eligible_base",
+      "gst_rate",
+    ];
+    if (interstate) cols.push("igst");
+    else cols.push("cgst", "sgst");
+    cols.push("cn_amount");
+    return cols;
+  }
+
+  // Direct Credit Note / Sales Invoice keeps QTY and RATE / BENEFIT
   if (!source || source === "DIRECT" || source === "SALES_INVOICE") {
     const cols: ParticularColumnKey[] = [
       "particular",
@@ -231,34 +248,20 @@ export function particularsColumnsForSource(
     return cols;
   }
 
-  if (source === "NEAR_EXPIRY") {
-    return ["product", "batch", "expiry", "qty", "eligible_base", "rate_benefit", "gst", "cn_amount"];
-  }
-  if (source === "SPECIAL_SCHEME") {
-    return ["product", "qty", "eligible_base", "rate_benefit", "ledger", "gst", "cn_amount"];
-  }
-  if (source === "SALES_RETURN") {
-    const cols: ParticularColumnKey[] = [
-      "product",
-      "batch",
-      "expiry",
-      "qty",
-      "rate_benefit",
-      "eligible_base",
-      "gst_rate",
-    ];
+  // Scheme credit notes: user requested "dont want the qty and rate / benefit"
+  const cols: ParticularColumnKey[] = [
+    "particular",
+    "ledger",
+    "eligible_base",
+    "gst_toggle",
+  ];
+  if (gstOn) {
+    cols.push("gst_rate");
     if (interstate) cols.push("igst");
     else cols.push("cgst", "sgst");
-    cols.push("cn_amount");
-    return cols;
   }
-  if (source === "CASH_DISCOUNT") {
-    return ["particular", "eligible_base", "rate_benefit", "ledger", "gst", "cn_amount"];
-  }
-  if (source === "TURNOVER_DISCOUNT") {
-    return ["particular", "eligible_base", "rate_benefit", "ledger", "gst", "cn_amount"];
-  }
-  return ["particular", "eligible_base", "gst", "cn_amount"];
+  cols.push("cn_amount");
+  return cols;
 }
 
 /** Preview GST split for a pending/return CN line after GST % change. */

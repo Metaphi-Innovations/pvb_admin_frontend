@@ -33,6 +33,7 @@ import {
   resolveVoucherTransactionTags,
   voucherMatchesBranchWarehouse,
 } from "@/lib/accounts/trial-balance-voucher-tags";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 
 export type DayBookVoucherType =
   | "sales_invoice"
@@ -220,16 +221,12 @@ export interface DayBookSummary {
 }
 
 export function formatDayBookDate(iso: string): string {
-  const d = new Date(iso.length === 10 ? `${iso}T00:00:00` : iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+  return formatDisplayDate(iso, iso);
 }
 
-/** DD-MM-YYYY label for date total rows (client format). */
+/** DD/MM/YYYY label for date total rows. */
 export function formatDayBookDateForTotal(iso: string): string {
-  const [y, m, d] = iso.split("-");
-  if (!y || !m || !d) return iso;
-  return `${d}-${m}-${y}`;
+  return formatDisplayDate(iso, iso);
 }
 
 function buildGeneralLedgerHrefForDayBook(

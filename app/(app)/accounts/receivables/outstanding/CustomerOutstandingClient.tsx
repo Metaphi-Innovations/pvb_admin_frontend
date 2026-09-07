@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { MessageSquare, Plus, Settings2 } from "lucide-react";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
@@ -11,11 +10,11 @@ import {
 } from "@/components/accounts/AccountsListingHeader";
 import { AgeingBreakpointPanel } from "@/components/accounts/AgeingBreakpointPanel";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 import {
   breakpointsToDraft,
   DEFAULT_AGEING_BREAKPOINTS,
-  getAgeingBucketLabels,
-  ageingBucketColumnKey,
+  getApiAgeingBucketKeys,
   type AgeingBreakpoints,
 } from "@/lib/accounts/ageing-breakpoints";
 import {
@@ -24,7 +23,7 @@ import {
 } from "@/lib/accounts/receivables-data";
 import type {
   ApiCollectionFollowUpRow,
-  ApiCustomerAgeingRow,
+  ApiCustomerAgeingGroup,
   ApiCustomerOutstandingRow,
   ApiFollowUpContactMethod,
   ApiInvoiceOutstandingRow,
@@ -41,6 +40,7 @@ import {
 } from "@/lib/accounts/receivables-api-mappers";
 import type { ReceivablesExportView } from "@/types/receivables.types";
 import { useReceivablesListing } from "@/lib/accounts/use-receivables-listing";
+import { AgeingGroupedTable } from "./AgeingGroupedTable";
 import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
 import { CustomerListService } from "@/services/customer-list.service";
 import { ReceivablesService } from "@/services/receivables.service";
@@ -60,7 +60,7 @@ import {
 import {
   ReportFilterRow,
   ReportAsOnDateFilter,
-  ReportCustomerFilter,
+  ReportCustomerMultiFilter,
   ReportSalespersonFilter,
   ReportSearchFilter,
   ReportFilterResetButton,
@@ -137,13 +137,6 @@ function contactMethodLabel(method?: ApiFollowUpContactMethod): string | null {
   return FOLLOW_UP_CONTACT_METHOD.find((o) => o.value === method)?.label ?? method;
 }
 
-function formatReportDate(value: string): string {
-  if (!value || value === "—") return "—";
-  const [y, m, d] = value.slice(0, 10).split("-");
-  if (!y || !m || !d) return value;
-  return `${d}-${m}-${y}`;
-}
-
 function AmountCell({ amount, className }: { amount: number; className?: string }) {
   return (
     <span className={cn("inline-block whitespace-nowrap tabular-nums", MONEY_CELL_CLASS, className)}>
@@ -212,6 +205,11 @@ function FollowUpDialog({
 }) {
   const [customerId, setCustomerId] = useState(initialCustomerId);
   const [customerName, setCustomerName] = useState(initialCustomerName);
+  const [openItemId, setOpenItemId] = useState<string>("");
+  const [openInvoices, setOpenInvoices] = useState<
+    { openItemId: string; invoiceNo: string; outstanding: number }[]
+  >([]);
+  const [invoicesLoading, setInvoicesLoading] = useState(false);
   const [history, setHistory] = useState<
     ReturnType<typeof mapFollowUpHistoryRow>[]
   >([]);
@@ -238,6 +236,7 @@ function FollowUpDialog({
       setRemarks(editing.remarks || "");
       setAssignedTo(editing.assignedTo || "");
       setContactMethod("");
+      setOpenItemId(editing.openItemId ? String(editing.openItemId) : "");
     } else {
       setStatus("follow_up_scheduled");
       setNextFollowUpDate(new Date().toISOString().slice(0, 10));
@@ -245,8 +244,54 @@ function FollowUpDialog({
       setRemarks("");
       setAssignedTo("");
       setContactMethod("");
+      setOpenItemId("");
     }
   }, [open, editing, initialCustomerId, initialCustomerName]);
+
+  useEffect(() => {
+    if (!open || !customerId) {
+      setOpenInvoices([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      setInvoicesLoading(true);
+      try {
+        const res = await ReceivablesService.getInvoices({
+          customerId,
+          page: 1,
+          page_size: 100,
+          sortBy: "outstanding_amount",
+          sortOrder: "desc",
+        });
+        if (cancelled) return;
+        const rows = (res.data ?? [])
+          .filter((inv) => Number(inv.outstandingAmount) > 0.009)
+          .map((inv) => ({
+            openItemId: String(inv.openItemId),
+            invoiceNo: inv.invoiceNumber || inv.openItemId,
+            outstanding: Number(inv.outstandingAmount) || 0,
+          }));
+        setOpenInvoices(rows);
+        setOpenItemId((prev) => {
+          if (prev && rows.some((r) => r.openItemId === prev)) return prev;
+          if (editing?.openItemId && rows.some((r) => r.openItemId === String(editing.openItemId))) {
+            return String(editing.openItemId);
+          }
+          if (!editing && rows.length === 1) return rows[0]!.openItemId;
+          if (!editing && rows.length > 1) return rows[0]!.openItemId;
+          return prev || "";
+        });
+      } catch {
+        if (!cancelled) setOpenInvoices([]);
+      } finally {
+        if (!cancelled) setInvoicesLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, customerId, editing?.openItemId]);
 
   useEffect(() => {
     if (!open || !editing?.id) {
@@ -291,8 +336,10 @@ function FollowUpDialog({
     try {
       const assignedToId = isUuid(assignedTo) ? assignedTo : null;
       const contactMethodPayload = contactMethod || null;
+      const selectedOpenItemId = openItemId || null;
       if (editing?.id) {
         await ReceivablesService.updateFollowUp(String(editing.id), {
+          openItemId: selectedOpenItemId,
           status: mapFollowUpStatusToApi(status),
           nextFollowUpDate: nextFollowUpDate || null,
           promisedPaymentDate: promiseToPayDate || null,
@@ -303,7 +350,7 @@ function FollowUpDialog({
       } else {
         await ReceivablesService.createFollowUp({
           customerId,
-          openItemId: editing?.openItemId ?? null,
+          openItemId: selectedOpenItemId,
           status: mapFollowUpStatusToApi(status),
           nextFollowUpDate: nextFollowUpDate || null,
           promisedPaymentDate: promiseToPayDate || null,
@@ -341,6 +388,7 @@ function FollowUpDialog({
                 onValueChange={(v) => {
                   setCustomerId(v);
                   setCustomerName(customers.find((c) => c.id === v)?.customerName ?? "");
+                  setOpenItemId("");
                 }}
               >
                 <SelectTrigger className="h-9 text-sm">
@@ -356,6 +404,34 @@ function FollowUpDialog({
               </Select>
             </div>
           )}
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">Invoice</Label>
+            <Select
+              value={openItemId || "none"}
+              onValueChange={(v) => setOpenItemId(v === "none" ? "" : v)}
+              disabled={!customerId || invoicesLoading}
+            >
+              <SelectTrigger className="h-9 text-sm">
+                <SelectValue
+                  placeholder={
+                    invoicesLoading
+                      ? "Loading invoices…"
+                      : openInvoices.length
+                        ? "Select invoice…"
+                        : "No open invoices"
+                  }
+                />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Customer-level (no invoice)</SelectItem>
+                {openInvoices.map((inv) => (
+                  <SelectItem key={inv.openItemId} value={inv.openItemId}>
+                    {inv.invoiceNo} · ₹{inv.outstanding.toFixed(2)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <div className="space-y-1.5">
             <Label className="text-xs font-medium">Status</Label>
             <Select value={status} onValueChange={(v) => setStatus(v as CollectionFollowUpStatus)}>
@@ -446,7 +522,7 @@ function FollowUpDialog({
                     .join(" · ");
                   return (
                   <div key={h.id} className="text-[11px] flex justify-between gap-2">
-                    <span className="text-muted-foreground shrink-0">{formatReportDate(h.date)}</span>
+                    <span className="text-muted-foreground shrink-0">{formatDisplayDate(h.date)}</span>
                     <span className="font-medium truncate text-right">
                       {detail || "—"}
                     </span>
@@ -549,7 +625,7 @@ function SummaryTable({
         label: "Oldest Due",
         filterType: "date",
         render: (r) => (
-          <span className="text-xs whitespace-nowrap">{formatReportDate(r.oldestDueDate)}</span>
+          <span className="text-xs whitespace-nowrap">{formatDisplayDate(r.oldestDueDate)}</span>
         ),
       },
       {
@@ -557,7 +633,7 @@ function SummaryTable({
         label: "Last Receipt",
         filterType: "date",
         render: (r) => (
-          <span className="text-xs whitespace-nowrap">{formatReportDate(r.lastReceiptDate)}</span>
+          <span className="text-xs whitespace-nowrap">{formatDisplayDate(r.lastReceiptDate)}</span>
         ),
       },
       {
@@ -688,7 +764,7 @@ function InvoiceTable({
         label: "Invoice Date",
         filterType: "date",
         render: (r) => (
-          <span className="text-xs whitespace-nowrap">{formatReportDate(r.invoiceDate)}</span>
+          <span className="text-xs whitespace-nowrap">{formatDisplayDate(r.invoiceDate)}</span>
         ),
       },
       {
@@ -696,7 +772,7 @@ function InvoiceTable({
         label: "Due Date",
         filterType: "date",
         render: (r) => (
-          <span className="text-xs whitespace-nowrap">{formatReportDate(r.dueDate)}</span>
+          <span className="text-xs whitespace-nowrap">{formatDisplayDate(r.dueDate)}</span>
         ),
       },
       {
@@ -777,64 +853,6 @@ function InvoiceTable({
   );
 }
 
-function AgeingTable({
-  columns,
-  rows,
-  totalRecords,
-  loading,
-  page,
-  pageSize,
-  onPageChange,
-  onPageSizeChange,
-}: {
-  columns: AccountsRichColumnDef<ApiCustomerAgeingRow>[];
-  rows: ApiCustomerAgeingRow[];
-  totalRecords: number;
-  loading: boolean;
-  page: number;
-  pageSize: number;
-  onPageChange: (p: number) => void;
-  onPageSizeChange: (s: number) => void;
-}) {
-  const router = useRouter();
-  const ctx = useAccountsColumnFilterContext();
-  const visible = useAccountsFilteredRows(rows);
-
-  useEffect(() => {
-    onPageChange(1);
-  }, [ctx?.columnFilters, ctx?.sortKey, ctx?.sortDir, onPageChange]);
-
-  return (
-    <div className="flex flex-col flex-1 min-h-0">
-      <AccountsTableScroll>
-        {loading && rows.length === 0 ? (
-          <div className="px-4 py-8 text-center text-sm text-muted-foreground">
-            Loading ageing data…
-          </div>
-        ) : (
-          <AccountsRichTable
-            columns={columns}
-            rows={visible}
-            minWidth={1280}
-            getRowKey={(r) => String(r.customerId)}
-            emptyMessage="No ageing balances."
-            onRowClick={(r) => router.push(`/accounts/receivables/outstanding/${r.customerId}`)}
-          />
-        )}
-      </AccountsTableScroll>
-      {totalRecords > 0 && (
-        <AccountsTablePagination
-          page={page}
-          pageSize={pageSize}
-          totalRecords={totalRecords}
-          onPageChange={onPageChange}
-          onPageSizeChange={onPageSizeChange}
-        />
-      )}
-    </div>
-  );
-}
-
 function CollectionTable({
   rows,
   totalRecords,
@@ -885,9 +903,21 @@ function CollectionTable({
         key: "invoiceNo",
         label: "Invoice",
         filterType: "text",
-        render: (r) => (
-          <span className="text-xs font-mono text-muted-foreground">{r.invoiceNo || "—"}</span>
-        ),
+        render: (r) =>
+          r.invoiceNo && r.openItemId ? (
+            <button
+              type="button"
+              className="text-xs font-mono font-semibold text-brand-700 hover:underline"
+              onClick={(e) => {
+                e.stopPropagation();
+                router.push(`/accounts/receivables/outstanding/invoice/${r.openItemId}`);
+              }}
+            >
+              {r.invoiceNo}
+            </button>
+          ) : (
+            <span className="text-xs font-mono text-muted-foreground">{r.invoiceNo || "—"}</span>
+          ),
       },
       {
         key: "outstandingAmount",
@@ -911,7 +941,7 @@ function CollectionTable({
         filterType: "date",
         render: (r) => (
           <span className="text-xs whitespace-nowrap">
-            {formatReportDate(r.promiseToPayDate || "—")}
+            {formatDisplayDate(r.promiseToPayDate || "—")}
           </span>
         ),
       },
@@ -921,7 +951,7 @@ function CollectionTable({
         filterType: "date",
         render: (r) => (
           <span className="text-xs whitespace-nowrap">
-            {formatReportDate(r.nextFollowUpDate || "—")}
+            {formatDisplayDate(r.nextFollowUpDate || "—")}
           </span>
         ),
       },
@@ -1006,7 +1036,7 @@ export default function CustomerOutstandingClient() {
   );
   const [asOnDate, setAsOnDate] = useState(defaultAsOnDate());
   const [search, setSearch] = useState("");
-  const [customerId, setCustomerId] = useState("all");
+  const [customerIds, setCustomerIds] = useState<string[]>([]);
   const [salesperson, setSalesperson] = useState("all");
   const [dueStatus, setDueStatus] = useState<DueStatusFilter>("all");
   const [page, setPage] = useState(1);
@@ -1130,7 +1160,7 @@ export default function CustomerOutstandingClient() {
     view,
     asOnDate,
     search,
-    customerId,
+    customerIds,
     salesperson: salesperson !== "all" ? salesperson : undefined,
     dueStatus,
     page,
@@ -1156,78 +1186,21 @@ export default function CustomerOutstandingClient() {
     return computeReceiptAllocationSummary().pendingAllocationCount;
   }, [refreshKey, sectionRefresh]);
 
-  const bucketLabels = useMemo(
-    () => getAgeingBucketLabels(appliedBreakpoints),
+  /** API bucket keys in breakpoint order — matches backend labels. */
+  const ageingBucketKeys = useMemo(
+    () => getApiAgeingBucketKeys(appliedBreakpoints),
     [appliedBreakpoints],
   );
-  /** Always show every standard bucket column (incl. zeros) — professional AR ageing layout. */
-  const ageingBucketIndices = useMemo(
-    () => appliedBreakpoints.map((_, index) => index),
-    [appliedBreakpoints],
-  );
-
-  const ageingColumns: AccountsRichColumnDef<ApiCustomerAgeingRow>[] = useMemo(() => {
-    const bucketCount = ageingBucketIndices.length;
-    const bucketColumns: AccountsRichColumnDef<ApiCustomerAgeingRow>[] = ageingBucketIndices.map(
-      (index) => ({
-        key: ageingBucketColumnKey(index),
-        label: bucketLabels[index] ?? "",
-        align: "right" as const,
-        filterType: "amount" as const,
-        className: "min-w-[120px]",
-        render: (r: ApiCustomerAgeingRow) => {
-          const amount = r.buckets[index] ?? 0;
-          const isOldest = index === bucketCount - 1;
-          const isLate = index === bucketCount - 2;
-          return (
-            <AmountCell
-              amount={amount}
-              className={cn(
-                amount > 0 && isOldest && "font-semibold text-red-600",
-                amount > 0 && isLate && "font-semibold text-brand-700",
-              )}
-            />
-          );
-        },
-      }),
-    );
-    return [
-      {
-        key: "customerName",
-        label: "Customer Name",
-        filterType: "text",
-        className: "min-w-[200px]",
-        render: (r) => (
-          <Link
-            href={`/accounts/receivables/outstanding/${r.customerId}`}
-            className="text-sm font-semibold text-brand-700 hover:underline"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {r.customerName}
-          </Link>
-        ),
-      },
-      {
-        key: "totalOutstanding",
-        label: "Total Outstanding",
-        align: "right",
-        filterType: "amount",
-        className: "min-w-[140px]",
-        render: (r) => <AmountCell amount={r.totalOutstanding} className="font-semibold text-sm" />,
-      },
-      ...bucketColumns,
-    ];
-  }, [bucketLabels, ageingBucketIndices]);
 
   const hasFilters =
     search.trim() !== "" ||
-    customerId !== "all" ||
+    customerIds.length > 0 ||
     salesperson !== "all" ||
     dueStatus !== "all";
 
   const clearFilters = () => {
     setSearch("");
-    setCustomerId("all");
+    setCustomerIds([]);
     setSalesperson("all");
     setDueStatus("all");
   };
@@ -1243,9 +1216,9 @@ export default function CustomerOutstandingClient() {
     return (row as unknown as Record<string, unknown>)[key];
   }, []);
 
-  const getAgeingCell = useCallback((row: ApiCustomerAgeingRow, key: string) => {
-    const bucketMatch = /^bucket_(\d+)$/.exec(key);
-    if (bucketMatch) return row.buckets[Number(bucketMatch[1])] ?? 0;
+  const getAgeingCell = useCallback((row: ApiCustomerAgeingGroup, key: string) => {
+    if (key === "customerName") return row.customerName;
+    if (key === "totalOutstanding") return row.totals.totalOutstanding;
     return (row as unknown as Record<string, unknown>)[key];
   }, []);
 
@@ -1268,7 +1241,7 @@ export default function CustomerOutstandingClient() {
     return {
       view: viewMap[view],
       search: search.trim() || undefined,
-      customerId: customerId !== "all" ? customerId : undefined,
+      customerIds: customerIds.length > 0 ? customerIds : undefined,
       salespersonId: resolvedSalespersonId,
       asOfDate: asOnDate,
       dueStatus,
@@ -1280,7 +1253,7 @@ export default function CustomerOutstandingClient() {
   }, [
     view,
     search,
-    customerId,
+    customerIds,
     resolvedSalespersonId,
     asOnDate,
     dueStatus,
@@ -1363,12 +1336,6 @@ export default function CustomerOutstandingClient() {
           : {
               customerName: { type: "text" },
               totalOutstanding: { type: "amount" },
-              ...Object.fromEntries(
-                ageingBucketIndices.map((i) => [
-                  ageingBucketColumnKey(i),
-                  { type: "amount" as const },
-                ]),
-              ),
             };
 
   const getCellValue =
@@ -1426,8 +1393,8 @@ export default function CustomerOutstandingClient() {
                 disabled={customersWithoutActiveFollowUp.length === 0}
                 onClick={() => {
                   const selected =
-                    customerId !== "all"
-                      ? customers.find((c) => String(c.id) === customerId)
+                    customerIds.length === 1
+                      ? customers.find((c) => String(c.id) === customerIds[0])
                       : undefined;
                   if (selected && activeFollowUpsByCustomerId[selected.id]) {
                     openFollowUpForCustomer(selected.id, selected.customerName);
@@ -1474,10 +1441,10 @@ export default function CustomerOutstandingClient() {
                     : "Search customer…"
               }
             />
-            <ReportCustomerFilter
-              value={customerId}
+            <ReportCustomerMultiFilter
+              values={customerIds}
               onChange={(v) => {
-                setCustomerId(v);
+                setCustomerIds(v);
                 setPage(1);
               }}
               customers={customers}
@@ -1596,11 +1563,12 @@ export default function CustomerOutstandingClient() {
             />
           )}
           {view === "ageing" && (
-            <AgeingTable
-              columns={ageingColumns}
-              rows={ageingRows}
+            <AgeingGroupedTable
+              groups={ageingRows}
+              bucketKeys={ageingBucketKeys}
               totalRecords={total}
               loading={loading}
+              error={error}
               page={page}
               pageSize={pageSize}
               onPageChange={setPage}

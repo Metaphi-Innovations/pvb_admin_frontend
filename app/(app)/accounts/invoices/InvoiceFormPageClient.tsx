@@ -331,6 +331,13 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
   const [schemeSettlementEntries, setSchemeSettlementEntries] = useState<
     DispatchNearExpirySchemeEntry[] | InvoiceNearExpirySchemeSettlement[]
   >([]);
+  const [eligibleCnSchemes, setEligibleCnSchemes] = useState<
+    import("@/services/sales-invoice.service").EligibleInvoiceCnSchemeOffer[]
+  >([]);
+  const [selectedCnSchemeId, setSelectedCnSchemeId] = useState<string | null>(
+    null,
+  );
+  const [loadingCnSchemes, setLoadingCnSchemes] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -397,6 +404,52 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
       setDueDate(computeDueDate(invoiceDate, creditDays));
     }
   }, [invoiceDate, creditDays]);
+
+  // Load eligible Near Expiry + Special (per-invoice) schemes for CN settlement.
+  useEffect(() => {
+    if (
+      isEdit ||
+      isStockTransferGeneration ||
+      !sourceDispatchId ||
+      !invoiceDate
+    ) {
+      setEligibleCnSchemes([]);
+      setSelectedCnSchemeId(null);
+      setLoadingCnSchemes(false);
+      return;
+    }
+
+    let cancelled = false;
+    setLoadingCnSchemes(true);
+    void SalesInvoiceService.getEligibleCnSchemes(sourceDispatchId, invoiceDate)
+      .then((result) => {
+        if (cancelled) return;
+        setEligibleCnSchemes(result.schemes ?? []);
+        setSelectedCnSchemeId((prev) => {
+          if (!prev) return null;
+          const stillThere = (result.schemes ?? []).some(
+            (s) => s.scheme_id === prev,
+          );
+          return stillThere ? prev : null;
+        });
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setEligibleCnSchemes([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingCnSchemes(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    isEdit,
+    isStockTransferGeneration,
+    sourceDispatchId,
+    invoiceDate,
+  ]);
 
   // Local seed peek removed — preview number always comes from Sales Invoice API below.
 
@@ -684,6 +737,8 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
       setSoOriginExpenses([]);
     }
     setSchemeSettlementEntries(prefill.nearExpirySchemes);
+    setEligibleCnSchemes([]);
+    setSelectedCnSchemeId(null);
   };
 
   const clearDispatchLinkedFields = () => {
@@ -709,6 +764,8 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     setAdditionalExpenses([]);
     setError(null);
     setSchemeSettlementEntries([]);
+    setEligibleCnSchemes([]);
+    setSelectedCnSchemeId(null);
   };
 
   const onCustomerSelect = (
@@ -2250,6 +2307,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
           additional_charges: charges.length > 0 ? charges : undefined,
           round_off_amount: roundOff,
           line_item_overrides: lineItemOverrides.length > 0 ? lineItemOverrides : undefined,
+          selected_cn_scheme_id: selectedCnSchemeId || undefined,
         });
 
         goToInvoiceList(
@@ -2646,12 +2704,16 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
           )
         ) : null}
 
-        {!isStockTransferInvoice && !soGen && !smGen && (
+        {!isStockTransferInvoice && !smGen ? (
           <InvoiceApplicableSchemesPanel
             lines={lines}
-            nearExpiryEntries={schemeSettlementEntries}
+            cnSchemes={eligibleCnSchemes}
+            selectedCnSchemeId={selectedCnSchemeId}
+            onSelectCnScheme={isEdit ? undefined : setSelectedCnSchemeId}
+            loadingCnSchemes={loadingCnSchemes}
+            forceShowCnSection={Boolean(sourceDispatchId) && !isEdit}
           />
-        )}
+        ) : null}
 
         <Section title="Product Details" compact={compactGen} flush={compactGen}>
           {stGen ? (
