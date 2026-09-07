@@ -434,6 +434,8 @@ export const API_ENDPOINTS = {
       SAMPLE_RETURN_LIST: "/warehouse/stock-overview/sample-return-stock/list",
       SAMPLE_RETURN_EXPORT: "/warehouse/stock-overview/sample-return-stock/export",
       MOVE_TO_REJECTED: "/warehouse/stock-overview/move-to-rejected",
+      STOCK_ADJUSTMENT: "/warehouse/stock-overview/stock-adjustment",
+      STOCK_ADJUSTMENT_BATCHES: "/warehouse/stock-overview/stock-adjustment/batches",
       DAILY_LOG_LIST: "/warehouse/stock-overview/daily-log/list",
       DAILY_LOG_EXPORT: "/warehouse/stock-overview/daily-log/export",
       DAILY_LOG_SUMMARY: "/warehouse/stock-overview/daily-log/summary",

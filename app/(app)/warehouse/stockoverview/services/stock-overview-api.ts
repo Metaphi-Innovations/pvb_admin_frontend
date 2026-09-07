@@ -113,6 +113,50 @@ export type MoveToRejectedResult = {
   document_no: string;
 };
 
+export type StockAdjustmentBatchOption = {
+  inventory_detail_id: string;
+  batch_no: string;
+  expiry_date: string | null;
+  quantity_type: "CASE" | "PIECE";
+  available_qty: number;
+  available_cases: number | null;
+  unit_per_packing: number;
+  product_id: string;
+  product_name: string;
+  sku: string | null;
+  unit: string | null;
+  pack_size: number | null;
+  net_weight: number | null;
+  warehouse_id: string;
+  warehouse_name: string;
+};
+
+export type StockAdjustmentPayload = {
+  direction: "INWARD" | "OUTWARD";
+  product_id: string;
+  warehouse_id: string;
+  inventory_detail_id?: string;
+  batch_no: string;
+  expiry_date?: string | null;
+  quantity_type: "CASE" | "PIECE";
+  qty?: number;
+  cases?: number;
+  reason?: string;
+};
+
+export type StockAdjustmentResult = {
+  document_no: string;
+  direction: "INWARD" | "OUTWARD";
+  quantity_type: "CASE" | "PIECE";
+  qty: number;
+  cases: number | null;
+  batch_no: string;
+  inventory_detail_id: string;
+  product_name: string;
+  warehouse_name: string;
+  reason: string;
+};
+
 export type DailyLogListRow = {
   id: string;
   product_code: string;
@@ -656,6 +700,92 @@ export const StockOverviewApi = {
       product_name: asString(data.product_name),
       warehouse_name: asString(data.warehouse_name),
       document_no: asString(data.document_no),
+    };
+  },
+
+  async listAdjustmentBatches(params: {
+    product_id: string;
+    warehouse_id: string;
+  }): Promise<StockAdjustmentBatchOption[]> {
+    const response = await axiosInstance.post(
+      API_ENDPOINTS.WAREHOUSE.STOCK_OVERVIEW.STOCK_ADJUSTMENT_BATCHES,
+      {
+        product_id: params.product_id,
+        warehouse_id: params.warehouse_id,
+      },
+    );
+    const data = (response.data as Record<string, unknown>)?.data;
+    if (!Array.isArray(data)) return [];
+    return data.map((row) => {
+      const r = row as Record<string, unknown>;
+      const qtyTypeRaw = asString(r.quantity_type).toUpperCase();
+      const quantity_type: "CASE" | "PIECE" =
+        qtyTypeRaw === "CASE" || qtyTypeRaw === "CASES" ? "CASE" : "PIECE";
+      return {
+        inventory_detail_id: asString(r.inventory_detail_id),
+        batch_no: asString(r.batch_no),
+        expiry_date: r.expiry_date ? asString(r.expiry_date).slice(0, 10) : null,
+        quantity_type,
+        available_qty: toNumber(r.available_qty),
+        available_cases:
+          r.available_cases != null && r.available_cases !== ""
+            ? toNumber(r.available_cases)
+            : null,
+        unit_per_packing: Math.max(1, toNumber(r.unit_per_packing) || 1),
+        product_id: asString(r.product_id),
+        product_name: asString(r.product_name),
+        sku: r.sku != null ? asString(r.sku) : null,
+        unit: r.unit != null ? asString(r.unit) : null,
+        pack_size: r.pack_size != null ? toNumber(r.pack_size) : null,
+        net_weight: r.net_weight != null ? toNumber(r.net_weight) : null,
+        warehouse_id: asString(r.warehouse_id),
+        warehouse_name: asString(r.warehouse_name),
+      };
+    });
+  },
+
+  async createStockAdjustment(
+    payload: StockAdjustmentPayload,
+  ): Promise<StockAdjustmentResult> {
+    const body: Record<string, unknown> = {
+      direction: payload.direction,
+      product_id: payload.product_id,
+      warehouse_id: payload.warehouse_id,
+      batch_no: payload.batch_no,
+      quantity_type: payload.quantity_type,
+    };
+    if (payload.inventory_detail_id) {
+      body.inventory_detail_id = payload.inventory_detail_id;
+    }
+    if (payload.expiry_date !== undefined) {
+      body.expiry_date = payload.expiry_date;
+    }
+    if (payload.quantity_type === "CASE") {
+      body.cases = payload.cases;
+    } else {
+      body.qty = payload.qty;
+    }
+    if (payload.reason?.trim()) body.reason = payload.reason.trim();
+
+    const response = await axiosInstance.post(
+      API_ENDPOINTS.WAREHOUSE.STOCK_OVERVIEW.STOCK_ADJUSTMENT,
+      body,
+    );
+    const data = ((response.data as Record<string, unknown>)?.data ??
+      {}) as Record<string, unknown>;
+    const qtyTypeRaw = asString(data.quantity_type).toUpperCase();
+    return {
+      document_no: asString(data.document_no),
+      direction: asString(data.direction).toUpperCase() === "OUTWARD" ? "OUTWARD" : "INWARD",
+      quantity_type:
+        qtyTypeRaw === "CASE" || qtyTypeRaw === "CASES" ? "CASE" : "PIECE",
+      qty: toNumber(data.qty),
+      cases: data.cases != null ? toNumber(data.cases) : null,
+      batch_no: asString(data.batch_no),
+      inventory_detail_id: asString(data.inventory_detail_id),
+      product_name: asString(data.product_name),
+      warehouse_name: asString(data.warehouse_name),
+      reason: asString(data.reason),
     };
   },
 
