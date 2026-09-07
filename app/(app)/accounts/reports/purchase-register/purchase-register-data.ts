@@ -15,6 +15,7 @@ import { loadVendors } from "@/app/(app)/masters/vendors/vendor-data";
 import { loadFinancialYears } from "@/app/(app)/accounts/masters/masters-data";
 import { COMPANY_BILLING } from "@/lib/procurement/config";
 import { roundMoney } from "@/lib/accounts/money-format";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 import {
   matchesMultiFilter,
   matchesMultiIdFilter,
@@ -650,10 +651,7 @@ export function computePurchaseRegisterTotals(rows: PurchaseRegisterRow[]): Purc
 }
 
 export function formatPurchaseRegisterDate(iso: string): string {
-  if (!iso || iso === "—") return "—";
-  return new Date(`${iso.slice(0, 10)}T12:00:00`)
-    .toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
-    .replace(/ /g, "-");
+  return formatDisplayDate(iso);
 }
 
 export function getPurchaseRegisterBranchOptions(rows: PurchaseRegisterRow[]): string[] {

@@ -8,6 +8,7 @@ import { loadFinancialYears } from "@/app/(app)/accounts/masters/masters-data";
 import { loadCreditNotes } from "@/app/(app)/accounts/credit-notes/credit-notes-data";
 import { loadDebitNotes } from "@/app/(app)/accounts/debit-notes/debit-notes-data";
 import { roundMoney } from "@/lib/accounts/money-format";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 import { matchesMultiFilter } from "@/lib/accounts/report-multi-filter-utils";
 import {
   buildStockLedgerRows,
@@ -529,10 +530,7 @@ export function buildStockRegisterDrillHref(params: {
 }
 
 export function formatStockRegisterDate(iso: string): string {
-  if (!iso) return "—";
-  return new Date(`${iso}T12:00:00`)
-    .toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
-    .replace(/ /g, "-");
+  return formatDisplayDate(iso);
 }
 
 export function formatQty(value: number, showZero = false): string {

@@ -57,6 +57,31 @@ export interface AgingBucketMap {
   [bucketLabel: string]: number;
 }
 
+/** Bill / open-item row inside a supplier ageing group (API). */
+export interface AgingApiBillRow {
+  openItemId: string;
+  billId?: string | null;
+  billNumber: string;
+  billDate: string;
+  dueDate?: string;
+  originalAmount: number;
+  settledAmount: number;
+  outstandingAmount: number;
+  ageDays?: number | null;
+  notDueAmount?: number;
+  buckets: AgingBucketMap;
+}
+
+export interface AgingApiSupplierTotals {
+  totalOutstanding: number;
+  notDueAmount: number;
+  buckets: AgingBucketMap;
+}
+
+/**
+ * Supplier-wise ageing group from GET /payables/aging.
+ * Top-level totalOutstanding / buckets / notDueAmount mirror `totals` for older consumers.
+ */
 export interface AgingApiRow {
   supplierId: string;
   supplierName: string;
@@ -64,6 +89,8 @@ export interface AgingApiRow {
   totalOutstanding: number;
   buckets: AgingBucketMap;
   notDueAmount?: number;
+  bills: AgingApiBillRow[];
+  totals: AgingApiSupplierTotals;
 }
 
 export interface SupplierDetailBillApiRow {
@@ -117,6 +144,7 @@ export interface BillSettlementApiRow {
 export interface SupplierSummaryQuery {
   search?: string;
   supplierId?: string;
+  supplierIds?: string[];
   branchId?: string;
   warehouseId?: string;
   asOfDate?: string;
@@ -131,6 +159,7 @@ export interface SupplierSummaryQuery {
 export interface BillsQuery {
   search?: string;
   supplierId?: string;
+  supplierIds?: string[];
   branchId?: string;
   warehouseId?: string;
   invoiceDateFrom?: string;
@@ -148,6 +177,7 @@ export interface BillsQuery {
 export interface AgingQuery {
   search?: string;
   supplierId?: string;
+  supplierIds?: string[];
   branchId?: string;
   warehouseId?: string;
   asOfDate?: string;
@@ -164,6 +194,7 @@ export interface PayablesExportQuery {
   view: PayablesExportView;
   search?: string;
   supplierId?: string;
+  supplierIds?: string[];
   branchId?: string;
   warehouseId?: string;
   asOfDate?: string;
@@ -209,6 +240,37 @@ export interface ApiSupplierBillOutstandingRow {
   status: PayableStatus;
 }
 
+/** Bill / open-item row for the grouped Ageing View UI. */
+export interface ApiVendorAgeingBillRow {
+  openItemId: string;
+  billId: string | null;
+  billNumber: string;
+  billDate: string;
+  dueDate: string;
+  originalAmount: number;
+  settledAmount: number;
+  outstandingAmount: number;
+  ageDays: number | null;
+  notDueAmount: number;
+  /** Amounts keyed by API bucket labels (e.g. "0-30", "91+"). */
+  buckets: Record<string, number>;
+}
+
+export interface ApiVendorAgeingGroup {
+  vendorId: string;
+  vendorName: string;
+  vendorCode: string;
+  bills: ApiVendorAgeingBillRow[];
+  totals: {
+    totalOutstanding: number;
+    notDueAmount: number;
+    buckets: Record<string, number>;
+  };
+  /** Ordered API bucket keys for this response (from applied breakpoints). */
+  bucketKeys: string[];
+}
+
+/** @deprecated Prefer ApiVendorAgeingGroup — flat vendor row used by older Ageing View. */
 export interface ApiVendorAgeingRow {
   vendorId: string;
   vendorName: string;
