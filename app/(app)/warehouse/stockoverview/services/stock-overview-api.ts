@@ -120,6 +120,7 @@ export type StockAdjustmentBatchOption = {
   quantity_type: "CASE" | "PIECE";
   available_qty: number;
   available_cases: number | null;
+  available_piece_qty: number;
   unit_per_packing: number;
   product_id: string;
   product_name: string;
@@ -731,6 +732,10 @@ export const StockOverviewApi = {
           r.available_cases != null && r.available_cases !== ""
             ? toNumber(r.available_cases)
             : null,
+        available_piece_qty:
+          r.available_piece_qty != null && r.available_piece_qty !== ""
+            ? toNumber(r.available_piece_qty)
+            : 0,
         unit_per_packing: Math.max(1, toNumber(r.unit_per_packing) || 1),
         product_id: asString(r.product_id),
         product_name: asString(r.product_name),

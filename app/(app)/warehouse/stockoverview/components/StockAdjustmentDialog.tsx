@@ -14,6 +14,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import {
   StackedQtyDisplay,
@@ -59,12 +66,9 @@ function batchOptionValue(b: StockAdjustmentBatchOption): string {
 
 function batchOptionLabel(b: StockAdjustmentBatchOption): string {
   const exp = b.expiry_date ? ` · Exp ${b.expiry_date}` : "";
-  const type = b.quantity_type === "CASE" ? "Case" : "Piece";
-  const avail =
-    b.quantity_type === "CASE"
-      ? `${Number(b.available_cases || 0)} case(s)`
-      : `${Number(b.available_qty || 0)} unit(s)`;
-  return `${b.batch_no}${exp} · ${type} · Avail ${avail}`;
+  const cases = Number(b.available_cases || 0);
+  const pieces = Number(b.available_piece_qty || 0);
+  return `${b.batch_no}${exp} · Case ${cases} · Piece ${pieces}`;
 }
 
 export function StockAdjustmentDialog({
@@ -96,23 +100,16 @@ export function StockAdjustmentDialog({
     [batches, batchKey],
   );
 
-  const lotType: QtyMode | null = selectedBatch
-    ? selectedBatch.quantity_type
-    : prefill?.quantityType
-      ? normalizeQtyType(prefill.quantityType)
-      : null;
-
   const pack = Math.max(1, Number(selectedBatch?.unit_per_packing) || 1);
-  const maxUnits = Number(selectedBatch?.available_qty || 0);
-  const maxCases =
-    selectedBatch?.quantity_type === "CASE"
-      ? Number(selectedBatch.available_cases || 0)
-      : 0;
+  const maxCases = Number(selectedBatch?.available_cases || 0);
+  const maxPieceUnits = Number(selectedBatch?.available_piece_qty || 0);
+  const caseMode = qtyMode === "CASE";
+  const maxForMode = caseMode ? maxCases : maxPieceUnits;
 
   const qtyMeta: QtyStackMeta | undefined = selectedBatch
     ? {
         unitsPerPacking: pack,
-        quantityType: selectedBatch.quantity_type === "CASE" ? "Case" : "Piece",
+        quantityType: caseMode ? "Case" : "Piece",
         uom: selectedBatch.unit,
         unitPackSize:
           selectedBatch.pack_size != null && Number(selectedBatch.pack_size) > 0
@@ -125,11 +122,6 @@ export function StockAdjustmentDialog({
       }
     : undefined;
 
-  // Lock qty mode to lot type once a batch is known.
-  useEffect(() => {
-    if (lotType) setQtyMode(lotType);
-  }, [lotType]);
-
   useEffect(() => {
     if (!open) return;
     setError(null);
@@ -141,9 +133,9 @@ export function StockAdjustmentDialog({
     setProductId(prefill?.productId || "");
     setBatchKey(prefill?.inventoryDetailId || "");
     setBatches([]);
-    if (prefill?.quantityType) {
-      setQtyMode(normalizeQtyType(prefill.quantityType));
-    }
+    setQtyMode(
+      prefill?.quantityType ? normalizeQtyType(prefill.quantityType) : "CASE",
+    );
   }, [open, prefill, warehouseIdProp]);
 
   useEffect(() => {
@@ -196,9 +188,7 @@ export function StockAdjustmentDialog({
                 r.batch_no === prefill.batchNo &&
                 (prefill.expiryDate == null ||
                   prefill.expiryDate === "" ||
-                  r.expiry_date === prefill.expiryDate) &&
-                (!prefill.quantityType ||
-                  r.quantity_type === normalizeQtyType(prefill.quantityType)),
+                  r.expiry_date === prefill.expiryDate),
             );
             if (match) return batchOptionValue(match);
           }
@@ -219,32 +209,21 @@ export function StockAdjustmentDialog({
     return () => {
       mounted = false;
     };
-  }, [open, productId, warehouseId, prefill?.batchNo, prefill?.expiryDate, prefill?.quantityType]);
+  }, [open, productId, warehouseId, prefill?.batchNo, prefill?.expiryDate]);
 
   const qtyNum = Number(qty);
-  const caseMode = qtyMode === "CASE";
 
   const qtyValid = useMemo(() => {
     if (!selectedBatch) return false;
-    if (lotType && qtyMode !== lotType) return false;
     if (caseMode) {
       if (!Number.isInteger(qtyNum) || qtyNum <= 0) return false;
       if (direction === "OUTWARD" && qtyNum > maxCases) return false;
       return true;
     }
     if (!Number.isFinite(qtyNum) || qtyNum <= 0) return false;
-    if (direction === "OUTWARD" && qtyNum > maxUnits + 1e-9) return false;
+    if (direction === "OUTWARD" && qtyNum > maxPieceUnits + 1e-9) return false;
     return true;
-  }, [
-    selectedBatch,
-    lotType,
-    qtyMode,
-    caseMode,
-    qtyNum,
-    direction,
-    maxCases,
-    maxUnits,
-  ]);
+  }, [selectedBatch, caseMode, qtyNum, direction, maxCases, maxPieceUnits]);
 
   const previewBaseQty = caseMode
     ? qtyValid
@@ -264,12 +243,6 @@ export function StockAdjustmentDialog({
 
   const handleSubmit = async () => {
     if (!canSubmit || !selectedBatch) return;
-    if (lotType && qtyMode !== lotType) {
-      setError(
-        `This batch is stored as ${lotType === "CASE" ? "Case" : "Piece"}. Use that quantity type only.`,
-      );
-      return;
-    }
     setSubmitting(true);
     setError(null);
     try {
@@ -300,7 +273,7 @@ export function StockAdjustmentDialog({
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && !submitting && onClose()}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg w-[calc(100vw-2rem)] overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base">
             <div className="w-8 h-8 rounded-lg bg-brand-50 border border-brand-200 flex items-center justify-center">
@@ -309,20 +282,22 @@ export function StockAdjustmentDialog({
             Stock Adjustment
           </DialogTitle>
           <DialogDescription className="text-xs pt-1">
-            Inventory-only correction. Case lots accept whole cases only; piece lots accept
-            units only. Does not change sales documents.
+            Inventory-only correction. Inward allows Case or Piece. Outward moves only the
+            selected quantity type from available stock.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-3 py-1 max-h-[70vh] overflow-y-auto pr-1">
-          {/* Direction */}
+        <div className="space-y-3 py-1 max-h-[70vh] overflow-y-auto overflow-x-hidden pr-1 min-w-0">
           <div className="space-y-1.5">
             <Label className="text-xs">Direction</Label>
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
                 disabled={submitting}
-                onClick={() => setDirection("INWARD")}
+                onClick={() => {
+                  setDirection("INWARD");
+                  setQty("");
+                }}
                 className={`flex items-center justify-center gap-1.5 h-9 rounded-lg border text-xs font-semibold transition-colors ${
                   direction === "INWARD"
                     ? "border-emerald-300 bg-emerald-50 text-emerald-800"
@@ -335,7 +310,10 @@ export function StockAdjustmentDialog({
               <button
                 type="button"
                 disabled={submitting}
-                onClick={() => setDirection("OUTWARD")}
+                onClick={() => {
+                  setDirection("OUTWARD");
+                  setQty("");
+                }}
                 className={`flex items-center justify-center gap-1.5 h-9 rounded-lg border text-xs font-semibold transition-colors ${
                   direction === "OUTWARD"
                     ? "border-rose-300 bg-rose-50 text-rose-800"
@@ -348,7 +326,6 @@ export function StockAdjustmentDialog({
             </div>
           </div>
 
-          {/* Warehouse */}
           <div className="space-y-1.5">
             <Label className="text-xs">Warehouse</Label>
             <AutocompleteSelect
@@ -366,7 +343,6 @@ export function StockAdjustmentDialog({
             />
           </div>
 
-          {/* Product */}
           <div className="space-y-1.5">
             <Label className="text-xs">Product</Label>
             <AutocompleteSelect
@@ -385,7 +361,6 @@ export function StockAdjustmentDialog({
             />
           </div>
 
-          {/* Batch */}
           <div className="space-y-1.5">
             <Label className="text-xs">Batch</Label>
             <AutocompleteSelect
@@ -421,135 +396,79 @@ export function StockAdjustmentDialog({
           </div>
 
           {selectedBatch ? (
-            <div className="rounded-md border border-border bg-muted/30 px-3 py-2.5 space-y-2">
-              <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
-                <span>
-                  Lot type:{" "}
+            <div className="rounded-md border border-border bg-muted/30 px-3 py-2.5 space-y-1.5 text-[11px] text-muted-foreground">
+              {selectedBatch.expiry_date ? (
+                <p>
+                  Expiry:{" "}
                   <span className="font-semibold text-foreground">
-                    {selectedBatch.quantity_type === "CASE" ? "Case" : "Piece"}
+                    {selectedBatch.expiry_date}
                   </span>
-                </span>
-                {selectedBatch.expiry_date ? (
-                  <span>
-                    Expiry:{" "}
-                    <span className="font-semibold text-foreground">
-                      {selectedBatch.expiry_date}
-                    </span>
-                  </span>
-                ) : null}
-              </div>
-              <div className="rounded border border-border/60 bg-white px-2.5 py-2">
-                <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">
-                  Available qty
                 </p>
-                <StackedQtyDisplay
-                  baseQty={maxUnits}
-                  meta={qtyMeta}
-                  layout="inline"
-                  emptyLabel="0"
-                />
-                {selectedBatch.quantity_type === "CASE" ? (
-                  <p className="text-[10px] text-muted-foreground mt-1">
-                    {maxCases.toLocaleString("en-IN")} packed case
-                    {maxCases === 1 ? "" : "s"} available
-                  </p>
-                ) : null}
-              </div>
+              ) : null}
+              <p>
+                Available — Case:{" "}
+                <span className="font-semibold text-foreground">{maxCases}</span>
+                {" · "}
+                Piece:{" "}
+                <span className="font-semibold text-foreground">
+                  {maxPieceUnits.toLocaleString("en-IN")}
+                </span>
+              </p>
             </div>
           ) : null}
 
-          {/* Case / Unit mode */}
-          <div className="space-y-1.5">
-            <Label className="text-xs">Quantity type</Label>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                disabled={
-                  submitting || (lotType != null && lotType !== "CASE")
-                }
-                onClick={() => {
-                  setQtyMode("CASE");
+          {/* Quantity type dropdown + qty side by side */}
+          <div className="space-y-1.5 min-w-0">
+            <Label className="text-xs">Quantity</Label>
+            <div className="flex items-center gap-2 min-w-0 w-full">
+              <Select
+                value={qtyMode}
+                onValueChange={(v) => {
+                  setQtyMode(v as QtyMode);
                   setQty("");
                 }}
-                className={`h-9 rounded-lg border text-xs font-semibold transition-colors ${
-                  qtyMode === "CASE"
-                    ? "border-brand-300 bg-brand-50 text-brand-800"
-                    : "border-border bg-white text-muted-foreground hover:bg-muted/40"
-                } disabled:opacity-40 disabled:cursor-not-allowed`}
+                disabled={submitting}
               >
-                Case
-              </button>
-              <button
-                type="button"
-                disabled={
-                  submitting || (lotType != null && lotType !== "PIECE")
+                <SelectTrigger className="h-8 w-[110px] shrink-0 text-xs">
+                  <SelectValue placeholder="Type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="CASE" className="text-xs">
+                    Case
+                  </SelectItem>
+                  <SelectItem value="PIECE" className="text-xs">
+                    Piece
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              <Input
+                id="stock-adj-qty"
+                type="number"
+                min={0}
+                step={caseMode ? 1 : "any"}
+                max={direction === "OUTWARD" ? maxForMode : undefined}
+                value={qty}
+                disabled={submitting || !selectedBatch}
+                onChange={(e) => setQty(e.target.value)}
+                className="h-8 min-w-0 flex-1 text-xs"
+                placeholder={
+                  caseMode
+                    ? direction === "OUTWARD"
+                      ? `Max ${maxCases}`
+                      : "Enter cases"
+                    : direction === "OUTWARD"
+                      ? `Max ${maxPieceUnits}`
+                      : "Enter qty"
                 }
-                onClick={() => {
-                  setQtyMode("PIECE");
-                  setQty("");
-                }}
-                className={`h-9 rounded-lg border text-xs font-semibold transition-colors ${
-                  qtyMode === "PIECE"
-                    ? "border-brand-300 bg-brand-50 text-brand-800"
-                    : "border-border bg-white text-muted-foreground hover:bg-muted/40"
-                } disabled:opacity-40 disabled:cursor-not-allowed`}
-              >
-                Unit / Piece
-              </button>
+              />
             </div>
-            {lotType ? (
-              <p className="text-[10px] text-muted-foreground">
-                This batch is {lotType === "CASE" ? "case" : "piece"} stock — only{" "}
-                {lotType === "CASE" ? "case" : "unit"} adjustments are allowed.
-              </p>
-            ) : (
-              <p className="text-[10px] text-muted-foreground">
-                Select a batch to lock Case or Unit based on inventory quantity type.
-              </p>
-            )}
-          </div>
-
-          {/* Qty */}
-          <div className="space-y-1.5">
-            <Label htmlFor="stock-adj-qty" className="text-xs">
-              {caseMode ? (
-                <>
-                  Cases to {direction === "INWARD" ? "inward" : "outward"}{" "}
-                  <span className="text-muted-foreground font-normal">(whole cases only)</span>
-                </>
-              ) : (
-                <>
-                  Units to {direction === "INWARD" ? "inward" : "outward"}{" "}
-                  <span className="text-muted-foreground font-normal">(piece stock)</span>
-                </>
-              )}
-            </Label>
-            <Input
-              id="stock-adj-qty"
-              type="number"
-              min={0}
-              step={caseMode ? 1 : "any"}
-              max={
-                direction === "OUTWARD"
-                  ? caseMode
-                    ? maxCases
-                    : maxUnits
-                  : undefined
-              }
-              value={qty}
-              disabled={submitting || !selectedBatch}
-              onChange={(e) => setQty(e.target.value)}
-              className="h-8 text-xs"
-              placeholder={
-                caseMode
-                  ? direction === "OUTWARD"
-                    ? `Max ${maxCases} cases`
-                    : "Enter cases"
-                  : direction === "OUTWARD"
-                    ? `Max ${maxUnits} units`
-                    : "Enter unit qty"
-              }
-            />
+            <p className="text-[10px] text-muted-foreground break-words">
+              {direction === "INWARD"
+                ? "Inward: choose Case or Piece freely."
+                : caseMode
+                  ? "Outward: only case inventory will be moved."
+                  : "Outward: only piece inventory will be moved."}
+            </p>
             {qtyValid && qtyMeta ? (
               <div className="rounded border border-border/60 bg-muted/20 px-2.5 py-1.5">
                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-0.5">
@@ -563,15 +482,14 @@ export function StockAdjustmentDialog({
                 />
               </div>
             ) : null}
-            {direction === "OUTWARD" && selectedBatch && caseMode && maxCases <= 0 ? (
-              <p className="text-[11px] text-rose-600">No packed cases available to outward.</p>
-            ) : null}
-            {direction === "OUTWARD" && selectedBatch && !caseMode && maxUnits <= 0 ? (
-              <p className="text-[11px] text-rose-600">No unit qty available to outward.</p>
+            {direction === "OUTWARD" && selectedBatch && maxForMode <= 0 ? (
+              <p className="text-[11px] text-rose-600">
+                No {caseMode ? "case" : "piece"} inventory available to outward for this
+                batch.
+              </p>
             ) : null}
           </div>
 
-          {/* Reason */}
           <div className="space-y-1.5">
             <Label htmlFor="stock-adj-reason" className="text-xs">
               Reason <span className="text-muted-foreground font-normal">(optional)</span>
