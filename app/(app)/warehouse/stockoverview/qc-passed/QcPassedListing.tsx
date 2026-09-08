@@ -17,6 +17,8 @@ import {
 interface QcPassedListingProps {
   warehouseId?: string;
   onFiltersApplied?: () => void;
+  /** Bump to force list reload (e.g. after stock adjustment). */
+  listNonce?: number;
 }
 
 function toInventoryQtyMeta(row: InventoryListRow): QtyStackMeta {
@@ -43,7 +45,11 @@ function inventoryViewHref(productId: string, warehouseId?: string) {
   return `/warehouse/stockoverview/view/${productId}?warehouse_id=${encodeURIComponent(warehouseId)}`;
 }
 
-export function QcPassedListing({ warehouseId, onFiltersApplied }: QcPassedListingProps) {
+export function QcPassedListing({
+  warehouseId,
+  onFiltersApplied,
+  listNonce: externalListNonce = 0,
+}: QcPassedListingProps) {
   const router = useRouter();
   const {
     draftFilters,
@@ -101,7 +107,7 @@ export function QcPassedListing({ warehouseId, onFiltersApplied }: QcPassedListi
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [page, pageSize, sort.key, sort.direction, appliedFilters, warehouseId, listNonce]);
+  }, [page, pageSize, sort.key, sort.direction, appliedFilters, warehouseId, listNonce, externalListNonce]);
 
   const onFilterChange = (next: typeof draftFilters) => {
     handleFilterChange(next);

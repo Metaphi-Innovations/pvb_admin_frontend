@@ -434,6 +434,8 @@ export const API_ENDPOINTS = {
       SAMPLE_RETURN_LIST: "/warehouse/stock-overview/sample-return-stock/list",
       SAMPLE_RETURN_EXPORT: "/warehouse/stock-overview/sample-return-stock/export",
       MOVE_TO_REJECTED: "/warehouse/stock-overview/move-to-rejected",
+      STOCK_ADJUSTMENT: "/warehouse/stock-overview/stock-adjustment",
+      STOCK_ADJUSTMENT_BATCHES: "/warehouse/stock-overview/stock-adjustment/batches",
       DAILY_LOG_LIST: "/warehouse/stock-overview/daily-log/list",
       DAILY_LOG_EXPORT: "/warehouse/stock-overview/daily-log/export",
       DAILY_LOG_SUMMARY: "/warehouse/stock-overview/daily-log/summary",
@@ -703,6 +705,8 @@ export const API_ENDPOINTS = {
       UPDATE: (id: string) => `/accounts/receipt-voucher/${id}`,
       CUSTOMER_OUTSTANDING: (customerId: string) =>
         `/accounts/receipt-voucher/customer/${customerId}/outstanding`,
+      ELIGIBLE_CASH_DISCOUNT_SCHEMES:
+        "/accounts/receipt-voucher/eligible-cash-discount-schemes",
       SUPPLIER_RECOVERABLE: (supplierId: string) =>
         `/accounts/receipt-voucher/supplier/${supplierId}/recoverable`,
       SUBMIT: (id: string) => `/accounts/receipt-voucher/${id}/submit`,

@@ -20,6 +20,10 @@ import { StackedQtyDisplay, type QtyStackMeta } from "@/app/(app)/sales/shared/S
 import { STATUS_BADGE_CONFIG } from "../../constants";
 import { MoveToRejectedDialog, type MoveToRejectedTarget } from "../../components/MoveToRejectedDialog";
 import {
+  StockAdjustmentDialog,
+  type StockAdjustmentPrefill,
+} from "../../components/StockAdjustmentDialog";
+import {
   InventoryDetails,
   RejectedDetails,
   StockOverviewApi,
@@ -117,6 +121,7 @@ export default function ViewStockDetailsPage() {
   const [error, setError] = useState<string | null>(null);
   const [reloadNonce, setReloadNonce] = useState(0);
   const [moveTarget, setMoveTarget] = useState<MoveToRejectedTarget | null>(null);
+  const [adjustPrefill, setAdjustPrefill] = useState<StockAdjustmentPrefill | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -382,38 +387,56 @@ export default function ViewStockDetailsPage() {
                           </span>
                         </td>
                         <td className="px-3 py-2.5 text-right">
-                          {movable > 0 ? (
+                          <div className="inline-flex items-center justify-end gap-1.5">
                             <Button
                               type="button"
                               variant="outline"
                               size="sm"
-                              className="h-7 text-[11px] text-rose-700 border-rose-200 hover:bg-rose-50"
+                              className="h-7 text-[11px]"
                               onClick={() =>
-                                setMoveTarget({
-                                  productName: details.product.product_name || "—",
-                                  batchNo: row.batch_no,
-                                  availableQty: movable,
-                                  availableCases:
-                                    row.available_cases != null
-                                      ? Number(row.available_cases)
-                                      : null,
-                                  status: rowStatus,
-                                  qtyMeta: {
-                                    ...meta,
-                                    quantityType:
-                                      row.quantity_type || meta.quantityType,
-                                  },
+                                setAdjustPrefill({
                                   productId: details.id,
+                                  productName: details.product.product_name || "—",
                                   warehouseId: row.warehouse_id || warehouseId,
+                                  batchNo: row.batch_no,
                                   expiryDate: row.expiry_date,
+                                  quantityType: row.quantity_type || meta.quantityType,
                                 })
                               }
                             >
-                              Move to Rejected
+                              Adjust
                             </Button>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">—</span>
-                          )}
+                            {movable > 0 ? (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-7 text-[11px] text-rose-700 border-rose-200 hover:bg-rose-50"
+                                onClick={() =>
+                                  setMoveTarget({
+                                    productName: details.product.product_name || "—",
+                                    batchNo: row.batch_no,
+                                    availableQty: movable,
+                                    availableCases:
+                                      row.available_cases != null
+                                        ? Number(row.available_cases)
+                                        : null,
+                                    status: rowStatus,
+                                    qtyMeta: {
+                                      ...meta,
+                                      quantityType:
+                                        row.quantity_type || meta.quantityType,
+                                    },
+                                    productId: details.id,
+                                    warehouseId: row.warehouse_id || warehouseId,
+                                    expiryDate: row.expiry_date,
+                                  })
+                                }
+                              >
+                                Move to Rejected
+                              </Button>
+                            ) : null}
+                          </div>
                         </td>
                       </tr>
                     );
@@ -427,6 +450,23 @@ export default function ViewStockDetailsPage() {
           open={!!moveTarget}
           target={moveTarget}
           onClose={() => setMoveTarget(null)}
+          onSuccess={() => setReloadNonce((n) => n + 1)}
+        />
+        <StockAdjustmentDialog
+          open={!!adjustPrefill}
+          warehouseId={adjustPrefill?.warehouseId || warehouseId}
+          warehouseOptions={
+            adjustPrefill?.warehouseId || warehouseId
+              ? [
+                  {
+                    label: details.warehouse.warehouse_name || "Warehouse",
+                    value: adjustPrefill?.warehouseId || warehouseId || details.warehouse.warehouse_code,
+                  },
+                ]
+              : []
+          }
+          prefill={adjustPrefill}
+          onClose={() => setAdjustPrefill(null)}
           onSuccess={() => setReloadNonce((n) => n + 1)}
         />
       </>

@@ -435,3 +435,32 @@ export const BANK_TRANSACTION_MODES: BankTransactionMode[] = [
   "BANK_TRANSFER",
   "OTHER",
 ];
+
+/** Cash Discount preview offer (per allocation) from eligible-cash-discount-schemes. */
+export type EligibleCashDiscountOffer = {
+  open_item_id: string;
+  sales_invoice_id: string;
+  invoice_number: string;
+  invoice_date: string;
+  allocated_amount: number;
+  payment_days: number;
+  scheme_id: string;
+  scheme_code: string;
+  scheme_name: string;
+  discount_type: "Percentage" | "Rupees" | string;
+  discount_value: number;
+  estimated_benefit_amount: number;
+  applied_slab: {
+    from_value: number;
+    to_value: number | null;
+    discount_type: string;
+    discount_value: number;
+  };
+  summary: string;
+  will_auto_apply: boolean;
+};
+
+export type EligibleCashDiscountResponse = {
+  offers: EligibleCashDiscountOffer[];
+  total_estimated_benefit: number;
+};
