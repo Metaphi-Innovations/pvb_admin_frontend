@@ -214,21 +214,21 @@ export const ACCOUNTING_IMPACT_DOCS: Record<AccountingImpactDocKey, AccountingIm
   stock_transfer_invoice: {
     title: "Accounting Impact",
     docNote:
-      "Different-GSTIN Stock Transfer Tax Invoice — informational only; posting is backend-driven. No Customer / AR.",
+      "Different-GSTIN Stock Transfer Tax Invoice — informational only; posting is backend-driven. No Customer / AR. Sales / COGS / Stock in Hand post one voucher line per invoice item (product × batch) with product_id and batch_id.",
     entryLines: [
       "Dr  Inter-GSTIN Clearing",
-      "Cr  Sales (Product Sales — Stock Transfer classified via SalesInvoiceType.STOCK_TRANSFER)",
+      "Cr  Sales (Product Sales — one line per batch item)",
       "Cr  Output IGST",
     ],
     secondaryEntryTitle: "Inventory / COGS — source warehouse",
     secondaryEntryLines: [
-      "Dr  Cost of Goods Sold",
-      "Cr  Stock in Hand (source warehouse)",
+      "Dr  Cost of Goods Sold (one line per batch item)",
+      "Cr  Stock in Hand (source warehouse — one line per batch item)",
     ],
     tertiaryEntryTitle: "Destination GSTIN Accounting",
     tertiaryEntryNote: "Posted after destination GRN / QC. Purchase-side invoice/record is created for Purchase Register and GST inward reporting.",
     tertiaryEntryLines: [
-      "Dr  Stock in Hand (destination warehouse)",
+      "Dr  Stock in Hand (destination warehouse — one line per batch item)",
       "Dr  Input IGST",
       "Cr  Inter-GSTIN Clearing",
     ],
@@ -266,8 +266,8 @@ export const ACCOUNTING_IMPACT_DOCS: Record<AccountingImpactDocKey, AccountingIm
     ],
     sources: [
       "No Customer / Sundry Debtors — Inter-GSTIN Clearing (system ledger)",
-      "Taxable value → Cost Price from Stock Transfer / Dispatch",
-      "Sales classification → SalesInvoiceType.STOCK_TRANSFER + voucher references",
+      "Taxable value + COGS → Stock Transfer CP (fallback InventoryDetail.unit_cost)",
+      "Voucher type → AccountingVoucherType.STOCK_TRANSFER",
       "Output IGST / Input IGST → System COA",
       "Destination PurchaseInvoice(type=STOCK_TRANSFER) after GRN/QC",
     ],
@@ -276,9 +276,9 @@ export const ACCOUNTING_IMPACT_DOCS: Record<AccountingImpactDocKey, AccountingIm
   purchase_invoice_stock_transfer: {
     title: "Accounting Impact",
     docNote:
-      "Destination Stock Transfer purchase-side record — mirrors the source Tax Invoice. Not a second legal supplier invoice. No fake Supplier / AP.",
+      "Destination Stock Transfer purchase-side record — mirrors the source Tax Invoice. Not a second legal supplier invoice. No fake Supplier / AP. Stock in Hand posts one line per invoice item (product × batch).",
     entryLines: [
-      "Dr  Stock in Hand (destination warehouse)",
+      "Dr  Stock in Hand (destination warehouse — one line per batch item)",
       "Dr  Input IGST",
       "Cr  Inter-GSTIN Clearing",
     ],
