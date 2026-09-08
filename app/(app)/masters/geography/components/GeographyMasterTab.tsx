@@ -512,7 +512,7 @@ export function GeographyMasterTab() {
         initialTab={detailTab}
         onOpenChild={(child) => {
           setViewRecord(null);
-          openFolder(child.id);
+          openFolder(Number(child.id));
         }}
         onEdit={() => {
           if (!viewRecord) return;

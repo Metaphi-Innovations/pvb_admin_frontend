@@ -21,3 +21,5 @@ export * from "./use-supplier-types";
 export * from "./use-warehouse-master";
 export * from "./use-pincode";
 export * from "./use-pricing";
+export * from "./use-postal-master";
+export * from "./use-business-geography";

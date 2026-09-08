@@ -411,6 +411,138 @@ export const API_ENDPOINTS = {
     PINCODE: {
       BY_CODE: (code: string) => `/user-management/pincode/code/${code}`,
     },
+    POSTAL_MASTER: {
+      STATE: {
+        LIST: "/user-management/postal-master/state/list",
+        CREATE: "/user-management/postal-master/state/create",
+        UPDATE: (id: string) => `/user-management/postal-master/state/update/${id}`,
+        STATUS_UPDATE: (id: string) =>
+          `/user-management/postal-master/state/update-status/${id}`,
+        VIEW: (id: string) => `/user-management/postal-master/state/${id}`,
+        EXPORT: "/user-management/postal-master/state/export",
+        FILTER_DROPDOWN: "/user-management/postal-master/state/filter-dropdown",
+        DROPDOWN: "/user-management/postal-master/state/dropdown",
+        SUMMARY: "/user-management/postal-master/state/summary",
+      },
+      DISTRICT: {
+        LIST: "/user-management/postal-master/district/list",
+        CREATE: "/user-management/postal-master/district/create",
+        UPDATE: (id: string) => `/user-management/postal-master/district/update/${id}`,
+        STATUS_UPDATE: (id: string) =>
+          `/user-management/postal-master/district/update-status/${id}`,
+        VIEW: (id: string) => `/user-management/postal-master/district/${id}`,
+        EXPORT: "/user-management/postal-master/district/export",
+        FILTER_DROPDOWN: "/user-management/postal-master/district/filter-dropdown",
+        DROPDOWN: "/user-management/postal-master/district/dropdown",
+        SUMMARY: "/user-management/postal-master/district/summary",
+      },
+      SUBDISTRICT: {
+        LIST: "/user-management/postal-master/subdistrict/list",
+        CREATE: "/user-management/postal-master/subdistrict/create",
+        UPDATE: (id: string) =>
+          `/user-management/postal-master/subdistrict/update/${id}`,
+        STATUS_UPDATE: (id: string) =>
+          `/user-management/postal-master/subdistrict/update-status/${id}`,
+        VIEW: (id: string) => `/user-management/postal-master/subdistrict/${id}`,
+        EXPORT: "/user-management/postal-master/subdistrict/export",
+        FILTER_DROPDOWN:
+          "/user-management/postal-master/subdistrict/filter-dropdown",
+        DROPDOWN: "/user-management/postal-master/subdistrict/dropdown",
+        SUMMARY: "/user-management/postal-master/subdistrict/summary",
+      },
+      LOCATION: {
+        LIST: "/user-management/postal-master/location/list",
+        CREATE: "/user-management/postal-master/location/create",
+        UPDATE: (id: string) =>
+          `/user-management/postal-master/location/update/${id}`,
+        STATUS_UPDATE: (id: string) =>
+          `/user-management/postal-master/location/update-status/${id}`,
+        VIEW: (id: string) => `/user-management/postal-master/location/${id}`,
+        EXPORT: "/user-management/postal-master/location/export",
+        FILTER_DROPDOWN: "/user-management/postal-master/location/filter-dropdown",
+        DROPDOWN: "/user-management/postal-master/location/dropdown",
+        SUMMARY: "/user-management/postal-master/location/summary",
+      },
+      POSTAL: {
+        LIST: "/user-management/postal-master/postal/list",
+        SUMMARY: "/user-management/postal-master/postal/summary",
+        EXPORT: "/user-management/postal-master/postal/export",
+        STATUS_UPDATE: (mappingId: string) =>
+          `/user-management/postal-master/postal/update-status/${mappingId}`,
+        MAPPING_CREATE: "/user-management/postal-master/postal/mapping/create",
+        MAPPING_DELETE: (mappingId: string) =>
+          `/user-management/postal-master/postal/mapping/${mappingId}`,
+        LOOKUP_STATES: "/user-management/postal-master/postal/lookup/states",
+        LOOKUP_DISTRICTS: "/user-management/postal-master/postal/lookup/districts",
+        LOOKUP_CITIES: "/user-management/postal-master/postal/lookup/cities",
+        LOOKUP_VILLAGES: "/user-management/postal-master/postal/lookup/villages",
+        LOOKUP_SUBDISTRICTS:
+          "/user-management/postal-master/postal/lookup/subdistricts",
+        LOOKUP_PINCODES: "/user-management/postal-master/postal/lookup/pincodes",
+        LOOKUP_BY_PINCODE:
+          "/user-management/postal-master/postal/lookup/by-pincode",
+      },
+    },
+    BUSINESS_GEOGRAPHY: {
+      ZONE: {
+        LIST: "/user-management/business-geography/zone/list",
+        CREATE: "/user-management/business-geography/zone/create",
+        UPDATE: (id: string) =>
+          `/user-management/business-geography/zone/update/${id}`,
+        STATUS_UPDATE: (id: string) =>
+          `/user-management/business-geography/zone/update-status/${id}`,
+        VIEW: (id: string) => `/user-management/business-geography/zone/${id}`,
+        EXPORT: "/user-management/business-geography/zone/export",
+        DROPDOWN: "/user-management/business-geography/zone/dropdown",
+        SUMMARY: "/user-management/business-geography/zone/summary",
+      },
+      REGION: {
+        LIST: "/user-management/business-geography/region/list",
+        CREATE: "/user-management/business-geography/region/create",
+        UPDATE: (id: string) =>
+          `/user-management/business-geography/region/update/${id}`,
+        STATUS_UPDATE: (id: string) =>
+          `/user-management/business-geography/region/update-status/${id}`,
+        VIEW: (id: string) => `/user-management/business-geography/region/${id}`,
+        EXPORT: "/user-management/business-geography/region/export",
+        DROPDOWN: "/user-management/business-geography/region/dropdown",
+        SUMMARY: "/user-management/business-geography/region/summary",
+      },
+      AREA: {
+        LIST: "/user-management/business-geography/area/list",
+        CREATE: "/user-management/business-geography/area/create",
+        UPDATE: (id: string) =>
+          `/user-management/business-geography/area/update/${id}`,
+        STATUS_UPDATE: (id: string) =>
+          `/user-management/business-geography/area/update-status/${id}`,
+        VIEW: (id: string) => `/user-management/business-geography/area/${id}`,
+        EXPORT: "/user-management/business-geography/area/export",
+        DROPDOWN: "/user-management/business-geography/area/dropdown",
+        SUMMARY: "/user-management/business-geography/area/summary",
+      },
+      TERRITORY: {
+        LIST: "/user-management/business-geography/territory/list",
+        CREATE: "/user-management/business-geography/territory/create",
+        UPDATE: (id: string) =>
+          `/user-management/business-geography/territory/update/${id}`,
+        STATUS_UPDATE: (id: string) =>
+          `/user-management/business-geography/territory/update-status/${id}`,
+        VIEW: (id: string) =>
+          `/user-management/business-geography/territory/${id}`,
+        EXPORT: "/user-management/business-geography/territory/export",
+        DROPDOWN: "/user-management/business-geography/territory/dropdown",
+        SUMMARY: "/user-management/business-geography/territory/summary",
+      },
+      LOOKUP: {
+        ZONES: "/user-management/business-geography/lookup/zones",
+        REGIONS: "/user-management/business-geography/lookup/regions",
+        AREAS: "/user-management/business-geography/lookup/areas",
+        STATES: "/user-management/business-geography/lookup/states",
+        DISTRICTS: "/user-management/business-geography/lookup/districts",
+        LOCATIONS: "/user-management/business-geography/lookup/locations",
+        PINCODES: "/user-management/business-geography/lookup/pincodes",
+      },
+    },
   },
   MASTER_DROPDOWNS: {
     CUSTOMER: "/master/customer/dropdown",
