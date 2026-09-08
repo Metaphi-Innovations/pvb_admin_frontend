@@ -302,6 +302,17 @@ export type SalesInvoiceDetailDto = SalesInvoiceListDto & {
   } | null;
   customer_ledger_id?: string | null;
   salesperson_name?: string | null;
+  /** Present on STOCK_TRANSFER invoices when backend includes relation fields. */
+  stock_transfer_id?: string | null;
+  destination_warehouse_id?: string | null;
+  destination_warehouse_snapshot?: Record<string, unknown> | null;
+  destination_warehouse_gst_snapshot?: Record<string, unknown> | null;
+  source_warehouse_gst_snapshot?: Record<string, unknown> | null;
+  warehouse_gst_snapshot?: Record<string, unknown> | null;
+  stock_transfer?: {
+    stock_transfer_id?: string;
+    transfer_no?: string | null;
+  } | null;
 };
 
 export type PrepareDispatchInvoiceDto = {
@@ -887,13 +898,39 @@ export function mapSalesInvoiceDetailToRecord(
     dispatchNo: dto.dispatch?.dispatch_number || dto.dispatch_number || undefined,
     salesOrderNo:
       dto.sales_order?.so_number ||
+      (dto as { stock_transfer?: { transfer_no?: string | null } }).stock_transfer
+        ?.transfer_no ||
+      snapshotStr(
+        (dto.destination_warehouse_snapshot || null) as Record<string, unknown> | null,
+        "transfer_no",
+      ) ||
       undefined,
     salesOrderId: dto.sales_order?.sales_order_id ?? null,
     branch: warehouseName,
     warehouse: warehouseName,
     warehouseUuid: dto.warehouse_id || dto.warehouse?.warehouse_id || undefined,
     placeOfSupply,
-    interstate: dto.is_interstate ?? false,
+    interstate: dto.is_interstate ?? (kind === "stock_transfer" ? true : false),
+    /** ST destination warehouse name is stored as party/customer display. */
+    sourceWarehouseGstin: readWarehouseGstin(
+      dto.source_warehouse_gst_snapshot as Record<string, unknown> | null,
+      dto.warehouse_gst_snapshot as Record<string, unknown> | null,
+    ),
+    destinationWarehouseGstin: readWarehouseGstin(
+      dto.destination_warehouse_gst_snapshot as Record<string, unknown> | null,
+      (dto.customer_snapshot || null) as Record<string, unknown> | null,
+    ),
+    destinationWarehouseName:
+      snapshotStr(
+        (dto.destination_warehouse_snapshot || null) as Record<string, unknown> | null,
+        "warehouse_name",
+        "name",
+      ) ||
+      (kind === "stock_transfer" ? customerName : undefined),
+    stockTransferId:
+      dto.stock_transfer_id ||
+      dto.stock_transfer?.stock_transfer_id ||
+      undefined,
     cgstTotal: asNumber(dto.cgst_amount),
     sgstTotal: asNumber(dto.sgst_amount),
     igstTotal: asNumber(dto.igst_amount),

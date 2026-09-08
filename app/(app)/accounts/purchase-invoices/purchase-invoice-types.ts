@@ -1,4 +1,4 @@
-export type PurchaseSourceType = "from_grn" | "direct_purchase";
+export type PurchaseSourceType = "from_grn" | "direct_purchase" | "stock_transfer";
 export type PurchaseNature = "expense" | "fixed_asset" | "service" | "other_non_stock";
 export type ItcClassification = "eligible" | "ineligible" | "reversal_required" | "not_applicable";
 
@@ -48,4 +48,5 @@ export interface DirectPurchaseHeaderFields {
 export const PURCHASE_SOURCE_TYPE_LABELS: Record<PurchaseSourceType, string> = {
   from_grn: "From GRN",
   direct_purchase: "Direct Purchase",
+  stock_transfer: "Stock Transfer",
 };

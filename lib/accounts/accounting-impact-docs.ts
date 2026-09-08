@@ -9,8 +9,10 @@ export type AccountingImpactDocKey =
   | "contra_voucher"
   | "journal_voucher"
   | "sales_invoice"
+  | "stock_transfer_invoice"
   | "service_invoice"
   | "purchase_invoice"
+  | "purchase_invoice_stock_transfer"
   | "credit_note"
   | "debit_note"
   | "inventory_adjustment"
@@ -32,6 +34,10 @@ export interface AccountingImpactDoc {
   /** Optional secondary entry block (e.g. COGS). */
   secondaryEntryTitle?: string;
   secondaryEntryLines?: string[];
+  /** Optional tertiary block (e.g. destination GSTIN accounting). */
+  tertiaryEntryTitle?: string;
+  tertiaryEntryLines?: string[];
+  tertiaryEntryNote?: string;
   coaTrees: AccountingCoaPath[];
   reportsUpdated: string[];
   /** Where posting data / ledger identity comes from. */
@@ -202,6 +208,106 @@ export const ACCOUNTING_IMPACT_DOCS: Record<AccountingImpactDocKey, AccountingIm
       "Product Sales Ledger → System COA (sys:PRODUCT_SALES)",
       "Output GST → System COA (Duties & Taxes)",
       "Stock in Hand / COGS → System COA (inventory posting)",
+    ],
+  },
+
+  stock_transfer_invoice: {
+    title: "Accounting Impact",
+    docNote:
+      "Different-GSTIN Stock Transfer Tax Invoice — informational only; posting is backend-driven. No Customer / AR.",
+    entryLines: [
+      "Dr  Inter-GSTIN Clearing",
+      "Cr  Sales (Product Sales — Stock Transfer classified via SalesInvoiceType.STOCK_TRANSFER)",
+      "Cr  Output IGST",
+    ],
+    secondaryEntryTitle: "Inventory / COGS — source warehouse",
+    secondaryEntryLines: [
+      "Dr  Cost of Goods Sold",
+      "Cr  Stock in Hand (source warehouse)",
+    ],
+    tertiaryEntryTitle: "Destination GSTIN Accounting",
+    tertiaryEntryNote: "Posted after destination GRN / QC. Purchase-side invoice/record is created for Purchase Register and GST inward reporting.",
+    tertiaryEntryLines: [
+      "Dr  Stock in Hand (destination warehouse)",
+      "Dr  Input IGST",
+      "Cr  Inter-GSTIN Clearing",
+    ],
+    coaTrees: [
+      {
+        path: ["Assets", "Current Assets", "Other Current Assets", "Inter-GSTIN Clearing"],
+        origin: "system",
+      },
+      {
+        path: ["Income", "Direct Income", "Sales", "Product Sales"],
+        origin: "system",
+      },
+      {
+        path: ["Liabilities", "Current Liabilities", "Duties & Taxes", "Output IGST"],
+        origin: "system",
+      },
+      {
+        path: ["Assets", "Current Assets", "Inventory", "Stock in Hand"],
+        origin: "system",
+      },
+      {
+        path: ["Assets", "Current Assets", "Duties & Taxes", "Input IGST"],
+        origin: "system",
+      },
+    ],
+    reportsUpdated: [
+      ...COMMON_REPORTS_CORE,
+      "Sales Register (source GSTIN — filter SalesInvoiceType.STOCK_TRANSFER)",
+      "GST outward supply / GSTR-1 (as applicable)",
+      "Purchase Register (destination GSTIN)",
+      "GST inward / Input GST",
+      "Stock Ledger",
+      "General Ledger",
+      "Balance Sheet",
+    ],
+    sources: [
+      "No Customer / Sundry Debtors — Inter-GSTIN Clearing (system ledger)",
+      "Taxable value → Cost Price from Stock Transfer / Dispatch",
+      "Sales classification → SalesInvoiceType.STOCK_TRANSFER + voucher references",
+      "Output IGST / Input IGST → System COA",
+      "Destination PurchaseInvoice(type=STOCK_TRANSFER) after GRN/QC",
+    ],
+  },
+
+  purchase_invoice_stock_transfer: {
+    title: "Accounting Impact",
+    docNote:
+      "Destination Stock Transfer purchase-side record — mirrors the source Tax Invoice. Not a second legal supplier invoice. No fake Supplier / AP.",
+    entryLines: [
+      "Dr  Stock in Hand (destination warehouse)",
+      "Dr  Input IGST",
+      "Cr  Inter-GSTIN Clearing",
+    ],
+    coaTrees: [
+      {
+        path: ["Assets", "Current Assets", "Inventory", "Stock in Hand"],
+        origin: "system",
+      },
+      {
+        path: ["Assets", "Current Assets", "Duties & Taxes", "Input IGST"],
+        origin: "system",
+      },
+      {
+        path: ["Assets", "Current Assets", "Other Current Assets", "Inter-GSTIN Clearing"],
+        origin: "system",
+      },
+    ],
+    reportsUpdated: [
+      ...COMMON_REPORTS_CORE,
+      "Purchase Register",
+      "GST inward / Input GST",
+      "Stock Ledger",
+      "Balance Sheet",
+    ],
+    sources: [
+      "Legal source Tax Invoice → SalesInvoice(type=STOCK_TRANSFER)",
+      "No Supplier master — Inter-GSTIN Clearing",
+      "Stock / Input IGST → System COA",
+      "Posted after destination GRN / QC",
     ],
   },
 

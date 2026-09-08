@@ -54,6 +54,10 @@ export interface SalesInvoiceDocumentInfoSectionProps {
   customerInfoButton?: React.ReactNode;
   warehouseName?: string;
   warehouseInfoButton?: React.ReactNode;
+  /** Override for Sales Order No. (e.g. Stock Transfer No.). */
+  sourceDocumentLabel?: string;
+  /** Hide Due Date / credit days when not used by the document type. */
+  hideDueDate?: boolean;
   /** @deprecated Goods narration is placed after Additional Charges. */
   narrationSlot?: React.ReactNode;
 }
@@ -84,6 +88,8 @@ function SalesInvoiceDocumentInfoSectionInner({
   customerInfoButton,
   warehouseName,
   warehouseInfoButton,
+  sourceDocumentLabel = "Sales Order No.",
+  hideDueDate = false,
 }: SalesInvoiceDocumentInfoSectionProps) {
   const [dispatchInfoOpen, setDispatchInfoOpen] = useState(false);
   const hasDispatch = Boolean(sourceDispatchId || dispatchRef);
@@ -149,7 +155,7 @@ function SalesInvoiceDocumentInfoSectionInner({
           ) : null}
 
           <div className="so-goods-field so-w-so">
-            <p className="so-goods-field__label">Sales Order No.</p>
+            <p className="so-goods-field__label">{sourceDocumentLabel}</p>
             <div className="so-goods-field__control">
               <div className="so-goods-ro so-goods-ro--mono w-full">{salesOrderRef || "—"}</div>
             </div>
@@ -227,12 +233,16 @@ function SalesInvoiceDocumentInfoSectionInner({
             aria-label="Invoice Date"
           />
         </InvoiceFormField>
-        <InvoiceFormReadOnly label="Due Date" value={formatDisplayDate(dueDate)} />
-        <p className="text-xs text-muted-foreground mt-0.5">
-          Auto-calculated · Net {creditDays} days
-        </p>
+        {!hideDueDate ? (
+          <>
+            <InvoiceFormReadOnly label="Due Date" value={formatDisplayDate(dueDate)} />
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Auto-calculated · Net {creditDays} days
+            </p>
+          </>
+        ) : null}
 
-        <InvoiceFormReadOnly label="Sales Order No." value={salesOrderRef || "—"} mono />
+        <InvoiceFormReadOnly label={sourceDocumentLabel} value={salesOrderRef || "—"} mono />
 
         <div className="space-y-1">
           <div className="flex items-center gap-1.5">
