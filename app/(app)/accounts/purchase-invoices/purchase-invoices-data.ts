@@ -141,6 +141,14 @@ export interface PurchaseInvoiceRecord {
   vendorId: number;
   vendorName: string;
   vendorGst: string;
+  /** Stock Transfer destination PI — links to source Tax Invoice / ST */
+  sourceSalesInvoiceId?: string | null;
+  sourceSalesInvoiceNo?: string;
+  stockTransferId?: string | null;
+  stockTransferNo?: string;
+  sourceWarehouseName?: string;
+  sourceWarehouseGstin?: string;
+  destinationWarehouseGstin?: string;
   poId: number | null;
   poNumber: string;
   poDate: string;

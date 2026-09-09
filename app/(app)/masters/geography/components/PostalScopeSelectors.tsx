@@ -259,14 +259,6 @@ export function TerritoryCoverageSelector({
     [regionStates, areaDistricts, postalRecordCount],
   );
 
-  const siblingAlloc = useMemo(
-    () =>
-      allowSharedCoverage
-        ? { towns: new Set<string>(), pincodeKeys: new Set<string>() }
-        : getSiblingTerritoryAllocations(parentAreaId, excludeGeographyId),
-    [parentAreaId, excludeGeographyId, allowSharedCoverage, postalRecordCount],
-  );
-
   const pincodeOwners = useMemo(
     () =>
       allowSharedCoverage
@@ -275,35 +267,18 @@ export function TerritoryCoverageSelector({
     [parentAreaId, excludeGeographyId, allowSharedCoverage, postalRecordCount],
   );
 
-  const allCities = useMemo(
+  const allLocations = useMemo(
     () => getCitiesForDistricts(effectiveStates, areaDistricts),
     [effectiveStates, areaDistricts, postalRecordCount],
   );
-  const allTowns = useMemo(
-    () => getTownsForCities(effectiveStates, areaDistricts, scope.cities),
-    [effectiveStates, areaDistricts, scope.cities, postalRecordCount],
-  );
 
-  const canShowPincodes = scope.cities.length > 0 || scope.towns.length > 0;
+  const canShowPincodes = scope.cities.length > 0;
   const pincodeOptions = useMemo(
     () =>
       canShowPincodes
-        ? getPincodeOptionsForScope(effectiveStates, areaDistricts, scope.cities, scope.towns)
+        ? getPincodeOptionsForScope(effectiveStates, areaDistricts, scope.cities, [])
         : [],
-    [canShowPincodes, effectiveStates, areaDistricts, scope.cities, scope.towns, postalRecordCount],
-  );
-
-  const townOptions = useMemo(
-    () =>
-      allTowns.map((t) => {
-        const disabled = siblingAlloc.towns.has(t) && !scope.towns.includes(t);
-        return {
-          value: t,
-          disabled,
-          disabledReason: disabled ? "Already assigned to another territory" : undefined,
-        };
-      }),
-    [allTowns, siblingAlloc.towns, scope.towns],
+    [canShowPincodes, effectiveStates, areaDistricts, scope.cities, postalRecordCount],
   );
 
   const togglePincode = (key: string) => {
@@ -315,36 +290,22 @@ export function TerritoryCoverageSelector({
     onChange({ ...scope, pincodeKeys: next });
   };
 
-  const handleTownsChange = (nextTowns: string[]) => {
-    const removed = scope.towns.filter((t) => !nextTowns.includes(t));
-    const added = nextTowns.filter((t) => !scope.towns.includes(t));
+  const handleLocationsChange = (nextLocations: string[]) => {
+    const validOptions = getPincodeOptionsForScope(
+      effectiveStates,
+      areaDistricts,
+      nextLocations,
+      [],
+    );
+    const validKeySet = new Set(validOptions.map((o) => o.key.toLowerCase()));
+    const nextKeys = scope.pincodeKeys.filter((k) => validKeySet.has(k.toLowerCase()));
 
-    let nextKeys = [...scope.pincodeKeys];
-
-    if (removed.length > 0) {
-      const removedKeySet = new Set(
-        getPincodeOptionsForScope(effectiveStates, areaDistricts, scope.cities, removed).map(
-          (o) => o.key,
-        ),
-      );
-      nextKeys = nextKeys.filter((k) => !removedKeySet.has(k));
-    }
-
-    if (added.length > 0) {
-      const addedOptions = getPincodeOptionsForScope(
-        effectiveStates,
-        areaDistricts,
-        scope.cities,
-        added,
-      );
-      for (const opt of addedOptions) {
-        const owner = pincodeOwners.get(opt.key.toLowerCase());
-        if (owner && !allowSharedCoverage) continue;
-        if (!nextKeys.includes(opt.key)) nextKeys.push(opt.key);
-      }
-    }
-
-    onChange({ ...scope, towns: nextTowns, pincodeKeys: nextKeys });
+    onChange({
+      ...scope,
+      cities: nextLocations,
+      towns: [],
+      pincodeKeys: nextKeys,
+    });
   };
 
   const selectedPincodeCount = scope.pincodeKeys.length;
@@ -365,28 +326,15 @@ export function TerritoryCoverageSelector({
       )}
 
       <MultiCheckList
-        label="Select City(s)"
-        options={allCities.map((c) => ({ value: c }))}
+        label="Select Location(s)"
+        options={allLocations.map((c) => ({ value: c }))}
         selected={scope.cities}
-        onChange={(cities) => onChange({ ...scope, cities, towns: [], pincodeKeys: [] })}
+        onChange={handleLocationsChange}
         error={errors?.cities}
         emptyMessage={
           parentAreaId == null
             ? "Select a parent Area first."
-            : postalEmptyMessage("No cities in Postal Master for this area.")
-        }
-      />
-
-      <MultiCheckList
-        label="Select Town(s)"
-        options={townOptions}
-        selected={scope.towns}
-        onChange={handleTownsChange}
-        error={errors?.towns}
-        emptyMessage={
-          scope.cities.length === 0
-            ? "Select at least one city to view towns."
-            : postalEmptyMessage("No towns in Postal Master for the selected cities.")
+            : postalEmptyMessage("No locations in Postal Master for this area.")
         }
       />
 
@@ -395,7 +343,7 @@ export function TerritoryCoverageSelector({
         <div className={cn("rounded-lg border max-h-40 overflow-y-auto p-2 space-y-1", errors?.pincodeKeys && "border-red-500")}>
           {!canShowPincodes ? (
             <p className="text-[11px] text-muted-foreground px-1 py-2">
-              Select at least one city or town to view pincodes.
+              Select at least one location to view pincodes.
             </p>
           ) : pincodeOptions.length === 0 ? (
             <p className="text-[11px] text-muted-foreground px-1 py-2">
@@ -446,12 +394,8 @@ export function TerritoryCoverageSelector({
       <div className="rounded-lg border border-border/60 bg-white p-3 space-y-1">
         <p className="text-[10px] font-medium text-muted-foreground uppercase">Coverage Summary</p>
         <p className="text-xs">
-          <span className="text-muted-foreground">Cities selected:</span>{" "}
+          <span className="text-muted-foreground">Locations selected:</span>{" "}
           <span className="font-medium tabular-nums">{scope.cities.length}</span>
-        </p>
-        <p className="text-xs">
-          <span className="text-muted-foreground">Towns selected:</span>{" "}
-          <span className="font-medium tabular-nums">{scope.towns.length}</span>
         </p>
         <p className="text-xs">
           <span className="text-muted-foreground">Pincodes selected:</span>{" "}

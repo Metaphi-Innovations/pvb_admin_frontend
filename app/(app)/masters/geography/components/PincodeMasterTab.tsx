@@ -271,7 +271,7 @@ export function PincodeMasterTab(props: {
       },
       {
         key: "city",
-        header: "City",
+        header: "Location",
         sortable: true,
         width: "140px",
         render: (val) => <span className="text-xs">{val}</span>,

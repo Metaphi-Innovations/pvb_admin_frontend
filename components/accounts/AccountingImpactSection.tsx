@@ -142,6 +142,23 @@ export function AccountingImpactSection({
                 </div>
               </div>
             ) : null}
+            {doc.tertiaryEntryTitle && doc.tertiaryEntryLines?.length ? (
+              <div className="mt-1.5">
+                <p className="text-[10px] font-medium text-muted-foreground mb-0.5">
+                  {doc.tertiaryEntryTitle}
+                </p>
+                {doc.tertiaryEntryNote ? (
+                  <p className="text-[10px] text-muted-foreground mb-0.5 leading-snug">
+                    {doc.tertiaryEntryNote}
+                  </p>
+                ) : null}
+                <div className="rounded-md border border-border/60 bg-muted/10 px-2.5 py-1.5 font-mono text-[11px] leading-relaxed text-foreground space-y-0.5">
+                  {doc.tertiaryEntryLines.map((line) => (
+                    <p key={line}>{line}</p>
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </div>
         )}
 

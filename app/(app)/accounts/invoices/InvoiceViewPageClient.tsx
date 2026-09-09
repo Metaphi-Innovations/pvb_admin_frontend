@@ -75,6 +75,7 @@ import {
   resolveDisplayDiscountPct,
   resolveLineSku,
 } from "./invoice-view-display";
+import { AccountingImpactSection } from "@/components/accounts/AccountingImpactSection";
 import { formatDisplayDate } from "@/lib/accounts/date-display";
 import "./sales-order-invoice-form-compact.css";
 import "@/components/accounts/voucher-form/transaction-view.css";
@@ -490,6 +491,8 @@ export default function InvoiceViewPageClient({
   const isSalesOrderView =
     record.sourceType === "sales_order" ||
     (invoiceType === "sales" && Boolean(record.salesOrderNo || record.dispatchNo));
+  const isStockTransferView =
+    invoiceType === "stock_transfer" || record.sourceType === "stock_transfer";
 
   const expenses = resolveInvoiceAdditionalExpenses(
     record.additionalExpenses,
@@ -628,11 +631,43 @@ export default function InvoiceViewPageClient({
               voucherDate: record.invoiceDate,
               branchName: record.warehouse || record.branch || undefined,
             })}
-            partyLabel={record.customerName}
+            partyLabel={
+              isStockTransferView
+                ? record.destinationWarehouseName || record.customerName || "Destination Warehouse"
+                : record.customerName
+            }
             amountLabel="Grand Total"
             amount={gst.invoiceTotal}
           />
 
+          {isStockTransferView ? (
+            <VoucherFormSectionCard title="Warehouse Transfer Details" highlight>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-2">
+                <Field label="Source Warehouse" value={record.warehouse} />
+                <Field
+                  label="Destination Warehouse"
+                  value={record.destinationWarehouseName || record.customerName}
+                />
+                <Field label="Source Warehouse GSTIN" value={record.sourceWarehouseGstin} mono />
+                <Field
+                  label="Destination Warehouse GSTIN"
+                  value={record.destinationWarehouseGstin || gstin}
+                  mono
+                />
+                <Field
+                  label="Stock Transfer No."
+                  value={record.salesOrderNo || record.referenceNo}
+                  mono
+                />
+                <Field label="Place of Supply" value={record.placeOfSupply} />
+                <div className="sm:col-span-2">
+                  <span className="inline-flex items-center h-6 px-2 rounded border border-amber-200 bg-amber-50 text-[10px] font-semibold uppercase tracking-wide text-amber-900">
+                    Inter-GSTIN / Taxable Transfer
+                  </span>
+                </div>
+              </div>
+            </VoucherFormSectionCard>
+          ) : (
           <VoucherFormSectionCard title="Customer" highlight>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-2">
               <Field label="Customer Name" value={record.customerName} />
@@ -645,14 +680,17 @@ export default function InvoiceViewPageClient({
               />
             </div>
           </VoucherFormSectionCard>
+          )}
 
           <VoucherFormSectionCard title="Invoice Details" highlight>
             <div className={INVOICE_FORM_GRID_CLASS}>
               <Field label="Invoice No." value={record.invoiceNo} mono />
               <Field label="Invoice Date" value={formatDisplayDate(record.invoiceDate)} />
-              <Field label="Due Date" value={formatDisplayDate(record.dueDate)} />
+              {!isStockTransferView ? (
+                <Field label="Due Date" value={formatDisplayDate(record.dueDate)} />
+              ) : null}
               <Field
-                label="Sales Order No."
+                label={isStockTransferView ? "Stock Transfer No." : "Sales Order No."}
                 value={record.salesOrderNo || record.referenceNo}
                 mono
               />
@@ -665,7 +703,9 @@ export default function InvoiceViewPageClient({
                     : record.receivableLedger || ""
                 }
               />
-              <Field label="Warehouse" value={record.warehouse} />
+              {!isStockTransferView ? (
+                <Field label="Warehouse" value={record.warehouse} />
+              ) : null}
               <Field label="Branch" value={record.branch} />
               <Field label="Place of Supply" value={record.placeOfSupply} />
               <Field label="Type" value={INVOICE_TYPE_LABELS[invoiceType]} />
@@ -684,6 +724,7 @@ export default function InvoiceViewPageClient({
                   )
                 }
               />
+              {!isStockTransferView ? (
               <Field
                 label="General Ledger"
                 value={
@@ -708,6 +749,7 @@ export default function InvoiceViewPageClient({
                   )
                 }
               />
+              ) : null}
             </div>
           </VoucherFormSectionCard>
 
@@ -791,11 +833,20 @@ export default function InvoiceViewPageClient({
                 )}
                 <SummaryRow label="Round Off" value={formatINR(roundOff)} />
                 <SummaryRow label="Grand Total" value={formatINR(gst.invoiceTotal)} grand />
-                <SummaryRow label="Received" value={formatINR(record.amountReceived)} />
-                <SummaryRow label="Balance Due" value={formatINR(record.balanceAmount)} />
+                {!isStockTransferView ? (
+                  <>
+                    <SummaryRow label="Received" value={formatINR(record.amountReceived)} />
+                    <SummaryRow label="Balance Due" value={formatINR(record.balanceAmount)} />
+                  </>
+                ) : null}
               </div>
             </VoucherFormSectionCard>
           </div>
+
+          <AccountingImpactSection
+            docKey={isStockTransferView ? "stock_transfer_invoice" : "sales_invoice"}
+            className="mt-2"
+          />
         </div>
       </InvoiceFormLayout>
     </div>

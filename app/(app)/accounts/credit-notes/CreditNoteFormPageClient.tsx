@@ -986,6 +986,7 @@ export default function CreditNoteFormPageClient({
         const directPayload = buildDirectPayload();
         const created = await CreditNoteFormApi.createFromPending(pendingId, {
           cn_date: cnDate,
+          warehouse_id: warehouseId || undefined,
           narration: narration.trim() || null,
           remarks: pending?.remarks || null,
           round_off_amount: roundOff,
@@ -1054,6 +1055,7 @@ export default function CreditNoteFormPageClient({
       const directPayload = buildDirectPayload();
       const created = await CreditNoteFormApi.createFromPending(pendingId, {
         cn_date: cnDate,
+        warehouse_id: warehouseId || undefined,
         narration: narration.trim() || null,
         remarks: pending?.remarks || null,
         round_off_amount: roundOff,
@@ -1170,6 +1172,7 @@ export default function CreditNoteFormPageClient({
           const directPayload = buildDirectPayload();
           const created = await CreditNoteFormApi.createFromPending(pendingId, {
             cn_date: cnDate,
+            warehouse_id: warehouseId || undefined,
             narration: narration.trim() || null,
             remarks: pending?.remarks || null,
             round_off_amount: roundOff,
@@ -1384,7 +1387,7 @@ export default function CreditNoteFormPageClient({
                       <CreditNoteWarehouseInfoButton warehouseId={warehouseId || null} />
                     }
                   >
-                    {pendingEntitlementLocked ? (
+                    {pendingEntitlementLocked && isSalesReturnCn ? (
                       <div className="so-goods-ro w-full">
                         {pending?.warehouse?.warehouse_name || selectedWarehouse?.name || "—"}
                       </div>

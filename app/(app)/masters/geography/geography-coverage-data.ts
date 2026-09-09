@@ -255,14 +255,15 @@ export interface PincodeScopeOption {
   key: string;
   label: string;
   pincode: string;
-  town: string;
+  town?: string;
+  location?: string;
 }
 
 export function getPincodeOptionsForScope(
   states: string[],
   districts: string[],
   cities: string[],
-  towns: string[],
+  towns: string[] = [],
   records?: PincodeRecord[],
 ): PincodeScopeOption[] {
   if (cities.length === 0 && towns.length === 0) return [];
@@ -274,9 +275,10 @@ export function getPincodeOptionsForScope(
   );
   return list.map((p) => ({
     key: pincodeRecordKey(p),
-    label: `${p.pincode} - ${p.town}`,
+    label: `${p.pincode} - ${p.city || p.town}`,
     pincode: p.pincode,
     town: p.town,
+    location: p.city,
   }));
 }
 
@@ -504,16 +506,13 @@ export function validatePostalScopeForLevel(
   }
 
   if (level === "Territory") {
-    const areaDistricts = options?.areaDistricts ?? [];
-    const regionStates = options?.regionStates ?? [];
     const selectedPincodes = scope.pincodeKeys;
 
     if (
       scope.cities.length === 0 &&
-      scope.towns.length === 0 &&
       selectedPincodes.length === 0
     ) {
-      errors.cities = "Select at least one city, town, or pincode.";
+      errors.cities = "Select at least one location or pincode.";
     }
     if (selectedPincodes.length === 0) {
       errors.pincodeKeys = "Please select at least one pincode for this territory.";
@@ -611,8 +610,7 @@ export function getCoverageTypeLabel(geographyId: number): string {
   if (def.geographyType === "Area") return def.districts.join(", ") || "—";
   if (def.geographyType === "Territory") {
     const parts: string[] = [];
-    if (def.cities.length) parts.push(`${def.cities.length} cities`);
-    if (def.towns.length) parts.push(`${def.towns.length} towns`);
+    if (def.cities.length) parts.push(`${def.cities.length} locations`);
     if (def.pincodeKeys.length) parts.push(`${def.pincodeKeys.length} pincodes`);
     return parts.join(" · ") || "—";
   }

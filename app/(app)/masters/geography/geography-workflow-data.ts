@@ -189,8 +189,9 @@ export interface TerritoryUserApprovalPreview {
   }>;
   missingRoleWarnings: string[];
   coverageSummary: {
+    locationsSelected?: number;
     citiesSelected: number;
-    townsSelected: number;
+    townsSelected?: number;
     pincodesSelected: number;
   };
 }
@@ -324,6 +325,7 @@ export function buildTerritoryUserApprovalPreview(input: {
     approvalChain,
     missingRoleWarnings,
     coverageSummary: {
+      locationsSelected: input.scope.cities.length,
       citiesSelected: input.scope.cities.length,
       townsSelected: input.scope.towns.length,
       pincodesSelected: input.pincodeKeys.length,

@@ -53,6 +53,10 @@ const VOUCHER_TYPE_LABELS: Record<string, string> = {
   credit_note: "Credit Note",
   debit_note: "Debit Note",
   contra: "Contra Voucher",
+  stock_transfer: "Stock Transfer",
+  SALES: "Sales Invoice",
+  PURCHASE: "Purchase Bill",
+  STOCK_TRANSFER: "Stock Transfer",
 };
 
 export function resolveLedgerType(

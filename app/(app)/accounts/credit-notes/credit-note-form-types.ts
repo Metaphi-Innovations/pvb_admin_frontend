@@ -307,6 +307,8 @@ export interface UpdateDraftCreditNotePayload {
 
 export interface CreateFromPendingPayload {
   cn_date?: string;
+  /** Optional override — defaults to Pending CN / invoice warehouse. */
+  warehouse_id?: string;
   narration?: string | null;
   remarks?: string | null;
   /** Signed round-off override; when omitted, backend applies auto nearest-rupee. */
