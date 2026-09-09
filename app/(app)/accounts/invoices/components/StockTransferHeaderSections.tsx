@@ -16,6 +16,7 @@ export function StockTransferWarehouseDetailsSection({
   destinationGstin,
   stockTransferNo,
   placeOfSupply,
+  transferTaxBadge,
 }: {
   sourceWarehouse: string;
   destinationWarehouse: string;
@@ -23,8 +24,16 @@ export function StockTransferWarehouseDetailsSection({
   destinationGstin: string;
   stockTransferNo: string;
   placeOfSupply: string;
+  /** e.g. Inter-GSTIN / Taxable Transfer */
+  transferTaxBadge?: string | null;
 }) {
   return (
+    <div className="space-y-2">
+      {transferTaxBadge?.trim() ? (
+        <div className="inline-flex items-center h-6 px-2 rounded border border-amber-200 bg-amber-50 text-[10px] font-semibold uppercase tracking-wide text-amber-900">
+          {transferTaxBadge}
+        </div>
+      ) : null}
     <div className="so-goods-field-grid">
       <div className="so-goods-field so-w-wh">
         <p className="so-goods-field__label">Source Warehouse</p>
@@ -72,6 +81,7 @@ export function StockTransferWarehouseDetailsSection({
         </div>
         <p className="so-goods-field__helper">Destination warehouse state</p>
       </div>
+    </div>
     </div>
   );
 }
