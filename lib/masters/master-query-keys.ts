@@ -309,4 +309,41 @@ export const masterKeys = {
     export: () => [...masterKeys.pricing.all(), "export"] as const,
     summary: () => [...masterKeys.pricing.all(), "summary"] as const,
   },
+
+  postalMaster: {
+    all: () => [...masterKeys.all, "postal-master"] as const,
+    lists: () => [...masterKeys.postalMaster.all(), "list"] as const,
+    list: (params: MasterListKeyParams) =>
+      [...masterKeys.postalMaster.lists(), params] as const,
+    summary: () => [...masterKeys.postalMaster.all(), "summary"] as const,
+    lookupStates: () => [...masterKeys.postalMaster.all(), "lookup-states"] as const,
+    lookupDistricts: (stateId: string) =>
+      [...masterKeys.postalMaster.all(), "lookup-districts", stateId] as const,
+    lookupLocations: (districtId: string) =>
+      [...masterKeys.postalMaster.all(), "lookup-locations", districtId] as const,
+  },
+
+  businessGeography: {
+    all: () => [...masterKeys.all, "business-geography"] as const,
+    tree: () => [...masterKeys.businessGeography.all(), "tree"] as const,
+    detail: (level: string, id: string) =>
+      [...masterKeys.businessGeography.all(), "detail", level, id] as const,
+    lookupZones: () => [...masterKeys.businessGeography.all(), "lookup-zones"] as const,
+    lookupRegions: (zoneId: string) =>
+      [...masterKeys.businessGeography.all(), "lookup-regions", zoneId] as const,
+    lookupAreas: (regionId: string) =>
+      [...masterKeys.businessGeography.all(), "lookup-areas", regionId] as const,
+    lookupStates: () => [...masterKeys.businessGeography.all(), "lookup-states"] as const,
+    lookupDistricts: (regionId: string) =>
+      [...masterKeys.businessGeography.all(), "lookup-districts", regionId] as const,
+    lookupLocations: (areaId: string) =>
+      [...masterKeys.businessGeography.all(), "lookup-locations", areaId] as const,
+    lookupPincodes: (locationIdsKey: string, excludeTerritoryId = "") =>
+      [
+        ...masterKeys.businessGeography.all(),
+        "lookup-pincodes",
+        locationIdsKey,
+        excludeTerritoryId,
+      ] as const,
+  },
 } as const;

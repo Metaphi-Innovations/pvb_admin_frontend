@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
-import { AlertTriangle, Globe } from "lucide-react";
+import { Globe } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ListingContainer } from "@/components/layout/ListingContainer";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -12,8 +13,9 @@ import { SplitMergeWizardTab } from "./components/SplitMergeWizardTab";
 import { AuditHistoryTab } from "./components/AuditHistoryTab";
 import { GeographyWorkflowBanner } from "./components/GeographyWorkflowBanner";
 import { migrateGeographyStorageIfNeeded, resetGeographyDemoData } from "./geography-reset";
-import { hydratePostalMaster, getPostalRecordCount } from "./pincode-data";
 import { getWorkflowSummary, syncGeographyCoverageCounts, syncGeographyUserCounts } from "./geography-workflow-data";
+import { usePostalMasterSummary } from "@/hooks/masters";
+import { masterKeys } from "@/lib/masters/master-query-keys";
 
 const TAB_VALUES = ["postal", "setup", "split", "audit"] as const;
 type TabValue = (typeof TAB_VALUES)[number];
@@ -51,35 +53,29 @@ export default function GeographyPage() {
   const rawTab = searchParams.get("tab");
   const activeTab = parseTab(rawTab);
   const [mounted, setMounted] = useState(false);
-  const [postalCount, setPostalCount] = useState(0);
   const [summary, setSummary] = useState(EMPTY_SUMMARY);
   const [resetting, setResetting] = useState(false);
 
-  const [postalHydrating, setPostalHydrating] = useState(true);
+  const queryClient = useQueryClient();
+  const postalSummaryQuery = usePostalMasterSummary();
+  const postalCount = postalSummaryQuery.data?.totalMappings ?? 0;
 
   const refreshSummary = useCallback(() => {
     syncGeographyCoverageCounts();
     syncGeographyUserCounts();
     setSummary(getWorkflowSummary());
-    setPostalCount(getPostalRecordCount());
-  }, []);
-
-  const initGeography = useCallback(async () => {
-    migrateGeographyStorageIfNeeded();
-    setPostalHydrating(true);
-    try {
-      const records = await hydratePostalMaster();
-      setPostalCount(records.length);
-      refreshSummary();
-    } finally {
-      setPostalHydrating(false);
-    }
-  }, [refreshSummary]);
+    void queryClient.invalidateQueries({
+      queryKey: masterKeys.postalMaster.summary(),
+    });
+  }, [queryClient]);
 
   useEffect(() => {
     setMounted(true);
-    void initGeography();
-  }, [initGeography]);
+    migrateGeographyStorageIfNeeded();
+    syncGeographyCoverageCounts();
+    syncGeographyUserCounts();
+    setSummary(getWorkflowSummary());
+  }, []);
 
   useEffect(() => {
     if (rawTab && LEGACY_TAB_REDIRECT[rawTab] && LEGACY_TAB_REDIRECT[rawTab] !== rawTab) {
@@ -92,11 +88,10 @@ export default function GeographyPage() {
   };
 
   const handleResetDemoData = async () => {
-    if (!confirm("Reset all Geography localStorage data and reload postal master from file?")) return;
+    if (!confirm("Reset all Geography localStorage demo data?")) return;
     setResetting(true);
     try {
-      const count = await resetGeographyDemoData();
-      setPostalCount(count);
+      await resetGeographyDemoData();
       refreshSummary();
     } finally {
       setResetting(false);
@@ -116,27 +111,12 @@ export default function GeographyPage() {
   return (
     <ListingContainer title="Geography" titleIcon={Globe}>
       <div className="space-y-4">
-        <GeographyWorkflowBanner summary={summary} />
-
-        {postalHydrating && (
-          <div className="rounded-xl border border-border bg-muted/20 px-4 py-3 text-xs text-muted-foreground">
-            Loading postal master dataset…
-          </div>
-        )}
-
-        {!postalHydrating && postalCount === 0 && (
-          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 flex items-start gap-2 text-xs text-amber-900">
-            <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-            <div>
-              <p className="font-semibold">Postal Master data is not loaded.</p>
-              <p className="mt-0.5 text-amber-800">
-                Please upload India Post data first (Bulk Upload on Postal Master tab), or run{" "}
-                <code className="text-[10px] bg-amber-100 px-1 rounded">npm run import:postal</code>{" "}
-                then refresh.
-              </p>
-            </div>
-          </div>
-        )}
+        <GeographyWorkflowBanner
+          summary={{
+            ...summary,
+            totalPincodes: postalCount || summary.totalPincodes,
+          }}
+        />
 
         {IS_DEV && (
           <div className="flex justify-end">
@@ -145,7 +125,7 @@ export default function GeographyPage() {
               size="sm"
               className="h-8 text-xs text-amber-800 border-amber-300"
               disabled={resetting}
-              onClick={handleResetDemoData}
+              onClick={() => void handleResetDemoData()}
             >
               {resetting ? "Resetting…" : "Reset Geography Demo Data"}
             </Button>
@@ -155,24 +135,30 @@ export default function GeographyPage() {
         <Tabs value={activeTab} onValueChange={setTab} className="space-y-4">
           <div className="overflow-x-auto -mx-1 px-1">
             <TabsList className="border-b border-border w-max min-w-full justify-start rounded-none h-auto p-0 bg-transparent gap-0">
-              <TabsTrigger value="postal" className={TAB_TRIGGER_CLASS}>Postal Master</TabsTrigger>
-              <TabsTrigger value="setup" className={TAB_TRIGGER_CLASS}>Business Geography</TabsTrigger>
-              <TabsTrigger value="split" className={TAB_TRIGGER_CLASS}>Split / Merge</TabsTrigger>
-              <TabsTrigger value="audit" className={TAB_TRIGGER_CLASS}>Audit</TabsTrigger>
+              <TabsTrigger value="postal" className={TAB_TRIGGER_CLASS}>
+                Postal Master
+              </TabsTrigger>
+              <TabsTrigger value="setup" className={TAB_TRIGGER_CLASS}>
+                Business Geography
+              </TabsTrigger>
+              <TabsTrigger value="split" className={TAB_TRIGGER_CLASS}>
+                Split / Merge
+              </TabsTrigger>
+              <TabsTrigger value="audit" className={TAB_TRIGGER_CLASS}>
+                Audit
+              </TabsTrigger>
             </TabsList>
           </div>
 
           <TabsContent value="postal" className="m-0 mt-0 outline-none">
             {activeTab === "postal" && (
-              <PostalLocationMasterTab
-                onWorkflowChange={refreshSummary}
-                postalRecordCount={postalCount}
-                postalHydrating={postalHydrating}
-              />
+              <PostalLocationMasterTab onWorkflowChange={refreshSummary} />
             )}
           </TabsContent>
           <TabsContent value="setup" className="m-0 mt-0 outline-none">
-            {activeTab === "setup" && <GeographySetupTab postalRecordCount={postalCount} />}
+            {activeTab === "setup" && (
+              <GeographySetupTab postalRecordCount={postalCount} />
+            )}
           </TabsContent>
           <TabsContent value="split" className="m-0 mt-0 outline-none">
             {activeTab === "split" && <SplitMergeWizardTab />}
