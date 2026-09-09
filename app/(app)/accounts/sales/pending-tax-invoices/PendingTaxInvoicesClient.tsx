@@ -457,6 +457,9 @@ function PendingInvoicesTable({
 
   const generateAction = (r: PendingInvoiceListRow) => {
     const alreadyInvoiced = Boolean(r.invoiceId);
+    const label = isStockTransfer
+      ? "Generate Stock Transfer Invoice"
+      : "Generate Invoice";
     return (
       <Button
         asChild={!alreadyInvoiced}
@@ -465,9 +468,9 @@ function PendingInvoicesTable({
         className="h-7 px-2.5 text-xs bg-brand-600 hover:bg-brand-700 text-white disabled:opacity-50"
       >
         {alreadyInvoiced ? (
-          <span>Generate Invoice</span>
+          <span>{label}</span>
         ) : (
-          <Link href={r.generateHref}>Generate Invoice</Link>
+          <Link href={r.generateHref}>{label}</Link>
         )}
       </Button>
     );

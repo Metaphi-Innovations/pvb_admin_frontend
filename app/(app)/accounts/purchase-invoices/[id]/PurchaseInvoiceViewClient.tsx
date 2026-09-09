@@ -17,6 +17,7 @@ import { DEBIT_NOTES_LIST_PATH } from "@/app/(app)/accounts/debit-notes/note-uti
 import { formatMoney, formatMoneyOrDash } from "@/lib/accounts/money-format";
 import { purchaseInvoiceImpactResolved } from "@/lib/accounts/resolved-impact-previews";
 import { LedgerImpactPreview } from "@/components/accounts/LedgerImpactPreview";
+import { AccountingImpactSection } from "@/components/accounts/AccountingImpactSection";
 import { cn } from "@/lib/utils";
 import {
   calcPurchaseLineGstSplit,
@@ -55,6 +56,7 @@ import {
   buildVoucherViewMeta,
   voucherStatusToBadgeKey,
 } from "@/components/accounts/voucher-form/TransactionViewHero";
+import Link from "next/link";
 import "@/components/accounts/voucher-form/transaction-view.css";
 
 function Field({ label, value }: { label: string; value?: string | null }) {
@@ -166,6 +168,7 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: st
 
   const isDirect = invoice ? isDirectPurchaseInvoice(invoice) : false;
   const isGrn = invoice ? isGrnPurchaseInvoice(invoice) : false;
+  const isStockTransfer = invoice?.sourceType === "stock_transfer";
   const recordHref = invoice?.backendId || invoiceId;
   const postingStatus = invoice?.backendStatus || "POSTED";
   const canCancel = postingStatus === "POSTED";
@@ -260,13 +263,16 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: st
     roundOff: invoice.roundingAdjustment ?? 0,
   });
 
-  const sourceChip = isDirect
-    ? PURCHASE_SOURCE_TYPE_LABELS.direct_purchase
-    : PURCHASE_SOURCE_TYPE_LABELS.from_grn;
+  const sourceChip = isStockTransfer
+    ? PURCHASE_SOURCE_TYPE_LABELS.stock_transfer
+    : isDirect
+      ? PURCHASE_SOURCE_TYPE_LABELS.direct_purchase
+      : PURCHASE_SOURCE_TYPE_LABELS.from_grn;
   const heroChips = [
     sourceChip,
     ...(invoice.reverseChargeApplicable ? ["RCM"] : []),
     ...(invoice.grnNo ? [invoice.grnNo] : []),
+    ...(isStockTransfer && invoice.stockTransferNo ? [invoice.stockTransferNo] : []),
   ];
   const statusLabel = POSTING_STATUS_LABELS[postingStatus] || postingStatus;
 
@@ -274,7 +280,11 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: st
     <PurchaseInvoicePageShell
       breadcrumbs={accountsBreadcrumb("Purchase Invoices", invoice.invoiceNo)}
       title={invoice.invoiceNo}
-      description={`Supplier Invoice: ${invoice.vendorInvoiceNo || "—"} · ${invoice.vendorName}`}
+      description={
+        isStockTransfer
+          ? `Stock Transfer purchase-side record · Legal source Tax Invoice: ${invoice.sourceSalesInvoiceNo || invoice.vendorInvoiceNo || "—"}`
+          : `Supplier Invoice: ${invoice.vendorInvoiceNo || "—"} · ${invoice.vendorName}`
+      }
       actions={
         <div className="flex items-center gap-2">
           <Button
@@ -335,7 +345,36 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: st
           <p className="text-xs text-red-700 px-1">{loadError}</p>
         )}
 
-        {/* Document References — GRN only */}
+        {/* Document References — GRN / Stock Transfer */}
+        {isStockTransfer ? (
+          <VoucherFormSectionCard title="Stock Transfer References" highlight>
+            <p className="text-[11px] text-muted-foreground mb-2 leading-snug">
+              This is not a second legal supplier Tax Invoice. It mirrors the source Stock Transfer Tax Invoice for Purchase Register and GST inward reporting.
+            </p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+              <Field label="Source Tax Invoice No." value={invoice.sourceSalesInvoiceNo || invoice.vendorInvoiceNo} />
+              <Field label="Stock Transfer No." value={invoice.stockTransferNo} />
+              <Field label="Destination GRN" value={invoice.grnNo} />
+              <Field label="QC" value={invoice.qcNo} />
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {invoice.sourceSalesInvoiceId ? (
+                <Button asChild size="sm" variant="outline" className="h-7 text-xs">
+                  <Link href={`/accounts/transactions/invoices/${invoice.sourceSalesInvoiceId}`}>
+                    View Source Tax Invoice
+                  </Link>
+                </Button>
+              ) : null}
+              {invoice.stockTransferId ? (
+                <Button asChild size="sm" variant="outline" className="h-7 text-xs">
+                  <Link href={`/sales/stock-transfer/${invoice.stockTransferId}`}>
+                    View Stock Transfer
+                  </Link>
+                </Button>
+              ) : null}
+            </div>
+          </VoucherFormSectionCard>
+        ) : null}
         {isGrn && (invoice.poNumber || invoice.grnNo || invoice.qcNo || invoice.vendorInvoiceNo) && (
           <VoucherFormSectionCard title="Document References" highlight>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
@@ -371,6 +410,16 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: st
 
         {/* Vendor & Invoice Info */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+          {isStockTransfer ? (
+            <VoucherFormSectionCard title="Warehouse Transfer Details" highlight>
+              <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+                <Field label="Source Warehouse" value={invoice.sourceWarehouseName} />
+                <Field label="Destination Warehouse" value={invoice.warehouse} />
+                <Field label="Source GSTIN" value={invoice.sourceWarehouseGstin || invoice.vendorGst} />
+                <Field label="Destination GSTIN" value={invoice.destinationWarehouseGstin || invoice.branchGstin} />
+              </div>
+            </VoucherFormSectionCard>
+          ) : (
           <VoucherFormSectionCard title="Supplier Details" highlight>
             <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
               <Field label="Supplier Name" value={invoice.vendorName} />
@@ -382,12 +431,19 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: st
               {isDirect && <Field label="Branch GSTIN" value={invoice.branchGstin} />}
             </div>
           </VoucherFormSectionCard>
+          )}
           <VoucherFormSectionCard title="Invoice Details" highlight>
             <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
               <Field label="Invoice No (Internal)" value={invoice.invoiceNo} />
-              <Field label="Supplier Invoice No" value={invoice.vendorInvoiceNo} />
-              <DateField label="Supplier Invoice Date" value={invoice.invoiceDate} />
-              <DateField label="Due Date" value={invoice.dueDate} />
+              <Field
+                label={isStockTransfer ? "Source Tax Invoice No" : "Supplier Invoice No"}
+                value={invoice.vendorInvoiceNo}
+              />
+              <DateField
+                label={isStockTransfer ? "Invoice Date" : "Supplier Invoice Date"}
+                value={invoice.invoiceDate}
+              />
+              {!isStockTransfer ? <DateField label="Due Date" value={invoice.dueDate} /> : null}
               <Field
                 label="Approval"
                 value={invoice.backendStatus === "PENDING" ? "Pending Approval" : "Approved"}
@@ -824,11 +880,15 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: st
         </VoucherFormSectionCard>
 
         {/* COA Posting Impact */}
-        <LedgerImpactPreview
-          title="COA Posting Impact"
-          lines={impactLines}
-          className="border border-border rounded-xl shadow-sm"
-        />
+        {isStockTransfer ? (
+          <AccountingImpactSection docKey="purchase_invoice_stock_transfer" />
+        ) : (
+          <LedgerImpactPreview
+            title="COA Posting Impact"
+            lines={impactLines}
+            className="border border-border rounded-xl shadow-sm"
+          />
+        )}
 
         {/* Remarks / Narration */}
         {(invoice.narration || invoice.remarks) && (

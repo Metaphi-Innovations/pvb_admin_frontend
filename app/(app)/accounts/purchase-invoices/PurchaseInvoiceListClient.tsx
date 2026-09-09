@@ -159,15 +159,14 @@ function isQcCompletedStatus(status: string | null | undefined): boolean {
 }
 
 function SourceTypeBadge({ type }: { type: PurchaseSourceType }) {
-  const isGrn = type === "from_grn";
+  const tone =
+    type === "from_grn"
+      ? "text-orange-700 border-orange-200 bg-orange-50"
+      : type === "stock_transfer"
+        ? "text-amber-800 border-amber-200 bg-amber-50"
+        : "text-brand-700 border-brand-200 bg-brand-50";
   return (
-    <Badge
-      variant="outline"
-      className={cn(
-        "text-xs h-5",
-        isGrn ? "text-orange-700 border-orange-200 bg-orange-50" : "text-brand-700 border-brand-200 bg-brand-50",
-      )}
-    >
+    <Badge variant="outline" className={cn("text-xs h-5", tone)}>
       {PURCHASE_SOURCE_TYPE_LABELS[type]}
     </Badge>
   );
@@ -364,7 +363,7 @@ function PurchaseInvoicesTabTable({
           <AccountsTableHeadRow>
             <SortTh label="Invoice No" colKey="invoiceNo" {...filterProps("invoiceNo")} />
             <SortTh label="Source Type" colKey="sourceType" {...filterProps("sourceType")} />
-            <SortTh label="Supplier" colKey="vendorName" className="accounts-col-party" {...filterProps("vendorName")} />
+            <SortTh label="Supplier / Source" colKey="vendorName" className="accounts-col-party" {...filterProps("vendorName")} />
             <SortTh label="Supplier Inv. No" colKey="vendorInvoiceNo" {...filterProps("vendorInvoiceNo")} />
             <SortTh label="Invoice Date" colKey="invoiceDate" filterType="date" {...filterProps("invoiceDate")} />
             <SortTh label="Purchase Nature" colKey="purchaseNature" {...filterProps("purchaseNature")} />
@@ -636,6 +635,7 @@ function PurchaseInvoicesTabBody({
                 { value: "all", label: "All Source Types" },
                 { value: "from_grn", label: "From GRN" },
                 { value: "direct_purchase", label: "Direct Purchase" },
+                { value: "stock_transfer", label: "Stock Transfer" },
               ]}
             />
             <ListingSelectFilter

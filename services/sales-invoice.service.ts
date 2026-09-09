@@ -302,6 +302,17 @@ export type SalesInvoiceDetailDto = SalesInvoiceListDto & {
   } | null;
   customer_ledger_id?: string | null;
   salesperson_name?: string | null;
+  /** Present on STOCK_TRANSFER invoices when backend includes relation fields. */
+  stock_transfer_id?: string | null;
+  destination_warehouse_id?: string | null;
+  destination_warehouse_snapshot?: Record<string, unknown> | null;
+  destination_warehouse_gst_snapshot?: Record<string, unknown> | null;
+  source_warehouse_gst_snapshot?: Record<string, unknown> | null;
+  warehouse_gst_snapshot?: Record<string, unknown> | null;
+  stock_transfer?: {
+    stock_transfer_id?: string;
+    transfer_no?: string | null;
+  } | null;
 };
 
 export type PrepareDispatchInvoiceDto = {
@@ -383,6 +394,8 @@ export type PrepareDispatchInvoiceDto = {
     hsn_id?: string | null;
     hsn_code?: string | null;
     unit_cost?: string | null;
+    /** Stock Transfer: authoritative transfer cost from Stock Transfer item. */
+    cp_price?: string | null;
     source_item_id?: string | null;
   }>;
   suggested_additional_charges: Array<{
@@ -502,8 +515,15 @@ export function mapPrepareDispatchItemsToLineItems(
   const sp = salespersonName?.trim() || "";
   return (items || []).map((item, index) => {
     const qty = Number(item.quantity || 0);
-    // For stock transfer dispatches unit_price is null; fall back to unit_cost (batch cost)
-    const rate = Number((item as any).unit_price || (item as any).unit_cost || 0);
+    // ST: prefer cp_price (Stock Transfer item), then unit_price/unit_cost (batch).
+    // Sales: unit_price from SO.
+    const rate = Number(
+      (item as { cp_price?: string | null }).cp_price ||
+        item.unit_price ||
+        item.unit_cost ||
+        0,
+    );
+    const cpMissing = !(rate > 0);
     const discountPct = Number(item.discount_percentage || 0);
     const discountAmt = Number(item.discount_amount || 0);
     const gstPercent = Number(item.gst_rate || 18);
@@ -523,10 +543,10 @@ export function mapPrepareDispatchItemsToLineItems(
       hsn: item.hsn_code || "—",
       qty,
       unit: item.quantity_type || "PCS",
-      unitPrice: rate,
+      unitPrice: cpMissing ? 0 : rate,
       discountPct,
       taxPct: gstPercent,
-      amount: qty * rate,
+      amount: qty * (cpMissing ? 0 : rate),
       batchNo: item.batch_no || "—",
       batchId: item.batch_id || undefined,
       manufacturingDate: asDateOnly(item.manufacture_date) || undefined,
@@ -537,6 +557,13 @@ export function mapPrepareDispatchItemsToLineItems(
       schemeDiscountPercent: discountPct,
       schemeDiscountAmount: discountAmt,
       schemeApplied: discountAmt > 0 ? "Yes" : "No",
+      costPrice: cpMissing ? 0 : rate,
+      costPriceSource: cpMissing
+        ? "Cost Price not available"
+        : (item as { cp_price?: string | null }).cp_price
+          ? "Stock Transfer · CP"
+          : "Inventory batch · unit cost",
+      cpMissing,
     });
   });
 }
@@ -887,13 +914,39 @@ export function mapSalesInvoiceDetailToRecord(
     dispatchNo: dto.dispatch?.dispatch_number || dto.dispatch_number || undefined,
     salesOrderNo:
       dto.sales_order?.so_number ||
+      (dto as { stock_transfer?: { transfer_no?: string | null } }).stock_transfer
+        ?.transfer_no ||
+      snapshotStr(
+        (dto.destination_warehouse_snapshot || null) as Record<string, unknown> | null,
+        "transfer_no",
+      ) ||
       undefined,
     salesOrderId: dto.sales_order?.sales_order_id ?? null,
     branch: warehouseName,
     warehouse: warehouseName,
     warehouseUuid: dto.warehouse_id || dto.warehouse?.warehouse_id || undefined,
     placeOfSupply,
-    interstate: dto.is_interstate ?? false,
+    interstate: dto.is_interstate ?? (kind === "stock_transfer" ? true : false),
+    /** ST destination warehouse name is stored as party/customer display. */
+    sourceWarehouseGstin: readWarehouseGstin(
+      dto.source_warehouse_gst_snapshot as Record<string, unknown> | null,
+      dto.warehouse_gst_snapshot as Record<string, unknown> | null,
+    ),
+    destinationWarehouseGstin: readWarehouseGstin(
+      dto.destination_warehouse_gst_snapshot as Record<string, unknown> | null,
+      (dto.customer_snapshot || null) as Record<string, unknown> | null,
+    ),
+    destinationWarehouseName:
+      snapshotStr(
+        (dto.destination_warehouse_snapshot || null) as Record<string, unknown> | null,
+        "warehouse_name",
+        "name",
+      ) ||
+      (kind === "stock_transfer" ? customerName : undefined),
+    stockTransferId:
+      dto.stock_transfer_id ||
+      dto.stock_transfer?.stock_transfer_id ||
+      undefined,
     cgstTotal: asNumber(dto.cgst_amount),
     sgstTotal: asNumber(dto.sgst_amount),
     igstTotal: asNumber(dto.igst_amount),

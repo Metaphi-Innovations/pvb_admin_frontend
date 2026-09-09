@@ -5,6 +5,7 @@ import type {
   CancelReceiptVoucherPayload,
   CreateReceiptVoucherPayload,
   CustomerOutstandingResponse,
+  EligibleCashDiscountResponse,
   ReceiptAttachmentMeta,
   ReceiptVoucherConfig,
   ReceiptVoucherDetail,
@@ -144,6 +145,24 @@ export const ReceiptVoucherService = {
       );
       return unwrapData<CustomerOutstandingResponse>(response);
     }, "Failed to load customer outstanding items.");
+  },
+
+  async getEligibleCashDiscountSchemes(payload: {
+    customer_id: string;
+    voucher_date: string;
+    allocations: Array<{ open_item_id: string; allocated_amount: string | number }>;
+  }): Promise<EligibleCashDiscountResponse> {
+    return withReceiptError(async () => {
+      const response = await axiosInstance.post(
+        API_ENDPOINTS.ACCOUNTS.RECEIPT_VOUCHER.ELIGIBLE_CASH_DISCOUNT_SCHEMES,
+        payload,
+      );
+      const data = unwrapData<EligibleCashDiscountResponse>(response);
+      return {
+        offers: data?.offers ?? [],
+        total_estimated_benefit: data?.total_estimated_benefit ?? 0,
+      };
+    }, "Failed to load eligible cash discount schemes.");
   },
 
   async listSupplierRecoverable(

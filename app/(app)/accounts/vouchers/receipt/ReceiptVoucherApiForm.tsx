@@ -57,6 +57,7 @@ import { ReceiptSearchableSelect } from "./components/ReceiptSearchableSelect";
 import { ReceiptFormActionBar } from "./components/ReceiptFormActionBar";
 import { ReceiptAllocationTable } from "./components/ReceiptAllocationTable";
 import { ReceiptInvoiceMultiSelect } from "./components/ReceiptInvoiceMultiSelect";
+import { ReceiptApplicableCashDiscountPanel } from "./components/ReceiptApplicableCashDiscountPanel";
 import { ReceiptLedgerEntriesTable, createReceiptLedgerEntryRow } from "./components/ReceiptLedgerEntriesTable";
 import { ReceiptFormSummary } from "./components/ReceiptFormSummary";
 import { ReceiptViewHero } from "./components/ReceiptViewHero";
@@ -87,6 +88,8 @@ import {
   type ReceiptUiAdjustment,
   type ReceiptUiAllocation,
 } from "./receipt-voucher-utils";
+import { roundMoney } from "@/lib/accounts/money-format";
+import type { EligibleCashDiscountOffer } from "@/types/receipt-voucher.types";
 
 export interface ReceiptVoucherApiFormProps {
   voucherId?: string;
@@ -182,6 +185,86 @@ export function ReceiptVoucherApiForm({
     [form.allocations],
   );
 
+  const cashDiscountAllocKey = useMemo(
+    () =>
+      selectedInvoiceRows
+        .map((a) => `${a.open_item_id}:${toMoneyNumber(a.allocated_amount)}`)
+        .sort()
+        .join("|"),
+    [selectedInvoiceRows],
+  );
+
+  const [cashDiscountOffers, setCashDiscountOffers] = useState<
+    EligibleCashDiscountOffer[]
+  >([]);
+  const [cashDiscountTotal, setCashDiscountTotal] = useState(0);
+  const [cashDiscountLoading, setCashDiscountLoading] = useState(false);
+
+  /** Preview Cash Discount schemes for selected invoice allocations. */
+  useEffect(() => {
+    if (
+      form.party_kind !== "CUSTOMER" ||
+      !form.customer_id ||
+      !form.voucher_date ||
+      !showInvoiceSettlement ||
+      !cashDiscountAllocKey
+    ) {
+      setCashDiscountOffers([]);
+      setCashDiscountTotal(0);
+      setCashDiscountLoading(false);
+      return;
+    }
+
+    const allocPayload = selectedInvoiceRows
+      .map((a) => ({
+        open_item_id: a.open_item_id,
+        allocated_amount: toMoneyNumber(a.allocated_amount),
+      }))
+      .filter((a) => a.allocated_amount > 0);
+
+    if (!allocPayload.length) {
+      setCashDiscountOffers([]);
+      setCashDiscountTotal(0);
+      setCashDiscountLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      setCashDiscountLoading(true);
+      void ReceiptVoucherService.getEligibleCashDiscountSchemes({
+        customer_id: form.customer_id,
+        voucher_date: form.voucher_date,
+        allocations: allocPayload,
+      })
+        .then((res) => {
+          if (cancelled) return;
+          setCashDiscountOffers(res.offers);
+          setCashDiscountTotal(res.total_estimated_benefit);
+        })
+        .catch(() => {
+          if (cancelled) return;
+          setCashDiscountOffers([]);
+          setCashDiscountTotal(0);
+        })
+        .finally(() => {
+          if (!cancelled) setCashDiscountLoading(false);
+        });
+    }, 350);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed by cashDiscountAllocKey
+  }, [
+    form.party_kind,
+    form.customer_id,
+    form.voucher_date,
+    showInvoiceSettlement,
+    cashDiscountAllocKey,
+  ]);
+
   /** Auto-derive TDS Receivable adjustment from invoice TDS (enter TDS once). */
   useEffect(() => {
     setForm((prev) => {
@@ -244,28 +327,56 @@ export function ReceiptVoucherApiForm({
 
   const handleInvoiceSelection = useCallback((ids: string[]) => {
     const idSet = new Set(ids);
-    setForm((prev) => ({
-      ...prev,
-      allocations: prev.allocations.map((a) => {
-        const selected = idSet.has(a.open_item_id);
-        if (selected) {
+    setForm((prev) => {
+      const gross = toMoneyNumber(prev.gross_party_amount);
+      let usedByOthers = 0;
+      // First pass: keep existing settlements on already-selected rows that stay selected.
+      for (const a of prev.allocations) {
+        if (idSet.has(a.open_item_id) && a.selected && toMoneyNumber(a.allocated_amount) > 0) {
+          usedByOthers += toMoneyNumber(a.allocated_amount);
+        }
+      }
+
+      return {
+        ...prev,
+        allocations: prev.allocations.map((a) => {
+          const selected = idSet.has(a.open_item_id);
+          if (!selected) {
+            return {
+              ...a,
+              selected: false,
+              allocated_amount: "",
+              tds_amount: "",
+              tds_section_id: "",
+              discount_amount: "",
+            };
+          }
+
+          // Keep amount the user already entered.
+          if (a.selected && toMoneyNumber(a.allocated_amount) > 0) {
+            return { ...a, selected: true };
+          }
+
+          // Newly selected: apply remaining received (Gross) payment, not full outstanding.
+          // Cash Discount is calculated on this settlement / received amount.
+          let allocated_amount = "";
+          if (gross > 0) {
+            const remaining = Math.max(0, roundMoney(gross - usedByOthers));
+            const apply = Math.min(a.outstanding_amount, remaining);
+            if (apply > 0) {
+              allocated_amount = String(apply);
+              usedByOthers = roundMoney(usedByOthers + apply);
+            }
+          }
+
           return {
             ...a,
             selected: true,
-            allocated_amount:
-              a.allocated_amount || String(a.outstanding_amount),
+            allocated_amount,
           };
-        }
-        return {
-          ...a,
-          selected: false,
-          allocated_amount: "",
-          tds_amount: "",
-          tds_section_id: "",
-          discount_amount: "",
-        };
-      }),
-    }));
+        }),
+      };
+    });
   }, []);
 
   const handleLedgerEntriesChange = useCallback(
@@ -1282,6 +1393,14 @@ export function ReceiptVoucherApiForm({
               )}
             </div>
           </VoucherFormSectionCard>
+        ) : null}
+
+        {form.party_kind === "CUSTOMER" && showInvoiceSettlement ? (
+          <ReceiptApplicableCashDiscountPanel
+            offers={cashDiscountOffers}
+            totalEstimatedBenefit={cashDiscountTotal}
+            loading={cashDiscountLoading}
+          />
         ) : null}
 
         {/* 6. Ledger Entries — optional manual adjustments only */}

@@ -90,6 +90,14 @@ import {
   type PrepareDispatchInvoiceDto,
 } from "@/services/sales-invoice.service";
 import {
+  classifyStockTransferByGstin,
+  isSameGstinInvoiceError,
+  isSameGstinTreatment,
+  resolveStockTransferInterstateDisplay,
+  SAME_GSTIN_INVOICE_BLOCKED_MESSAGE,
+} from "@/lib/accounts/stock-transfer-gstin";
+import Link from "next/link";
+import {
   calculateInvoiceTotals,
   createEmptyLine,
   canEditInvoice,
@@ -284,6 +292,10 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
   const [destinationWarehouseState, setDestinationWarehouseState] = useState("");
   const [sourceWarehouseId, setSourceWarehouseId] = useState<string | null>(null);
   const [destinationWarehouseId, setDestinationWarehouseId] = useState<string | null>(null);
+  const [stockTransferRecordId, setStockTransferRecordId] = useState<string | null>(null);
+  const [backendPlaceOfSupplyInterstate, setBackendPlaceOfSupplyInterstate] = useState<
+    boolean | null
+  >(null);
   const [gstTreatment, setGstTreatment] = useState("");
   const [receivableLedger, setReceivableLedger] = useState("");
   const [customerFields, setCustomerFields] = useState<CustomerTransactionFields | null>(null);
@@ -1189,6 +1201,28 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
           };
 
           applySalesInvoicePrefill(prefill);
+          setStockTransferRecordId(
+            isSTDispatch ? (stData?.stock_transfer_id ?? null) : null,
+          );
+          const posInterstate = (pos as { isInterstate?: boolean; is_interstate?: boolean })
+            .isInterstate;
+          const posInterstateSnake = (pos as { is_interstate?: boolean }).is_interstate;
+          if (typeof posInterstate === "boolean") {
+            setBackendPlaceOfSupplyInterstate(posInterstate);
+          } else if (typeof posInterstateSnake === "boolean") {
+            setBackendPlaceOfSupplyInterstate(posInterstateSnake);
+          } else if (isSTDispatch) {
+            // Different-GSTIN create path forces IGST; align preview when POS flag absent.
+            const gstinClass = classifyStockTransferByGstin({
+              sourceGstin: sourceWhGstin,
+              destinationGstin: destWhGstin,
+            });
+            setBackendPlaceOfSupplyInterstate(
+              gstinClass.treatment === "DIFFERENT_GSTIN" ? true : null,
+            );
+          } else {
+            setBackendPlaceOfSupplyInterstate(null);
+          }
           setSourceWarehouseId(
             isSTDispatch
               ? (stData?.from_warehouse?.warehouse_id ?? null)
@@ -1244,10 +1278,14 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
           }
         } catch (err) {
           console.error("Failed to load prefill from backend:", err);
-          setError(
+          const msg =
             err instanceof Error
               ? err.message
-              : "Failed to prepare dispatch for invoice.",
+              : "Failed to prepare dispatch for invoice.";
+          setError(
+            isSameGstinInvoiceError(msg)
+              ? SAME_GSTIN_INVOICE_BLOCKED_MESSAGE
+              : msg,
           );
         }
       };
@@ -1600,13 +1638,33 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
 
   const showSezSupply = isSezGstCategory(customerGstCategory);
 
+  const stockTransferGstinClass = useMemo(() => {
+    if (!(invoiceType === "stock_transfer" || isStockTransferGeneration)) {
+      return null;
+    }
+    return classifyStockTransferByGstin({
+      sourceGstin: sourceWarehouseGstin,
+      destinationGstin: destinationWarehouseGstin,
+    });
+  }, [
+    invoiceType,
+    isStockTransferGeneration,
+    sourceWarehouseGstin,
+    destinationWarehouseGstin,
+  ]);
+
+  const sameGstinStockTransferBlocked = Boolean(
+    stockTransferGstinClass && isSameGstinTreatment(stockTransferGstinClass.treatment),
+  );
+
   const interstateGst = useMemo(() => {
     if (invoiceType === "stock_transfer" || isStockTransferGeneration) {
-      const src = sourceWarehouseState.trim();
-      const dest = destinationWarehouseState.trim() || placeOfSupply.trim();
-      if (src && dest) {
-        return src.toLowerCase() !== dest.toLowerCase();
-      }
+      return resolveStockTransferInterstateDisplay({
+        treatment: stockTransferGstinClass?.treatment ?? "UNKNOWN",
+        backendIsInterstate: backendPlaceOfSupplyInterstate,
+        backendIgstAmount: backendTotals ? Number(backendTotals.igst_amount) : null,
+        backendCgstAmount: backendTotals ? Number(backendTotals.cgst_amount) : null,
+      });
     }
     if (/igst/i.test(gstTreatment)) return true;
     return inferInterstateFromPlaceOfSupply(placeOfSupply);
@@ -1615,8 +1673,9 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     placeOfSupply,
     invoiceType,
     isStockTransferGeneration,
-    sourceWarehouseState,
-    destinationWarehouseState,
+    stockTransferGstinClass,
+    backendPlaceOfSupplyInterstate,
+    backendTotals,
   ]);
 
   // Preview SI number from DocumentSequence (create only)
@@ -2187,6 +2246,10 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
       }
     }
     if (isStockTransferGeneration || sourceType === "stock_transfer") {
+      if (sameGstinStockTransferBlocked) {
+        setError(SAME_GSTIN_INVOICE_BLOCKED_MESSAGE);
+        return;
+      }
       const stErr = validateStockTransferInvoiceCore();
       if (stErr) {
         setError(stErr);
@@ -2337,7 +2400,8 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
             : "Invoice saved and posted to ledger successfully.",
       );
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not save invoice.");
+      const msg = e instanceof Error ? e.message : "Could not save invoice.";
+      setError(isSameGstinInvoiceError(msg) ? SAME_GSTIN_INVOICE_BLOCKED_MESSAGE : msg);
       savingRef.current = false;
       setSaving(false);
     }
@@ -2353,6 +2417,10 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
       return;
     }
     setError(null);
+    if (isStockTransferGeneration && sameGstinStockTransferBlocked) {
+      setError(SAME_GSTIN_INVOICE_BLOCKED_MESSAGE);
+      return;
+    }
     const coreErr = isStockTransferGeneration
       ? validateStockTransferInvoiceCore()
       : isSampleOrderGeneration
@@ -2482,20 +2550,39 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
                   Sample Order
                 </span>
               ) : null}
-              <Button
-                size="sm"
-                className="h-8 text-xs font-medium bg-brand-600 hover:bg-brand-700 text-white border-0"
-                onClick={handleTopGenerateClick}
-                disabled={saving}
-              >
-                {saving
-                  ? "Saving…"
-                  : isSampleOrderGeneration
-                    ? "Generate Proforma Invoice"
-                    : isStockTransferGeneration
-                      ? "Generate Stock Transfer Invoice"
-                      : "Generate Invoice"}
-              </Button>
+              {stGen && sameGstinStockTransferBlocked ? (
+                <>
+                  {stockTransferRecordId ? (
+                    <Button asChild size="sm" variant="outline" className="h-8 text-xs">
+                      <Link href={`/sales/stock-transfer/${stockTransferRecordId}`}>
+                        View Stock Transfer
+                      </Link>
+                    </Button>
+                  ) : null}
+                  {sourceDispatchId ? (
+                    <Button asChild size="sm" variant="outline" className="h-8 text-xs">
+                      <Link href={`/warehouse/dispatch/view/${sourceDispatchId}`}>
+                        View Dispatch / Delivery Challan
+                      </Link>
+                    </Button>
+                  ) : null}
+                </>
+              ) : (
+                <Button
+                  size="sm"
+                  className="h-8 text-xs font-medium bg-brand-600 hover:bg-brand-700 text-white border-0"
+                  onClick={handleTopGenerateClick}
+                  disabled={saving || (stGen && sameGstinStockTransferBlocked)}
+                >
+                  {saving
+                    ? "Saving…"
+                    : isSampleOrderGeneration
+                      ? "Generate Proforma Invoice"
+                      : isStockTransferGeneration
+                        ? "Generate Stock Transfer Invoice"
+                        : "Generate Invoice"}
+                </Button>
+              )}
             </div>
           </div>
         ) : (
@@ -2512,6 +2599,12 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
       }
     >
       <div className={cn(compactGen ? "space-y-2.5" : "space-y-4")}>
+        {stGen && sameGstinStockTransferBlocked ? (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-950 leading-snug">
+            <p className="font-semibold">Same GSTIN — Delivery Challan Only</p>
+            <p className="mt-1">{SAME_GSTIN_INVOICE_BLOCKED_MESSAGE}</p>
+          </div>
+        ) : null}
         {!soGen ? (
         <InvoiceFormCard title={stGen ? "Warehouse Transfer Details" : isStockTransferInvoice ? "Destination Warehouse" : "Customer"}>
           {stGen ? (
@@ -2522,6 +2615,13 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
               destinationGstin={destinationWarehouseGstin}
               stockTransferNo={salesOrderRef}
               placeOfSupply={placeOfSupply}
+              transferTaxBadge={
+                sameGstinStockTransferBlocked
+                  ? "Same GSTIN — Delivery Challan Only"
+                  : stockTransferGstinClass?.treatment === "DIFFERENT_GSTIN"
+                    ? "Inter-GSTIN / Taxable Transfer"
+                    : null
+              }
             />
           ) : isStockTransferInvoice ? (
             <div className={INVOICE_FORM_GRID_CLASS}>
@@ -2563,6 +2663,25 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
         ) : null}
 
         <DetailsCard title="Invoice & Dispatch Details" compact={compactGen}>
+          {stGen ? (
+            <StockTransferInvoiceDetailsSection
+              isEdit={isEdit}
+              invoiceNo={invoiceNo}
+              previewInvoiceNo={previewInvoiceNo}
+              invoiceDate={invoiceDate}
+              onInvoiceDateChange={setInvoiceDate}
+              dispatchNo={dispatchRef}
+              dispatchDate={dispatchDate}
+              warehouseRef={warehouse}
+              bankAccountId={bankAccountId}
+              onBankAccountChange={handleBankAccountChange}
+              bankAccountHelper={
+                bankPrintDetails
+                  ? `${bankPrintDetails.bankName} · ${bankPrintDetails.accountNumber}`
+                  : undefined
+              }
+            />
+          ) : (
           <SalesInvoiceDocumentInfoSection
             isEdit={isEdit}
             invoiceNo={isEdit ? invoiceNo : previewInvoiceNo}
@@ -2582,6 +2701,10 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
             compactGrid={soGen}
             invoiceDateRequired={soGen}
             goodsGenerateCompact={soGen}
+            sourceDocumentLabel={
+              isStockTransferInvoice ? "Stock Transfer No." : "Sales Order No."
+            }
+            hideDueDate={isStockTransferInvoice}
             bankAccountSlot={
               soGen ? (
                 <WarehouseMappedBankAccountSelect
@@ -2650,6 +2773,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
                 : undefined
             }
           />
+          )}
           
           {showSezSupply && (
             <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-1">
@@ -3183,7 +3307,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
           )}
         </div>
 
-        {stGen && !isEdit ? (
+        {stGen && !isEdit && !sameGstinStockTransferBlocked ? (
           compactGen ? (
             <VoucherFormSectionCard title="Statutory Generation">
               <GoodsStatutoryGenerationSection
@@ -3227,7 +3351,11 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
 
         {!soGen ? (
         <AccountingImpactSection
-          docKey="sales_invoice"
+          docKey={
+            stGen || isStockTransferInvoice
+              ? "stock_transfer_invoice"
+              : "sales_invoice"
+          }
           className={compactGen ? "mt-2" : undefined}
         />
         ) : null}

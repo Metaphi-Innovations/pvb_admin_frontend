@@ -2,13 +2,15 @@
 
 import React, { useCallback, useState, useEffect } from "react";
 import {
-  Boxes, ClipboardList, Package, RotateCcw, Reply, XCircle,
+  Boxes, ClipboardList, Package, RotateCcw, Reply, Scale, XCircle,
 } from "lucide-react";
 import { TabsContent } from "@/components/ui/tabs";
 import { ListingContainer } from "@/components/layout/ListingContainer";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
+import { Button } from "@/components/ui/button";
 import { MiniKPICard } from "@/components/ui/KPICard";
 import { DailyLogsTab } from "./components/DailyLogsTab";
+import { StockAdjustmentDialog } from "./components/StockAdjustmentDialog";
 import { QcPassedListing } from "./qc-passed/QcPassedListing";
 import { SalesReturnStockListing } from "./sales-return/SalesReturnStockListing";
 import { SampleReturnStockListing } from "./sample-return/SampleReturnStockListing";
@@ -28,6 +30,8 @@ export default function StockOverviewPage() {
   const [warehouseOptions, setWarehouseOptions] = useState<Array<{ label: string; value: string }>>([]);
   const [summary, setSummary] = useState<StockOverviewSummary>(EMPTY_SUMMARY);
   const [summaryNonce, setSummaryNonce] = useState(0);
+  const [inventoryListNonce, setInventoryListNonce] = useState(0);
+  const [adjustmentOpen, setAdjustmentOpen] = useState(false);
 
   const refreshSummary = useCallback(() => {
     setSummaryNonce((n) => n + 1);
@@ -101,6 +105,19 @@ export default function StockOverviewPage() {
       actions={
         showWarehouseFilter ? (
           <div className="flex items-center gap-2">
+            {activeTab === "inventory" ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-9 text-xs gap-1.5"
+                disabled={!selectedWarehouse}
+                onClick={() => setAdjustmentOpen(true)}
+              >
+                <Scale className="w-3.5 h-3.5" />
+                Stock Adjustment
+              </Button>
+            ) : null}
             <span className="text-xs font-semibold text-muted-foreground whitespace-nowrap">Warehouse:</span>
             <AutocompleteSelect
               options={warehouseOptions}
@@ -122,7 +139,11 @@ export default function StockOverviewPage() {
       </TabsContent>
 
       <TabsContent value="inventory" className="mt-0 outline-none">
-        <QcPassedListing warehouseId={warehouseId} onFiltersApplied={refreshSummary} />
+        <QcPassedListing
+          warehouseId={warehouseId}
+          listNonce={inventoryListNonce}
+          onFiltersApplied={refreshSummary}
+        />
       </TabsContent>
 
       <TabsContent value="sales-return" className="mt-0 outline-none">
@@ -136,6 +157,17 @@ export default function StockOverviewPage() {
       <TabsContent value="rejected" className="mt-0 outline-none">
         <RejectedListing warehouseId={warehouseId} onFiltersApplied={refreshSummary} />
       </TabsContent>
+
+      <StockAdjustmentDialog
+        open={adjustmentOpen}
+        warehouseId={selectedWarehouse || undefined}
+        warehouseOptions={warehouseOptions}
+        onClose={() => setAdjustmentOpen(false)}
+        onSuccess={() => {
+          refreshSummary();
+          setInventoryListNonce((n) => n + 1);
+        }}
+      />
     </ListingContainer>
   );
 }

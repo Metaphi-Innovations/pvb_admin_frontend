@@ -25,7 +25,7 @@ export function parsePendingGrnViewId(id: string): string | null {
   return UUID_RE.test(grnId) ? grnId : null;
 }
 
-export type PurchaseInvoiceBackendType = "PURCHASE" | "DIRECT_PURCHASE";
+export type PurchaseInvoiceBackendType = "PURCHASE" | "DIRECT_PURCHASE" | "STOCK_TRANSFER";
 export type PurchaseInvoiceBackendStatus = "POSTED" | "CANCELLED" | "REVERSED" | "PENDING";
 
 export type PiNumberParams = {
@@ -191,7 +191,7 @@ export type PurchaseInvoiceListDto = {
   outstanding_amount?: string | number;
   attachment_urls?: Array<string | { file_url?: string | null; file_name?: string | null }> | null;
   warehouse_id: string;
-  supplier_id: string;
+  supplier_id: string | null;
   grn_id?: string | null;
   grn_number?: string | null;
   is_pending_grn?: boolean;
@@ -199,6 +199,8 @@ export type PurchaseInvoiceListDto = {
   narration?: string | null;
   remarks?: string | null;
   cancellation_reason?: string | null;
+  source_sales_invoice_id?: string | null;
+  stock_transfer_id?: string | null;
   supplier?: {
     supplier_id: string;
     supplier_code?: string | null;
@@ -350,6 +352,11 @@ export type PurchaseInvoiceListRow = {
   voucherNumber: string;
   isPendingGrn?: boolean;
   grnId?: string | null;
+  sourceSalesInvoiceId?: string;
+  stockTransferId?: string;
+  stockTransferNo?: string;
+  sourceWarehouseName?: string;
+  sourceWarehouseGstin?: string;
 };
 
 function asString(value: unknown): string {
@@ -491,12 +498,19 @@ function resolvePurchaseNatureLabel(
   sourceType: PurchaseSourceType,
   purchaseNature: PurchaseNature | null,
 ): string {
+  if (sourceType === "stock_transfer") return "Stock Transfer";
   if (sourceType === "from_grn") return "Inventory";
   if (purchaseNature === "expense") return "Expense";
   if (purchaseNature === "fixed_asset") return "Fixed Asset";
   if (purchaseNature === "service") return "Service";
   if (purchaseNature === "other_non_stock") return "Capital Goods";
   return "—";
+}
+
+function stockTransferPartyLabel(snapshot: Record<string, unknown> | null | undefined): string {
+  const fromName = snapshotStr(snapshot, "from_warehouse_name");
+  if (fromName) return `Internal Transfer — ${fromName}`;
+  return "Internal Transfer";
 }
 
 function mapAttachment(
@@ -583,7 +597,9 @@ function multipartFyHeaders(financialYearId: string): Record<string, string | fa
 export function mapInvoiceTypeToSource(
   type: PurchaseInvoiceBackendType | string | undefined,
 ): PurchaseSourceType {
-  return type === "DIRECT_PURCHASE" ? "direct_purchase" : "from_grn";
+  if (type === "DIRECT_PURCHASE") return "direct_purchase";
+  if (type === "STOCK_TRANSFER") return "stock_transfer";
+  return "from_grn";
 }
 
 export function sourceTypeToInvoiceType(
@@ -591,6 +607,7 @@ export function sourceTypeToInvoiceType(
 ): PurchaseInvoiceBackendType | undefined {
   if (source === "from_grn") return "PURCHASE";
   if (source === "direct_purchase") return "DIRECT_PURCHASE";
+  if (source === "stock_transfer") return "STOCK_TRANSFER";
   return undefined;
 }
 
@@ -604,19 +621,21 @@ export function mapPurchaseInvoiceListDto(
   const outstandingAmount = asNumber(dto.outstanding_amount);
   const amountPaid = asNumber(dto.amount_paid);
   const purchaseNature = sourceType === "direct_purchase" ? "expense" : null;
+  const snapshot = (dto.supplier_snapshot || null) as Record<string, unknown> | null;
   return {
     id: dto.purchase_invoice_id,
     invoiceNo: dto.purchase_invoice_number,
     invoiceDate: asDateOnly(dto.purchase_invoice_date),
-    vendorInvoiceNo: asString(dto.supplier_invoice_number),
+    vendorInvoiceNo:
+      sourceType === "stock_transfer"
+        ? snapshotStr(snapshot, "source_invoice_number") || asString(dto.supplier_invoice_number)
+        : asString(dto.supplier_invoice_number),
     vendorName:
-      dto.supplier?.supplier_name ||
-      snapshotStr(
-        (dto as { supplier_snapshot?: Record<string, unknown> }).supplier_snapshot,
-        "supplier_name",
-        "name",
-      ) ||
-      "—",
+      sourceType === "stock_transfer"
+        ? stockTransferPartyLabel(snapshot)
+        : dto.supplier?.supplier_name ||
+          snapshotStr(snapshot, "supplier_name", "name") ||
+          "—",
     warehouseName: dto.warehouse?.warehouse_name || "—",
     sourceType,
     invoiceType: dto.invoice_type,
@@ -645,6 +664,15 @@ export function mapPurchaseInvoiceListDto(
     voucherNumber: "",
     isPendingGrn,
     grnId: dto.grn_id ?? null,
+    sourceSalesInvoiceId:
+      dto.source_sales_invoice_id ||
+      snapshotStr(snapshot, "source_sales_invoice_id") ||
+      undefined,
+    stockTransferId:
+      dto.stock_transfer_id || snapshotStr(snapshot, "stock_transfer_id") || undefined,
+    stockTransferNo: snapshotStr(snapshot, "stock_transfer_no") || undefined,
+    sourceWarehouseName: snapshotStr(snapshot, "from_warehouse_name") || undefined,
+    sourceWarehouseGstin: snapshotStr(snapshot, "from_gstin") || undefined,
   };
 }
 
@@ -695,14 +723,13 @@ export function mapPurchaseInvoiceDetailToRecord(
   const gstAmount = asNumber(dto.gst_amount);
   const grandTotal = asNumber(dto.invoice_amount);
   const amountPaid = asNumber(dto.amount_paid);
+  const snapshot = (dto.supplier_snapshot || null) as Record<string, unknown> | null;
   const vendorName =
-    dto.supplier?.supplier_name ||
-    snapshotStr(
-      (dto as { supplier_snapshot?: Record<string, unknown> }).supplier_snapshot,
-      "supplier_name",
-      "name",
-    ) ||
-    "—";
+    sourceType === "stock_transfer"
+      ? stockTransferPartyLabel(snapshot)
+      : dto.supplier?.supplier_name ||
+        snapshotStr(snapshot, "supplier_name", "name") ||
+        "—";
 
   const lineItems: PurchaseInvoiceLine[] = (dto.items || []).map((raw, index) => {
     const item = raw as Record<string, unknown>;
@@ -765,15 +792,27 @@ export function mapPurchaseInvoiceDetailToRecord(
     id: 0,
     invoiceNo: dto.purchase_invoice_number,
     invoiceDate: asDateOnly(dto.purchase_invoice_date),
-    vendorInvoiceNo: asString(dto.supplier_invoice_number),
+    vendorInvoiceNo:
+      sourceType === "stock_transfer"
+        ? snapshotStr(snapshot, "source_invoice_number") || asString(dto.supplier_invoice_number)
+        : asString(dto.supplier_invoice_number),
     vendorId: 0,
     vendorName,
-    vendorGst: snapshotStr(
-      (dto as { supplier_snapshot?: Record<string, unknown> }).supplier_snapshot,
-      "gstin_number",
-      "gstin",
-      "gst_number",
-    ),
+    vendorGst:
+      sourceType === "stock_transfer"
+        ? snapshotStr(snapshot, "from_gstin")
+        : snapshotStr(snapshot, "gstin_number", "gstin", "gst_number"),
+    sourceSalesInvoiceId:
+      dto.source_sales_invoice_id || snapshotStr(snapshot, "source_sales_invoice_id") || null,
+    sourceSalesInvoiceNo: snapshotStr(snapshot, "source_invoice_number") || undefined,
+    stockTransferId: dto.stock_transfer_id || snapshotStr(snapshot, "stock_transfer_id") || null,
+    stockTransferNo: snapshotStr(snapshot, "stock_transfer_no") || undefined,
+    sourceWarehouseName: snapshotStr(snapshot, "from_warehouse_name") || undefined,
+    sourceWarehouseGstin: snapshotStr(snapshot, "from_gstin") || undefined,
+    destinationWarehouseGstin:
+      snapshotStr(dto.warehouse_gst_snapshot, "gst_number", "gstin") ||
+      asString(dto.warehouse?.gst_number) ||
+      undefined,
     poId: null,
     poNumber: dto.purchase_order?.po_no || "",
     poDate: "",

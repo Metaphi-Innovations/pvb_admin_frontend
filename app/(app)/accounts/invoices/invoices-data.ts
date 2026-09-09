@@ -259,6 +259,12 @@ export interface InvoiceRecord {
 	warehouse?: string;
 	/** API warehouse UUID for bank-account resolution */
 	warehouseUuid?: string;
+	/** Stock Transfer Tax Invoice — source warehouse GSTIN */
+	sourceWarehouseGstin?: string;
+	/** Stock Transfer Tax Invoice — destination warehouse GSTIN */
+	destinationWarehouseGstin?: string;
+	destinationWarehouseName?: string;
+	stockTransferId?: string;
 	/** Bank account for payment instructions / print */
 	bankAccountId?: number | null;
 	paymentTerms?: string;
