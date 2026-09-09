@@ -42,13 +42,16 @@ function CoaLedgerDetailTableBody({
   footer,
   emptyLabel,
   onVoucherClick,
+  showWarehouseColumns = false,
 }: {
   rows: CoaLedgerDetailRow[];
   footer?: CoaLedgerDetailFooter;
   emptyLabel: string;
   onVoucherClick?: (row: CoaLedgerDetailRow) => void;
+  showWarehouseColumns?: boolean;
 }) {
   const visible = useAccountsFilteredRows(rows);
+  const colSpan = showWarehouseColumns ? 11 : 9;
 
   if (rows.length === 0) {
     return (
@@ -61,13 +64,19 @@ function CoaLedgerDetailTableBody({
   return (
     <div className="flex flex-col flex-1 min-h-0">
       <AccountsTableScroll>
-        <AccountsTable minWidth={1100}>
+        <AccountsTable minWidth={showWarehouseColumns ? 1400 : 1100}>
           <AccountsTableHead>
             <AccountsTableHeadRow>
               <SortTh label="Date" colKey="date" filterType="date" />
               <SortTh label="Voucher Type" colKey="voucherType" />
               <SortTh label="Voucher No." colKey="voucherNo" />
               <SortTh label="Particulars" colKey="particulars" />
+              {showWarehouseColumns ? (
+                <>
+                  <SortTh label="Warehouse" colKey="warehouseName" />
+                  <SortTh label="Transfer" colKey="transferRoute" />
+                </>
+              ) : null}
               <SortTh label="Debit" colKey="debit" filterType="amount" align="right" />
               <SortTh label="Credit" colKey="credit" filterType="amount" align="right" />
               <SortTh label="Balance" colKey="runningBalance" filterType="amount" align="right" />
@@ -78,7 +87,7 @@ function CoaLedgerDetailTableBody({
           <AccountsTableBody>
             {visible.length === 0 ? (
               <AccountsTableRow>
-                <AccountsTableCell colSpan={9} className="accounts-table-empty">
+                <AccountsTableCell colSpan={colSpan} className="accounts-table-empty">
                   No records match the column filters.
                 </AccountsTableCell>
               </AccountsTableRow>
@@ -119,6 +128,22 @@ function CoaLedgerDetailTableBody({
                     <AccountsTableCell className="max-w-[200px] truncate" title={particularsLabel(r)}>
                       {particularsLabel(r)}
                     </AccountsTableCell>
+                    {showWarehouseColumns ? (
+                      <>
+                        <AccountsTableCell
+                          className="max-w-[160px] truncate whitespace-nowrap"
+                          title={r.warehouseName || undefined}
+                        >
+                          {r.warehouseName || "—"}
+                        </AccountsTableCell>
+                        <AccountsTableCell
+                          className="max-w-[220px] truncate text-muted-foreground"
+                          title={r.transferRoute || undefined}
+                        >
+                          {r.transferRoute || "—"}
+                        </AccountsTableCell>
+                      </>
+                    ) : null}
                     <MoneyCell amount={r.debit} dashIfZero className="accounts-table-td" />
                     <MoneyCell amount={r.credit} dashIfZero className="accounts-table-td" />
                     <AccountsTableCell align="right" className="tabular-nums font-medium whitespace-nowrap">
@@ -177,11 +202,14 @@ export function CoaLedgerDetailTable({
   footer,
   emptyLabel = "No transactions found for this ledger.",
   onVoucherClick,
+  showWarehouseColumns = false,
 }: {
   rows: CoaLedgerDetailRow[];
   footer?: CoaLedgerDetailFooter;
   emptyLabel?: string;
   onVoucherClick?: (row: CoaLedgerDetailRow) => void;
+  /** Show Warehouse + Transfer (from → to) columns — used by Stock in Hand product drill-down. */
+  showWarehouseColumns?: boolean;
 }) {
   const getCellValue = useCallback((row: CoaLedgerDetailRow, key: string) => {
     switch (key) {
@@ -211,6 +239,12 @@ export function CoaLedgerDetailTable({
         voucherType: { type: "text" },
         voucherNo: { type: "text" },
         particulars: { type: "text" },
+        ...(showWarehouseColumns
+          ? {
+              warehouseName: { type: "text" as const },
+              transferRoute: { type: "text" as const },
+            }
+          : {}),
         debit: { type: "amount" },
         credit: { type: "amount" },
         runningBalance: { type: "amount" },
@@ -225,6 +259,7 @@ export function CoaLedgerDetailTable({
         footer={footer}
         emptyLabel={emptyLabel}
         onVoucherClick={onVoucherClick}
+        showWarehouseColumns={showWarehouseColumns}
       />
     </AccountsColumnFilterProvider>
   );
