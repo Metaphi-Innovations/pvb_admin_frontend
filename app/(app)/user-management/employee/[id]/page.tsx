@@ -717,7 +717,6 @@ export default function EmployeeDetailPage() {
               geoRegion: employee.geoRegion,
               geoArea: employee.geoArea,
               territory: employee.territory,
-              geoTown: employee.geoTown || employee.geoLocality,
             },
           ]
         : [];
@@ -821,11 +820,6 @@ export default function EmployeeDetailPage() {
                     { key: "region", header: "Region", render: (r) => r.geoRegion || "—" },
                     { key: "area", header: "Area", render: (r) => r.geoArea || "—" },
                     { key: "territory", header: "Territory", render: (r) => r.territory || "—" },
-                    {
-                      key: "town",
-                      header: "Town",
-                      render: (r) => r.geoTown || r.geoLocality || "—",
-                    },
                   ]}
                   rows={geoRows}
                 />
