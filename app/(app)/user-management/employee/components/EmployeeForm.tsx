@@ -12,9 +12,9 @@ import {
   AlertCircle, ChevronsUpDown, Check, ArrowLeft, Save, MapPin,
   Info, ChevronDown, ChevronUp, Plus, Trash2, GripVertical,
   Monitor, Smartphone,
-  User, Briefcase, FileText,
+  User, Briefcase, Shield, FileText,
 } from "lucide-react";
-import { loadGeoNodes, type GeoNode, type GeoLevel } from "@/app/(app)/masters/geography/geo-data";
+import { loadGeoNodes, type GeoNode } from "@/app/(app)/masters/geography/geo-data";
 import {
   type Employee, type RoleType, type SalesType, type UserPermissions,
   type WebAction, type MobileAction, type PermModule, type MobileGroupDef,
@@ -29,7 +29,7 @@ import {
   validateCircularReporting, todayStr, loadEmployees, nextEmployeeId,
   applyEmployeeStatusChange,
 } from "../employee-data";
-import { geoFieldsForRole } from "../user-api-data";
+import { geoFieldsForRole, type GeographyLookupItem } from "../user-api-data";
 import { type EmployeeDocument } from "../employee-documents";
 import { EmployeeDocumentsSection } from "./EmployeeDocumentsSection";
 import { EmployeeListingStatusCell } from "./EmployeeListingStatusCell";
@@ -73,6 +73,7 @@ interface EmployeeFormProps {
   onRoleIdChange?: (roleId: string | null) => void;
   onValidationFail?: (errors: Record<string, string>) => void;
   isSubmitting?: boolean;
+  businessGeography?: GeographyLookupItem[];
 }
 
 type EmployeeFormState = Partial<Employee> & {
@@ -246,7 +247,7 @@ function SectionHead({ label, sub, required }: { label: string; sub?: string; re
   );
 }
 
-type FormTabId = "personal" | "employment" | "documents";
+type FormTabId = "personal" | "employment" | "permissions" | "documents";
 
 const FORM_SECTIONS: Record<
   FormTabId,
@@ -262,6 +263,10 @@ const FORM_SECTIONS: Record<
   employment: {
     label: "Employment Details",
     icon: Briefcase,
+  },
+  permissions: {
+    label: "Permissions",
+    icon: Shield,
   },
   documents: {
     label: "Documents",
@@ -308,37 +313,25 @@ interface ApprovalLevel { uid: string; empId: number | string | null; name: stri
 interface GeoMappingRow {
   geoZone: string;
   geoRegion: string;
-  geoState: string;
   geoArea: string;
   territory: string;
-  geoDistrict: string;
-  geoCity: string;
-  geoTown: string;
 }
 
 function emptyGeoMapping(): GeoMappingRow {
   return {
     geoZone: "",
     geoRegion: "",
-    geoState: "",
     geoArea: "",
     territory: "",
-    geoDistrict: "",
-    geoCity: "",
-    geoTown: "",
   };
 }
 
-function toGeoMappingRow(mapping?: Partial<GeoMappingRow> & { geoLocality?: string } | null): GeoMappingRow {
+function toGeoMappingRow(mapping?: Partial<GeoMappingRow> | null): GeoMappingRow {
   return {
     geoZone: mapping?.geoZone || "",
     geoRegion: mapping?.geoRegion || "",
-    geoState: mapping?.geoState || "",
     geoArea: mapping?.geoArea || "",
     territory: mapping?.territory || "",
-    geoDistrict: mapping?.geoDistrict || "",
-    geoCity: mapping?.geoCity || "",
-    geoTown: mapping?.geoTown || mapping?.geoLocality || "",
   };
 }
 
@@ -359,8 +352,15 @@ function AC({ label, value, onChange, options, placeholder, required, error, dis
 }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
-  const filtered = q ? options.filter(o => o.label.toLowerCase().includes(q.toLowerCase())) : options;
-  const selected = options.find(o => o.value === value);
+  const query = q.trim().toLowerCase();
+  const filtered = query
+    ? options.filter(
+        (o) =>
+          o.label.toLowerCase().includes(query) ||
+          (o.sub && o.sub.toLowerCase().includes(query)),
+      )
+    : options;
+  const selected = options.find((o) => String(o.value) === String(value));
   return (
     <div className="space-y-1">
       <Label className="text-xs font-medium">
@@ -790,53 +790,10 @@ function PermissionsTab({
     setShowConfirmModal(false);
   };
 
-  const templateAccessType = useMemo(() => {
-    if (!role) return "web";
-    const allRolesMaster = loadRoles();
-    const templatesList = loadPermissionTemplates();
-    const templateId = getRoleTemplateId(role, allRolesMaster);
-    if (templateId && templatesList[templateId]) {
-      return templatesList[templateId].accessType;
-    }
-    return "web";
-  }, [role]);
-
-  const visibleTabs = useMemo(() => {
-    if (roleType === "Field User") return [["mobile", "Mobile App"]] as const;
-    if (roleType === "Admin User") return [["web", "Web Portal"]] as const;
-    return [
-      ["web", "Web Portal"],
-      ["mobile", "Mobile App"],
-    ] as const;
-  }, [roleType]);
-
-  useEffect(() => {
-    if (roleType === "Field User") setSection("mobile");
-    else if (roleType === "Admin User") setSection("web");
-  }, [roleType]);
-
-  useEffect(() => {
-    if (visibleTabs.length === 1 && section !== visibleTabs[0][0]) {
-      setSection(visibleTabs[0][0]);
-    }
-  }, [visibleTabs, section]);
-
-  // Set default section based on template accessType on load/role change
-  useEffect(() => {
-    if (role) {
-      const allRolesMaster = loadRoles();
-      const templates = loadPermissionTemplates();
-      const templateId = getRoleTemplateId(role, allRolesMaster);
-      if (templateId && templates[templateId]) {
-        const template = templates[templateId];
-        if (template.accessType === "mobile") {
-          setSection("mobile");
-        } else if (template.accessType === "web") {
-          setSection("web");
-        }
-      }
-    }
-  }, [role]);
+  const visibleTabs = [
+    ["web", "Web Portal"],
+    ["mobile", "Mobile App"],
+  ] as const;
 
   const toggleMod = (id: string) => setOpenMods((s) => {
     const next = new Set(s);
@@ -1270,16 +1227,6 @@ function PermissionsTab({
 
 // -- Geo helpers --------------------------------------------------------------
 
-function isDescendantOf(node: GeoNode, ancestorLevel: GeoLevel, ancestorName: string, nodes: GeoNode[]): boolean {
-  let cur: GeoNode | undefined = node;
-  while (cur) {
-    if (cur.level === ancestorLevel && cur.name === ancestorName) return true;
-    if (cur.parentId === null) break;
-    cur = nodes.find(n => n.id === cur!.parentId);
-  }
-  return false;
-}
-
 // ── Main Form ─────────────────────────────────────────────────────────────────
 
 export default function EmployeeForm({
@@ -1298,6 +1245,7 @@ export default function EmployeeForm({
   onRoleIdChange,
   onValidationFail,
   isSubmitting,
+  businessGeography = [],
 }: EmployeeFormProps) {
   const allEmployees = loadEmployees();
   const isApiMode = Boolean(onRoleIdChange);
@@ -1308,18 +1256,13 @@ export default function EmployeeForm({
     if (employee?.geoMappings?.length) {
       return employee.geoMappings.map((mapping) => toGeoMappingRow(mapping));
     }
-    if (employee?.geoZone || employee?.geoRegion || employee?.geoState || employee?.geoArea || employee?.territory || employee?.geoTown || employee?.geoLocality) {
+    if (employee?.geoZone || employee?.geoRegion || employee?.geoArea || employee?.territory) {
       return [
         toGeoMappingRow({
           geoZone: employee.geoZone,
           geoRegion: employee.geoRegion,
-          geoState: employee.geoState,
           geoArea: employee.geoArea,
           territory: employee.territory,
-          geoDistrict: employee.geoDistrict,
-          geoCity: employee.geoCity,
-          geoTown: employee.geoTown,
-          geoLocality: employee.geoLocality,
         }),
       ];
     }
@@ -1353,7 +1296,7 @@ export default function EmployeeForm({
     roleId: null, role: "",
     reportingManagerId: null,
     status: "draft", joiningDate: todayStr(),
-    geoZone: "", geoRegion: "", geoState: "", geoArea: "", territory: "", geoDistrict: "", geoCity: "", geoTown: "",
+    geoZone: "", geoRegion: "", geoArea: "", territory: "",
     approvalLevel1Id: null, approvalLevel1Name: "", approvalLevel1Role: "",
     approvalLevel2Id: null, approvalLevel2Name: "", approvalLevel2Role: "",
     approvalLevel3Id: null, approvalLevel3Name: "", approvalLevel3Role: "",
@@ -1424,8 +1367,7 @@ export default function EmployeeForm({
       if (key === "roleType") {
         upd.salesType = undefined;
         upd.roleId = null; upd.role = "";
-        upd.geoZone = ""; upd.geoRegion = ""; upd.geoState = ""; upd.geoArea = "";
-        upd.territory = ""; upd.geoDistrict = ""; upd.geoCity = ""; upd.geoTown = "";
+        upd.geoZone = ""; upd.geoRegion = ""; upd.geoArea = ""; upd.territory = "";
         upd.approvalLevel1Id = null; upd.approvalLevel1Name = ""; upd.approvalLevel1Role = "";
         upd.approvalLevel2Id = null; upd.approvalLevel2Name = ""; upd.approvalLevel2Role = "";
         upd.approvalLevel3Id = null; upd.approvalLevel3Name = ""; upd.approvalLevel3Role = "";
@@ -1438,8 +1380,7 @@ export default function EmployeeForm({
       }
       if (key === "salesType") {
         upd.roleId = null; upd.role = "";
-        upd.geoZone = ""; upd.geoRegion = ""; upd.geoState = ""; upd.geoArea = "";
-        upd.territory = ""; upd.geoDistrict = ""; upd.geoCity = ""; upd.geoTown = "";
+        upd.geoZone = ""; upd.geoRegion = ""; upd.geoArea = ""; upd.territory = "";
         setGeoMappings([emptyGeoMapping()]);
         setErrors(prev => Object.fromEntries(Object.entries(prev).filter(([errorKey]) => !errorKey.startsWith("geoMapping_"))));
         if (isApiMode) onRoleIdChange?.(null);
@@ -1447,27 +1388,13 @@ export default function EmployeeForm({
       }
       // Cascade geo resets
       if (key === "geoZone") {
-        upd.geoRegion = ""; upd.geoState = ""; upd.geoArea = ""; upd.territory = "";
-        upd.geoDistrict = ""; upd.geoCity = ""; upd.geoTown = "";
+        upd.geoRegion = ""; upd.geoArea = ""; upd.territory = "";
       }
       if (key === "geoRegion") {
-        upd.geoState = ""; upd.geoArea = ""; upd.territory = "";
-        upd.geoDistrict = ""; upd.geoCity = ""; upd.geoTown = "";
-      }
-      if (key === "geoState") {
-        upd.geoArea = ""; upd.territory = ""; upd.geoDistrict = ""; upd.geoCity = ""; upd.geoTown = "";
+        upd.geoArea = ""; upd.territory = "";
       }
       if (key === "geoArea") {
-        upd.territory = ""; upd.geoDistrict = ""; upd.geoCity = ""; upd.geoTown = "";
-      }
-      if (key === "territory") {
-        upd.geoDistrict = ""; upd.geoCity = ""; upd.geoTown = "";
-      }
-      if (key === "geoDistrict") {
-        upd.geoCity = ""; upd.geoTown = "";
-      }
-      if (key === "geoCity") {
-        upd.geoTown = "";
+        upd.territory = "";
       }
       if (key === "firstName" || key === "lastName")
         upd.fullName = `${key === "firstName" ? value : prev.firstName || ""} ${key === "lastName" ? value : prev.lastName || ""}`.trim();
@@ -1516,7 +1443,7 @@ export default function EmployeeForm({
       ...prev,
       roleId: targetRoleId,
       role: r.name || "",
-      geoZone: "", geoRegion: "", geoState: "", geoArea: "", territory: "", geoDistrict: "", geoCity: "", geoTown: "",
+      geoZone: "", geoRegion: "", geoArea: "", territory: "",
       approvalLevel1Id: null, approvalLevel1Name: "", approvalLevel1Role: "",
       approvalLevel2Id: null, approvalLevel2Name: "", approvalLevel2Role: "",
       approvalLevel3Id: null, approvalLevel3Name: "", approvalLevel3Role: "",
@@ -1563,12 +1490,8 @@ export default function EmployeeForm({
       ...prev,
       geoZone: primary.geoZone,
       geoRegion: primary.geoRegion,
-      geoState: primary.geoState,
       geoArea: primary.geoArea,
       territory: primary.territory,
-      geoDistrict: primary.geoDistrict,
-      geoCity: primary.geoCity,
-      geoTown: primary.geoTown,
     }));
   };
 
@@ -1592,67 +1515,31 @@ export default function EmployeeForm({
   // Reporting manager options — all users from API when integrated
   const managerOptions = useMemo(() => {
     if (reportingManagerOptions !== undefined) return reportingManagerOptions;
-    const aboveRoles = form.role ? (ROLES_ABOVE[form.role] || []) : [];
-    const directRole = aboveRoles[0] || "";
-    const geoMatch = (e: Employee) =>
-      (form.geoZone && e.geoZone && e.geoZone === form.geoZone) ||
-      (form.geoRegion && e.geoRegion && e.geoRegion === form.geoRegion);
-
-    const priority = (e: Employee): number => {
-      const isGeo = geoMatch(e);
-      if (directRole && e.role === directRole && isGeo) return 0;  // direct superior + same geo
-      if (directRole && e.role === directRole) return 1;            // direct superior
-      if (aboveRoles.includes(e.role) && isGeo) return 2;          // any higher role + same geo
-      if (aboveRoles.includes(e.role)) return 3;                    // any higher role
-      return 4;                                                      // everyone else
-    };
 
     return allEmployees
       .filter(e => e.status === "active" && e.id !== employee?.id)
-      .sort((a, b) => {
-        const diff = priority(a) - priority(b);
-        return diff !== 0 ? diff : a.fullName.localeCompare(b.fullName);
-      })
+      .sort((a, b) => a.fullName.localeCompare(b.fullName))
       .map(e => ({
         label: e.fullName,
         value: e.id,
-        sub: `${e.employeeId} · ${e.role}${e.department ? ` · ${e.department}` : ""}${e.geoZone ? ` · ${e.geoZone}` : e.geoRegion ? ` · ${e.geoRegion}` : ""}`,
+        sub: `${e.employeeId} · ${e.role}${e.department ? ` · ${e.department}` : ""}`,
       }));
-  }, [employee?.id, form.role, form.geoZone, form.geoRegion, reportingManagerOptions]);
+  }, [employee?.id, allEmployees, reportingManagerOptions]);
 
   // ── Flexible approval options from API when integrated ──
   const allApprovalOptions: ACOption[] = useMemo(() => {
-    if (approvalUserOptions !== undefined) return approvalUserOptions;
-
-    const aboveRoles = ROLES_ABOVE[form.role || ""] || [];
-    const directRole = aboveRoles[0] || "";
-    const geoMatch = (e: Employee) =>
-      (form.geoZone && e.geoZone && e.geoZone === form.geoZone) ||
-      (form.geoRegion && e.geoRegion && e.geoRegion === form.geoRegion);
-
-    const priority = (e: Employee): number => {
-      const isDirect = e.role === directRole;
-      const isHigher = aboveRoles.includes(e.role);
-      const isGeo = geoMatch(e);
-      if (isDirect && isGeo) return 0;
-      if (isDirect) return 1;
-      if (isHigher && isGeo) return 2;
-      if (isHigher) return 3;
-      return 4;
-    };
+    if (approvalUserOptions && approvalUserOptions.length > 0) return approvalUserOptions;
+    if (managerOptions && managerOptions.length > 0) return managerOptions;
 
     return allEmployees
       .filter(e => e.status === "active" && e.id !== employee?.id)
-      .sort((a, b) => {
-        const diff = priority(a) - priority(b);
-        return diff !== 0 ? diff : a.fullName.localeCompare(b.fullName);
-      })
+      .sort((a, b) => a.fullName.localeCompare(b.fullName))
       .map(e => ({
         label: e.fullName,
         value: e.id,
-        sub: `${e.employeeId} · ${e.role}${e.department ? ` · ${e.department}` : ""}${e.geoZone ? ` · ${e.geoZone}` : e.geoRegion ? ` · ${e.geoRegion}` : ""}`,
+        sub: `${e.employeeId} · ${e.role}${e.department ? ` · ${e.department}` : ""}`,
       }));
-  }, [employee?.id, form.role, form.geoZone, form.geoRegion, approvalUserOptions]);
+  }, [approvalUserOptions, managerOptions, allEmployees, employee?.id]);
 
   const geoFields: string[] = useMemo(() => {
     const selectedApiRole = apiRoles?.find((r) => String(r.id) === String(form.roleId));
@@ -1664,54 +1551,28 @@ export default function EmployeeForm({
   }, [apiRoles, form.roleId, form.roleType, form.role]);
 
   const getGeoOptionsMap = (mapping: GeoMappingRow): Record<string, ACOption[]> => {
-    const zoneOptions = geoNodes
-      .filter(n => n.level === "Zone")
-      .map(n => ({ label: n.name, value: n.name }));
+    const zones = businessGeography.filter((item) => item.level === "Zone");
+    const selectedZone = zones.find((item) => item.name === mapping.geoZone);
+    const regions = businessGeography.filter(
+      (item) => item.level === "Region" && (!selectedZone || item.parent_id === selectedZone.geography_id),
+    );
+    const selectedRegion = regions.find((item) => item.name === mapping.geoRegion);
+    const areas = businessGeography.filter(
+      (item) => item.level === "Area" && (!selectedRegion || item.parent_id === selectedRegion.geography_id),
+    );
+    const selectedArea = areas.find((item) => item.name === mapping.geoArea);
+    const territories = businessGeography.filter(
+      (item) => item.level === "Territory" && (!selectedArea || item.parent_id === selectedArea.geography_id),
+    );
 
-    const regionOptions = geoNodes
-      .filter(n => n.level === "Region")
-      .filter(n => !mapping.geoZone || isDescendantOf(n, "Zone", mapping.geoZone, geoNodes))
-      .map(n => ({ label: n.name, value: n.name }));
-
-    const stateOptions = geoNodes
-      .filter(n => n.level === "State")
-      .filter(n => !mapping.geoRegion || isDescendantOf(n, "Region", mapping.geoRegion, geoNodes))
-      .map(n => ({ label: n.name, value: n.name }));
-
-    const areaOptions = geoNodes
-      .filter(n => n.level === "Area")
-      .filter(n => !mapping.geoState || isDescendantOf(n, "State", mapping.geoState, geoNodes))
-      .map(n => ({ label: n.name, value: n.name }));
-
-    const territoryOptions = geoNodes
-      .filter(n => n.level === "Territory")
-      .filter(n => !mapping.geoArea || isDescendantOf(n, "Area", mapping.geoArea, geoNodes))
-      .map(n => ({ label: n.name, value: n.name }));
-
-    const districtOptions = geoNodes
-      .filter(n => n.level === "District")
-      .filter(n => !mapping.territory || isDescendantOf(n, "Territory", mapping.territory, geoNodes))
-      .map(n => ({ label: n.name, value: n.name }));
-
-    const cityOptions = geoNodes
-      .filter(n => n.level === "City")
-      .filter(n => !mapping.geoDistrict || isDescendantOf(n, "District", mapping.geoDistrict, geoNodes))
-      .map(n => ({ label: n.name, value: n.name }));
-
-    const townOptions = geoNodes
-      .filter(n => n.level === "Town")
-      .filter(n => !mapping.geoCity || isDescendantOf(n, "City", mapping.geoCity, geoNodes))
-      .map(n => ({ label: n.name, value: n.name }));
+    const toOptions = (items: GeographyLookupItem[]) =>
+      items.map((item) => ({ label: item.name, value: item.name }));
 
     return {
-      Zone: zoneOptions,
-      Region: regionOptions,
-      State: stateOptions,
-      Area: areaOptions,
-      Territory: territoryOptions,
-      District: districtOptions,
-      City: cityOptions,
-      Town: townOptions,
+      Zone: toOptions(zones),
+      Region: toOptions(regions),
+      Area: toOptions(areas),
+      Territory: toOptions(territories),
     };
   };
 
@@ -1732,16 +1593,17 @@ export default function EmployeeForm({
     });
 
   const setApprovalLevelUser = (idx: number, empId: number | string | "") => {
-    const fromApi = approvalUserOptions?.find((o) => String(o.value) === String(empId));
-    const emp = !fromApi ? (empId ? allEmployees.find(e => String(e.id) === String(empId)) : null) : null;
+    const fromOptions = allApprovalOptions?.find((o) => String(o.value) === String(empId));
+    const emp = !fromOptions ? (empId ? allEmployees.find(e => String(e.id) === String(empId)) : null) : null;
     setApprovalLevels(prev => {
       const arr = [...prev];
+      const subParts = (fromOptions?.sub || "").split("·").map(s => s.trim());
       arr[idx] = {
         uid: arr[idx].uid,
         empId: empId || null,
-        name: fromApi?.label || emp?.fullName || "",
-        role: fromApi?.sub?.split("·")[1]?.trim() || emp?.role || "",
-        employeeCode: fromApi?.sub?.split("·")[0]?.trim() || emp?.employeeId || "",
+        name: fromOptions?.label || emp?.fullName || "",
+        role: subParts[1] || emp?.role || "",
+        employeeCode: subParts[0] || emp?.employeeId || "",
       };
       return arr;
     });
@@ -1764,12 +1626,8 @@ export default function EmployeeForm({
   const geoKey: Record<string, keyof GeoMappingRow> = {
     Zone: "geoZone",
     Region: "geoRegion",
-    State: "geoState",
     Area: "geoArea",
     Territory: "territory",
-    District: "geoDistrict",
-    City: "geoCity",
-    Town: "geoTown",
   };
 
   const getGeoMappingErrorKey = (index: number, field: string) => `geoMapping_${index}_${field}`;
@@ -1787,45 +1645,15 @@ export default function EmployeeForm({
 
       if (key === "geoZone") {
         mapping.geoRegion = "";
-        mapping.geoState = "";
         mapping.geoArea = "";
         mapping.territory = "";
-        mapping.geoDistrict = "";
-        mapping.geoCity = "";
-        mapping.geoTown = "";
       }
       if (key === "geoRegion") {
-        mapping.geoState = "";
         mapping.geoArea = "";
         mapping.territory = "";
-        mapping.geoDistrict = "";
-        mapping.geoCity = "";
-        mapping.geoTown = "";
-      }
-      if (key === "geoState") {
-        mapping.geoArea = "";
-        mapping.territory = "";
-        mapping.geoDistrict = "";
-        mapping.geoCity = "";
-        mapping.geoTown = "";
       }
       if (key === "geoArea") {
         mapping.territory = "";
-        mapping.geoDistrict = "";
-        mapping.geoCity = "";
-        mapping.geoTown = "";
-      }
-      if (key === "territory") {
-        mapping.geoDistrict = "";
-        mapping.geoCity = "";
-        mapping.geoTown = "";
-      }
-      if (key === "geoDistrict") {
-        mapping.geoCity = "";
-        mapping.geoTown = "";
-      }
-      if (key === "geoCity") {
-        mapping.geoTown = "";
       }
 
       next[index] = mapping;
@@ -1852,7 +1680,8 @@ export default function EmployeeForm({
 
   // ── Validation ────────────────────────────────────────────────────────────────
   const resolveErrorTab = (key: string): FormTabId => {
-    if (key.startsWith("geoMapping_") || key === "permissions") return "employment";
+    if (key === "permissions") return "permissions";
+    if (key.startsWith("geoMapping_")) return "employment";
     if (
       [
         "departmentId",
@@ -2016,12 +1845,8 @@ export default function EmployeeForm({
       joiningDate: form.joiningDate || now,
       geoZone: geoMappings[0]?.geoZone || "",
       geoRegion: geoMappings[0]?.geoRegion || "",
-      geoState: geoMappings[0]?.geoState || "",
       geoArea: geoMappings[0]?.geoArea || "",
       territory: geoMappings[0]?.territory || "",
-      geoDistrict: geoMappings[0]?.geoDistrict || "",
-      geoCity: geoMappings[0]?.geoCity || "",
-      geoTown: geoMappings[0]?.geoTown || "",
       geoMappings: form.roleType === "Field User" ? geoMappings.map((mapping) => ({ ...mapping })) : [],
       permissions: convertFromSets(activeWebPerms, activeMobilePerms),
       // Approval chain — dynamic levels, save up to 3 for backward compat
@@ -2090,6 +1915,10 @@ export default function EmployeeForm({
           <TabsTrigger value="employment" className={TAB_TRIGGER_CLASS}>
             <Briefcase className="w-4 h-4 shrink-0" />
             Employment Details
+          </TabsTrigger>
+          <TabsTrigger value="permissions" className={TAB_TRIGGER_CLASS}>
+            <Shield className="w-4 h-4 shrink-0" />
+            Permissions
           </TabsTrigger>
           <TabsTrigger value="documents" className={TAB_TRIGGER_CLASS}>
             <FileText className="w-4 h-4 shrink-0" />
@@ -2350,7 +2179,7 @@ export default function EmployeeForm({
                     <AC label="Reporting Manager" value={form.reportingManagerId || ""}
                       onChange={v => set("reportingManagerId", v)}
                       options={managerOptions}
-                      placeholder="Search by name, ID, role… (hierarchy suggested)"
+                      placeholder="Search by name, employee ID, role..."
                       error={errors.reportingManagerId} />
 
                   </div>
@@ -2404,7 +2233,7 @@ export default function EmployeeForm({
                               )}
                             </div>
 
-                            <div className={cn("grid gap-3", geoFields.length <= 3 ? "grid-cols-3" : "grid-cols-5")}>
+                            <div className={cn("grid gap-3", geoFields.length <= 2 ? "grid-cols-2" : geoFields.length === 3 ? "grid-cols-3" : "grid-cols-4")}>
                               {geoFields.map((field) => {
                                 const key = geoKey[field] as keyof GeoMappingRow;
                                 return (
@@ -2427,7 +2256,7 @@ export default function EmployeeForm({
                       <div className="flex items-center justify-between gap-3">
                         <p className="text-[11px] text-muted-foreground flex items-center gap-1">
                           <Info className="flex-shrink-0 w-3 h-3" />
-                          Selections are loaded from Geography Master. Choosing a higher level filters the options below it automatically.
+                          Selections are loaded from Business Geography Master. Choosing a higher level filters the options below it automatically.
                         </p>
                         <Button
                           type="button"
@@ -2600,17 +2429,20 @@ export default function EmployeeForm({
                 )}
               </div>
             )}
+            </div>
+          )}
+        </TabsContent>
 
-            {/* Permissions — visible based on role type */}
-            {form.roleType && form.role && (
-              <div className="pt-4 border-t border-border/60">
+        <TabsContent value="permissions" className="mt-6 outline-none focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0">
+          {/* ══════════════════════════════════════════════════════════════════════
+              TAB 3 — PERMISSIONS
+              ══════════════════════════════════════════════════════════════════════ */}
+          {activeTab === "permissions" && (
+            <div className="space-y-5">
+              <div>
                 <SectionHead
-                  label={form.roleType === "Field User" ? "Mobile App Permissions" : "Web Permissions"}
-                  sub={
-                    form.roleType === "Field User"
-                      ? "Configure mobile app access for this field user."
-                      : "Configure web portal access for this admin user."
-                  }
+                  label="User Permissions"
+                  sub="Configure Web Portal and Mobile App access permissions."
                 />
                 <PermissionsTab
                   activeWebPerms={activeWebPerms}
@@ -2623,7 +2455,6 @@ export default function EmployeeForm({
                   onApplyPermissionTemplate={onApplyPermissionTemplate}
                 />
               </div>
-            )}
             </div>
           )}
         </TabsContent>

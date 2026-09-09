@@ -14,6 +14,10 @@ import {
   type PurchaseReturn,
   type PurchaseReturnItem,
 } from "@/app/(app)/procurement/purchase-returns/purchase-return-data";
+import {
+  applyPurchaseReturnItemPatch,
+  resolveReturnHeaderWarehouse,
+} from "../purchase-return-warehouse";
 import { PReturnLineItemsSection } from "./PReturnLineItemsSection";
 
 const inputCls = "h-8 rounded-lg text-xs";
@@ -52,6 +56,7 @@ export function PurchaseReturnForm({
   errors = {},
   editMode = false,
   linesLoading = false,
+  groupByWarehouse = false,
 }: {
   record: PurchaseReturn;
   onChange: (record: PurchaseReturn) => void;
@@ -60,6 +65,8 @@ export function PurchaseReturnForm({
   /** When true, line items are split into existing return lines + additional eligible GRNs. */
   editMode?: boolean;
   linesLoading?: boolean;
+  /** Create flow: show eligible lines grouped by physical stock warehouse. */
+  groupByWarehouse?: boolean;
 }) {
   const detailsGridCls = "grid grid-cols-4 gap-3";
   const taxSupplyType = record.taxSupplyType ?? "intra";
@@ -71,8 +78,15 @@ export function PurchaseReturnForm({
   };
 
   const setItem = (id: string, itemPatch: Partial<PurchaseReturnItem>) => {
+    const nextItems = applyPurchaseReturnItemPatch(record.items, id, itemPatch);
+    const headerWh = resolveReturnHeaderWarehouse(nextItems, {
+      warehouseId: record.warehouseId,
+      warehouseName: record.warehouseName,
+    });
     patch({
-      items: record.items.map((it) => (it.id === id ? { ...it, ...itemPatch } : it)),
+      items: nextItems,
+      warehouseId: headerWh.warehouseId,
+      warehouseName: headerWh.warehouseName,
     });
   };
 
@@ -118,6 +132,10 @@ export function PurchaseReturnForm({
               <Label className="text-xs font-medium">Supplier Code</Label>
               <ReadOnlyField value={record.supplierCode} mono />
             </div>
+            <div className="space-y-1">
+              <Label className="text-xs font-medium">Return Warehouse</Label>
+              <ReadOnlyField value={record.warehouseName || record.warehouseId} />
+            </div>
             {readOnly && record.packingListNo && (
               <div className="space-y-1">
                 <Label className="text-xs font-medium">Packing List</Label>
@@ -150,6 +168,7 @@ export function PurchaseReturnForm({
           editMode={editMode}
           warehouseName={record.warehouseName}
           loading={linesLoading}
+          groupByWarehouse={groupByWarehouse}
         />
 
         <div className="border-t border-border/60 pt-4">

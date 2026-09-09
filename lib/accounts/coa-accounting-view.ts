@@ -44,6 +44,10 @@ export interface CoaTransactionRow {
   lineOrder?: number;
   viewHref?: string;
   viewLabel?: string;
+  /** Warehouse whose Stock in Hand / inventory line was posted. */
+  warehouseName?: string;
+  /** Stock transfer route (source → destination), when applicable. */
+  transferRoute?: string;
 }
 
 export interface CoaGroupAccountingSummary {

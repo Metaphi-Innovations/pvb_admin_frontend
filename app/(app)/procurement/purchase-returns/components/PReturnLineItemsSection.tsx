@@ -16,6 +16,7 @@ import {
   resolveReturnBaseQtyFromItem,
   type QtyStackParts,
 } from "../purchase-return-utils";
+import { groupReturnItemsByStockWarehouse } from "../purchase-return-warehouse";
 
 const inputCls = "h-8 rounded-lg text-xs";
 
@@ -154,6 +155,7 @@ function RejectionSourceBadge({ source }: { source?: string }) {
 type GrnSummary = {
   grnId: string;
   grnNo: string;
+  warehouseName: string;
   receivedQty: number;
   remainingQty: number;
   currentReturnQty: number;
@@ -163,10 +165,12 @@ type GrnSummary = {
 function buildGrnSummaries(items: PurchaseReturnItem[]): GrnSummary[] {
   const map = new Map<string, GrnSummary>();
   for (const it of items) {
-    const key = it.grnId || it.grnNo || "unknown";
+    const whKey = it.stockWarehouseId || it.stockWarehouseName || "";
+    const key = `${it.grnId || it.grnNo || "unknown"}::${whKey}`;
     const cur = map.get(key) ?? {
       grnId: it.grnId,
       grnNo: it.grnNo || "—",
+      warehouseName: it.stockWarehouseName || "",
       receivedQty: 0,
       remainingQty: 0,
       currentReturnQty: 0,
@@ -176,6 +180,9 @@ function buildGrnSummaries(items: PurchaseReturnItem[]): GrnSummary[] {
     cur.remainingQty += it.balanceRejectedQty || 0;
     cur.currentReturnQty += it.selected ? it.returnQty || 0 : 0;
     cur.batchCount += 1;
+    if (!cur.warehouseName && it.stockWarehouseName) {
+      cur.warehouseName = it.stockWarehouseName;
+    }
     map.set(key, cur);
   }
   return Array.from(map.values());
@@ -493,9 +500,11 @@ function EligibleGrnSummary({
         </thead>
         <tbody>
           {summaries.map((g) => (
-            <tr key={g.grnId || g.grnNo} className="border-b border-border/60 hover:bg-muted/20">
+            <tr key={`${g.grnId || g.grnNo}::${g.warehouseName}`} className="border-b border-border/60 hover:bg-muted/20">
               <td className="px-3 py-2 font-mono text-xs font-semibold text-brand-700">{g.grnNo}</td>
-              <td className="px-3 py-2 text-xs text-foreground">{warehouseName || "—"}</td>
+              <td className="px-3 py-2 text-xs text-foreground">
+                {g.warehouseName || warehouseName || "—"}
+              </td>
               <td className="px-3 py-2 text-right text-xs tabular-nums">{g.receivedQty}</td>
               <td className="px-3 py-2 text-right text-xs tabular-nums font-semibold">{g.remainingQty}</td>
               <td className="px-3 py-2 text-right text-xs tabular-nums text-brand-700">{g.currentReturnQty}</td>
@@ -517,6 +526,7 @@ export function PReturnLineItemsSection({
   editMode = false,
   warehouseName,
   loading = false,
+  groupByWarehouse = false,
 }: {
   items: PurchaseReturnItem[];
   readOnly?: boolean;
@@ -526,6 +536,7 @@ export function PReturnLineItemsSection({
   editMode?: boolean;
   warehouseName?: string;
   loading?: boolean;
+  groupByWarehouse?: boolean;
 }) {
   const existingItems = useMemo(
     () => (editMode ? items.filter((it) => Boolean(it.isExistingOnReturn)) : items),
@@ -534,6 +545,11 @@ export function PReturnLineItemsSection({
   const additionalItems = useMemo(
     () => (editMode ? items.filter((it) => !it.isExistingOnReturn) : []),
     [editMode, items],
+  );
+
+  const warehouseGroups = useMemo(
+    () => (groupByWarehouse && !editMode ? groupReturnItemsByStockWarehouse(items) : []),
+    [groupByWarehouse, editMode, items],
   );
 
   const selectedCount = useMemo(() => items.filter((it) => it.selected).length, [items]);
@@ -556,7 +572,11 @@ export function PReturnLineItemsSection({
         <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
           <SectionHead
             label="Inwarded Batch Items"
-            sub="GRN rates and GST from purchase order. Select batches and enter return quantity."
+            sub={
+              groupByWarehouse && warehouseGroups.length > 1
+                ? "Grouped by warehouse where rejected stock currently sits. Select batches from one warehouse only."
+                : "GRN rates and GST from purchase order. Select batches and enter return quantity."
+            }
           />
           {items.length > 0 && (
             <div className="mb-2.5 flex flex-wrap items-center gap-2 md:mb-0">
@@ -590,14 +610,42 @@ export function PReturnLineItemsSection({
           </p>
         )}
 
-        <ReturnItemsTable
-          items={items}
-          readOnly={readOnly}
-          errors={errors}
-          taxSupplyType={taxSupplyType}
-          onItemChange={onItemChange}
-          loading={loading}
-        />
+        {groupByWarehouse && warehouseGroups.length > 1 ? (
+          <div className="space-y-5">
+            {warehouseGroups.map((group) => (
+              <div key={group.warehouseId}>
+                <div className="mb-2 flex flex-wrap items-center gap-2">
+                  <p className="text-xs font-bold text-foreground">
+                    Warehouse: {group.warehouseName}
+                  </p>
+                  <span className="inline-flex h-5 items-center rounded-full bg-muted px-2 text-[10px] font-semibold text-muted-foreground">
+                    {group.items.length} batch{group.items.length === 1 ? "" : "es"}
+                  </span>
+                  <span className="inline-flex h-5 items-center rounded-full bg-muted px-2 text-[10px] font-semibold text-muted-foreground">
+                    {group.items.reduce((s, it) => s + it.balanceRejectedQty, 0)} balance
+                  </span>
+                </div>
+                <ReturnItemsTable
+                  items={group.items}
+                  readOnly={readOnly}
+                  errors={errors}
+                  taxSupplyType={taxSupplyType}
+                  onItemChange={onItemChange}
+                  loading={loading}
+                />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <ReturnItemsTable
+            items={items}
+            readOnly={readOnly}
+            errors={errors}
+            taxSupplyType={taxSupplyType}
+            onItemChange={onItemChange}
+            loading={loading}
+          />
+        )}
       </div>
     );
   }

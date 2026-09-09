@@ -57,15 +57,10 @@ export interface GeographyLookupItem {
 }
 
 const GEO_LEVEL_FIELDS: Record<string, string[]> = {
-  Country: [],
   Zone: ["Zone"],
   Region: ["Zone", "Region"],
-  State: ["Zone", "Region", "State"],
-  Area: ["Zone", "Region", "State", "Area"],
-  Territory: ["Zone", "Region", "State", "Area", "Territory"],
-  District: ["Zone", "Region", "State", "Area", "Territory", "District"],
-  City: ["Zone", "Region", "State", "Area", "Territory", "District", "City"],
-  Town: ["Zone", "Region", "State", "Area", "Territory", "District", "City", "Town"],
+  Area: ["Zone", "Region", "Area"],
+  Territory: ["Zone", "Region", "Area", "Territory"],
   None: [],
 };
 
@@ -179,12 +174,8 @@ export function detailToEmployee(detail: UserDetailRecord): Employee {
     emergencyState: detail.emergencyState || "",
     geoZone: detail.geoZone || "",
     geoRegion: detail.geoRegion || "",
-    geoState: detail.geoState || "",
     geoArea: detail.geoArea || "",
     territory: detail.territory || "",
-    geoDistrict: detail.geoDistrict || "",
-    geoCity: detail.geoCity || "",
-    geoTown: detail.geoTown || "",
     approvalLevel1Id: l1.id as unknown as number | null,
     approvalLevel1Name: approvalLevels[0]?.name || l1.name,
     approvalLevel1Role: approvalLevels[0]?.role || l1.role,
@@ -210,11 +201,15 @@ function resolveGeoId(
   level: string,
   name: string,
   geography: GeographyLookupItem[],
+  parentId?: string | null,
 ): string | null {
   const trimmed = name.trim();
   if (!trimmed) return null;
   const match = geography.find(
-    (g) => g.level.toLowerCase() === level.toLowerCase() && g.name.toLowerCase() === trimmed.toLowerCase(),
+    (g) =>
+      g.level.toLowerCase() === level.toLowerCase() &&
+      g.name.toLowerCase() === trimmed.toLowerCase() &&
+      (parentId === undefined || (g.parent_id ?? null) === parentId),
   );
   return match?.geography_id || null;
 }
@@ -229,23 +224,20 @@ export function buildGeographyMapping(
   const mapping = employee.geoMappings?.[0] || {
     geoZone: employee.geoZone,
     geoRegion: employee.geoRegion,
-    geoState: employee.geoState,
     geoArea: employee.geoArea,
     territory: employee.territory,
-    geoDistrict: employee.geoDistrict,
-    geoCity: employee.geoCity,
-    geoTown: employee.geoTown,
   };
 
+  const zoneId = resolveGeoId("Zone", mapping.geoZone || "", geography, null);
+  const regionId = resolveGeoId("Region", mapping.geoRegion || "", geography, zoneId ?? undefined);
+  const areaId = resolveGeoId("Area", mapping.geoArea || "", geography, regionId ?? undefined);
+  const territoryId = resolveGeoId("Territory", mapping.territory || "", geography, areaId ?? undefined);
+
   const result: Record<string, string | null> = {
-    zone_id: resolveGeoId("Zone", mapping.geoZone || "", geography),
-    region_id: resolveGeoId("Region", mapping.geoRegion || "", geography),
-    state_id: resolveGeoId("State", mapping.geoState || "", geography),
-    area_id: resolveGeoId("Area", mapping.geoArea || "", geography),
-    territory_id: resolveGeoId("Territory", mapping.territory || "", geography),
-    district_id: resolveGeoId("District", mapping.geoDistrict || "", geography),
-    city_id: resolveGeoId("City", mapping.geoCity || "", geography),
-    town_id: resolveGeoId("Town", mapping.geoTown || "", geography),
+    zone_id: zoneId,
+    region_id: regionId,
+    area_id: areaId,
+    territory_id: territoryId,
   };
 
   if (roleGeoLevel === "None" || roleGeoLevel === "Country") {
@@ -365,7 +357,6 @@ export function approvalUsersToOptions(users: ApprovalUserOption[]) {
     sub: `${user.employeeId} · ${user.roleName}${user.departmentName ? ` · ${user.departmentName}` : ""}`,
   }));
 }
-
 export function usersDropdownToOptions(users: Array<{
   userId: string;
   label: string;
@@ -373,12 +364,22 @@ export function usersDropdownToOptions(users: Array<{
   firstName: string;
   lastName: string;
   employeeId: string;
+  roleName?: string;
+  departmentName?: string;
 }>) {
-  return users.map((user) => ({
-    label: user.label || `${user.firstName} ${user.lastName}`.trim(),
-    value: user.userId,
-    sub: `${user.employeeId} · ${user.username}`,
-  }));
+  return users.map((user) => {
+    const rolePart = user.roleName || user.username;
+    const deptPart = user.departmentName ? ` · ${user.departmentName}` : "";
+    const sub = user.employeeId
+      ? `${user.employeeId} · ${rolePart}${deptPart}`
+      : `${user.username}${deptPart}`;
+
+    return {
+      label: user.label || `${user.firstName} ${user.lastName}`.trim(),
+      value: user.userId,
+      sub,
+    };
+  });
 }
 
 export function templatePermissionsToSets(template: {

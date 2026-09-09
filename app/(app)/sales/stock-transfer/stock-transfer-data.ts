@@ -183,7 +183,8 @@ export function getAvailableBatchRowsForTransfer(
       (r) =>
         warehouseMatchesStockRecord(r.warehouse, sourceWarehouseName) &&
         productMatchesStockRecord(r.product, productName, productCode) &&
-        r.availableQuantity > 0,
+        r.availableQuantity > 0 &&
+        getStockStatus(r.expiryDate, asOn) !== "Expired",
     )
     .map((r) => ({
       productName: r.product,

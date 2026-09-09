@@ -1,24 +1,18 @@
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export type GeoLevel =
-  | "Country"
   | "Zone"
   | "Region"
-  | "State"
   | "Area"
   | "Territory"
-  | "District"
-  | "City"
-  | "Town"
   | "None";
 
 export const GEO_LEVELS: GeoLevel[] = [
-  "Country", "Zone", "Region", "State", "Area", "Territory", "District", "City", "Town", "None",
+  "Zone", "Region", "Area", "Territory", "None",
 ];
 
 export const GEO_LEVEL_ORDER: Record<GeoLevel, number> = {
-  Country: 10, Zone: 9, Region: 8, State: 7, Area: 6, Territory: 5,
-  District: 4, City: 3, Town: 2, None: 0,
+  Zone: 4, Region: 3, Area: 2, Territory: 1, None: 0,
 };
 
 export interface ApprovalStep {
@@ -84,7 +78,7 @@ export const SEED_ROLES: Role[] = [
     departmentId: null,
     department: "—",
     description: "Manages regional sales targets and team performance.",
-    geoLevel: "State",
+    geoLevel: "Region",
     approvalChain: [],
     status: "inactive",
     createdBy: "Admin",
@@ -186,7 +180,7 @@ export const SEED_ROLES: Role[] = [
     departmentId: null,
     department: "—",
     description: "On-ground field operations and last-mile distribution.",
-    geoLevel: "Town",
+    geoLevel: "Territory",
     approvalChain: [],
     status: "inactive",
     createdBy: "Admin",
@@ -284,7 +278,7 @@ export const SEED_ROLES: Role[] = [
     departmentId: null,
     department: "—",
     description: "Sales Force intern — limited travel and expense eligibility.",
-    geoLevel: "Town",
+    geoLevel: "Territory",
     approvalChain: [],
     status: "inactive",
     createdBy: "Admin",
@@ -347,7 +341,7 @@ export function getValidApproverRoles(
   currentGeoLevel: GeoLevel,
   excludeRoleId?: number,
 ): Role[] {
-  if (currentGeoLevel === "None" || currentGeoLevel === "Country") return [];
+  if (currentGeoLevel === "None") return [];
   const currentOrder = GEO_LEVEL_ORDER[currentGeoLevel];
   return allRoles.filter(r =>
     r.id !== excludeRoleId &&

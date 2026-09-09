@@ -73,6 +73,8 @@ export interface UserDropdownItem {
   lastName: string;
   email: string;
   employeeId: string;
+  roleName?: string;
+  departmentName?: string;
 }
 
 export interface ApprovalUserOption {
@@ -166,20 +168,12 @@ export interface UserDetailRecord extends UserListRecord {
   approvalChain?: unknown;
   geoZoneId?: string;
   geoRegionId?: string;
-  geoStateId?: string;
   geoAreaId?: string;
   geoTerritoryId?: string;
-  geoDistrictId?: string;
-  geoCityId?: string;
-  geoTownId?: string;
   geoZone?: string;
   geoRegion?: string;
-  geoState?: string;
   geoArea?: string;
   territory?: string;
-  geoDistrict?: string;
-  geoCity?: string;
-  geoTown?: string;
   permissions?: UserPermissions | null;
   documents?: EmployeeDocument[];
 }
@@ -304,7 +298,10 @@ function mapFilterOptions(
 
 function geoName(raw: unknown): string {
   if (!raw || typeof raw !== "object") return "";
-  return asString((raw as Record<string, unknown>).name);
+  const item = raw as Record<string, unknown>;
+  return asString(
+    item.name ?? item.zone_name ?? item.region_name ?? item.area_name ?? item.territory_name,
+  );
 }
 
 function parseCombinedAddress(value: unknown): {
@@ -340,7 +337,8 @@ function parseCombinedAddress(value: unknown): {
 
 function geoId(raw: unknown): string {
   if (!raw || typeof raw !== "object") return "";
-  return asString((raw as Record<string, unknown>).geography_id);
+  const item = raw as Record<string, unknown>;
+  return asString(item.geography_id ?? item.id);
 }
 
 function permissionsFromApiTree(
@@ -668,20 +666,12 @@ export const UserListService = {
       approvalChain: raw.approval_chain,
       geoZoneId: geoId(raw.zone),
       geoRegionId: geoId(raw.region),
-      geoStateId: geoId(raw.state_geo),
       geoAreaId: geoId(raw.area),
       geoTerritoryId: geoId(raw.territory),
-      geoDistrictId: geoId(raw.district),
-      geoCityId: geoId(raw.city_geo ?? raw.city),
-      geoTownId: geoId(raw.town),
       geoZone: geoName(raw.zone),
       geoRegion: geoName(raw.region),
-      geoState: geoName(raw.state_geo),
       geoArea: geoName(raw.area),
       territory: geoName(raw.territory),
-      geoDistrict: geoName(raw.district),
-      geoCity: geoName(raw.city_geo ?? raw.city),
-      geoTown: geoName(raw.town),
       permissions,
       documents: mapDocuments(raw.documents),
     };
@@ -848,6 +838,8 @@ export const UserListService = {
         lastName: asString(item.last_name),
         email: asString(item.email),
         employeeId: asString(item.employee_id),
+        roleName: asString(item.role_name),
+        departmentName: asString(item.department_name),
       };
     });
   },
