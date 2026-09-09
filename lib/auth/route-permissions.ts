@@ -209,12 +209,76 @@ export const ROUTE_PERMISSION_RULES: RoutePermissionRule[] = [
     candidates: [{ module: "warehouse", submodule: "stock_overview" }],
   },
   {
-    prefix: "/events",
+    prefix: "/events/event",
     candidates: [
-      { module: "events", submodule: "events" },
       { module: "events", submodule: "event" },
+      { module: "events", submodule: "events" },
     ],
   },
+  {
+    prefix: "/events/demo",
+    candidates: [
+      { module: "events", submodule: "demo" },
+    ],
+  },
+  {
+    prefix: "/events",
+    candidates: [
+      { module: "events", submodule: "event" },
+      { module: "events", submodule: "demo" },
+      { module: "events", submodule: "events" },
+    ],
+  },
+  {
+    prefix: "/database/farmer",
+    candidates: [
+      { module: "database", submodule: "farmer" },
+    ],
+  },
+  {
+    prefix: "/database/distributor",
+    candidates: [
+      { module: "database", submodule: "distributor" },
+    ],
+  },
+
+  // Accounts routes
+  { prefix: "/accounts/masters/chart-of-accounts", candidates: [{ module: "accounts", submodule: "chart_of_accounts" }, { module: "accounts", submodule: "masters.chart_of_accounts" }, { module: "accounts", submodule: "coa" }] },
+  { prefix: "/accounts/sales/pending-tax-invoices", candidates: [{ module: "accounts", submodule: "pending_invoices" }, { module: "accounts", submodule: "transactions.pending_invoices" }] },
+  { prefix: "/accounts/transactions/invoices", candidates: [{ module: "accounts", submodule: "sales_invoice" }, { module: "accounts", submodule: "transactions.sales_invoice" }] },
+  { prefix: "/accounts/purchase-invoices", candidates: [{ module: "accounts", submodule: "purchase_invoice" }, { module: "accounts", submodule: "transactions.purchase_invoice" }] },
+  { prefix: "/accounts/purchases/pending-vendor-bills", candidates: [{ module: "accounts", submodule: "purchase_invoice" }, { module: "accounts", submodule: "transactions.purchase_invoice" }] },
+  { prefix: "/accounts/transactions/credit-notes", candidates: [{ module: "accounts", submodule: "credit_note" }, { module: "accounts", submodule: "transactions.credit_note" }] },
+  { prefix: "/accounts/transactions/debit-notes", candidates: [{ module: "accounts", submodule: "debit_note" }, { module: "accounts", submodule: "transactions.debit_note" }] },
+  { prefix: "/accounts/vouchers", candidates: [
+    { module: "accounts", submodule: "receipt_voucher" },
+    { module: "accounts", submodule: "payment_voucher" },
+    { module: "accounts", submodule: "journal_voucher" },
+    { module: "accounts", submodule: "contra_voucher" },
+    { module: "accounts", submodule: "transactions.receipt_voucher" },
+    { module: "accounts", submodule: "transactions.payment_voucher" },
+    { module: "accounts", submodule: "transactions.journal_voucher" },
+    { module: "accounts", submodule: "transactions.contra_voucher" },
+  ] },
+  { prefix: "/accounts/receivables/outstanding", candidates: [{ module: "accounts", submodule: "customer_outstanding" }, { module: "accounts", submodule: "receivables.customer_outstanding" }] },
+  { prefix: "/accounts/payables/outstanding", candidates: [{ module: "accounts", submodule: "outstanding" }, { module: "accounts", submodule: "payables.outstanding" }] },
+  { prefix: "/accounts/banking/bank-accounts", candidates: [{ module: "accounts", submodule: "bank_accounts" }, { module: "accounts", submodule: "banking.bank_accounts" }] },
+  { prefix: "/accounts/banking/reconciliation", candidates: [{ module: "accounts", submodule: "bank_reconciliation" }, { module: "accounts", submodule: "banking.bank_reconciliation" }] },
+  { prefix: "/accounts/reports/bank-book", candidates: [{ module: "accounts", submodule: "bank_book" }, { module: "accounts", submodule: "banking.bank_book" }] },
+  { prefix: "/accounts/reports/cash-book", candidates: [{ module: "accounts", submodule: "cash_book" }, { module: "accounts", submodule: "banking.cash_book" }] },
+  { prefix: "/accounts/reports/trial-balance", candidates: [{ module: "accounts", submodule: "trial_balance" }, { module: "accounts", submodule: "reports.trial_balance" }] },
+  { prefix: "/accounts/reports/pl", candidates: [{ module: "accounts", submodule: "profit_loss" }, { module: "accounts", submodule: "reports.profit_loss" }] },
+  { prefix: "/accounts/reports/balance-sheet", candidates: [{ module: "accounts", submodule: "balance_sheet" }, { module: "accounts", submodule: "reports.balance_sheet" }] },
+  { prefix: "/accounts/reports/cash-flow", candidates: [{ module: "accounts", submodule: "cash_flow" }, { module: "accounts", submodule: "reports.cash_flow" }] },
+  { prefix: "/accounts/reports/general-ledger", candidates: [{ module: "accounts", submodule: "general_ledger" }, { module: "accounts", submodule: "reports.general_ledger" }] },
+  { prefix: "/accounts/reports/day-book", candidates: [{ module: "accounts", submodule: "day_book" }, { module: "accounts", submodule: "reports.day_book" }] },
+  { prefix: "/accounts/reports/gst-summary", candidates: [{ module: "accounts", submodule: "gst_summary" }, { module: "accounts", submodule: "reports.gst_summary" }] },
+  { prefix: "/accounts/reports/tds-party-wise", candidates: [{ module: "accounts", submodule: "tds_summary" }, { module: "accounts", submodule: "reports.tds_summary" }] },
+  { prefix: "/accounts/reports/sales-register", candidates: [{ module: "accounts", submodule: "sales_register" }, { module: "accounts", submodule: "reports.sales_register" }] },
+  { prefix: "/accounts/reports/purchase-register", candidates: [{ module: "accounts", submodule: "purchase_register" }, { module: "accounts", submodule: "reports.purchase_register" }] },
+  { prefix: "/accounts/reports/stock-valuation", candidates: [{ module: "accounts", submodule: "stock_valuation" }, { module: "accounts", submodule: "reports.stock_valuation" }] },
+  { prefix: "/accounts/reports/stock-register", candidates: [{ module: "accounts", submodule: "stock_register" }, { module: "accounts", submodule: "reports.stock_register" }] },
+  { prefix: "/accounts/reports/audit-trail", candidates: [{ module: "accounts", submodule: "audit_trail" }, { module: "accounts", submodule: "reports.audit_trail" }] },
 
   // Auth-only (no module/submodule gate)
   { prefix: "/dashboard" },
@@ -222,13 +286,132 @@ export const ROUTE_PERMISSION_RULES: RoutePermissionRule[] = [
   { prefix: "/403" },
   { prefix: "/template" },
   { prefix: "/hr" },
-  { prefix: "/accounts" },
-  { prefix: "/database" },
 ];
 
 /** Nav href → module/submodule candidates (view required to show link). */
 export const NAV_PERMISSION_MAP: Record<string, ModuleSubmoduleRef[]> = {
   "/dashboard": [],
+  "/accounts/masters/chart-of-accounts": [
+    { module: "accounts", submodule: "chart_of_accounts" },
+    { module: "accounts", submodule: "masters.chart_of_accounts" },
+    { module: "accounts", submodule: "coa" },
+  ],
+  "/accounts/sales/pending-tax-invoices": [
+    { module: "accounts", submodule: "pending_invoices" },
+    { module: "accounts", submodule: "transactions.pending_invoices" },
+  ],
+  "/accounts/transactions/invoices": [
+    { module: "accounts", submodule: "sales_invoice" },
+    { module: "accounts", submodule: "transactions.sales_invoice" },
+  ],
+  "/accounts/purchase-invoices": [
+    { module: "accounts", submodule: "purchase_invoice" },
+    { module: "accounts", submodule: "transactions.purchase_invoice" },
+  ],
+  "/accounts/purchases/pending-vendor-bills": [
+    { module: "accounts", submodule: "purchase_invoice" },
+    { module: "accounts", submodule: "transactions.purchase_invoice" },
+  ],
+  "/accounts/transactions/credit-notes": [
+    { module: "accounts", submodule: "credit_note" },
+    { module: "accounts", submodule: "transactions.credit_note" },
+  ],
+  "/accounts/transactions/debit-notes": [
+    { module: "accounts", submodule: "debit_note" },
+    { module: "accounts", submodule: "transactions.debit_note" },
+  ],
+  "/accounts/vouchers?tab=receipt": [
+    { module: "accounts", submodule: "receipt_voucher" },
+    { module: "accounts", submodule: "transactions.receipt_voucher" },
+  ],
+  "/accounts/vouchers?tab=payment": [
+    { module: "accounts", submodule: "payment_voucher" },
+    { module: "accounts", submodule: "transactions.payment_voucher" },
+  ],
+  "/accounts/vouchers?tab=journal": [
+    { module: "accounts", submodule: "journal_voucher" },
+    { module: "accounts", submodule: "transactions.journal_voucher" },
+  ],
+  "/accounts/vouchers?tab=contra": [
+    { module: "accounts", submodule: "contra_voucher" },
+    { module: "accounts", submodule: "transactions.contra_voucher" },
+  ],
+  "/accounts/receivables/outstanding": [
+    { module: "accounts", submodule: "customer_outstanding" },
+    { module: "accounts", submodule: "receivables.customer_outstanding" },
+  ],
+  "/accounts/payables/outstanding": [
+    { module: "accounts", submodule: "outstanding" },
+    { module: "accounts", submodule: "payables.outstanding" },
+  ],
+  "/accounts/banking/bank-accounts": [
+    { module: "accounts", submodule: "bank_accounts" },
+    { module: "accounts", submodule: "banking.bank_accounts" },
+  ],
+  "/accounts/banking/reconciliation": [
+    { module: "accounts", submodule: "bank_reconciliation" },
+    { module: "accounts", submodule: "banking.bank_reconciliation" },
+  ],
+  "/accounts/reports/bank-book": [
+    { module: "accounts", submodule: "bank_book" },
+    { module: "accounts", submodule: "banking.bank_book" },
+  ],
+  "/accounts/reports/cash-book": [
+    { module: "accounts", submodule: "cash_book" },
+    { module: "accounts", submodule: "banking.cash_book" },
+  ],
+  "/accounts/reports/trial-balance": [
+    { module: "accounts", submodule: "trial_balance" },
+    { module: "accounts", submodule: "reports.trial_balance" },
+  ],
+  "/accounts/reports/pl": [
+    { module: "accounts", submodule: "profit_loss" },
+    { module: "accounts", submodule: "reports.profit_loss" },
+  ],
+  "/accounts/reports/balance-sheet": [
+    { module: "accounts", submodule: "balance_sheet" },
+    { module: "accounts", submodule: "reports.balance_sheet" },
+  ],
+  "/accounts/reports/cash-flow": [
+    { module: "accounts", submodule: "cash_flow" },
+    { module: "accounts", submodule: "reports.cash_flow" },
+  ],
+  "/accounts/reports/general-ledger": [
+    { module: "accounts", submodule: "general_ledger" },
+    { module: "accounts", submodule: "reports.general_ledger" },
+  ],
+  "/accounts/reports/day-book": [
+    { module: "accounts", submodule: "day_book" },
+    { module: "accounts", submodule: "reports.day_book" },
+  ],
+  "/accounts/reports/gst-summary": [
+    { module: "accounts", submodule: "gst_summary" },
+    { module: "accounts", submodule: "reports.gst_summary" },
+  ],
+  "/accounts/reports/tds-party-wise": [
+    { module: "accounts", submodule: "tds_summary" },
+    { module: "accounts", submodule: "reports.tds_summary" },
+  ],
+  "/accounts/reports/sales-register": [
+    { module: "accounts", submodule: "sales_register" },
+    { module: "accounts", submodule: "reports.sales_register" },
+  ],
+  "/accounts/reports/purchase-register": [
+    { module: "accounts", submodule: "purchase_register" },
+    { module: "accounts", submodule: "reports.purchase_register" },
+  ],
+  "/accounts/reports/stock-valuation": [
+    { module: "accounts", submodule: "stock_valuation" },
+    { module: "accounts", submodule: "reports.stock_valuation" },
+  ],
+  "/accounts/reports/stock-register": [
+    { module: "accounts", submodule: "stock_register" },
+    { module: "accounts", submodule: "reports.stock_register" },
+  ],
+  "/accounts/reports/audit-trail": [
+    { module: "accounts", submodule: "audit_trail" },
+    { module: "accounts", submodule: "reports.audit_trail" },
+  ],
   "/masters/geography": [
     { module: "usermanagement", submodule: "geography" },
     { module: "userManagement", submodule: "geography" },
@@ -321,6 +504,10 @@ export const NAV_PERMISSION_MAP: Record<string, ModuleSubmoduleRef[]> = {
   "/warehouse/reorder-level": [{ module: "warehouse", submodule: "reorder_level" }],
   "/warehouse/stockoverview": [{ module: "warehouse", submodule: "stock_overview" }],
   "/warehouse/stock-overview": [{ module: "warehouse", submodule: "stock_overview" }],
+  "/database/farmer": [{ module: "database", submodule: "farmer" }],
+  "/database/distributor": [{ module: "database", submodule: "distributor" }],
+  "/events/event": [{ module: "events", submodule: "event" }, { module: "events", submodule: "events" }],
+  "/events/demo": [{ module: "events", submodule: "demo" }],
 };
 
 /** Top-level nav module id → permission module codes. */
@@ -335,6 +522,7 @@ export const NAV_MODULE_MAP: Record<string, string[]> = {
   accounts: ["accounts"],
   database: ["database", "farmer"],
   events: ["events"],
+  event: ["events"],
 };
 
 function isLikelyId(segment: string): boolean {

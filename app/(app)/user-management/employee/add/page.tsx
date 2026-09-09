@@ -3,8 +3,6 @@
 import React, { useState, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, XCircle, X } from "lucide-react";
-import { axiosInstance } from "@/api/axios";
-import { API_ENDPOINTS } from "@/api/endpoints";
 import EmployeeForm from "../components/EmployeeForm";
 import { type Employee } from "../employee-data";
 import {
@@ -30,6 +28,7 @@ import {
 } from "@/hooks/user-management";
 import { TemplateListService } from "@/services/template-list.service";
 import { getErrorMessage } from "@/lib/masters/master-query-errors";
+import { BusinessGeographyService } from "@/services/business-geography.service";
 
 interface ToastState { msg: string; type: "success" | "error" }
 
@@ -63,23 +62,19 @@ export default function AddEmployeePage() {
   const savePermissionsMutation = useSaveUserPermissions();
 
   React.useEffect(() => {
-    axiosInstance
-      .get(API_ENDPOINTS.USER_MANAGEMENT.GEOGRAPHY.DROPDOWN)
-      .then((response) => {
-        const payload = response.data as Record<string, unknown>;
-        const data = payload.data;
-        if (!Array.isArray(data)) return;
-        setGeography(
-          data.map((row) => {
-            const item = (row ?? {}) as Record<string, unknown>;
-            return {
-              geography_id: String(item.geography_id ?? ""),
-              name: String(item.name ?? ""),
-              level: String(item.level ?? ""),
-              parent_id: item.parent_id ? String(item.parent_id) : null,
-            };
-          }),
-        );
+    Promise.all([
+      BusinessGeographyService.lookupZones(),
+      BusinessGeographyService.lookupRegions(),
+      BusinessGeographyService.lookupAreas(),
+      BusinessGeographyService.lookupTerritories(),
+    ])
+      .then(([zones, regions, areas, territories]) => {
+        setGeography([
+          ...zones.map((item) => ({ geography_id: item.id, name: item.label, level: "Zone", parent_id: null })),
+          ...regions.map((item) => ({ geography_id: item.id, name: item.label, level: "Region", parent_id: item.parentId ?? null })),
+          ...areas.map((item) => ({ geography_id: item.id, name: item.label, level: "Area", parent_id: item.parentId ?? null })),
+          ...territories.map((item) => ({ geography_id: item.id, name: item.label, level: "Territory", parent_id: item.parentId ?? null })),
+        ]);
       })
       .catch(() => undefined);
   }, []);
@@ -192,6 +187,7 @@ export default function AddEmployeePage() {
           });
         }}
         isSubmitting={createMutation.isPending || savePermissionsMutation.isPending}
+        businessGeography={geography}
       />
       {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
     </>

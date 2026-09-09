@@ -24,7 +24,7 @@ export type SalesType = "Retail Sales" | "Institutional Sales";
 
 // ── Permission types ──────────────────────────────────────────────────────────
 
-export type WebAction    = "view" | "create" | "edit" | "delete" | "approve" | "export" | "import";
+export type WebAction = "view" | "create" | "edit" | "delete" | "approve" | "export" | "import";
 export type MobileAction = "view" | "create" | "edit" | "delete" | "approve";
 
 export interface SubmodulePermission {
@@ -37,14 +37,14 @@ export interface MobileFeaturePermission {
 }
 
 export interface UserPermissions {
-  web:    Record<string, Record<string, SubmodulePermission>>;
+  web: Record<string, Record<string, SubmodulePermission>>;
   mobile: Record<string, Record<string, MobileFeaturePermission>>;
 }
 
 // ── Permission sub-types for registry ─────────────────────────────────────────
 
-export interface PermSubmodule  { id: string; label: string; actions: WebAction[] }
-export interface PermModule     { id: string; label: string; submodules: PermSubmodule[] }
+export interface PermSubmodule { id: string; label: string; actions: WebAction[] }
+export interface PermModule { id: string; label: string; submodules: PermSubmodule[] }
 export interface MobileFeatureDef { id: string; label: string; actions: MobileAction[] }
 export interface MobileGroupDef { id: string; label: string; features: MobileFeatureDef[] }
 
@@ -124,25 +124,13 @@ export interface Employee {
   // Geography (Field Users)
   geoZone?: string;
   geoRegion?: string;
-  geoState?: string;
   geoArea?: string;
   territory?: string;
-  geoDistrict?: string;
-  geoCity?: string;
-  geoTown?: string;
-  /** @deprecated use geoTown */
-  geoLocality?: string;
   geoMappings?: Array<{
     geoZone?: string;
     geoRegion?: string;
-    geoState?: string;
     geoArea?: string;
     territory?: string;
-    geoDistrict?: string;
-    geoCity?: string;
-    geoTown?: string;
-    /** @deprecated use geoTown */
-    geoLocality?: string;
   }>;
   // Permissions
   permissions?: UserPermissions;
@@ -197,66 +185,66 @@ export const ROLE_TYPES: RoleType[] = ["Field User", "Admin User"];
 export const SALES_TYPES: SalesType[] = ["Retail Sales", "Institutional Sales"];
 
 export const COUNTRY_CODES = [
-  { code: "+91",  label: "+91  India" },
-  { code: "+1",   label: "+1   USA / Canada" },
-  { code: "+44",  label: "+44  UK" },
-  { code: "+61",  label: "+61  Australia" },
+  { code: "+91", label: "+91  India" },
+  { code: "+1", label: "+1   USA / Canada" },
+  { code: "+44", label: "+44  UK" },
+  { code: "+61", label: "+61  Australia" },
   { code: "+971", label: "+971 UAE" },
-  { code: "+65",  label: "+65  Singapore" },
-  { code: "+60",  label: "+60  Malaysia" },
+  { code: "+65", label: "+65  Singapore" },
+  { code: "+60", label: "+60  Malaysia" },
 ];
 
 // ── Role Definitions ──────────────────────────────────────────────────────────
 
 export const RETAIL_SALES_ROLES = [
-  { id: 101, name: "DO",     fullName: "Distribution Officer (DO)" },
+  { id: 101, name: "DO", fullName: "Distribution Officer (DO)" },
   { id: 102, name: "Intern", fullName: "Intern" },
-  { id: 103, name: "TM",     fullName: "Territory Manager (TM)" },
-  { id: 104, name: "FMO",    fullName: "Field Marketing Officer (FMO)" },
-  { id: 105, name: "ASM",    fullName: "Area Sales Manager (ASM)" },
-  { id: 106, name: "RSM",    fullName: "Regional Sales Manager (RSM)" },
-  { id: 107, name: "ZSM",    fullName: "Zonal Sales Manager (ZSM)" },
-  { id: 108, name: "NSM",    fullName: "National Sales Manager (NSM)" },
+  { id: 103, name: "TM", fullName: "Territory Manager (TM)" },
+  { id: 104, name: "FMO", fullName: "Field Marketing Officer (FMO)" },
+  { id: 105, name: "ASM", fullName: "Area Sales Manager (ASM)" },
+  { id: 106, name: "RSM", fullName: "Regional Sales Manager (RSM)" },
+  { id: 107, name: "ZSM", fullName: "Zonal Sales Manager (ZSM)" },
+  { id: 108, name: "NSM", fullName: "National Sales Manager (NSM)" },
 ];
 
 // Hierarchy: NSM/SPM → ZSM → RSM → ASM/KAM → TM → FMO → DO/Intern
 export const INSTITUTIONAL_SALES_ROLES = [
-  { id: 108, name: "NSM",    fullName: "National Sales Manager (NSM)" },
-  { id: 110, name: "SPM",    fullName: "Senior Planning Manager (SPM)" },
-  { id: 107, name: "ZSM",    fullName: "Zonal Sales Manager (ZSM)" },
-  { id: 106, name: "RSM",    fullName: "Regional Sales Manager (RSM)" },
-  { id: 105, name: "ASM",    fullName: "Area Sales Manager (ASM)" },
-  { id: 109, name: "KAM",    fullName: "Key Account Manager (KAM)" },
-  { id: 103, name: "TM",     fullName: "Territory Manager (TM)" },
-  { id: 104, name: "FMO",    fullName: "Field Marketing Officer (FMO)" },
-  { id: 101, name: "DO",     fullName: "Distribution Officer (DO)" },
+  { id: 108, name: "NSM", fullName: "National Sales Manager (NSM)" },
+  { id: 110, name: "SPM", fullName: "Senior Planning Manager (SPM)" },
+  { id: 107, name: "ZSM", fullName: "Zonal Sales Manager (ZSM)" },
+  { id: 106, name: "RSM", fullName: "Regional Sales Manager (RSM)" },
+  { id: 105, name: "ASM", fullName: "Area Sales Manager (ASM)" },
+  { id: 109, name: "KAM", fullName: "Key Account Manager (KAM)" },
+  { id: 103, name: "TM", fullName: "Territory Manager (TM)" },
+  { id: 104, name: "FMO", fullName: "Field Marketing Officer (FMO)" },
+  { id: 101, name: "DO", fullName: "Distribution Officer (DO)" },
   { id: 102, name: "Intern", fullName: "Intern" },
 ];
 
 // Admin User roles — includes national-level heads; no geography mapping required
 export const ADMIN_ROLES = [
-  { id: 301, name: "NSM",                fullName: "National Sales Manager (NSM)" },
-  { id: 302, name: "SPM",                fullName: "Senior Planning Manager (SPM)" },
-  { id: 201, name: "Procurement Head",   fullName: "Procurement Head" },
-  { id: 202, name: "Accounts Manager",   fullName: "Accounts Manager" },
-  { id: 203, name: "HR Admin",           fullName: "HR Admin" },
+  { id: 301, name: "NSM", fullName: "National Sales Manager (NSM)" },
+  { id: 302, name: "SPM", fullName: "Senior Planning Manager (SPM)" },
+  { id: 201, name: "Procurement Head", fullName: "Procurement Head" },
+  { id: 202, name: "Accounts Manager", fullName: "Accounts Manager" },
+  { id: 203, name: "HR Admin", fullName: "HR Admin" },
   { id: 204, name: "Operations Manager", fullName: "Operations Manager" },
-  { id: 205, name: "Finance Manager",    fullName: "Finance Manager" },
-  { id: 206, name: "Back Office Manager",fullName: "Back Office Manager" },
+  { id: 205, name: "Finance Manager", fullName: "Finance Manager" },
+  { id: 206, name: "Back Office Manager", fullName: "Back Office Manager" },
 ];
 
 // Geography fields required per field role (top-down hierarchy)
 export const ROLE_GEO_FIELDS: Record<string, string[]> = {
-  "NSM":    [],                                                       // National — no geo mapping
-  "SPM":    [],                                                       // National — no geo mapping (Institutional top level)
-  "ZSM":    ["Zone"],                                                 // Zonal
-  "RSM":    ["Zone", "Region"],                                       // Regional
-  "ASM":    ["Zone", "Region", "State", "Area"],
-  "KAM":    ["Zone", "Region", "State", "Area"],
-  "TM":     ["Zone", "Region", "State", "Area", "Territory"],
-  "FMO":    ["Zone", "Region", "State", "Area", "Territory"],
-  "DO":     ["Zone", "Region", "State", "Area", "Territory", "District", "City", "Town"],
-  "Intern": ["Zone", "Region", "State", "Area", "Territory", "District", "City", "Town"],
+  "NSM": [],                                                       // National — no geo mapping
+  "SPM": [],                                                       // National — no geo mapping (Institutional top level)
+  "ZSM": ["Zone"],                                                 // Zonal
+  "RSM": ["Zone", "Region"],                                       // Regional
+  "ASM": ["Zone", "Region", "Area"],
+  "KAM": ["Zone", "Region", "Area"],
+  "TM": ["Zone", "Region", "Area", "Territory"],
+  "FMO": ["Zone", "Region", "Area", "Territory"],
+  "DO": ["Zone", "Region", "Area", "Territory"],
+  "Intern": ["Zone", "Region", "Area", "Territory"],
 };
 
 // ── Web Portal Permission Registry ─────────────────────────────────────────────
@@ -264,75 +252,123 @@ export const ROLE_GEO_FIELDS: Record<string, string[]> = {
 
 export const PERMISSION_REGISTRY: PermModule[] = [
   {
-    id: "userManagement", label: "User Management",
+    id: "usermanagement", label: "User Management",
     submodules: [
-      { id: "geography",  label: "Geography",  actions: ["view","create","edit","delete","export"] },
-      { id: "department", label: "Department", actions: ["view","create","edit","delete"] },
-      { id: "roles",      label: "Roles",      actions: ["view","create","edit","delete"] },
-      { id: "user",       label: "User",       actions: ["view","create","edit","delete","approve","export","import"] },
+      { id: "geography", label: "Geography", actions: ["view", "create", "edit", "delete", "export"] },
+      { id: "department", label: "Department", actions: ["view", "create", "edit", "delete"] },
+      { id: "roles", label: "Roles", actions: ["view", "create", "edit", "delete"] },
+      { id: "user", label: "User", actions: ["view", "create", "edit", "delete", "approve", "export", "import"] },
     ],
   },
   {
     id: "masters", label: "Masters",
     submodules: [
-      { id: "cropMaster",       label: "Crop Master",       actions: ["view","create","edit","delete","export","import"] },
-      { id: "productMaster",    label: "Product Master",    actions: ["view","create","edit","delete","export","import"] },
-      { id: "brandMaster",      label: "Brand Master",      actions: ["view","create","edit","delete","export"] },
-      { id: "categoryMaster",   label: "Category Master",   actions: ["view","create","edit","delete"] },
-      { id: "cfu",              label: "CFU",               actions: ["view","create","edit","delete","export"] },
-      { id: "hsnTax",           label: "HSN / Tax",         actions: ["view","create","edit","delete","export"] },
-      { id: "customerCategory", label: "Customer Category", actions: ["view","create","edit","delete"] },
-      { id: "customerMaster",   label: "Customer Master",   actions: ["view","create","edit","delete"] },
-      { id: "document_type",    label: "Document Type",     actions: ["view","create","edit","delete"] },
-      { id: "event_type",       label: "Event Type",        actions: ["view","create","edit","delete"] },
-      { id: "formulation",      label: "Formulation",       actions: ["view","create","edit","delete"] },
-      { id: "gst",              label: "GST",               actions: ["view","create","edit","delete"] },
-      { id: "pricing",          label: "Pricing",           actions: ["view","create","edit","delete","export"] },
-      { id: "scheme",           label: "Scheme",            actions: ["view","create","edit","delete","export"] },
-      { id: "segment",          label: "Segment",           actions: ["view","create","edit","delete"] },
-      { id: "supplier_type",    label: "Supplier Type",     actions: ["view","create","edit","delete"] },
-      { id: "supplier",         label: "Supplier Master",   actions: ["view","create","edit","delete"] },
-      { id: "warehouseMaster",  label: "Warehouse",         actions: ["view","create","edit","delete"] },
-      { id: "uomMaster",        label: "Units of Measure",  actions: ["view","create","edit","delete"] },
-      { id: "tds",              label: "TDS Master",        actions: ["view","create","edit","delete","export"] },
-      { id: "tcs",              label: "TCS Master",        actions: ["view","create","edit","delete","export"] },
+      { id: "cropMaster", label: "Crop Master", actions: ["view", "create", "edit", "delete", "export", "import"] },
+      { id: "productMaster", label: "Product Master", actions: ["view", "create", "edit", "delete", "export", "import"] },
+      { id: "brandMaster", label: "Brand Master", actions: ["view", "create", "edit", "delete", "export"] },
+      { id: "categoryMaster", label: "Category Master", actions: ["view", "create", "edit", "delete"] },
+      { id: "cfu", label: "CFU", actions: ["view", "create", "edit", "delete", "export"] },
+      { id: "hsnTax", label: "HSN / Tax", actions: ["view", "create", "edit", "delete", "export"] },
+      { id: "customerCategory", label: "Customer Category", actions: ["view", "create", "edit", "delete"] },
+      { id: "customerMaster", label: "Customer Master", actions: ["view", "create", "edit", "delete"] },
+      { id: "document_type", label: "Document Type", actions: ["view", "create", "edit", "delete"] },
+      { id: "event_type", label: "Event Type", actions: ["view", "create", "edit", "delete"] },
+      { id: "formulation", label: "Formulation", actions: ["view", "create", "edit", "delete"] },
+      { id: "gst", label: "GST", actions: ["view", "create", "edit", "delete"] },
+      { id: "pricing", label: "Pricing", actions: ["view", "create", "edit", "delete", "export"] },
+      { id: "scheme", label: "Scheme", actions: ["view", "create", "edit", "delete", "export"] },
+      { id: "segment", label: "Segment", actions: ["view", "create", "edit", "delete"] },
+      { id: "supplier_type", label: "Supplier Type", actions: ["view", "create", "edit", "delete"] },
+      { id: "supplier", label: "Supplier Master", actions: ["view", "create", "edit", "delete"] },
+      { id: "warehouseMaster", label: "Warehouse", actions: ["view", "create", "edit", "delete"] },
+      { id: "uomMaster", label: "Units of Measure", actions: ["view", "create", "edit", "delete"] },
+      { id: "tds", label: "TDS Master", actions: ["view", "create", "edit", "delete", "export"] },
+      { id: "tcs", label: "TCS Master", actions: ["view", "create", "edit", "delete", "export"] },
     ],
   },
   {
     id: "procurement", label: "Procurement",
     submodules: [
-      { id: "purchaseRequisition", label: "Purchase Requisition", actions: ["view","create","edit","delete","approve","export"] },
-      { id: "purchaseOrder",       label: "Purchase Order",       actions: ["view","create","edit","delete","approve","export"] },
+      { id: "purchaseRequisition", label: "Purchase Requisition", actions: ["view", "create", "edit", "delete", "approve", "export"] },
+      { id: "purchaseOrder", label: "Purchase Order", actions: ["view", "create", "edit", "delete", "approve", "export"] },
     ],
   },
   {
     id: "sales", label: "Sales",
     submodules: [
-      { id: "salesOrder",  label: "Sales Orders",  actions: ["view","create","edit","delete","approve","export"] },
-      { id: "sample_orders", label: "Sample Orders", actions: ["view","create","edit","delete","approve","export"] },
-      { id: "stock_transfers", label: "Stock Transfer", actions: ["view","create","edit","delete","approve","export"] },
-      { id: "scheme_progress", label: "Scheme Progress", actions: ["view","create","edit","delete","approve","export"] },
+      { id: "salesOrder", label: "Sales Orders", actions: ["view", "create", "edit", "delete", "approve", "export"] },
+      { id: "sample_orders", label: "Sample Orders", actions: ["view", "create", "edit", "delete", "approve", "export"] },
+      { id: "stock_transfers", label: "Stock Transfer", actions: ["view", "create", "edit", "delete", "approve", "export"] },
+      { id: "scheme_progress", label: "Scheme Progress", actions: ["view", "create", "edit", "delete", "approve", "export"] },
     ],
   },
   {
     id: "warehouse", label: "Warehouse",
     submodules: [
-      { id: "grn",           label: "GRN",           actions: ["view","create","edit","delete","approve","export"] },
-      { id: "qc",            label: "QC",            actions: ["view","create","edit","delete","approve","export"] },
-      { id: "packing",       label: "Packing",       actions: ["view","create","edit","delete","approve","export"] },
-      { id: "dispatch",      label: "Dispatch",      actions: ["view","create","edit","delete","approve","export"] },
-      { id: "reorder_level", label: "Reorder Level", actions: ["view","create","edit","delete","approve","export"] },
-      { id: "stock_overview",label: "Stock Overview",actions: ["view","export"] },
+      { id: "grn", label: "GRN", actions: ["view", "create", "edit", "delete", "approve", "export"] },
+      { id: "qc", label: "QC", actions: ["view", "create", "edit", "delete", "approve", "export"] },
+      { id: "packing", label: "Packing", actions: ["view", "create", "edit", "delete", "approve", "export"] },
+      { id: "dispatch", label: "Dispatch", actions: ["view", "create", "edit", "delete", "approve", "export"] },
+      { id: "reorder_level", label: "Reorder Level", actions: ["view", "create", "edit", "delete", "approve", "export"] },
+      { id: "stock_overview", label: "Stock Overview", actions: ["view", "export"] },
     ],
   },
   {
     id: "hr", label: "HR",
     submodules: [
-      { id: "attendance",      label: "Attendance",      actions: ["view","create","edit","approve","export"] },
-      { id: "holidaySetup",    label: "Holiday Setup",   actions: ["view","create","edit","delete"] },
-      { id: "weekOffSetup",    label: "Week Off Setup",  actions: ["view","create","edit","delete"] },
-      { id: "policyMaster",    label: "Policy Master",   actions: ["view","create","edit","delete","export"] },
-      { id: "tadaClaims",      label: "TA/DA Claims",    actions: ["view","create","edit","approve","export"] },
+      { id: "attendance", label: "Attendance", actions: ["view", "create", "edit", "approve", "export"] },
+      { id: "holidaySetup", label: "Holiday Setup", actions: ["view", "create", "edit", "delete"] },
+      { id: "weekOffSetup", label: "Week Off Setup", actions: ["view", "create", "edit", "delete"] },
+      { id: "policyMaster", label: "Policy Master", actions: ["view", "create", "edit", "delete", "export"] },
+      { id: "tadaClaims", label: "TA/DA Claims", actions: ["view", "create", "edit", "approve", "export"] },
+    ],
+  },
+  {
+    id: "accounts", label: "Accounts",
+    submodules: [
+      { id: "chart_of_accounts", label: "Chart of Accounts", actions: ["view", "create", "edit", "delete"] },
+      { id: "pending_invoices", label: "Pending Invoices", actions: ["view", "create", "edit", "delete"] },
+      { id: "sales_invoice", label: "Sales Invoice", actions: ["view", "create", "edit", "delete"] },
+      { id: "purchase_invoice", label: "Purchase Invoice", actions: ["view", "create", "edit", "delete"] },
+      { id: "credit_note", label: "Credit Note", actions: ["view", "create", "edit", "delete"] },
+      { id: "debit_note", label: "Debit Note", actions: ["view", "create", "edit", "delete"] },
+      { id: "receipt_voucher", label: "Receipt Voucher", actions: ["view", "create", "edit", "delete"] },
+      { id: "payment_voucher", label: "Payment Voucher", actions: ["view", "create", "edit", "delete"] },
+      { id: "journal_voucher", label: "Journal Voucher", actions: ["view", "create", "edit", "delete"] },
+      { id: "contra_voucher", label: "Contra Voucher", actions: ["view", "create", "edit", "delete"] },
+      { id: "customer_outstanding", label: "Customer Outstanding", actions: ["view", "create", "edit", "delete"] },
+      { id: "outstanding", label: "Supplier Outstanding", actions: ["view", "create", "edit", "delete"] },
+      { id: "bank_accounts", label: "Bank Accounts", actions: ["view", "create", "edit", "delete"] },
+      { id: "bank_reconciliation", label: "Bank Reconciliation", actions: ["view", "create", "edit", "delete"] },
+      { id: "bank_book", label: "Bank Book", actions: ["view", "create", "edit", "delete"] },
+      { id: "cash_book", label: "Cash Book", actions: ["view", "create", "edit", "delete"] },
+      { id: "trial_balance", label: "Trial Balance", actions: ["view", "create", "edit", "delete"] },
+      { id: "profit_loss", label: "Profit & Loss", actions: ["view", "create", "edit", "delete"] },
+      { id: "balance_sheet", label: "Balance Sheet", actions: ["view", "create", "edit", "delete"] },
+      { id: "cash_flow", label: "Cash Flow", actions: ["view", "create", "edit", "delete"] },
+      { id: "general_ledger", label: "General Ledger", actions: ["view", "create", "edit", "delete"] },
+      { id: "day_book", label: "Day Book", actions: ["view", "create", "edit", "delete"] },
+      { id: "gst_summary", label: "GST Summary", actions: ["view", "create", "edit", "delete"] },
+      { id: "tds_summary", label: "TDS Summary", actions: ["view", "create", "edit", "delete"] },
+      { id: "sales_register", label: "Sales Register", actions: ["view", "create", "edit", "delete"] },
+      { id: "purchase_register", label: "Purchase Register", actions: ["view", "create", "edit", "delete"] },
+      { id: "stock_valuation", label: "Stock Valuation", actions: ["view", "create", "edit", "delete"] },
+      { id: "stock_register", label: "Stock Register", actions: ["view", "create", "edit", "delete"] },
+      { id: "audit_trail", label: "Audit Trail", actions: ["view", "create", "edit", "delete"] },
+    ],
+  },
+  {
+    id: "database", label: "Database",
+    submodules: [
+      { id: "farmer", label: "Farmer Database", actions: ["view", "create", "edit", "delete", "export", "import"] },
+      { id: "distributor", label: "Distributor Database", actions: ["view", "create", "edit", "delete", "export", "import"] },
+    ],
+  },
+  {
+    id: "events", label: "Events",
+    submodules: [
+      { id: "event", label: "Events", actions: ["view", "create", "edit", "delete", "export"] },
+      { id: "demo", label: "Demo", actions: ["view", "create", "edit", "delete", "export"] },
     ],
   },
 ];
@@ -344,62 +380,62 @@ export const MOBILE_PERMISSION_REGISTRY: MobileGroupDef[] = [
   {
     id: "fieldOps", label: "Field Operations",
     features: [
-      { id: "mobileLogin",       label: "Mobile Login",        actions: ["view"] },
-      { id: "attendance",        label: "Attendance Marking",  actions: ["view","create"] },
-      { id: "beatPlanning",      label: "Beat Planning",       actions: ["view","create","edit","delete"] },
-      { id: "beatPlanExecution", label: "Beat Plan Execution", actions: ["view","create","edit"] },
-      { id: "locationTracking",  label: "Location Tracking",   actions: ["view","create"] },
-      { id: "routeTracking",     label: "Route Tracking",      actions: ["view","create"] },
-      { id: "gpsCapture",        label: "GPS Capture",         actions: ["create"] },
+      { id: "mobileLogin", label: "Mobile Login", actions: ["view"] },
+      { id: "attendance", label: "Attendance Marking", actions: ["view", "create"] },
+      { id: "beatPlanning", label: "Beat Planning", actions: ["view", "create", "edit", "delete"] },
+      { id: "beatPlanExecution", label: "Beat Plan Execution", actions: ["view", "create", "edit"] },
+      { id: "locationTracking", label: "Location Tracking", actions: ["view", "create"] },
+      { id: "routeTracking", label: "Route Tracking", actions: ["view", "create"] },
+      { id: "gpsCapture", label: "GPS Capture", actions: ["create"] },
     ],
   },
   {
     id: "salesOps", label: "Sales & Orders",
     features: [
-      { id: "orderTaking",      label: "Order Taking",      actions: ["view","create","edit","delete"] },
-      { id: "collectionEntry",  label: "Collection Entry",  actions: ["view","create","edit"] },
-      { id: "leadCreation",     label: "Lead Creation",     actions: ["view","create","edit","delete"] },
+      { id: "orderTaking", label: "Order Taking", actions: ["view", "create", "edit", "delete"] },
+      { id: "collectionEntry", label: "Collection Entry", actions: ["view", "create", "edit"] },
+      { id: "leadCreation", label: "Lead Creation", actions: ["view", "create", "edit", "delete"] },
       { id: "productCatalogue", label: "Product Catalogue", actions: ["view"] },
     ],
   },
   {
     id: "masterAccess", label: "Master Data Access",
     features: [
-      { id: "customerMaster",      label: "Customer Master Access",  actions: ["view","create","edit","delete"] },
-      { id: "productMaster",       label: "Product Master Access",   actions: ["view"] },
-      { id: "distributorCreation", label: "Distributor Creation",    actions: ["view","create","edit"] },
-      { id: "retailerCreation",    label: "Retailer Creation",       actions: ["view","create","edit"] },
-      { id: "customerCreation",    label: "Customer Creation",       actions: ["view","create","edit","delete"] },
+      { id: "customerMaster", label: "Customer Master Access", actions: ["view", "create", "edit", "delete"] },
+      { id: "productMaster", label: "Product Master Access", actions: ["view"] },
+      { id: "distributorCreation", label: "Distributor Creation", actions: ["view", "create", "edit"] },
+      { id: "retailerCreation", label: "Retailer Creation", actions: ["view", "create", "edit"] },
+      { id: "customerCreation", label: "Customer Creation", actions: ["view", "create", "edit", "delete"] },
     ],
   },
   {
     id: "farmerOps", label: "Farmer Operations",
     features: [
-      { id: "farmerCreation", label: "Farmer Creation",  actions: ["view","create","edit","delete"] },
-      { id: "farmerSurvey",   label: "Farmer Survey",    actions: ["view","create","edit","delete"] },
-      { id: "demoScheduling", label: "Demo Scheduling",  actions: ["view","create","edit","delete"] },
-      { id: "demoExecution",  label: "Demo Execution",   actions: ["view","create","edit"] },
-      { id: "demoReporting",  label: "Demo Reporting",   actions: ["view","create","edit"] },
+      { id: "farmerCreation", label: "Farmer Creation", actions: ["view", "create", "edit", "delete"] },
+      { id: "farmerSurvey", label: "Farmer Survey", actions: ["view", "create", "edit", "delete"] },
+      { id: "demoScheduling", label: "Demo Scheduling", actions: ["view", "create", "edit", "delete"] },
+      { id: "demoExecution", label: "Demo Execution", actions: ["view", "create", "edit"] },
+      { id: "demoReporting", label: "Demo Reporting", actions: ["view", "create", "edit"] },
     ],
   },
   {
     id: "hrOps", label: "HR & Expenses",
     features: [
-      { id: "leaveApplication", label: "Leave Application", actions: ["view","create","edit","delete"] },
-      { id: "leaveApproval",    label: "Leave Approval",    actions: ["view","approve"] },
-      { id: "expenseEntry",     label: "Expense Entry",     actions: ["view","create","edit","delete"] },
-      { id: "expenseApproval",  label: "Expense Approval",  actions: ["view","approve"] },
+      { id: "leaveApplication", label: "Leave Application", actions: ["view", "create", "edit", "delete"] },
+      { id: "leaveApproval", label: "Leave Approval", actions: ["view", "approve"] },
+      { id: "expenseEntry", label: "Expense Entry", actions: ["view", "create", "edit", "delete"] },
+      { id: "expenseApproval", label: "Expense Approval", actions: ["view", "approve"] },
     ],
   },
   {
     id: "dataOps", label: "Data & Uploads",
     features: [
-      { id: "databaseCreation", label: "Database Creation", actions: ["view","create"] },
-      { id: "databaseImport",   label: "Database Import",   actions: ["create"] },
-      { id: "photoUpload",      label: "Photo Upload",      actions: ["create"] },
-      { id: "documentUpload",   label: "Document Upload",   actions: ["create"] },
-      { id: "offlineMode",      label: "Offline Mode",      actions: ["view"] },
-      { id: "syncData",         label: "Sync Data",         actions: ["view","create"] },
+      { id: "databaseCreation", label: "Database Creation", actions: ["view", "create"] },
+      { id: "databaseImport", label: "Database Import", actions: ["create"] },
+      { id: "photoUpload", label: "Photo Upload", actions: ["create"] },
+      { id: "documentUpload", label: "Document Upload", actions: ["create"] },
+      { id: "offlineMode", label: "Offline Mode", actions: ["view"] },
+      { id: "syncData", label: "Sync Data", actions: ["view", "create"] },
     ],
   },
 ];
@@ -457,7 +493,7 @@ export function roleDefaultPermissions(role: string): UserPermissions {
   try {
     const roles = loadRoles();
     const templates = loadPermissionTemplates();
-    
+
     // Find the role in roles-data.ts by matching roleName or role string
     const matchedRole = roles.find(r => r.roleName.toLowerCase() === role.toLowerCase());
     if (!matchedRole) {
@@ -467,7 +503,7 @@ export function roleDefaultPermissions(role: string): UserPermissions {
       }
       return p;
     }
-    
+
     const template = templates[matchedRole.id] || templates[String(matchedRole.id)];
     if (!template) return p;
 
@@ -513,8 +549,8 @@ export function roleDefaultPermissions(role: string): UserPermissions {
 
 // Legacy compat
 export const ROLE_TYPE_ROLES: Record<RoleType, string[]> = {
-  "Field User":  ["DO", "Intern", "TM", "FMO", "ASM", "KAM", "RSM", "ZSM", "NSM", "SPM"],
-  "Admin User":  ["NSM", "SPM", "Procurement Head", "Accounts Manager", "HR Admin", "Operations Manager", "Finance Manager", "Back Office Manager"],
+  "Field User": ["DO", "Intern", "TM", "FMO", "ASM", "KAM", "RSM", "ZSM", "NSM", "SPM"],
+  "Admin User": ["NSM", "SPM", "Procurement Head", "Accounts Manager", "HR Admin", "Operations Manager", "Finance Manager", "Back Office Manager"],
 };
 
 // ── Utility Functions ─────────────────────────────────────────────────────────
@@ -642,7 +678,6 @@ export const SEED_EMPLOYEES: Employee[] = [
         geoRegion: "Mumbai",
         geoArea: "Central Mumbai",
         territory: "Mumbai Region",
-        geoTown: "Kothrud Town",
       }
     ],
     approvalLevel1Id: 4,
@@ -726,7 +761,7 @@ export const SEED_EMPLOYEES: Employee[] = [
     departmentId: 5, department: "Field Force", roleType: "Field User",
     salesType: "Retail Sales", roleId: 101, role: "DO",
     geoZone: "West", geoRegion: "Mumbai", geoArea: "Central Mumbai",
-    territory: "West Territory", geoTown: "Kothrud Town",
+    territory: "West Territory",
     emergencyContactName: "Neha Singh", emergencyContactMobile: "9876543217",
     emergencyContactRelation: "Spouse",
     currentAddress: "789 Residential Complex, Mumbai 400019",
@@ -801,7 +836,7 @@ export const SEED_EMPLOYEES: Employee[] = [
     departmentId: 5, department: "Field Force", roleType: "Field User",
     salesType: "Retail Sales", roleId: 101, role: "DO",
     geoZone: "South", geoRegion: "Bangalore", geoArea: "East Bangalore",
-    territory: "South Territory", geoTown: "Whitefield Town",
+    territory: "South Territory",
     emergencyContactName: "Suresh Desai", emergencyContactMobile: "8765432116",
     emergencyContactRelation: "Parent",
     currentAddress: "567 Garden View, Bangalore 560038",
