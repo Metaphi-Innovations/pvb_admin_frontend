@@ -18,6 +18,7 @@ import {
   formatInventoryTypeLabel,
   inventoryTypeBadgeClass,
   sortBatchesByExpiryAsc,
+  filterNonExpiredBatches,
 } from "../../../../orders/packing-list-data";
 import { useStockTransfer } from "@/hooks/sales/use-stock-transfers";
 import { useCreatePackingList } from "@/hooks/sales/use-sales-orders";
@@ -91,7 +92,9 @@ export default function TransferNewPackingListPage() {
 
           // Fetch available inventory batches from the backend (FEFO-ordered)
           const batches = sortBatchesByExpiryAsc(
-            await StockTransferService.getBatches(line.productId, warehouseId, line.quantityType),
+            filterNonExpiredBatches(
+              await StockTransferService.getBatches(line.productId, warehouseId, line.quantityType),
+            ),
           );
 
           const config = {

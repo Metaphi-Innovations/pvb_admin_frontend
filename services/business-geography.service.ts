@@ -29,6 +29,7 @@ export interface BgLookupOption {
   id: string;
   label: string;
   code?: string;
+  parentId?: string | null;
   extra?: string;
   assignedGeography?: { id: string; name: string } | null;
 }
@@ -443,9 +444,13 @@ export const BusinessGeographyService = {
     });
     const data = unwrapData(response.data as Record<string, unknown>);
     if (!Array.isArray(data)) return [];
-    return data.map((row) =>
-      mapLookupRow((row ?? {}) as Record<string, unknown>, ["region_name"], "region_code"),
-    );
+    return data.map((row) => {
+      const item = (row ?? {}) as Record<string, unknown>;
+      return {
+        ...mapLookupRow(item, ["region_name"], "region_code"),
+        parentId: asString(item.zone_id) || null,
+      };
+    });
   },
 
   async lookupAreas(
@@ -458,9 +463,32 @@ export const BusinessGeographyService = {
     });
     const data = unwrapData(response.data as Record<string, unknown>);
     if (!Array.isArray(data)) return [];
-    return data.map((row) =>
-      mapLookupRow((row ?? {}) as Record<string, unknown>, ["area_name"], "area_code"),
-    );
+    return data.map((row) => {
+      const item = (row ?? {}) as Record<string, unknown>;
+      return {
+        ...mapLookupRow(item, ["area_name"], "area_code"),
+        parentId: asString(item.region_id) || null,
+      };
+    });
+  },
+
+  async lookupTerritories(
+    areaId?: string | null,
+    signal?: AbortSignal,
+  ): Promise<BgLookupOption[]> {
+    const response = await axiosInstance.get(BG.TERRITORY.DROPDOWN, {
+      params: areaId ? { area_id: areaId } : {},
+      signal,
+    });
+    const data = unwrapData(response.data as Record<string, unknown>);
+    if (!Array.isArray(data)) return [];
+    return data.map((row) => {
+      const item = (row ?? {}) as Record<string, unknown>;
+      return {
+        ...mapLookupRow(item, ["territory_name"], "territory_code"),
+        parentId: asString(item.area_id) || null,
+      };
+    });
   },
 
   async lookupStates(signal?: AbortSignal): Promise<BgLookupOption[]> {

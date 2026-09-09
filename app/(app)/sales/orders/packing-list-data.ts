@@ -102,6 +102,23 @@ export function sortBatchesByExpiryAsc<T extends { expiry_date?: string | null; 
   });
 }
 
+/** Drop lots whose expiry date is before today (today still allowed). Null expiry kept. */
+export function filterNonExpiredBatches<T extends { expiry_date?: string | null; expiryDate?: string | null }>(
+  batches: T[],
+  asOn = new Date(),
+): T[] {
+  const todayYmd = [
+    asOn.getFullYear(),
+    String(asOn.getMonth() + 1).padStart(2, "0"),
+    String(asOn.getDate()).padStart(2, "0"),
+  ].join("-");
+  return batches.filter((b) => {
+    const exp = String(b.expiry_date ?? b.expiryDate ?? "").slice(0, 10);
+    if (!exp || exp === "—" || exp.toLowerCase() === "null") return true;
+    return exp >= todayYmd;
+  });
+}
+
 export interface InventoryCarton {
   id: string;
   productId: number;
@@ -300,6 +317,17 @@ export function suggestFefoCartonAllocations(
   const unitsPerPackingUnit = config?.unitsPerPackingUnit ?? 1;
 
   const cartons = getCartonsForProductInWarehouse(productId, warehouseCode)
+    .filter((c) => {
+      const exp = String(c.expiryDate || "").slice(0, 10);
+      if (!exp) return true;
+      const today = new Date();
+      const todayYmd = [
+        today.getFullYear(),
+        String(today.getMonth() + 1).padStart(2, "0"),
+        String(today.getDate()).padStart(2, "0"),
+      ].join("-");
+      return exp >= todayYmd;
+    })
     .sort((a, b) => {
       const exp = a.expiryDate.localeCompare(b.expiryDate);
       if (exp !== 0) return exp;
