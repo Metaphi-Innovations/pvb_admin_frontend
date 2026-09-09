@@ -2,15 +2,16 @@
 
 import React, { useCallback, useState, useEffect } from "react";
 import {
-  Boxes, ClipboardList, Package, RotateCcw, Reply, Scale, XCircle,
+  Boxes, ClipboardList, Package, RotateCcw, Reply, XCircle,
+  // Scale,
 } from "lucide-react";
 import { TabsContent } from "@/components/ui/tabs";
 import { ListingContainer } from "@/components/layout/ListingContainer";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
-import { Button } from "@/components/ui/button";
+// import { Button } from "@/components/ui/button";
 import { MiniKPICard } from "@/components/ui/KPICard";
 import { DailyLogsTab } from "./components/DailyLogsTab";
-import { StockAdjustmentDialog } from "./components/StockAdjustmentDialog";
+// import { StockAdjustmentDialog } from "./components/StockAdjustmentDialog";
 import { QcPassedListing } from "./qc-passed/QcPassedListing";
 import { SalesReturnStockListing } from "./sales-return/SalesReturnStockListing";
 import { SampleReturnStockListing } from "./sample-return/SampleReturnStockListing";
@@ -30,8 +31,8 @@ export default function StockOverviewPage() {
   const [warehouseOptions, setWarehouseOptions] = useState<Array<{ label: string; value: string }>>([]);
   const [summary, setSummary] = useState<StockOverviewSummary>(EMPTY_SUMMARY);
   const [summaryNonce, setSummaryNonce] = useState(0);
-  const [inventoryListNonce, setInventoryListNonce] = useState(0);
-  const [adjustmentOpen, setAdjustmentOpen] = useState(false);
+  const [inventoryListNonce] = useState(0);
+  // const [adjustmentOpen, setAdjustmentOpen] = useState(false);
 
   const refreshSummary = useCallback(() => {
     setSummaryNonce((n) => n + 1);
@@ -105,6 +106,7 @@ export default function StockOverviewPage() {
       actions={
         showWarehouseFilter ? (
           <div className="flex items-center gap-2">
+            {/* Hidden for now — re-enable when stock adjustment is ready to expose
             {activeTab === "inventory" ? (
               <Button
                 type="button"
@@ -118,6 +120,7 @@ export default function StockOverviewPage() {
                 Stock Adjustment
               </Button>
             ) : null}
+            */}
             <span className="text-xs font-semibold text-muted-foreground whitespace-nowrap">Warehouse:</span>
             <AutocompleteSelect
               options={warehouseOptions}
@@ -158,6 +161,7 @@ export default function StockOverviewPage() {
         <RejectedListing warehouseId={warehouseId} onFiltersApplied={refreshSummary} />
       </TabsContent>
 
+      {/* Hidden for now with the Stock Adjustment button
       <StockAdjustmentDialog
         open={adjustmentOpen}
         warehouseId={selectedWarehouse || undefined}
@@ -168,6 +172,7 @@ export default function StockOverviewPage() {
           setInventoryListNonce((n) => n + 1);
         }}
       />
+      */}
     </ListingContainer>
   );
 }
