@@ -357,7 +357,6 @@ export function approvalUsersToOptions(users: ApprovalUserOption[]) {
     sub: `${user.employeeId} · ${user.roleName}${user.departmentName ? ` · ${user.departmentName}` : ""}`,
   }));
 }
-
 export function usersDropdownToOptions(users: Array<{
   userId: string;
   label: string;
@@ -365,12 +364,22 @@ export function usersDropdownToOptions(users: Array<{
   firstName: string;
   lastName: string;
   employeeId: string;
+  roleName?: string;
+  departmentName?: string;
 }>) {
-  return users.map((user) => ({
-    label: user.label || `${user.firstName} ${user.lastName}`.trim(),
-    value: user.userId,
-    sub: `${user.employeeId} · ${user.username}`,
-  }));
+  return users.map((user) => {
+    const rolePart = user.roleName || user.username;
+    const deptPart = user.departmentName ? ` · ${user.departmentName}` : "";
+    const sub = user.employeeId
+      ? `${user.employeeId} · ${rolePart}${deptPart}`
+      : `${user.username}${deptPart}`;
+
+    return {
+      label: user.label || `${user.firstName} ${user.lastName}`.trim(),
+      value: user.userId,
+      sub,
+    };
+  });
 }
 
 export function templatePermissionsToSets(template: {

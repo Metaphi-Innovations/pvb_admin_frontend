@@ -288,6 +288,10 @@ export interface ProductTransactionRow {
   unitRate: number | null;
   debit: number;
   credit: number;
+  warehouseId?: string | null;
+  warehouseName?: string | null;
+  fromWarehouseName?: string | null;
+  toWarehouseName?: string | null;
 }
 
 export interface ProductTransactionsResponse {

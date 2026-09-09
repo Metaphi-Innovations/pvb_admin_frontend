@@ -73,6 +73,8 @@ export interface UserDropdownItem {
   lastName: string;
   email: string;
   employeeId: string;
+  roleName?: string;
+  departmentName?: string;
 }
 
 export interface ApprovalUserOption {
@@ -836,6 +838,8 @@ export const UserListService = {
         lastName: asString(item.last_name),
         email: asString(item.email),
         employeeId: asString(item.employee_id),
+        roleName: asString(item.role_name),
+        departmentName: asString(item.department_name),
       };
     });
   },
