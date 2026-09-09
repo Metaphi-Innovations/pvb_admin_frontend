@@ -309,6 +309,17 @@ export function validateReturnItems(items: PurchaseReturnItem[]): Record<string,
     errors._form = "Select at least one batch and enter a return quantity greater than zero.";
   }
 
+  const selectedWarehouses = new Set(
+    items
+      .filter((it) => it.selected && it.returnQty > 0)
+      .map((it) => it.stockWarehouseId?.trim())
+      .filter((id): id is string => Boolean(id)),
+  );
+  if (selectedWarehouses.size > 1) {
+    errors._form =
+      "Select products from only one warehouse. Create a separate purchase return for the other warehouse.";
+  }
+
   return errors;
 }
 

@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils";
 import { useGrn } from "@/hooks/warehouse/use-grn";
 import { formatQtyStackTotals } from "@/lib/warehouse/grn-quantity";
 import { stackGrnLineQty } from "../shared/grn-qty-stack";
+import { resolveStockTransferGrnOrderedQtyByIndex } from "./stock-transfer-grn-utils";
 
 const STATUS_CONFIG = {
   pending_qc: {
@@ -122,8 +123,9 @@ export function StockTransferView({ id }: { id: string }) {
     variant: "neutral" as const,
   };
 
-  const orderedStacks = grn.items.map((it) =>
-    stackGrnLineQty(it.orderedQty || 0, {
+  const orderedQtyByIndex = resolveStockTransferGrnOrderedQtyByIndex(grn.items);
+  const orderedStacks = grn.items.map((it, idx) =>
+    stackGrnLineQty(orderedQtyByIndex[idx] || 0, {
       packingSize: it.unitPerPacking || 1,
       unit: it.unit,
       netWeightPerPack: it.netWeightPerPack,
@@ -261,7 +263,8 @@ export function StockTransferView({ id }: { id: string }) {
                     netWeightPerPack: item.netWeightPerPack,
                     weightUom: item.weightUom,
                   };
-                  const orderedStack = stackGrnLineQty(item.orderedQty || 0, stackOpts);
+                  const orderedQty = orderedQtyByIndex[idx] || 0;
+                  const orderedStack = stackGrnLineQty(orderedQty, stackOpts);
                   const receivedStack = stackGrnLineQty(item.receivedQty, stackOpts);
                   return (
                     <tr key={`${item.productId}-${idx}`} className="hover:bg-muted/10">
@@ -271,7 +274,7 @@ export function StockTransferView({ id }: { id: string }) {
                       <td className="p-2 align-middle">
                         <StackedQtyCell
                           stack={orderedStack}
-                          empty={!(item.orderedQty > 0)}
+                          empty={!(orderedQty > 0)}
                         />
                       </td>
                       <td className="p-2 align-middle">

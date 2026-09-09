@@ -27,6 +27,7 @@ import {
   formatInventoryTypeLabel,
   inventoryTypeBadgeClass,
   sortBatchesByExpiryAsc,
+  filterNonExpiredBatches,
 } from "../../../packing-list-data";
 import {
   StackedQtyDisplay,
@@ -118,7 +119,9 @@ export default function NewSampleOrderPackingListPage() {
           if (remainingCap <= 0) continue;
 
           const batches = sortBatchesByExpiryAsc(
-            await PackingListService.getBatches(String(line.productId), warehouseId, line.quantityType),
+            filterNonExpiredBatches(
+              await PackingListService.getBatches(String(line.productId), warehouseId, line.quantityType),
+            ),
           );
 
           const unitsPerPacking = (line as any).packSize || 1;
