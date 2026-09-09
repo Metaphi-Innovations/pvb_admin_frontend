@@ -662,8 +662,11 @@ export const PurchaseReturnService = {
           .filter((id): id is string => Boolean(id)),
       ),
     ];
+    // Always prefer the physical stock warehouse of selected lines (post stock-transfer rejects).
     const warehouseId =
-      stockWarehouseIds.length === 1 ? stockWarehouseIds[0] : record.warehouseId;
+      stockWarehouseIds.length === 1
+        ? stockWarehouseIds[0]
+        : record.warehouseId;
 
     return {
       return_no: record.returnNumber || undefined,

@@ -295,6 +295,50 @@ export type StockTransferLineFromDispatch = {
   productSnapshot: Record<string, unknown>;
 };
 
+/**
+ * Older ST GRNs stored full transfer line qty as ordered_base_qty on every
+ * batch row. When several items share sourceItemId with the same ordered qty,
+ * fall back to each row's received qty as the per-batch dispatched/ordered display.
+ */
+export function resolveStockTransferGrnOrderedQtyByIndex(
+  items: Array<{
+    sourceItemId?: string;
+    productId?: string;
+    orderedQty?: number;
+    receivedQty?: number;
+  }>,
+): number[] {
+  const result = items.map((item) =>
+    Math.max(0, Number(item.orderedQty || item.receivedQty || 0)),
+  );
+  const indexesBySource = new Map<string, number[]>();
+  items.forEach((item, index) => {
+    const key = item.sourceItemId || item.productId || `idx-${index}`;
+    const list = indexesBySource.get(key) || [];
+    list.push(index);
+    indexesBySource.set(key, list);
+  });
+  for (const indexes of indexesBySource.values()) {
+    if (indexes.length < 2) continue;
+    const orderedValues = indexes.map((i) => Number(items[i].orderedQty || 0));
+    const firstOrdered = orderedValues[0];
+    if (!(firstOrdered > 0) || orderedValues.some((o) => o !== firstOrdered)) {
+      continue;
+    }
+    const receivedSum = indexes.reduce(
+      (sum, i) => sum + Number(items[i].receivedQty || 0),
+      0,
+    );
+    if (firstOrdered >= receivedSum && receivedSum > 0) {
+      for (const i of indexes) {
+        const received = Number(items[i].receivedQty || 0);
+        if (received > 0) result[i] = received;
+      }
+    }
+  }
+  return result;
+}
+
 export async function buildStockTransferLinesFromDispatch(
   dispatch: Record<string, unknown>,
   signal?: AbortSignal,

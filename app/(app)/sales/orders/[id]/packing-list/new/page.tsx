@@ -23,6 +23,7 @@ import {
   formatInventoryTypeLabel,
   inventoryTypeBadgeClass,
   sortBatchesByExpiryAsc,
+  filterNonExpiredBatches,
 } from "../../../packing-list-data";
 import {
   useSalesOrder,
@@ -114,7 +115,9 @@ export default function NewPackingListPage() {
 
           // Fetch available inventory batches from the backend (FEFO-ordered)
           const batches = sortBatchesByExpiryAsc(
-            await SalesOrderService.getBatches(line.productId, warehouseId, line.quantityType),
+            filterNonExpiredBatches(
+              await SalesOrderService.getBatches(line.productId, warehouseId, line.quantityType),
+            ),
           );
 
           const config = getProductPackingConfig(Number(line.productId)) || {

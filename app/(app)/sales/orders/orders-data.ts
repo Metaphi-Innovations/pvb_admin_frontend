@@ -1575,7 +1575,17 @@ export function suggestFefoAllocations(productId: number, orderedQty: number): {
   warehouseName: string;
 }[] {
   const batches = getBatchesForProduct(productId)
-    .filter(b => b.availableQty > 0)
+    .filter((b) => b.availableQty > 0)
+    .filter((b) => {
+      const today = new Date();
+      const todayYmd = [
+        today.getFullYear(),
+        String(today.getMonth() + 1).padStart(2, "0"),
+        String(today.getDate()).padStart(2, "0"),
+      ].join("-");
+      const exp = String(b.expiryDate || "").slice(0, 10);
+      return !exp || exp >= todayYmd;
+    })
     .sort((a, b) => a.expiryDate.localeCompare(b.expiryDate));
 
   let remaining = orderedQty;

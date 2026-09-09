@@ -44,6 +44,7 @@ import {
   buildStockTransferLinesFromDispatch,
   getCustomerSnapshot,
   matchesDestinationWarehouse,
+  resolveStockTransferGrnOrderedQtyByIndex,
   type StockTransferLineFromDispatch,
 } from "./stock-transfer-grn-utils";
 import { FormContainer } from "@/components/layout/FormContainer";
@@ -221,6 +222,17 @@ export function StockTransferCreate({
         const { lines: builtLines } = await buildStockTransferLinesFromDispatch(dispatch);
         if (!active) return;
 
+        // Cap receivable across batches that share one ST line (sourceItemId).
+        // Do not copy the full ST line qty onto every batch row.
+        const stRemainingBySourceItem = new Map<string, number>();
+        for (const [sourceItemId, transferQty] of transferQtyBySourceItem.entries()) {
+          const alreadyReceived = receivedBySourceItem.get(sourceItemId) || 0;
+          stRemainingBySourceItem.set(
+            sourceItemId,
+            Math.max(0, round2(Number(transferQty) - Number(alreadyReceived))),
+          );
+        }
+
         setStockTransferId(sourceId);
         setStockTransferNo(transferNo || dispatch.dispatch_number || "");
         setDispatchNumber(dispatch.dispatch_number || "");
@@ -232,19 +244,28 @@ export function StockTransferCreate({
             .map((line): LineInputState | null => {
               const caseSize = line.caseSize > 0 ? line.caseSize : 1;
               const quantityType = resolveGrnQuantityType(line.quantityType);
+              const dispatchedQty = Math.max(0, round2(line.maxQty));
+              if (dispatchedQty <= 0) return null;
+
+              let receivable = dispatchedQty;
+              if (line.sourceItemId && stRemainingBySourceItem.has(line.sourceItemId)) {
+                const stRemaining = stRemainingBySourceItem.get(line.sourceItemId) || 0;
+                receivable = Math.max(0, round2(Math.min(dispatchedQty, stRemaining)));
+                stRemainingBySourceItem.set(
+                  line.sourceItemId,
+                  Math.max(0, round2(stRemaining - receivable)),
+                );
+              }
+              if (receivable <= 0) return null;
+
+              // Keep maxQty as per-batch dispatched qty for the Dispatched column.
+              // Encode ST remaining caps via previousReceivedQty so
+              // remaining = maxQty - previousReceivedQty === receivable.
               const previousReceivedQty = Math.max(
                 0,
-                round2(receivedBySourceItem.get(line.sourceItemId) || 0),
+                round2(dispatchedQty - receivable),
               );
-              const orderedQty = Math.max(
-                0,
-                round2(
-                  transferQtyBySourceItem.get(line.sourceItemId) || line.maxQty,
-                ),
-              );
-              const remaining = Math.max(0, round2(orderedQty - previousReceivedQty));
-              if (remaining <= 0) return null;
-              const receivedQty = remaining;
+              const receivedQty = receivable;
               const displayQty = round2(
                 fromBaseQuantity({
                   baseQty: receivedQty,
@@ -255,7 +276,7 @@ export function StockTransferCreate({
               const pricing = priceBySourceItem.get(line.sourceItemId);
               return {
                 ...line,
-                maxQty: orderedQty,
+                maxQty: dispatchedQty,
                 caseSize,
                 unitPrice: pricing?.unitPrice || line.unitPrice || 0,
                 gstPct: pricing?.gstPct || line.gstPct || 0,
@@ -321,15 +342,36 @@ export function StockTransferCreate({
       }
       if (!active) return;
 
+      // Batches are flattened in item order; consume uniquely so same-product
+      // multi-batch rows do not all bind to the first matching batch.
+      const usedBatchIndexes = new Set<number>();
+      const takeBatchForItem = (item: (typeof existingGrn.items)[number]) => {
+        const idx = existingGrn.batches.findIndex((b, i) => {
+          if (usedBatchIndexes.has(i)) return false;
+          return (
+            b.productId === item.productId ||
+            (!!item.productCode && b.productCode === item.productCode)
+          );
+        });
+        if (idx < 0) return undefined;
+        usedBatchIndexes.add(idx);
+        return existingGrn.batches[idx];
+      };
+
+      // Legacy ST GRNs stored full transfer_base_qty on every batch row.
+      const orderedByIndex = resolveStockTransferGrnOrderedQtyByIndex(existingGrn.items);
+      const legacyMaxByIndex = new Map<number, number>();
+      existingGrn.items.forEach((item, index) => {
+        const resolved = orderedByIndex[index];
+        const stored = Number(item.orderedQty || 0);
+        if (resolved > 0 && resolved !== stored) {
+          legacyMaxByIndex.set(index, resolved);
+        }
+      });
+
       setLines(
-        existingGrn.items.map((item) => {
-          const batch =
-            existingGrn.batches.find(
-              (b) =>
-                (item.sourceItemId && b.productId === item.sourceItemId) ||
-                b.productId === item.productId ||
-                b.productCode === item.productCode,
-            );
+        existingGrn.items.map((item, itemIndex) => {
+          const batch = takeBatchForItem(item);
           const caseSize =
             item.unitPerPacking != null && item.unitPerPacking > 0
               ? item.unitPerPacking
@@ -345,6 +387,14 @@ export function StockTransferCreate({
           );
           const sourceItemId = item.sourceItemId || item.productId;
           const pricing = priceBySourceItem.get(sourceItemId);
+          const maxQty = Math.max(
+            0,
+            round2(orderedByIndex[itemIndex] || item.receivedQty || 0),
+          );
+          // Per-batch rows: clear ST-level cumulative previous on legacy rows.
+          const previousReceivedQty = legacyMaxByIndex.has(itemIndex)
+            ? 0
+            : Math.max(0, round2(item.alreadyReceivedQty || 0));
           return {
             sourceItemId,
             productId: item.productId,
@@ -354,8 +404,8 @@ export function StockTransferCreate({
             batchNo: batch?.batchNumber || "",
             mfgDate: batch?.mfgDate || "",
             expDate: batch?.expDate || "",
-            maxQty: item.orderedQty || item.receivedQty || 0,
-            previousReceivedQty: item.alreadyReceivedQty || 0,
+            maxQty,
+            previousReceivedQty,
             receivedQty,
             displayQty,
             quantityType,

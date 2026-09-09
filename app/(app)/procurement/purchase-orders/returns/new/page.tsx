@@ -1,6 +1,6 @@
 "use client";
 
-import React, { Suspense, useEffect, useRef, useState } from "react";
+import React, { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { PReturnFormLayout } from "../../../purchase-returns/components/PReturnFormLayout";
 import { PReturnFormFooter } from "../../../purchase-returns/components/PReturnFormFooter";
@@ -14,6 +14,11 @@ import {
   resolvePurchaseReturnRedirectWithToast,
   validateReturnItems,
 } from "@/app/(app)/procurement/purchase-returns/purchase-return-utils";
+import {
+  groupReturnItemsByStockWarehouse,
+  resolveReturnHeaderWarehouse,
+  UNKNOWN_STOCK_WAREHOUSE_ID,
+} from "@/app/(app)/procurement/purchase-returns/purchase-return-warehouse";
 import { usePurchaseOrder } from "@/hooks/procurement";
 import {
   useCreatePurchaseReturn,
@@ -45,17 +50,28 @@ function NewPurchaseReturnContent() {
   const eligibleMergedRef = useRef(false);
 
   const poQuery = usePurchaseOrder(poId || null);
-  const warehouseId =
+  const poWarehouseId =
     poQuery.data?.warehouseId != null ? String(poQuery.data.warehouseId) : null;
+
+  // Physical return warehouse (may differ from PO after stock transfer + QC reject).
+  // Preview number is warehouse-scoped — follow header WH once known.
+  const previewWarehouseId = record?.warehouseId || poWarehouseId;
+
   const previewQuery = usePurchaseReturnPreviewNumber(
-    warehouseId,
-    Boolean(poId),
+    previewWarehouseId,
+    Boolean(poId) && Boolean(previewWarehouseId),
   );
-  const eligibleItemsQuery = useEligiblePurchaseReturnItems(
-    poId || null,
-    warehouseId || undefined,
-  );
+
+  // Load all returnable rejected stock for this PO (all warehouses).
+  const eligibleItemsQuery = useEligiblePurchaseReturnItems(poId || null);
   const createMutation = useCreatePurchaseReturn();
+
+  const multiWarehouseEligible = useMemo(() => {
+    if (!record?.items.length) return false;
+    return groupReturnItemsByStockWarehouse(record.items).filter(
+      (g) => g.warehouseId !== UNKNOWN_STOCK_WAREHOUSE_ID,
+    ).length > 1;
+  }, [record?.items]);
 
   // Show form shell as soon as PO + preview number are ready (don't wait on eligible lines).
   useEffect(() => {
@@ -78,16 +94,26 @@ function NewPurchaseReturnContent() {
     );
   }, [poQuery.data, previewQuery.data]);
 
-  // Merge eligible lines when they arrive.
+  // Merge eligible lines when they arrive; set header WH when only one stock warehouse.
   useEffect(() => {
     if (!record || !poQuery.data || !eligibleItemsQuery.data) return;
     if (eligibleMergedRef.current) return;
     eligibleMergedRef.current = true;
+    const items = eligibleItemsQuery.data;
+    const headerWh = resolveReturnHeaderWarehouse(items, {
+      warehouseId: record.warehouseId,
+      warehouseName: record.warehouseName,
+    });
     setRecord(
-      recalcPurchaseReturn({
-        ...record,
-        items: eligibleItemsQuery.data,
-      }, poQuery.data),
+      recalcPurchaseReturn(
+        {
+          ...record,
+          items,
+          warehouseId: headerWh.warehouseId,
+          warehouseName: headerWh.warehouseName,
+        },
+        poQuery.data,
+      ),
     );
   }, [eligibleItemsQuery.data, poQuery.data, record]);
 
@@ -184,6 +210,12 @@ function NewPurchaseReturnContent() {
           Loading returnable batches…
         </p>
       ) : null}
+      {multiWarehouseEligible ? (
+        <p className="mb-3 text-xs text-muted-foreground">
+          Rejected stock exists in more than one warehouse. Select products from one
+          warehouse only for this return; create another return for the other warehouse.
+        </p>
+      ) : null}
       {eligibleItemsQuery.isError ? (
         <p className="mb-3 text-xs text-red-600">
           Failed to load returnable items.{" "}
@@ -204,6 +236,7 @@ function NewPurchaseReturnContent() {
         onChange={setRecord}
         errors={errors}
         linesLoading={linesLoading}
+        groupByWarehouse
       />
     </PReturnFormLayout>
   );
