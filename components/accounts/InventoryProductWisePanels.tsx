@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { ChevronLeft } from "lucide-react";
 import {
@@ -13,6 +13,13 @@ import {
 import { formatMoney } from "@/lib/accounts/money-format";
 import { Button } from "@/components/ui/button";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   AccountsTable,
   AccountsTableBody,
   AccountsTableCell,
@@ -21,13 +28,13 @@ import {
   AccountsTableRow,
   AccountsTableScroll,
 } from "@/components/accounts/AccountsTable";
-// ProductTransactionRow is used only via LedgerService return type below
 import { AccountsColumnHeader } from "@/components/accounts/AccountsColumnHeader";
 import { useAccountsColumnFilters } from "@/components/accounts/useAccountsColumnFilters";
 import { AccountsColumnFilterContext } from "@/components/accounts/AccountsColumnFilterContext";
 import type { AccountsColumnFilterState } from "@/lib/accounts/column-filter-types";
 import { CoaLedgerDetailTable } from "@/app/(app)/accounts/masters/chart-of-accounts/components/CoaLedgerDetailTable";
 import type { CoaLedgerDetailRow } from "@/app/(app)/accounts/masters/chart-of-accounts/coa-demo-accounting";
+import { useWarehousesDropdown } from "@/hooks/masters/use-warehouse-master";
 
 // ─── helpers: translate filter context → backend params ──────────────────────
 
@@ -57,12 +64,64 @@ function amountFilterToRange(f: AccountsColumnFilterState | undefined): {
   return {};
 }
 
+function formatTransferRoute(
+  fromWarehouseName?: string | null,
+  toWarehouseName?: string | null,
+): string {
+  const from = (fromWarehouseName || "").trim();
+  const to = (toWarehouseName || "").trim();
+  if (from && to) return `${from} → ${to}`;
+  if (from) return `From ${from}`;
+  if (to) return `To ${to}`;
+  return "";
+}
+
 function ProductWiseSkeleton() {
   return (
     <div className="p-4 space-y-2 flex-1">
       {Array.from({ length: 6 }).map((_, i) => (
         <div key={i} className="h-8 bg-muted animate-pulse rounded-md" />
       ))}
+    </div>
+  );
+}
+
+function WarehouseFilterSelect({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (warehouseId: string) => void;
+}) {
+  const { data: warehouses = [] } = useWarehousesDropdown();
+  const options = useMemo(
+    () =>
+      warehouses
+        .map((w) => ({
+          id: String(w.warehouse_id || "").trim(),
+          name: String(w.warehouseName || "").trim(),
+        }))
+        .filter((w) => w.id && w.name)
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    [warehouses],
+  );
+
+  return (
+    <div className="flex items-center gap-2 min-w-0">
+      <span className="text-xs text-muted-foreground whitespace-nowrap">Warehouse</span>
+      <Select value={value || "all"} onValueChange={(v) => onChange(v === "all" ? "" : v)}>
+        <SelectTrigger className="h-8 w-[220px] text-xs">
+          <SelectValue placeholder="All warehouses" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">All warehouses</SelectItem>
+          {options.map((w) => (
+            <SelectItem key={w.id} value={w.id}>
+              {w.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </div>
   );
 }
@@ -94,6 +153,8 @@ function toDetailRows(raw: ProductTransactionRow[]): CoaLedgerDetailRow[] {
       credit: r.credit,
       runningBalance: Math.abs(balance),
       runningBalanceType: side,
+      warehouseName: r.warehouseName ?? "",
+      transferRoute: formatTransferRoute(r.fromWarehouseName, r.toWarehouseName),
     };
   });
 }
@@ -103,12 +164,14 @@ function ProductTransactionsPanel({
   product,
   dateFrom,
   dateTo,
+  warehouseId,
   onBack,
 }: {
   ledgerKind: LedgerKind;
   product: { productId: string; productName: string; productCode: string | null };
   dateFrom: string;
   dateTo: string;
+  warehouseId?: string;
   onBack: () => void;
 }) {
   const [rows, setRows] = useState<ProductTransactionRow[]>([]);
@@ -125,6 +188,7 @@ function ProductTransactionsPanel({
         productId: product.productId,
         dateFrom: dateFrom || undefined,
         dateTo: dateTo || undefined,
+        warehouseId: warehouseId || undefined,
         limit: 200,
       },
       controller.signal,
@@ -138,13 +202,14 @@ function ProductTransactionsPanel({
       })
       .finally(() => setLoading(false));
     return () => controller.abort();
-  }, [ledgerKind, product.productId, dateFrom, dateTo]);
+  }, [ledgerKind, product.productId, dateFrom, dateTo, warehouseId]);
 
   const detailRows = toDetailRows(rows);
   const totalDebit = rows.reduce((s, r) => s + r.debit, 0);
   const totalCredit = rows.reduce((s, r) => s + r.credit, 0);
   const closingBalance = Math.abs(totalDebit - totalCredit);
   const closingBalanceType: "Debit" | "Credit" = totalDebit >= totalCredit ? "Debit" : "Credit";
+  const showWarehouseColumns = ledgerKind === "stock-in-hand";
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
@@ -171,6 +236,7 @@ function ProductTransactionsPanel({
       ) : (
         <CoaLedgerDetailTable
           rows={detailRows}
+          showWarehouseColumns={showWarehouseColumns}
           footer={{
             totalDebit,
             totalCredit,
@@ -207,7 +273,7 @@ function InventoryTableInner({
             <AccountsTableHeadRow>
               <AccountsColumnHeader {...h("productName", "Product", { filterType: "text" })} />
               <AccountsColumnHeader {...h("uom", "UOM", { filterType: "text" })} />
-              <AccountsColumnHeader {...h("netQuantityConsumed", "Qty Consumed (Net)", { filterType: "amount", align: "right" })} />
+              <AccountsColumnHeader {...h("netQuantityConsumed", "Qty (Net)", { filterType: "amount", align: "right" })} />
               <AccountsColumnHeader {...h("averageUnitCost", "Avg Unit Cost", { filterType: "amount", align: "right" })} />
               <AccountsColumnHeader {...h("netInventoryValue", "Inventory Value (Net)", { filterType: "amount", align: "right" })} />
             </AccountsTableHeadRow>
@@ -280,6 +346,7 @@ export function InventoryProductWisePanel({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [drillProduct, setDrillProduct] = useState<InventoryProductWiseRow | null>(null);
+  const [warehouseId, setWarehouseId] = useState("");
 
   const getCellValue = useCallback((row: InventoryProductWiseRow, key: string) => {
     return (row as unknown as Record<string, unknown>)[key];
@@ -314,6 +381,7 @@ export function InventoryProductWisePanel({
       {
         dateFrom: dateFrom || undefined,
         dateTo: dateTo || undefined,
+        warehouseId: warehouseId || undefined,
         limit: 200,
         sortBy,
         sortDir,
@@ -337,33 +405,63 @@ export function InventoryProductWisePanel({
       })
       .finally(() => setLoading(false));
     return () => controller.abort();
-  }, [dateFrom, dateTo, sortBy, sortDir, searchParam, valueRange.min, valueRange.max, qtyRange.min, qtyRange.max]);
+  }, [
+    dateFrom,
+    dateTo,
+    warehouseId,
+    sortBy,
+    sortDir,
+    searchParam,
+    valueRange.min,
+    valueRange.max,
+    qtyRange.min,
+    qtyRange.max,
+  ]);
 
   if (drillProduct) {
     return (
-      <ProductTransactionsPanel
-        ledgerKind="stock-in-hand"
-        product={drillProduct}
-        dateFrom={dateFrom}
-        dateTo={dateTo}
-        onBack={() => setDrillProduct(null)}
-      />
-    );
-  }
-
-  if (loading) return <ProductWiseSkeleton />;
-
-  if (error) {
-    return (
-      <div className="flex flex-1 items-center justify-center py-12">
-        <p className="text-sm text-destructive">{error}</p>
+      <div className="flex flex-col flex-1 min-h-0">
+        <div className="flex items-center justify-between gap-3 px-4 py-2 border-b border-border bg-muted/20 flex-shrink-0">
+          <WarehouseFilterSelect value={warehouseId} onChange={setWarehouseId} />
+        </div>
+        <ProductTransactionsPanel
+          ledgerKind="stock-in-hand"
+          product={drillProduct}
+          dateFrom={dateFrom}
+          dateTo={dateTo}
+          warehouseId={warehouseId || undefined}
+          onBack={() => setDrillProduct(null)}
+        />
       </div>
     );
   }
 
   return (
     <AccountsColumnFilterContext.Provider value={filterCtx}>
-      <InventoryTableInner rows={rows} summary={summary} filterCtx={filterCtx} onProductClick={setDrillProduct} />
+      <div className="flex flex-col flex-1 min-h-0">
+        <div className="flex items-center justify-between gap-3 px-4 py-2 border-b border-border bg-muted/20 flex-shrink-0">
+          <WarehouseFilterSelect value={warehouseId} onChange={setWarehouseId} />
+          <p className="text-[11px] text-muted-foreground truncate">
+            {warehouseId
+              ? "Showing product stock for the selected warehouse"
+              : "Select a warehouse to view stock per product in that warehouse"}
+          </p>
+        </div>
+        {loading ? (
+          <ProductWiseSkeleton />
+        ) : error ? (
+          <div className="flex flex-1 items-center justify-center py-12">
+            <p className="text-sm text-destructive">{error}</p>
+          </div>
+        ) : (
+          <InventoryTableInner
+            rows={rows}
+            summary={summary}
+            filterCtx={filterCtx}
+            onProductClick={setDrillProduct}
+          />
+        )}
+      </div>
     </AccountsColumnFilterContext.Provider>
   );
 }
