@@ -352,8 +352,15 @@ function AC({ label, value, onChange, options, placeholder, required, error, dis
 }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
-  const filtered = q ? options.filter(o => o.label.toLowerCase().includes(q.toLowerCase())) : options;
-  const selected = options.find(o => o.value === value);
+  const query = q.trim().toLowerCase();
+  const filtered = query
+    ? options.filter(
+        (o) =>
+          o.label.toLowerCase().includes(query) ||
+          (o.sub && o.sub.toLowerCase().includes(query)),
+      )
+    : options;
+  const selected = options.find((o) => String(o.value) === String(value));
   return (
     <div className="space-y-1">
       <Label className="text-xs font-medium">
@@ -1521,37 +1528,18 @@ export default function EmployeeForm({
 
   // ── Flexible approval options from API when integrated ──
   const allApprovalOptions: ACOption[] = useMemo(() => {
-    if (approvalUserOptions !== undefined) return approvalUserOptions;
-
-    const aboveRoles = ROLES_ABOVE[form.role || ""] || [];
-    const directRole = aboveRoles[0] || "";
-    const geoMatch = (e: Employee) =>
-      (form.geoZone && e.geoZone && e.geoZone === form.geoZone) ||
-      (form.geoRegion && e.geoRegion && e.geoRegion === form.geoRegion);
-
-    const priority = (e: Employee): number => {
-      const isDirect = e.role === directRole;
-      const isHigher = aboveRoles.includes(e.role);
-      const isGeo = geoMatch(e);
-      if (isDirect && isGeo) return 0;
-      if (isDirect) return 1;
-      if (isHigher && isGeo) return 2;
-      if (isHigher) return 3;
-      return 4;
-    };
+    if (approvalUserOptions && approvalUserOptions.length > 0) return approvalUserOptions;
+    if (managerOptions && managerOptions.length > 0) return managerOptions;
 
     return allEmployees
       .filter(e => e.status === "active" && e.id !== employee?.id)
-      .sort((a, b) => {
-        const diff = priority(a) - priority(b);
-        return diff !== 0 ? diff : a.fullName.localeCompare(b.fullName);
-      })
+      .sort((a, b) => a.fullName.localeCompare(b.fullName))
       .map(e => ({
         label: e.fullName,
         value: e.id,
-        sub: `${e.employeeId} · ${e.role}${e.department ? ` · ${e.department}` : ""}${e.geoZone ? ` · ${e.geoZone}` : e.geoRegion ? ` · ${e.geoRegion}` : ""}`,
+        sub: `${e.employeeId} · ${e.role}${e.department ? ` · ${e.department}` : ""}`,
       }));
-  }, [employee?.id, form.role, form.geoZone, form.geoRegion, approvalUserOptions]);
+  }, [approvalUserOptions, managerOptions, allEmployees, employee?.id]);
 
   const geoFields: string[] = useMemo(() => {
     const selectedApiRole = apiRoles?.find((r) => String(r.id) === String(form.roleId));
@@ -1605,16 +1593,17 @@ export default function EmployeeForm({
     });
 
   const setApprovalLevelUser = (idx: number, empId: number | string | "") => {
-    const fromApi = approvalUserOptions?.find((o) => String(o.value) === String(empId));
-    const emp = !fromApi ? (empId ? allEmployees.find(e => String(e.id) === String(empId)) : null) : null;
+    const fromOptions = allApprovalOptions?.find((o) => String(o.value) === String(empId));
+    const emp = !fromOptions ? (empId ? allEmployees.find(e => String(e.id) === String(empId)) : null) : null;
     setApprovalLevels(prev => {
       const arr = [...prev];
+      const subParts = (fromOptions?.sub || "").split("·").map(s => s.trim());
       arr[idx] = {
         uid: arr[idx].uid,
         empId: empId || null,
-        name: fromApi?.label || emp?.fullName || "",
-        role: fromApi?.sub?.split("·")[1]?.trim() || emp?.role || "",
-        employeeCode: fromApi?.sub?.split("·")[0]?.trim() || emp?.employeeId || "",
+        name: fromOptions?.label || emp?.fullName || "",
+        role: subParts[1] || emp?.role || "",
+        employeeCode: subParts[0] || emp?.employeeId || "",
       };
       return arr;
     });
