@@ -623,7 +623,14 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: st
                     return (
                       <tr key={line.id} className="border-b border-border/60 hover:bg-muted/20">
                         <td className="px-3 py-2 text-muted-foreground">{i + 1}</td>
-                        <td className="px-3 py-2 font-medium">{line.productName}</td>
+                        <td className="px-3 py-2 font-medium">
+                          <p className="text-xs font-medium text-foreground">{line.productName}</p>
+                          {line.productCode ? (
+                            <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">
+                              SKU: {line.productCode}
+                            </p>
+                          ) : null}
+                        </td>
                         <td className="px-3 py-2 text-muted-foreground">{line.description || "—"}</td>
                         <td className="px-3 py-2 text-right tabular-nums">{line.invoiceQty}</td>
                         <td className="px-3 py-2 text-muted-foreground">{line.unit}</td>

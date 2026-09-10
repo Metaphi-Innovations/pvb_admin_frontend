@@ -19,6 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
+import { resolveSkuFromProductSnapshot } from "@/lib/accounts/product-sku";
 import { useFormDirtySnapshot } from "@/lib/accounts/use-form-dirty-snapshot";
 import { useTransactionFormCancel } from "@/components/accounts/TransactionFormCancel";
 import { formatMoney, roundMoney } from "@/lib/accounts/money-format";
@@ -658,9 +659,19 @@ export function PurchaseInvoiceGrnForm({
                           <tr key={item.grn_item_id || idx} className="border-b border-border/40 last:border-0">
                             <td className="p-1.5 pr-2 font-medium min-w-0">
                               <span className="block truncate">
-                                {snapshotStr(item.product_snapshot, "product_name", "name", "product_code") ||
+                                {snapshotStr(item.product_snapshot, "product_name", "name") ||
                                   `Item ${idx + 1}`}
                               </span>
+                              {(() => {
+                                const sku = resolveSkuFromProductSnapshot(
+                                  (item.product_snapshot || null) as Record<string, unknown> | null,
+                                );
+                                return sku ? (
+                                  <span className="mt-0.5 block truncate font-mono text-[11px] text-muted-foreground">
+                                    SKU: {sku}
+                                  </span>
+                                ) : null;
+                              })()}
                             </td>
                             <td className="p-1.5 pr-2 text-right">
                               <InvoiceTableReadonly value={String(Number(item.quantity))} />

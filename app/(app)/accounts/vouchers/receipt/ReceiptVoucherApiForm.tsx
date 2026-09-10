@@ -1160,7 +1160,7 @@ export function ReceiptVoucherApiForm({
 
               {form.transaction_mode !== "CASH" && form.transaction_mode !== "CHEQUE" ? (
                 <>
-                  <InvoiceDetailField label="UTR Number">
+                  <InvoiceDetailField label="UTR Number" required>
                     <Input
                       className={INVOICE_DETAIL_INPUT_CLASS}
                       value={form.utr_number}
@@ -1169,7 +1169,7 @@ export function ReceiptVoucherApiForm({
                       placeholder="UTR…"
                     />
                   </InvoiceDetailField>
-                  <InvoiceDetailField label="Transaction Reference">
+                  <InvoiceDetailField label="Transaction Reference" required>
                     <Input
                       className={INVOICE_DETAIL_INPUT_CLASS}
                       value={form.transaction_reference}
@@ -1275,7 +1275,12 @@ export function ReceiptVoucherApiForm({
                       : "Gross Amount"
                     : "Gross Refund Amount"
               }
-              required={form.party_kind === "OTHER_LEDGER"}
+              required={
+                form.party_kind === "OTHER_LEDGER" ||
+                form.party_kind === "SUPPLIER" ||
+                (form.party_kind === "CUSTOMER" &&
+                  (isCustomerAdvance || form.receipt_treatment === "mixed_allocation"))
+              }
             >
               <Input
                 className={cn(INVOICE_DETAIL_INPUT_CLASS, VOUCHER_MONEY_INPUT_CLASS, "tabular-nums")}

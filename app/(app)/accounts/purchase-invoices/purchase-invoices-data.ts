@@ -94,6 +94,8 @@ export interface PurchaseInvoiceLine {
   id: string;
   productId: number | null;
   productName: string;
+  /** Product Master SKU (not system product_code). */
+  productCode?: string;
   description: string;
   batchNumber?: string;
   mfgDate?: string;

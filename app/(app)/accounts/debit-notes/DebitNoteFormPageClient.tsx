@@ -1690,7 +1690,7 @@ export default function DebitNoteFormPageClient({
                       {debitNoteNo || "…"}
                     </div>
                   </InvoiceDetailField>
-                  <InvoiceDetailField label="Debit Note Date">
+                  <InvoiceDetailField label="Debit Note Date" required>
                     <AccountsDateInput
                       value={debitNoteDate}
                       onChange={setDebitNoteDate}
@@ -1701,7 +1701,7 @@ export default function DebitNoteFormPageClient({
                   {isDirectMode || warehouseId ? (
                     <InvoiceDetailField
                       label="Warehouse"
-                      required={isDirectMode}
+                      required={isDirectMode || !referencePreview?.sourceGrnNo}
                       labelExtra={
                         <DebitNoteWarehouseInfoButton warehouseId={warehouseId || null} />
                       }
@@ -2169,7 +2169,17 @@ export default function DebitNoteFormPageClient({
             ) : null}
 
             <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_300px] gap-2.5 items-start">
-              <VoucherFormSectionCard title="Narration">
+              <VoucherFormSectionCard
+                title={
+                  isPendingEntitlement || isSourceRefMode ? (
+                    <>
+                      Narration <span className="text-red-500">*</span>
+                    </>
+                  ) : (
+                    "Narration"
+                  )
+                }
+              >
                 <Textarea
                   className={cnMerge(VOUCHER_INPUT_CLASS, "so-goods-narration min-h-[60px] h-auto resize-y text-xs w-full")}
                   value={narration || remarks}
@@ -2177,7 +2187,11 @@ export default function DebitNoteFormPageClient({
                     setNarration(e.target.value);
                     setRemarks(e.target.value);
                   }}
-                  placeholder="Optional narration…"
+                  placeholder={
+                    isPendingEntitlement || isSourceRefMode
+                      ? "Enter narration…"
+                      : "Optional narration…"
+                  }
                   maxLength={2000}
                   disabled={saving}
                 />

@@ -9,6 +9,9 @@ import type {
   PurchaseNature,
   PurchaseSourceType,
 } from "@/app/(app)/accounts/purchase-invoices/purchase-invoices-data";
+import {
+  resolveSkuFromProductSnapshot,
+} from "@/lib/accounts/product-sku";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -753,6 +756,7 @@ export function mapPurchaseInvoiceDetailToRecord(
         snapshotStr(productSnap, "product_name", "name") ||
         asString(item.expense_description) ||
         `Line ${index + 1}`,
+      productCode: resolveSkuFromProductSnapshot(productSnap),
       description: asString(item.expense_description) || asString(item.narration),
       batchNumber: snapshotStr(batchSnap, "batch_number", "batchNumber"),
       mfgDate: asDateOnly(batchSnap?.manufacture_date),
@@ -921,7 +925,8 @@ export function mapPrepareItemsToLines(
       id: item.grn_item_id || `prep-${index}`,
       productId: null,
       productName:
-        snapshotStr(snap, "product_name", "name", "product_code") || `Item ${index + 1}`,
+        snapshotStr(snap, "product_name", "name") || `Item ${index + 1}`,
+      productCode: resolveSkuFromProductSnapshot(snap),
       description: snapshotStr(snap, "hsn_code", "hsn") || "",
       batchNumber: snapshotStr(batchSnap, "batch_number", "batchNumber"),
       mfgDate: asDateOnly(batchSnap?.manufacture_date),

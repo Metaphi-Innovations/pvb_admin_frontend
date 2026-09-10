@@ -454,7 +454,7 @@ export default function InvoiceViewPageClient({
   const productCodeById = useMemo(() => {
     const map = new Map<number, string>();
     for (const p of loadProducts()) {
-      map.set(p.id, p.productCode || p.sku || "");
+      map.set(p.id, p.sku || p.productCode || "");
     }
     return map;
   }, []);

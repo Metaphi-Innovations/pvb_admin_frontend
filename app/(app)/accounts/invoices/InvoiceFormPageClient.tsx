@@ -2715,7 +2715,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
             showDispatchSelect={!isStockTransferInvoice && !soGen}
             previewInvoiceNo={soGen ? previewInvoiceNo : undefined}
             compactGrid={soGen}
-            invoiceDateRequired={soGen}
+            invoiceDateRequired
             goodsGenerateCompact={soGen}
             sourceDocumentLabel={
               isStockTransferInvoice ? "Stock Transfer No." : "Sales Order No."
@@ -2810,7 +2810,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
                 value={bankAccountId}
                 onChange={handleBankAccountChange}
                 label="Bank Account (for payment / print)"
-                required={false}
+                required={!sourceDispatchId}
               />
               {bankPrintDetails && (
                 <p className="text-[11px] text-muted-foreground mt-1 font-mono">

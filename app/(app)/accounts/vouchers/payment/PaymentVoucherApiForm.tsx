@@ -986,7 +986,7 @@ export function PaymentVoucherApiForm({
 
               {form.transaction_mode !== "CASH" && form.transaction_mode !== "CHEQUE" ? (
                 <>
-                  <InvoiceDetailField label="UTR Number">
+                  <InvoiceDetailField label="UTR Number" required>
                     <Input
                       className={INVOICE_DETAIL_INPUT_CLASS}
                       value={form.utr_number}
@@ -995,7 +995,7 @@ export function PaymentVoucherApiForm({
                       placeholder="UTR…"
                     />
                   </InvoiceDetailField>
-                  <InvoiceDetailField label="Transaction Reference">
+                  <InvoiceDetailField label="Transaction Reference" required>
                     <Input
                       className={INVOICE_DETAIL_INPUT_CLASS}
                       value={form.transaction_reference}
@@ -1105,7 +1105,11 @@ export function PaymentVoucherApiForm({
                     ? "Gross Refund Amount"
                     : "Gross Amount"
               }
-              required={form.party_kind !== "SUPPLIER"}
+              required={
+                form.party_kind !== "SUPPLIER" ||
+                form.payment_treatment === "advance_on_account" ||
+                form.payment_treatment === "mixed_allocation"
+              }
             >
               <Input
                 className={cn(INVOICE_DETAIL_INPUT_CLASS, VOUCHER_MONEY_INPUT_CLASS, "tabular-nums")}

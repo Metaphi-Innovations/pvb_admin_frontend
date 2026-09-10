@@ -8,6 +8,7 @@ import type {
 } from "@/app/(app)/accounts/invoices/invoices-data";
 import { recalculateLineItem } from "@/app/(app)/accounts/invoices/invoices-data";
 import type { InvoiceAdditionalExpense } from "@/app/(app)/accounts/invoices/invoice-additional-expenses";
+import { resolveProductSkuDisplay } from "@/lib/accounts/product-sku";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -256,6 +257,14 @@ export type SalesInvoiceListDto = {
     so_number?: string | null;
     salesperson_name?: string | null;
   } | null;
+  stock_transfer?: {
+    stock_transfer_id?: string | null;
+    transfer_no?: string | null;
+  } | null;
+  sample_order?: {
+    sample_order_id?: string | null;
+    order_no?: string | null;
+  } | null;
   total_quantity?: number | string | null;
 };
 
@@ -377,6 +386,8 @@ export type PrepareDispatchInvoiceDto = {
     dispatch_item_id: string;
     product_id: string;
     product_code?: string | null;
+    /** Product Master SKU (prefer over product_code for display). */
+    sku?: string | null;
     product_name?: string | null;
     batch_id?: string | null;
     batch_no?: string | null;
@@ -540,7 +551,7 @@ export function mapPrepareDispatchItemsToLineItems(
       id: item.dispatch_item_id || `line-${index}`,
       productId: null,
       productUuid: item.product_id || null,
-      productCode: item.product_code || "",
+      productCode: resolveProductSkuDisplay(item.sku, item.product_code),
       productName: item.product_name || "—",
       description: `Dispatch Ref: ${dispatchNumber}`,
       hsn: item.hsn_code || "—",
@@ -749,7 +760,13 @@ function mapBackendLineItem(
     id: asString(raw.sales_invoice_item_id || raw.id || `line-${idx}`),
     productId: null,
     productName,
-    productCode: asString(productSnap.product_code || productSnap.productCode),
+    productCode: resolveProductSkuDisplay(
+      productSnap.sku as string | undefined,
+      productSnap.product_sku as string | undefined,
+      productSnap.SKU as string | undefined,
+      productSnap.product_code as string | undefined,
+      productSnap.productCode as string | undefined,
+    ),
     description: asString(raw.narration) || productName,
     hsn:
       asString(hsnSnap.hsnCode || hsnSnap.hsn_code) ||
@@ -917,8 +934,8 @@ export function mapSalesInvoiceDetailToRecord(
     dispatchNo: dto.dispatch?.dispatch_number || dto.dispatch_number || undefined,
     salesOrderNo:
       dto.sales_order?.so_number ||
-      (dto as { stock_transfer?: { transfer_no?: string | null } }).stock_transfer
-        ?.transfer_no ||
+      dto.stock_transfer?.transfer_no ||
+      dto.sample_order?.order_no ||
       snapshotStr(
         (dto.destination_warehouse_snapshot || null) as Record<string, unknown> | null,
         "transfer_no",
