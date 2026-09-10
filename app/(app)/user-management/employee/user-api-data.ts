@@ -1,5 +1,6 @@
 import type { Employee, UserPermissions } from "./employee-data";
 import { ROLE_GEO_FIELDS } from "./employee-data";
+import { canonicalizePermKeySet } from "@/lib/auth/permission-aliases";
 import type {
   ApprovalUserOption,
   UserCreatePayload,
@@ -397,7 +398,10 @@ export function templatePermissionsToSets(template: {
     mobileSet.add(`${p.moduleKey}.${p.actionKey}`);
   });
 
-  return { webSet, mobileSet };
+  return {
+    webSet: canonicalizePermKeySet(webSet),
+    mobileSet,
+  };
 }
 
 export type { UserPermissions };
