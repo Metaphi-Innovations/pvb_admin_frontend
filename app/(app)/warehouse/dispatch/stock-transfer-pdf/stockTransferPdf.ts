@@ -212,6 +212,12 @@ export function mapDispatchToStockTransfer(
     billFrom: transferring,
     billTo: receiving,
     shipTo: receiving,
+    narration: (() => {
+      const fromBase = String(base.narration ?? "").trim();
+      if (fromBase) return fromBase;
+      // Only use ST remarks as narration — never reason (often a code/distance).
+      return String(st.remarks ?? "").trim();
+    })(),
   };
 }
 

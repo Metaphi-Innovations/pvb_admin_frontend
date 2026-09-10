@@ -111,6 +111,7 @@ export interface TaxInvoiceViewModel {
   summary: {
     grossAmount: number;
     discount: number;
+    additionalCharges: number;
     taxableValue: number;
     cgst: number;
     sgst: number;
@@ -250,6 +251,11 @@ export function mapDispatchToTaxInvoice(
     warehouseState.toLowerCase() !== customerState.toLowerCase() ||
     toNumber(pick(readRecord((dispatch?.items || [])[0]), ["igst_percentage", "igst_amount"])) >
       0;
+
+  const salesInvoice = readRecord(
+    dispatch?.sales_invoice ??
+      (Array.isArray(dispatch?.sales_invoices) ? dispatch.sales_invoices[0] : null),
+  );
 
   const items = (dispatch?.items || dispatch?.products || []) as any[];
   const lines: TaxInvoiceLineItem[] = items.map((item, index) => {
@@ -394,6 +400,43 @@ export function mapDispatchToTaxInvoice(
     };
   });
 
+  const invoiceCharges = Array.isArray(salesInvoice.additional_charges)
+    ? (salesInvoice.additional_charges as unknown[])
+    : [];
+  for (const rawCharge of invoiceCharges) {
+    const charge = readRecord(rawCharge);
+    const gstPct =
+      toNumber(charge.gst_rate) ||
+      toNumber(charge.igst_rate) ||
+      toNumber(charge.cgst_rate) + toNumber(charge.sgst_rate);
+    lines.push({
+      sr: lines.length + 1,
+      productCode: "—",
+      productName: asText(charge.charge_name, "Additional Charge"),
+      batchLine: "",
+      sku: "—",
+      hsnCode: asText(
+        pick(readRecord(charge.hsn_snapshot), ["hsn_code"]) ||
+          pick(readRecord(charge.additional_charge_snapshot), ["hsn_sac_code"]),
+        "",
+      ),
+      qtyInCase: 0,
+      totalQty: 1,
+      uom: "—",
+      rate: toNumber(charge.amount),
+      grossAmt: round2(toNumber(charge.amount)),
+      discPct: 0,
+      discAmt: 0,
+      taxableValue: toNumber(charge.taxable_amount),
+      gstPct,
+      cgst: toNumber(charge.cgst_amount),
+      sgst: toNumber(charge.sgst_amount),
+      igst: toNumber(charge.igst_amount),
+      total: toNumber(charge.total_amount),
+      interstate: interstate || toNumber(charge.igst_amount) > 0,
+    });
+  }
+
   const hsnMap = new Map<string, TaxInvoiceHsnSummaryRow>();
   for (const line of lines) {
     const key = `${line.hsnCode}|${line.gstPct}`;
@@ -417,16 +460,45 @@ export function mapDispatchToTaxInvoice(
     }
   }
 
-  const grossAmount = round2(lines.reduce((s, l) => s + l.grossAmt, 0));
-  const discount = round2(lines.reduce((s, l) => s + l.discAmt, 0));
-  const taxableValue = round2(lines.reduce((s, l) => s + l.taxableValue, 0));
-  const cgst = round2(lines.reduce((s, l) => s + l.cgst, 0));
-  const sgst = round2(lines.reduce((s, l) => s + l.sgst, 0));
-  const igst = round2(lines.reduce((s, l) => s + l.igst, 0));
-  const totalTax = round2(cgst + sgst + igst);
-  const beforeRound = round2(taxableValue + totalTax);
-  const grandTotal = Math.round(beforeRound);
-  const roundOff = round2(grandTotal - beforeRound);
+  const linesGross = round2(lines.reduce((s, l) => s + l.grossAmt, 0));
+  const linesDiscount = round2(lines.reduce((s, l) => s + l.discAmt, 0));
+  const linesTaxable = round2(lines.reduce((s, l) => s + l.taxableValue, 0));
+  const linesCgst = round2(lines.reduce((s, l) => s + l.cgst, 0));
+  const linesSgst = round2(lines.reduce((s, l) => s + l.sgst, 0));
+  const linesIgst = round2(lines.reduce((s, l) => s + l.igst, 0));
+  const linesTax = round2(linesCgst + linesSgst + linesIgst);
+  const additionalChargesFromRows = round2(
+    invoiceCharges.reduce((sum, rawCharge) => {
+      const charge = readRecord(rawCharge);
+      return sum + toNumber(charge.amount);
+    }, 0),
+  );
+
+  // Prefer posted sales-invoice totals when present so PDF matches Accounts.
+  const grossAmount =
+    toNumber(salesInvoice.gross_amount) || linesGross;
+  const discount =
+    toNumber(salesInvoice.product_discount_amount) || linesDiscount;
+  const additionalCharges =
+    toNumber(salesInvoice.additional_charge_amount) || additionalChargesFromRows;
+  const taxableValue =
+    toNumber(salesInvoice.taxable_amount) || linesTaxable;
+  const cgst = toNumber(salesInvoice.cgst_amount) || linesCgst;
+  const sgst = toNumber(salesInvoice.sgst_amount) || linesSgst;
+  const igst = toNumber(salesInvoice.igst_amount) || linesIgst;
+  const totalTax =
+    toNumber(salesInvoice.gst_amount) || round2(cgst + sgst + igst) || linesTax;
+  const hasInvoiceTotals =
+    toNumber(salesInvoice.invoice_amount) > 0 ||
+    Object.prototype.hasOwnProperty.call(salesInvoice, "round_off_amount");
+  const derivedBeforeRound = round2(taxableValue + totalTax);
+  const derivedGrand = Math.round(derivedBeforeRound);
+  const grandTotal = hasInvoiceTotals
+    ? toNumber(salesInvoice.invoice_amount) || derivedGrand
+    : derivedGrand;
+  const roundOff = hasInvoiceTotals
+    ? toNumber(salesInvoice.round_off_amount)
+    : round2(derivedGrand - derivedBeforeRound);
 
   const warehouseName = asText(
     warehouse.warehouse_name,
@@ -523,17 +595,20 @@ export function mapDispatchToTaxInvoice(
     hsnSummary: Array.from(hsnMap.values()),
     bank: { ...DEFAULT_BANK },
     narration: (() => {
-      const inv = readRecord(dispatch?.sales_invoice);
-      const fromNarration = String(inv.narration ?? "").trim();
+      const fromNarration = String(salesInvoice.narration ?? "").trim();
       if (fromNarration) return fromNarration;
       return String(
-        inv.remarks ?? dispatch?.remarks ?? dispatch?.narration ?? "",
+        salesInvoice.remarks ??
+          dispatch?.remarks ??
+          dispatch?.narration ??
+          "",
       ).trim();
     })(),
     terms: DEFAULT_TI_DECLARATION,
     summary: {
       grossAmount,
       discount,
+      additionalCharges,
       taxableValue,
       cgst,
       sgst,
@@ -651,7 +726,7 @@ export function buildTaxInvoiceHtml(
     layout?: "tax_invoice" | "proforma";
   },
 ): string {
-  const docTitle = options?.docTitle || "TAX INVOICE";
+  const docTitle = options?.docTitle || "SALES INVOICE";
   const partyMode = options?.partyMode || "bill_ship";
   const isProforma = options?.layout === "proforma";
   const useIgst = data.interstate || data.lines.some((l) => l.igst > 0);
@@ -716,39 +791,45 @@ export function buildTaxInvoiceHtml(
         { key: "total", header: "Total", width: "6.5%", numeric: true },
       ];
 
-  const finalRows: PdfTableRow[] = data.lines.map((line) => ({
-    cells: {
-      sr: String(line.sr),
-      productCode: line.productCode,
-      productName: line.productName,
-      sku: line.sku,
-      salesPerson: data.salesPerson,
-      hsn: line.hsnCode,
-      qtyCase: formatNumber(line.qtyInCase),
-      totalQty: `${formatNumber(line.totalQty)} ${line.uom}`,
-      rate: formatCurrency(line.rate),
-      gross: formatCurrency(line.grossAmt),
-      discPct: line.discPct ? pctLabel(line.discPct) : "—",
-      discAmt: formatCurrency(line.discAmt),
-      taxable: formatCurrency(line.taxableValue),
-      gstPct: pctLabel(line.gstPct),
-      cgst: formatCurrency(useIgst ? line.igst : line.cgst),
-      sgst: formatCurrency(line.sgst),
-      total: formatCurrency(line.total),
-    },
-    htmlCells: {
-      productName: `<strong>${escapeHtml(line.productName)}</strong>${
-        line.batchLine
-          ? `<span class="sub">${escapeHtml(line.batchLine)}</span>`
-          : ""
-      }`,
-      total: `<strong>${escapeHtml(formatCurrency(line.total))}</strong>`,
-    },
-  }));
+  const finalRows: PdfTableRow[] = data.lines.map((line) => {
+    const isCharge = line.productCode === "—" && line.uom === "—";
+    return {
+      cells: {
+        sr: String(line.sr),
+        productCode: line.productCode,
+        productName: line.productName,
+        sku: line.sku,
+        salesPerson: data.salesPerson,
+        hsn: line.hsnCode,
+        qtyCase: isCharge ? "—" : formatNumber(line.qtyInCase),
+        totalQty: isCharge ? "—" : `${formatNumber(line.totalQty)} ${line.uom}`,
+        rate: formatCurrency(line.rate),
+        gross: formatCurrency(line.grossAmt),
+        discPct: line.discPct ? pctLabel(line.discPct) : "—",
+        discAmt: isCharge ? "—" : formatCurrency(line.discAmt),
+        taxable: formatCurrency(line.taxableValue),
+        gstPct: pctLabel(line.gstPct),
+        cgst: formatCurrency(useIgst ? line.igst : line.cgst),
+        sgst: formatCurrency(line.sgst),
+        total: formatCurrency(line.total),
+      },
+      htmlCells: {
+        productName: `<strong>${escapeHtml(line.productName)}</strong>${
+          line.batchLine
+            ? `<span class="sub">${escapeHtml(line.batchLine)}</span>`
+            : ""
+        }`,
+        total: `<strong>${escapeHtml(formatCurrency(line.total))}</strong>`,
+      },
+    };
+  });
 
-  const totalCases = data.lines.reduce((s, l) => s + l.qtyInCase, 0);
-  const totalQty = data.lines.reduce((s, l) => s + l.totalQty, 0);
-  const uom = data.lines[0]?.uom || "Units";
+  const productLines = data.lines.filter(
+    (l) => l.productCode !== "—" || l.uom !== "—",
+  );
+  const totalCases = productLines.reduce((s, l) => s + l.qtyInCase, 0);
+  const totalQty = productLines.reduce((s, l) => s + l.totalQty, 0);
+  const uom = productLines[0]?.uom || data.lines[0]?.uom || "Units";
   const linesTotal = round2(data.lines.reduce((s, l) => s + l.total, 0));
   const b = blankCell();
 
@@ -821,6 +902,14 @@ export function buildTaxInvoiceHtml(
   const summaryRows = [
     { label: "Gross Amount / Subtotal", value: formatCurrency(data.summary.grossAmount) },
     { label: "(-) Discount", value: formatCurrency(data.summary.discount) },
+    ...(Number(data.summary.additionalCharges || 0) > 0
+      ? [
+          {
+            label: "Additional Charges",
+            value: formatCurrency(data.summary.additionalCharges),
+          },
+        ]
+      : []),
     { label: "Taxable Value", value: formatCurrency(data.summary.taxableValue) },
     ...(useIgst
       ? [{ label: "IGST", value: formatCurrency(data.summary.igst) }]
@@ -837,6 +926,11 @@ export function buildTaxInvoiceHtml(
     },
   ];
 
+  const soNoLabel =
+    partyMode === "branches" ? "Stock Transfer No." : "Sales Order No.";
+  const soDateLabel =
+    partyMode === "branches" ? "Stock Transfer Date" : "Sales Order Date";
+
   const metaBlock = isProforma
     ? `
     <div class="ti-meta-row cols-4">${[
@@ -847,8 +941,8 @@ export function buildTaxInvoiceHtml(
     ].join("")}</div>
     <div class="ti-dash"></div>
     <div class="ti-meta-row cols-4">${[
-      metaFieldHtml("Sales Order No.", data.salesOrderNo),
-      metaFieldHtml("Sales Order Date", data.salesOrderDate),
+      metaFieldHtml(soNoLabel, data.salesOrderNo),
+      metaFieldHtml(soDateLabel, data.salesOrderDate),
       metaFieldHtml("Place of Supply", data.placeOfSupply),
       metaFieldHtml("State Code", data.stateCode),
     ].join("")}</div>
@@ -858,11 +952,20 @@ export function buildTaxInvoiceHtml(
     <div class="ti-meta-row cols-7">${[
       metaFieldHtml("Invoice No.", data.invoiceNo),
       metaFieldHtml("Invoice Date", data.invoiceDate),
-      metaFieldHtml("Customer PO No.", data.customerPoNo),
-      metaFieldHtml("Customer PO Date", data.customerPoDate),
-      metaFieldHtml("Sales Order No.", data.salesOrderNo),
-      metaFieldHtml("Sales Order Date", data.salesOrderDate),
-      metaFieldHtml("Sales Person (TM)", data.salesPerson),
+      metaFieldHtml(
+        partyMode === "branches" ? "Reference No." : "Customer PO No.",
+        data.customerPoNo,
+      ),
+      metaFieldHtml(
+        partyMode === "branches" ? "Reference Date" : "Customer PO Date",
+        data.customerPoDate,
+      ),
+      metaFieldHtml(soNoLabel, data.salesOrderNo),
+      metaFieldHtml(soDateLabel, data.salesOrderDate),
+      metaFieldHtml(
+        partyMode === "branches" ? "Requested By" : "Sales Person (TM)",
+        data.salesPerson,
+      ),
     ].join("")}</div>
     <div class="ti-dash"></div>
     <div class="ti-meta-row cols-6">${[
