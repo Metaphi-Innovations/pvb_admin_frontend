@@ -7,6 +7,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { AlertCircle, ChevronsUpDown, Check } from "lucide-react";
+import { GstVerificationButton } from "@/components/gst";
+import type { GstAutoFillPayload } from "@/components/gst";
+import { showToast } from "@/lib/toast";
 import {
   type Supplier,
   type SupplierStatus,
@@ -156,6 +159,19 @@ export function SupplierForm({
     onClearError(key);
   };
 
+  const handleGstAutoFill = (payload: GstAutoFillPayload) => {
+    onChange({
+      ...form,
+      supplierName: payload.legalName || form.supplierName,
+      address: payload.legalAddress || form.address,
+      gstin: payload.gstin || form.gstin,
+    });
+    onClearError("supplierName");
+    onClearError("address");
+    onClearError("gstin");
+    showToast("Legal name and legal address auto-filled from GSTIN.", "success");
+  };
+
   const inputCls = (key: string) =>
     cn("h-8 text-xs", errors[key] && "border-red-400 focus-visible:ring-red-300");
 
@@ -224,13 +240,23 @@ export function SupplierForm({
         {/* GSTIN */}
         <div className="col-span-2 space-y-1">
           <Label className="text-xs font-medium">GSTIN</Label>
-          <Input
-            value={form.gstin}
-            onChange={(e) => set("gstin", e.target.value.toUpperCase())}
-            placeholder="27AABCU9603R1ZX"
-            className={cn("font-mono", inputCls("gstin"))}
-            disabled={readOnly}
-          />
+          <div className="flex items-start gap-2">
+            <Input
+              value={form.gstin}
+              onChange={(e) => set("gstin", e.target.value.toUpperCase())}
+              placeholder="27AABCU9603R1ZX"
+              className={cn("font-mono flex-1", inputCls("gstin"))}
+              disabled={readOnly}
+              maxLength={15}
+            />
+            {!readOnly && (
+              <GstVerificationButton
+                gstin={form.gstin}
+                onAutoFill={handleGstAutoFill}
+                onError={(message) => showToast(message, "error")}
+              />
+            )}
+          </div>
           <FieldError msg={errors.gstin} />
         </div>
 

@@ -108,9 +108,9 @@ function mapBackendStatusToFrontend(status: string): any {
 function mapFrontendStatusToBackend(status: string): string {
   const s = asString(status).toLowerCase();
   if (s === "pending_approval") return "PENDING_APPROVAL";
-  if (s === "approved") return "APPROVED";
+  // "confirmed" is the FE submit signal — backend stores APPROVED (approval bypassed).
+  if (s === "approved" || s === "confirmed") return "APPROVED";
   if (s === "rejected") return "REJECTED";
-  if (s === "confirmed") return "CONFIRMED";
   if (s === "cancelled") return "CANCELLED";
   return "DRAFT";
 }

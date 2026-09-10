@@ -77,14 +77,21 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { AccountsToast, useAccountsToast } from "@/components/accounts/AccountsToast";
 import { cn } from "@/lib/utils";
 import { AgeingGroupedTable } from "./AgeingGroupedTable";
+import { AgeingPartySummaryTable } from "@/components/accounts/AgeingPartySummaryTable";
 
 type WorkspaceView = "summary" | "bills" | "ageing";
+type AgeingSubTab = "party" | "billwise";
 type DueStatusFilter = "all" | "overdue" | "not_due";
 
 const VIEW_TABS = [
   { id: "summary", label: "Vendor Summary" },
   { id: "bills", label: "Bill View" },
   { id: "ageing", label: "Ageing View" },
+];
+
+const AGEING_SUB_TABS = [
+  { id: "party", label: "Vendor Outstanding" },
+  { id: "billwise", label: "Vendor Bill Wise Outstanding" },
 ];
 
 function AmountCell({ amount, className }: { amount: number; className?: string }) {
@@ -108,6 +115,15 @@ function resolveInitialView(searchParams: URLSearchParams): WorkspaceView {
   if (view) return parseViewParam(view);
   if (tab) return parseViewParam(tab);
   return "summary";
+}
+
+function parseAgeingSubTab(raw: string | null): AgeingSubTab {
+  if (raw === "billwise" || raw === "bill-wise" || raw === "bills") return "billwise";
+  return "party";
+}
+
+function resolveInitialAgeingSubTab(searchParams: URLSearchParams): AgeingSubTab {
+  return parseAgeingSubTab(searchParams.get("ageingTab"));
 }
 
 function PayablesListSortSync({
@@ -437,6 +453,9 @@ export default function VendorOutstandingClient() {
   const [view, setView] = useState<WorkspaceView>(() =>
     resolveInitialView(new URLSearchParams(searchParams.toString())),
   );
+  const [ageingSubTab, setAgeingSubTab] = useState<AgeingSubTab>(() =>
+    resolveInitialAgeingSubTab(new URLSearchParams(searchParams.toString())),
+  );
   const [asOnDate, setAsOnDate] = useState(defaultAsOnDate());
   const [search, setSearch] = useState("");
   const [supplierIds, setSupplierIds] = useState<string[]>([]);
@@ -456,6 +475,9 @@ export default function VendorOutstandingClient() {
 
   useEffect(() => {
     setView(resolveInitialView(new URLSearchParams(searchParams.toString())));
+    setAgeingSubTab(
+      resolveInitialAgeingSubTab(new URLSearchParams(searchParams.toString())),
+    );
   }, [searchParams]);
 
   useEffect(() => {
@@ -470,6 +492,25 @@ export default function VendorOutstandingClient() {
       params.delete("tab");
       if (next === "summary") params.delete("view");
       else params.set("view", next === "bills" ? "bills" : next);
+      if (next === "ageing") {
+        if (!params.get("ageingTab")) params.set("ageingTab", ageingSubTab);
+      } else {
+        params.delete("ageingTab");
+      }
+      const qs = params.toString();
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    },
+    [router, pathname, searchParams, ageingSubTab],
+  );
+
+  const setAgeingWorkspaceSubTab = useCallback(
+    (next: AgeingSubTab) => {
+      setAgeingSubTab(next);
+      setPage(1);
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("view", "ageing");
+      params.set("ageingTab", next);
+      params.delete("tab");
       const qs = params.toString();
       router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
     },
@@ -567,11 +608,13 @@ export default function VendorOutstandingClient() {
       status: dueStatus === "overdue" ? "OVERDUE" : undefined,
       dueStatus,
       agingBreakpoints: appliedBreakpoints.join(","),
+      ageingLayout: view === "ageing" ? ageingSubTab : undefined,
       sortBy: apiSort,
       sortOrder: apiSort ? sortDir : undefined,
     };
   }, [
     view,
+    ageingSubTab,
     search,
     supplierIds,
     asOnDate,
@@ -786,6 +829,15 @@ export default function VendorOutstandingClient() {
               </Popover>
             )}
           </AccountsListingTabsRow>
+          {view === "ageing" && (
+            <div className="flex items-center px-3 py-1.5 border-b border-border/60 bg-muted/10">
+              <SectionTabs
+                tabs={AGEING_SUB_TABS}
+                active={ageingSubTab}
+                onChange={(id) => setAgeingWorkspaceSubTab(id as AgeingSubTab)}
+              />
+            </div>
+          )}
           {view === "summary" && (
             <SummaryTable
               rows={summaryRows}
@@ -814,7 +866,33 @@ export default function VendorOutstandingClient() {
               }}
             />
           )}
-          {view === "ageing" && (
+          {view === "ageing" && ageingSubTab === "party" && (
+            <AgeingPartySummaryTable
+              rows={ageingRows.map((g) => ({
+                partyId: String(g.vendorId),
+                partyName: g.vendorName,
+                partyCode: g.vendorCode,
+                buckets: g.totals.buckets,
+                totalOutstanding: g.totals.totalOutstanding,
+                notDueAmount: g.totals.notDueAmount,
+              }))}
+              bucketKeys={ageingBucketKeys}
+              partyColumnLabel="Broker"
+              balanceSide="Cr"
+              partyHref={(row) => `/accounts/payables/outstanding/${row.partyId}`}
+              totalRecords={total}
+              loading={loading}
+              error={error}
+              page={page}
+              pageSize={pageSize}
+              onPageChange={setPage}
+              onPageSizeChange={(s) => {
+                setPageSize(s);
+                setPage(1);
+              }}
+            />
+          )}
+          {view === "ageing" && ageingSubTab === "billwise" && (
             <AgeingGroupedTable
               groups={ageingRows}
               bucketKeys={ageingBucketKeys}

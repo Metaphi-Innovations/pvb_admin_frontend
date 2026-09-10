@@ -63,10 +63,8 @@ import { formatMoney } from "@/lib/accounts/money-format";
 import { formatDisplayDate, toIsoDateOnly } from "@/lib/accounts/date-display";
 import { cn } from "@/lib/utils";
 import { PURCHASE_SOURCE_TYPE_LABELS, type PurchaseNature, type PurchaseSourceType } from "./purchase-invoice-types";
-import { downloadPurchaseInvoicePdf } from "./purchase-invoice-pdf";
 import {
   PurchaseInvoiceService,
-  mapPurchaseInvoiceDetailToRecord,
   mapPurchaseInvoiceListDto,
   sourceTypeToInvoiceType,
   type EligibleGrnDto,
@@ -229,8 +227,8 @@ function ListingRowActions({
       {canDownload ? (
         <button
           type="button"
-          title="Download"
-          aria-label="Download"
+          title="Download supplier invoice"
+          aria-label="Download supplier invoice"
           disabled={downloading}
           className={ACCOUNTS_ACTION_BTN_CLASS}
           onClick={onDownload}
@@ -434,7 +432,9 @@ function PurchaseInvoicesTabTable({
                 <AccountsTableCell align="right" className={accountsActionColClass("multi")}>
                   <ListingRowActions
                     viewHref={`/accounts/purchase-invoices/${inv.id}`}
-                    canDownload={PurchaseInvoiceService.isUuid(inv.id)}
+                    canDownload={
+                      PurchaseInvoiceService.isUuid(inv.id) && inv.hasAttachment
+                    }
                     canCancel={
                       PurchaseInvoiceService.isUuid(inv.id) &&
                       inv.status === "POSTED" &&
@@ -1017,10 +1017,13 @@ export default function PurchaseInvoiceListClient() {
     setDownloadingId(row.id);
     setError(null);
     try {
-      const dto = await PurchaseInvoiceService.getById(row.id);
-      downloadPurchaseInvoicePdf(mapPurchaseInvoiceDetailToRecord(dto));
+      await PurchaseInvoiceService.downloadSupplierInvoice(row.id);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to download purchase invoice.");
+      setError(
+        e instanceof Error
+          ? e.message
+          : "Failed to download supplier invoice attachment.",
+      );
     } finally {
       setDownloadingId(null);
     }

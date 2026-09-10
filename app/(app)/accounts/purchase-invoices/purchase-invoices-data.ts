@@ -94,6 +94,8 @@ export interface PurchaseInvoiceLine {
   id: string;
   productId: number | null;
   productName: string;
+  /** Product Master SKU (not system product_code). */
+  productCode?: string;
   description: string;
   batchNumber?: string;
   mfgDate?: string;
@@ -155,7 +157,13 @@ export interface PurchaseInvoiceRecord {
   grnId: string | null;
   grnNo: string;
   warehouse?: string;
-  bankAccountId?: number | null;
+  bankAccountId?: string | null;
+  bankAccountPrint?: {
+    bankName: string;
+    accountNumber: string;
+    ifsc: string;
+    branchName: string;
+  } | null;
   source: PurchaseSource;
   sourceType?: PurchaseSourceType;
   purchaseNature?: PurchaseNature;
@@ -1217,7 +1225,13 @@ export type GrnPurchaseInput = {
   grnId: string;
   grnNo: string;
   warehouse?: string;
-  bankAccountId?: number | null;
+  bankAccountId?: string | null;
+  bankAccountPrint?: {
+    bankName: string;
+    accountNumber: string;
+    ifsc: string;
+    branchName: string;
+  } | null;
   vendorId: number;
   vendorInvoiceNo: string;
   invoiceDate: string;

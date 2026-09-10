@@ -45,12 +45,12 @@ export function InvoiceReceivePaymentModal({
     paymentMode: PaymentMode;
     referenceNo: string;
     remarks: string;
-    bankAccountId?: number | null;
+    bankAccountId?: string | null;
   }) => void;
 }) {
   const [paymentDate, setPaymentDate] = useState("");
   const [paymentMode, setPaymentMode] = useState<PaymentMode>("Bank Transfer");
-  const [bankAccountId, setBankAccountId] = useState<number | null>(null);
+  const [bankAccountId, setBankAccountId] = useState<string | null>(null);
   const [referenceNo, setReferenceNo] = useState("");
   const [amount, setAmount] = useState("");
   const [remarks, setRemarks] = useState("");
@@ -65,7 +65,9 @@ export function InvoiceReceivePaymentModal({
       setReferenceNo("");
       setAmount(String(maxPay));
       setRemarks("");
-      setBankAccountId(invoice.bankAccountId ?? null);
+      setBankAccountId(
+        typeof invoice.bankAccountId === "string" ? invoice.bankAccountId : null,
+      );
       setError(null);
     }
   }, [open, invoice?.id, maxPay]);
@@ -111,7 +113,7 @@ export function InvoiceReceivePaymentModal({
           </div>
           {needsBank && (
             <WarehouseMappedBankAccountSelect
-              warehouseRef={invoice?.warehouse}
+              warehouseId={invoice?.warehouseUuid}
               value={bankAccountId}
               onChange={(id) => setBankAccountId(id)}
               label="Bank Account"

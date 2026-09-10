@@ -60,7 +60,12 @@ export function invoiceHasProductDiscount(inv: InvoiceRecord): boolean {
 export function resolveLineSku(
   line: InvoiceLineItem,
   productCodeById: Map<number, string>,
+  productSkuByUuid?: Map<string, string>,
 ): string {
+  if (line.productUuid && productSkuByUuid) {
+    const fromUuid = productSkuByUuid.get(line.productUuid)?.trim();
+    if (fromUuid) return fromUuid;
+  }
   if (line.productCode?.trim()) return line.productCode.trim();
   if (line.productId != null) {
     const fromMaster = productCodeById.get(line.productId);

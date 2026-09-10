@@ -290,7 +290,7 @@ export default function DebitNoteFormPageClient({
   const [remarks, setRemarks] = useState("");
   const [attachments, setAttachments] = useState<DebitNoteAttachment[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [bankAccountId, setBankAccountId] = useState<number | null>(null);
+  const [bankAccountId, setBankAccountId] = useState<string | null>(null);
   const [roundOff, setRoundOff] = useState(0);
   const [directExtraCharges, setDirectExtraCharges] = useState<DirectExtraCharge[]>([]);
   const [pendingDetail, setPendingDetail] = useState<any | null>(null);
@@ -748,7 +748,9 @@ export default function DebitNoteFormPageClient({
       setAlreadyAdjusted(String(rec.alreadyAdjustedAmount));
       setRemarks(rec.remarks);
       setNarration(rec.remarks);
-      setBankAccountId(rec.bankAccountId ?? null);
+      setBankAccountId(
+        typeof rec.bankAccountId === "string" ? rec.bankAccountId : null,
+      );
       setAttachments(rec.attachments ?? []);
       setReferenceNo(rec.referenceNo ?? "");
       setAdjustmentLedgerId(rec.adjustmentLedgerId ?? null);
@@ -1688,7 +1690,7 @@ export default function DebitNoteFormPageClient({
                       {debitNoteNo || "…"}
                     </div>
                   </InvoiceDetailField>
-                  <InvoiceDetailField label="Debit Note Date">
+                  <InvoiceDetailField label="Debit Note Date" required>
                     <AccountsDateInput
                       value={debitNoteDate}
                       onChange={setDebitNoteDate}
@@ -1699,7 +1701,7 @@ export default function DebitNoteFormPageClient({
                   {isDirectMode || warehouseId ? (
                     <InvoiceDetailField
                       label="Warehouse"
-                      required={isDirectMode}
+                      required={isDirectMode || !referencePreview?.sourceGrnNo}
                       labelExtra={
                         <DebitNoteWarehouseInfoButton warehouseId={warehouseId || null} />
                       }
@@ -1871,11 +1873,11 @@ export default function DebitNoteFormPageClient({
                               placeholder="Optional"
                             />
                           </InvoiceDetailField>
-                          {warehouseRef ? (
+                          {warehouseId ? (
                             <InvoiceDetailField label="Bank Account (optional — refund only)">
                               <div className="space-y-1">
                                 <WarehouseMappedBankAccountSelect
-                                  warehouseRef={warehouseRef}
+                                  warehouseId={warehouseId}
                                   value={bankAccountId}
                                   onChange={(id) => setBankAccountId(id)}
                                   label=""
@@ -1914,11 +1916,11 @@ export default function DebitNoteFormPageClient({
                           placeholder="Optional"
                         />
                       </InvoiceDetailField>
-                      {warehouseRef ? (
+                      {warehouseId ? (
                         <InvoiceDetailField label="Bank Account (optional — refund only)">
                           <div className="space-y-1">
                             <WarehouseMappedBankAccountSelect
-                              warehouseRef={warehouseRef}
+                              warehouseId={warehouseId}
                               value={bankAccountId}
                               onChange={(id) => setBankAccountId(id)}
                               label=""
@@ -2167,7 +2169,16 @@ export default function DebitNoteFormPageClient({
             ) : null}
 
             <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_300px] gap-2.5 items-start">
-              <VoucherFormSectionCard title="Narration">
+              <VoucherFormSectionCard
+                title="Narration"
+                headerActions={
+                  isPendingEntitlement || isSourceRefMode ? (
+                    <span className="text-red-500 text-sm font-semibold leading-none" aria-hidden>
+                      *
+                    </span>
+                  ) : undefined
+                }
+              >
                 <Textarea
                   className={cnMerge(VOUCHER_INPUT_CLASS, "so-goods-narration min-h-[60px] h-auto resize-y text-xs w-full")}
                   value={narration || remarks}
@@ -2175,7 +2186,11 @@ export default function DebitNoteFormPageClient({
                     setNarration(e.target.value);
                     setRemarks(e.target.value);
                   }}
-                  placeholder="Optional narration…"
+                  placeholder={
+                    isPendingEntitlement || isSourceRefMode
+                      ? "Enter narration…"
+                      : "Optional narration…"
+                  }
                   maxLength={2000}
                   disabled={saving}
                 />

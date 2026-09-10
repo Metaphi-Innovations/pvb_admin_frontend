@@ -9,6 +9,93 @@ import type {
   PurchaseNature,
   PurchaseSourceType,
 } from "@/app/(app)/accounts/purchase-invoices/purchase-invoices-data";
+import {
+  resolveProductSkuDisplay,
+  resolveSkuFromProductSnapshot,
+} from "@/lib/accounts/product-sku";
+
+/** Prefer same-origin `/uploads/...` so Next rewrites proxy to the backend. */
+export function resolvePurchaseInvoiceAttachmentUrl(
+  path?: string | null,
+): string {
+  const raw = String(path ?? "").trim();
+  if (!raw) return "";
+  if (raw.startsWith("data:") || raw.startsWith("blob:")) return raw;
+
+  if (/^https?:\/\//i.test(raw)) {
+    try {
+      const parsed = new URL(raw);
+      if (parsed.pathname.startsWith("/uploads/")) {
+        return `${parsed.pathname}${parsed.search}`;
+      }
+      return raw;
+    } catch {
+      return raw;
+    }
+  }
+
+  const normalized = raw.startsWith("/") ? raw : `/${raw}`;
+  if (normalized.startsWith("/uploads/")) return normalized;
+  if (normalized.includes("/uploads/")) {
+    return normalized.slice(normalized.indexOf("/uploads/"));
+  }
+  return `/uploads/${normalized.replace(/^\//, "")}`;
+}
+
+/** Download the supplier invoice file uploaded at GRN/inward (or on the PI). */
+export async function downloadPurchaseInvoiceAttachment(
+  url: string,
+  fileName?: string,
+): Promise<void> {
+  const resolved = resolvePurchaseInvoiceAttachmentUrl(url);
+  if (!resolved) throw new Error("Supplier invoice attachment URL is missing.");
+
+  const tryUrls: string[] = [];
+  // Prefer absolute URL first when provided (avoids wrong-host rewrite 404s).
+  if (/^https?:\/\//i.test(String(url ?? "").trim())) {
+    tryUrls.push(String(url).trim());
+  }
+  tryUrls.push(resolved);
+  if (resolved.startsWith("/uploads/")) {
+    const apiBase = (
+      process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api"
+    ).trim();
+    const origin = apiBase.replace(/\/api\/?$/, "").replace(/\/+$/, "");
+    tryUrls.push(`${origin}${resolved}`);
+  }
+
+  let blob: Blob | null = null;
+  for (const candidate of [...new Set(tryUrls)]) {
+    try {
+      const response = await fetch(candidate, {
+        credentials: candidate.startsWith("/") ? "same-origin" : "include",
+      });
+      if (response.ok) {
+        blob = await response.blob();
+        break;
+      }
+    } catch {
+      // try next candidate
+    }
+  }
+
+  if (!blob) {
+    throw new Error(
+      "Supplier invoice file was not found on storage. It may have been deleted or never uploaded during GRN/inward.",
+    );
+  }
+
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = objectUrl;
+  link.download = (fileName || "supplier-invoice").trim() || "supplier-invoice";
+  link.rel = "noopener";
+  link.style.display = "none";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1500);
+}
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -286,6 +373,8 @@ export type PrepareGrnInvoiceDto = {
     purchase_order_product_id?: string | null;
     grn_item_id?: string | null;
     product_id?: string | null;
+    /** Product Master SKU (not system product_code). */
+    sku?: string | null;
     product_snapshot?: Record<string, unknown> | null;
     batch_snapshot?: Record<string, unknown> | null;
     quantity: string;
@@ -423,15 +512,38 @@ function isAbortError(error: unknown): boolean {
 
 function extractErrorMessage(error: unknown, fallback: string): string {
   const err = error as {
-    response?: { data?: { message?: string; error?: string } };
+    response?: { data?: unknown };
     message?: string;
   };
-  return (
-    err?.response?.data?.message ||
-    err?.response?.data?.error ||
-    err?.message ||
-    fallback
-  );
+  const data = err?.response?.data;
+  if (data && typeof data === "object" && !(data instanceof Blob)) {
+    const record = data as { message?: string; error?: string };
+    if (record.message?.trim()) return record.message.trim();
+    if (record.error?.trim()) return record.error.trim();
+  }
+  return err?.message || fallback;
+}
+
+async function extractBlobErrorMessage(
+  error: unknown,
+  fallback: string,
+): Promise<string> {
+  const err = error as {
+    response?: { data?: unknown };
+    message?: string;
+  };
+  const data = err?.response?.data;
+  if (data instanceof Blob) {
+    try {
+      const text = await data.text();
+      const parsed = JSON.parse(text) as { message?: string; error?: string };
+      if (parsed.message?.trim()) return parsed.message.trim();
+      if (parsed.error?.trim()) return parsed.error.trim();
+    } catch {
+      // fall through
+    }
+  }
+  return extractErrorMessage(error, fallback);
 }
 
 function snapshotStr(
@@ -753,6 +865,10 @@ export function mapPurchaseInvoiceDetailToRecord(
         snapshotStr(productSnap, "product_name", "name") ||
         asString(item.expense_description) ||
         `Line ${index + 1}`,
+      productCode: resolveProductSkuDisplay(
+        resolveSkuFromProductSnapshot(productSnap),
+        asString(item.sku),
+      ),
       description: asString(item.expense_description) || asString(item.narration),
       batchNumber: snapshotStr(batchSnap, "batch_number", "batchNumber"),
       mfgDate: asDateOnly(batchSnap?.manufacture_date),
@@ -921,7 +1037,11 @@ export function mapPrepareItemsToLines(
       id: item.grn_item_id || `prep-${index}`,
       productId: null,
       productName:
-        snapshotStr(snap, "product_name", "name", "product_code") || `Item ${index + 1}`,
+        snapshotStr(snap, "product_name", "name") || `Item ${index + 1}`,
+      productCode: resolveProductSkuDisplay(
+        asString(item.sku),
+        resolveSkuFromProductSnapshot(snap),
+      ),
       description: snapshotStr(snap, "hsn_code", "hsn") || "",
       batchNumber: snapshotStr(batchSnap, "batch_number", "batchNumber"),
       mfgDate: asDateOnly(batchSnap?.manufacture_date),
@@ -1258,6 +1378,65 @@ export const PurchaseInvoiceService = {
     } catch (error) {
       throw new Error(
         extractErrorMessage(error, "Failed to load purchase invoice."),
+      );
+    }
+  },
+
+  async downloadSupplierInvoice(id: string): Promise<void> {
+    try {
+      const response = await axiosInstance.get(
+        API_ENDPOINTS.ACCOUNTS.PURCHASE_INVOICE.SUPPLIER_INVOICE(id),
+        { responseType: "blob" },
+      );
+      const blob = response.data as Blob;
+      if (!(blob instanceof Blob) || blob.size === 0) {
+        throw new Error(
+          "No supplier invoice file was uploaded during GRN/inward for this purchase invoice.",
+        );
+      }
+      // API may return JSON error as blob when status is error — handled by interceptor usually,
+      // but guard content-type for safety.
+      const contentType = String(response.headers["content-type"] || "");
+      if (contentType.includes("application/json")) {
+        const text = await blob.text();
+        try {
+          const parsed = JSON.parse(text) as { message?: string };
+          throw new Error(
+            parsed.message ||
+              "No supplier invoice file was uploaded during GRN/inward for this purchase invoice.",
+          );
+        } catch (e) {
+          if (e instanceof Error && e.message && !e.message.startsWith("Unexpected")) {
+            throw e;
+          }
+          throw new Error(
+            "No supplier invoice file was uploaded during GRN/inward for this purchase invoice.",
+          );
+        }
+      }
+
+      const disposition = String(response.headers["content-disposition"] || "");
+      const match = /filename\*?=(?:UTF-8''|")?([^\";]+)/i.exec(disposition);
+      const fileName = match
+        ? decodeURIComponent(match[1].replace(/"/g, "").trim())
+        : "supplier-invoice";
+
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = fileName || "supplier-invoice";
+      link.rel = "noopener";
+      link.style.display = "none";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1500);
+    } catch (error) {
+      throw new Error(
+        await extractBlobErrorMessage(
+          error,
+          "Failed to download supplier invoice attachment.",
+        ),
       );
     }
   },

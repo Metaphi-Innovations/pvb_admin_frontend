@@ -146,7 +146,9 @@ import {
 } from "./invoice-additional-expenses";
 import {
   WarehouseMappedBankAccountSelect,
-  getBankAccountPrintDetails,
+  bankAccountOptionToPrintDetails,
+  type BankAccountPrintDetails,
+  type WarehouseMappedBankAccountSelectOption,
 } from "@/components/accounts/WarehouseMappedBankAccountSelect";
 import {
   peekNextSampleOrderProformaNo,
@@ -332,7 +334,8 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
   const [dispatchQty, setDispatchQty] = useState(0);
   const [branch, setBranch] = useState("Head Office");
   const [warehouse, setWarehouse] = useState("Central Warehouse");
-  const [bankAccountId, setBankAccountId] = useState<number | null>(null);
+  const [bankAccountId, setBankAccountId] = useState<string | null>(null);
+  const [bankAccountPrint, setBankAccountPrint] = useState<BankAccountPrintDetails | null>(null);
   const [remarks, setRemarks] = useState("");
   const [narration, setNarration] = useState("");
   const [transport, setTransport] = useState<GoodsTransportStatutoryState>(
@@ -1049,9 +1052,10 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
             salespersonName,
           );
 
+          const isSTDispatch = routeSource === "stock_transfer";
           const suggestedExpenses = mapSuggestedAdditionalChargesToExpenses(
             prepared.suggested_additional_charges || [],
-            "sales_order",
+            isSTDispatch ? "stock_transfer" : "sales_order",
           );
 
           const customerName = String(
@@ -1062,7 +1066,6 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
           );
           // resolved below after stData is available
 
-          const isSTDispatch = routeSource === "stock_transfer";
           const stData = prepared.stock_transfer ?? null;
           const transportDistanceKm =
             stData?.distance_km ??
@@ -1378,7 +1381,10 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     setBranch(rec.branch ?? "Head Office");
     setWarehouse(rec.warehouse ?? "Central Warehouse");
     setSourceWarehouseId(rec.warehouseUuid || null);
-    setBankAccountId(rec.bankAccountId ?? null);
+    setBankAccountId(
+      typeof rec.bankAccountId === "string" ? rec.bankAccountId : null,
+    );
+    setBankAccountPrint(rec.bankAccountPrint ?? null);
     setSalesperson(rec.salesperson ?? "");
     setSalesOrderId(rec.salesOrderId ?? null);
     setInvoiceType(rec.invoiceType ?? (rec.invoiceNo.startsWith("STI-") ? "stock_transfer" : "sales"));
@@ -1737,14 +1743,15 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     sezLutResolution.declaration,
   ]);
 
-  const bankPrintDetails = useMemo(
-    () => getBankAccountPrintDetails(bankAccountId),
-    [bankAccountId],
-  );
+  const bankPrintDetails = bankAccountPrint;
 
-  const handleBankAccountChange = useCallback((id: number | null) => {
-    setBankAccountId(id);
-  }, []);
+  const handleBankAccountChange = useCallback(
+    (id: string | null, option?: WarehouseMappedBankAccountSelectOption) => {
+      setBankAccountId(id);
+      setBankAccountPrint(bankAccountOptionToPrintDetails(option) ?? null);
+    },
+    [],
+  );
 
   const buildInput = (invoiceStatus: InvoiceStatus) => {
     const soMode = isSalesOrderGeneration || sourceType === "sales_order";
@@ -1811,7 +1818,9 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
       dispatchNo: dispatchRef.trim(),
       branch: branch.trim(),
       warehouse: warehouse.trim(),
+      warehouseUuid: sourceWarehouseId || undefined,
       bankAccountId,
+      bankAccountPrint: bankAccountPrint ?? null,
       salesperson: salesperson.trim(),
       transportMode: goodsMode ? transport.transportMode.trim() : undefined,
       transporterName: goodsMode ? transport.transporterName.trim() : undefined,
@@ -2381,6 +2390,15 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
         return;
       }
 
+      if (isSampleOrderGeneration || sourceType === "sample_order") {
+        setError(
+          "Sample Order proforma is no longer created from local demo data. Use an API-backed sample order flow when available.",
+        );
+        savingRef.current = false;
+        setSaving(false);
+        return;
+      }
+
       if (isEdit && invoiceId != null) {
         updateInvoice(invoiceId, buildInput(status));
         goToInvoiceList(
@@ -2395,9 +2413,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
       goToInvoiceList(
         asDraft
           ? "Invoice saved as draft."
-          : isSampleOrderGeneration
-            ? "Sample Order Proforma generated — inventory posted at Cost Price."
-            : "Invoice saved and posted to ledger successfully.",
+          : "Invoice saved and posted to ledger successfully.",
       );
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Could not save invoice.";
@@ -2672,7 +2688,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
               onInvoiceDateChange={setInvoiceDate}
               dispatchNo={dispatchRef}
               dispatchDate={dispatchDate}
-              warehouseRef={warehouse}
+              warehouseId={sourceWarehouseId}
               bankAccountId={bankAccountId}
               onBankAccountChange={handleBankAccountChange}
               bankAccountHelper={
@@ -2699,7 +2715,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
             showDispatchSelect={!isStockTransferInvoice && !soGen}
             previewInvoiceNo={soGen ? previewInvoiceNo : undefined}
             compactGrid={soGen}
-            invoiceDateRequired={soGen}
+            invoiceDateRequired
             goodsGenerateCompact={soGen}
             sourceDocumentLabel={
               isStockTransferInvoice ? "Stock Transfer No." : "Sales Order No."
@@ -2708,7 +2724,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
             bankAccountSlot={
               soGen ? (
                 <WarehouseMappedBankAccountSelect
-                  warehouseRef={warehouse}
+                  warehouseId={sourceWarehouseId}
                   value={bankAccountId}
                   onChange={handleBankAccountChange}
                   label=""
@@ -2790,11 +2806,11 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
           {!soGen && !stGen ? (
             <div className="mt-3 max-w-md">
               <WarehouseMappedBankAccountSelect
-                warehouseRef={warehouse}
+                warehouseId={sourceWarehouseId}
                 value={bankAccountId}
                 onChange={handleBankAccountChange}
                 label="Bank Account (for payment / print)"
-                required={false}
+                required={!sourceDispatchId}
               />
               {bankPrintDetails && (
                 <p className="text-[11px] text-muted-foreground mt-1 font-mono">

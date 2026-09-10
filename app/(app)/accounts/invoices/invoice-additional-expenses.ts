@@ -131,7 +131,7 @@ const FREIGHT_EXPENSE_HEADS = new Set<InvoiceExpenseHead>([
 	"Transportation",
 ]);
 
-export type InvoiceExpenseOrigin = "sales_order" | "manual" | "purchase_order";
+export type InvoiceExpenseOrigin = "sales_order" | "stock_transfer" | "manual" | "purchase_order";
 
 export type InvoiceChargeSource = "ORDER" | "INVOICE";
 
@@ -185,7 +185,10 @@ export type SuggestedAdditionalChargeLike = {
 	matched_ledger_id?: string | null;
 	hsn_id?: string | null;
 	hsn_code?: string | null;
+	suggested_hsn_id?: string | null;
+	suggested_hsn_sac_code?: string | null;
 	sales_order_expense_id?: string | null;
+	stock_transfer_expense_id?: string | null;
 };
 
 export function getActiveInvoiceChargeOptions(): InvoiceChargeMasterOption[] {
@@ -313,10 +316,21 @@ export function mapSuggestedAdditionalChargesToExpenses(
 			asSuggestedNumber(charge.default_gst_rate);
 		const gstApplicable =
 			charge.gst_applicable == null ? gstPct > 0 : Boolean(charge.gst_applicable);
-		const hsnId = charge.hsn_id?.trim() || null;
+		const hsnId =
+			charge.hsn_id?.trim() ||
+			charge.suggested_hsn_id?.trim() ||
+			null;
+		const hsnCode =
+			charge.hsn_code?.trim() ||
+			charge.suggested_hsn_sac_code?.trim() ||
+			null;
+		const sourceExpenseId =
+			charge.stock_transfer_expense_id?.trim() ||
+			charge.sales_order_expense_id?.trim() ||
+			"";
 		return {
 			id:
-				charge.sales_order_expense_id?.trim() ||
+				sourceExpenseId ||
 				`suggested-${origin}-${idx}-${Math.random().toString(36).slice(2, 7)}`,
 			expenseHead: (charge.charge_name || "").trim(),
 			amount: asSuggestedNumber(charge.amount),
@@ -329,7 +343,7 @@ export function mapSuggestedAdditionalChargesToExpenses(
 			coaLedgerName: "",
 			coaLedgerCode: "",
 			hsnId,
-			hsnCode: charge.hsn_code?.trim() || null,
+			hsnCode,
 			chargeSource: "ORDER",
 			origin,
 		};
@@ -353,7 +367,9 @@ export function toAdditionalChargePayload(
 
 	const source: InvoiceChargeSource =
 		row.chargeSource ||
-		(row.origin === "sales_order" || row.origin === "purchase_order"
+		(row.origin === "sales_order" ||
+		row.origin === "stock_transfer" ||
+		row.origin === "purchase_order"
 			? "ORDER"
 			: fallbackSource);
 

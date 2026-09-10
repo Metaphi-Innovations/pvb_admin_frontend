@@ -290,6 +290,7 @@ export interface ReceivablesExportQuery {
   dueDateFrom?: string;
   dueDateTo?: string;
   agingBreakpoints?: string;
+  ageingLayout?: "party" | "billwise";
   sortBy?: string;
   sortOrder?: "asc" | "desc";
 }

@@ -1,16 +1,12 @@
 "use client";
 
 import { AlertTriangle, ChevronDown, ChevronUp, Users } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import {
-  getAssignableUsersForRole,
-  type SalesRole,
-  type SplitMergeResultPreview,
-} from "../geography-workflow-data";
+import type { SplitMergeLevel } from "../geography-workflow-data";
 
 export type UserAssignAction = "keep" | "assign" | "unassigned";
 
@@ -19,20 +15,69 @@ export interface RoleUserAssignment {
   userId: string;
 }
 
+export interface SplitMergeCardPreview {
+  key: string;
+  name: string;
+  level: SplitMergeLevel;
+  parentName: string;
+  isExisting: boolean;
+  assignedScopeLabels: string[];
+  pincodeCount: number;
+  customerCount: number;
+  customers: Array<{
+    customerCode: string;
+    customerName: string;
+    customerType: string;
+    pincode: string;
+    region: string;
+  }>;
+  usersByRole: Array<{ role: string; userName: string | null; status: "assigned" | "missing" }>;
+  approvalChain: Array<{ role: string; userName: string | null }>;
+  warnings: string[];
+}
+
+export interface SplitMergeAssignableUserOption {
+  id: string;
+  fullName: string;
+  roleName: string | null;
+}
+
 interface SplitMergeResultCardProps {
-  preview: SplitMergeResultPreview;
+  preview: SplitMergeCardPreview;
   userAssignments: Record<string, RoleUserAssignment>;
-  onUserAssignmentChange: (role: SalesRole, patch: Partial<RoleUserAssignment>) => void;
+  onUserAssignmentChange: (role: string, patch: Partial<RoleUserAssignment>) => void;
+  assignableUsers?: SplitMergeAssignableUserOption[];
   mergeSourceNames?: string[];
+}
+
+function usersForRole(
+  users: SplitMergeAssignableUserOption[],
+  role: string,
+): SplitMergeAssignableUserOption[] {
+  const needle = role.toUpperCase();
+  const matched = users.filter((u) => {
+    const name = (u.roleName ?? "").toUpperCase();
+    return name.includes(needle) || name === needle;
+  });
+  return matched.length > 0 ? matched : users;
 }
 
 export function SplitMergeResultCard({
   preview,
   userAssignments,
   onUserAssignmentChange,
+  assignableUsers = [],
   mergeSourceNames,
 }: SplitMergeResultCardProps) {
   const [showCustomers, setShowCustomers] = useState(false);
+
+  const roleCandidates = useMemo(() => {
+    const map: Record<string, SplitMergeAssignableUserOption[]> = {};
+    for (const { role } of preview.usersByRole) {
+      map[role] = usersForRole(assignableUsers, role);
+    }
+    return map;
+  }, [preview.usersByRole, assignableUsers]);
 
   return (
     <div className="rounded-xl border border-border bg-white overflow-hidden">
@@ -41,7 +86,8 @@ export function SplitMergeResultCard({
           <div>
             <p className="text-sm font-semibold">{preview.name}</p>
             <p className="text-[11px] text-muted-foreground mt-0.5">
-              {preview.isExisting ? "Existing Geography" : "New Geography"} · {preview.level} · Parent: {preview.parentName}
+              {preview.isExisting ? "Existing Geography" : "New Geography"} · {preview.level} · Parent:{" "}
+              {preview.parentName}
             </p>
           </div>
           {preview.warnings.length > 0 && (
@@ -93,7 +139,7 @@ export function SplitMergeResultCard({
           <p className="text-xs font-semibold">Assign / Update Users</p>
           {preview.usersByRole.map(({ role }) => {
             const assignment = userAssignments[role] ?? { action: "unassigned" as const, userId: "" };
-            const candidates = getAssignableUsersForRole(role);
+            const candidates = roleCandidates[role] ?? [];
             return (
               <div key={role} className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-end">
                 <div>
@@ -114,7 +160,7 @@ export function SplitMergeResultCard({
                       Select {role} User…
                     </SelectItem>
                     {candidates.map((u) => (
-                      <SelectItem key={u.id} value={String(u.id)} className="text-xs">
+                      <SelectItem key={u.id} value={u.id} className="text-xs">
                         {u.fullName}
                       </SelectItem>
                     ))}
@@ -174,7 +220,9 @@ export function SplitMergeResultCard({
                 Customer master will not be changed. Visibility will recalculate from pincode mapping.
               </p>
               {preview.customers.length === 0 ? (
-                <p className="text-xs text-muted-foreground">No customers in this scope.</p>
+                <p className="text-xs text-muted-foreground">
+                  Customer impact is recalculated after publish from pincode coverage.
+                </p>
               ) : (
                 <div className="overflow-x-auto max-h-[180px] overflow-y-auto">
                   <table className="w-full text-[11px] min-w-[640px]">
@@ -202,11 +250,6 @@ export function SplitMergeResultCard({
                       ))}
                     </tbody>
                   </table>
-                  {preview.customers.length > 20 && (
-                    <p className="text-[10px] text-muted-foreground py-1">
-                      +{preview.customers.length - 20} more customers
-                    </p>
-                  )}
                 </div>
               )}
             </div>
