@@ -45,10 +45,20 @@ export function useExportBankAccounts() {
   });
 }
 
-export function useBankAccountOptions(enabled = true) {
+export function useBankAccountOptions(
+  params?: {
+    warehouseId?: string | null;
+    usage?: "RECEIPT" | "PAYMENT";
+    enabled?: boolean;
+  },
+) {
+  const warehouseId = params?.warehouseId?.trim() || undefined;
+  const usage = params?.usage;
+  const enabled = params?.enabled ?? true;
   return useQuery({
-    queryKey: accountsKeys.bankAccounts.options(),
-    queryFn: ({ signal }) => BankAccountsListService.getOptions(signal),
+    queryKey: accountsKeys.bankAccounts.options({ warehouseId, usage }),
+    queryFn: ({ signal }) =>
+      BankAccountsListService.getOptions({ warehouseId, usage, signal }),
     staleTime: 2 * 60 * 1000,
     gcTime: 5 * 60 * 1000,
     enabled,

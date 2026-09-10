@@ -400,6 +400,7 @@ export type PrepareDispatchInvoiceDto = {
   }>;
   suggested_additional_charges: Array<{
     sales_order_expense_id: string;
+    stock_transfer_expense_id?: string | null;
     charge_name: string;
     amount: string;
     gst_percent: string | null;
@@ -413,6 +414,8 @@ export type PrepareDispatchInvoiceDto = {
     mapping_ok: boolean;
     hsn_id?: string | null;
     hsn_code?: string | null;
+    suggested_hsn_id?: string | null;
+    suggested_hsn_sac_code?: string | null;
   }>;
   totals?: DispatchInvoiceTotalsPreview;
 };

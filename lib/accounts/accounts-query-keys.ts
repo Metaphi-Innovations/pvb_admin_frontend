@@ -21,7 +21,8 @@ export const accountsKeys = {
       [...accountsKeys.bankAccounts.all(), "filter-dropdown"] as const,
     filterDropdown: (fieldName: string) =>
       [...accountsKeys.bankAccounts.filterDropdowns(), fieldName] as const,
-    options: () => [...accountsKeys.bankAccounts.all(), "options"] as const,
+    options: (params?: { warehouseId?: string; usage?: "RECEIPT" | "PAYMENT" }) =>
+      [...accountsKeys.bankAccounts.all(), "options", params ?? {}] as const,
     details: () => [...accountsKeys.bankAccounts.all(), "detail"] as const,
     detail: (ledgerId: string) =>
       [...accountsKeys.bankAccounts.details(), ledgerId] as const,

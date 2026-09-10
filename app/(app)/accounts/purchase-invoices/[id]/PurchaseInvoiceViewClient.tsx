@@ -48,7 +48,6 @@ import {
   PurchaseInvoiceMatchStatusBadge,
 } from "../PurchaseInvoiceQtyComparisonTable";
 import { DirectPurchaseAttachmentPanel } from "../DirectPurchaseAttachmentPanel";
-import { getBankAccountPrintDetails } from "@/components/accounts/WarehouseMappedBankAccountSelect";
 import { formatDisplayDate, isoToDisplayDate } from "@/lib/accounts/date-display";
 import { VoucherFormSectionCard } from "@/components/accounts/voucher-form/VoucherFormSectionCard";
 import {
@@ -481,7 +480,7 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: st
               {isGrn && <Field label="Match Status" value={matchStatus.replace(/_/g, " ")} />}
               {isGrn && <Field label="Warehouse" value={invoice.warehouse} />}
               {(() => {
-                const bank = getBankAccountPrintDetails(invoice.bankAccountId);
+                const bank = invoice.bankAccountPrint ?? null;
                 if (!bank) return null;
                 return (
                   <>

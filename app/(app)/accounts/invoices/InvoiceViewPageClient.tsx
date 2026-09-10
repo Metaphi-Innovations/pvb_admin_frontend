@@ -55,8 +55,6 @@ import { formatMoneyOrDash } from "@/lib/accounts/money-format";
 import { GENERAL_LEDGER_HREF } from "@/lib/accounts/general-ledger-data";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { cn } from "@/lib/utils";
-import { getBankAccountPrintDetails } from "@/components/accounts/WarehouseMappedBankAccountSelect";
-import { listBankAccountSelectOptions } from "@/lib/accounts/bank-accounts-data";
 import {
   InvoiceFormLayout,
   INVOICE_FORM_GRID_CLASS,
@@ -479,15 +477,7 @@ export default function InvoiceViewPageClient({
   const invoiceType = resolveInvoiceDocumentType(record);
   const gst = getInvoiceGstBreakup(record);
   const interstate = gst.interstate;
-  const bankOptions = listBankAccountSelectOptions(
-    record.warehouseUuid || record.warehouse,
-  );
-  const bankDetails =
-    record.bankAccountId != null
-      ? getBankAccountPrintDetails(record.bankAccountId)
-      : bankOptions[0]
-        ? getBankAccountPrintDetails(bankOptions[0].id)
-        : null;
+  const bankDetails = record.bankAccountPrint ?? null;
   const isSalesOrderView =
     record.sourceType === "sales_order" ||
     (invoiceType === "sales" && Boolean(record.salesOrderNo || record.dispatchNo));

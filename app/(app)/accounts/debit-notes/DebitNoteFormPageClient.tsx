@@ -290,7 +290,7 @@ export default function DebitNoteFormPageClient({
   const [remarks, setRemarks] = useState("");
   const [attachments, setAttachments] = useState<DebitNoteAttachment[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [bankAccountId, setBankAccountId] = useState<number | null>(null);
+  const [bankAccountId, setBankAccountId] = useState<string | null>(null);
   const [roundOff, setRoundOff] = useState(0);
   const [directExtraCharges, setDirectExtraCharges] = useState<DirectExtraCharge[]>([]);
   const [pendingDetail, setPendingDetail] = useState<any | null>(null);
@@ -748,7 +748,9 @@ export default function DebitNoteFormPageClient({
       setAlreadyAdjusted(String(rec.alreadyAdjustedAmount));
       setRemarks(rec.remarks);
       setNarration(rec.remarks);
-      setBankAccountId(rec.bankAccountId ?? null);
+      setBankAccountId(
+        typeof rec.bankAccountId === "string" ? rec.bankAccountId : null,
+      );
       setAttachments(rec.attachments ?? []);
       setReferenceNo(rec.referenceNo ?? "");
       setAdjustmentLedgerId(rec.adjustmentLedgerId ?? null);
@@ -1871,11 +1873,11 @@ export default function DebitNoteFormPageClient({
                               placeholder="Optional"
                             />
                           </InvoiceDetailField>
-                          {warehouseRef ? (
+                          {warehouseId ? (
                             <InvoiceDetailField label="Bank Account (optional — refund only)">
                               <div className="space-y-1">
                                 <WarehouseMappedBankAccountSelect
-                                  warehouseRef={warehouseRef}
+                                  warehouseId={warehouseId}
                                   value={bankAccountId}
                                   onChange={(id) => setBankAccountId(id)}
                                   label=""
@@ -1914,11 +1916,11 @@ export default function DebitNoteFormPageClient({
                           placeholder="Optional"
                         />
                       </InvoiceDetailField>
-                      {warehouseRef ? (
+                      {warehouseId ? (
                         <InvoiceDetailField label="Bank Account (optional — refund only)">
                           <div className="space-y-1">
                             <WarehouseMappedBankAccountSelect
-                              warehouseRef={warehouseRef}
+                              warehouseId={warehouseId}
                               value={bankAccountId}
                               onChange={(id) => setBankAccountId(id)}
                               label=""

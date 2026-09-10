@@ -41,9 +41,9 @@ import { PaymentVoucherService } from "@/services/payment-voucher.service";
 import { CustomerListService } from "@/services/customer-list.service";
 import { SupplierListService } from "@/services/supplier-list.service";
 import { WarehouseService } from "@/services/warehouse.service";
-import { BankAccountsListService } from "@/services/bank-accounts-list.service";
 import { LedgerService } from "@/services/ledger.service";
 import { UserListService } from "@/services/user-list.service";
+import { useBankAccountOptions } from "@/hooks/accounts/use-bank-accounts-list";
 import {
   PAYMENT_BANK_TRANSACTION_MODE_LABELS,
   PAYMENT_BANK_TRANSACTION_MODES,
@@ -123,9 +123,6 @@ export function PaymentVoucherApiForm({
   const [warehouses, setWarehouses] = useState<{ value: string; label: string }[]>([]);
   const [customers, setCustomers] = useState<{ value: string; label: string; sub?: string }[]>([]);
   const [suppliers, setSuppliers] = useState<{ value: string; label: string; sub?: string }[]>([]);
-  const [bankRows, setBankRows] = useState<
-    { bankAccountId: string; ledgerId: string; label: string; warehouses: string[] }[]
-  >([]);
   const [cashLedgers, setCashLedgers] = useState<{ value: string; label: string; sub?: string }[]>([]);
   const [manualLedgers, setManualLedgers] = useState<{ value: string; label: string; sub?: string }[]>([]);
   const [approvers, setApprovers] = useState<{ value: string; label: string }[]>([]);
@@ -257,14 +254,10 @@ export function PaymentVoucherApiForm({
     let cancelled = false;
     (async () => {
       try {
-        const [wh, cust, supp, banks, ledgers, users] = await Promise.all([
+        const [wh, cust, supp, ledgers, users] = await Promise.all([
           WarehouseService.dropdown().catch(() => []),
           CustomerListService.dropdown().catch(() => []),
           SupplierListService.dropdown().catch(() => []),
-          BankAccountsListService.list({ page: 1, pageSize: 200 }).catch(() => ({
-            items: [],
-            total: 0,
-          })),
           LedgerService.getDropdown({ status: "ACTIVE", allowManualPosting: true }).catch(
             () => ({ tree: [], ledgers: [] }),
           ),
@@ -293,16 +286,6 @@ export function PaymentVoucherApiForm({
             label: s.supplierName,
             sub: s.supplierCode,
           })),
-        );
-        setBankRows(
-          banks.items
-            .filter((b) => b.bankAccountId && b.status === "active")
-            .map((b) => ({
-              bankAccountId: b.bankAccountId as string,
-              ledgerId: b.ledgerId,
-              label: `${b.bankName || b.ledgerName} — ${b.accountNumber || b.ledgerCode}`,
-              warehouses: b.mappedWarehouseNames || [],
-            })),
         );
         const ledgerOpts = (ledgers.ledgers ?? [])
           .map((l) => ({
@@ -520,20 +503,48 @@ export function PaymentVoucherApiForm({
     return form.other_ledger_name || PAYMENT_PARTY_KIND_LABELS.OTHER_LEDGER;
   }, [form.party_kind, form.supplier_id, form.customer_id, form.other_ledger_name, suppliers, customers]);
 
+  const bankAccountsQuery = useBankAccountOptions({
+    warehouseId: form.warehouse_id || undefined,
+    usage: "PAYMENT",
+    enabled: Boolean(form.warehouse_id),
+  });
+
   const bankOptions = useMemo(() => {
-    return bankRows
-      .filter(
-        (b) =>
-          !form.warehouse_id ||
-          b.warehouses.length === 0 ||
-          b.warehouses.includes(warehouseName),
-      )
+    return (bankAccountsQuery.data ?? [])
+      .filter((b) => b.bankAccountId)
       .map((b) => ({
-        value: b.bankAccountId,
+        value: b.bankAccountId as string,
         label: b.label,
         sub: b.ledgerId,
       }));
-  }, [bankRows, form.warehouse_id, warehouseName]);
+  }, [bankAccountsQuery.data]);
+
+  useEffect(() => {
+    if (!form.bank_account_id) return;
+    if (!form.warehouse_id) {
+      setForm((prev) => ({
+        ...prev,
+        bank_account_id: "",
+        cash_bank_ledger_id: "",
+        cash_bank_ledger_name: "",
+      }));
+      return;
+    }
+    if (bankAccountsQuery.isLoading) return;
+    if (!bankOptions.some((o) => o.value === form.bank_account_id)) {
+      setForm((prev) => ({
+        ...prev,
+        bank_account_id: "",
+        cash_bank_ledger_id: "",
+        cash_bank_ledger_name: "",
+      }));
+    }
+  }, [
+    form.bank_account_id,
+    form.warehouse_id,
+    bankOptions,
+    bankAccountsQuery.isLoading,
+  ]);
 
   const attachmentCount = form.persistedAttachments.length + form.pendingFiles.length;
   const selectedAllocCount = form.allocations.filter((a) => a.selected).length;
@@ -938,7 +949,9 @@ export function PaymentVoucherApiForm({
                     }
                     triggerClassName={INVOICE_DETAIL_SELECT_CLASS}
                     onChange={(id) => {
-                      const row = bankRows.find((b) => b.bankAccountId === id);
+                      const row = (bankAccountsQuery.data ?? []).find(
+                        (b) => b.bankAccountId === id,
+                      );
                       patch({
                         bank_account_id: id,
                         cash_bank_ledger_id: row?.ledgerId || "",

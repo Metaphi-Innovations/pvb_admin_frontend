@@ -34,14 +34,6 @@ import { ensureCustomerLedgerFromMaster } from "@/lib/accounts/party-ledger-sync
 import { customerMasterToTransactionFields } from "@/lib/accounts/transaction-master-fetch";
 import type { InvoiceNearExpirySchemeSettlement } from "@/app/(app)/accounts/invoices/invoices-data";
 import {
-  getPendingInvoiceSeedDispatch,
-  listPendingInvoiceSeedRows,
-} from "@/lib/accounts/pending-invoice-seed";
-import {
-  getNearExpiryPendingDemoDispatch,
-  isNearExpiryPendingDemoDispatch,
-} from "@/lib/accounts/pending-invoice-near-expiry-demo";
-import {
   getDispatchInvoiceType,
   getDispatchPartyName,
   type InvoiceDocumentType,
@@ -778,53 +770,21 @@ function mapDispatchToPendingRow(d: DispatchRecord): PendingDispatchInvoiceRow {
 }
 
 export function listPendingDispatchInvoices(): PendingDispatchInvoiceRow[] {
-  const seedRows = listPendingInvoiceSeedRows().map((row) => ({
-    dispatchId: row.dispatchId,
-    dispatchNo: row.dispatchNo,
-    soNumber: row.soNumber,
-    salesOrderId: row.salesOrderId,
-    invoiceType: row.invoiceType,
-    customerName: row.customerName,
-    dispatchDate: row.dispatchDate,
-    taxableValue: row.taxableValue,
-    gstAmount: row.gstAmount,
-    invoiceValue: row.invoiceValue,
-    interstate: row.interstate,
-    status: row.status,
-    warehouse: row.invoiceType === "stock_transfer" ? row.customerName : "Central Warehouse",
-    totalQty: 0,
-    qtyUnit: "Units",
-    schemeLabel: row.schemeLabel,
-    settlementLabel: row.settlementLabel,
-  }));
-
-  const seedIds = new Set(seedRows.map((r) => r.dispatchId));
-
-  const warehouseRows = getDispatchRecords()
+  // Warehouse dispatch local store is retired for Accounts; Pending Invoices uses the API.
+  // Keep this helper for legacy manual-invoice dispatch pickers (returns empty).
+  return getDispatchRecords()
     .filter((d) => INVOICE_READY_STATUSES.has(d.deliveryStatus))
     .filter((d) => !isDispatchInvoiced(d.dispatchNumber))
     .filter((d) => d.products.some((p: any) => p.dispatchQty > 0))
-    .filter((d) => !seedIds.has(d.id))
-    .map(mapDispatchToPendingRow);
-
-  return [...seedRows, ...warehouseRows].sort((a, b) => b.dispatchDate.localeCompare(a.dispatchDate));
+    .map(mapDispatchToPendingRow)
+    .sort((a, b) => b.dispatchDate.localeCompare(a.dispatchDate));
 }
 
 export function getDispatchById(dispatchId: string): DispatchRecord | undefined {
-  const seed = getPendingInvoiceSeedDispatch(dispatchId);
-  if (seed) return seed;
-  if (isNearExpiryPendingDemoDispatch(dispatchId)) {
-    return getNearExpiryPendingDemoDispatch();
-  }
   return getDispatchRecords().find((d) => d.id === dispatchId);
 }
 
 export function getDispatchByNumber(dispatchNo: string): DispatchRecord | undefined {
-  const seed = getPendingInvoiceSeedDispatch(null, dispatchNo);
-  if (seed) return seed;
-  if (isNearExpiryPendingDemoDispatch(null, dispatchNo)) {
-    return getNearExpiryPendingDemoDispatch();
-  }
   return getDispatchRecords().find((d) => d.dispatchNumber === dispatchNo);
 }
 

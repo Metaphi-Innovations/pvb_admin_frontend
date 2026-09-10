@@ -1,6 +1,5 @@
 import { normalizeInvoice, type InvoiceRecord, getInvoiceAmountBreakup } from "./invoices-data";
 import { formatINR, INVOICE_AMOUNT_LABELS } from "./invoice-utils";
-import { getBankAccountPrintDetails } from "@/components/accounts/WarehouseMappedBankAccountSelect";
 import { getInvoiceGstBreakup } from "@/lib/accounts/invoice-gst-breakup";
 
 export function downloadInvoicePdf(invoice: InvoiceRecord): void {
@@ -10,8 +9,8 @@ export function downloadInvoicePdf(invoice: InvoiceRecord): void {
   const isServiceInvoice = rec.sourceType === "service";
   const gst = getInvoiceGstBreakup(rec);
   const bank =
-    isSalesOrderInvoice || isServiceInvoice
-      ? getBankAccountPrintDetails(rec.bankAccountId)
+    (isSalesOrderInvoice || isServiceInvoice) && rec.bankAccountPrint
+      ? rec.bankAccountPrint
       : null;
 
   const rows = isSalesOrderInvoice
