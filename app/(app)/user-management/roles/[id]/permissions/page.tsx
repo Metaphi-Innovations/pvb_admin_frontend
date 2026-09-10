@@ -37,6 +37,7 @@ import {
 	roleDefaultPermissions,
 	migratePermissions,
 } from "../../../employee/employee-data";
+import { revokeKeysForPrefix } from "@/lib/auth/permission-aliases";
 import {
 	type Role,
 	type RolePermissionTemplate,
@@ -248,15 +249,7 @@ export default function RolePermissionsPage() {
 	};
 
 	const revokeMod = (mod: PermModule) => {
-		setActiveWebPerms((prev) => {
-			const next = new Set(prev);
-			mod.submodules.forEach((sub) => {
-				sub.actions.forEach((action) => {
-					next.delete(`${mod.id}.${sub.id}.${action}`);
-				});
-			});
-			return next;
-		});
+		setActiveWebPerms((prev) => revokeKeysForPrefix(prev, mod.id));
 	};
 
 	const grantGroup = (grp: MobileGroupDef) => {
@@ -272,15 +265,7 @@ export default function RolePermissionsPage() {
 	};
 
 	const revokeGroup = (grp: MobileGroupDef) => {
-		setActiveMobilePerms((prev) => {
-			const next = new Set(prev);
-			grp.features.forEach((feat) => {
-				feat.actions.forEach((action) => {
-					next.delete(`${grp.id}.${feat.id}.${action}`);
-				});
-			});
-			return next;
-		});
+		setActiveMobilePerms((prev) => revokeKeysForPrefix(prev, grp.id));
 	};
 
 	const grantAll = () => {

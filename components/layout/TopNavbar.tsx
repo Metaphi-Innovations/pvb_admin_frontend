@@ -627,88 +627,76 @@ const NavDropdown = memo(function NavDropdown({
             </PrefetchLink>
           )}
           <div className="flex flex-1 min-h-0">
-          <div
-            className={cn(
-              "w-[272px] flex-shrink-0 bg-muted/25 border-r border-border/80 p-2 space-y-1",
-            )}
-          >
-            {groupedChildren.map((group, idx) => {
-              const GroupIcon = group.icon;
-              const isHovered = hoveredGroup === idx;
-              const groupHref = group.href ?? group.children[0]?.href;
-              return (
-                <PrefetchLink
-                  key={group.label}
-                  href={groupHref ?? "#"}
-                  onClick={(e) => groupHref && navigateFromMenu(groupHref, e, group.label)}
-                  onMouseEnter={() => setHoveredGroup(idx)}
-                  className={cn(
-                    "block w-full text-left rounded-lg border p-3 transition-all duration-150 outline-none",
-                    isHovered
-                      ? "bg-white border-border shadow-sm"
-                      : "border-transparent hover:bg-white/70",
-                  )}
-                >
-                  <div className="flex gap-3 items-start">
-                    {GroupIcon ? (
-                      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-50 to-brand-100/80 border border-brand-100 flex items-center justify-center flex-shrink-0">
-                        <GroupIcon className="w-5 h-5 text-brand-600" />
-                      </div>
-                    ) : null}
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[13px] font-semibold text-foreground leading-tight">
-                        {group.label}
-                      </p>
-                      {group.description ? (
-                        <p className="text-[11px] text-muted-foreground leading-snug mt-1 line-clamp-2">
-                          {group.description}
-                        </p>
-                      ) : null}
-                    </div>
-                  </div>
-                </PrefetchLink>
-              );
-            })}
-          </div>
-          <div className="flex-1 p-4 min-w-0">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-3 px-1">
-              {groupedChildren[hoveredGroup]?.label}
-            </p>
-            {isAccountsMenu ? (
-              (() => {
-                const activeGroup = groupedChildren[hoveredGroup];
-                const activeChildren = activeGroup?.children ?? [];
-                const columns = arrangeAccountsMegaMenuColumns(
-                  (activeGroup?.id ?? "coa") as AccountsNavGroupId,
-                  activeChildren.map((c) => ({
-                    label: c.label,
-                    href: c.href,
-                    icon: c.icon,
-                    description: c.description,
-                  })),
-                );
-                const hasRightColumn = columns.right.length > 0;
+            <div
+              className={cn(
+                "w-[272px] flex-shrink-0 bg-muted/25 border-r border-border/80 p-2 space-y-1",
+              )}
+            >
+              {groupedChildren.map((group, idx) => {
+                const GroupIcon = group.icon;
+                const isHovered = hoveredGroup === idx;
+                const groupHref = group.href ?? group.children[0]?.href;
                 return (
-                  <div
+                  <PrefetchLink
+                    key={group.label}
+                    href={groupHref ?? "#"}
+                    onClick={(e) => groupHref && navigateFromMenu(groupHref, e, group.label)}
+                    onMouseEnter={() => setHoveredGroup(idx)}
                     className={cn(
-                      "grid gap-x-6 gap-y-0.5",
-                      hasRightColumn ? "grid-cols-2" : "grid-cols-1",
+                      "block w-full text-left rounded-lg border p-3 transition-all duration-150 outline-none",
+                      isHovered
+                        ? "bg-white border-border shadow-sm"
+                        : "border-transparent hover:bg-white/70",
                     )}
                   >
-                    <div className="min-w-0 space-y-0">
-                      {columns.left.map((child) => (
-                        <MegaMenuLink
-                          key={child.href}
-                          child={child}
-                          pathname={pathname}
-                          search={search}
-                          onNavigate={navigateFromMenu}
-                        />
-                      ))}
+                    <div className="flex gap-3 items-start">
+                      {GroupIcon ? (
+                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-50 to-brand-100/80 border border-brand-100 flex items-center justify-center flex-shrink-0">
+                          <GroupIcon className="w-5 h-5 text-brand-600" />
+                        </div>
+                      ) : null}
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[13px] font-semibold text-foreground leading-tight">
+                          {group.label}
+                        </p>
+                        {group.description ? (
+                          <p className="text-[11px] text-muted-foreground leading-snug mt-1 line-clamp-2">
+                            {group.description}
+                          </p>
+                        ) : null}
+                      </div>
                     </div>
-                    {hasRightColumn ? (
+                  </PrefetchLink>
+                );
+              })}
+            </div>
+            <div className="flex-1 p-4 min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-3 px-1">
+                {groupedChildren[hoveredGroup]?.label}
+              </p>
+              {isAccountsMenu ? (
+                (() => {
+                  const activeGroup = groupedChildren[hoveredGroup];
+                  const activeChildren = activeGroup?.children ?? [];
+                  const columns = arrangeAccountsMegaMenuColumns(
+                    (activeGroup?.id ?? "coa") as AccountsNavGroupId,
+                    activeChildren.map((c) => ({
+                      label: c.label,
+                      href: c.href,
+                      icon: c.icon,
+                      description: c.description,
+                    })),
+                  );
+                  const hasRightColumn = columns.right.length > 0;
+                  return (
+                    <div
+                      className={cn(
+                        "grid gap-x-6 gap-y-0.5",
+                        hasRightColumn ? "grid-cols-2" : "grid-cols-1",
+                      )}
+                    >
                       <div className="min-w-0 space-y-0">
-                        {columns.right.map((child) => (
+                        {columns.left.map((child) => (
                           <MegaMenuLink
                             key={child.href}
                             child={child}
@@ -718,53 +706,65 @@ const NavDropdown = memo(function NavDropdown({
                           />
                         ))}
                       </div>
-                    ) : null}
-                  </div>
-                );
-              })()
-            ) : (
-            <div
-              className={cn(
-                "grid gap-x-6 gap-y-0.5",
-                (groupedChildren[hoveredGroup]?.children.length ?? 0) > 4
-                  ? "grid-cols-1"
-                  : "grid-cols-2",
+                      {hasRightColumn ? (
+                        <div className="min-w-0 space-y-0">
+                          {columns.right.map((child) => (
+                            <MegaMenuLink
+                              key={child.href}
+                              child={child}
+                              pathname={pathname}
+                              search={search}
+                              onNavigate={navigateFromMenu}
+                            />
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })()
+              ) : (
+                <div
+                  className={cn(
+                    "grid gap-x-6 gap-y-0.5",
+                    (groupedChildren[hoveredGroup]?.children.length ?? 0) > 4
+                      ? "grid-cols-1"
+                      : "grid-cols-2",
+                  )}
+                >
+                  {groupedChildren[hoveredGroup]?.children.map((child) => {
+                    const childActive = isNavHrefActive(pathname, search, child.href);
+                    return (
+                      <PrefetchLink
+                        key={child.href}
+                        href={child.href}
+                        onClick={(e) => navigateFromMenu(child.href, e, child.label)}
+                        className={cn(
+                          "group flex items-center gap-2.5 py-2 px-1 rounded-md transition-colors duration-100",
+                          childActive ? "text-brand-700" : "text-foreground hover:text-brand-700",
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            "w-2 h-2 rounded-full border flex-shrink-0 transition-colors",
+                            childActive
+                              ? "border-brand-600 bg-brand-600"
+                              : "border-foreground/30 group-hover:border-brand-500",
+                          )}
+                        />
+                        <span
+                          className={cn(
+                            "text-[13px] font-medium leading-tight",
+                            childActive && "font-semibold",
+                          )}
+                        >
+                          {child.label}
+                        </span>
+                      </PrefetchLink>
+                    );
+                  })}
+                </div>
               )}
-            >
-              {groupedChildren[hoveredGroup]?.children.map((child) => {
-                const childActive = isNavHrefActive(pathname, search, child.href);
-                return (
-                  <PrefetchLink
-                    key={child.href}
-                    href={child.href}
-                    onClick={(e) => navigateFromMenu(child.href, e, child.label)}
-                    className={cn(
-                      "group flex items-center gap-2.5 py-2 px-1 rounded-md transition-colors duration-100",
-                      childActive ? "text-brand-700" : "text-foreground hover:text-brand-700",
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        "w-2 h-2 rounded-full border flex-shrink-0 transition-colors",
-                        childActive
-                          ? "border-brand-600 bg-brand-600"
-                          : "border-foreground/30 group-hover:border-brand-500",
-                      )}
-                    />
-                    <span
-                      className={cn(
-                        "text-[13px] font-medium leading-tight",
-                        childActive && "font-semibold",
-                      )}
-                    >
-                      {child.label}
-                    </span>
-                  </PrefetchLink>
-                );
-              })}
             </div>
-            )}
-          </div>
           </div>
         </div>
       ) : hasGroups ? (

@@ -37,6 +37,10 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  canonicalizePermKeySet,
+  revokeKeysForPrefix,
+} from "@/lib/auth/permission-aliases";
+import {
   loadRoles, loadPermissionTemplates, type Role, loadNewPermissionTemplates, type PermissionTemplate
 } from "../../roles/roles-data";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
@@ -648,12 +652,15 @@ const convertToSets = (perms: UserPermissions) => {
       });
     }
   }
-  return { webSet, mobileSet };
+  // Drop legacy alias keys so the form matches runtime access checks.
+  return { webSet: canonicalizePermKeySet(webSet), mobileSet };
 };
 
 const convertFromSets = (webSet: Set<string>, mobileSet: Set<string>): UserPermissions => {
   const perms = defaultPermissions();
-  webSet.forEach(key => {
+  // Persist canonical registry keys only — never re-write seed aliases.
+  const canonicalWeb = canonicalizePermKeySet(webSet);
+  canonicalWeb.forEach(key => {
     const parts = key.split(".");
     if (parts.length >= 3) {
       const modId = parts[0];
@@ -845,15 +852,8 @@ function PermissionsTab({
   };
 
   const revokeMod = (mod: PermModule) => {
-    setActiveWebPerms((prev) => {
-      const next = new Set(prev);
-      mod.submodules.forEach((sub) => {
-        sub.actions.forEach((action) => {
-          next.delete(`${mod.id}.${sub.id}.${action}`);
-        });
-      });
-      return next;
-    });
+    // Clear every key under the module — including seed/legacy aliases not shown in the UI.
+    setActiveWebPerms((prev) => revokeKeysForPrefix(prev, mod.id));
   };
 
   const grantGroup = (grp: MobileGroupDef) => {
@@ -869,15 +869,7 @@ function PermissionsTab({
   };
 
   const revokeGroup = (grp: MobileGroupDef) => {
-    setActiveMobilePerms((prev) => {
-      const next = new Set(prev);
-      grp.features.forEach((feat) => {
-        feat.actions.forEach((action) => {
-          next.delete(`${grp.id}.${feat.id}.${action}`);
-        });
-      });
-      return next;
-    });
+    setActiveMobilePerms((prev) => revokeKeysForPrefix(prev, grp.id));
   };
 
   const grantAll = () => {
