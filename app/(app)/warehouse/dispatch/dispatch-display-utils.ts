@@ -25,10 +25,7 @@ export function resolveProductSku(product: {
     product.product?.sku ||
     (typeof snap.sku === "string" ? snap.sku : null) ||
     (typeof snap.SKU === "string" ? snap.SKU : null) ||
-    getSnapshotField(product.product_snapshot, "sku", "SKU") ||
-    product.product_code ||
-    product.product?.product_code ||
-    getSnapshotField(product.product_snapshot, "product_code") ||
+    getSnapshotField(product.product_snapshot, "sku", "SKU", "product_sku") ||
     "—"
   );
 }

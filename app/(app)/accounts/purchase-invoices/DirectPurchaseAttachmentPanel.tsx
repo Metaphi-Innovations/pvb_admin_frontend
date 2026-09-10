@@ -28,7 +28,7 @@ export function DirectPurchaseAttachmentPanel({
           </Button>
           <a href={previewUrl} download={attachment.fileName}>
             <Button variant="outline" size="sm" className="h-8 text-xs gap-1">
-              <Download className="w-3.5 h-3.5" /> Download
+              <Download className="w-3.5 h-3.5" /> Download supplier invoice
             </Button>
           </a>
         </>

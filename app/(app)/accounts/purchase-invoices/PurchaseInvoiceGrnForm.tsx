@@ -19,7 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
-import { resolveSkuFromProductSnapshot } from "@/lib/accounts/product-sku";
+import { resolveProductSkuDisplay, resolveSkuFromProductSnapshot } from "@/lib/accounts/product-sku";
 import { useFormDirtySnapshot } from "@/lib/accounts/use-form-dirty-snapshot";
 import { useTransactionFormCancel } from "@/components/accounts/TransactionFormCancel";
 import { formatMoney, roundMoney } from "@/lib/accounts/money-format";
@@ -663,8 +663,11 @@ export function PurchaseInvoiceGrnForm({
                                   `Item ${idx + 1}`}
                               </span>
                               {(() => {
-                                const sku = resolveSkuFromProductSnapshot(
-                                  (item.product_snapshot || null) as Record<string, unknown> | null,
+                                const snap = (item.product_snapshot ||
+                                  null) as Record<string, unknown> | null;
+                                const sku = resolveProductSkuDisplay(
+                                  item.sku,
+                                  resolveSkuFromProductSnapshot(snap),
                                 );
                                 return sku ? (
                                   <span className="mt-0.5 block truncate font-mono text-[11px] text-muted-foreground">

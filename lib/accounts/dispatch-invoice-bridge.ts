@@ -271,7 +271,7 @@ export function buildInvoiceLineFromDispatchProduct(
     id: `dispatch-${dispatch.id}-${lineIndex}`,
     productId: master.id,
     productName: master.productName,
-    productCode: master.sku ?? master.productCode ?? dp.sku,
+    productCode: master.sku || "",
     description: [
       dispatch.dispatchNumber,
       batchNo ? `Batch ${batchNo}` : "",
@@ -324,8 +324,8 @@ export function buildSampleOrderLineFromDispatchProduct(
     };
   }
 
-  const sku = master.sku ?? master.productCode ?? dp.sku;
-  const pricing = findActivePricingForStock(sku, master.productName);
+  const sku = master.sku || "";
+  const pricing = findActivePricingForStock(master.sku, master.productName);
   const taxPct = pricing?.gstPct ? parseTaxPct(pricing.gstPct) : parseTaxPct(master.gstRate);
   const unit = master.packagingUnit ?? master.baseUnit ?? "PCS";
 
@@ -428,8 +428,8 @@ export function buildStockTransferLineFromDispatchProduct(
     };
   }
 
-  const sku = master.sku ?? master.productCode ?? dp.sku;
-  const pricing = findActivePricingForStock(sku, master.productName);
+  const sku = master.sku || "";
+  const pricing = findActivePricingForStock(master.sku, master.productName);
   const taxPct = pricing?.gstPct ? parseTaxPct(pricing.gstPct) : parseTaxPct(master.gstRate);
   const unit = pricing?.uom ?? master.packagingUnit ?? master.baseUnit ?? "PCS";
 

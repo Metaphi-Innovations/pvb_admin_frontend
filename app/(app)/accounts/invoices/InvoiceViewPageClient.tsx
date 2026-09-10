@@ -136,10 +136,12 @@ function ProductTable({
   lines,
   interstate,
   productCodeById,
+  productSkuByUuid,
 }: {
   lines: InvoiceLineItem[];
   interstate: boolean;
   productCodeById: Map<number, string>;
+  productSkuByUuid: Map<string, string>;
 }) {
   const headers = interstate
     ? ([
@@ -251,7 +253,7 @@ function ProductTable({
               const discAmt = resolveDisplayDiscountAmount(line);
               /** GST / taxable / line total from stored line amounts — do not re-apply scheme % into totals. */
               const split = getLineGstSplit(line, interstate);
-              const sku = resolveLineSku(line, productCodeById);
+              const sku = resolveLineSku(line, productCodeById, productSkuByUuid);
               const hasScheme = lineHasProductDiscount(line);
 
               return (
@@ -454,7 +456,17 @@ export default function InvoiceViewPageClient({
   const productCodeById = useMemo(() => {
     const map = new Map<number, string>();
     for (const p of loadProducts()) {
-      map.set(p.id, p.sku || p.productCode || "");
+      if (p.sku?.trim()) map.set(p.id, p.sku.trim());
+    }
+    return map;
+  }, []);
+
+  const productSkuByUuid = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const p of loadProducts()) {
+      const uuid = (p as { productUuid?: string }).productUuid?.trim();
+      const sku = p.sku?.trim();
+      if (uuid && sku) map.set(uuid, sku);
     }
     return map;
   }, []);
@@ -777,6 +789,7 @@ export default function InvoiceViewPageClient({
               lines={record.lineItems}
               interstate={interstate}
               productCodeById={productCodeById}
+              productSkuByUuid={productSkuByUuid}
             />
             <div className="px-3 pb-3">
               <CompactSchemeInformation record={record} />

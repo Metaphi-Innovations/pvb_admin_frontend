@@ -551,7 +551,7 @@ export function mapPrepareDispatchItemsToLineItems(
       id: item.dispatch_item_id || `line-${index}`,
       productId: null,
       productUuid: item.product_id || null,
-      productCode: resolveProductSkuDisplay(item.sku, item.product_code),
+      productCode: resolveProductSkuDisplay(item.sku),
       productName: item.product_name || "—",
       description: `Dispatch Ref: ${dispatchNumber}`,
       hsn: item.hsn_code || "—",
@@ -759,13 +759,17 @@ function mapBackendLineItem(
   return {
     id: asString(raw.sales_invoice_item_id || raw.id || `line-${idx}`),
     productId: null,
+    productUuid:
+      asString(raw.product_id) ||
+      asString(productSnap.product_id) ||
+      null,
     productName,
     productCode: resolveProductSkuDisplay(
       productSnap.sku as string | undefined,
       productSnap.product_sku as string | undefined,
       productSnap.SKU as string | undefined,
-      productSnap.product_code as string | undefined,
-      productSnap.productCode as string | undefined,
+      (raw as { sku?: string | null }).sku,
+      (raw.product as { sku?: string | null } | null | undefined)?.sku,
     ),
     description: asString(raw.narration) || productName,
     hsn:

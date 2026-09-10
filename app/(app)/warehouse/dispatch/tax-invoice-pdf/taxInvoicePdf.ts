@@ -359,7 +359,7 @@ export function mapDispatchToTaxInvoice(
       ),
       batchLine: batchParts.join(" | "),
       sku: asText(
-        product.sku ?? productSnapshot.sku ?? product.product_code,
+        product.sku ?? productSnapshot.sku,
         "—",
       ),
       hsnCode: asText(
