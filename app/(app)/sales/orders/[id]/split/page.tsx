@@ -196,7 +196,7 @@ export default function SplitSalesOrderPage() {
         id: originalOrder.id,
         form,
         options: {
-          status: asDraft ? "draft" : form.status || "confirmed",
+          status: asDraft ? "draft" : "confirmed",
           reason: form.remarks || "Quantity split",
         },
       },

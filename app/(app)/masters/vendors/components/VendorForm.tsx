@@ -47,13 +47,12 @@ import { Label } from "@/components/ui/label";
 import {
 	buildGstCategory,
 	deriveGstRegistrationType,
-	fetchGstRegistrationDetailsAsync,
 	gstApplicableFromCategory,
-	gstDetailsToAddressSnapshot,
 	GST_REGISTRATION_TYPE_DEFAULT,
-	validateGSTIN,
 	type GstAddressSnapshot,
 } from "@/lib/masters/gst-compliance";
+import { useGstVerificationFlow } from "@/components/gst";
+import type { GstAutoFillPayload } from "@/components/gst";
 
 import {
 	Field,
@@ -305,7 +304,6 @@ export function VendorForm({
 }) {
 	const { selectedFY } = useFY();
 	const [tab, setTab] = useState<TabId>(activeStep ?? "basic");
-	const [fetchingGst, setFetchingGst] = useState(false);
 	const fileRefs = useRef<Record<string, HTMLInputElement | null>>({});
 	const [bulkDocumentTypeIds, setBulkDocumentTypeIds] = useState<string[]>([]);
 	const [toast, setToast] = useState<{
@@ -423,6 +421,35 @@ export function VendorForm({
 		return () => clearTimeout(t);
 	}, [toast]);
 
+	const applyGstAutoFill = (payload: GstAutoFillPayload) => {
+		const addr = payload.principalAddress;
+		const snap: GstAddressSnapshot = {
+			address: payload.legalAddress,
+			addressLine2: [addr.floorNumber, addr.landmark].filter(Boolean).join(", "),
+			country: "India",
+			district: addr.district || addr.location,
+			city: addr.location || addr.district,
+			state: addr.state,
+			pincode: addr.pincode,
+		};
+		setGstAddressSnapshot(snap);
+		onChange({
+			...form,
+			legalCompanyName: payload.legalName,
+		});
+		showToast("Legal name and legal address auto-filled from GSTIN.", "success");
+	};
+
+	const gstVerification = useGstVerificationFlow({
+		onAutoFill: applyGstAutoFill,
+		onError: (message) => showToast(message, "error"),
+	});
+
+	const handleFetchGst = async () => {
+		if (readOnly) return;
+		await gstVerification.verify(form.gstNumber);
+	};
+
 	const set = <K extends keyof VendorFormValues>(
 		k: K,
 		v: VendorFormValues[K],
@@ -491,47 +518,6 @@ export function VendorForm({
 			state: addr.state,
 			pincode: addr.pincode,
 		});
-	};
-
-	const handleFetchGst = async () => {
-		if (readOnly) return;
-		if (!form.gstNumber.trim()) {
-			showToast("Enter GSTIN before fetching details.");
-			return;
-		}
-		if (!validateGSTIN(form.gstNumber)) {
-			showToast("Enter a valid 15-character GSTIN.");
-			return;
-		}
-		setFetchingGst(true);
-		try {
-			const details = await fetchGstRegistrationDetailsAsync(form.gstNumber);
-			if (!details) {
-				showToast("Could not fetch GST details. Check GSTIN format.");
-				return;
-			}
-			const snap = gstDetailsToAddressSnapshot(details);
-			setGstAddressSnapshot(snap);
-			const displayName = details.tradeName || details.legalBusinessName;
-			onChange({
-				...form,
-				vendorName: form.vendorName.trim() || displayName,
-				companyName: form.companyName.trim() || displayName,
-				legalCompanyName: details.legalBusinessName,
-				panNumber: form.panNumber.trim() || form.gstNumber.trim().slice(2, 12),
-				billingAddress: {
-					...form.billingAddress,
-					line1: snap.address,
-					city: snap.city,
-					state: snap.state,
-					pincode: snap.pincode,
-					country: form.billingAddress.country || "India",
-				},
-			});
-			showToast("GST details fetched and applied.", "success");
-		} finally {
-			setFetchingGst(false);
-		}
 	};
 
 	const updateContact = (uid: string, patch: Partial<VendorContact>) => {
@@ -810,7 +796,7 @@ export function VendorForm({
 									});
 								}}
 								readOnly={readOnly}
-								fetchingGst={fetchingGst}
+								fetchingGst={gstVerification.loading}
 								onFetchGst={handleFetchGst}
 								inputClassName={inputCls}
 								errors={{ gstin: errors.gstin }}
@@ -1380,6 +1366,7 @@ export function VendorForm({
 					onDismiss={() => setToast(null)}
 				/>
 			)}
+			{gstVerification.dialog}
 		</div>
 	);
 }

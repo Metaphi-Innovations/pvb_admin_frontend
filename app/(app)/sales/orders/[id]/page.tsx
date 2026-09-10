@@ -382,129 +382,182 @@ export default function ViewSalesOrderPage() {
         )}
 
         {activeTab === "line-items" && (
-          <div className="overflow-hidden bg-white border shadow-sm rounded-xl border-border">
-            <div className="px-4 py-2.5 border-b border-border bg-muted/30">
-              <p className="text-xs font-semibold text-foreground">Product Lines</p>
+          <div className="space-y-4">
+            <div className="overflow-hidden bg-white border shadow-sm rounded-xl border-border">
+              <div className="px-4 py-2.5 border-b border-border bg-muted/30">
+                <p className="text-xs font-semibold text-foreground">Product Lines</p>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[1100px]">
+                  <thead>
+                    <tr className="border-b bg-muted/40 border-border">
+                      <th className="px-4 py-2.5 text-left text-xs font-semibold">Product</th>
+                      <th className="px-4 py-2.5 text-right text-xs font-semibold w-16">Stock</th>
+                      <th className="px-4 py-2.5 text-right text-xs font-semibold w-24">Qty (Cases/Loose)</th>
+                      <th className="px-4 py-2.5 text-right text-xs font-semibold">DP</th>
+                      <th className="px-4 py-2.5 text-left text-xs font-semibold">Offer</th>
+                      <th className="px-4 py-2.5 text-right text-xs font-semibold">Scheme Disc.</th>
+                      <th className="px-4 py-2.5 text-right text-xs font-semibold">Manual Disc.</th>
+                      <th className="px-4 py-2.5 text-right text-xs font-semibold">Final Rate</th>
+                      <th className="px-4 py-2.5 text-right text-xs font-semibold w-24">GST % / Amt</th>
+                      <th className="px-4 py-2.5 text-right text-xs font-semibold">Line Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {order.lineItems.map(line => {
+                      const product = line.productId ? getProductById(line.productId) : undefined;
+                      const hasScheme = isProductDiscountSchemeApplied(line);
+                      const packSize = line.packSize || product?.packSize || 1;
+                      const qtyType = line.quantityType || "Piece";
+                      const cases = qtyType === "Case"
+                        ? (line.caseQuantity ?? Math.floor(line.quantity / packSize))
+                        : 0;
+                      const loose = qtyType === "Piece"
+                        ? (line.pieceQuantity ?? line.quantity)
+                        : 0;
+                      const gstRateLabel =
+                        line.gstPercentage != null
+                          ? `${line.gstPercentage}%`
+                          : product?.gstRate || "0%";
+                      const lineGst =
+                        Number(line.gstAmount || 0) ||
+                        Number(line.cgstAmount || 0) +
+                          Number(line.sgstAmount || 0) +
+                          Number(line.igstAmount || 0);
+
+                      return (
+                        <tr key={line.id} className="border-b border-border/60">
+                          <td className="px-4 py-2">
+                            <p className="text-xs font-semibold text-foreground">{line.productName || "—"}</p>
+                            <p className="text-[11px] font-mono text-brand-700">{line.productCode}</p>
+                          </td>
+                          <td className="px-4 py-2 text-xs text-right tabular-nums">{line.productId ? line.availableStock : "—"}</td>
+                          <td className="px-4 py-2 text-xs text-right tabular-nums">
+                            <div className="flex flex-col items-end">
+                              <span className="font-semibold">{cases > 0 ? `${cases} Cases` : ""} {loose > 0 ? `${loose} Loose` : ""} {cases === 0 && loose === 0 ? "0" : ""}</span>
+                              <span className="text-[10px] text-muted-foreground">{line.quantity} Base Qty</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-2 text-xs text-right tabular-nums">{formatSchemeRupee(line.dealerPrice)}</td>
+                          <td className="px-4 py-2">
+                            {hasScheme ? (
+                              <div className="flex flex-col gap-0.5">
+                                <Badge className="w-fit px-1.5 py-0 text-[10px] font-semibold bg-emerald-600 hover:bg-emerald-600">
+                                  Applied
+                                </Badge>
+                                <span className="text-[10px] font-mono text-brand-700">
+                                  {line.appliedSchemeCode ?? line.schemeCode}
+                                </span>
+                                <span className="text-[10px] text-emerald-700 tabular-nums">
+                                  {formatSchemeRupee(line.schemeDiscountAmount)} off
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-[10px] text-muted-foreground">No Scheme</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-2 text-xs text-right tabular-nums">
+                            {hasScheme ? (
+                              <div className="flex flex-col items-end gap-0.5">
+                                <span>
+                                  {line.schemeDiscountType === "Rupees"
+                                    ? formatSchemeRupee(line.schemeDiscountAmount)
+                                    : `${line.schemeDiscountPercent || line.schemeDiscountValue || 0}%`}
+                                </span>
+                                <span className="text-[10px] text-muted-foreground">
+                                  {formatSchemeRupee(line.schemeDiscountAmount)} / unit
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-2 text-xs text-right tabular-nums">
+                            {line.discountValue > 0 || line.discount > 0 ? (
+                              <div className="flex flex-col items-end gap-0.5">
+                                <span>
+                                  {normalizeLineDiscountType(line.discountType) === "Flat"
+                                    ? `Fixed · ${formatSchemeRupee(line.discountValue)}`
+                                    : `${line.discount}%`}
+                                </span>
+                                <span className="text-[10px] text-muted-foreground">
+                                  {formatSchemeRupee(line.discountValue)}
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-2 text-xs text-right tabular-nums font-medium">{formatSchemeRupee(line.finalRate)}</td>
+                          <td className="px-4 py-2 text-xs text-right tabular-nums">
+                            <div className="flex flex-col items-end">
+                              <span className="text-[10px] text-muted-foreground font-semibold">{gstRateLabel}</span>
+                              <span>{formatRupee(lineGst)}</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-2 text-xs font-semibold text-right tabular-nums">{formatRupee(line.lineTotal)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[1100px]">
-                <thead>
-                  <tr className="border-b bg-muted/40 border-border">
-                    <th className="px-4 py-2.5 text-left text-xs font-semibold">Product</th>
-                    <th className="px-4 py-2.5 text-right text-xs font-semibold w-16">Stock</th>
-                    <th className="px-4 py-2.5 text-right text-xs font-semibold w-24">Qty (Cases/Loose)</th>
-                    <th className="px-4 py-2.5 text-right text-xs font-semibold">DP</th>
-                    <th className="px-4 py-2.5 text-left text-xs font-semibold">Offer</th>
-                    <th className="px-4 py-2.5 text-right text-xs font-semibold">Scheme Disc.</th>
-                    <th className="px-4 py-2.5 text-right text-xs font-semibold">Manual Disc.</th>
-                    <th className="px-4 py-2.5 text-right text-xs font-semibold">Final Rate</th>
-                    <th className="px-4 py-2.5 text-right text-xs font-semibold w-24">GST % / Amt</th>
-                    <th className="px-4 py-2.5 text-right text-xs font-semibold">Line Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {order.lineItems.map(line => {
-                    const product = line.productId ? getProductById(Number(line.productId)) : undefined;
-                    const hasScheme = isProductDiscountSchemeApplied(line);
-                    const packSize = line.packSize || product?.packSize || 1;
-                    const qtyType = line.quantityType || "Piece";
-                    const cases = qtyType === "Case"
-                      ? (line.caseQuantity ?? Math.floor(line.quantity / packSize))
-                      : 0;
-                    const loose = qtyType === "Piece"
-                      ? (line.pieceQuantity ?? line.quantity)
-                      : 0;
-                    const gstRateLabel =
-                      line.gstPercentage != null
-                        ? `${line.gstPercentage}%`
-                        : product?.gstRate || "0%";
-                    
-                    return (
-                      <tr key={line.id} className="border-b border-border/60">
-                        <td className="px-4 py-2">
-                          <p className="text-xs font-semibold text-foreground">{line.productName || "—"}</p>
-                          <p className="text-[11px] font-mono text-brand-700">{line.productCode}</p>
-                        </td>
-                        <td className="px-4 py-2 text-xs text-right tabular-nums">{line.productId ? line.availableStock : "—"}</td>
-                        <td className="px-4 py-2 text-xs text-right tabular-nums">
-                          <div className="flex flex-col items-end">
-                            <span className="font-semibold">{cases > 0 ? `${cases} Cases` : ""} {loose > 0 ? `${loose} Loose` : ""} {cases === 0 && loose === 0 ? "0" : ""}</span>
-                            <span className="text-[10px] text-muted-foreground">{line.quantity} Base Qty</span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-2 text-xs text-right tabular-nums">{formatSchemeRupee(line.dealerPrice)}</td>
-                        <td className="px-4 py-2">
-                          {hasScheme ? (
-                            <div className="flex flex-col gap-0.5">
-                              <Badge className="w-fit px-1.5 py-0 text-[10px] font-semibold bg-emerald-600 hover:bg-emerald-600">
-                                Applied
-                              </Badge>
-                              <span className="text-[10px] font-mono text-brand-700">
-                                {line.appliedSchemeCode ?? line.schemeCode}
-                              </span>
-                              <span className="text-[10px] text-emerald-700 tabular-nums">
-                                {formatSchemeRupee(line.schemeDiscountAmount)} off
-                              </span>
-                            </div>
-                          ) : (
-                            <span className="text-[10px] text-muted-foreground">No Scheme</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-2 text-xs text-right tabular-nums">
-                          {hasScheme ? (
-                            <div className="flex flex-col items-end gap-0.5">
-                              <span>
-                                {line.schemeDiscountType === "Rupees"
-                                  ? formatSchemeRupee(line.schemeDiscountAmount)
-                                  : `${line.schemeDiscountPercent || line.schemeDiscountValue || 0}%`}
-                              </span>
-                              <span className="text-[10px] text-muted-foreground">
-                                {formatSchemeRupee(line.schemeDiscountAmount)} / unit
-                              </span>
-                            </div>
-                          ) : (
-                            <span className="text-muted-foreground">—</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-2 text-xs text-right tabular-nums">
-                          {line.discountValue > 0 || line.discount > 0 ? (
-                            <div className="flex flex-col items-end gap-0.5">
-                              <span>
-                                {normalizeLineDiscountType(line.discountType) === "Flat"
-                                  ? `Fixed · ${formatSchemeRupee(line.discountValue)}`
-                                  : `${line.discount}%`}
-                              </span>
-                              <span className="text-[10px] text-muted-foreground">
-                                {formatSchemeRupee(line.discountValue)}
-                              </span>
-                            </div>
-                          ) : (
-                            <span className="text-muted-foreground">—</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-2 text-xs text-right tabular-nums font-medium">{formatSchemeRupee(line.finalRate)}</td>
-                        <td className="px-4 py-2 text-xs text-right tabular-nums">
-                          <div className="flex flex-col items-end">
-                            <span className="text-[10px] text-muted-foreground font-semibold">{gstRateLabel}</span>
-                            <span>{formatRupee(line.gstAmount)}</span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-2 text-xs font-semibold text-right tabular-nums">{formatRupee(line.lineTotal)}</td>
+
+            {(order.additionalExpenses?.length ?? 0) > 0 && (
+              <div className="overflow-hidden bg-white border shadow-sm rounded-xl border-border">
+                <div className="px-4 py-2.5 border-b border-border bg-muted/30">
+                  <p className="text-xs font-semibold text-foreground">Additional Expenses</p>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b bg-muted/40 border-border">
+                        <th className="px-4 py-2.5 text-left text-xs font-semibold">Expense Name</th>
+                        <th className="px-4 py-2.5 text-right text-xs font-semibold">Amount</th>
+                        <th className="px-4 py-2.5 text-right text-xs font-semibold">GST</th>
+                        <th className="px-4 py-2.5 text-right text-xs font-semibold">Total</th>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-            <div className="flex justify-end px-4 py-3 border-t border-border bg-muted/20">
-              <div className="w-full max-w-xs space-y-1 text-xs">
+                    </thead>
+                    <tbody>
+                      {(order.additionalExpenses ?? []).map((exp) => (
+                        <tr key={exp.id} className="border-b border-border/60">
+                          <td className="px-4 py-2 text-xs font-semibold">{exp.expenseName || "—"}</td>
+                          <td className="px-4 py-2 text-xs text-right tabular-nums">{formatRupee(exp.amount)}</td>
+                          <td className="px-4 py-2 text-xs text-right tabular-nums">{formatRupee(exp.gstAmount || 0)}</td>
+                          <td className="px-4 py-2 text-xs font-semibold text-right tabular-nums">
+                            {formatRupee(exp.totalAmount || exp.amount + (exp.gstAmount || 0))}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-end">
+              <div className="w-full max-w-xs space-y-1 text-xs bg-white border border-border p-3 rounded-xl shadow-sm">
                 <div className="flex justify-between"><span className="text-muted-foreground">Product Subtotal</span><span>{formatRupee(totals.productSubtotal)}</span></div>
                 <div className="flex justify-between"><span className="text-muted-foreground">Scheme Discount</span><span>{formatRupee(totals.schemeDiscountTotal)}</span></div>
                 <div className="flex justify-between"><span className="text-muted-foreground">Manual Discount</span><span>{formatRupee(totals.manualDiscountTotal)}</span></div>
                 <div className="flex justify-between"><span className="text-muted-foreground">Product Discount Total</span><span>{formatRupee(totals.productDiscountTotal)}</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">Net Total</span><span>{formatRupee(totals.netTotal)}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Net Total (Products)</span><span>{formatRupee(totals.netTotal)}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Additional Expenses</span><span>{formatRupee(totals.netAdditionalExpenses)}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Taxable Amount</span><span>{formatRupee(totals.taxableAmount)}</span></div>
+                {totals.cgstTotal > 0 || totals.sgstTotal > 0 ? (
+                  <>
+                    <div className="flex justify-between"><span className="text-muted-foreground">CGST</span><span>{formatRupee(totals.cgstTotal)}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">SGST</span><span>{formatRupee(totals.sgstTotal)}</span></div>
+                  </>
+                ) : totals.igstTotal > 0 ? (
+                  <div className="flex justify-between"><span className="text-muted-foreground">IGST</span><span>{formatRupee(totals.igstTotal)}</span></div>
+                ) : null}
                 <div className="flex justify-between"><span className="text-muted-foreground">Total GST</span><span>{formatRupee(totals.totalGst)}</span></div>
-                <div className="flex justify-between font-bold text-brand-700"><span>Grand Total</span><span>{formatRupee(totals.grandTotal)}</span></div>
+                <div className="flex justify-between font-bold text-brand-700 border-t border-border pt-1 mt-1">
+                  <span>Grand Total</span>
+                  <span>{formatRupee(totals.grandTotal)}</span>
+                </div>
               </div>
             </div>
           </div>

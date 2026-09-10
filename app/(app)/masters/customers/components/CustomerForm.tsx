@@ -53,15 +53,15 @@ import {
 	deriveGstRegistered,
 	deriveGstRegistrationType,
 	buildGstCategory,
-	fetchGstRegistrationDetailsAsync,
 	gstApplicableFromCategory,
-	gstDetailsToAddressSnapshot,
 	isGstCategoryRegistered,
 	type GstAddressSnapshot,
 	MSME_NUMBER_ERROR,
 	validateMSMENumber,
 } from "@/lib/masters/gst-compliance";
 import { GstRegistrationFields, GstRegisteredToggleControl } from "@/components/masters/GstRegistrationFields";
+import { useGstVerificationFlow } from "@/components/gst";
+import type { GstAutoFillPayload } from "@/components/gst";
 import { ErpFormSection } from "@/components/masters/erp/ErpFormSection";
 import { CustomerDistributorCreditSection } from "./CustomerDistributorCreditSection";
 import {
@@ -126,7 +126,6 @@ import { CustomerCreatePayload, CustomerListRecord, CustomerBranchPayload, Custo
 import { usePincode, useTdsDropdown } from "@/hooks/masters";
 import { useSalesmenDropdown } from "@/hooks/sales/use-sales-orders";
 import { CustomerTypeDocument } from "@/services/customer-type-list.service";
-import { PincodeService } from "@/services/pincode.service";
 
 export interface BranchAddress {
 	address: string;
@@ -1046,79 +1045,49 @@ export function CustomerForm({
 		Record<number, boolean>
 	>({});
 	const [bulkProductIds, setBulkProductIds] = useState<string[]>([]);
-	const [fetchingGst, setFetchingGst] = useState(false);
 	const [gstAddressSnapshot, setGstAddressSnapshot] =
 		useState<GstAddressSnapshot | null>(null);
+	const [toastState, setToastState] = useState<ToastState | null>(null);
+	const showToast = (msg: string, type: "success" | "error") => {
+		setToastState({ msg, type });
+		setTimeout(() => setToastState(null), 3200);
+	};
 
 	const gstRegistered = form.gstRegistered;
 
+	const applyGstAutoFill = (payload: GstAutoFillPayload) => {
+		const addr = payload.principalAddress;
+		const snap: GstAddressSnapshot = {
+			address: payload.legalAddress,
+			addressLine2: [addr.floorNumber, addr.landmark].filter(Boolean).join(", "),
+			country: "India",
+			district: addr.district || addr.location,
+			city: addr.location || addr.district,
+			state: addr.state,
+			pincode: addr.pincode,
+		};
+		setGstAddressSnapshot(snap);
+		onChange({
+			...form,
+			registeredLegalName: payload.legalName,
+			registeredAddress: payload.legalAddress,
+		});
+		showToast("Legal name and legal address auto-filled from GSTIN.", "success");
+	};
+
+	const gstVerification = useGstVerificationFlow({
+		onAutoFill: applyGstAutoFill,
+		onError: (message) => showToast(message, "error"),
+	});
+
 	const handleFetchGst = async () => {
 		if (readOnly) return;
-		if (!form.gstin.trim()) {
-			showToast("Enter GSTIN before fetching details.", "error");
-			return;
-		}
-		if (!validateGSTIN(form.gstin)) {
-			showToast("Enter a valid 15-character GSTIN.", "error");
-			return;
-		}
-		setFetchingGst(true);
-		try {
-			const details = await fetchGstRegistrationDetailsAsync(form.gstin);
-			if (!details) {
-				showToast("Could not fetch GST details. Check GSTIN format.", "error");
-				return;
-			}
-			const snap = gstDetailsToAddressSnapshot(details);
-
-			let pincodeId: string | undefined;
-			if (snap.pincode && /^\d{6}$/.test(snap.pincode.trim())) {
-				const pincodeRecords = await PincodeService.getByPincode(snap.pincode.trim());
-				if (pincodeRecords.length > 0) {
-					pincodeId = pincodeRecords[0].id;
-				}
-			}
-
-			const enrichedSnap = { ...snap, pincodeId };
-			setGstAddressSnapshot(enrichedSnap);
-			const displayName = details.tradeName || details.legalBusinessName;
-			const updatedBranches = form.branches.map((b, idx) => {
-				const isMain =
-					b.isMain || (!form.branches.some((x) => x.isMain) && idx === 0);
-				if (!isMain) return b;
-				return {
-					...b,
-					billingAddress: {
-						...enrichedSnap,
-						addressLine2: enrichedSnap.addressLine2 ?? "",
-						country: enrichedSnap.country ?? "India",
-						district: enrichedSnap.district ?? enrichedSnap.city,
-					},
-					shippingAddress: {
-						...enrichedSnap,
-						addressLine2: enrichedSnap.addressLine2 ?? "",
-						country: enrichedSnap.country ?? "India",
-						district: enrichedSnap.district ?? enrichedSnap.city,
-					},
-				};
-			});
-			onChange({
-				...form,
-				registeredLegalName: details.legalBusinessName || displayName,
-				registeredAddress: details.registeredAddress,
-				customerName: form.customerName.trim() || displayName,
-				pan: form.pan.trim() || form.gstin.trim().slice(2, 12),
-				branches: updatedBranches,
-			});
-			showToast("GST details fetched and applied.", "success");
-		} finally {
-			setFetchingGst(false);
-		}
+		await gstVerification.verify(form.gstin);
 	};
 
 	const copyGstAddressToBranch = (bIdx: number) => {
 		if (!gstAddressSnapshot) {
-			showToast("Fetch GST details first to copy the registered address.", "error");
+			showToast("Verify GSTIN and auto-fill first to copy the registered address.", "error");
 			return;
 		}
 		const updatedBranches = form.branches.map((b, idx) =>
@@ -1132,12 +1101,6 @@ export function CustomerForm({
 		);
 		onChange({ ...form, branches: updatedBranches });
 		showToast("GST registered address copied to branch.", "success");
-	};
-
-	const [toastState, setToastState] = useState<ToastState | null>(null);
-	const showToast = (msg: string, type: "success" | "error") => {
-		setToastState({ msg, type });
-		setTimeout(() => setToastState(null), 3200);
 	};
 
 	const [previewDoc, setPreviewDoc] = useState<{
@@ -1795,11 +1758,12 @@ export function CustomerForm({
 								}}
 								errors={errors}
 								readOnly={readOnly}
-								fetchingGst={fetchingGst}
+								fetchingGst={gstVerification.loading}
 								onFetchGst={handleFetchGst}
 								footer={panTdsFooter}
 							/>
 						</ErpFormSection>
+						{gstVerification.dialog}
 
 						<ErpFormSection title='Compliance & Certifications' bodyClassName='p-2'>
 							<ComplianceCertificationsGrid

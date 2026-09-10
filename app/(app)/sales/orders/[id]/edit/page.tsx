@@ -193,7 +193,8 @@ export default function EditSalesOrderPage() {
 				form,
 				options: {
 					soNumber: orderNumber,
-					status: asDraft ? "draft" : form.status || "confirmed",
+					// Submit must leave DRAFT — form.status stays "draft" while editing a draft.
+					status: asDraft ? "draft" : "confirmed",
 				},
 			},
 			{

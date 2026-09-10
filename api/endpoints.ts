@@ -15,6 +15,9 @@ export const API_ENDPOINTS = {
       VIEW: (pincode: string) => `/user-management/pincode/code/${pincode}`,
     },
   },
+  GST: {
+    VERIFY: "/gst/verify",
+  },
   MASTER: {
     CATEGORY: {
       LIST: "/master/category/list",

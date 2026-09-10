@@ -44,6 +44,7 @@ import {
   SAMPLE_BILLING_DETAILS,
   getProductById,
   hydrateOrderLineItems,
+  calculateOrderTotalsSummary,
 } from "../orders-data";
 import {
   useSampleOrder,
@@ -113,6 +114,10 @@ export default function ViewSalesOrderPage() {
   }
 
   const order = hydratedOrder;
+  const totals = calculateOrderTotalsSummary(
+    order.lineItems,
+    order.additionalExpenses ?? [],
+  );
 
   const packingListIdNum = typeof order.packingListId === "string" ? parseInt(order.packingListId, 10) : order.packingListId;
   const packingList = (packingListIdNum && !isNaN(packingListIdNum)) ? getPackingListById(packingListIdNum) : undefined;
@@ -495,7 +500,11 @@ export default function ViewSalesOrderPage() {
             </div>
             <div className="flex justify-end px-4 py-3 border-t border-border bg-muted/20">
               <div className="w-full max-w-xs space-y-1 text-xs">
-                <div className="flex justify-between font-bold text-brand-700"><span>Grand Total</span><span>{formatRupee(order.totalAmount)}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Product Subtotal</span><span>{formatRupee(totals.productSubtotal)}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Discount</span><span>{formatRupee(totals.productDiscountTotal)}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Net Total</span><span>{formatRupee(totals.netTotal)}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Total GST</span><span>{formatRupee(totals.totalGst)}</span></div>
+                <div className="flex justify-between font-bold text-brand-700"><span>Grand Total</span><span>{formatRupee(totals.grandTotal)}</span></div>
               </div>
             </div>
           </div>
