@@ -1,3 +1,8 @@
+import {
+  canonicalizeModuleId,
+  isLegacySubmoduleKey,
+} from "@/lib/auth/permission-aliases";
+
 /**
  * Hierarchical web permissions from backend:
  * Module → Submodule → Actions
@@ -225,8 +230,14 @@ export function normalizeWebPermissions(raw: unknown): WebPermissionTree {
   const out: WebPermissionTree = {};
   for (const [mod, subs] of Object.entries(tree as Record<string, unknown>)) {
     if (!subs || typeof subs !== "object" || Array.isArray(subs)) continue;
-    out[mod] = {};
+    const canonicalMod = canonicalizeModuleId(mod);
+    if (!out[canonicalMod]) out[canonicalMod] = {};
     for (const [sub, actions] of Object.entries(subs as Record<string, unknown>)) {
+      // Drop legacy alias keys so incomplete UI revoke (canonical cleared, alias left)
+      // no longer keeps the parent module unlocked.
+      if (isLegacySubmoduleKey(canonicalMod, sub) || isLegacySubmoduleKey(mod, sub)) {
+        continue;
+      }
       if (!actions || typeof actions !== "object" || Array.isArray(actions)) continue;
       const normalized: Record<string, boolean> = {};
       for (const [action, enabled] of Object.entries(actions as Record<string, unknown>)) {
@@ -234,7 +245,9 @@ export function normalizeWebPermissions(raw: unknown): WebPermissionTree {
         const key = action.toLowerCase() === "update" ? "edit" : action;
         normalized[key] = true;
       }
-      out[mod][sub] = normalized;
+      if (!Object.keys(normalized).length) continue;
+      const existing = out[canonicalMod][sub] ?? {};
+      out[canonicalMod][sub] = { ...existing, ...normalized };
     }
   }
   return out;

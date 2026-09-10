@@ -6,6 +6,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { CountBadge } from "@/components/ui/StatusBadge";
 import { useClientMounted } from "@/lib/use-client-mounted";
 import { countPendingAccountsApprovals } from "@/lib/accounts/accounts-approvals-queue";
+import { usePermissions } from "@/lib/auth/permissions-context";
+import type { WebPermissionTree } from "@/lib/auth/permissions";
 
 const OTHER_PENDING_APPROVALS = [
   { label: "Purchase Orders", count: 4, href: "/procurement/purchase-orders" },
@@ -15,8 +17,20 @@ const OTHER_PENDING_APPROVALS = [
   { label: "Leave Requests", count: 2, href: "/hr/leaves?status=pending" },
 ];
 
+function hasAnyApprovePermission(permissions: WebPermissionTree | null): boolean {
+  if (!permissions) return false;
+  for (const mod of Object.values(permissions)) {
+    if (!mod) continue;
+    for (const actions of Object.values(mod)) {
+      if (actions && actions.approve === true) return true;
+    }
+  }
+  return false;
+}
+
 function ApprovalsButtonInner() {
   const mounted = useClientMounted();
+  const { permissions, isLoading } = usePermissions();
   const [accountsPending, setAccountsPending] = React.useState(0);
 
   React.useEffect(() => {
@@ -38,6 +52,11 @@ function ApprovalsButtonInner() {
       window.clearTimeout(t);
     };
   }, [mounted]);
+
+  if (!isLoading && !hasAnyApprovePermission(permissions)) {
+    return null;
+  }
+
   const otherPending = OTHER_PENDING_APPROVALS.reduce((s, a) => s + a.count, 0);
   const totalPending = accountsPending + otherPending;
 

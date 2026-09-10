@@ -34,6 +34,7 @@ import {
   type PermSubmodule,
   type MobileFeatureDef,
 } from "../../../employee/employee-data";
+import { revokeKeysForPrefix } from "@/lib/auth/permission-aliases";
 import {
   useCreateTemplate,
   useTemplate,
@@ -197,15 +198,7 @@ export default function TemplateForm({ mode, templateId }: TemplateFormProps) {
 
   const revokeMod = (mod: PermModule) => {
     if (isReadOnly) return;
-    setActiveWebPerms((prev) => {
-      const next = new Set(prev);
-      mod.submodules.forEach((sub: PermSubmodule) => {
-        sub.actions.forEach((action: WebAction) => {
-          next.delete(`${mod.id}.${sub.id}.${action}`);
-        });
-      });
-      return next;
-    });
+    setActiveWebPerms((prev) => revokeKeysForPrefix(prev, mod.id));
   };
 
   const grantGroup = (grp: MobileGroupDef) => {
@@ -223,15 +216,7 @@ export default function TemplateForm({ mode, templateId }: TemplateFormProps) {
 
   const revokeGroup = (grp: MobileGroupDef) => {
     if (isReadOnly) return;
-    setActiveMobilePerms((prev) => {
-      const next = new Set(prev);
-      grp.features.forEach((feat: MobileFeatureDef) => {
-        feat.actions.forEach((action: MobileAction) => {
-          next.delete(`${grp.id}.${feat.id}.${action}`);
-        });
-      });
-      return next;
-    });
+    setActiveMobilePerms((prev) => revokeKeysForPrefix(prev, grp.id));
   };
 
   const modHasAny = (mod: PermModule) => {

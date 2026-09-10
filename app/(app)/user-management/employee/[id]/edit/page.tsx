@@ -17,6 +17,8 @@ import {
 } from "../../user-api-data";
 import { permissionsHaveEnabled } from "@/services/user-list.service";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/lib/auth/auth-context";
+import { usePermissions } from "@/lib/auth/permissions-context";
 import {
   useUser,
   useUpdateUser,
@@ -52,6 +54,8 @@ export default function EditEmployeePage() {
   const router = useRouter();
   const params = useParams();
   const userId = params.id as string;
+  const { user: authUser } = useAuth();
+  const { refresh: refreshPermissions } = usePermissions();
 
   const [toast, setToast] = useState<ToastState | null>(null);
   const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null);
@@ -174,6 +178,13 @@ export default function EditEmployeePage() {
                 type: "error",
               });
               return;
+            }
+          }
+          if (authUser?.user_id === userId) {
+            try {
+              await refreshPermissions();
+            } catch {
+              // Nav will refresh on next route change if this fails.
             }
           }
           setToast({ msg: "User updated successfully", type: "success" });
