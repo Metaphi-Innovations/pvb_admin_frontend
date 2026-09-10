@@ -468,7 +468,7 @@ export function mapDispatchToTaxInvoice(
   const linesIgst = round2(lines.reduce((s, l) => s + l.igst, 0));
   const linesTax = round2(linesCgst + linesSgst + linesIgst);
   const additionalChargesFromRows = round2(
-    invoiceCharges.reduce((sum, rawCharge) => {
+    invoiceCharges.reduce((sum: number, rawCharge) => {
       const charge = readRecord(rawCharge);
       return sum + toNumber(charge.amount);
     }, 0),

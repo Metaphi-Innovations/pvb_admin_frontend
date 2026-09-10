@@ -288,16 +288,14 @@ export function GeographySetupTab(_props?: { postalRecordCount?: number }) {
               </Button>
 
               <ListingStatusToggle
-                currentStatus={item.status}
-                onToggle={async () => {
-                  const newStatus = isActiveStatus(item.status) ? "Inactive" : "Active";
-                  await toggleStatus.mutateAsync({ id: item.id, status: newStatus });
+                active={isActiveStatus(item.status)}
+                onChange={async () => {
+                  await toggleStatus.mutateAsync({ level: item.level, id: item.id });
                 }}
                 disabled={toggleStatus.isPending}
-                size="sm"
               />
 
-              <ActionMenu item={item} actions={rowActions} />
+              <ActionMenu row={item} actions={rowActions} />
             </div>
           </td>
         </tr>
