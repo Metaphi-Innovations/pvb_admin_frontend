@@ -38,9 +38,9 @@ import { ReceiptVoucherService } from "@/services/receipt-voucher.service";
 import { CustomerListService } from "@/services/customer-list.service";
 import { SupplierListService } from "@/services/supplier-list.service";
 import { WarehouseService } from "@/services/warehouse.service";
-import { BankAccountsListService } from "@/services/bank-accounts-list.service";
 import { LedgerService } from "@/services/ledger.service";
 import { UserListService } from "@/services/user-list.service";
+import { useBankAccountOptions } from "@/hooks/accounts/use-bank-accounts-list";
 import {
   BANK_TRANSACTION_MODE_LABELS,
   BANK_TRANSACTION_MODES,
@@ -124,9 +124,6 @@ export function ReceiptVoucherApiForm({
   const [warehouses, setWarehouses] = useState<{ value: string; label: string }[]>([]);
   const [customers, setCustomers] = useState<{ value: string; label: string; sub?: string }[]>([]);
   const [suppliers, setSuppliers] = useState<{ value: string; label: string; sub?: string }[]>([]);
-  const [bankRows, setBankRows] = useState<
-    { bankAccountId: string; ledgerId: string; label: string; warehouses: string[] }[]
-  >([]);
   const [cashLedgers, setCashLedgers] = useState<{ value: string; label: string; sub?: string }[]>([]);
   const [manualLedgers, setManualLedgers] = useState<{ value: string; label: string; sub?: string }[]>([]);
   const [approvers, setApprovers] = useState<{ value: string; label: string }[]>([]);
@@ -415,15 +412,11 @@ export function ReceiptVoucherApiForm({
     const ac = new AbortController();
     (async () => {
       try {
-        const [cfg, wh, cust, supp, banks, ledgers, users] = await Promise.all([
+        const [cfg, wh, cust, supp, ledgers, users] = await Promise.all([
           ReceiptVoucherService.getConfig().catch(() => ({ approval_required: true })),
           WarehouseService.dropdown().catch(() => []),
           CustomerListService.dropdown().catch(() => []),
           SupplierListService.dropdown().catch(() => []),
-          BankAccountsListService.list({ page: 1, pageSize: 200 }).catch(() => ({
-            items: [],
-            total: 0,
-          })),
           LedgerService.getDropdown({ status: "ACTIVE", allowManualPosting: true }).catch(
             () => ({ tree: [], ledgers: [] }),
           ),
@@ -453,18 +446,6 @@ export function ReceiptVoucherApiForm({
             label: s.supplierName,
             sub: s.supplierCode,
           })),
-        );
-
-        // List rows expose mapped warehouse names for client-side branch filtering.
-        setBankRows(
-          banks.items
-            .filter((b) => b.bankAccountId && b.status === "active")
-            .map((b) => ({
-              bankAccountId: b.bankAccountId as string,
-              ledgerId: b.ledgerId,
-              label: `${b.bankName || b.ledgerName} — ${b.accountNumber || b.ledgerCode}`,
-              warehouses: b.mappedWarehouseNames || [],
-            })),
         );
 
         const ledgerOpts = (ledgers.ledgers ?? []).map((l) => ({
@@ -676,20 +657,48 @@ export function ReceiptVoucherApiForm({
 
   const warehouseName = warehouses.find((w) => w.value === form.warehouse_id)?.label || "";
 
+  const bankAccountsQuery = useBankAccountOptions({
+    warehouseId: form.warehouse_id || undefined,
+    usage: "RECEIPT",
+    enabled: Boolean(form.warehouse_id),
+  });
+
   const bankOptions = useMemo(() => {
-    return bankRows
-      .filter(
-        (b) =>
-          !form.warehouse_id ||
-          b.warehouses.length === 0 ||
-          b.warehouses.includes(warehouseName),
-      )
+    return (bankAccountsQuery.data ?? [])
+      .filter((b) => b.bankAccountId)
       .map((b) => ({
-        value: b.bankAccountId,
+        value: b.bankAccountId as string,
         label: b.label,
         sub: b.ledgerId,
       }));
-  }, [bankRows, form.warehouse_id, warehouseName]);
+  }, [bankAccountsQuery.data]);
+
+  useEffect(() => {
+    if (!form.bank_account_id) return;
+    if (!form.warehouse_id) {
+      setForm((prev) => ({
+        ...prev,
+        bank_account_id: "",
+        cash_bank_ledger_id: "",
+        cash_bank_ledger_name: "",
+      }));
+      return;
+    }
+    if (bankAccountsQuery.isLoading) return;
+    if (!bankOptions.some((o) => o.value === form.bank_account_id)) {
+      setForm((prev) => ({
+        ...prev,
+        bank_account_id: "",
+        cash_bank_ledger_id: "",
+        cash_bank_ledger_name: "",
+      }));
+    }
+  }, [
+    form.bank_account_id,
+    form.warehouse_id,
+    bankOptions,
+    bankAccountsQuery.isLoading,
+  ]);
 
   const partyName = useMemo(() => {
     if (form.party_kind === "CUSTOMER") {
@@ -1114,7 +1123,9 @@ export function ReceiptVoucherApiForm({
                     }
                     triggerClassName={INVOICE_DETAIL_SELECT_CLASS}
                     onChange={(id) => {
-                      const row = bankRows.find((b) => b.bankAccountId === id);
+                      const row = (bankAccountsQuery.data ?? []).find(
+                        (b) => b.bankAccountId === id,
+                      );
                       patch({
                         bank_account_id: id,
                         cash_bank_ledger_id: row?.ledgerId || "",
@@ -1149,7 +1160,7 @@ export function ReceiptVoucherApiForm({
 
               {form.transaction_mode !== "CASH" && form.transaction_mode !== "CHEQUE" ? (
                 <>
-                  <InvoiceDetailField label="UTR Number">
+                  <InvoiceDetailField label="UTR Number" required>
                     <Input
                       className={INVOICE_DETAIL_INPUT_CLASS}
                       value={form.utr_number}
@@ -1158,7 +1169,7 @@ export function ReceiptVoucherApiForm({
                       placeholder="UTR…"
                     />
                   </InvoiceDetailField>
-                  <InvoiceDetailField label="Transaction Reference">
+                  <InvoiceDetailField label="Transaction Reference" required>
                     <Input
                       className={INVOICE_DETAIL_INPUT_CLASS}
                       value={form.transaction_reference}
@@ -1264,7 +1275,12 @@ export function ReceiptVoucherApiForm({
                       : "Gross Amount"
                     : "Gross Refund Amount"
               }
-              required={form.party_kind === "OTHER_LEDGER"}
+              required={
+                form.party_kind === "OTHER_LEDGER" ||
+                form.party_kind === "SUPPLIER_REFUND" ||
+                (form.party_kind === "CUSTOMER" &&
+                  (isCustomerAdvance || form.receipt_treatment === "mixed_allocation"))
+              }
             >
               <Input
                 className={cn(INVOICE_DETAIL_INPUT_CLASS, VOUCHER_MONEY_INPUT_CLASS, "tabular-nums")}

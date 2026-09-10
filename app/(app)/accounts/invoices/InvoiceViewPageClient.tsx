@@ -55,8 +55,6 @@ import { formatMoneyOrDash } from "@/lib/accounts/money-format";
 import { GENERAL_LEDGER_HREF } from "@/lib/accounts/general-ledger-data";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { cn } from "@/lib/utils";
-import { getBankAccountPrintDetails } from "@/components/accounts/WarehouseMappedBankAccountSelect";
-import { listBankAccountSelectOptions } from "@/lib/accounts/bank-accounts-data";
 import {
   InvoiceFormLayout,
   INVOICE_FORM_GRID_CLASS,
@@ -138,10 +136,12 @@ function ProductTable({
   lines,
   interstate,
   productCodeById,
+  productSkuByUuid,
 }: {
   lines: InvoiceLineItem[];
   interstate: boolean;
   productCodeById: Map<number, string>;
+  productSkuByUuid: Map<string, string>;
 }) {
   const headers = interstate
     ? ([
@@ -253,7 +253,7 @@ function ProductTable({
               const discAmt = resolveDisplayDiscountAmount(line);
               /** GST / taxable / line total from stored line amounts — do not re-apply scheme % into totals. */
               const split = getLineGstSplit(line, interstate);
-              const sku = resolveLineSku(line, productCodeById);
+              const sku = resolveLineSku(line, productCodeById, productSkuByUuid);
               const hasScheme = lineHasProductDiscount(line);
 
               return (
@@ -456,7 +456,17 @@ export default function InvoiceViewPageClient({
   const productCodeById = useMemo(() => {
     const map = new Map<number, string>();
     for (const p of loadProducts()) {
-      map.set(p.id, p.productCode || p.sku || "");
+      if (p.sku?.trim()) map.set(p.id, p.sku.trim());
+    }
+    return map;
+  }, []);
+
+  const productSkuByUuid = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const p of loadProducts()) {
+      const uuid = (p as { productUuid?: string }).productUuid?.trim();
+      const sku = p.sku?.trim();
+      if (uuid && sku) map.set(uuid, sku);
     }
     return map;
   }, []);
@@ -479,15 +489,7 @@ export default function InvoiceViewPageClient({
   const invoiceType = resolveInvoiceDocumentType(record);
   const gst = getInvoiceGstBreakup(record);
   const interstate = gst.interstate;
-  const bankOptions = listBankAccountSelectOptions(
-    record.warehouseUuid || record.warehouse,
-  );
-  const bankDetails =
-    record.bankAccountId != null
-      ? getBankAccountPrintDetails(record.bankAccountId)
-      : bankOptions[0]
-        ? getBankAccountPrintDetails(bankOptions[0].id)
-        : null;
+  const bankDetails = record.bankAccountPrint ?? null;
   const isSalesOrderView =
     record.sourceType === "sales_order" ||
     (invoiceType === "sales" && Boolean(record.salesOrderNo || record.dispatchNo));
@@ -787,6 +789,7 @@ export default function InvoiceViewPageClient({
               lines={record.lineItems}
               interstate={interstate}
               productCodeById={productCodeById}
+              productSkuByUuid={productSkuByUuid}
             />
             <div className="px-3 pb-3">
               <CompactSchemeInformation record={record} />

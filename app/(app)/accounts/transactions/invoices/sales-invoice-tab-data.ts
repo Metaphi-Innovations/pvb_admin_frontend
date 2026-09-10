@@ -152,7 +152,11 @@ export function mapApiInvoiceToListRow(
   const id = dto.sales_invoice_id;
   const dispatchNo =
     dto.dispatch?.dispatch_number || dto.dispatch_number || "—";
-  const orderNo = dto.sales_order?.so_number || "—";
+  const orderNo =
+    dto.sales_order?.so_number ||
+    dto.stock_transfer?.transfer_no ||
+    dto.sample_order?.order_no ||
+    "—";
   const totalQty = Math.round((Number(dto.total_quantity) || 0) * 100) / 100;
 
   const stubRecord = {

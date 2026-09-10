@@ -34,7 +34,6 @@ import { backfillInvoiceCustomerLedgerLinks } from "@/lib/accounts/invoice-ledge
 import {
   NEAR_EXPIRY_SETTLEMENT_REQUIRED_LABEL,
 } from "@/app/(app)/warehouse/dispatch/near-expiry-dispatch";
-import { mergeNearExpiryDemoSalesInvoice } from "@/lib/accounts/near-expiry-scheme-invoice-demo";
 import type {
 	InvoiceDocumentKind,
 	InvoiceDocumentType,
@@ -47,11 +46,6 @@ import {
 	nextServiceInvoiceNo,
 } from "@/lib/accounts/invoice-type";
 import { SalesInvoiceNumberService } from "@/services/sales-invoice-number.service";
-import {
-  mergeSalesInvoiceSeed,
-  buildSalesInvoiceSeed,
-  SALES_INVOICE_SEED_VERSION,
-} from "@/lib/accounts/sales-invoice-seed";
 
 export const SCHEME_SETTLEMENT_SETTLED_LABEL = "Settled";
 
@@ -265,8 +259,15 @@ export interface InvoiceRecord {
 	destinationWarehouseGstin?: string;
 	destinationWarehouseName?: string;
 	stockTransferId?: string;
-	/** Bank account for payment instructions / print */
-	bankAccountId?: number | null;
+	/** Bank account UUID for payment instructions / print */
+	bankAccountId?: string | null;
+	/** Snapshot for PDF / view when bank master is not re-fetched */
+	bankAccountPrint?: {
+		bankName: string;
+		accountNumber: string;
+		ifsc: string;
+		branchName: string;
+	} | null;
 	paymentTerms?: string;
 	creditDays?: number;
 	placeOfSupply?: string;
@@ -345,7 +346,6 @@ export interface InvoiceRecord {
 }
 
 const STORAGE_KEY = "ds_accounts_invoices_v2";
-const SEED_VERSION_KEY = "ds_accounts_invoices_seed_version";
 
 /** Column labels — GST-inclusive totals must be explicit across Accounts UI. */
 export const INVOICE_AMOUNT_LABELS = {
@@ -796,29 +796,23 @@ function postSentInvoiceOrRollback(
 	}
 }
 
-const SEED: InvoiceRecord[] = buildSalesInvoiceSeed();
-
 export function loadInvoices(): InvoiceRecord[] {
-	if (typeof window === "undefined") return SEED.map(normalizeInvoice);
+	if (typeof window === "undefined") return [];
 	try {
-		const version = localStorage.getItem(SEED_VERSION_KEY);
 		const raw = localStorage.getItem(STORAGE_KEY);
-		let list: InvoiceRecord[] =
-			version === String(SALES_INVOICE_SEED_VERSION) && raw
-				? JSON.parse(raw)
-				: mergeSalesInvoiceSeed(SEED);
-		const normalized = mergeNearExpiryDemoSalesInvoice(list.map(normalizeInvoice));
-		const merged = mergeSalesInvoiceSeed(normalized);
-		const { invoices: linked, changed } = backfillInvoiceCustomerLedgerLinks(merged);
+		if (!raw) return [];
+		const list: InvoiceRecord[] = JSON.parse(raw);
+		if (!Array.isArray(list)) return [];
+		const normalized = list.map(normalizeInvoice);
+		const { invoices: linked, changed } = backfillInvoiceCustomerLedgerLinks(normalized);
 		const { invoices: reconciled, changed: postingChanged } =
 			reconcileSalesInvoicePostingState(linked);
-		if (changed || postingChanged || version !== String(SALES_INVOICE_SEED_VERSION) || !raw) {
+		if (changed || postingChanged) {
 			localStorage.setItem(STORAGE_KEY, JSON.stringify(reconciled));
-			localStorage.setItem(SEED_VERSION_KEY, String(SALES_INVOICE_SEED_VERSION));
 		}
 		return reconciled;
 	} catch {
-		return mergeSalesInvoiceSeed(SEED).map(normalizeInvoice);
+		return [];
 	}
 }
 
@@ -978,7 +972,13 @@ export type InvoiceFormInput = {
 	dispatchNo?: string;
 	branch?: string;
 	warehouse?: string;
-	bankAccountId?: number | null;
+	bankAccountId?: string | null;
+	bankAccountPrint?: {
+		bankName: string;
+		accountNumber: string;
+		ifsc: string;
+		branchName: string;
+	} | null;
 	salesperson?: string;
 	transportMode?: string;
 	transporterName?: string;

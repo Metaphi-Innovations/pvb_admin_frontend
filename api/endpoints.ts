@@ -673,6 +673,8 @@ export const API_ENDPOINTS = {
       EXPORT: "/accounts/purchase-invoice/export",
       FILTER_DROPDOWN: "/accounts/purchase-invoice/filter-dropdown",
       BY_ID: (id: string) => `/accounts/purchase-invoice/${id}`,
+      SUPPLIER_INVOICE: (id: string) =>
+        `/accounts/purchase-invoice/${id}/supplier-invoice`,
       CANCEL: (id: string) => `/accounts/purchase-invoice/${id}/cancel`,
       PREVIEW_NUMBER: "/accounts/purchase-invoice/preview-number",
       ALLOCATE: "/accounts/purchase-invoice/allocate",

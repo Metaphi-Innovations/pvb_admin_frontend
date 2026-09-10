@@ -70,16 +70,21 @@ export const EMPTY_TRANSPORT_STATUTORY: GoodsTransportStatutoryState = {
 
 function Field({
   label,
+  required,
   className,
   children,
 }: {
   label: string;
+  required?: boolean;
   className?: string;
   children: React.ReactNode;
 }) {
   return (
     <div className={cn("so-goods-field so-transport-cell", className)}>
-      <p className="so-goods-field__label">{label}</p>
+      <p className="so-goods-field__label">
+        {label}
+        {required ? <span className="text-red-500 ml-0.5">*</span> : null}
+      </p>
       <div className="so-goods-field__control">{children}</div>
     </div>
   );
@@ -129,7 +134,7 @@ export function GoodsTransportStatutorySection({
           hideDistance ? "so-transport-grid--docs" : "so-transport-grid--5",
         )}
       >
-        <Field label="Transport Mode">
+        <Field label="Transport Mode" required>
           <Select
             value={value.transportMode || undefined}
             onValueChange={(v) => set({ transportMode: v })}
@@ -169,7 +174,7 @@ export function GoodsTransportStatutorySection({
           />
         </Field>
         {!hideDistance ? (
-          <Field label="Distance (KM)">
+          <Field label="Distance (KM)" required>
             <CtrlInput
               type="number"
               value={value.distanceKm}
@@ -193,14 +198,14 @@ export function GoodsTransportStatutorySection({
             aria-label="LR Date"
           />
         </Field>
-        <Field label="Transport Doc No." className="so-span-1">
+        <Field label="Transport Doc No." className="so-span-1" required>
           <CtrlInput
             value={value.transportDocNo}
             onChange={(v) => set({ transportDocNo: v })}
             placeholder="Transport document no."
           />
         </Field>
-        <Field label="Transport Doc Date" className="so-span-1">
+        <Field label="Transport Doc Date" className="so-span-1" required>
           <AccountsDateInput
             className="h-8 text-xs w-full"
             value={value.transportDocDate}

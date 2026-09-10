@@ -46,7 +46,6 @@ import { SalesInvoiceNumberService } from "@/services/sales-invoice-number.servi
 import { loadFinancialYears } from "@/app/(app)/accounts/masters/masters-data";
 import { resolveDateRangePreset, type DateRangePresetId } from "@/lib/accounts/report-date-presets";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
-import { accountsDataService } from "@/lib/accounts/accounts-data-service";
 import {
   AccountsColumnFilterProvider,
   AccountsColumnHeader,
@@ -57,8 +56,6 @@ import {
 import type { AccountsColumnFilterConfig, ColumnValueOption } from "@/lib/accounts/column-filter-types";
 import { PendingInvoicesTabs } from "./PendingInvoicesTabs";
 import {
-  getPendingInvoiceBranchOptions,
-  listPendingInvoicesByTab,
   PENDING_INVOICE_TAB_META,
   type PendingInvoiceListRow,
   type PendingInvoiceTabId,
@@ -457,9 +454,7 @@ function PendingInvoicesTable({
 
   const generateAction = (r: PendingInvoiceListRow) => {
     const alreadyInvoiced = Boolean(r.invoiceId);
-    const label = isStockTransfer
-      ? "Generate Stock Transfer Invoice"
-      : "Generate Invoice";
+    const label = "Generate Invoice";
     return (
       <Button
         asChild={!alreadyInvoiced}

@@ -193,7 +193,7 @@ export interface CreditNoteRecord {
   referenceNo?: string;
   attachmentName?: string;
   warehouse?: string;
-  bankAccountId?: number | null;
+  bankAccountId?: string | null;
 }
 
 const STORAGE_KEY = "ds_accounts_credit_notes_v2";
@@ -831,7 +831,7 @@ export type CreditNoteFormInput = {
   referenceNo?: string;
   attachmentName?: string;
   warehouse?: string;
-  bankAccountId?: number | null;
+  bankAccountId?: string | null;
 };
 
 function inferAgainstType(input: CreditNoteFormInput): CreditNoteAgainst {

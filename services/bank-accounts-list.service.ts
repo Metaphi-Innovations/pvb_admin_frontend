@@ -183,9 +183,17 @@ export interface BankAccountOption {
   accountNumber: string;
   label: string;
   ifscCode: string;
+  branchName: string;
   accountHolderName: string;
   status: BankAccountApiStatus;
+  default?: boolean;
 }
+
+export type BankAccountOptionsQuery = {
+  warehouseId?: string | null;
+  usage?: "RECEIPT" | "PAYMENT";
+  signal?: AbortSignal;
+};
 
 export interface BankAccountMutationResult {
   message: string;
@@ -400,8 +408,10 @@ function mapBankAccountOption(row: Record<string, unknown>): BankAccountOption {
         ? `${bankName} - ${accountNumber}`
         : bankName || accountNumber || "—"),
     ifscCode: asString(row.ifscCode ?? row.ifsc),
+    branchName: asString(row.branchName ?? row.branch_name),
     accountHolderName: asString(row.accountHolderName),
     status: mapApiStatus(row.status),
+    default: asBoolean(row.default, false),
   };
 }
 
@@ -709,10 +719,19 @@ export const BankAccountsListService = {
     return Array.isArray(payload.data) ? payload.data : [];
   },
 
-  async getOptions(signal?: AbortSignal): Promise<BankAccountOption[]> {
+  async getOptions(
+    params?: BankAccountOptionsQuery,
+  ): Promise<BankAccountOption[]> {
+    const query: Record<string, string> = {};
+    const warehouseId = params?.warehouseId?.trim();
+    if (warehouseId && UUID_RE.test(warehouseId)) {
+      query.warehouseId = warehouseId;
+    }
+    if (params?.usage) query.usage = params.usage;
+
     const response = await axiosInstance.get(
       API_ENDPOINTS.ACCOUNTS.BANKING.BANK_ACCOUNTS.OPTIONS,
-      { signal },
+      { params: query, signal: params?.signal },
     );
     const payload = response.data as Record<string, unknown>;
     const data = payload.data;

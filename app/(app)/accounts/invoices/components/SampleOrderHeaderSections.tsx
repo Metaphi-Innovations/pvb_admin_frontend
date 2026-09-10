@@ -34,7 +34,9 @@ export function SampleOrderCustomerSection({
   return (
     <div className="so-goods-field-grid">
       <div className="so-goods-field so-w-customer">
-        <p className="so-goods-field__label">Customer Name</p>
+        <p className="so-goods-field__label">
+          Customer Name <span className="text-red-500">*</span>
+        </p>
         <div className="so-goods-field__control">
           <div className="so-goods-ro-with-info">
             <span className="so-goods-ro-with-info__value">{customerName || "—"}</span>
@@ -76,7 +78,7 @@ export function SampleOrderProformaDetailsSection({
   sampleOrderNo,
   dispatchNo,
   dispatchDate,
-  warehouseRef,
+  warehouseId,
   bankAccountId,
   onBankAccountChange,
   bankAccountHelper,
@@ -89,9 +91,10 @@ export function SampleOrderProformaDetailsSection({
   sampleOrderNo: string;
   dispatchNo: string;
   dispatchDate: string;
-  warehouseRef: string;
-  bankAccountId: number | null;
-  onBankAccountChange: (id: number | null) => void;
+  /** API warehouse UUID for mapped bank accounts. */
+  warehouseId?: string | null;
+  bankAccountId: string | null;
+  onBankAccountChange: (id: string | null) => void;
   bankAccountHelper?: string;
 }) {
   const displayInvoiceNo = isEdit
@@ -147,7 +150,7 @@ export function SampleOrderProformaDetailsSection({
         <p className="so-goods-field__label">Bank Account</p>
         <div className="so-goods-field__control min-w-0 w-full">
           <WarehouseMappedBankAccountSelect
-            warehouseRef={warehouseRef}
+            warehouseId={warehouseId}
             value={bankAccountId}
             onChange={(id) => onBankAccountChange(id)}
             label=""
