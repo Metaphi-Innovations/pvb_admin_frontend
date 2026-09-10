@@ -100,8 +100,6 @@ export const NEAR_EXPIRY_DEMO_SALES_INVOICE: InvoiceRecord = {
 };
 
 export function mergeNearExpiryDemoSalesInvoice(list: InvoiceRecord[]): InvoiceRecord[] {
-  if (list.some((inv) => inv.invoiceNo === NEAR_EXPIRY_DEMO_INVOICE_NO)) {
-    return list;
-  }
-  return [...list, NEAR_EXPIRY_DEMO_SALES_INVOICE];
+  // Demo near-expiry sales invoice injection retired.
+  return list;
 }

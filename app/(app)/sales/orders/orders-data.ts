@@ -944,15 +944,26 @@ export function calculateOrderTotalsSummary(
       : 0;
     const manualLineDiscount = Math.max(0, synced.discountValue || 0);
     const lineNet = calculateLineSubtotalFromFinalRate(line.quantity, synced.finalRate);
+    const lineGst =
+      Math.round(
+        (Number(line.gstAmount || 0) ||
+          Number(line.cgstAmount || 0) +
+            Number(line.sgstAmount || 0) +
+            Number(line.igstAmount || 0)) *
+          100,
+      ) / 100;
+    const lineCgst = Number(line.cgstAmount || 0);
+    const lineSgst = Number(line.sgstAmount || 0);
+    const lineIgst = Number(line.igstAmount || 0);
 
     subtotalBeforeDiscount += lineSubtotalBeforeDiscount;
     schemeDiscountTotal += schemeLineDiscount;
     manualDiscountTotal += manualLineDiscount;
     netTotal += lineNet;
-    totalGst += line.gstAmount;
-    cgstTotal += line.cgstAmount ?? 0;
-    sgstTotal += line.sgstAmount ?? 0;
-    igstTotal += line.igstAmount ?? 0;
+    totalGst += lineGst;
+    cgstTotal += lineCgst;
+    sgstTotal += lineSgst;
+    igstTotal += lineIgst;
   }
 
   let additionalExpensesTotal = 0;
@@ -960,10 +971,18 @@ export function calculateOrderTotalsSummary(
   let netAdditionalExpenses = 0;
   for (const exp of expenses) {
     const net = calculateExpenseNet(exp);
+    const expGst =
+      Math.round(
+        (Number(exp.gstAmount || 0) ||
+          Number(exp.cgstAmount || 0) +
+            Number(exp.sgstAmount || 0) +
+            Number(exp.igstAmount || 0)) *
+          100,
+      ) / 100;
     additionalExpensesTotal += exp.amount || 0;
     expenseDiscountTotal += Math.max(0, (exp.amount || 0) - net);
     netAdditionalExpenses += net;
-    totalGst += exp.gstAmount || 0;
+    totalGst += expGst;
     cgstTotal += exp.cgstAmount || 0;
     sgstTotal += exp.sgstAmount || 0;
     igstTotal += exp.igstAmount || 0;

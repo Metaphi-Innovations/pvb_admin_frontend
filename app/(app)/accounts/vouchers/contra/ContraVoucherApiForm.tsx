@@ -813,7 +813,7 @@ export function ContraVoucherApiForm({
             form.transaction_mode !== "CASH" &&
             form.transaction_mode !== "CHEQUE" ? (
               <>
-                <InvoiceDetailField label="UTR Number">
+                <InvoiceDetailField label="UTR Number" required>
                   <Input
                     className={INVOICE_DETAIL_INPUT_CLASS}
                     value={form.utr_number}
@@ -822,7 +822,7 @@ export function ContraVoucherApiForm({
                     placeholder="UTR…"
                   />
                 </InvoiceDetailField>
-                <InvoiceDetailField label="Transaction Reference">
+                <InvoiceDetailField label="Transaction Reference" required>
                   <Input
                     className={INVOICE_DETAIL_INPUT_CLASS}
                     value={form.transaction_reference}

@@ -181,7 +181,8 @@ export default function AddSalesOrderPage() {
 				form,
 				options: {
 					soNumber: orderNumber,
-					status: asDraft ? "draft" : form.status || "confirmed",
+					// Always submit as confirmed — do not reuse form.status (often still "draft").
+					status: asDraft ? "draft" : "confirmed",
 				},
 			},
 			{

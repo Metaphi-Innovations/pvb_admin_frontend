@@ -1,6 +1,8 @@
 /**
  * Shared GST / tax compliance helpers for Customer & Vendor masters.
- * `fetchGstRegistrationDetails` is structured for future API integration.
+ * Live GSTIN verification uses `@/components/gst` + `POST /api/gst/verify`.
+ * `fetchGstRegistrationDetails` remains a lightweight mock fallback for forms
+ * not yet wired to the PeriOne-backed verification dialog.
  */
 
 export const GST_CATEGORY_UNREGISTERED = "unregistered";

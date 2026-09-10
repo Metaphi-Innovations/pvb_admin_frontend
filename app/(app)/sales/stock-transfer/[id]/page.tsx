@@ -393,6 +393,7 @@ export default function ViewStockTransferPage() {
               <div className="w-full max-w-xs space-y-1 text-xs bg-white border border-border p-3 rounded-xl shadow-sm">
                 <div className="flex justify-between"><span className="text-muted-foreground">Product Subtotal</span><span>{formatRupee(totals.productSubtotal)}</span></div>
                 <div className="flex justify-between"><span className="text-muted-foreground">Product Discount</span><span>{formatRupee(totals.productDiscountTotal)}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Net Total (Products)</span><span>{formatRupee(totals.netTotal)}</span></div>
                 <div className="flex justify-between"><span className="text-muted-foreground">Additional Expenses</span><span>{formatRupee(totals.netAdditionalExpenses)}</span></div>
                 <div className="flex justify-between"><span className="text-muted-foreground">Taxable Amount</span><span>{formatRupee(totals.taxableAmount)}</span></div>
                 <div className="flex justify-between"><span className="text-muted-foreground">Total GST</span><span>{formatRupee(totals.totalGst)}</span></div>

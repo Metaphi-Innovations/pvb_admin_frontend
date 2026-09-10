@@ -867,7 +867,7 @@ export type DebitNoteFormInput = {
   attachments: DebitNoteAttachment[];
   status: NoteWorkflowStatus;
   warehouse?: string;
-  bankAccountId?: number | null;
+  bankAccountId?: string | null;
   source?: DebitNoteSource;
   sourceReturnId?: string;
   sourceReturnNo?: string;

@@ -3,8 +3,9 @@
 import { useEffect, useState } from "react";
 import type { PurchaseAttachment } from "./purchase-invoices-data";
 import { getPurchaseAttachmentObjectUrl } from "./purchase-invoice-attachment-store";
+import { resolvePurchaseInvoiceAttachmentUrl } from "@/services/purchase-invoice.service";
 
-/** Resolve a session blob URL or IndexedDB-backed attachment for preview/download. */
+/** Resolve a session blob URL, IndexedDB blob, or server `/uploads` attachment for preview/download. */
 export function usePurchaseAttachmentPreviewUrl(
   attachment: PurchaseAttachment | null | undefined,
 ): string | null {
@@ -27,6 +28,17 @@ export function usePurchaseAttachmentPreviewUrl(
       const ref = attachment.fileUrl ?? attachment.id;
       if (!ref) {
         setPreviewUrl(null);
+        return;
+      }
+
+      if (
+        ref.startsWith("blob:") ||
+        ref.startsWith("data:") ||
+        ref.includes("/uploads/") ||
+        /^https?:\/\//i.test(ref)
+      ) {
+        const resolved = resolvePurchaseInvoiceAttachmentUrl(ref);
+        if (!cancelled) setPreviewUrl(resolved || null);
         return;
       }
 

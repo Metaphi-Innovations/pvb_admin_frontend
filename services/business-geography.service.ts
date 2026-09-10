@@ -567,7 +567,231 @@ export const BusinessGeographyService = {
       };
     });
   },
+
+  // ── Split / Merge ─────────────────────────────────────────────────────────
+
+  async listSplitMergeSources(params: {
+    geography_level: SplitMergeApiLevel;
+    parent_id?: string;
+    search?: string;
+  }): Promise<SplitMergeSourceOption[]> {
+    const response = await axiosInstance.get(BG.SPLIT_MERGE.SOURCES, { params });
+    const payload = response.data as Record<string, unknown>;
+    assertSuccess(payload, "Failed to load geography sources.");
+    const data = unwrapData(payload);
+    if (!Array.isArray(data)) return [];
+    return data.map((row) => {
+      const r = (row ?? {}) as Record<string, unknown>;
+      return {
+        id: asString(r.id),
+        name: asString(r.name),
+        code: r.code ? asString(r.code) : null,
+        status: Boolean(r.status),
+        parent_id: r.parent_id ? asString(r.parent_id) : null,
+        effective_date: r.effective_date ? toDateOnly(r.effective_date) : null,
+      };
+    });
+  },
+
+  async createSplitMergeJob(
+    input: CreateSplitMergeJobPayload,
+  ): Promise<SplitMergeJobView> {
+    const response = await axiosInstance.post(BG.SPLIT_MERGE.JOBS, input);
+    const payload = response.data as Record<string, unknown>;
+    assertSuccess(payload, "Failed to create split/merge draft.");
+    return (unwrapData(payload) ?? {}) as SplitMergeJobView;
+  },
+
+  async getSplitMergeJob(id: string): Promise<SplitMergeJobView> {
+    const response = await axiosInstance.get(BG.SPLIT_MERGE.JOB(id));
+    const payload = response.data as Record<string, unknown>;
+    assertSuccess(payload, "Failed to load split/merge job.");
+    return (unwrapData(payload) ?? {}) as SplitMergeJobView;
+  },
+
+  async quickAddSplitMergeTargets(
+    id: string,
+    body: {
+      targets: Array<{
+        key?: string;
+        name: string;
+        status?: boolean;
+        effective_date?: string | null;
+      }>;
+      new_children?: Array<{
+        target_key: string;
+        name: string;
+        status?: boolean;
+        effective_date?: string | null;
+      }>;
+    },
+  ): Promise<SplitMergeJobView> {
+    const response = await axiosInstance.post(BG.SPLIT_MERGE.QUICK_ADD(id), body);
+    const payload = response.data as Record<string, unknown>;
+    assertSuccess(payload, "Failed to save quick-add targets.");
+    return (unwrapData(payload) ?? {}) as SplitMergeJobView;
+  },
+
+  async allocateSplitMerge(
+    id: string,
+    allocations: Array<{
+      child_id: string;
+      action: "KEEP" | "MOVE";
+      target_key?: string | null;
+    }>,
+  ): Promise<SplitMergeJobView> {
+    const response = await axiosInstance.post(BG.SPLIT_MERGE.ALLOCATE(id), {
+      allocations,
+    });
+    const payload = response.data as Record<string, unknown>;
+    assertSuccess(payload, "Failed to save allocations.");
+    return (unwrapData(payload) ?? {}) as SplitMergeJobView;
+  },
+
+  async assignSplitMergeUsers(
+    id: string,
+    user_assignments: Array<{
+      node_key: string;
+      role_code: string;
+      action: "KEEP" | "ASSIGN" | "UNASSIGN";
+      user_id?: string | null;
+    }>,
+  ): Promise<SplitMergeJobView> {
+    const response = await axiosInstance.post(BG.SPLIT_MERGE.ASSIGN_USERS(id), {
+      user_assignments,
+    });
+    const payload = response.data as Record<string, unknown>;
+    assertSuccess(payload, "Failed to save user assignments.");
+    return (unwrapData(payload) ?? {}) as SplitMergeJobView;
+  },
+
+  async listSplitMergeAssignableUsers(
+    id: string,
+    role_code?: string,
+  ): Promise<{ roles: string[]; users: SplitMergeAssignableUser[] }> {
+    const response = await axiosInstance.get(BG.SPLIT_MERGE.ASSIGNABLE_USERS(id), {
+      params: role_code ? { role_code } : {},
+    });
+    const payload = response.data as Record<string, unknown>;
+    assertSuccess(payload, "Failed to load assignable users.");
+    const data = (unwrapData(payload) ?? {}) as Record<string, unknown>;
+    return {
+      roles: Array.isArray(data.roles) ? (data.roles as string[]) : [],
+      users: Array.isArray(data.users)
+        ? (data.users as SplitMergeAssignableUser[])
+        : [],
+    };
+  },
+
+  async publishSplitMerge(id: string): Promise<SplitMergeJobView> {
+    const response = await axiosInstance.post(BG.SPLIT_MERGE.PUBLISH(id));
+    const payload = response.data as Record<string, unknown>;
+    assertSuccess(payload, "Failed to publish split/merge.");
+    return (unwrapData(payload) ?? {}) as SplitMergeJobView;
+  },
+
+  async cancelSplitMerge(id: string): Promise<SplitMergeJobView> {
+    const response = await axiosInstance.post(BG.SPLIT_MERGE.CANCEL(id));
+    const payload = response.data as Record<string, unknown>;
+    assertSuccess(payload, "Failed to cancel split/merge job.");
+    return (unwrapData(payload) ?? {}) as SplitMergeJobView;
+  },
 };
+
+export type SplitMergeApiLevel = "ZONE" | "REGION" | "AREA" | "TERRITORY";
+export type SplitMergeOperation = "SPLIT" | "MERGE";
+
+export interface SplitMergeSourceOption {
+  id: string;
+  name: string;
+  code: string | null;
+  status: boolean;
+  parent_id: string | null;
+  effective_date: string | null;
+}
+
+export interface SplitMergeJobChild {
+  id: string;
+  name: string;
+  code?: string | null;
+}
+
+export interface SplitMergeJobView {
+  id: string;
+  operation_type: SplitMergeOperation;
+  geography_level: SplitMergeApiLevel;
+  source_id: string;
+  source_ids: string[];
+  effective_date: string;
+  status: string;
+  targets: Array<{
+    key: string;
+    name: string;
+    status: boolean;
+    effective_date?: string | null;
+    created_id?: string | null;
+  }>;
+  allocations: Array<{
+    child_id: string;
+    action: "KEEP" | "MOVE";
+    target_key?: string | null;
+  }>;
+  user_assignments: Array<{
+    node_key: string;
+    role_code: string;
+    action: "KEEP" | "ASSIGN" | "UNASSIGN";
+    user_id?: string | null;
+  }>;
+  merge_target: {
+    mode: "EXISTING" | "NEW";
+    target_id?: string | null;
+    name?: string | null;
+    status?: boolean;
+    effective_date?: string | null;
+  } | null;
+  source: {
+    id: string;
+    name: string;
+    code?: string | null;
+    status: boolean;
+    children: SplitMergeJobChild[];
+  };
+  sources?: Array<{ id: string; name: string; code?: string | null; status: boolean }>;
+  assignment_roles: string[];
+  published_at?: string | null;
+  publish_summary?: unknown;
+}
+
+export interface SplitMergeAssignableUser {
+  user_id: string;
+  employee_id: string | null;
+  full_name: string;
+  email: string;
+  role_name: string | null;
+  geography_level: string | null;
+  zone_id: string | null;
+  region_id: string | null;
+  area_id: string | null;
+  territory_id: string | null;
+}
+
+export interface CreateSplitMergeJobPayload {
+  operation_type: SplitMergeOperation;
+  geography_level: SplitMergeApiLevel;
+  source_ids: string[];
+  effective_date: string;
+  merge_target?: {
+    mode: "EXISTING" | "NEW";
+    target_id?: string | null;
+    name?: string | null;
+    status?: boolean;
+    effective_date?: string | null;
+  } | null;
+}
+
+export function toSplitMergeApiLevel(level: BusinessGeoLevel): SplitMergeApiLevel {
+  return level.toUpperCase() as SplitMergeApiLevel;
+}
 
 export function nextBusinessGeoLevel(
   parentLevel: BusinessGeoLevel | null | undefined,

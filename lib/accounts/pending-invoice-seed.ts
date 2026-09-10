@@ -485,54 +485,26 @@ function isDispatchInvoiced(dispatchNo: string): boolean {
 }
 
 export function getPendingInvoiceSeedDispatches(): DispatchRecord[] {
-  return [
-    NEAR_EXPIRY_PENDING_DEMO_DISPATCH,
-    ...SALES_DISPATCHES,
-    ...STOCK_TRANSFER_DISPATCHES,
-    ...SAMPLE_ORDER_DISPATCHES,
-  ];
+  // Demo pending-invoice seeds removed — Pending Invoices uses the API.
+  return [];
 }
 
 export function getPendingInvoiceSeedDispatch(
-  dispatchId?: string | null,
-  dispatchNo?: string | null,
+  _dispatchId?: string | null,
+  _dispatchNo?: string | null,
 ): DispatchRecord | undefined {
-  if (typeof window === "undefined") return undefined;
-  if (dispatchId === PENDING_SEED_DISPATCH_IDS.ne001 || dispatchNo === NEAR_EXPIRY_PENDING_DEMO_DISPATCH_NO) {
-    if (isDispatchInvoiced(NEAR_EXPIRY_PENDING_DEMO_DISPATCH_NO)) return undefined;
-    ensureNearExpiryPendingDemoCustomer();
-    return NEAR_EXPIRY_PENDING_DEMO_DISPATCH;
-  }
-  if (
-    dispatchId === PENDING_SEED_DISPATCH_IDS.we008 ||
-    dispatchNo === GOODS_WE008_DISPATCH_NO
-  ) {
-    if (isDispatchInvoiced(GOODS_WE008_DISPATCH_NO)) return undefined;
-    ensureGoodsWe008DemoLinkage();
-    return SALES_DISPATCHES.find((d) => d.id === PENDING_SEED_DISPATCH_IDS.we008);
-  }
-  const all = [...SALES_DISPATCHES, ...STOCK_TRANSFER_DISPATCHES, ...SAMPLE_ORDER_DISPATCHES];
-  return (
-    (dispatchId ? all.find((d) => d.id === dispatchId) : undefined) ??
-    (dispatchNo ? all.find((d) => d.dispatchNumber === dispatchNo) : undefined)
-  );
+  return undefined;
 }
 
-export function isPendingInvoiceSeedDispatch(dispatchId?: string | null, dispatchNo?: string | null): boolean {
-  return Boolean(getPendingInvoiceSeedDispatch(dispatchId, dispatchNo));
+export function isPendingInvoiceSeedDispatch(
+  _dispatchId?: string | null,
+  _dispatchNo?: string | null,
+): boolean {
+  return false;
 }
 
 export function listPendingInvoiceSeedRows(): PendingTaxInvoiceRow[] {
-  if (typeof window === "undefined") {
-    return SEED_ROW_DEFS.map((row, index) => mapSeedDefToRow(row, index + 1));
-  }
-
-  ensureNearExpiryPendingDemoCustomer();
-  ensureGoodsWe008DemoLinkage();
-
-  return SEED_ROW_DEFS.filter((row) => !isDispatchInvoiced(row.dispatchNo)).map((row, index) =>
-    mapSeedDefToRow(row, index + 1),
-  );
+  return [];
 }
 
 function mapSeedDefToRow(def: SeedRowDef, index: number): PendingTaxInvoiceRow {

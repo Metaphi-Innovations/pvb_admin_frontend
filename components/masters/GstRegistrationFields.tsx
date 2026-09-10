@@ -117,7 +117,7 @@ export function GstRegistrationFields({
 					/>
 					<span className="text-[10px] text-muted-foreground">
 						{values.gstRegistered
-							? "Enter GSTIN and fetch registered details"
+							? "Enter GSTIN and verify registered details"
 							: "Customer is not GST registered"}
 					</span>
 				</div>
@@ -186,7 +186,7 @@ export function GstRegistrationFields({
 								) : (
 									<Search className="mr-1 h-3 w-3" />
 								)}
-								Fetch GST Details
+								{fetchingGst ? "Verifying GSTIN..." : "Verify GSTIN"}
 							</Button>
 						</div>
 					</div>

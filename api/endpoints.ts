@@ -15,6 +15,9 @@ export const API_ENDPOINTS = {
       VIEW: (pincode: string) => `/user-management/pincode/code/${pincode}`,
     },
   },
+  GST: {
+    VERIFY: "/gst/verify",
+  },
   MASTER: {
     CATEGORY: {
       LIST: "/master/category/list",
@@ -542,6 +545,24 @@ export const API_ENDPOINTS = {
         LOCATIONS: "/user-management/business-geography/lookup/locations",
         PINCODES: "/user-management/business-geography/lookup/pincodes",
       },
+      SPLIT_MERGE: {
+        SOURCES: "/user-management/business-geography/split-merge/sources",
+        JOBS: "/user-management/business-geography/split-merge/jobs",
+        JOB: (id: string) =>
+          `/user-management/business-geography/split-merge/jobs/${id}`,
+        QUICK_ADD: (id: string) =>
+          `/user-management/business-geography/split-merge/jobs/${id}/quick-add`,
+        ALLOCATE: (id: string) =>
+          `/user-management/business-geography/split-merge/jobs/${id}/allocate`,
+        ASSIGN_USERS: (id: string) =>
+          `/user-management/business-geography/split-merge/jobs/${id}/assign-users`,
+        ASSIGNABLE_USERS: (id: string) =>
+          `/user-management/business-geography/split-merge/jobs/${id}/assignable-users`,
+        PUBLISH: (id: string) =>
+          `/user-management/business-geography/split-merge/jobs/${id}/publish`,
+        CANCEL: (id: string) =>
+          `/user-management/business-geography/split-merge/jobs/${id}/cancel`,
+      },
     },
   },
   MASTER_DROPDOWNS: {
@@ -670,6 +691,8 @@ export const API_ENDPOINTS = {
       EXPORT: "/accounts/purchase-invoice/export",
       FILTER_DROPDOWN: "/accounts/purchase-invoice/filter-dropdown",
       BY_ID: (id: string) => `/accounts/purchase-invoice/${id}`,
+      SUPPLIER_INVOICE: (id: string) =>
+        `/accounts/purchase-invoice/${id}/supplier-invoice`,
       CANCEL: (id: string) => `/accounts/purchase-invoice/${id}/cancel`,
       PREVIEW_NUMBER: "/accounts/purchase-invoice/preview-number",
       ALLOCATE: "/accounts/purchase-invoice/allocate",

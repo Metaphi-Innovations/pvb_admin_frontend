@@ -172,7 +172,8 @@ export default function EditSalesOrderPage() {
 				form,
 				options: {
 					orderNo: orderNumber,
-					status: asDraft ? "draft" : form.status,
+					// Submit must leave DRAFT — form.status stays "draft" while editing a draft.
+					status: asDraft ? "draft" : "confirmed",
 				},
 				customerDetails: customers.find((c: any) => c.id === form.customerId),
 			},
