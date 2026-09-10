@@ -1277,7 +1277,7 @@ export function ReceiptVoucherApiForm({
               }
               required={
                 form.party_kind === "OTHER_LEDGER" ||
-                form.party_kind === "SUPPLIER" ||
+                form.party_kind === "SUPPLIER_REFUND" ||
                 (form.party_kind === "CUSTOMER" &&
                   (isCustomerAdvance || form.receipt_treatment === "mixed_allocation"))
               }

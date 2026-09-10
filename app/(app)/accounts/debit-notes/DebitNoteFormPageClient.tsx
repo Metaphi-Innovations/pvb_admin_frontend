@@ -2170,14 +2170,13 @@ export default function DebitNoteFormPageClient({
 
             <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_300px] gap-2.5 items-start">
               <VoucherFormSectionCard
-                title={
+                title="Narration"
+                headerActions={
                   isPendingEntitlement || isSourceRefMode ? (
-                    <>
-                      Narration <span className="text-red-500">*</span>
-                    </>
-                  ) : (
-                    "Narration"
-                  )
+                    <span className="text-red-500 text-sm font-semibold leading-none" aria-hidden>
+                      *
+                    </span>
+                  ) : undefined
                 }
               >
                 <Textarea
