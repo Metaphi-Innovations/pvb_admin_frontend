@@ -35,7 +35,7 @@ const TAB_TRIGGER_CLASS =
 function parseTab(raw: string | null): TabValue {
   if (raw && LEGACY_TAB_REDIRECT[raw]) return LEGACY_TAB_REDIRECT[raw];
   if (raw && TAB_VALUES.includes(raw as TabValue)) return raw as TabValue;
-  return "postal";
+  return "setup";
 }
 
 const EMPTY_SUMMARY = {
@@ -84,7 +84,7 @@ export default function GeographyPage() {
   }, [rawTab, router]);
 
   const setTab = (tab: string) => {
-    router.replace(tab === "postal" ? "/masters/geography" : `/masters/geography?tab=${tab}`);
+    router.replace(tab === "setup" ? "/masters/geography" : `/masters/geography?tab=${tab}`);
   };
 
   const handleResetDemoData = async () => {
@@ -111,12 +111,14 @@ export default function GeographyPage() {
   return (
     <ListingContainer title="Geography" titleIcon={Globe}>
       <div className="space-y-4">
-        <GeographyWorkflowBanner
-          summary={{
-            ...summary,
-            totalPincodes: postalCount || summary.totalPincodes,
-          }}
-        />
+        {activeTab !== "setup" && (
+          <GeographyWorkflowBanner
+            summary={{
+              ...summary,
+              totalPincodes: postalCount || summary.totalPincodes,
+            }}
+          />
+        )}
 
         {IS_DEV && (
           <div className="flex justify-end">
@@ -135,11 +137,11 @@ export default function GeographyPage() {
         <Tabs value={activeTab} onValueChange={setTab} className="space-y-4">
           <div className="overflow-x-auto -mx-1 px-1">
             <TabsList className="border-b border-border w-max min-w-full justify-start rounded-none h-auto p-0 bg-transparent gap-0">
-              <TabsTrigger value="postal" className={TAB_TRIGGER_CLASS}>
-                Postal Master
-              </TabsTrigger>
               <TabsTrigger value="setup" className={TAB_TRIGGER_CLASS}>
                 Business Geography
+              </TabsTrigger>
+              <TabsTrigger value="postal" className={TAB_TRIGGER_CLASS}>
+                Postal Master
               </TabsTrigger>
               <TabsTrigger value="split" className={TAB_TRIGGER_CLASS}>
                 Split / Merge

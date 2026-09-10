@@ -269,7 +269,7 @@ export const PERMISSION_REGISTRY: PermModule[] = [
       { id: "category", label: "Category Master", actions: ["view", "create", "edit", "delete"] },
       { id: "cfu", label: "CFU", actions: ["view", "create", "edit", "delete", "export"] },
       { id: "hsnTax", label: "HSN / Tax", actions: ["view", "create", "edit", "delete", "export"] },
-      { id: "customer_type", label: "Customer Type", actions: ["view", "create", "edit", "delete"] },
+      { id: "customerCategory", label: "Customer Type", actions: ["view", "create", "edit", "delete"] },
       { id: "customerMaster", label: "Customer Master", actions: ["view", "create", "edit", "delete"] },
       { id: "document_type", label: "Document Type", actions: ["view", "create", "edit", "delete"] },
       { id: "event_type", label: "Event Type", actions: ["view", "create", "edit", "delete"] },
