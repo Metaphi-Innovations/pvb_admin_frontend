@@ -355,11 +355,6 @@ export function PostalLocationMasterTab(props: {
           {listError}
         </div>
       )}
-      {!listError && !loading && totalMappings === 0 && (
-        <div className="rounded-lg border border-dashed border-border bg-muted/20 px-4 py-3 text-xs text-muted-foreground">
-          No location–pincode mappings yet. Use Add Mapping to link a city/village to a pincode.
-        </div>
-      )}
       {totalMappings > 0 && (
         <div className="rounded-lg border border-border bg-muted/20 px-4 py-2 text-xs text-muted-foreground">
           Showing results from{" "}

@@ -27,6 +27,7 @@ import { ListingStatusToggle, isActiveStatus } from "@/components/listing";
 import {
   useBgLookupAreas,
   useBgLookupRegions,
+  useBgLookupStates,
   useBgLookupZones,
   useBusinessGeographyTree,
   useCreateBusinessGeo,
@@ -137,6 +138,7 @@ export function GeographyFormSheet({
   const zonesQuery = useBgLookupZones(open && level === "Region");
   const regionsQuery = useBgLookupRegions(undefined, open && level === "Area");
   const areasQuery = useBgLookupAreas(undefined, open && level === "Territory");
+  const statesQuery = useBgLookupStates(open && level === "Region");
 
   const parentOptions = useMemo(() => {
     if (level === "Region") return zonesQuery.data ?? [];

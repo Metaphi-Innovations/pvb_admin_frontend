@@ -29,7 +29,11 @@ import { type DebitNoteRecord, DEBIT_NOTE_SOURCE_LABELS } from "./debit-notes-da
 import { DebitNoteCancelDialog } from "./components/DebitNoteCancelDialog";
 import { showToast } from "@/lib/toast";
 import { usePermissions } from "@/lib/auth/permissions-context";
-import { canCreate, canEdit, canApprove } from "@/lib/auth/permissions";
+import { canApprove, canCreate, canEdit } from "@/lib/auth/permissions";
+import {
+  canDownloadDebitNoteOfficialPdf,
+  openDebitNotePdfPreview,
+} from "./debit-note-official-pdf";
 
 // Shadcn UI components import (simple dialog implementation)
 import {
@@ -114,6 +118,7 @@ export default function DebitNoteViewPageClient({ debitNoteId }: { debitNoteId: 
   const [error, setError] = useState<string | null>(null);
   const [approvalRequired, setApprovalRequired] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
+  const [pdfBusy, setPdfBusy] = useState(false);
 
   // Modals visibility
   const [cancelOpen, setCancelOpen] = useState(false);
@@ -217,6 +222,7 @@ export default function DebitNoteViewPageClient({ debitNoteId }: { debitNoteId: 
     ["DRAFT", "PENDING_APPROVAL", "APPROVED", "REJECTED"].includes(status) && hasCreatePermission;
   const canApproveDoc = status === "PENDING_APPROVAL" && approvalRequired && hasApprovePermission;
   const canRejectDoc = status === "PENDING_APPROVAL" && approvalRequired && hasApprovePermission;
+  const canDownloadPdf = canDownloadDebitNoteOfficialPdf(status);
   const canReverse = status === "POSTED" && hasCreatePermission;
   const canUpdateEway =
     ["DRAFT", "PENDING_APPROVAL", "APPROVED", "REJECTED"].includes(status) && hasUpdatePermission;
@@ -395,8 +401,14 @@ export default function DebitNoteViewPageClient({ debitNoteId }: { debitNoteId: 
   };
 
   const handleDownload = () => {
-    const { downloadDebitNotePdf } = require("./debit-note-pdf");
-    downloadDebitNotePdf(record);
+    setPdfBusy(true);
+    void openDebitNotePdfPreview(String(record.id))
+      .catch((e: unknown) => {
+        const message =
+          e instanceof Error ? e.message : "Failed to open Debit Note PDF.";
+        showToast(message, "error");
+      })
+      .finally(() => setPdfBusy(false));
   };
 
   return (
@@ -427,14 +439,18 @@ export default function DebitNoteViewPageClient({ debitNoteId }: { debitNoteId: 
                 Back
               </Button>
               <div className="flex items-center gap-1.5">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 text-xs gap-1"
-                  onClick={handleDownload}
-                >
-                  <Download className="w-3.5 h-3.5" /> PDF
-                </Button>
+                {canDownloadPdf ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 text-xs gap-1"
+                    disabled={pdfBusy}
+                    onClick={handleDownload}
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    {pdfBusy ? "Opening…" : "PDF"}
+                  </Button>
+                ) : null}
                 {canEditDoc ? (
                   <Button
                     size="sm"

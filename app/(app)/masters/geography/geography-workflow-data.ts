@@ -199,10 +199,10 @@ export interface TerritoryUserApprovalPreview {
 const USER_PREVIEW_ROLES: SalesRole[] = ["ZSM", "RSM", "ASM", "TM", "DO", "Intern"];
 
 const LEVEL_ROLE_PRIORITY: Record<string, SalesRole[]> = {
-  Zone: ["NSM", "ZSM"],
+  Zone: ["ZSM"],
   Region: ["RSM", "ZSM"],
-  Area: ["ASM"],
-  Territory: ["TM"],
+  Area: ["ASM", "RSM", "ZSM"],
+  Territory: ["TM", "ASM"],
 };
 
 function activeAssignmentAt(geographyId: number, role: SalesRole): GeographyUserAssignment | undefined {
@@ -1078,16 +1078,36 @@ export function resolvePincodeKeysForAllocatedScope(
 export function getRolesForSplitMergeLevel(level: SplitMergeLevel): SalesRole[] {
   switch (level) {
     case "Zone":
-      return ["NSM", "ZSM"];
+      return ["ZSM"];
     case "Region":
       return ["RSM", "ZSM"];
     case "Area":
-      return ["ASM"];
+      return ["ASM", "RSM", "ZSM"];
     case "Territory":
-      return ["TM", "DO", "Intern"];
+      return ["TM", "ASM"];
     default:
       return [];
   }
+}
+
+/** Primary (editable) role for the level being split/merged; others are inherited parents. */
+export function getPrimaryRoleForSplitMergeLevel(level: SplitMergeLevel): SalesRole {
+  switch (level) {
+    case "Zone":
+      return "ZSM";
+    case "Region":
+      return "RSM";
+    case "Area":
+      return "ASM";
+    case "Territory":
+      return "TM";
+    default:
+      return "TM";
+  }
+}
+
+export function isInheritedSplitMergeRole(level: SplitMergeLevel, role: string): boolean {
+  return getPrimaryRoleForSplitMergeLevel(level).toUpperCase() !== role.trim().toUpperCase();
 }
 
 export type PostalMasterScopeKind = "state" | "district" | "city" | "town" | "pincode";
