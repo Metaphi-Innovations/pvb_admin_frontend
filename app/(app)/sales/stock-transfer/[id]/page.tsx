@@ -5,47 +5,27 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
-  Edit,
-  Trash2,
   CheckCircle2,
   XCircle,
   ListOrdered,
   Activity,
-  Warehouse,
   IndianRupee,
-  FileText,
   Package,
-  Download,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   RecordDetailPage,
   RecordSectionCard,
   RecordKvRow,
-  type RecordDetailSidebarProps,
   type RecordDetailTab,
 } from "@/components/record-detail";
 import {
-  type StockTransfer,
   type TransferStatus,
   formatTransferStatus,
-  canEditTransfer,
-  canCancelTransfer,
-  canDownloadNote,
-  canGeneratePackingList,
-  canDownloadPackingList,
 } from "../stock-transfer-data";
 import { formatFulfillmentStatus } from "@/app/(app)/sales/orders/orders-data";
 import { getProductById, calculateOrderTotalsSummary } from "@/app/(app)/sales/orders/orders-data";
-import CancelTransferDialog from "../components/CancelTransferDialog";
-import {
-  useStockTransfer,
-  useCancelStockTransfer,
-  useUpdateStockTransferStatus,
-} from "@/hooks/sales/use-stock-transfers";
-import { StockTransferService } from "@/services/stock-transfer.service";
-import { openPackingListPdfById } from "@/app/(app)/sales/orders/pl-pdf/packingListPdfGenerator";
-import { PackingListDownloadDialog, type PackingListDownloadOption } from "@/app/(app)/sales/shared/PackingListDownloadDialog";
+import { useStockTransfer } from "@/hooks/sales/use-stock-transfers";
 
 function transferStatusVariant(status: TransferStatus): "active" | "inactive" | "draft" | "blocked" | "neutral" {
   if (status === "approved" || status === "confirmed" || status === "received") return "active";
@@ -61,13 +41,8 @@ export default function ViewStockTransferPage() {
 
   const [activeTab, setActiveTab] = useState("overview");
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
-  const [cancelOpen, setCancelOpen] = useState(false);
-  const [plDownloadOpen, setPlDownloadOpen] = useState(false);
-  const [plDownloadOptions, setPlDownloadOptions] = useState<PackingListDownloadOption[]>([]);
 
-  const { data: transfer, isLoading, isError, refetch } = useStockTransfer(id);
-  const cancelMutation = useCancelStockTransfer();
-  const statusMutation = useUpdateStockTransferStatus();
+  const { data: transfer, isLoading, isError } = useStockTransfer(id);
 
   useEffect(() => {
     if (!toast) return;
@@ -88,117 +63,24 @@ export default function ViewStockTransferPage() {
     );
   }
 
-  const showToast = (msg: string, type: "success" | "error" = "success") => setToast({ msg, type });
-
   const totals = calculateOrderTotalsSummary(transfer.lineItems, transfer.additionalExpenses || []);
+
+  const showIgst =
+    transfer.lineItems.some((l) => Number(l.igstAmount || 0) > 0) ||
+    (transfer.additionalExpenses || []).some((e) => Number(e.igstAmount || 0) > 0);
+  const showCgstSgst =
+    !showIgst &&
+    (transfer.lineItems.some(
+      (l) => Number(l.cgstAmount || 0) > 0 || Number(l.sgstAmount || 0) > 0,
+    ) ||
+      (transfer.additionalExpenses || []).some(
+        (e) => Number(e.cgstAmount || 0) > 0 || Number(e.sgstAmount || 0) > 0,
+      ) ||
+      transfer.lineItems.some((l) => Number(l.gstAmount || l.gstPercentage || 0) > 0) ||
+      (transfer.additionalExpenses || []).some((e) => Number(e.gstAmount || 0) > 0));
 
   const formatRupee = (n: number) =>
     `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
-  const handleCancelConfirm = async (reason: string) => {
-    await cancelMutation.mutateAsync({ id, remarks: reason });
-    showToast("Stock transfer cancelled successfully.");
-    refetch();
-  };
-
-  const handleDownloadNote = async () => {
-    try {
-      const blob = await StockTransferService.downloadNote(id);
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `stock-transfer-${transfer.transferNumber}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      showToast("Stock transfer note downloaded.");
-    } catch (err: any) {
-      showToast(err.message || "Failed to download note.", "error");
-    }
-  };
-
-  const quickActions: RecordDetailSidebarProps["quickActions"] = [];
-  if (canEditTransfer(transfer)) {
-    quickActions.push({
-      label: "Edit Transfer",
-      icon: Edit,
-      onClick: () => router.push(`/sales/stock-transfer/${transfer.id}/edit`),
-    });
-  }
-  if (canDownloadNote(transfer)) {
-    quickActions.push({
-      label: "Download Note",
-      icon: FileText,
-      onClick: handleDownloadNote,
-    });
-  }
-  if (canGeneratePackingList(transfer)) {
-    quickActions.push({
-      label: "Generate Packing List",
-      icon: Package,
-      onClick: () => router.push(`/sales/stock-transfer/${transfer.id}/packing-list/new`),
-    });
-  }
-  quickActions.push({
-    label: "Download Packing List",
-    icon: Download,
-    disabled: !canDownloadPackingList(transfer),
-    onClick: () => {
-      const opts: PackingListDownloadOption[] =
-        transfer.packingLists && transfer.packingLists.length > 0
-          ? transfer.packingLists
-          : transfer.packingListId
-            ? [
-                {
-                  packingListId: String(transfer.packingListId),
-                  packingNumber: transfer.packingListNumber || String(transfer.packingListId),
-                },
-              ]
-            : [];
-      if (opts.length === 1) {
-        void openPackingListPdfById(opts[0].packingListId).catch((e: unknown) => {
-          const message =
-            e instanceof Error && e.message
-              ? e.message
-              : "Failed to download Packing List.";
-          window.alert(message);
-        });
-        return;
-      }
-      setPlDownloadOptions(opts);
-      setPlDownloadOpen(true);
-    },
-  });
-  if (canCancelTransfer(transfer)) {
-    quickActions.push({
-      label: "Cancel Transfer",
-      icon: Trash2,
-      onClick: () => setCancelOpen(true),
-    });
-  }
-
-  const sidebar: RecordDetailSidebarProps = {
-    quickActions,
-    summary: [
-      { label: "Source Warehouse", value: `${transfer.sourceWarehouseCode} — ${transfer.sourceWarehouseName}` },
-      { label: "Target Warehouse", value: `${transfer.targetWarehouseCode} — ${transfer.targetWarehouseName}` },
-      { label: "Transfer Date", value: transfer.transferDate },
-      { label: "Delivery Date", value: transfer.deliveryDate },
-      { label: "Grand Total", value: formatRupee(transfer.totalAmount), highlight: true },
-    ],
-    approval: [
-      {
-        label: "Status",
-        value: formatTransferStatus(transfer.status),
-        tone: (transfer.status === "approved" || transfer.status === "confirmed" || transfer.status === "received") ? "approved" : (transfer.status === "cancelled" || transfer.status === "rejected") ? "rejected" : transfer.status === "pending" ? "pending" : "neutral",
-      },
-      {
-        label: "Fulfillment",
-        value: formatFulfillmentStatus(transfer.fulfillmentStatus),
-        tone: "neutral",
-      },
-    ],
-  };
 
   const tabs: RecordDetailTab[] = [
     { value: "overview", label: "Overview" },
@@ -220,14 +102,14 @@ export default function ViewStockTransferPage() {
             icon: IndianRupee,
             iconBg: "bg-emerald-100",
             iconColor: "text-emerald-700",
-            value: formatRupee(transfer.totalAmount),
+            value: formatRupee(totals.grandTotal),
             label: "Total Amount",
           },
           {
             icon: ListOrdered,
             iconBg: "bg-emerald-100",
             iconColor: "text-emerald-700",
-            value: String(transfer.totalItems),
+            value: String(transfer.lineItems.length || transfer.totalItems),
             label: "Line Items",
           },
           {
@@ -241,7 +123,6 @@ export default function ViewStockTransferPage() {
         tabs={tabs}
         activeTab={activeTab}
         onTabChange={setActiveTab}
-        sidebar={sidebar}
       >
         {activeTab === "overview" && (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -253,7 +134,7 @@ export default function ViewStockTransferPage() {
               <RecordKvRow label="Target Warehouse" value={`${transfer.targetWarehouseCode} — ${transfer.targetWarehouseName}`} />
               <RecordKvRow label="Status" value={formatTransferStatus(transfer.status)} />
               <RecordKvRow label="Fulfillment Status" value={formatFulfillmentStatus(transfer.fulfillmentStatus)} />
-              <RecordKvRow label="Total Amount" value={formatRupee(transfer.totalAmount)} isLast />
+              <RecordKvRow label="Total Amount" value={formatRupee(totals.grandTotal)} isLast />
             </RecordSectionCard>
 
             <div className="space-y-4">
@@ -309,14 +190,23 @@ export default function ViewStockTransferPage() {
                 <p className="text-xs font-semibold text-foreground">Transferred Items</p>
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[800px]">
+                <table className="w-full min-w-[900px]">
                   <thead>
                     <tr className="border-b bg-muted/40 border-border">
                       <th className="px-4 py-2.5 text-left text-xs font-semibold">Product</th>
                       <th className="px-4 py-2.5 text-right text-xs font-semibold w-24">Qty (Cases/Loose)</th>
                       <th className="px-4 py-2.5 text-right text-xs font-semibold">Unit Price</th>
-                      <th className="px-4 py-2.5 text-right text-xs font-semibold w-20">Discount (%)</th>
-                      <th className="px-4 py-2.5 text-right text-xs font-semibold w-24">GST % / Amt</th>
+                      <th className="px-4 py-2.5 text-right text-xs font-semibold w-20">Discount</th>
+                      <th className="px-4 py-2.5 text-right text-xs font-semibold">Taxable</th>
+                      {showCgstSgst && (
+                        <>
+                          <th className="px-4 py-2.5 text-right text-xs font-semibold">CGST</th>
+                          <th className="px-4 py-2.5 text-right text-xs font-semibold">SGST</th>
+                        </>
+                      )}
+                      {showIgst && (
+                        <th className="px-4 py-2.5 text-right text-xs font-semibold">IGST</th>
+                      )}
                       <th className="px-4 py-2.5 text-right text-xs font-semibold">Line Total</th>
                     </tr>
                   </thead>
@@ -326,7 +216,17 @@ export default function ViewStockTransferPage() {
                       const packSize = product?.packSize || line.unitsPerPackingUnit || 1;
                       const cases = Math.floor(line.quantity / packSize);
                       const loose = line.quantity % packSize;
-                      const gstRateLabel = line.gstRate || product?.gstRate || "0%";
+                      const taxable = Math.round(
+                        Math.max(0, (line.quantity || 0) * (line.finalRate ?? line.unitPrice ?? 0) - (line.discountValue || 0)) * 100,
+                      ) / 100;
+                      const cgstAmt = Number(line.cgstAmount || 0);
+                      const sgstAmt = Number(line.sgstAmount || 0);
+                      const igstAmt = Number(line.igstAmount || 0);
+                      const lineGst = Number(line.gstAmount || 0) || cgstAmt + sgstAmt + igstAmt;
+                      const lineTotal = Number(line.lineTotal || 0) || Math.round((taxable + lineGst) * 100) / 100;
+                      const cgstPct = Number(line.cgstPercentage || 0);
+                      const sgstPct = Number(line.sgstPercentage || 0);
+                      const igstPct = Number(line.igstPercentage || 0);
 
                       return (
                         <tr key={line.id} className="border-b border-border/60">
@@ -341,14 +241,39 @@ export default function ViewStockTransferPage() {
                             </div>
                           </td>
                           <td className="px-4 py-2 text-xs text-right tabular-nums">{formatRupee(line.unitPrice)}</td>
-                          <td className="px-4 py-2 text-xs text-right tabular-nums">{line.discount}%</td>
                           <td className="px-4 py-2 text-xs text-right tabular-nums">
-                            <div className="flex flex-col items-end">
-                              <span className="text-[10px] text-muted-foreground font-semibold">{gstRateLabel}</span>
-                              <span>{formatRupee(line.gstAmount)}</span>
-                            </div>
+                            {line.discountValue > 0
+                              ? formatRupee(line.discountValue)
+                              : line.discount > 0
+                                ? `${line.discount}%`
+                                : "—"}
                           </td>
-                          <td className="px-4 py-2 text-xs font-semibold text-right tabular-nums">{formatRupee(line.lineTotal)}</td>
+                          <td className="px-4 py-2 text-xs text-right tabular-nums">{formatRupee(taxable)}</td>
+                          {showCgstSgst && (
+                            <>
+                              <td className="px-4 py-2 text-xs text-right tabular-nums">
+                                <div className="flex flex-col items-end">
+                                  <span className="text-[10px] text-muted-foreground">{cgstPct}%</span>
+                                  <span>{formatRupee(cgstAmt)}</span>
+                                </div>
+                              </td>
+                              <td className="px-4 py-2 text-xs text-right tabular-nums">
+                                <div className="flex flex-col items-end">
+                                  <span className="text-[10px] text-muted-foreground">{sgstPct}%</span>
+                                  <span>{formatRupee(sgstAmt)}</span>
+                                </div>
+                              </td>
+                            </>
+                          )}
+                          {showIgst && (
+                            <td className="px-4 py-2 text-xs text-right tabular-nums">
+                              <div className="flex flex-col items-end">
+                                <span className="text-[10px] text-muted-foreground">{igstPct}%</span>
+                                <span>{formatRupee(igstAmt)}</span>
+                              </div>
+                            </td>
+                          )}
+                          <td className="px-4 py-2 text-xs font-semibold text-right tabular-nums">{formatRupee(lineTotal)}</td>
                         </tr>
                       );
                     })}
@@ -363,26 +288,71 @@ export default function ViewStockTransferPage() {
                   <p className="text-xs font-semibold text-foreground">Additional Expenses</p>
                 </div>
                 <div className="overflow-x-auto">
-                  <table className="w-full">
+                  <table className="w-full min-w-[800px]">
                     <thead>
                       <tr className="border-b bg-muted/40 border-border">
                         <th className="px-4 py-2.5 text-left text-xs font-semibold">Expense Name</th>
                         <th className="px-4 py-2.5 text-right text-xs font-semibold">Amount</th>
-                        <th className="px-4 py-2.5 text-left text-xs font-semibold">Discount</th>
-                        <th className="px-4 py-2.5 text-right text-xs font-semibold">Net Amount</th>
+                        <th className="px-4 py-2.5 text-right text-xs font-semibold">Discount</th>
+                        <th className="px-4 py-2.5 text-right text-xs font-semibold">Net</th>
+                        {showCgstSgst && (
+                          <>
+                            <th className="px-4 py-2.5 text-right text-xs font-semibold">CGST</th>
+                            <th className="px-4 py-2.5 text-right text-xs font-semibold">SGST</th>
+                          </>
+                        )}
+                        {showIgst && (
+                          <th className="px-4 py-2.5 text-right text-xs font-semibold">IGST</th>
+                        )}
+                        <th className="px-4 py-2.5 text-right text-xs font-semibold">Total</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {transfer.additionalExpenses.map(exp => (
-                        <tr key={exp.id} className="border-b border-border/60">
-                          <td className="px-4 py-2 text-xs font-semibold">{exp.expenseName}</td>
-                          <td className="px-4 py-2 text-xs text-right tabular-nums">{formatRupee(exp.amount)}</td>
-                          <td className="px-4 py-2 text-xs text-left">
-                            {exp.discountType === "percent" ? `${exp.discountValue}%` : formatRupee(exp.discountValue)}
-                          </td>
-                          <td className="px-4 py-2 text-xs font-semibold text-right tabular-nums">{formatRupee(exp.netAmount)}</td>
-                        </tr>
-                      ))}
+                      {transfer.additionalExpenses.map(exp => {
+                        const gstPct = Number(parseFloat(String(exp.gstRate || "0")) || 0);
+                        const isInter = Number(exp.igstAmount || 0) > 0;
+                        const halfPct = isInter ? 0 : gstPct / 2;
+                        const igstPct = isInter ? gstPct : 0;
+                        return (
+                          <tr key={exp.id} className="border-b border-border/60">
+                            <td className="px-4 py-2 text-xs font-semibold">{exp.expenseName}</td>
+                            <td className="px-4 py-2 text-xs text-right tabular-nums">{formatRupee(exp.amount)}</td>
+                            <td className="px-4 py-2 text-xs text-right tabular-nums">
+                              {exp.discountType === "percent"
+                                ? `${exp.discountValue || 0}%`
+                                : formatRupee(exp.discountValue || 0)}
+                            </td>
+                            <td className="px-4 py-2 text-xs text-right tabular-nums">{formatRupee(exp.netAmount)}</td>
+                            {showCgstSgst && (
+                              <>
+                                <td className="px-4 py-2 text-xs text-right tabular-nums">
+                                  <div className="flex flex-col items-end">
+                                    <span className="text-[10px] text-muted-foreground">{halfPct}%</span>
+                                    <span>{formatRupee(exp.cgstAmount || 0)}</span>
+                                  </div>
+                                </td>
+                                <td className="px-4 py-2 text-xs text-right tabular-nums">
+                                  <div className="flex flex-col items-end">
+                                    <span className="text-[10px] text-muted-foreground">{halfPct}%</span>
+                                    <span>{formatRupee(exp.sgstAmount || 0)}</span>
+                                  </div>
+                                </td>
+                              </>
+                            )}
+                            {showIgst && (
+                              <td className="px-4 py-2 text-xs text-right tabular-nums">
+                                <div className="flex flex-col items-end">
+                                  <span className="text-[10px] text-muted-foreground">{igstPct}%</span>
+                                  <span>{formatRupee(exp.igstAmount || 0)}</span>
+                                </div>
+                              </td>
+                            )}
+                            <td className="px-4 py-2 text-xs font-semibold text-right tabular-nums">
+                              {formatRupee(exp.totalAmount || exp.netAmount + (exp.gstAmount || 0))}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -391,44 +361,29 @@ export default function ViewStockTransferPage() {
 
             <div className="flex justify-end">
               <div className="w-full max-w-xs space-y-1 text-xs bg-white border border-border p-3 rounded-xl shadow-sm">
-                <div className="flex justify-between"><span className="text-muted-foreground">Product Subtotal</span><span>{formatRupee(totals.productSubtotal)}</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">Product Discount</span><span>{formatRupee(totals.productDiscountTotal)}</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">Net Total (Products)</span><span>{formatRupee(totals.netTotal)}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Product Line Total</span><span>{formatRupee(totals.productSubtotal)}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Discount</span><span>{formatRupee(totals.productDiscountTotal)}</span></div>
                 <div className="flex justify-between"><span className="text-muted-foreground">Additional Expenses</span><span>{formatRupee(totals.netAdditionalExpenses)}</span></div>
                 <div className="flex justify-between"><span className="text-muted-foreground">Taxable Amount</span><span>{formatRupee(totals.taxableAmount)}</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">Total GST</span><span>{formatRupee(totals.totalGst)}</span></div>
-                <div className="flex justify-between font-bold text-brand-700 border-t border-border pt-1 mt-1"><span>Grand Total</span><span>{formatRupee(totals.grandTotal)}</span></div>
+                {showCgstSgst ? (
+                  <>
+                    <div className="flex justify-between"><span className="text-muted-foreground">CGST</span><span>{formatRupee(totals.cgstTotal)}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">SGST</span><span>{formatRupee(totals.sgstTotal)}</span></div>
+                  </>
+                ) : null}
+                {showIgst ? (
+                  <div className="flex justify-between"><span className="text-muted-foreground">IGST</span><span>{formatRupee(totals.igstTotal)}</span></div>
+                ) : null}
+                <div className="flex justify-between"><span className="text-muted-foreground">Total Tax</span><span>{formatRupee(totals.totalGst)}</span></div>
+                <div className="flex justify-between font-bold text-brand-700 border-t border-border pt-1 mt-1">
+                  <span>Grand Total</span>
+                  <span>{formatRupee(totals.grandTotal)}</span>
+                </div>
               </div>
             </div>
           </div>
         )}
       </RecordDetailPage>
-
-      <CancelTransferDialog
-        transfer={transfer}
-        open={cancelOpen}
-        onClose={() => setCancelOpen(false)}
-        onConfirm={handleCancelConfirm}
-        isLoading={cancelMutation.isPending}
-      />
-
-      <PackingListDownloadDialog
-        open={plDownloadOpen}
-        onOpenChange={setPlDownloadOpen}
-        options={plDownloadOptions}
-        onDownload={async (opt) => {
-          try {
-            await openPackingListPdfById(opt.packingListId);
-            setPlDownloadOpen(false);
-          } catch (e: unknown) {
-            const message =
-              e instanceof Error && e.message
-                ? e.message
-                : "Failed to download Packing List.";
-            window.alert(message);
-          }
-        }}
-      />
 
       {toast && (
         <div
