@@ -90,13 +90,27 @@ function buildPreviews(params: {
 
   const resolveUserName = (nodeKey: string, role: string): string | null => {
     const ua = params.userAssignmentsByCard[nodeKey]?.[role];
-    if (!ua || ua.action === "unassigned") return null;
-    if (ua.action === "assign" && ua.userId) {
+    if (ua?.action === "unassigned") return null;
+    if (ua?.action === "assign" && ua.userId) {
       return (
         params.assignableUsers.find((u) => u.user_id === ua.userId)?.full_name ?? null
       );
     }
-    return "Keep existing";
+    // If Keep Existing on source, find the existing user assigned to this geography
+    if (nodeKey === "source" && params.job) {
+      const sourceId = params.job.source_id;
+      const existing = params.assignableUsers.find((u) => {
+        if (params.geoLevel === "Zone") return u.zone_id === sourceId;
+        if (params.geoLevel === "Region") return u.region_id === sourceId;
+        if (params.geoLevel === "Area") return u.area_id === sourceId;
+        if (params.geoLevel === "Territory") return u.territory_id === sourceId;
+        return false;
+      });
+      if (existing) {
+        return existing.full_name;
+      }
+    }
+    return nodeKey === "source" ? "Keep existing" : null;
   };
 
   const roleRows = (nodeKey: string) =>
@@ -397,6 +411,28 @@ export function SplitMergeWizardTab() {
     job?.merge_target?.name,
   ]);
 
+  /** Always load assignable users whenever job draft is active */
+  useEffect(() => {
+    if (!job?.id || published) return;
+    let cancelled = false;
+
+    const fetchAssignable = async () => {
+      try {
+        const assignable = await BusinessGeographyService.listSplitMergeAssignableUsers(job.id);
+        if (!cancelled) {
+          setAssignableUsers(assignable.users ?? []);
+        }
+      } catch (err) {
+        console.error("Failed to load assignable users for job:", err);
+      }
+    };
+
+    void fetchAssignable();
+    return () => {
+      cancelled = true;
+    };
+  }, [job?.id, published]);
+
   const mergeSourceNames = useMemo(
     () =>
       mergeSourceIds
@@ -571,12 +607,26 @@ export function SplitMergeWizardTab() {
 
   const assignableOptions = useMemo(
     () =>
-      assignableUsers.map((u) => ({
-        id: u.user_id,
-        fullName: u.full_name,
-        roleName: u.role_name,
-      })),
-    [assignableUsers],
+      assignableUsers.map((u) => {
+        const isCurrent =
+          (geoLevel === "Zone" && u.zone_id && u.zone_id === sourceId) ||
+          (geoLevel === "Region" && u.region_id && u.region_id === sourceId) ||
+          (geoLevel === "Area" && u.area_id && u.area_id === sourceId) ||
+          (geoLevel === "Territory" && u.territory_id && u.territory_id === sourceId);
+
+        return {
+          id: u.user_id,
+          fullName: u.full_name,
+          roleName: u.role_name,
+          geographyLevel: u.geography_level,
+          isCurrentAssignment: Boolean(isCurrent),
+          zoneId: u.zone_id,
+          regionId: u.region_id,
+          areaId: u.area_id,
+          territoryId: u.territory_id,
+        };
+      }),
+    [assignableUsers, geoLevel, sourceId],
   );
 
   const children = job?.source.children ?? [];

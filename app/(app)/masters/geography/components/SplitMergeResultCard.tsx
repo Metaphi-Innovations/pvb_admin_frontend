@@ -34,12 +34,61 @@ export interface SplitMergeCardPreview {
   usersByRole: Array<{ role: string; userName: string | null; status: "assigned" | "missing" }>;
   approvalChain: Array<{ role: string; userName: string | null }>;
   warnings: string[];
+  existingUsers?: Array<{ role: string; fullName: string; roleName?: string | null }>;
 }
 
 export interface SplitMergeAssignableUserOption {
   id: string;
   fullName: string;
   roleName: string | null;
+  geographyLevel?: string | null;
+  isCurrentAssignment?: boolean;
+  zoneId?: string | null;
+  regionId?: string | null;
+  areaId?: string | null;
+  territoryId?: string | null;
+}
+
+const ROLE_TARGET_GEO_LEVEL: Record<string, string> = {
+  ZSM: "Zone",
+  RSM: "Region",
+  ASM: "Area",
+  KAM: "Area",
+  TM: "Territory",
+  TSM: "Territory",
+  FMO: "Territory",
+  DO: "Territory",
+  INTERN: "Territory",
+};
+
+function usersForRole(
+  users: SplitMergeAssignableUserOption[],
+  role: string,
+): SplitMergeAssignableUserOption[] {
+  const needleRole = role.toUpperCase();
+  const targetLevel = ROLE_TARGET_GEO_LEVEL[needleRole];
+
+  const matched = users.filter((u) => {
+    // 1. Geography level match (e.g. "Zone" for "ZSM")
+    if (targetLevel && u.geographyLevel) {
+      if (u.geographyLevel.trim().toLowerCase() === targetLevel.trim().toLowerCase()) {
+        return true;
+      }
+    }
+
+    // 2. Role code match (e.g. role name contains "ZSM")
+    const name = (u.roleName ?? "").toUpperCase();
+    if (name.includes(needleRole) || name === needleRole) {
+      return true;
+    }
+
+    return false;
+  });
+
+  // If filtered match produces results, return them.
+  // If no match found (or users were already scoped by backend for this job/level),
+  // return all available users as fallback so the dropdown is never empty unexpectedly.
+  return matched.length > 0 ? matched : users;
 }
 
 interface SplitMergeResultCardProps {
@@ -48,18 +97,6 @@ interface SplitMergeResultCardProps {
   onUserAssignmentChange: (role: string, patch: Partial<RoleUserAssignment>) => void;
   assignableUsers?: SplitMergeAssignableUserOption[];
   mergeSourceNames?: string[];
-}
-
-function usersForRole(
-  users: SplitMergeAssignableUserOption[],
-  role: string,
-): SplitMergeAssignableUserOption[] {
-  const needle = role.toUpperCase();
-  const matched = users.filter((u) => {
-    const name = (u.roleName ?? "").toUpperCase();
-    return name.includes(needle) || name === needle;
-  });
-  return matched.length > 0 ? matched : users;
 }
 
 export function SplitMergeResultCard({
@@ -138,34 +175,62 @@ export function SplitMergeResultCard({
         <div className="rounded-lg border border-border p-3 space-y-3">
           <p className="text-xs font-semibold">Assign / Update Users</p>
           {preview.usersByRole.map(({ role }) => {
-            const assignment = userAssignments[role] ?? { action: "unassigned" as const, userId: "" };
+            const defaultAction = preview.isExisting ? ("keep" as const) : ("unassigned" as const);
+            const assignment = userAssignments[role] ?? { action: defaultAction, userId: "" };
             const candidates = roleCandidates[role] ?? [];
+            const currentAssigned = candidates.find((u) => u.isCurrentAssignment) ||
+              candidates.find((u) => preview.level === "Zone" && u.zoneId && u.zoneId === preview.key) ||
+              candidates[0];
+
             return (
               <div key={role} className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-end">
                 <div>
                   <Label className="text-[10px] text-muted-foreground">Required Role: {role}</Label>
                 </div>
-                <Select
-                  value={assignment.userId || "__none__"}
-                  disabled={assignment.action !== "assign"}
-                  onValueChange={(v) =>
-                    onUserAssignmentChange(role, { userId: v === "__none__" ? "" : v })
-                  }
-                >
-                  <SelectTrigger className="h-8 text-xs">
-                    <SelectValue placeholder={`Select ${role} User`} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__" className="text-xs">
-                      Select {role} User…
-                    </SelectItem>
-                    {candidates.map((u) => (
-                      <SelectItem key={u.id} value={u.id} className="text-xs">
-                        {u.fullName} {u.roleName ? `(${u.roleName})` : ""}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {assignment.action === "keep" ? (
+                  <div className="h-8 px-3 py-1.5 rounded-input border border-border bg-muted/30 text-xs flex items-center justify-between text-foreground">
+                    <span className="truncate">
+                      {currentAssigned
+                        ? `${currentAssigned.fullName} ${currentAssigned.roleName ? `(${currentAssigned.roleName})` : ""}`
+                        : preview.usersByRole.find((u) => u.role === role)?.userName &&
+                          preview.usersByRole.find((u) => u.role === role)?.userName !== "Keep existing"
+                        ? preview.usersByRole.find((u) => u.role === role)?.userName
+                        : "Keep Existing"}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground ml-1 shrink-0">(Current)</span>
+                  </div>
+                ) : (
+                  <Select
+                    value={assignment.userId || undefined}
+                    disabled={assignment.action !== "assign"}
+                    onValueChange={(v) =>
+                      onUserAssignmentChange(role, { userId: v || "" })
+                    }
+                  >
+                    <SelectTrigger className="h-8 text-xs">
+                      <SelectValue
+                        placeholder={
+                          assignment.action === "unassigned"
+                            ? "Unassigned"
+                            : `Select ${role} User...`
+                        }
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {candidates.length === 0 ? (
+                        <div className="px-2 py-3 text-xs text-center text-muted-foreground">
+                          No assignable {role} users found
+                        </div>
+                      ) : (
+                        candidates.map((u) => (
+                          <SelectItem key={u.id} value={u.id} className="text-xs">
+                            {u.fullName} {u.roleName ? `(${u.roleName})` : ""}
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                )}
                 <div className="flex flex-wrap gap-1">
                   {(
                     [
