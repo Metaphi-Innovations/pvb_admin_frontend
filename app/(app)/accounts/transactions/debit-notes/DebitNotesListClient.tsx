@@ -261,8 +261,8 @@ export default function DebitNotesListClient() {
   const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_year");
   const { permissions } = usePermissions();
 
-  const hasCreatePermission = useMemo(() => canCreate(permissions, "accounts", "ledger"), [permissions]);
-  const hasUpdatePermission = useMemo(() => canEdit(permissions, "accounts", "ledger"), [permissions]);
+  const hasCreatePermission = useMemo(() => canCreate(permissions, "accounts", "debit_note"), [permissions]);
+  const hasUpdatePermission = useMemo(() => canEdit(permissions, "accounts", "debit_note"), [permissions]);
 
   const [moduleTab, setModuleTab] = useState("pending");
   const [statusTab, setStatusTab] = useState("all");

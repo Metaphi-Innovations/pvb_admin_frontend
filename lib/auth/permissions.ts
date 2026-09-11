@@ -1,6 +1,7 @@
 import {
   canonicalizeModuleId,
   isLegacySubmoduleKey,
+  toCanonicalSubmoduleId,
 } from "@/lib/auth/permission-aliases";
 
 /**
@@ -42,7 +43,10 @@ function getModuleNode(
   module: string,
 ): Record<string, Record<string, boolean>> | null {
   if (!permissions || !module) return null;
-  const key = findKey(permissions as Record<string, unknown>, module);
+  const canonicalMod = canonicalizeModuleId(module);
+  const key =
+    findKey(permissions as Record<string, unknown>, canonicalMod) ??
+    findKey(permissions as Record<string, unknown>, module);
   if (!key) return null;
   const node = permissions[key];
   return node && typeof node === "object" ? node : null;
@@ -55,7 +59,10 @@ function getSubmoduleActions(
 ): Record<string, boolean> | null {
   const mod = getModuleNode(permissions, module);
   if (!mod || !submodule) return null;
-  const key = findKey(mod as Record<string, unknown>, submodule);
+  const canonicalSub = toCanonicalSubmoduleId(module, submodule);
+  const key =
+    findKey(mod as Record<string, unknown>, canonicalSub) ??
+    findKey(mod as Record<string, unknown>, submodule);
   if (!key) return null;
   const actions = mod[key];
   return actions && typeof actions === "object" ? actions : null;

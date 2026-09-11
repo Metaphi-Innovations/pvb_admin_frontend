@@ -107,7 +107,7 @@ export default function BankAccountDetailClient({ ledgerId }: { ledgerId: string
   const canUpdate =
     !permissions || permissions.isLoading
       ? true
-      : permissions.canEdit("accounts", "bank_account");
+      : permissions.canEdit("accounts", "bank_accounts");
 
   const detailQuery = useBankAccountByLedgerId(ledgerId, {
     financialYearId: selectedFY?.id ?? null,

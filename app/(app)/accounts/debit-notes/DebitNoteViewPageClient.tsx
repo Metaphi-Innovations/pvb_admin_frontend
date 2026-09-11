@@ -104,9 +104,9 @@ export default function DebitNoteViewPageClient({ debitNoteId }: { debitNoteId: 
   const router = useRouter();
   const { permissions } = usePermissions();
 
-  const hasCreatePermission = canCreate(permissions, "accounts", "ledger");
-  const hasUpdatePermission = canEdit(permissions, "accounts", "ledger");
-  const hasApprovePermission = canApprove(permissions, "accounts", "ledger");
+  const hasCreatePermission = canCreate(permissions, "accounts", "debit_note");
+  const hasUpdatePermission = canEdit(permissions, "accounts", "debit_note");
+  const hasApprovePermission = canApprove(permissions, "accounts", "debit_note");
 
   const [record, setRecord] = useState<DebitNoteRecord | null>(null);
   const [rawRecord, setRawRecord] = useState<any | null>(null);
