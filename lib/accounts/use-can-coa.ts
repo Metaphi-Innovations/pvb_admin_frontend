@@ -1,15 +1,29 @@
 "use client";
 
-import { useClientMounted } from "@/lib/use-client-mounted";
-import { canCoa } from "@/lib/accounts/permissions";
+import { usePermissionsOptional } from "@/lib/auth";
+
+const COA_MODULE = "accounts";
+const COA_SUBMODULE = "chart_of_accounts";
 
 /**
- * SSR-safe COA permission check.
- * Returns false until mount so server HTML matches the first client render,
- * then reads localStorage-backed permissions.
+ * Chart of Accounts permission check against real web RBAC
+ * (`accounts.chart_of_accounts.*`). Optimistic while permissions load
+ * (same pattern as bank accounts).
  */
 export function useCanCoa(action: "view" | "create" | "edit" | "delete"): boolean {
-  const mounted = useClientMounted();
-  if (!mounted) return false;
-  return canCoa(action);
+  const permissions = usePermissionsOptional();
+  if (!permissions || permissions.isLoading) return true;
+
+  switch (action) {
+    case "view":
+      return permissions.canView(COA_MODULE, COA_SUBMODULE);
+    case "create":
+      return permissions.canCreate(COA_MODULE, COA_SUBMODULE);
+    case "edit":
+      return permissions.canEdit(COA_MODULE, COA_SUBMODULE);
+    case "delete":
+      return permissions.canDelete(COA_MODULE, COA_SUBMODULE);
+    default:
+      return false;
+  }
 }

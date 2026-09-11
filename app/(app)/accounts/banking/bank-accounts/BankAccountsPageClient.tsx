@@ -247,7 +247,7 @@ function BankAccountsTable({
   const canUpdate =
     !permissions || permissions.isLoading
       ? true
-      : permissions.canEdit("accounts", "bank_account");
+      : permissions.canEdit("accounts", "bank_accounts");
 
   const goToAccount = (ledgerId: string, mode: "view" | "edit" | "complete") => {
     if (!ledgerId) return;
@@ -530,7 +530,7 @@ export default function BankAccountsPageClient() {
   const canCreate =
     !permissions || permissions.isLoading
       ? true
-      : permissions.canCreate("accounts", "bank_account");
+      : permissions.canCreate("accounts", "bank_accounts");
 
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedValue(search, 300);
