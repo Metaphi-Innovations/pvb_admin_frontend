@@ -95,6 +95,10 @@ function useDebouncedValue<T>(value: T, delayMs = 300): T {
   return debounced;
 }
 
+function firstFilterValue(value: unknown): unknown {
+  return Array.isArray(value) ? value[0] : value;
+}
+
 export function PostalLocationMasterTab(props: {
   onWorkflowChange?: () => void;
 } = {}) {
@@ -143,13 +147,14 @@ export function PostalLocationMasterTab(props: {
 
     // Merge MasterListing column filters
     Object.entries(filters).forEach(([key, val]) => {
-      if (val !== undefined && val !== null && val !== "") {
+      const filterValue = firstFilterValue(val);
+      if (filterValue !== undefined && filterValue !== null && filterValue !== "") {
         if (key === "status") {
           // Status column filter
-          if (val === "active") next.status = true;
-          else if (val === "inactive") next.status = false;
+          if (filterValue === "active") next.status = true;
+          else if (filterValue === "inactive") next.status = false;
         } else {
-          next[key] = val;
+          next[key] = filterValue;
         }
       }
     });
@@ -158,8 +163,9 @@ export function PostalLocationMasterTab(props: {
   }, [stateFilter, districtFilter, filters]);
 
   const effectiveStatus = useMemo<"all" | "active" | "inactive">(() => {
-    if (filters.status === "active") return "active";
-    if (filters.status === "inactive") return "inactive";
+    const columnStatus = firstFilterValue(filters.status);
+    if (columnStatus === "active") return "active";
+    if (columnStatus === "inactive") return "inactive";
     return statusFilter;
   }, [statusFilter, filters.status]);
 
@@ -186,7 +192,11 @@ export function PostalLocationMasterTab(props: {
   }, [debouncedSearch, stateFilter, districtFilter, statusFilter, filters, sort, pageSize]);
 
   const hasActiveFilters = Boolean(
-    search.trim() || stateFilter || districtFilter || statusFilter !== "all",
+    search.trim() ||
+      stateFilter ||
+      districtFilter ||
+      statusFilter !== "all" ||
+      Object.keys(filters).length,
   );
 
   const clearFilters = () => {
@@ -259,27 +269,6 @@ export function PostalLocationMasterTab(props: {
     return items;
   }, [canManagePostal]);
 
-  const pincodeOptions = useMemo(() => {
-    const set = new Set<string>();
-    (listQuery.data?.items ?? []).forEach((row) => {
-      if (row.pincode) set.add(row.pincode);
-    });
-    return Array.from(set)
-      .sort()
-      .map((pin) => ({ label: pin, value: pin }));
-  }, [listQuery.data?.items]);
-
-  const locationOptions = useMemo(() => {
-    const map = new Map<string, string>();
-    (listQuery.data?.items ?? []).forEach((row) => {
-      const name = row.locationName || row.city;
-      if (name) map.set(name, name);
-    });
-    return Array.from(map.keys())
-      .sort()
-      .map((name) => ({ label: name, value: name }));
-  }, [listQuery.data?.items]);
-
   const columns = useMemo<ColumnConfig<PostalListRecord>[]>(
     () => [
       {
@@ -287,8 +276,7 @@ export function PostalLocationMasterTab(props: {
         header: "Pincode",
         sortable: true,
         filterable: true,
-        filterType: "dropdown",
-        filterOptions: pincodeOptions,
+        filterType: "text",
         width: "120px",
         render: (v) => <span className="font-mono text-xs font-semibold">{v}</span>,
       },
@@ -317,8 +305,7 @@ export function PostalLocationMasterTab(props: {
         header: "Location",
         sortable: true,
         filterable: true,
-        filterType: "dropdown",
-        filterOptions: locationOptions,
+        filterType: "text",
         width: "180px",
         render: (v, row) => (
           <span className="text-xs font-medium">
@@ -350,7 +337,7 @@ export function PostalLocationMasterTab(props: {
         ),
       },
     ],
-    [statesQuery.data, allDistrictsQuery.data, pincodeOptions, locationOptions],
+    [statesQuery.data, allDistrictsQuery.data],
   );
 
   const rows = listQuery.data?.items ?? [];

@@ -161,7 +161,7 @@ export function SplitMergeResultCard({
                     </SelectItem>
                     {candidates.map((u) => (
                       <SelectItem key={u.id} value={u.id} className="text-xs">
-                        {u.fullName}
+                        {u.fullName} {u.roleName ? `(${u.roleName})` : ""}
                       </SelectItem>
                     ))}
                   </SelectContent>

@@ -25,6 +25,9 @@ export function usePostalMasterList(params: MasterListKeyParams) {
     queryKey: masterKeys.postalMaster.list(params),
     queryFn: ({ signal }) =>
       PostalMasterListService.list({ ...toListParams(params), signal }),
+    placeholderData: (previousData) => previousData,
+    staleTime: 30_000,
+    retry: 1,
   });
 }
 
@@ -32,7 +35,7 @@ export function usePostalMasterSummary() {
   return useQuery({
     queryKey: masterKeys.postalMaster.summary(),
     queryFn: ({ signal }) => PostalMasterListService.summary(signal),
-    staleTime: 30_000,
+    staleTime: 10 * 60_000,
   });
 }
 
