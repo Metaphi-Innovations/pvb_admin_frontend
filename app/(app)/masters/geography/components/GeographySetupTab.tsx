@@ -70,32 +70,41 @@ export function GeographySetupTab(_props?: { postalRecordCount?: number }) {
 
   const [searchQuery, setSearchQuery] = useState("");
 
-  const records = treeQuery.data ?? [];
+  const records = useMemo(
+    () => (treeQuery.data ?? []).filter((r) => isActiveStatus(r.status)),
+    [treeQuery.data],
+  );
 
-  // Expanded node IDs for the table tree
+  const STORAGE_KEY = "pvb_geo_expanded_ids";
+
+  // Expanded node IDs for the table tree - restore from localStorage if present
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => {
-    const set = new Set<string>();
-    for (const r of records) {
-      if (r.level === "Zone") set.add(r.id);
+    if (typeof window === "undefined") return new Set<string>();
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) return new Set<string>(parsed);
+      }
+    } catch {
+      // ignore
     }
-    return set;
+    return new Set<string>();
   });
 
-  // Whenever records load for the first time, auto-expand zones and regions
-  React.useEffect(() => {
-    if (records.length > 0) {
-      setExpandedIds((prev) => {
-        if (prev.size > 0) return prev;
-        const init = new Set<string>();
-        for (const r of records) {
-          if (r.level === "Zone" || r.level === "Region") {
-            init.add(r.id);
-          }
-        }
-        return init;
-      });
-    }
-  }, [records]);
+  const toggleExpand = (id: string) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(Array.from(next)));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  };
 
   // Group children by parentId
   const childrenMap = useMemo(() => {
@@ -123,15 +132,6 @@ export function GeographySetupTab(_props?: { postalRecordCount?: number }) {
     return records.reduce((acc, r) => acc + (r.locationIds?.length ?? 0), 0);
   }, [records]);
 
-  const toggleExpand = (id: string) => {
-    setExpandedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
   const rowActions = useMemo<ActionItemConfig<BusinessGeoListItem>[]>(
     () => [
       { label: "View", action: "view", icon: Eye, onClick: (g) => setViewRecord(g) },
@@ -153,10 +153,10 @@ export function GeographySetupTab(_props?: { postalRecordCount?: number }) {
     return records.filter((r) => r.level === "Zone");
   }, [records]);
 
-  const handleAddTerritory = (areaId: string) => {
+  const handleAddChild = (parentId: string, parentLevel: BusinessGeoLevel) => {
     setEditRecord(null);
-    setDefaultParentId(areaId);
-    setDefaultParentLevel("Area");
+    setDefaultParentId(parentId);
+    setDefaultParentLevel(parentLevel);
     setFormOpen(true);
   };
 
@@ -234,14 +234,34 @@ export function GeographySetupTab(_props?: { postalRecordCount?: number }) {
                 </span>
               )}
 
-              {/* + Territory button directly on Area row */}
+              {/* + Child buttons directly on row (shown on hover) */}
+              {item.level === "Zone" && (
+                <button
+                  type="button"
+                  onClick={() => handleAddChild(item.id, "Zone")}
+                  className="ml-1 text-[10px] font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200/80 rounded px-1.5 py-0 inline-flex items-center gap-0.5 leading-tight h-5 opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  <Plus className="w-2.5 h-2.5" /> Region
+                </button>
+              )}
+
+              {item.level === "Region" && (
+                <button
+                  type="button"
+                  onClick={() => handleAddChild(item.id, "Region")}
+                  className="ml-1 text-[10px] font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200/80 rounded px-1.5 py-0 inline-flex items-center gap-0.5 leading-tight h-5 opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  <Plus className="w-2.5 h-2.5" /> Area
+                </button>
+              )}
+
               {item.level === "Area" && (
                 <button
                   type="button"
-                  onClick={() => handleAddTerritory(item.id)}
-                  className="ml-1 text-[11px] font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded px-2 py-0.5 inline-flex items-center gap-1 transition-colors"
+                  onClick={() => handleAddChild(item.id, "Area")}
+                  className="ml-1 text-[10px] font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200/80 rounded px-1.5 py-0 inline-flex items-center gap-0.5 leading-tight h-5 opacity-0 group-hover:opacity-100 transition-opacity"
                 >
-                  <Plus className="w-3 h-3" /> Territory
+                  <Plus className="w-2.5 h-2.5" /> Territory
                 </button>
               )}
             </div>
@@ -270,9 +290,14 @@ export function GeographySetupTab(_props?: { postalRecordCount?: number }) {
             )}
           </td>
 
+          {/* Effective Date */}
+          <td className="py-2.5 px-4 text-center text-xs text-muted-foreground font-medium">
+            {item.effectiveDate || "—"}
+          </td>
+
           {/* Actions */}
           <td className="py-2.5 px-4 text-right">
-            <div className="flex items-center justify-end gap-1.5">
+            <div className="flex items-center justify-end">
               <Button
                 variant="outline"
                 size="sm"
@@ -286,16 +311,6 @@ export function GeographySetupTab(_props?: { postalRecordCount?: number }) {
               >
                 <Edit2 className="w-3 h-3" /> Edit
               </Button>
-
-              <ListingStatusToggle
-                active={isActiveStatus(item.status)}
-                onChange={async () => {
-                  await toggleStatus.mutateAsync({ level: item.level, id: item.id });
-                }}
-                disabled={toggleStatus.isPending}
-              />
-
-              <ActionMenu row={item} actions={rowActions} />
             </div>
           </td>
         </tr>
@@ -364,7 +379,8 @@ export function GeographySetupTab(_props?: { postalRecordCount?: number }) {
                   <th className="text-left py-3 px-4 font-semibold text-foreground">Geography Name</th>
                   <th className="text-center py-3 px-4 font-semibold text-foreground w-[120px]">Level</th>
                   <th className="text-center py-3 px-4 font-semibold text-foreground w-[100px]">Pincode</th>
-                  <th className="text-right py-3 px-4 font-semibold text-foreground w-[180px]">Actions</th>
+                  <th className="text-center py-3 px-4 font-semibold text-foreground w-[120px]">Effective Date</th>
+                  <th className="text-right py-3 px-4 font-semibold text-foreground w-[100px]">Actions</th>
                 </tr>
               </thead>
               <tbody>
