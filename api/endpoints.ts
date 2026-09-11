@@ -810,11 +810,19 @@ export const API_ENDPOINTS = {
       POST: (id: string | number) => `/accounts/debit-note/${id}/post`,
       CANCEL: (id: string | number) => `/accounts/debit-note/${id}/cancel`,
       REVERSE: (id: string | number) => `/accounts/debit-note/${id}/reverse`,
+      PDF_PREVIEW: (id: string | number) => `/accounts/debit-note/${id}/pdf-preview`,
+      PDF: (id: string | number) => `/accounts/debit-note/${id}/pdf`,
       PENDING: "/accounts/debit-note/pending",
       PENDING_BY_ID: (id: string | number) => `/accounts/debit-note/pending/${id}`,
       CREATE_FROM_PENDING: (pendingId: string | number) => `/accounts/debit-note/from-pending/${pendingId}`,
       ELIGIBLE_PURCHASE_INVOICES: (supplierId: string | number) =>
         `/accounts/debit-note/supplier/${supplierId}/eligible-purchase-invoices`,
+    },
+    CREDIT_NOTE: {
+      LIST: "/accounts/credit-note",
+      GET_BY_ID: (id: string | number) => `/accounts/credit-note/${id}`,
+      PDF_PREVIEW: (id: string | number) => `/accounts/credit-note/${id}/pdf-preview`,
+      PDF: (id: string | number) => `/accounts/credit-note/${id}/pdf`,
     },
     RECEIVABLES: {
       CUSTOMER_SUMMARY: "/accounts/receivables/customer-summary",

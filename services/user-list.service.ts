@@ -75,6 +75,11 @@ export interface UserDropdownItem {
   employeeId: string;
   roleName?: string;
   departmentName?: string;
+  geographyLevel?: string;
+  zoneId?: string | null;
+  regionId?: string | null;
+  areaId?: string | null;
+  territoryId?: string | null;
 }
 
 export interface ApprovalUserOption {
@@ -840,6 +845,11 @@ export const UserListService = {
         employeeId: asString(item.employee_id),
         roleName: asString(item.role_name),
         departmentName: asString(item.department_name),
+        geographyLevel: asString(item.geography_level) || undefined,
+        zoneId: asString(item.zone_id) || null,
+        regionId: asString(item.region_id) || null,
+        areaId: asString(item.area_id) || null,
+        territoryId: asString(item.territory_id) || null,
       };
     });
   },
