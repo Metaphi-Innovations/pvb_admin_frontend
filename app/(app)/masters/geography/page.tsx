@@ -137,11 +137,11 @@ export default function GeographyPage() {
         <Tabs value={activeTab} onValueChange={setTab} className="space-y-4">
           <div className="overflow-x-auto -mx-1 px-1">
             <TabsList className="border-b border-border w-max min-w-full justify-start rounded-none h-auto p-0 bg-transparent gap-0">
-              <TabsTrigger value="setup" className={TAB_TRIGGER_CLASS}>
-                Business Geography
-              </TabsTrigger>
               <TabsTrigger value="postal" className={TAB_TRIGGER_CLASS}>
                 Postal Master
+              </TabsTrigger>
+              <TabsTrigger value="setup" className={TAB_TRIGGER_CLASS}>
+                Business Geography
               </TabsTrigger>
               <TabsTrigger value="split" className={TAB_TRIGGER_CLASS}>
                 Split / Merge

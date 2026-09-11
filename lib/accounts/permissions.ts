@@ -1,15 +1,25 @@
 /**
- * Accounts module RBAC permission codes.
- * Wire to role_permissions in production; client checks are advisory until auth is integrated.
+ * Accounts module permission code constants.
+ * COA / bank account UI gates use real web RBAC via `useCanCoa` and
+ * `usePermissions` (`chart_of_accounts`, `bank_accounts`). Codes below remain
+ * for legacy localStorage helpers (e.g. posting-engine advisory checks).
  */
 
+import {
+  canCreate,
+  canDelete,
+  canEdit,
+  canView,
+  type WebPermissionTree,
+} from "@/lib/auth/permissions";
+
 export const ACCOUNTS_PERMISSIONS = {
-  // Chart of Accounts
-  COA_VIEW: "accounts.coa.view",
-  COA_LEDGER_CREATE: "accounts.coa.ledger.create",
-  COA_SUB_LEDGER_CREATE: "accounts.coa.sub_ledger.create",
-  COA_LEDGER_EDIT: "accounts.coa.ledger.edit",
-  COA_LEDGER_DELETE: "accounts.coa.ledger.delete",
+  // Chart of Accounts (canonical registry keys)
+  COA_VIEW: "accounts.chart_of_accounts.view",
+  COA_LEDGER_CREATE: "accounts.chart_of_accounts.create",
+  COA_SUB_LEDGER_CREATE: "accounts.chart_of_accounts.create",
+  COA_LEDGER_EDIT: "accounts.chart_of_accounts.edit",
+  COA_LEDGER_DELETE: "accounts.chart_of_accounts.delete",
 
   // Vouchers
   VOUCHER_VIEW: "accounts.voucher.view",
@@ -24,10 +34,10 @@ export const ACCOUNTS_PERMISSIONS = {
   FY_MANAGE: "accounts.fy.manage",
   VOUCHER_TYPE_CONFIGURE: "accounts.voucher_type.configure",
   COST_CENTER_MANAGE: "accounts.cost_center.manage",
-  BANK_ACCOUNT_MANAGE: "accounts.bank_account.manage",
-  BANK_ACCOUNT_VIEW: "accounts.bank_account.view",
-  BANK_ACCOUNT_CREATE: "accounts.bank_account.create",
-  BANK_ACCOUNT_UPDATE: "accounts.bank_account.update",
+  BANK_ACCOUNT_MANAGE: "accounts.bank_accounts.edit",
+  BANK_ACCOUNT_VIEW: "accounts.bank_accounts.view",
+  BANK_ACCOUNT_CREATE: "accounts.bank_accounts.create",
+  BANK_ACCOUNT_UPDATE: "accounts.bank_accounts.edit",
   SETTINGS_MANAGE: "accounts.settings.manage",
 
   // Reports
@@ -116,13 +126,21 @@ export function requireAccountsPermission(
   };
 }
 
-/** COA ledger CRUD permission shorthand */
-export function canCoa(action: "view" | "create" | "edit" | "delete"): boolean {
-  const map = {
-    view: ACCOUNTS_PERMISSIONS.COA_VIEW,
-    create: ACCOUNTS_PERMISSIONS.COA_LEDGER_CREATE,
-    edit: ACCOUNTS_PERMISSIONS.COA_LEDGER_EDIT,
-    delete: ACCOUNTS_PERMISSIONS.COA_LEDGER_DELETE,
-  } as const;
-  return hasAccountsPermission(map[action]);
+/** COA CRUD against real web permission tree (`accounts.chart_of_accounts`). */
+export function canCoa(
+  action: "view" | "create" | "edit" | "delete",
+  permissions: WebPermissionTree | null | undefined,
+): boolean {
+  switch (action) {
+    case "view":
+      return canView(permissions, "accounts", "chart_of_accounts");
+    case "create":
+      return canCreate(permissions, "accounts", "chart_of_accounts");
+    case "edit":
+      return canEdit(permissions, "accounts", "chart_of_accounts");
+    case "delete":
+      return canDelete(permissions, "accounts", "chart_of_accounts");
+    default:
+      return false;
+  }
 }

@@ -122,11 +122,11 @@ export default function BankAccountFormClient({
   const canCreate =
     !permissions || permissions.isLoading
       ? true
-      : permissions.canCreate("accounts", "bank_account");
+      : permissions.canCreate("accounts", "bank_accounts");
   const canUpdate =
     !permissions || permissions.isLoading
       ? true
-      : permissions.canEdit("accounts", "bank_account");
+      : permissions.canEdit("accounts", "bank_accounts");
   const canSubmit = mode === "create" ? canCreate : canUpdate;
 
   const detailQuery = useBankAccountByLedgerId(
