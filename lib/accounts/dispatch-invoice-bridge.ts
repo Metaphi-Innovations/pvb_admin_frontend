@@ -233,13 +233,21 @@ export function buildInvoiceLineFromDispatchProduct(
   /**
    * Use list/dealer rate + commercial discount once.
    * Do not set unitPrice to scheme finalRate AND re-apply scheme % (double discount).
+   * When commercial discount is empty, fall back to Product Discount scheme %.
    */
   const originalRate =
     soLine?.originalDealerPrice ||
     soLine?.dealerPrice ||
     soLine?.unitPrice ||
     unitPrice;
-  const discountPct = soLine?.discount || 0;
+  const commercialDiscountPct = soLine?.discount || 0;
+  const schemeDiscountPct = soLine?.schemeDiscountPercent || 0;
+  const discountPct =
+    commercialDiscountPct > 0
+      ? commercialDiscountPct
+      : hasScheme
+        ? schemeDiscountPct
+        : 0;
   const batchNo =
     dp.batchNo?.trim() ||
     dp.batchAllocations?.[0]?.batchNumber?.trim() ||

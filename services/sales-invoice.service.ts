@@ -401,6 +401,12 @@ export type PrepareDispatchInvoiceDto = {
     unit_price?: string | null;
     discount_amount?: string | null;
     discount_percentage?: string | null;
+    scheme_id?: string | null;
+    scheme_code?: string | null;
+    scheme_name?: string | null;
+    scheme_discount_type?: string | null;
+    scheme_discount_value?: string | null;
+    scheme_discount_amount?: string | null;
     gst_rate?: string | null;
     hsn_id?: string | null;
     hsn_code?: string | null;
@@ -547,6 +553,22 @@ export function mapPrepareDispatchItemsToLineItems(
         : item.unit_per_packing != null
           ? Number(item.unit_per_packing)
           : null;
+    const schemeType = String(item.scheme_discount_type || "").toLowerCase();
+    const schemeValue = Number(item.scheme_discount_value || 0);
+    const schemeAmtPerUnit = Number(item.scheme_discount_amount || 0);
+    const hasScheme = Boolean(item.scheme_id || schemeValue > 0 || schemeAmtPerUnit > 0);
+    const schemeDiscountType =
+      schemeType === "flat" || schemeType === "rupees" || schemeType === "fixed amount"
+        ? ("Rupees" as const)
+        : hasScheme
+          ? ("Percentage" as const)
+          : undefined;
+    const schemeDiscountPercent =
+      schemeDiscountType === "Percentage"
+        ? schemeValue > 0
+          ? schemeValue
+          : discountPct
+        : 0;
     return recalculateLineItem({
       id: item.dispatch_item_id || `line-${index}`,
       productId: null,
@@ -559,6 +581,7 @@ export function mapPrepareDispatchItemsToLineItems(
       unit: item.quantity_type || "PCS",
       unitPrice: cpMissing ? 0 : rate,
       discountPct,
+      discountAmt: discountAmt > 0 ? discountAmt : undefined,
       taxPct: gstPercent,
       amount: qty * (cpMissing ? 0 : rate),
       batchNo: item.batch_no || "—",
@@ -568,9 +591,13 @@ export function mapPrepareDispatchItemsToLineItems(
       qtyInCase: qtyInCase != null && qtyInCase > 0 ? qtyInCase : null,
       salesperson: item.salesperson_name?.trim() || sp || undefined,
       dispatchReadyQty: qty,
-      schemeDiscountPercent: discountPct,
-      schemeDiscountAmount: discountAmt,
-      schemeApplied: discountAmt > 0 ? "Yes" : "No",
+      dispatchItemId: item.dispatch_item_id || undefined,
+      schemeCode: item.scheme_code || undefined,
+      schemeName: item.scheme_name || undefined,
+      schemeDiscountPercent: hasScheme ? schemeDiscountPercent : undefined,
+      schemeDiscountAmount: hasScheme ? schemeAmtPerUnit : undefined,
+      schemeDiscountType,
+      schemeApplied: hasScheme ? "Yes" : "No",
       costPrice: cpMissing ? 0 : rate,
       costPriceSource: cpMissing
         ? "Cost Price not available"
