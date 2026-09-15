@@ -230,9 +230,7 @@ export function SplitMergeResultCard({
                 return false;
               }) || candidates[0];
             const currentAssigned = preview.isExisting
-              ? candidates.find((u) => u.isCurrentAssignment) ||
-                candidates.find((u) => preview.level === "Zone" && u.zoneId && u.zoneId === preview.key) ||
-                candidates[0]
+              ? candidates.find((u) => u.isCurrentAssignment) ?? null
               : null;
 
             if (inherited) {
@@ -314,11 +312,14 @@ export function SplitMergeResultCard({
                       {currentAssigned
                         ? `${currentAssigned.fullName} ${currentAssigned.roleName ? `(${currentAssigned.roleName})` : ""}`
                         : preview.usersByRole.find((u) => u.role === role)?.userName &&
-                          preview.usersByRole.find((u) => u.role === role)?.userName !== "Keep existing"
-                        ? preview.usersByRole.find((u) => u.role === role)?.userName
-                        : "Keep Existing"}
+                            preview.usersByRole.find((u) => u.role === role)?.userName !==
+                              "Keep existing"
+                          ? preview.usersByRole.find((u) => u.role === role)?.userName
+                          : "No user currently on this geography"}
                     </span>
-                    <span className="text-[10px] text-muted-foreground ml-1 shrink-0">(Current)</span>
+                    {currentAssigned ? (
+                      <span className="text-[10px] text-muted-foreground ml-1 shrink-0">(Current)</span>
+                    ) : null}
                   </div>
                 ) : (
                   <div className="flex items-center gap-1.5">
@@ -327,7 +328,10 @@ export function SplitMergeResultCard({
                         value={assignment.userId || undefined}
                         disabled={assignment.action !== "assign"}
                         onValueChange={(v) =>
-                          onUserAssignmentChange(role, { userId: v || "" })
+                          onUserAssignmentChange(role, {
+                            action: "assign",
+                            userId: v || "",
+                          })
                         }
                       >
                         <SelectTrigger className="h-8 text-xs">
@@ -350,17 +354,20 @@ export function SplitMergeResultCard({
                               const takenByOtherCard = Boolean(
                                 assignedToCard && assignedToCard !== preview.key,
                               );
-                              // Backend marks selectable: unassigned OR on a selected source zone/region/area
-                              // Mapped to a geography outside the merge/split sources → disabled
+                              const keptOnSource =
+                                takenByOtherCard && assignedToCard === "source";
+                              // Mapped to a geography outside this split/merge job → disabled
                               const mappedElsewhere = u.isSelectable === false;
                               const disabled = takenByOtherCard || mappedElsewhere;
                               const suffix = mappedElsewhere
                                 ? " — assigned to another geography"
-                                : takenByOtherCard
-                                  ? " — used on another geography"
-                                  : u.isCurrentAssignment
-                                    ? " — from selected source"
-                                    : " — available";
+                                : keptOnSource
+                                  ? " — kept on existing geography"
+                                  : takenByOtherCard
+                                    ? " — used on another geography"
+                                    : u.isCurrentAssignment
+                                      ? " — from selected source"
+                                      : " — available";
                               return (
                                 <SelectItem
                                   key={u.id}
@@ -413,7 +420,26 @@ export function SplitMergeResultCard({
                         "h-7 text-[10px]",
                         assignment.action === action && "bg-brand-600 hover:bg-brand-700 text-white",
                       )}
-                      onClick={() => onUserAssignmentChange(role, { action })}
+                      onClick={() => {
+                        if (action === "keep") {
+                          onUserAssignmentChange(role, {
+                            action: "keep",
+                            userId: currentAssigned?.id ?? "",
+                          });
+                          return;
+                        }
+                        if (action === "unassigned") {
+                          onUserAssignmentChange(role, {
+                            action: "unassigned",
+                            userId: "",
+                          });
+                          return;
+                        }
+                        onUserAssignmentChange(role, {
+                          action: "assign",
+                          userId: "",
+                        });
+                      }}
                     >
                       {label}
                     </Button>

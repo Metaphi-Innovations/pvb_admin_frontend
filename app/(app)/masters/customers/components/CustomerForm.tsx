@@ -126,6 +126,7 @@ import { CustomerCreatePayload, CustomerListRecord, CustomerBranchPayload, Custo
 import { usePincode, useTdsDropdown } from "@/hooks/masters";
 import { useSalesmenDropdown } from "@/hooks/sales/use-sales-orders";
 import { CustomerTypeDocument } from "@/services/customer-type-list.service";
+import { BusinessGeographyService } from "@/services/business-geography.service";
 
 export interface BranchAddress {
 	address: string;
@@ -828,6 +829,58 @@ function BranchAddressWithPincode({
 	);
 }
 
+/** Autofills branch Sales Person (TM/TSM) when billing pincode changes to a mapped pin. */
+function BranchSalesPersonFromPincode({
+	pincode,
+	readOnly,
+	onAssign,
+}: {
+	pincode: string;
+	readOnly?: boolean;
+	onAssign: (person: {
+		user_id: string;
+		first_name: string;
+		last_name: string;
+		employee_id: string | null;
+		role_name: string | null;
+	}) => void;
+}) {
+	const onAssignRef = useRef(onAssign);
+	onAssignRef.current = onAssign;
+	const prevPincodeRef = useRef(pincode.trim());
+
+	useEffect(() => {
+		if (readOnly) return;
+		const pin = pincode.trim();
+		if (!/^\d{6}$/.test(pin)) {
+			prevPincodeRef.current = pin;
+			return;
+		}
+		if (prevPincodeRef.current === pin) return;
+		prevPincodeRef.current = pin;
+
+		let cancelled = false;
+		void (async () => {
+			try {
+				const result =
+					await BusinessGeographyService.lookupSalesPersonByPincode(pin);
+				const person = result?.sales_person;
+				const userId = person?.user_id?.trim();
+				if (cancelled || !person || !userId) return;
+				onAssignRef.current(person);
+			} catch {
+				// Silent: leave sales person unchanged if lookup fails / unmapped
+			}
+		})();
+
+		return () => {
+			cancelled = true;
+		};
+	}, [pincode, readOnly]);
+
+	return null;
+}
+
 interface ProductCatalogItem {
 	productId: string;
 	numericId: number;
@@ -1017,6 +1070,11 @@ export function CustomerForm({
 	const show = (stepId: CustomerFormStepId) => !activeStep || activeStep === stepId;
 	const { data: tdsDropdownItems = [] } = useTdsDropdown();
 	const { data: salesmanData = [] } = useSalesmenDropdown();
+	const [autoSalesOptions, setAutoSalesOptions] = useState<
+		{ value: string; label: string; sublabel?: string }[]
+	>([]);
+	const formRef = useRef(form);
+	formRef.current = form;
 
 	const { selectedFY } = useFY();
 	const [geoNodes] = useState(() =>
@@ -1179,7 +1237,8 @@ export function CustomerForm({
 	}, [form.territoryId, geoNodes]);
 
 	const salesOptions = useMemo(() => {
-		return salesmanData.map((s: any) => {
+		type SalesOption = { value: string; label: string; sublabel?: string };
+		const fromApi: SalesOption[] = salesmanData.map((s: any) => {
 			const name = `${s.first_name || ""} ${s.last_name || ""}`.trim() || s.username || "";
 			const label = s.geo_region ? `${name} (${s.geo_region})` : name;
 			return {
@@ -1190,7 +1249,12 @@ export function CustomerForm({
 					.join(" - "),
 			};
 		});
-	}, [salesmanData]);
+		const byValue = new Map<string, SalesOption>(fromApi.map((o) => [o.value, o]));
+		for (const extra of autoSalesOptions) {
+			if (!byValue.has(extra.value)) byValue.set(extra.value, extra);
+		}
+		return Array.from(byValue.values());
+	}, [salesmanData, autoSalesOptions]);
 
 	const activeProducts = useMemo((): ProductCatalogItem[] => {
 		return loadProducts()
@@ -2100,6 +2164,41 @@ export function CustomerForm({
 														className='min-w-[200px] flex-1 max-w-md'
 														onClick={(e) => e.stopPropagation()}
 													>
+														<BranchSalesPersonFromPincode
+															pincode={branch.billingAddress.pincode}
+															readOnly={readOnly}
+															onAssign={(person) => {
+																const name =
+																	`${person.first_name || ""} ${person.last_name || ""}`.trim() ||
+																	person.user_id;
+																setAutoSalesOptions((prev) => {
+																	if (prev.some((o) => o.value === person.user_id)) {
+																		return prev;
+																	}
+																	return [
+																		...prev,
+																		{
+																			value: person.user_id,
+																			label: name,
+																			sublabel: [
+																				person.employee_id,
+																				person.role_name,
+																			]
+																				.filter(Boolean)
+																				.join(" - "),
+																		},
+																	];
+																});
+																const current = formRef.current;
+																const updated = current.branches.map((b, i) =>
+																	i === bIdx
+																		? { ...b, salesManId: person.user_id }
+																		: b,
+																);
+																onChange({ ...current, branches: updated });
+																onClearError(`branch_${bIdx}_salesManId`);
+															}}
+														/>
 														{readOnly ? (
 															<p className='mt-1 text-xs text-foreground'>
 																{salesOptions.find(

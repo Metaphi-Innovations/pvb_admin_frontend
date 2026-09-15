@@ -675,6 +675,51 @@ export const BusinessGeographyService = {
     });
   },
 
+  async lookupSalesPersonByPincode(
+    pincode: string,
+    signal?: AbortSignal,
+  ): Promise<{
+    pincode: string;
+    pincode_id: string | null;
+    territory_id: string | null;
+    territory_name: string | null;
+    sales_person: {
+      user_id: string;
+      first_name: string;
+      last_name: string;
+      employee_id: string | null;
+      role_name: string | null;
+    } | null;
+  } | null> {
+    const code = pincode.trim();
+    if (!/^\d{6}$/.test(code)) return null;
+    const response = await axiosInstance.get(BG.LOOKUP.SALES_PERSON_BY_PINCODE, {
+      params: { pincode: code },
+      signal,
+    });
+    const payload = response.data as Record<string, unknown>;
+    if (payload.success === false) return null;
+    const data = (unwrapData(payload) ?? null) as Record<string, unknown> | null;
+    if (!data) return null;
+
+    const salesPersonRaw = data.sales_person as Record<string, unknown> | null;
+    return {
+      pincode: asString(data.pincode) || code,
+      pincode_id: asString(data.pincode_id) || null,
+      territory_id: asString(data.territory_id) || null,
+      territory_name: asString(data.territory_name) || null,
+      sales_person: salesPersonRaw
+        ? {
+            user_id: asString(salesPersonRaw.user_id),
+            first_name: asString(salesPersonRaw.first_name),
+            last_name: asString(salesPersonRaw.last_name),
+            employee_id: asString(salesPersonRaw.employee_id) || null,
+            role_name: asString(salesPersonRaw.role_name) || null,
+          }
+        : null,
+    };
+  },
+
   // ── Split / Merge ─────────────────────────────────────────────────────────
 
   async listSplitMergeSources(params: {
@@ -823,6 +868,14 @@ export interface SplitMergeJobChild {
   code?: string | null;
 }
 
+export interface SplitMergeJobSourceSummary {
+  id: string;
+  name: string;
+  code?: string | null;
+  status: boolean;
+  children?: SplitMergeJobChild[];
+}
+
 export interface SplitMergeJobView {
   id: string;
   operation_type: SplitMergeOperation;
@@ -863,7 +916,7 @@ export interface SplitMergeJobView {
     status: boolean;
     children: SplitMergeJobChild[];
   };
-  sources?: Array<{ id: string; name: string; code?: string | null; status: boolean }>;
+  sources?: SplitMergeJobSourceSummary[];
   assignment_roles: string[];
   published_at?: string | null;
   publish_summary?: unknown;
