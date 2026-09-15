@@ -2,6 +2,8 @@ import { lazyAccountsPage } from "@/lib/accounts/lazy-accounts-page";
 
 const DebitNoteFormPageClient = lazyAccountsPage(() => import("../../../debit-notes/DebitNoteFormPageClient"));
 
+import { Suspense } from "react";
+
 type PageProps = {
   searchParams?: {
     returnId?: string;
@@ -18,21 +20,23 @@ export default function NewDebitNotePage({ searchParams }: PageProps) {
   const pendingId = searchParams?.pendingId?.trim() || undefined;
 
   return (
-    <DebitNoteFormPageClient
-      pendingId={pendingId}
-      returnId={searchParams?.returnId ? Number(searchParams.returnId) : undefined}
-      purchaseInvoiceId={Number.isFinite(purchaseInvoiceId) ? purchaseInvoiceId : undefined}
-      mode={
-        pendingId
-          ? "return"
-          : searchParams?.mode === "fresh"
-            ? "fresh"
-            : searchParams?.purchaseInvoiceId
-              ? "purchase_invoice"
-              : searchParams?.returnId
-                ? "return"
-                : undefined
-      }
-    />
+    <Suspense fallback={null}>
+      <DebitNoteFormPageClient
+        pendingId={pendingId}
+        returnId={searchParams?.returnId ? Number(searchParams.returnId) : undefined}
+        purchaseInvoiceId={Number.isFinite(purchaseInvoiceId) ? purchaseInvoiceId : undefined}
+        mode={
+          pendingId
+            ? "return"
+            : searchParams?.mode === "fresh"
+              ? "fresh"
+              : searchParams?.purchaseInvoiceId
+                ? "purchase_invoice"
+                : searchParams?.returnId
+                  ? "return"
+                  : undefined
+        }
+      />
+    </Suspense>
   );
 }

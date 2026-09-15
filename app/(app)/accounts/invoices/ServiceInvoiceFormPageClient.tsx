@@ -6,7 +6,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,6 +27,10 @@ import {
 import { VOUCHER_INPUT_CLASS } from "@/components/accounts/voucher-simple-form-ui";
 import { useFY } from "@/lib/fy-store";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
+import {
+  invoicesListHrefForSourceType,
+  safeInternalReturnPath,
+} from "@/app/(app)/accounts/invoices/invoice-utils";
 import {
   calcGstLineSplit,
   calcLineAmounts,
@@ -137,6 +141,15 @@ const CHARGE_INPUT_CLASS =
 
 export default function ServiceInvoiceFormPageClient() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const listHref = useMemo(
+    () =>
+      safeInternalReturnPath(
+        searchParams.get("returnTo"),
+        invoicesListHrefForSourceType("service"),
+      ),
+    [searchParams],
+  );
   const { selectedFY } = useFY();
   const { data: customerData } = useCustomersDropdown();
   const { data: warehouseData } = useWarehousesDropdown();
@@ -473,7 +486,7 @@ export default function ServiceInvoiceFormPageClient() {
 
       dispatchAccountsDataChanged("sales-invoices");
       showToast("Service invoice posted successfully.", "success");
-      router.replace("/accounts/transactions/invoices");
+      router.replace(listHref);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to create service invoice.");
       setSaving(false);
@@ -485,11 +498,11 @@ export default function ServiceInvoiceFormPageClient() {
       <InvoiceFormLayout
         title="Create Service Invoice"
         subtitle="Accounts → Transactions → Sales Invoice → Service"
-        breadcrumb={accountsBreadcrumb("Transactions", "Sales Invoice")}
-        backHref="/accounts/transactions/invoices"
+        breadcrumb={accountsBreadcrumb("Transactions", "Sales Invoice", listHref)}
+        backHref={listHref}
         stickyFooter={
           <VoucherFormActionBar
-            onDiscard={() => router.push("/accounts/transactions/invoices")}
+            onDiscard={() => router.push(listHref)}
             onSaveDraft={() => showToast("Draft is not supported for service invoices. Use Post Invoice.", "info")}
             onSaveAndPost={saveAndPost}
             saveAndPostLabel="Post Invoice"

@@ -68,7 +68,14 @@ import {
   creditNoteListApiError,
   type CreditNoteListApiRow,
 } from "../../credit-notes/credit-note-list-api";
-import { CREDIT_NOTES_LIST_PATH, formatINR } from "../../credit-notes/note-utils";
+import {
+  CREDIT_NOTES_LIST_PATH,
+  creditNotesListHref,
+  formatINR,
+  parseCreditNotesModuleTab,
+  parseCreditNotesStatusTab,
+  withReturnTo,
+} from "../../credit-notes/note-utils";
 import {
   hasDocumentsListingFilters,
   parseDocumentsListingFiltersFromSearch,
@@ -286,6 +293,7 @@ async function exportCreditNoteListRows(rows: CreditNoteListRow[]): Promise<void
 function CreditNotesRecordsTable({
   loading,
   toolbarFiltered,
+  listReturnHref,
   page,
   pageSize,
   onPageChange,
@@ -297,6 +305,7 @@ function CreditNotesRecordsTable({
 }: {
   loading: boolean;
   toolbarFiltered: CreditNoteListRow[];
+  listReturnHref: string;
   page: number;
   pageSize: number;
   onPageChange: (p: number) => void;
@@ -422,7 +431,12 @@ function CreditNotesRecordsTable({
                         </button>
                       ) : null}
                       {canEditListRow(r) && (
-                        <AccountsEditAction href={`${LIST_PATH}/${r.credit_note_id}/edit`} />
+                        <AccountsEditAction
+                          href={withReturnTo(
+                            `${LIST_PATH}/${r.credit_note_id}/edit`,
+                            listReturnHref,
+                          )}
+                        />
                       )}
                       {canCancelListRow(r) && (
                         <AccountsMoreActions contentClassName="w-44">
@@ -464,8 +478,12 @@ export default function CreditNotesListClient() {
   const { toast, showToast, dismissToast } = useAccountsToast();
   const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_year");
 
-  const [moduleTab, setModuleTab] = useState("pending");
-  const [statusTab, setStatusTab] = useState("all");
+  const moduleTab =
+    parseCreditNotesModuleTab(searchParams.get("tab")) ?? "pending";
+  const statusTab =
+    parseCreditNotesStatusTab(searchParams.get("status")) ?? "all";
+  const listReturnHref = creditNotesListHref(moduleTab, statusTab);
+
   const [filters, setFilters] = useState<NotesListingFilterState>(() => ({
     ...resetNotesListingFilters("this_year"),
     dateFrom,
@@ -524,8 +542,31 @@ export default function CreditNotesListClient() {
       setPreset("custom");
     }
     if (parsed.branch) setFilters((prev) => ({ ...prev, branches: [parsed.branch!] }));
-    setModuleTab("records");
-  }, [searchParams, setDateFrom, setDateTo, setPreset]);
+    if (moduleTab !== "records") {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("tab", "records");
+      router.replace(`${LIST_PATH}?${params.toString()}`, { scroll: false });
+    }
+  }, [searchParams, setDateFrom, setDateTo, setPreset, moduleTab, router]);
+
+  const handleModuleTabChange = useCallback(
+    (tab: string) => {
+      router.push(
+        creditNotesListHref(tab, tab === "records" ? statusTab : null),
+        { scroll: false },
+      );
+      if (tab === "pending") void refresh();
+    },
+    [router, statusTab, refresh],
+  );
+
+  const handleStatusTabChange = useCallback(
+    (tab: string) => {
+      setPage(1);
+      router.push(creditNotesListHref("records", tab), { scroll: false });
+    },
+    [router],
+  );
 
   const counts = useMemo(() => computeTabCounts(records, filters), [records, filters]);
 
@@ -586,16 +627,18 @@ export default function CreditNotesListClient() {
   };
 
   const handleResetFilters = () => {
-    setStatusTab("all");
     const reset = resetNotesListingFilters("this_year");
     setPreset(reset.preset);
     setDateFrom(reset.dateFrom);
     setDateTo(reset.dateTo);
     setFilters(reset);
+    router.push(creditNotesListHref("records", "all"), { scroll: false });
   };
 
   const handleView = (row: CreditNoteListRow) => {
-    router.push(`${LIST_PATH}/${row.credit_note_id}`);
+    router.push(
+      withReturnTo(`${LIST_PATH}/${row.credit_note_id}`, listReturnHref),
+    );
   };
 
   return (
@@ -612,7 +655,11 @@ export default function CreditNotesListClient() {
             onExportPdf={moduleTab === "records" ? handleExport : undefined}
             exportDisabled={exporting || toolbarFiltered.length === 0}
             createLabel="Create Credit Note"
-            onCreate={() => router.push(`${LIST_PATH}/new?mode=fresh`)}
+            onCreate={() =>
+              router.push(
+                withReturnTo(`${LIST_PATH}/new?mode=fresh`, listReturnHref),
+              )
+            }
           />
         }
         layout="split"
@@ -622,10 +669,7 @@ export default function CreditNotesListClient() {
           <SectionTabs
             tabs={[...NOTES_MODULE_TABS]}
             active={moduleTab}
-            onChange={(tab) => {
-              setModuleTab(tab);
-              if (tab === "pending") void refresh();
-            }}
+            onChange={handleModuleTabChange}
             counts={{ pending: pendingCount, records: counts.all }}
             compact
           />
@@ -645,7 +689,7 @@ export default function CreditNotesListClient() {
                   <SectionTabs
                     tabs={[...NOTES_STATUS_TABS]}
                     active={statusTab}
-                    onChange={setStatusTab}
+                    onChange={handleStatusTabChange}
                     counts={counts}
                     compact
                   />
@@ -670,6 +714,7 @@ export default function CreditNotesListClient() {
                 <CreditNotesRecordsTable
                   loading={loading}
                   toolbarFiltered={toolbarFiltered}
+                  listReturnHref={listReturnHref}
                   page={page}
                   pageSize={pageSize}
                   onPageChange={setPage}
