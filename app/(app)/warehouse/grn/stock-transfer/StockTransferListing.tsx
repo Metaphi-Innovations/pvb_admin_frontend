@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MasterListing } from "@/components/listing/MasterListing";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
-import { Eye, FileCheck2, FilePlus2, Pencil, Truck } from "lucide-react";
+import { Eye, FileCheck2, FilePlus2, Pencil } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
@@ -408,13 +408,6 @@ export function StockTransferListing() {
       icon: FilePlus2,
       onClick: (row) =>
         router.push(`/warehouse/grn/stock-transfer/create?dispatchId=${row.dispatchId}`),
-    },
-    {
-      label: "View Dispatch",
-      action: "view",
-      icon: Truck,
-      onClick: (row) =>
-        router.push(`/warehouse/grn/stock-transfer/dispatch-view/${row.dispatchId}`),
     },
   ];
 

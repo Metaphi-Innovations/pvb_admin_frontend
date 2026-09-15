@@ -627,6 +627,7 @@ export const API_ENDPOINTS = {
       REVERT: (id: string) => `/warehouse/dispatch/${id}/revert`,
       DOWNLOAD_CHALLAN: (id: string) => `/warehouse/dispatch/${id}/download-challan`,
       CHALLAN_PREVIEW: (id: string) => `/warehouse/dispatch/${id}/challan-preview`,
+      SEND_CHALLAN_EMAIL: (id: string) => `/warehouse/dispatch/${id}/send-challan-email`,
       ALLOCATE_DC: (id: string) => `/warehouse/dispatch/${id}/allocate-dc`,
       ALLOCATE_SI: (id: string) => `/warehouse/dispatch/${id}/allocate-si`,
       ALLOCATE_ST: (id: string) => `/warehouse/dispatch/${id}/allocate-st`,

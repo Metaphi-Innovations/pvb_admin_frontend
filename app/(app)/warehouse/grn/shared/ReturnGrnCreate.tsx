@@ -78,6 +78,8 @@ interface LineInputState {
   caseSize: number;
   batchLocked: boolean;
   productSnapshot: Record<string, unknown>;
+  unitPrice: number;
+  gstPct: number;
 }
 
 interface FieldErrors {
@@ -282,6 +284,8 @@ export function ReturnGrnCreate({
               packSize: item.packSize,
             },
           ),
+          unitPrice: batch?.unitPrice || 0,
+          gstPct: batch?.gstPct || 0,
         };
       }),
     );
@@ -343,6 +347,8 @@ export function ReturnGrnCreate({
               unitPerPacking: caseSize,
               unit: item.unit || "Unit",
             }),
+            unitPrice: item.unitPrice || 0,
+            gstPct: item.gstPct || 0,
           };
         })
         .filter((line): line is LineInputState => line != null),
@@ -536,9 +542,12 @@ export function ReturnGrnCreate({
           manufactureDate: line.mfgDate || null,
           expiryDate: line.expDate || null,
           quantity_base_qty: line.receivedQty,
-          rate: null,
-          gst: null,
-          gstAmount: null,
+          rate: line.unitPrice > 0 ? round2(line.unitPrice) : null,
+          gst: line.gstPct > 0 ? round2(line.gstPct) : null,
+          gstAmount:
+            line.unitPrice > 0 && line.gstPct > 0
+              ? round2((line.receivedQty * line.unitPrice * line.gstPct) / 100)
+              : null,
         },
       ],
     }));
