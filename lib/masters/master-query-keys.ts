@@ -325,7 +325,8 @@ export const masterKeys = {
 
   businessGeography: {
     all: () => [...masterKeys.all, "business-geography"] as const,
-    tree: () => [...masterKeys.businessGeography.all(), "tree"] as const,
+    tree: (search = "") =>
+      [...masterKeys.businessGeography.all(), "tree", search] as const,
     detail: (level: string, id: string) =>
       [...masterKeys.businessGeography.all(), "detail", level, id] as const,
     lookupZones: () => [...masterKeys.businessGeography.all(), "lookup-zones"] as const,

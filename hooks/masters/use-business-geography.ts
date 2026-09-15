@@ -8,16 +8,23 @@ import {
 } from "@/services/business-geography.service";
 import { masterKeys } from "@/lib/masters/master-query-keys";
 
-async function invalidateTree(queryClient: ReturnType<typeof useQueryClient>) {
+async function invalidateBusinessGeography(
+  queryClient: ReturnType<typeof useQueryClient>,
+) {
+  // Tree + all parent/scope lookups (zones/regions/areas/districts/locations/pincodes)
   await queryClient.invalidateQueries({
-    queryKey: masterKeys.businessGeography.tree(),
+    queryKey: masterKeys.businessGeography.all(),
   });
 }
 
-export function useBusinessGeographyTree() {
+export function useBusinessGeographyTree(search = "") {
+  const normalized = search.trim();
   return useQuery({
-    queryKey: masterKeys.businessGeography.tree(),
-    queryFn: ({ signal }) => BusinessGeographyService.listAllForTree(signal),
+    queryKey: masterKeys.businessGeography.tree(normalized),
+    queryFn: ({ signal }) =>
+      BusinessGeographyService.listAllForTree(signal, {
+        search: normalized || undefined,
+      }),
   });
 }
 
@@ -27,7 +34,7 @@ export function useToggleBusinessGeoStatus() {
     mutationFn: ({ level, id }: { level: BusinessGeoLevel; id: string }) =>
       BusinessGeographyService.toggleStatus(level, id),
     onSuccess: async () => {
-      await invalidateTree(queryClient);
+      await invalidateBusinessGeography(queryClient);
     },
   });
 }
@@ -37,7 +44,7 @@ export function useCreateBusinessGeo() {
   return useMutation({
     mutationFn: (input: BusinessGeoSaveInput) => BusinessGeographyService.create(input),
     onSuccess: async () => {
-      await invalidateTree(queryClient);
+      await invalidateBusinessGeography(queryClient);
     },
   });
 }
@@ -48,7 +55,7 @@ export function useUpdateBusinessGeo() {
     mutationFn: ({ id, input }: { id: string; input: BusinessGeoSaveInput }) =>
       BusinessGeographyService.update(id, input),
     onSuccess: async () => {
-      await invalidateTree(queryClient);
+      await invalidateBusinessGeography(queryClient);
     },
   });
 }
@@ -97,7 +104,8 @@ export function useBgLookupDistricts(regionId?: string | null) {
     queryFn: ({ signal }) =>
       BusinessGeographyService.lookupDistricts(regionId!, signal),
     enabled: Boolean(regionId),
-    staleTime: 5 * 60_000,
+    staleTime: 30_000,
+    refetchOnMount: "always",
   });
 }
 
@@ -107,7 +115,8 @@ export function useBgLookupLocations(areaId?: string | null) {
     queryFn: ({ signal }) =>
       BusinessGeographyService.lookupLocations(areaId!, signal),
     enabled: Boolean(areaId),
-    staleTime: 5 * 60_000,
+    staleTime: 30_000,
+    refetchOnMount: "always",
   });
 }
 
@@ -128,6 +137,7 @@ export function useBgLookupPincodes(
         signal,
       ),
     enabled: locationIds.length > 0,
-    staleTime: 5 * 60_000,
+    staleTime: 30_000,
+    refetchOnMount: "always",
   });
 }
