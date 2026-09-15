@@ -2,8 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Download, FileText, Paperclip, Plus, Truck, XCircle } from "lucide-react";
+import {
+  parsePurchaseInvoiceTabParam,
+  purchaseInvoicesListHref,
+  withReturnTo,
+  type PurchaseInvoiceListTabId,
+} from "./purchase-invoice-nav";
 import {
   AccountsMoreActions,
   AccountsTableActionCell,
@@ -98,7 +104,7 @@ function mapDropdownOptions(
     .map((value) => ({ value, count: 0 }));
 }
 
-type Tab = "invoices" | "grn_pending";
+type Tab = PurchaseInvoiceListTabId;
 type SourceTypeFilter = "all" | PurchaseSourceType;
 type PurchaseNatureFilter = "all" | "inventory" | PurchaseNature;
 
@@ -321,6 +327,7 @@ function GrnSortSync({
 
 function PurchaseInvoicesTabTable({
   toolbarRows,
+  listReturnHref,
   loading,
   filterOptions,
   filterLoading,
@@ -332,6 +339,7 @@ function PurchaseInvoicesTabTable({
   onCancel,
 }: {
   toolbarRows: PurchaseInvoiceListRow[];
+  listReturnHref: string;
   loading: boolean;
   filterOptions: FilterValueOptions;
   filterLoading: FilterFlagMap;
@@ -393,7 +401,10 @@ function PurchaseInvoicesTabTable({
                 <AccountsTableCell className="font-medium">
                   {PurchaseInvoiceService.isUuid(inv.id) ? (
                     <Link
-                      href={`/accounts/purchase-invoices/${inv.id}`}
+                      href={withReturnTo(
+                        `/accounts/purchase-invoices/${inv.id}`,
+                        listReturnHref,
+                      )}
                       className="text-brand-700 hover:text-brand-800 hover:underline"
                     >
                       {inv.invoiceNo || "—"}
@@ -431,7 +442,10 @@ function PurchaseInvoicesTabTable({
 
                 <AccountsTableCell align="right" className={accountsActionColClass("multi")}>
                   <ListingRowActions
-                    viewHref={`/accounts/purchase-invoices/${inv.id}`}
+                    viewHref={withReturnTo(
+                      `/accounts/purchase-invoices/${inv.id}`,
+                      listReturnHref,
+                    )}
                     canDownload={
                       PurchaseInvoiceService.isUuid(inv.id) && inv.hasAttachment
                     }
@@ -544,6 +558,7 @@ function GrnPendingTabTable({
 
 function PurchaseInvoicesTabBody({
   invoices,
+  listReturnHref,
   totalRecords,
   search,
   setSearch,
@@ -575,6 +590,7 @@ function PurchaseInvoicesTabBody({
   onCancel,
 }: {
   invoices: PurchaseInvoiceListRow[];
+  listReturnHref: string;
   totalRecords: number;
   search: string;
   setSearch: (v: string) => void;
@@ -706,6 +722,7 @@ function PurchaseInvoicesTabBody({
     >
       <PurchaseInvoicesTabTable
         toolbarRows={invoices}
+        listReturnHref={listReturnHref}
         loading={loading}
         filterOptions={filterOptions}
         filterLoading={filterLoading}
@@ -795,7 +812,10 @@ function GrnPendingTabBody({
 
 export default function PurchaseInvoiceListClient() {
   const router = useRouter();
-  const [tab, setTab] = useState<Tab>("invoices");
+  const searchParams = useSearchParams();
+  const tab =
+    parsePurchaseInvoiceTabParam(searchParams.get("tab")) ?? "invoices";
+  const listReturnHref = purchaseInvoicesListHref(tab);
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedValue(search, 300);
   const [sourceTypeFilter, setSourceTypeFilter] = useState<SourceTypeFilter>("all");
@@ -1081,7 +1101,19 @@ export default function PurchaseInvoiceListClient() {
         return;
       }
       setError(null);
-      router.push(`/accounts/purchase-invoices/new?mode=grn&grnId=${grn.grn_id}`);
+      router.push(
+        withReturnTo(
+          `/accounts/purchase-invoices/new?mode=grn&grnId=${grn.grn_id}`,
+          purchaseInvoicesListHref("grn_pending"),
+        ),
+      );
+    },
+    [router],
+  );
+
+  const handleTabChange = useCallback(
+    (next: Tab) => {
+      router.push(purchaseInvoicesListHref(next), { scroll: false });
     },
     [router],
   );
@@ -1211,14 +1243,21 @@ export default function PurchaseInvoiceListClient() {
             tab={tab}
             invoiceCount={invoiceTotal}
             pendingCount={pendingGrnTotal}
-            onTabChange={setTab}
+            onTabChange={handleTabChange}
           />
         }
         actions={
           <Button
             size="sm"
             className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
-            onClick={() => router.push("/accounts/purchase-invoices/new?mode=direct")}
+            onClick={() =>
+              router.push(
+                withReturnTo(
+                  "/accounts/purchase-invoices/new?mode=direct",
+                  listReturnHref,
+                ),
+              )
+            }
           >
             <Plus className="w-3.5 h-3.5" />
             Direct Purchase
@@ -1248,6 +1287,7 @@ export default function PurchaseInvoiceListClient() {
                 />
                 <PurchaseInvoicesTabBody
                   invoices={invoices}
+                  listReturnHref={listReturnHref}
                   totalRecords={invoiceTotal}
                   search={search}
                   setSearch={setSearch}

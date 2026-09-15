@@ -1,13 +1,25 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, Check, CheckCircle2, ChevronsUpDown, Loader2, Plus, Search, Trash2 } from "lucide-react";
+import {
+  AlertTriangle,
+  Check,
+  CheckCircle2,
+  ChevronsUpDown,
+  Combine,
+  Loader2,
+  Plus,
+  Search,
+  Split,
+  Trash2,
+} from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { showToast } from "@/lib/toast";
 import { getErrorMessage } from "@/lib/masters/master-query-errors";
 import { masterKeys } from "@/lib/masters/master-query-keys";
@@ -26,6 +38,11 @@ import {
   type SplitMergeJobView,
   type SplitMergeSourceOption,
 } from "@/services/business-geography.service";
+import {
+  useBgLookupAreas,
+  useBgLookupRegions,
+  useBgLookupZones,
+} from "@/hooks/masters";
 import {
   SplitMergeResultCard,
   type RoleUserAssignment,
@@ -54,6 +71,13 @@ const LEVEL_CHILD_LABEL: Record<SplitMergeLevel, string> = {
   Territory: "Pincodes",
 };
 
+const LEVEL_CHILD_SINGULAR: Record<SplitMergeLevel, string> = {
+  Zone: "region",
+  Region: "area",
+  Area: "territory",
+  Territory: "pincode",
+};
+
 function newRowKey() {
   return `tgt-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
@@ -69,6 +93,19 @@ function scopeLabelForLevel(level: SplitMergeLevel): string {
     case "Territory":
       return "Select Source Territory";
   }
+}
+
+function pluralGeoLevel(level: SplitMergeLevel): string {
+  if (level === "Territory") return "Territories";
+  return `${level}s`;
+}
+
+function pluralCountLabel(count: number, singular: string, plural: string) {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
+function compareByName(a: string, b: string) {
+  return a.localeCompare(b, undefined, { sensitivity: "base", numeric: true });
 }
 
 function actionToApi(action: RoleUserAssignment["action"]): "KEEP" | "ASSIGN" | "UNASSIGN" {
@@ -108,6 +145,34 @@ function buildPreviews(params: {
     });
   };
 
+  const matchesAssignmentRole = (u: SplitMergeAssignableUser, role: string) => {
+    const norm = role.trim().toUpperCase();
+    const rName = (u.role_name || "").trim().toUpperCase();
+    const gLevel = (u.geography_level || "").trim().toUpperCase();
+    const targetLevel =
+      norm === "ZSM"
+        ? "ZONE"
+        : norm === "RSM"
+          ? "REGION"
+          : norm === "ASM"
+            ? "AREA"
+            : "TERRITORY";
+    return rName.includes(norm) || gLevel === targetLevel;
+  };
+
+  const findUserOnSource = (role: string) => {
+    if (!params.job?.source_id) return undefined;
+    const sourceId = params.job.source_id;
+    return params.assignableUsers.find((u) => {
+      if (!matchesAssignmentRole(u, role)) return false;
+      if (params.geoLevel === "Zone") return u.zone_id === sourceId;
+      if (params.geoLevel === "Region") return u.region_id === sourceId;
+      if (params.geoLevel === "Area") return u.area_id === sourceId;
+      if (params.geoLevel === "Territory") return u.territory_id === sourceId;
+      return false;
+    });
+  };
+
   const resolveUserName = (nodeKey: string, role: string): string | null => {
     if (isInheritedSplitMergeRole(params.geoLevel, role)) {
       return findInheritedUser(role)?.full_name ?? `Parent ${role}`;
@@ -119,21 +184,11 @@ function buildPreviews(params: {
         params.assignableUsers.find((u) => u.user_id === ua.userId)?.full_name ?? null
       );
     }
-    // If Keep Existing on source, find the existing user assigned to this geography
+    // Keep Existing on source: only the user actually mapped to this geography
     if (nodeKey === "source" && params.job) {
-      const sourceId = params.job.source_id;
-      const existing = params.assignableUsers.find((u) => {
-        if (params.geoLevel === "Zone") return u.zone_id === sourceId;
-        if (params.geoLevel === "Region") return u.region_id === sourceId;
-        if (params.geoLevel === "Area") return u.area_id === sourceId;
-        if (params.geoLevel === "Territory") return u.territory_id === sourceId;
-        return false;
-      });
-      if (existing) {
-        return existing.full_name;
-      }
+      return findUserOnSource(role)?.full_name ?? null;
     }
-    return nodeKey === "source" ? "Keep existing" : null;
+    return null;
   };
 
   const roleRows = (nodeKey: string) =>
@@ -153,6 +208,20 @@ function buildPreviews(params: {
     const warnings = usersByRole
       .filter((u) => u.status === "missing" && !isInheritedSplitMergeRole(params.geoLevel, u.role))
       .map((u) => `${u.role} not assigned on merge target`);
+    const childLabel = LEVEL_CHILD_LABEL[params.geoLevel];
+    const childCount = (params.job?.sources ?? []).reduce(
+      (sum, s) => sum + (s.children?.length ?? 0),
+      0,
+    );
+    const fallbackChildCount = params.job?.source.children?.length ?? 0;
+    const totalChildren = childCount > 0 ? childCount : fallbackChildCount;
+    const scopeLabels =
+      totalChildren > 0
+        ? [
+            `${totalChildren} ${childLabel.toLowerCase()} from ${params.mergeSourceNames.length} ${params.geoLevel.toLowerCase()}s`,
+            ...params.mergeSourceNames.map((n) => `← ${n}`),
+          ]
+        : [`All ${childLabel.toLowerCase()} from ${params.mergeSourceNames.length} sources`];
     return [
       {
         key: "merge_target",
@@ -160,7 +229,7 @@ function buildPreviews(params: {
         level: params.geoLevel,
         parentName: "—",
         isExisting: false,
-        assignedScopeLabels: [`All children from ${params.mergeSourceNames.length} sources`],
+        assignedScopeLabels: scopeLabels,
         pincodeCount: 0,
         customerCount: 0,
         customers: [],
@@ -240,7 +309,7 @@ function buildPreviews(params: {
     });
   }
 
-  // Enforce unique user assignments: duplicate check across all cards (including kept users on existing nodes)
+  // Enforce unique user assignments across cards (kept + explicitly assigned).
   const userAssignmentsByRole = new Map<string, { userId: string; userName: string; cardName: string }[]>();
   for (const card of cards) {
     const byRole = params.userAssignmentsByCard[card.key] ?? {};
@@ -255,17 +324,17 @@ function buildPreviews(params: {
         list.push({ userId: ua.userId, userName: name, cardName: card.name });
         userAssignmentsByRole.set(role, list);
       } else if (action === "keep" && card.isExisting && params.job) {
-        const sourceId = params.job.source_id;
-        const existing = params.assignableUsers.find((u) => {
-          if (params.geoLevel === "Zone") return u.zone_id === sourceId;
-          if (params.geoLevel === "Region") return u.region_id === sourceId;
-          if (params.geoLevel === "Area") return u.area_id === sourceId;
-          if (params.geoLevel === "Territory") return u.territory_id === sourceId;
-          return false;
-        });
+        const keptId = ua?.userId;
+        const existing = keptId
+          ? params.assignableUsers.find((u) => u.user_id === keptId)
+          : findUserOnSource(role);
         if (existing) {
           const list = userAssignmentsByRole.get(role) ?? [];
-          list.push({ userId: existing.user_id, userName: existing.full_name, cardName: card.name });
+          list.push({
+            userId: existing.user_id,
+            userName: existing.full_name,
+            cardName: card.name,
+          });
           userAssignmentsByRole.set(role, list);
         }
       }
@@ -300,6 +369,7 @@ function buildPreviews(params: {
 export function SplitMergeWizardTab() {
   const queryClient = useQueryClient();
   const [mode, setMode] = useState<WizardMode>("split");
+  const [wizardActive, setWizardActive] = useState(false);
   const [geoLevel, setGeoLevel] = useState<SplitMergeLevel>("Zone");
   const [sourceId, setSourceId] = useState<string | null>(null);
   const [sourceLabel, setSourceLabel] = useState("");
@@ -320,6 +390,10 @@ export function SplitMergeWizardTab() {
   const [sourcesLoading, setSourcesLoading] = useState(false);
   const [sourceSearch, setSourceSearch] = useState("");
   const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
+  /** Merge parent cascade filters */
+  const [filterZoneId, setFilterZoneId] = useState<string | null>(null);
+  const [filterRegionId, setFilterRegionId] = useState<string | null>(null);
+  const [filterAreaId, setFilterAreaId] = useState<string | null>(null);
   const [job, setJob] = useState<SplitMergeJobView | null>(null);
   const [jobLoading, setJobLoading] = useState(false);
   const [assignableUsers, setAssignableUsers] = useState<SplitMergeAssignableUser[]>([]);
@@ -328,6 +402,40 @@ export function SplitMergeWizardTab() {
 
   const createLock = useRef(false);
   const apiLevel = toSplitMergeApiLevel(geoLevel);
+
+  const needsMergeZone =
+    mode === "merge" && (geoLevel === "Region" || geoLevel === "Area" || geoLevel === "Territory");
+  const needsMergeRegion =
+    mode === "merge" && (geoLevel === "Area" || geoLevel === "Territory");
+  const needsMergeArea = mode === "merge" && geoLevel === "Territory";
+
+  const zonesQuery = useBgLookupZones(needsMergeZone);
+  const regionsQuery = useBgLookupRegions(filterZoneId, needsMergeRegion && Boolean(filterZoneId));
+  const areasQuery = useBgLookupAreas(filterRegionId, needsMergeArea && Boolean(filterRegionId));
+
+  const mergeParentId = useMemo(() => {
+    if (mode !== "merge") return undefined;
+    if (geoLevel === "Region") return filterZoneId ?? undefined;
+    if (geoLevel === "Area") return filterRegionId ?? undefined;
+    if (geoLevel === "Territory") return filterAreaId ?? undefined;
+    return undefined;
+  }, [mode, geoLevel, filterZoneId, filterRegionId, filterAreaId]);
+
+  const mergeParentsReady =
+    mode !== "merge" ||
+    geoLevel === "Zone" ||
+    (geoLevel === "Region" && Boolean(filterZoneId)) ||
+    (geoLevel === "Area" && Boolean(filterRegionId)) ||
+    (geoLevel === "Territory" && Boolean(filterAreaId));
+
+  const clearMergeSelection = useCallback(() => {
+    setMergeSourceIds([]);
+    setMergedName("");
+    setJob(null);
+    setPublished(false);
+    setAssignableUsers([]);
+    setUserAssignmentsByCard({});
+  }, []);
 
   const refreshSplitJob = useCallback(async () => {
     if (!sourceId || !effectiveDate) return;
@@ -359,10 +467,16 @@ export function SplitMergeWizardTab() {
   }, [sourceId, effectiveDate, apiLevel]);
 
   const loadSources = useCallback(async (search?: string) => {
+    if (mode === "merge" && !mergeParentsReady) {
+      setSources([]);
+      setSourcesLoading(false);
+      return;
+    }
     setSourcesLoading(true);
     try {
       const rows = await BusinessGeographyService.listSplitMergeSources({
         geography_level: apiLevel,
+        ...(mergeParentId ? { parent_id: mergeParentId } : {}),
         ...(search?.trim() ? { search: search.trim() } : {}),
       });
       setSources(rows.filter((r) => r.status));
@@ -372,7 +486,7 @@ export function SplitMergeWizardTab() {
     } finally {
       setSourcesLoading(false);
     }
-  }, [apiLevel]);
+  }, [apiLevel, mode, mergeParentId, mergeParentsReady]);
 
   useEffect(() => {
     const q = sourceSearch.trim();
@@ -392,6 +506,9 @@ export function SplitMergeWizardTab() {
     setMergeSourceIds([]);
     setSourceSearch("");
     setSourcePickerOpen(false);
+    setFilterZoneId(null);
+    setFilterRegionId(null);
+    setFilterAreaId(null);
     setNewGeoRows([]);
     setAllocations({});
     setMergedName("");
@@ -408,6 +525,23 @@ export function SplitMergeWizardTab() {
     if (patch.mode) setMode(patch.mode);
     if (patch.level) setGeoLevel(patch.level);
     resetWorkflow();
+  };
+
+  const handleModeTabChange = (next: string) => {
+    const nextMode = next as WizardMode;
+    if (nextMode === mode) return;
+    handleLevelOrModeChange({ mode: nextMode });
+    setWizardActive(false);
+  };
+
+  const startWizard = () => {
+    resetWorkflow();
+    setWizardActive(true);
+  };
+
+  const exitWizard = () => {
+    resetWorkflow();
+    setWizardActive(false);
   };
 
   /** Create / refresh draft when split source is chosen */
@@ -560,13 +694,77 @@ export function SplitMergeWizardTab() {
     };
   }, [job?.id, published]);
 
+  // Seed Keep Existing on source with the current mapped user id so new geos grey them out immediately
+  useEffect(() => {
+    if (!job?.source_id || assignableUsers.length === 0) return;
+    const sourceId = job.source_id;
+    const roles = (job.assignment_roles?.length
+      ? job.assignment_roles
+      : getRolesForSplitMergeLevel(geoLevel)
+    ).filter((r) => !isInheritedSplitMergeRole(geoLevel, r));
+
+    setUserAssignmentsByCard((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      const sourceRoles = { ...(next["source"] ?? {}) };
+
+      for (const role of roles) {
+        const current = sourceRoles[role];
+        const action = current?.action ?? "keep";
+        if (action !== "keep") continue;
+        if (current?.userId) continue;
+
+        const existing = assignableUsers.find((u) => {
+          const onSource =
+            (geoLevel === "Zone" && u.zone_id === sourceId) ||
+            (geoLevel === "Region" && u.region_id === sourceId) ||
+            (geoLevel === "Area" && u.area_id === sourceId) ||
+            (geoLevel === "Territory" && u.territory_id === sourceId);
+          if (!onSource) return false;
+          const norm = role.trim().toUpperCase();
+          const rName = (u.role_name || "").toUpperCase();
+          const gLevel = (u.geography_level || "").toUpperCase();
+          return (
+            rName.includes(norm) ||
+            gLevel ===
+              (norm === "ZSM"
+                ? "ZONE"
+                : norm === "RSM"
+                  ? "REGION"
+                  : norm === "ASM"
+                    ? "AREA"
+                    : "TERRITORY")
+          );
+        });
+        if (!existing) continue;
+        sourceRoles[role] = { action: "keep", userId: existing.user_id };
+        changed = true;
+      }
+
+      if (!changed) return prev;
+      next["source"] = sourceRoles;
+      return next;
+    });
+  }, [job?.source_id, job?.assignment_roles, assignableUsers, geoLevel]);
+
   const mergeSourceNames = useMemo(
     () =>
       mergeSourceIds
         .map((id) => sources.find((s) => s.id === id)?.name ?? "")
-        .filter(Boolean),
+        .filter(Boolean)
+        .sort(compareByName),
     [mergeSourceIds, sources],
   );
+
+  const sortedMergeSources = useMemo(() => {
+    const selected = new Set(mergeSourceIds);
+    return [...sources].sort((a, b) => {
+      const aSelected = selected.has(a.id) ? 0 : 1;
+      const bSelected = selected.has(b.id) ? 0 : 1;
+      if (aSelected !== bSelected) return aSelected - bSelected;
+      return compareByName(a.name, b.name);
+    });
+  }, [sources, mergeSourceIds]);
 
   const resultPreviews = useMemo(
     () =>
@@ -611,36 +809,57 @@ export function SplitMergeWizardTab() {
 
   const assignedUserIdsByRole = useMemo(() => {
     const map: Record<string, Record<string, string>> = {}; // [role -> [userId -> cardKey]]
+
+    // Explicit Assign / Keep (with stored user id) lock that user on other cards
     for (const [cardKey, byRole] of Object.entries(userAssignmentsByCard)) {
       for (const [role, ua] of Object.entries(byRole)) {
-        if (ua.action === "assign" && ua.userId) {
+        if ((ua.action === "assign" || ua.action === "keep") && ua.userId) {
           if (!map[role]) map[role] = {};
           map[role][ua.userId] = cardKey;
         }
       }
     }
 
-    // Also register the kept user on the source geography so other cards cannot pick them
+    // Default Keep Existing on source (no explicit row yet): lock current source user
     if (job?.source_id) {
       const sourceId = job.source_id;
-      const sourceKeepAction = userAssignmentsByCard["source"];
+      const sourceByRole = userAssignmentsByCard["source"] ?? {};
       const roles = (job?.assignment_roles?.length
         ? job.assignment_roles
         : getRolesForSplitMergeLevel(geoLevel)
       ).filter((r) => !isInheritedSplitMergeRole(geoLevel, r));
 
       for (const r of roles) {
-        const action = sourceKeepAction?.[r]?.action ?? "keep";
-        if (action === "keep") {
-          const existing = assignableUsers.find((u) => {
-            if (geoLevel === "Zone") return u.zone_id === sourceId;
-            if (geoLevel === "Region") return u.region_id === sourceId;
-            if (geoLevel === "Area") return u.area_id === sourceId;
-            if (geoLevel === "Territory") return u.territory_id === sourceId;
-            return false;
-          });
-          if (existing) {
-            if (!map[r]) map[r] = {};
+        const action = sourceByRole[r]?.action ?? "keep";
+        if (action !== "keep") continue;
+        // Already locked via stored userId above
+        if (sourceByRole[r]?.userId && map[r]?.[sourceByRole[r].userId]) continue;
+
+        const existing = assignableUsers.find((u) => {
+          const onSource =
+            (geoLevel === "Zone" && u.zone_id === sourceId) ||
+            (geoLevel === "Region" && u.region_id === sourceId) ||
+            (geoLevel === "Area" && u.area_id === sourceId) ||
+            (geoLevel === "Territory" && u.territory_id === sourceId);
+          if (!onSource) return false;
+          const norm = r.trim().toUpperCase();
+          const rName = (u.role_name || "").toUpperCase();
+          const gLevel = (u.geography_level || "").toUpperCase();
+          return (
+            rName.includes(norm) ||
+            gLevel ===
+              (norm === "ZSM"
+                ? "ZONE"
+                : norm === "RSM"
+                  ? "REGION"
+                  : norm === "ASM"
+                    ? "AREA"
+                    : "TERRITORY")
+          );
+        });
+        if (existing) {
+          if (!map[r]) map[r] = {};
+          if (!map[r][existing.user_id]) {
             map[r][existing.user_id] = "source";
           }
         }
@@ -648,7 +867,7 @@ export function SplitMergeWizardTab() {
     }
 
     return map;
-  }, [userAssignmentsByCard, job?.source_id, geoLevel, assignableUsers]);
+  }, [userAssignmentsByCard, job?.source_id, job?.assignment_roles, geoLevel, assignableUsers]);
 
   const unallocatedCount = useMemo(() => {
     if (mode === "merge" || !job) return 0;
@@ -776,9 +995,12 @@ export function SplitMergeWizardTab() {
       );
 
       current = await BusinessGeographyService.publishSplitMerge(current.id);
-      setJob(current);
-      setPublished(true);
-      showToast("Split/merge published successfully.", "success");
+      showToast(
+        mode === "split"
+          ? "Split published successfully."
+          : "Merge published successfully.",
+        "success",
+      );
       void loadSources();
       await Promise.all([
         queryClient.invalidateQueries({
@@ -788,6 +1010,7 @@ export function SplitMergeWizardTab() {
           queryKey: userManagementKeys.users.all(),
         }),
       ]);
+      exitWizard();
     } catch (error) {
       showToast(getErrorMessage(error, "Failed to publish split/merge."), "error");
     } finally {
@@ -847,6 +1070,49 @@ export function SplitMergeWizardTab() {
 
   const children = job?.source.children ?? [];
 
+  const mergeChildSummary = useMemo(() => {
+    const selectedIds = new Set(mergeSourceIds);
+    const sortChildren = <T extends { name: string; code?: string | null }>(rows: T[]) =>
+      [...rows].sort((a, b) => {
+        const byName = compareByName(a.name, b.name);
+        if (byName !== 0) return byName;
+        return compareByName(a.code ?? "", b.code ?? "");
+      });
+
+    let groups = (job?.sources ?? [])
+      .filter((src) => selectedIds.size === 0 || selectedIds.has(src.id))
+      .map((src) => ({
+        id: src.id,
+        name: src.name,
+        code: src.code ?? null,
+        children: sortChildren(src.children ?? []),
+      }))
+      .sort((a, b) => compareByName(a.name, b.name));
+
+    // Fallback: if sources lack children (older API), use primary source children once
+    if (
+      mode === "merge" &&
+      groups.length > 0 &&
+      groups.every((g) => g.children.length === 0) &&
+      (job?.source.children?.length ?? 0) > 0
+    ) {
+      groups = [
+        {
+          id: job!.source.id,
+          name: job!.source.name,
+          code: job!.source.code ?? null,
+          children: sortChildren(job!.source.children),
+        },
+      ];
+    }
+
+    const totalChildren = groups.reduce((sum, g) => sum + g.children.length, 0);
+    return { groups, totalChildren };
+  }, [job, mode, mergeSourceIds]);
+
+  const modeTabTriggerClass =
+    "rounded-none border-b-2 border-transparent px-4 pb-3 pt-2 text-xs font-semibold text-muted-foreground data-[state=active]:border-brand-600 data-[state=active]:text-brand-650 bg-transparent shadow-none";
+
   return (
     <div className="space-y-5">
       <div>
@@ -857,30 +1123,93 @@ export function SplitMergeWizardTab() {
         </p>
       </div>
 
-      <div className="rounded-xl border border-border bg-white p-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="space-y-1.5">
-            <Label className="text-xs font-semibold">1. Operation Type</Label>
-            <Select
-              value={mode}
-              onValueChange={(v) => handleLevelOrModeChange({ mode: v as WizardMode })}
-            >
-              <SelectTrigger className="h-9 text-sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="split" className="text-xs">
-                  Split
-                </SelectItem>
-                <SelectItem value="merge" className="text-xs">
-                  Merge
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+      <Tabs value={mode} onValueChange={handleModeTabChange} className="space-y-4">
+        <div className="overflow-x-auto -mx-1 px-1">
+          <TabsList className="border-b border-border w-max min-w-full justify-start rounded-none h-auto p-0 bg-transparent gap-0">
+            <TabsTrigger value="split" className={modeTabTriggerClass}>
+              <span className="inline-flex items-center gap-1.5">
+                <Split className="w-3.5 h-3.5" />
+                Split
+              </span>
+            </TabsTrigger>
+            <TabsTrigger value="merge" className={modeTabTriggerClass}>
+              <span className="inline-flex items-center gap-1.5">
+                <Combine className="w-3.5 h-3.5" />
+                Merge
+              </span>
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
+        <TabsContent value="split" className="m-0 mt-0 outline-none space-y-5">
+          {!wizardActive ? (
+            <SplitMergeLanding
+              mode="split"
+              onStart={startWizard}
+            />
+          ) : (
+            <>
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-xs text-muted-foreground">
+                  Splitting a geography into new child scopes.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 text-xs"
+                  onClick={exitWizard}
+                  disabled={publishing}
+                >
+                  Back to overview
+                </Button>
+              </div>
+              {renderWizardForm()}
+            </>
+          )}
+        </TabsContent>
+
+        <TabsContent value="merge" className="m-0 mt-0 outline-none space-y-5">
+          {!wizardActive ? (
+            <SplitMergeLanding
+              mode="merge"
+              onStart={startWizard}
+            />
+          ) : (
+            <>
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-xs text-muted-foreground">
+                  Merging multiple geographies into one target.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 text-xs"
+                  onClick={exitWizard}
+                  disabled={publishing}
+                >
+                  Back to overview
+                </Button>
+              </div>
+              {renderWizardForm()}
+            </>
+          )}
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+
+  function renderWizardForm() {
+    const mergeCascadeCount =
+      (needsMergeZone ? 1 : 0) + (needsMergeRegion ? 1 : 0) + (needsMergeArea ? 1 : 0);
+
+    return (
+      <>
+      <div className="rounded-xl border border-border bg-white p-4 space-y-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1.5">
-            <Label className="text-xs font-semibold">2. Geography Level</Label>
+            <Label className="text-xs font-semibold">1. Geography Level</Label>
             <Select
               value={geoLevel}
               onValueChange={(v) => handleLevelOrModeChange({ level: v as SplitMergeLevel })}
@@ -899,157 +1228,6 @@ export function SplitMergeWizardTab() {
           </div>
 
           <div className="space-y-1.5">
-            <Label className="text-xs font-semibold">
-              3. {mode === "split" ? scopeLabelForLevel(geoLevel) : `Select ${geoLevel}s to Merge`}
-            </Label>
-            {mode === "split" ? (
-              <Popover
-                open={sourcePickerOpen && !published}
-                onOpenChange={(open) => {
-                  setSourcePickerOpen(open);
-                  if (!open) setSourceSearch("");
-                }}
-              >
-                <PopoverTrigger asChild>
-                  <button
-                    type="button"
-                    disabled={published}
-                    className={cn(
-                      "w-full h-9 px-3 text-sm text-left border border-border rounded-md bg-background flex items-center justify-between gap-2 transition-colors",
-                      published
-                        ? "opacity-50 cursor-not-allowed"
-                        : "hover:bg-muted/30",
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        "truncate",
-                        sourceId ? "text-foreground" : "text-muted-foreground",
-                      )}
-                    >
-                      {sourceId
-                        ? sourceLabel || `Selected ${geoLevel.toLowerCase()}`
-                        : `Select source ${geoLevel.toLowerCase()}`}
-                    </span>
-                    <ChevronsUpDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                  </button>
-                </PopoverTrigger>
-                <PopoverContent
-                  align="start"
-                  className="w-[--radix-popover-trigger-width] p-0"
-                >
-                  <div className="border-b border-border p-2">
-                    <div className="relative">
-                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
-                      <Input
-                        className="h-8 text-xs pl-8 focus-visible:ring-0"
-                        value={sourceSearch}
-                        placeholder={`Search ${geoLevel.toLowerCase()}…`}
-                        onChange={(e) => setSourceSearch(e.target.value)}
-                        autoFocus
-                      />
-                    </div>
-                  </div>
-                  <div className="max-h-[220px] overflow-y-auto py-1">
-                    {sourcesLoading ? (
-                      <div className="px-2 py-3 text-xs text-center text-muted-foreground flex items-center justify-center gap-1.5">
-                        <Loader2 className="w-3 h-3 animate-spin" />
-                        Searching…
-                      </div>
-                    ) : sources.length === 0 ? (
-                      <div className="px-2 py-3 text-xs text-center text-muted-foreground">
-                        {sourceSearch.trim()
-                          ? "No matching sources"
-                          : `No active ${geoLevel.toLowerCase()}s`}
-                      </div>
-                    ) : (
-                      sources.map((o) => {
-                        const label = `${o.name}${o.code ? ` (${o.code})` : ""}`;
-                        const selected = o.id === sourceId;
-                        return (
-                          <button
-                            key={o.id}
-                            type="button"
-                            className={cn(
-                              "w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-left hover:bg-muted/60 transition-colors",
-                              selected && "bg-brand-50",
-                            )}
-                            onClick={() => {
-                              setSourceId(o.id);
-                              setSourceLabel(label);
-                              setSourceSearch("");
-                              setSourcePickerOpen(false);
-                              setPublished(false);
-                              setJob(null);
-                            }}
-                          >
-                            <span className="flex-1 truncate">{label}</span>
-                            {selected && (
-                              <Check className="w-3 h-3 text-brand-600 shrink-0" />
-                            )}
-                          </button>
-                        );
-                      })
-                    )}
-                  </div>
-                </PopoverContent>
-              </Popover>
-            ) : (
-              <div className="border border-border rounded-lg overflow-hidden">
-                <div className="border-b border-border bg-muted/20 p-2">
-                  <div className="relative">
-                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
-                    <Input
-                      className="h-8 text-xs pl-8 bg-white"
-                      value={sourceSearch}
-                      disabled={published}
-                      placeholder={`Search ${geoLevel.toLowerCase()}…`}
-                      onChange={(e) => setSourceSearch(e.target.value)}
-                    />
-                  </div>
-                </div>
-                <div className="p-2 max-h-[160px] overflow-y-auto space-y-1">
-                  {sourcesLoading ? (
-                    <p className="text-xs text-muted-foreground flex items-center gap-1.5">
-                      <Loader2 className="w-3 h-3 animate-spin" />
-                      Searching…
-                    </p>
-                  ) : sources.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">
-                      {sourceSearch.trim()
-                        ? `No ${geoLevel.toLowerCase()}s match “${sourceSearch.trim()}”.`
-                        : `No active ${geoLevel.toLowerCase()}s.`}
-                    </p>
-                  ) : (
-                    sources.map((o) => (
-                      <label
-                        key={o.id}
-                        className="flex items-center gap-2 text-xs cursor-pointer"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={mergeSourceIds.includes(o.id)}
-                          onChange={() => {
-                            setMergeSourceIds((prev) =>
-                              prev.includes(o.id)
-                                ? prev.filter((id) => id !== o.id)
-                                : [...prev, o.id],
-                            );
-                            setPublished(false);
-                            setJob(null);
-                          }}
-                        />
-                        {o.name}
-                        {o.code ? ` (${o.code})` : ""}
-                      </label>
-                    ))
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="space-y-1.5">
             <Label className="text-xs font-semibold">Effective Date</Label>
             <Input
               type="date"
@@ -1063,6 +1241,310 @@ export function SplitMergeWizardTab() {
             />
           </div>
         </div>
+
+        {mode === "split" ? (
+          <div className="space-y-1.5">
+            <Label className="text-xs font-semibold">2. {scopeLabelForLevel(geoLevel)}</Label>
+            <Popover
+              open={sourcePickerOpen && !published}
+              onOpenChange={(open) => {
+                setSourcePickerOpen(open);
+                if (!open) setSourceSearch("");
+              }}
+            >
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  disabled={published}
+                  className={cn(
+                    "w-full h-9 px-3 text-sm text-left border border-border rounded-md bg-background flex items-center justify-between gap-2 transition-colors",
+                    published
+                      ? "opacity-50 cursor-not-allowed"
+                      : "hover:bg-muted/30",
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "truncate",
+                      sourceId ? "text-foreground" : "text-muted-foreground",
+                    )}
+                  >
+                    {sourceId
+                      ? sourceLabel || `Selected ${geoLevel.toLowerCase()}`
+                      : `Select source ${geoLevel.toLowerCase()}`}
+                  </span>
+                  <ChevronsUpDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent
+                align="start"
+                className="w-[--radix-popover-trigger-width] p-0"
+              >
+                <div className="border-b border-border p-2">
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+                    <Input
+                      className="h-8 text-xs pl-8 focus-visible:ring-0"
+                      value={sourceSearch}
+                      placeholder={`Search ${geoLevel.toLowerCase()}…`}
+                      onChange={(e) => setSourceSearch(e.target.value)}
+                      autoFocus
+                    />
+                  </div>
+                </div>
+                <div className="max-h-[220px] overflow-y-auto py-1">
+                  {sourcesLoading ? (
+                    <div className="px-2 py-3 text-xs text-center text-muted-foreground flex items-center justify-center gap-1.5">
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      Searching…
+                    </div>
+                  ) : sources.length === 0 ? (
+                    <div className="px-2 py-3 text-xs text-center text-muted-foreground">
+                      {sourceSearch.trim()
+                        ? "No matching sources"
+                        : `No active ${geoLevel.toLowerCase()}s`}
+                    </div>
+                  ) : (
+                    sources.map((o) => {
+                      const label = `${o.name}${o.code ? ` (${o.code})` : ""}`;
+                      const selected = o.id === sourceId;
+                      return (
+                        <button
+                          key={o.id}
+                          type="button"
+                          className={cn(
+                            "w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-left hover:bg-muted/60 transition-colors",
+                            selected && "bg-brand-50",
+                          )}
+                          onClick={() => {
+                            setSourceId(o.id);
+                            setSourceLabel(label);
+                            setSourceSearch("");
+                            setSourcePickerOpen(false);
+                            setPublished(false);
+                            setJob(null);
+                          }}
+                        >
+                          <span className="flex-1 truncate">{label}</span>
+                          {selected && (
+                            <Check className="w-3 h-3 text-brand-600 shrink-0" />
+                          )}
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              </PopoverContent>
+            </Popover>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {mergeCascadeCount > 0 && (
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">
+                  2. Parent Path
+                  <span className="ml-1.5 font-normal text-muted-foreground">
+                    (narrow down to list {pluralGeoLevel(geoLevel).toLowerCase()})
+                  </span>
+                </Label>
+                <div
+                  className={cn(
+                    "grid gap-3",
+                    mergeCascadeCount === 1 && "grid-cols-1 sm:grid-cols-2",
+                    mergeCascadeCount === 2 && "grid-cols-1 sm:grid-cols-2",
+                    mergeCascadeCount >= 3 && "grid-cols-1 sm:grid-cols-3",
+                  )}
+                >
+                  {needsMergeZone && (
+                    <div className="space-y-1">
+                      <Label className="text-[11px] text-muted-foreground">Zone *</Label>
+                      <Select
+                        value={filterZoneId ?? ""}
+                        disabled={published}
+                        onValueChange={(v) => {
+                          setFilterZoneId(v || null);
+                          setFilterRegionId(null);
+                          setFilterAreaId(null);
+                          setSourceSearch("");
+                          clearMergeSelection();
+                        }}
+                      >
+                        <SelectTrigger className="h-9 text-sm">
+                          <SelectValue placeholder="Select zone" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(zonesQuery.data ?? []).map((z) => (
+                            <SelectItem key={z.id} value={z.id} className="text-xs">
+                              {z.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
+                  {needsMergeRegion && (
+                    <div className="space-y-1">
+                      <Label className="text-[11px] text-muted-foreground">Region *</Label>
+                      <Select
+                        value={filterRegionId ?? ""}
+                        disabled={published || !filterZoneId}
+                        onValueChange={(v) => {
+                          setFilterRegionId(v || null);
+                          setFilterAreaId(null);
+                          setSourceSearch("");
+                          clearMergeSelection();
+                        }}
+                      >
+                        <SelectTrigger className="h-9 text-sm">
+                          <SelectValue
+                            placeholder={
+                              filterZoneId ? "Select region" : "Select zone first"
+                            }
+                          />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(regionsQuery.data ?? []).map((r) => (
+                            <SelectItem key={r.id} value={r.id} className="text-xs">
+                              {r.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
+                  {needsMergeArea && (
+                    <div className="space-y-1">
+                      <Label className="text-[11px] text-muted-foreground">Area *</Label>
+                      <Select
+                        value={filterAreaId ?? ""}
+                        disabled={published || !filterRegionId}
+                        onValueChange={(v) => {
+                          setFilterAreaId(v || null);
+                          setSourceSearch("");
+                          clearMergeSelection();
+                        }}
+                      >
+                        <SelectTrigger className="h-9 text-sm">
+                          <SelectValue
+                            placeholder={
+                              filterRegionId ? "Select area" : "Select region first"
+                            }
+                          />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(areasQuery.data ?? []).map((a) => (
+                            <SelectItem key={a.id} value={a.id} className="text-xs">
+                              {a.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between gap-2">
+                <Label className="text-xs font-semibold">
+                  {mergeCascadeCount > 0 ? "3." : "2."} Select{" "}
+                  {pluralGeoLevel(geoLevel)} to Merge
+                </Label>
+                {mergeSourceIds.length > 0 && (
+                  <span className="text-[11px] text-muted-foreground">
+                    {mergeSourceIds.length} selected
+                  </span>
+                )}
+              </div>
+              <div className="border border-border rounded-lg overflow-hidden">
+                <div className="border-b border-border bg-muted/20 p-2">
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+                    <Input
+                      className="h-8 text-xs pl-8 bg-white"
+                      value={sourceSearch}
+                      disabled={published || !mergeParentsReady}
+                      placeholder={
+                        mergeParentsReady
+                          ? `Search ${pluralGeoLevel(geoLevel).toLowerCase()}…`
+                          : geoLevel === "Region"
+                            ? "Select a zone first"
+                            : geoLevel === "Area"
+                              ? "Select zone and region first"
+                              : geoLevel === "Territory"
+                                ? "Select zone, region and area first"
+                                : `Search ${pluralGeoLevel(geoLevel).toLowerCase()}…`
+                      }
+                      onChange={(e) => setSourceSearch(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div className="p-2 max-h-[200px] overflow-y-auto space-y-1">
+                  {!mergeParentsReady ? (
+                    <p className="text-xs text-muted-foreground py-2 px-1">
+                      {geoLevel === "Region"
+                        ? "Select a zone to list regions for merge."
+                        : geoLevel === "Area"
+                          ? "Select zone and region to list areas for merge."
+                          : "Select zone, region and area to list territories for merge."}
+                    </p>
+                  ) : sourcesLoading ? (
+                    <p className="text-xs text-muted-foreground flex items-center gap-1.5 py-2 px-1">
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      Searching…
+                    </p>
+                  ) : sources.length === 0 ? (
+                    <p className="text-xs text-muted-foreground py-2 px-1">
+                      {sourceSearch.trim()
+                        ? `No ${pluralGeoLevel(geoLevel).toLowerCase()} match “${sourceSearch.trim()}”.`
+                        : `No active ${pluralGeoLevel(geoLevel).toLowerCase()} under the selected parent.`}
+                    </p>
+                  ) : (
+                    sortedMergeSources.map((o) => (
+                      <label
+                        key={o.id}
+                        className={cn(
+                          "flex items-center gap-2 text-xs cursor-pointer rounded-md px-2 py-1.5 hover:bg-muted/40",
+                          mergeSourceIds.includes(o.id) && "bg-brand-50",
+                        )}
+                      >
+                        <input
+                          type="checkbox"
+                          className="accent-brand-600"
+                          checked={mergeSourceIds.includes(o.id)}
+                          disabled={published}
+                          onChange={() => {
+                            setMergeSourceIds((prev) =>
+                              prev.includes(o.id)
+                                ? prev.filter((id) => id !== o.id)
+                                : [...prev, o.id],
+                            );
+                            setPublished(false);
+                            setJob(null);
+                          }}
+                        />
+                        <span className="truncate">
+                          {o.name}
+                          {o.code ? (
+                            <span className="text-muted-foreground"> ({o.code})</span>
+                          ) : null}
+                        </span>
+                      </label>
+                    ))
+                  )}
+                </div>
+              </div>
+              {mergeSourceIds.length > 0 && mergeSourceIds.length < 2 && (
+                <p className="text-[11px] text-amber-700">
+                  Select at least 2 {pluralGeoLevel(geoLevel).toLowerCase()} to merge.
+                </p>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {published && (
@@ -1218,6 +1700,109 @@ export function SplitMergeWizardTab() {
             All {LEVEL_CHILD_LABEL[geoLevel].toLowerCase()} from selected geographies will move to
             the target. Old geographies become inactive — not deleted.
           </p>
+        </section>
+      )}
+
+      {mode === "merge" && mergeSourceIds.length >= 2 && (
+        <section className="rounded-xl border border-border bg-white p-4 space-y-3">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <h3 className="text-sm font-semibold">Merge Scope Summary</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Child data that will move into{" "}
+                {mergedName.trim() ? (
+                  <span className="font-medium text-foreground">{mergedName.trim()}</span>
+                ) : (
+                  "the target geography"
+                )}
+                .
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2 text-[11px]">
+              <span className="px-2 py-0.5 rounded-full border border-border bg-muted/30 text-muted-foreground">
+                {pluralCountLabel(
+                  mergeSourceNames.length || mergeSourceIds.length,
+                  geoLevel.toLowerCase(),
+                  pluralGeoLevel(geoLevel).toLowerCase(),
+                )}
+              </span>
+              <span className="px-2 py-0.5 rounded-full border border-border bg-muted/30 text-muted-foreground">
+                {pluralCountLabel(
+                  mergeChildSummary.totalChildren,
+                  LEVEL_CHILD_SINGULAR[geoLevel],
+                  LEVEL_CHILD_LABEL[geoLevel].toLowerCase(),
+                )}
+              </span>
+            </div>
+          </div>
+
+          {!job ? (
+            <p className="text-xs text-muted-foreground italic">
+              Enter a target name to load the child-data summary for the selected{" "}
+              {pluralGeoLevel(geoLevel).toLowerCase()}.
+            </p>
+          ) : mergeChildSummary.groups.length === 0 ? (
+            <p className="text-xs text-muted-foreground italic">
+              No {LEVEL_CHILD_LABEL[geoLevel].toLowerCase()} found under the selected{" "}
+              {pluralGeoLevel(geoLevel).toLowerCase()}.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              <div className="rounded-lg border border-border overflow-hidden">
+                <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 px-3 py-1.5 bg-muted/30 border-b border-border text-[10px] uppercase tracking-wide text-muted-foreground font-medium">
+                  <span>
+                    {geoLevel} / {LEVEL_CHILD_SINGULAR[geoLevel]}
+                  </span>
+                  <span>Code / Count</span>
+                </div>
+                <div className="divide-y divide-border/60 max-h-[280px] overflow-y-auto">
+                  {mergeChildSummary.groups.map((group) => (
+                    <div key={group.id}>
+                      <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 items-center px-3 py-2 bg-muted/15">
+                        <p className="text-xs font-semibold truncate">
+                          {group.name}
+                          {group.code ? (
+                            <span className="text-muted-foreground font-normal">
+                              {" "}
+                              ({group.code})
+                            </span>
+                          ) : null}
+                        </p>
+                        <span className="text-[10px] text-muted-foreground tabular-nums shrink-0">
+                          {pluralCountLabel(
+                            group.children.length,
+                            LEVEL_CHILD_SINGULAR[geoLevel],
+                            LEVEL_CHILD_LABEL[geoLevel].toLowerCase(),
+                          )}
+                        </span>
+                      </div>
+                      {group.children.length === 0 ? (
+                        <p className="px-3 py-1.5 pl-6 text-[11px] text-muted-foreground italic">
+                          No {LEVEL_CHILD_LABEL[geoLevel].toLowerCase()}
+                        </p>
+                      ) : (
+                        group.children.map((child) => (
+                          <div
+                            key={child.id}
+                            className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 items-center px-3 py-1.5 pl-6 text-xs hover:bg-muted/20"
+                          >
+                            <span className="truncate text-foreground/90">{child.name}</span>
+                            <span className="text-muted-foreground tabular-nums shrink-0 text-[11px]">
+                              {child.code || "—"}
+                            </span>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                On publish, these {LEVEL_CHILD_LABEL[geoLevel].toLowerCase()} move to the target
+                and the selected {pluralGeoLevel(geoLevel).toLowerCase()} become inactive.
+              </p>
+            </div>
+          )}
         </section>
       )}
 
@@ -1460,6 +2045,43 @@ export function SplitMergeWizardTab() {
           }}
         />
       )}
+      </>
+    );
+  }
+}
+
+function SplitMergeLanding({
+  mode,
+  onStart,
+}: {
+  mode: WizardMode;
+  onStart: () => void;
+}) {
+  const isSplit = mode === "split";
+
+  return (
+    <div className="rounded-xl border border-border bg-white min-h-[280px] flex flex-col items-center justify-center gap-3 p-8 text-center">
+      <p className="text-sm text-muted-foreground">
+        {isSplit ? "Split a geography into new scopes." : "Merge sibling geographies into one."}
+      </p>
+      <Button
+        type="button"
+        size="sm"
+        className="h-9 text-xs bg-brand-600 hover:bg-brand-700 text-white gap-1.5"
+        onClick={onStart}
+      >
+        {isSplit ? (
+          <>
+            <Split className="w-3.5 h-3.5" />
+            Start Split
+          </>
+        ) : (
+          <>
+            <Combine className="w-3.5 h-3.5" />
+            Start Merge
+          </>
+        )}
+      </Button>
     </div>
   );
 }

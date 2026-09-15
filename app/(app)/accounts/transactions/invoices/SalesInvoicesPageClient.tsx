@@ -2,7 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useClientMounted } from "@/lib/use-client-mounted";
+import {
+  invoicesListHref,
+  parseSalesInvoiceTabParam,
+  withReturnTo,
+} from "@/app/(app)/accounts/invoices/invoice-utils";
 import { Ban, Download, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
@@ -406,6 +412,7 @@ function StatutoryStatusCells({ row }: { row: SalesInvoiceListRow }) {
 
 function SalesInvoicesListing({
   tab,
+  listReturnHref,
   mounted,
   toolbarRows,
   page,
@@ -420,6 +427,7 @@ function SalesInvoicesListing({
   onPrint,
 }: {
   tab: SalesInvoiceTabId;
+  listReturnHref: string;
   mounted: boolean;
   toolbarRows: SalesInvoiceListRow[];
   page: number;
@@ -451,6 +459,7 @@ function SalesInvoicesListing({
     >
       <SalesInvoicesTable
         tab={tab}
+        listReturnHref={listReturnHref}
         mounted={mounted}
         toolbarRows={toolbarRows}
         page={page}
@@ -469,15 +478,21 @@ function SalesInvoicesListing({
 
 function RowActions({
   row,
+  listReturnHref,
   onCancel,
   onPrint,
 }: {
   row: SalesInvoiceListRow;
+  listReturnHref: string;
   onCancel: (row: SalesInvoiceListRow) => void;
   onPrint: (row: SalesInvoiceListRow) => void;
 }) {
   const invoiceId = String(row.salesInvoiceId || row.invoiceId);
   const showOfficialDownloads = row.canDownloadPi;
+  const viewHref = withReturnTo(row.viewHref, listReturnHref);
+  const editHref = row.editHref
+    ? withReturnTo(row.editHref, listReturnHref)
+    : null;
 
   const handleOfficialError = (error: unknown, fallback: string) => {
     const err = error as { response?: { data?: { message?: string } }; message?: string };
@@ -486,7 +501,7 @@ function RowActions({
 
   return (
     <AccountsTableActionCell variant="multi">
-      <AccountsViewAction href={row.viewHref} title="View Invoice" />
+      <AccountsViewAction href={viewHref} title="View Invoice" />
       {showOfficialDownloads ? (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -536,8 +551,8 @@ function RowActions({
           <Download className={ACCOUNTS_ACTION_ICON_CLASS} />
         </button>
       ) : null}
-      {row.canEdit && row.editHref ? (
-        <AccountsEditAction href={row.editHref} title="Edit Invoice" />
+      {row.canEdit && editHref ? (
+        <AccountsEditAction href={editHref} title="Edit Invoice" />
       ) : null}
       {row.canCancel ? (
         <button
@@ -593,6 +608,7 @@ function PartyCell({ row }: { row: SalesInvoiceListRow }) {
 
 function SalesInvoicesTable({
   tab,
+  listReturnHref,
   mounted,
   toolbarRows,
   page,
@@ -606,6 +622,7 @@ function SalesInvoicesTable({
   onPrint,
 }: {
   tab: SalesInvoiceTabId;
+  listReturnHref: string;
   mounted: boolean;
   toolbarRows: SalesInvoiceListRow[];
   page: number;
@@ -690,7 +707,7 @@ function SalesInvoicesTable({
                       : "text-brand-700",
                   )}
                 >
-                  <Link href={r.viewHref} className="hover:underline">
+                  <Link href={withReturnTo(r.viewHref, listReturnHref)} className="hover:underline">
                     {r.invoiceNo}
                   </Link>
                 </AccountsTableCell>
@@ -714,7 +731,12 @@ function SalesInvoicesTable({
                 </AccountsTableCell>
                 <StatutoryStatusCells row={r} />
                 <AccountsTableCell align="right" actions>
-                  <RowActions row={r} onCancel={onCancel} onPrint={onPrint} />
+                  <RowActions
+                    row={r}
+                    listReturnHref={listReturnHref}
+                    onCancel={onCancel}
+                    onPrint={onPrint}
+                  />
                 </AccountsTableCell>
               </AccountsTableRow>
             ))}
@@ -762,7 +784,7 @@ function SalesInvoicesTable({
                       : "text-brand-700",
                   )}
                 >
-                  <Link href={r.viewHref} className="hover:underline">
+                  <Link href={withReturnTo(r.viewHref, listReturnHref)} className="hover:underline">
                     {r.invoiceNo}
                   </Link>
                 </AccountsTableCell>
@@ -781,7 +803,12 @@ function SalesInvoicesTable({
                 </AccountsTableCell>
                 <StatutoryStatusCells row={r} />
                 <AccountsTableCell align="right" actions>
-                  <RowActions row={r} onCancel={onCancel} onPrint={onPrint} />
+                  <RowActions
+                    row={r}
+                    listReturnHref={listReturnHref}
+                    onCancel={onCancel}
+                    onPrint={onPrint}
+                  />
                 </AccountsTableCell>
               </AccountsTableRow>
             ))}
@@ -830,7 +857,7 @@ function SalesInvoicesTable({
                     : "text-brand-700",
                 )}
               >
-                <Link href={r.viewHref} className="hover:underline">
+                <Link href={withReturnTo(r.viewHref, listReturnHref)} className="hover:underline">
                   {r.invoiceNo}
                 </Link>
               </AccountsTableCell>
@@ -855,7 +882,12 @@ function SalesInvoicesTable({
               </AccountsTableCell>
               <StatutoryStatusCells row={r} />
               <AccountsTableCell align="right" actions>
-                <RowActions row={r} onCancel={onCancel} onPrint={onPrint} />
+                <RowActions
+                  row={r}
+                  listReturnHref={listReturnHref}
+                  onCancel={onCancel}
+                  onPrint={onPrint}
+                />
               </AccountsTableCell>
             </AccountsTableRow>
           ))}
@@ -866,7 +898,11 @@ function SalesInvoicesTable({
 
 export default function SalesInvoicesPageClient() {
   const mounted = useClientMounted();
-  const [activeTab, setActiveTab] = useState<SalesInvoiceTabId>("all");
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const activeTab =
+    parseSalesInvoiceTabParam(searchParams.get("tab")) ?? "all";
+  const listReturnHref = invoicesListHref(activeTab);
   const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } =
     useReportDateRange("this_year");
   const [financialYearId, setFinancialYearId] = useState("all");
@@ -990,7 +1026,7 @@ export default function SalesInvoicesPageClient() {
   }, [mounted]);
 
   const handleTabChange = (tab: SalesInvoiceTabId) => {
-    setActiveTab(tab);
+    router.push(invoicesListHref(tab), { scroll: false });
     // Fetch lazily — only if this tab hasn't been loaded yet.
     if (!tabState[tab].loaded && !tabState[tab].loading) {
       void fetchTab(tab);
@@ -1245,7 +1281,12 @@ export default function SalesInvoicesPageClient() {
                     size="sm"
                     className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
                   >
-                    <Link href="/accounts/transactions/invoices/new-service">
+                    <Link
+                      href={withReturnTo(
+                        "/accounts/transactions/invoices/new-service",
+                        listReturnHref,
+                      )}
+                    >
                       <Plus className="w-3.5 h-3.5" />
                       Create Service Invoice
                     </Link>
@@ -1290,6 +1331,7 @@ export default function SalesInvoicesPageClient() {
         >
           <SalesInvoicesListing
             tab={activeTab}
+            listReturnHref={listReturnHref}
             mounted={mounted}
             toolbarRows={toolbarRows}
             page={active.page}

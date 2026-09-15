@@ -5,8 +5,8 @@
  * Same workspace chrome as Create/Edit so the header never overlays the document.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Download } from "lucide-react";
 import { AccountsFormLayout } from "../expenses/components/AccountsFormLayout";
@@ -25,7 +25,12 @@ import { AccountsToast, useAccountsToast } from "@/components/accounts/AccountsT
 import { CreditNoteCancelDialog } from "./components/CreditNoteCancelDialog";
 import { CreditNoteReverseDialog } from "./components/CreditNoteReverseDialog";
 import { CreditNoteAmountSummary } from "./components/CreditNoteAmountSummary";
-import { CREDIT_NOTES_BREADCRUMB, CREDIT_NOTES_LIST_PATH } from "./note-utils";
+import {
+  CREDIT_NOTES_BREADCRUMB,
+  CREDIT_NOTES_LIST_PATH,
+  creditNoteReturnPath,
+  withReturnTo,
+} from "./note-utils";
 import {
   CreditNoteListApi,
   creditNoteListApiError,
@@ -115,6 +120,11 @@ function mapLines(record: CreditNoteDetailApi): ViewLine[] {
 
 export default function CreditNoteViewPageClient({ creditNoteId }: { creditNoteId: string }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const listHref = useMemo(
+    () => creditNoteReturnPath(searchParams.get("returnTo")),
+    [searchParams],
+  );
   const { toast, showToast, dismissToast } = useAccountsToast();
   const reverseBusyRef = useRef(false);
   const [record, setRecord] = useState<CreditNoteDetailApi | null>(null);
@@ -163,7 +173,7 @@ export default function CreditNoteViewPageClient({ creditNoteId }: { creditNoteI
               variant="outline"
               size="sm"
               className="h-8 text-xs"
-              onClick={() => router.push(CREDIT_NOTES_LIST_PATH)}
+              onClick={() => router.push(listHref)}
             >
               Back
             </Button>
@@ -189,7 +199,7 @@ export default function CreditNoteViewPageClient({ creditNoteId }: { creditNoteI
               variant="outline"
               size="sm"
               className="h-8 text-xs"
-              onClick={() => router.push(CREDIT_NOTES_LIST_PATH)}
+              onClick={() => router.push(listHref)}
             >
               Back to Credit Notes
             </Button>
@@ -251,7 +261,7 @@ export default function CreditNoteViewPageClient({ creditNoteId }: { creditNoteI
                 variant="outline"
                 size="sm"
                 className="h-8 text-xs"
-                onClick={() => router.push(CREDIT_NOTES_LIST_PATH)}
+                onClick={() => router.push(listHref)}
               >
                 Back
               </Button>
@@ -283,7 +293,12 @@ export default function CreditNoteViewPageClient({ creditNoteId }: { creditNoteI
                     size="sm"
                     className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white"
                     onClick={() =>
-                      router.push(`${CREDIT_NOTES_LIST_PATH}/${record.credit_note_id}/edit`)
+                      router.push(
+                        withReturnTo(
+                          `${CREDIT_NOTES_LIST_PATH}/${record.credit_note_id}/edit`,
+                          listHref,
+                        ),
+                      )
                     }
                   >
                     Edit

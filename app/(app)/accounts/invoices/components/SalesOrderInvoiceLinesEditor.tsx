@@ -101,7 +101,7 @@ const SalesOrderInvoiceLineRow = memo(function SalesOrderInvoiceLineRow({
           {line.batchNo?.trim() || "—"}
         </p>
       </td>
-      <td className={cn("px-2 py-1.5 align-middle so-cell-num text-muted-foreground", COL.hsn)}>
+      <td className={cn("px-2 py-1.5 align-middle text-left text-muted-foreground", COL.hsn)}>
         {line.hsn || "—"}
       </td>
       <td className={cn("px-2 py-1.5 align-middle so-cell-num text-muted-foreground", COL.qtyCase)}>

@@ -10,6 +10,7 @@ import {
   useBgLookupLocations,
   useBgLookupPincodes,
   useBgLookupStates,
+  useBusinessGeographyTree,
 } from "@/hooks/masters";
 
 interface CheckOption {
@@ -66,6 +67,16 @@ function MultiCheckList({
     [filteredOptions],
   );
 
+  const optionValues = useMemo(
+    () => new Set(options.map((o) => o.value)),
+    [options],
+  );
+
+  const selectedInListCount = useMemo(
+    () => selected.filter((v) => optionValues.has(v)).length,
+    [selected, optionValues],
+  );
+
   const isAllFilteredSelected =
     enabledFilteredOptions.length > 0 &&
     enabledFilteredOptions.every((opt) => selected.includes(opt.value));
@@ -90,6 +101,10 @@ function MultiCheckList({
     }
   };
 
+  const clearListSelection = () => {
+    onChange(selected.filter((v) => !optionValues.has(v)));
+  };
+
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between gap-2">
@@ -104,15 +119,15 @@ function MultiCheckList({
             >
               {isAllFilteredSelected ? "Deselect All" : "Select All"}
             </button>
-            {selected.length > 0 && (
+            {selectedInListCount > 0 && (
               <>
                 <span className="text-muted-foreground/50">|</span>
                 <button
                   type="button"
                   className="text-muted-foreground hover:text-foreground hover:underline"
-                  onClick={() => onChange([])}
+                  onClick={clearListSelection}
                 >
-                  Clear ({selected.length})
+                  Clear ({selectedInListCount})
                 </button>
               </>
             )}
@@ -247,26 +262,156 @@ export function AreaDistrictSelector({
   error?: string;
 }) {
   const districtsQuery = useBgLookupDistricts(regionId);
-  const options =
-    districtsQuery.data?.map((d) => ({
-      value: d.id,
-      label: d.label,
-    })) ?? [];
+  const statesQuery = useBgLookupStates();
+  const treeQuery = useBusinessGeographyTree();
+
+  const regionStateIds = useMemo(() => {
+    if (!regionId) return [] as string[];
+    const region = (treeQuery.data ?? []).find(
+      (item) => item.id === regionId && item.level === "Region",
+    );
+    return region?.stateIds ?? [];
+  }, [regionId, treeQuery.data]);
+
+  const districtSections = useMemo(() => {
+    const stateNameById = new Map(
+      (statesQuery.data ?? []).map((s) => [s.id, s.label] as const),
+    );
+    const byState = new Map<string, CheckOption[]>();
+    const ungrouped: CheckOption[] = [];
+
+    for (const district of districtsQuery.data ?? []) {
+      const option = { value: district.id, label: district.label };
+      const stateId = district.parentId?.trim() || "";
+      if (!stateId) {
+        ungrouped.push(option);
+        continue;
+      }
+      if (!byState.has(stateId)) byState.set(stateId, []);
+      byState.get(stateId)!.push(option);
+    }
+
+    // API returned districts but without state ids — keep a single usable list
+    if (byState.size === 0 && ungrouped.length > 0) {
+      return [
+        {
+          stateId: "__all__",
+          stateLabel: "All",
+          label: "Select District(s) *",
+          options: ungrouped,
+        },
+      ];
+    }
+
+    const nameOf = (stateId: string) =>
+      stateNameById.get(stateId) ?? "State";
+
+    const orderedStateIds: string[] = [];
+    const seen = new Set<string>();
+
+    // Prefer parent-region state order, then any extra states present in district data
+    for (const stateId of regionStateIds) {
+      if (!stateId || seen.has(stateId)) continue;
+      seen.add(stateId);
+      orderedStateIds.push(stateId);
+    }
+    for (const stateId of Array.from(byState.keys()).sort((a, b) =>
+      nameOf(a).localeCompare(nameOf(b)),
+    )) {
+      if (seen.has(stateId)) continue;
+      seen.add(stateId);
+      orderedStateIds.push(stateId);
+    }
+
+    const sections = orderedStateIds.map((stateId) => {
+      const stateLabel = nameOf(stateId);
+      return {
+        stateId,
+        stateLabel,
+        label: `Select District(s) * — ${stateLabel}`,
+        options: byState.get(stateId) ?? [],
+      };
+    });
+
+    if (ungrouped.length > 0) {
+      sections.push({
+        stateId: "__other__",
+        stateLabel: "Other",
+        label: "Select District(s) * — Other",
+        options: ungrouped,
+      });
+    }
+
+    return sections;
+  }, [districtsQuery.data, regionStateIds, statesQuery.data]);
+
+  const initialLoading =
+    Boolean(regionId) &&
+    ((districtsQuery.isLoading && !districtsQuery.data) ||
+      (statesQuery.isLoading && !statesQuery.data) ||
+      (treeQuery.isLoading && !treeQuery.data));
+
+  if (!regionId) {
+    return (
+      <MultiCheckList
+        label="Select District(s) *"
+        options={[]}
+        selected={selectedIds}
+        onChange={onChange}
+        error={error}
+        loading={false}
+        emptyMessage="Select a parent Region first."
+      />
+    );
+  }
+
+  if (initialLoading && districtSections.length === 0) {
+    return (
+      <MultiCheckList
+        label="Select District(s) *"
+        options={[]}
+        selected={selectedIds}
+        onChange={onChange}
+        error={error}
+        loading
+        emptyMessage="No districts available for this region."
+      />
+    );
+  }
+
+  if (!initialLoading && districtSections.length === 0) {
+    return (
+      <MultiCheckList
+        label="Select District(s) *"
+        options={[]}
+        selected={selectedIds}
+        onChange={onChange}
+        error={error}
+        loading={false}
+        emptyMessage={
+          districtsQuery.isError
+            ? "Failed to load districts. Try again."
+            : "No states mapped to this region."
+        }
+      />
+    );
+  }
 
   return (
-    <MultiCheckList
-      label="Select District(s) *"
-      options={options}
-      selected={selectedIds}
-      onChange={onChange}
-      error={error}
-      loading={Boolean(regionId) && districtsQuery.isLoading}
-      emptyMessage={
-        regionId == null
-          ? "Select a parent Region first."
-          : "No districts available for this region."
-      }
-    />
+    <div className="space-y-4">
+      {districtSections.map((section) => (
+        <MultiCheckList
+          key={section.stateId}
+          label={section.label}
+          options={section.options}
+          selected={selectedIds}
+          onChange={onChange}
+          loading={initialLoading && section.options.length === 0}
+          emptyMessage={`No districts available for ${section.stateLabel}.`}
+        />
+      ))}
+      {error && <p className="text-[11px] text-red-600">{error}</p>}
+    </div>
   );
 }
 
@@ -287,61 +432,287 @@ export function TerritoryCoverageSelector({
   onChangePincodes: (ids: string[]) => void;
   errors?: { locations?: string; pincodes?: string };
 }) {
+  const treeQuery = useBusinessGeographyTree();
   const locationsQuery = useBgLookupLocations(areaId);
   const pincodesQuery = useBgLookupPincodes(
     selectedLocationIds,
     territoryId ?? undefined,
   );
 
-  const locationOptions =
-    locationsQuery.data?.map((loc) => ({
-      value: loc.id,
-      label: loc.extra ? `${loc.label} (${loc.extra})` : loc.label,
-    })) ?? [];
+  const parentArea = useMemo(() => {
+    if (!areaId) return null;
+    return (
+      (treeQuery.data ?? []).find(
+        (item) => item.id === areaId && item.level === "Area",
+      ) ?? null
+    );
+  }, [areaId, treeQuery.data]);
 
-  const pincodeOptions =
-    pincodesQuery.data?.map((pin) => {
-      const isAssignedToOther = Boolean(pin.assignedGeography);
+  const areaDistrictIds = parentArea?.districtIds ?? [];
+  const districtsQuery = useBgLookupDistricts(parentArea?.regionId ?? null);
+
+  const locationSections = useMemo(() => {
+    const districtNameById = new Map(
+      (districtsQuery.data ?? []).map((d) => [d.id, d.label] as const),
+    );
+    const byDistrict = new Map<string, CheckOption[]>();
+    const ungrouped: CheckOption[] = [];
+
+    for (const loc of locationsQuery.data ?? []) {
+      const option = {
+        value: loc.id,
+        label: loc.extra ? `${loc.label} (${loc.extra})` : loc.label,
+      };
+      const districtId = loc.parentId?.trim() || "";
+      if (!districtId) {
+        ungrouped.push(option);
+        continue;
+      }
+      if (!byDistrict.has(districtId)) byDistrict.set(districtId, []);
+      byDistrict.get(districtId)!.push(option);
+    }
+
+    if (byDistrict.size === 0 && ungrouped.length > 0) {
+      return [
+        {
+          groupId: "__all__",
+          groupLabel: "All",
+          label: "Select Location(s) *",
+          options: ungrouped,
+        },
+      ];
+    }
+
+    const nameOf = (districtId: string) =>
+      districtNameById.get(districtId) ?? "District";
+
+    const orderedDistrictIds: string[] = [];
+    const seen = new Set<string>();
+
+    for (const districtId of areaDistrictIds) {
+      if (!districtId || seen.has(districtId)) continue;
+      seen.add(districtId);
+      orderedDistrictIds.push(districtId);
+    }
+    for (const districtId of Array.from(byDistrict.keys()).sort((a, b) =>
+      nameOf(a).localeCompare(nameOf(b)),
+    )) {
+      if (seen.has(districtId)) continue;
+      seen.add(districtId);
+      orderedDistrictIds.push(districtId);
+    }
+
+    const sections = orderedDistrictIds.map((districtId) => {
+      const groupLabel = nameOf(districtId);
       return {
+        groupId: districtId,
+        groupLabel,
+        label: `Select Location(s) * — ${groupLabel}`,
+        options: byDistrict.get(districtId) ?? [],
+      };
+    });
+
+    if (ungrouped.length > 0) {
+      sections.push({
+        groupId: "__other__",
+        groupLabel: "Other",
+        label: "Select Location(s) * — Other",
+        options: ungrouped,
+      });
+    }
+
+    return sections;
+  }, [areaDistrictIds, districtsQuery.data, locationsQuery.data]);
+
+  const locationLabelById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const loc of locationsQuery.data ?? []) {
+      map.set(
+        loc.id,
+        loc.extra ? `${loc.label} (${loc.extra})` : loc.label,
+      );
+    }
+    return map;
+  }, [locationsQuery.data]);
+
+  const pincodeSections = useMemo(() => {
+    if (selectedLocationIds.length === 0) return [];
+
+    const byLocation = new Map<string, CheckOption[]>();
+    const ungrouped: CheckOption[] = [];
+
+    for (const pin of pincodesQuery.data ?? []) {
+      const option: CheckOption = {
         value: pin.id,
         label: pin.label,
-        disabled: isAssignedToOther,
+        disabled: Boolean(pin.assignedGeography),
         assignedBadge: pin.assignedGeography?.name,
       };
-    }) ?? [];
+      const locationId = pin.parentId?.trim() || "";
+      if (!locationId) {
+        ungrouped.push(option);
+        continue;
+      }
+      if (!byLocation.has(locationId)) byLocation.set(locationId, []);
+      byLocation.get(locationId)!.push(option);
+    }
+
+    if (byLocation.size === 0 && ungrouped.length > 0) {
+      return [
+        {
+          groupId: "__all__",
+          groupLabel: "All",
+          label: "Select Pincode(s) *",
+          options: ungrouped,
+        },
+      ];
+    }
+
+    const sections = selectedLocationIds.map((locationId) => {
+      const groupLabel = locationLabelById.get(locationId) ?? "Location";
+      return {
+        groupId: locationId,
+        groupLabel,
+        label: `Select Pincode(s) * — ${groupLabel}`,
+        options: byLocation.get(locationId) ?? [],
+      };
+    });
+
+    if (ungrouped.length > 0) {
+      sections.push({
+        groupId: "__other__",
+        groupLabel: "Other",
+        label: "Select Pincode(s) * — Other",
+        options: ungrouped,
+      });
+    }
+
+    return sections;
+  }, [locationLabelById, pincodesQuery.data, selectedLocationIds]);
+
+  const locationsLoading =
+    Boolean(areaId) &&
+    ((locationsQuery.isLoading && !locationsQuery.data) ||
+      (districtsQuery.isLoading && !districtsQuery.data && Boolean(parentArea?.regionId)) ||
+      (treeQuery.isLoading && !treeQuery.data));
+
+  const pincodesLoading =
+    selectedLocationIds.length > 0 &&
+    pincodesQuery.isLoading &&
+    !pincodesQuery.data;
+
+  const handleLocationsChange = (next: string[]) => {
+    onChangeLocations(next);
+    onChangePincodes([]);
+  };
 
   return (
-    <div className="space-y-3">
-      <MultiCheckList
-        label="Select Location(s) *"
-        options={locationOptions}
-        selected={selectedLocationIds}
-        onChange={(next) => {
-          onChangeLocations(next);
-          onChangePincodes([]);
-        }}
-        error={errors?.locations}
-        loading={Boolean(areaId) && locationsQuery.isLoading}
-        emptyMessage={
-          areaId == null
-            ? "Select a parent Area first."
-            : "No locations available for this area."
-        }
-      />
+    <div className="space-y-4">
+      {!areaId ? (
+        <MultiCheckList
+          label="Select Location(s) *"
+          options={[]}
+          selected={selectedLocationIds}
+          onChange={handleLocationsChange}
+          error={errors?.locations}
+          loading={false}
+          emptyMessage="Select a parent Area first."
+        />
+      ) : locationsLoading && locationSections.length === 0 ? (
+        <MultiCheckList
+          label="Select Location(s) *"
+          options={[]}
+          selected={selectedLocationIds}
+          onChange={handleLocationsChange}
+          error={errors?.locations}
+          loading
+          emptyMessage="No locations available for this area."
+        />
+      ) : locationSections.length === 0 ? (
+        <MultiCheckList
+          label="Select Location(s) *"
+          options={[]}
+          selected={selectedLocationIds}
+          onChange={handleLocationsChange}
+          error={errors?.locations}
+          loading={false}
+          emptyMessage={
+            locationsQuery.isError
+              ? "Failed to load locations. Try again."
+              : "No locations available for this area."
+          }
+        />
+      ) : (
+        <div className="space-y-4">
+          {locationSections.map((section) => (
+            <MultiCheckList
+              key={section.groupId}
+              label={section.label}
+              options={section.options}
+              selected={selectedLocationIds}
+              onChange={handleLocationsChange}
+              loading={locationsLoading && section.options.length === 0}
+              emptyMessage={`No locations available for ${section.groupLabel}.`}
+            />
+          ))}
+          {errors?.locations && (
+            <p className="text-[11px] text-red-600">{errors.locations}</p>
+          )}
+        </div>
+      )}
 
-      <MultiCheckList
-        label="Select Pincode(s) *"
-        options={pincodeOptions}
-        selected={selectedPincodeIds}
-        onChange={onChangePincodes}
-        error={errors?.pincodes}
-        loading={selectedLocationIds.length > 0 && pincodesQuery.isLoading}
-        emptyMessage={
-          selectedLocationIds.length === 0
-            ? "Select at least one location to view pincodes."
-            : "No pincodes found for the selected locations."
-        }
-      />
+      {selectedLocationIds.length === 0 ? (
+        <MultiCheckList
+          label="Select Pincode(s) *"
+          options={[]}
+          selected={selectedPincodeIds}
+          onChange={onChangePincodes}
+          error={errors?.pincodes}
+          loading={false}
+          emptyMessage="Select at least one location to view pincodes."
+        />
+      ) : pincodesLoading && pincodeSections.length === 0 ? (
+        <MultiCheckList
+          label="Select Pincode(s) *"
+          options={[]}
+          selected={selectedPincodeIds}
+          onChange={onChangePincodes}
+          error={errors?.pincodes}
+          loading
+          emptyMessage="No pincodes found for the selected locations."
+        />
+      ) : pincodeSections.length === 0 ? (
+        <MultiCheckList
+          label="Select Pincode(s) *"
+          options={[]}
+          selected={selectedPincodeIds}
+          onChange={onChangePincodes}
+          error={errors?.pincodes}
+          loading={false}
+          emptyMessage={
+            pincodesQuery.isError
+              ? "Failed to load pincodes. Try again."
+              : "No pincodes found for the selected locations."
+          }
+        />
+      ) : (
+        <div className="space-y-4">
+          {pincodeSections.map((section) => (
+            <MultiCheckList
+              key={section.groupId}
+              label={section.label}
+              options={section.options}
+              selected={selectedPincodeIds}
+              onChange={onChangePincodes}
+              loading={pincodesLoading && section.options.length === 0}
+              emptyMessage={`No pincodes available for ${section.groupLabel}.`}
+            />
+          ))}
+          {errors?.pincodes && (
+            <p className="text-[11px] text-red-600">{errors.pincodes}</p>
+          )}
+        </div>
+      )}
 
       <div className="rounded-lg border border-border/60 bg-white p-3 space-y-1">
         <p className="text-[10px] font-medium text-muted-foreground uppercase">

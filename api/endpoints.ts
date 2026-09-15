@@ -544,6 +544,8 @@ export const API_ENDPOINTS = {
         DISTRICTS: "/user-management/business-geography/lookup/districts",
         LOCATIONS: "/user-management/business-geography/lookup/locations",
         PINCODES: "/user-management/business-geography/lookup/pincodes",
+        SALES_PERSON_BY_PINCODE:
+          "/user-management/business-geography/lookup/sales-person-by-pincode",
       },
       SPLIT_MERGE: {
         SOURCES: "/user-management/business-geography/split-merge/sources",

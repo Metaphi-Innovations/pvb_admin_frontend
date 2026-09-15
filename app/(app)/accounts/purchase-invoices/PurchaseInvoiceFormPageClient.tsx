@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { AccountsToast, useAccountsToast } from "@/components/accounts/AccountsToast";
@@ -8,6 +8,10 @@ import { PurchaseInvoiceDirectForm } from "./PurchaseInvoiceDirectForm";
 import { PurchaseInvoicePageShell } from "./PurchaseInvoicePageShell";
 import { PurchaseInvoiceGrnForm } from "./PurchaseInvoiceGrnForm";
 import type { PurchaseSourceType } from "./purchase-invoice-types";
+import {
+  purchaseInvoiceReturnPath,
+  withReturnTo,
+} from "./purchase-invoice-nav";
 
 export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId?: string }) {
   const router = useRouter();
@@ -16,6 +20,10 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
   const isEdit = Boolean(invoiceId);
   const initialMode = searchParams.get("mode");
   const preselectedGrnId = searchParams.get("grnId");
+  const listHref = useMemo(
+    () => purchaseInvoiceReturnPath(searchParams.get("returnTo")),
+    [searchParams],
+  );
 
   const [sourceType, setSourceType] = useState<PurchaseSourceType>(() =>
     initialMode === "direct" ? "direct_purchase" : "from_grn",
@@ -24,18 +32,17 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
   useEffect(() => {
     if (searchParams.get("mode") === "manual") {
       const grnId = searchParams.get("grnId");
-      router.replace(
-        grnId
-          ? `/accounts/purchase-invoices/new?mode=grn&grnId=${grnId}`
-          : "/accounts/purchase-invoices/new?mode=grn",
-      );
+      const base = grnId
+        ? `/accounts/purchase-invoices/new?mode=grn&grnId=${grnId}`
+        : "/accounts/purchase-invoices/new?mode=grn";
+      router.replace(withReturnTo(base, listHref));
     }
-  }, [router, searchParams]);
+  }, [router, searchParams, listHref]);
 
   useEffect(() => {
     if (!invoiceId) return;
-    router.replace(`/accounts/purchase-invoices/${invoiceId}`);
-  }, [invoiceId, router]);
+    router.replace(withReturnTo(`/accounts/purchase-invoices/${invoiceId}`, listHref));
+  }, [invoiceId, router, listHref]);
 
   if (isEdit) {
     return (
@@ -56,7 +63,8 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
     return (
       <>
         <PurchaseInvoiceDirectForm
-          onCancel={() => router.push("/accounts/purchase-invoices")}
+          listHref={listHref}
+          onCancel={() => router.push(listHref)}
           showToast={(msg) => showToast(msg)}
         />
         <AccountsToast toast={toast} onDismiss={dismissToast} />
@@ -68,10 +76,13 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
     <PurchaseInvoiceGrnForm
       preselectedGrnId={preselectedGrnId}
       sourceType={sourceType}
+      listHref={listHref}
       onSourceTypeChange={(v) => {
         setSourceType(v);
         if (v === "direct_purchase") {
-          router.replace("/accounts/purchase-invoices/new?mode=direct");
+          router.replace(
+            withReturnTo("/accounts/purchase-invoices/new?mode=direct", listHref),
+          );
         }
       }}
       toast={toast}

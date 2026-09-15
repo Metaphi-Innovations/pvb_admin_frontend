@@ -89,11 +89,10 @@ export default function TransferProductLinesEditor({
         }
 
         if (product?.gstRate) {
-          next = applyLineTaxFields(
-            { ...next, gstRate: product.gstRate },
-            product.gstRate,
-            taxSupplyType,
-          ) as TransferLineItem;
+          next = {
+            ...applyLineTaxFields(next, product.gstRate, taxSupplyType),
+            gstRate: product.gstRate,
+          };
         } else {
           next = recalculateLineItem(next) as TransferLineItem;
         }
@@ -126,11 +125,10 @@ export default function TransferProductLinesEditor({
       }
 
       if (product?.gstRate) {
-        next = applyLineTaxFields(
-          { ...next, gstRate: product.gstRate },
-          product.gstRate,
-          taxSupplyType,
-        ) as TransferLineItem;
+        next = {
+          ...applyLineTaxFields(next, product.gstRate, taxSupplyType),
+          gstRate: product.gstRate,
+        };
       } else {
         next = recalculateLineItem(next) as TransferLineItem;
       }

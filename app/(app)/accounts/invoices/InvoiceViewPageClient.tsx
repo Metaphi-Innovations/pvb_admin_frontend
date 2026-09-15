@@ -7,7 +7,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { ChevronDown, Download } from "lucide-react";
 import { loadProducts } from "@/app/(app)/masters/products/product-data";
@@ -41,7 +41,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { formatINR, INVOICES_LIST_PATH } from "./invoice-utils";
+import {
+  formatINR,
+  INVOICES_LIST_PATH,
+  invoicesListHrefForSourceType,
+  safeInternalReturnPath,
+  withReturnTo,
+} from "./invoice-utils";
 import {
   resolveWorkflowStatus,
   WORKFLOW_STATUS_LABELS,
@@ -418,8 +424,18 @@ export default function InvoiceViewPageClient({
   invoiceId: number | string;
 }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [record, setRecord] = useState<InvoiceRecord | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+
+  const listHref = useMemo(
+    () =>
+      safeInternalReturnPath(
+        searchParams.get("returnTo"),
+        invoicesListHrefForSourceType(record?.sourceType),
+      ),
+    [searchParams, record?.sourceType],
+  );
 
   const refresh = async () => {
     setLoadError(null);
@@ -437,12 +453,12 @@ export default function InvoiceViewPageClient({
     }
     const numericId = Number(invoiceId);
     if (!Number.isFinite(numericId)) {
-      router.replace(INVOICES_LIST_PATH);
+      router.replace(listHref);
       return;
     }
     const r = getInvoiceById(numericId);
     if (!r) {
-      router.replace(INVOICES_LIST_PATH);
+      router.replace(listHref);
       return;
     }
     setRecord(r);
@@ -475,7 +491,7 @@ export default function InvoiceViewPageClient({
     return (
       <div className="p-6 text-sm text-red-600">
         {loadError}{" "}
-        <Link href={INVOICES_LIST_PATH} className="underline text-brand-700">
+        <Link href={listHref} className="underline text-brand-700">
           Back to list
         </Link>
       </div>
@@ -599,7 +615,11 @@ export default function InvoiceViewPageClient({
           variant="outline"
           size="sm"
           className="h-8 text-xs"
-          onClick={() => router.push(`${INVOICES_LIST_PATH}/${record.id}/edit`)}
+          onClick={() =>
+            router.push(
+              withReturnTo(`${INVOICES_LIST_PATH}/${record.id}/edit`, listHref),
+            )
+          }
         >
           Edit
         </Button>
@@ -613,8 +633,8 @@ export default function InvoiceViewPageClient({
       <InvoiceFormLayout
         title="View Sales Invoice"
         subtitle={`${record.invoiceNo} · ${WORKFLOW_STATUS_LABELS[workflowStatus]}`}
-        breadcrumb={accountsBreadcrumb("Transactions", "Sales Invoice", INVOICES_LIST_PATH)}
-        backHref={INVOICES_LIST_PATH}
+        breadcrumb={accountsBreadcrumb("Transactions", "Sales Invoice", listHref)}
+        backHref={listHref}
         stickyFooter={stickyFooter}
       >
         <div
