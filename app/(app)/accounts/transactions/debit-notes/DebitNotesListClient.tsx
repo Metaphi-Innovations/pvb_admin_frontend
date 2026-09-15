@@ -9,9 +9,15 @@ import {
   AccountsMoreActions,
   AccountsTableActionCell,
   AccountsViewAction,
+  ACCOUNTS_ACTION_BTN_CLASS,
+  ACCOUNTS_ACTION_ICON_CLASS,
   accountsActionColClass,
 } from "@/components/accounts/AccountsTableActions";
-import { XCircle } from "lucide-react";
+import { Download, XCircle } from "lucide-react";
+import {
+  canDownloadDebitNoteOfficialPdf,
+  openDebitNotePdfPreview,
+} from "../../debit-notes/debit-note-official-pdf";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import {
   AccountsTable,
@@ -106,6 +112,7 @@ function DebitNotesRecordsTable({
   onPageChange,
   onPageSizeChange,
   onCancel,
+  onDownloadPdf,
   onRefresh,
   approvalRequired,
   hasCreatePermission,
@@ -120,6 +127,7 @@ function DebitNotesRecordsTable({
   onPageChange: (p: number) => void;
   onPageSizeChange: (s: number) => void;
   onCancel: (r: DebitNoteRecord) => void;
+  onDownloadPdf: (r: DebitNoteRecord) => void;
   onRefresh: () => void;
   approvalRequired: boolean;
   hasCreatePermission: boolean;
@@ -219,6 +227,16 @@ function DebitNotesRecordsTable({
                   <AccountsTableCell align="right" className={accountsActionColClass("multi")}>
                     <AccountsTableActionCell>
                       <AccountsViewAction href={`${LIST_PATH}/${r.id}`} />
+                      {canDownloadDebitNoteOfficialPdf(r.status) ? (
+                        <button
+                          type="button"
+                          title="Download PDF"
+                          className={ACCOUNTS_ACTION_BTN_CLASS}
+                          onClick={() => onDownloadPdf(r)}
+                        >
+                          <Download className={ACCOUNTS_ACTION_ICON_CLASS} />
+                        </button>
+                      ) : null}
                       {canEditRow && (
                         <AccountsEditAction href={`${LIST_PATH}/${r.id}/edit`} />
                       )}
@@ -747,6 +765,13 @@ export default function DebitNotesListClient() {
                   onPageChange={setPage}
                   onPageSizeChange={setPageSize}
                   onCancel={setCancelTarget}
+                  onDownloadPdf={(r) => {
+                    void openDebitNotePdfPreview(String(r.id)).catch((e: unknown) => {
+                      const message =
+                        e instanceof Error ? e.message : "Failed to open Debit Note PDF.";
+                      showToast(message, "error");
+                    });
+                  }}
                   onRefresh={refreshRecords}
                   approvalRequired={approvalRequired}
                   hasCreatePermission={hasCreatePermission}

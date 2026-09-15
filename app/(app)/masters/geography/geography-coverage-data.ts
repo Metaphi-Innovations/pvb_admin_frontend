@@ -275,7 +275,7 @@ export function getPincodeOptionsForScope(
   );
   return list.map((p) => ({
     key: pincodeRecordKey(p),
-    label: `${p.pincode} - ${p.city || p.town}`,
+    label: p.pincode,
     pincode: p.pincode,
     town: p.town,
     location: p.city,

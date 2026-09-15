@@ -52,7 +52,15 @@ export function useCreateUser() {
       documents?: EmployeeDocument[];
     }) => UserListService.create(payload, documents),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: userManagementKeys.users.lists() });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: userManagementKeys.users.lists() }),
+        queryClient.invalidateQueries({
+          queryKey: userManagementKeys.users.nextEmployeeId(),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: userManagementKeys.users.dropdown(),
+        }),
+      ]);
     },
   });
 }
@@ -138,6 +146,7 @@ export function useNextEmployeeId(enabled = true) {
     queryFn: () => UserListService.getNextEmployeeId(),
     enabled,
     staleTime: 0,
+    refetchOnMount: "always",
   });
 }
 

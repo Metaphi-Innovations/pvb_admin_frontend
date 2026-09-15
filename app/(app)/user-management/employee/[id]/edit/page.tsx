@@ -10,6 +10,7 @@ import {
   employeeToUpdatePayload,
   approvalUsersToOptions,
   usersDropdownToOptions,
+  usersDropdownToGeographyOccupancy,
   templatePermissionsToSets,
   roleDropdownToApiOptions,
   type ApiRoleOption,
@@ -150,6 +151,11 @@ export default function EditEmployeePage() {
     [usersDropdownQuery.data, userId],
   );
 
+  const geographyOccupancy = useMemo(
+    () => usersDropdownToGeographyOccupancy(usersDropdownQuery.data ?? []),
+    [usersDropdownQuery.data],
+  );
+
   const handleApplyPermissionTemplate = useCallback(async (templateId: string) => {
     const template = await TemplateListService.view(templateId);
     return templatePermissionsToSets(template);
@@ -254,6 +260,7 @@ export default function EditEmployeePage() {
           toggleStatusMutation.isPending
         }
         businessGeography={geography}
+        geographyOccupancy={geographyOccupancy}
       />
       {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
     </>

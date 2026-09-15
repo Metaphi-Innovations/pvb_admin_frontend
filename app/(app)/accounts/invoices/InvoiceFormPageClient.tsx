@@ -1684,6 +1684,12 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     backendTotals,
   ]);
 
+  // Charge GST split needs interstate after ST GSTIN classification is known.
+  const expenseGstSplit = useMemo(
+    () => calcAdditionalExpensesTotals(additionalExpenses, interstateGst),
+    [additionalExpenses, interstateGst],
+  );
+
   // Preview SI number from DocumentSequence (create only)
   useEffect(() => {
     if (isEdit) return;
@@ -1882,20 +1888,39 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
 
   const isStockTransferInvoice = invoiceType === "stock_transfer";
 
+  const useLocalDispatchSummary =
+    isSalesOrderGeneration || isStockTransferGeneration;
+
   const outputGstSplit = useMemo(() => {
-    if (isDispatchGenerationPreview && !isSalesOrderGeneration && dispatchTotalsPreview) {
+    if (
+      isDispatchGenerationPreview &&
+      !useLocalDispatchSummary &&
+      dispatchTotalsPreview
+    ) {
       return {
         cgst: dispatchTotalsPreview.cgst,
         sgst: dispatchTotalsPreview.sgst,
         igst: dispatchTotalsPreview.igst,
       };
     }
+    if (useLocalDispatchSummary || !dispatchTotalsPreview) {
+      const productSplit = splitInvoiceGst(lineTotals.taxAmount, interstateGst);
+      return {
+        cgst: Math.round((productSplit.cgst + expenseGstSplit.cgst) * 100) / 100,
+        sgst: Math.round((productSplit.sgst + expenseGstSplit.sgst) * 100) / 100,
+        igst: Math.round((productSplit.igst + expenseGstSplit.igst) * 100) / 100,
+      };
+    }
     return splitInvoiceGst(totals.taxAmount, interstateGst);
   }, [
     isDispatchGenerationPreview,
-    isSalesOrderGeneration,
+    useLocalDispatchSummary,
     dispatchTotalsPreview,
     totals.taxAmount,
+    lineTotals.taxAmount,
+    expenseGstSplit.cgst,
+    expenseGstSplit.sgst,
+    expenseGstSplit.igst,
     interstateGst,
   ]);
 
@@ -2460,15 +2485,21 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
       ? dispatchTotalsPreview.roundOff
       : roundOff;
   const summaryGrandTotal =
-    isDispatchGenerationPreview && !isSalesOrderGeneration && dispatchTotalsPreview
+    isDispatchGenerationPreview &&
+    !useLocalDispatchSummary &&
+    dispatchTotalsPreview
       ? dispatchTotalsPreview.grandTotal
       : totals.grandTotal;
   const summaryTaxAmount =
-    isDispatchGenerationPreview && !isSalesOrderGeneration && dispatchTotalsPreview
+    isDispatchGenerationPreview &&
+    !useLocalDispatchSummary &&
+    dispatchTotalsPreview
       ? dispatchTotalsPreview.gstAmount
       : totals.taxAmount;
   const summaryGrossAmount =
-    isDispatchGenerationPreview && !isSalesOrderGeneration && dispatchTotalsPreview
+    isDispatchGenerationPreview &&
+    !useLocalDispatchSummary &&
+    dispatchTotalsPreview
       ? dispatchTotalsPreview.grossAmount
       : totals.productSubtotal;
   const summaryDiscountAmount = totals.discountTotal;

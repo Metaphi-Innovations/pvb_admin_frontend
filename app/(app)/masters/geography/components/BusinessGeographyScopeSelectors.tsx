@@ -43,13 +43,23 @@ function MultiCheckList({
 
   const filteredOptions = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return options;
-    return options.filter(
-      (opt) =>
-        opt.label.toLowerCase().includes(q) ||
-        (opt.assignedBadge && opt.assignedBadge.toLowerCase().includes(q)),
-    );
-  }, [options, search]);
+    const list = !q
+      ? options
+      : options.filter(
+          (opt) =>
+            opt.label.toLowerCase().includes(q) ||
+            (opt.assignedBadge && opt.assignedBadge.toLowerCase().includes(q)),
+        );
+
+    // Selected options shown first at top of list
+    return [...list].sort((a, b) => {
+      const aSel = selected.includes(a.value);
+      const bSel = selected.includes(b.value);
+      if (aSel && !bSel) return -1;
+      if (!aSel && bSel) return 1;
+      return 0;
+    });
+  }, [options, search, selected]);
 
   const enabledFilteredOptions = useMemo(
     () => filteredOptions.filter((opt) => !opt.disabled),

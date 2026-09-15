@@ -568,7 +568,27 @@ export default function DebitNoteFormPageClient({
         setSourceDispatchNo(
           detail.dispatch?.dispatch_number || detail.dispatch?.challan_number || "",
         );
-        setNarration(`Converted from Purchase Return ${returnNo}`);
+        {
+          const refs = [
+            ...(Array.isArray(detail.invoice_references) ? detail.invoice_references : []),
+            ...(Array.isArray(detail.references) ? detail.references : []),
+          ];
+          const piRef = refs.find(
+            (r: any) => String(r?.reference_type || "") === "PURCHASE_INVOICE",
+          );
+          const piNo = String(
+            detail.resolved_purchase_invoice_number ||
+              piRef?.reference_code ||
+              "",
+          ).trim();
+          const suggested = String(detail.suggested_narration || "").trim();
+          setNarration(
+            suggested ||
+              (piNo
+                ? `Debit note issued against returned quantity relating to Purchase Invoice ${piNo}`
+                : ""),
+          );
+        }
         setRemarks(detail.remarks || "");
         setRoundOff(0);
 

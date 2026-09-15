@@ -8,9 +8,11 @@ import {
   AccountsMoreActions,
   AccountsTableActionCell,
   AccountsViewAction,
+  ACCOUNTS_ACTION_BTN_CLASS,
+  ACCOUNTS_ACTION_ICON_CLASS,
   accountsActionColClass,
 } from "@/components/accounts/AccountsTableActions";
-import { XCircle } from "lucide-react";
+import { XCircle, Download } from "lucide-react";
 import { AccountsToast, useAccountsToast } from "@/components/accounts/AccountsToast";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import {
@@ -35,6 +37,10 @@ import { formatDisplayDate, toIsoDateOnly } from "@/lib/accounts/date-display";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { useClientMounted } from "@/lib/use-client-mounted";
 import type { StatusKey } from "@/lib/tokens";
+import {
+  canDownloadCreditNoteOfficialPdf,
+  openCreditNotePdfPreview,
+} from "@/app/(app)/accounts/credit-notes/credit-note-official-pdf";
 import {
   SectionTabs,
   AccountsColumnFilterProvider,
@@ -286,6 +292,7 @@ function CreditNotesRecordsTable({
   onPageSizeChange,
   onView,
   onCancel,
+  onDownloadPdf,
   actionBusy,
 }: {
   loading: boolean;
@@ -296,6 +303,7 @@ function CreditNotesRecordsTable({
   onPageSizeChange: (s: number) => void;
   onView: (r: CreditNoteListRow) => void;
   onCancel: (r: CreditNoteListRow) => void;
+  onDownloadPdf: (r: CreditNoteListRow) => void;
   actionBusy?: boolean;
 }) {
   const ctx = useAccountsColumnFilterContext();
@@ -402,6 +410,17 @@ function CreditNotesRecordsTable({
                   <AccountsTableCell align="right" className={accountsActionColClass("multi")}>
                     <AccountsTableActionCell>
                       <AccountsViewAction onClick={() => onView(r)} />
+                      {canDownloadCreditNoteOfficialPdf(r.status) ? (
+                        <button
+                          type="button"
+                          title="Download PDF"
+                          className={ACCOUNTS_ACTION_BTN_CLASS}
+                          disabled={actionBusy}
+                          onClick={() => onDownloadPdf(r)}
+                        >
+                          <Download className={ACCOUNTS_ACTION_ICON_CLASS} />
+                        </button>
+                      ) : null}
                       {canEditListRow(r) && (
                         <AccountsEditAction href={`${LIST_PATH}/${r.credit_note_id}/edit`} />
                       )}
@@ -657,6 +676,14 @@ export default function CreditNotesListClient() {
                   onPageSizeChange={setPageSize}
                   onView={handleView}
                   actionBusy={reverseBusy}
+                  onDownloadPdf={(r) => {
+                    void openCreditNotePdfPreview(r.credit_note_id).catch((e) =>
+                      showToast(
+                        creditNoteListApiError(e, "Failed to open Credit Note PDF."),
+                        "error",
+                      ),
+                    );
+                  }}
                   onCancel={(r) => {
                     if (isPostedListRow(r)) setReverseTarget(r);
                     else setCancelTarget(r);

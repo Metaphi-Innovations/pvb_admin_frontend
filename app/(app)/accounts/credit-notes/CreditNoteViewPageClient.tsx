@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { Download } from "lucide-react";
 import { AccountsFormLayout } from "../expenses/components/AccountsFormLayout";
 import { VoucherFormSectionCard } from "@/components/accounts/voucher-form/VoucherFormSectionCard";
 import {
@@ -30,6 +31,10 @@ import {
   creditNoteListApiError,
   type CreditNoteDetailApi,
 } from "./credit-note-list-api";
+import {
+  canDownloadCreditNoteOfficialPdf,
+  openCreditNotePdfPreview,
+} from "./credit-note-official-pdf";
 import { SOURCE_TYPE_LABELS, STATUS_LABELS, statusChipClass } from "./credit-note-form-utils";
 import { formatMoney } from "@/lib/accounts/money-format";
 import { formatDisplayDate, toIsoDateOnly } from "@/lib/accounts/date-display";
@@ -118,6 +123,7 @@ export default function CreditNoteViewPageClient({ creditNoteId }: { creditNoteI
   const [cancelOpen, setCancelOpen] = useState(false);
   const [reverseOpen, setReverseOpen] = useState(false);
   const [reverseBusy, setReverseBusy] = useState(false);
+  const [pdfBusy, setPdfBusy] = useState(false);
 
   const refresh = useCallback(async (opts?: { silent?: boolean }) => {
     if (!creditNoteId || creditNoteId === "new" || !isUuid(creditNoteId)) {
@@ -199,6 +205,7 @@ export default function CreditNoteViewPageClient({ creditNoteId }: { creditNoteI
   const canEdit = status === "DRAFT" || status === "REJECTED";
   const canCancel = status !== "POSTED" && status !== "CANCELLED" && status !== "REVERSED";
   const canReverse = status === "POSTED";
+  const canDownloadPdf = canDownloadCreditNoteOfficialPdf(status);
   const isQty = String(record.source_type) === "SALES_RETURN" || String(record.source_type) === "NEAR_EXPIRY";
   const lines = mapLines(record);
   const cgst = toNum(record.cgst_amount);
@@ -249,6 +256,28 @@ export default function CreditNoteViewPageClient({ creditNoteId }: { creditNoteI
                 Back
               </Button>
               <div className="flex items-center gap-1.5">
+                {canDownloadPdf ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 text-xs gap-1.5"
+                    disabled={pdfBusy}
+                    onClick={() => {
+                      setPdfBusy(true);
+                      void openCreditNotePdfPreview(record.credit_note_id)
+                        .catch((e) => {
+                          showToast(
+                            creditNoteListApiError(e, "Failed to open Credit Note PDF."),
+                            "error",
+                          );
+                        })
+                        .finally(() => setPdfBusy(false));
+                    }}
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    {pdfBusy ? "Opening…" : "Download PDF"}
+                  </Button>
+                ) : null}
                 {canEdit ? (
                   <Button
                     size="sm"

@@ -54,7 +54,6 @@ export default function GeographyPage() {
   const activeTab = parseTab(rawTab);
   const [mounted, setMounted] = useState(false);
   const [summary, setSummary] = useState(EMPTY_SUMMARY);
-  const [resetting, setResetting] = useState(false);
 
   const queryClient = useQueryClient();
   const postalSummaryQuery = usePostalMasterSummary();
@@ -87,17 +86,6 @@ export default function GeographyPage() {
     router.replace(tab === "setup" ? "/masters/geography" : `/masters/geography?tab=${tab}`);
   };
 
-  const handleResetDemoData = async () => {
-    if (!confirm("Reset all Geography localStorage demo data?")) return;
-    setResetting(true);
-    try {
-      await resetGeographyDemoData();
-      refreshSummary();
-    } finally {
-      setResetting(false);
-    }
-  };
-
   if (!mounted) {
     return (
       <ListingContainer title="Geography" titleIcon={Globe}>
@@ -118,20 +106,6 @@ export default function GeographyPage() {
               totalPincodes: postalCount || summary.totalPincodes,
             }}
           />
-        )}
-
-        {IS_DEV && (
-          <div className="flex justify-end">
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 text-xs text-amber-800 border-amber-300"
-              disabled={resetting}
-              onClick={() => void handleResetDemoData()}
-            >
-              {resetting ? "Resetting…" : "Reset Geography Demo Data"}
-            </Button>
-          </div>
         )}
 
         <Tabs value={activeTab} onValueChange={setTab} className="space-y-4">

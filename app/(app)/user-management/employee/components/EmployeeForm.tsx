@@ -12,7 +12,7 @@ import {
   AlertCircle, ChevronsUpDown, Check, ArrowLeft, Save, MapPin,
   Info, ChevronDown, ChevronUp, Plus, Trash2, GripVertical,
   Monitor, Smartphone,
-  User, Briefcase, Shield, FileText,
+  User, Briefcase, Shield, FileText, Sparkles,
 } from "lucide-react";
 import { loadGeoNodes, type GeoNode } from "@/app/(app)/masters/geography/geo-data";
 import {
@@ -29,7 +29,7 @@ import {
   validateCircularReporting, todayStr, loadEmployees, nextEmployeeId,
   applyEmployeeStatusChange,
 } from "../employee-data";
-import { geoFieldsForRole, type GeographyLookupItem } from "../user-api-data";
+import { geoFieldsForRole, type GeographyLookupItem, type GeographyOccupancy } from "../user-api-data";
 import { type EmployeeDocument } from "../employee-documents";
 import { EmployeeDocumentsSection } from "./EmployeeDocumentsSection";
 import { EmployeeListingStatusCell } from "./EmployeeListingStatusCell";
@@ -78,6 +78,8 @@ interface EmployeeFormProps {
   onValidationFail?: (errors: Record<string, string>) => void;
   isSubmitting?: boolean;
   businessGeography?: GeographyLookupItem[];
+  /** Active users with geography mapping — used to mark already-assigned zones/regions/areas/territories */
+  geographyOccupancy?: GeographyOccupancy[];
 }
 
 type EmployeeFormState = Partial<Employee> & {
@@ -312,7 +314,12 @@ function FormSectionHeader({ tab }: { tab: FormTabId }) {
 
 // ── Autocomplete (searchable dropdown) ───────────────────────────────────────
 
-interface ACOption { label: string; value: string | number; sub?: string }
+interface ACOption {
+  label: string;
+  value: string | number;
+  sub?: string;
+  disabled?: boolean;
+}
 interface ApprovalLevel { uid: string; empId: number | string | null; name: string; role: string; employeeCode: string }
 interface GeoMappingRow {
   geoZone: string;
@@ -349,6 +356,22 @@ function makeApprovalLevel(level?: Partial<ApprovalLevel>): ApprovalLevel {
   };
 }
 
+function handleScrollableWheel(event: React.WheelEvent<HTMLElement>) {
+  const current = event.currentTarget;
+  if (current.scrollHeight <= current.clientHeight) return;
+
+  const atTop = current.scrollTop <= 0;
+  const atBottom = current.scrollTop + current.clientHeight >= current.scrollHeight - 1;
+  const scrollingUp = event.deltaY < 0;
+  const scrollingDown = event.deltaY > 0;
+
+  if ((scrollingUp && atTop) || (scrollingDown && atBottom)) return;
+
+  event.preventDefault();
+  event.stopPropagation();
+  current.scrollTop += event.deltaY;
+}
+
 function AC({ label, value, onChange, options, placeholder, required, error, disabled, sub }: {
   label: string; value: string | number; onChange: (v: string | number) => void;
   options: ACOption[]; placeholder?: string; required?: boolean; error?: string;
@@ -383,25 +406,57 @@ function AC({ label, value, onChange, options, placeholder, required, error, dis
             <ChevronsUpDown className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
           </button>
         </PopoverTrigger>
-        <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+        <PopoverContent
+          className="w-[--radix-popover-trigger-width] p-0"
+          align="start"
+          onWheelCapture={handleScrollableWheel}
+        >
           <div className="p-1.5 border-b border-border">
             <Input placeholder="Search…" value={q} onChange={e => setQ(e.target.value)}
               className="text-xs h-7 focus-visible:ring-0" autoFocus />
           </div>
-          <div className="py-1 overflow-y-auto max-h-48">
+          <div
+            className="py-1 overflow-y-auto max-h-48 overscroll-contain"
+            onWheelCapture={handleScrollableWheel}
+          >
             {filtered.length === 0
               ? <p className="px-3 py-4 text-xs text-center text-muted-foreground">No options</p>
               : filtered.map(opt => (
-                <button key={opt.value} onClick={() => { onChange(opt.value); setOpen(false); setQ(""); }}
+                <button
+                  key={opt.value}
+                  type="button"
+                  disabled={opt.disabled}
+                  onClick={() => {
+                    if (opt.disabled) return;
+                    onChange(opt.value);
+                    setOpen(false);
+                    setQ("");
+                  }}
                   className={cn(
-                    "w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-left hover:bg-muted/60 transition-colors",
-                    selected?.value === opt.value && "bg-brand-50"
-                  )}>
+                    "w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-left transition-colors",
+                    opt.disabled
+                      ? "opacity-60 cursor-not-allowed bg-muted/20"
+                      : "hover:bg-muted/60",
+                    selected?.value === opt.value && !opt.disabled && "bg-brand-50",
+                  )}
+                >
                   <div className="flex-1 min-w-0">
-                    <span className="block truncate">{opt.label}</span>
-                    {opt.sub && <span className="text-[10px] text-muted-foreground">{opt.sub}</span>}
+                    <span className={cn("block truncate", opt.disabled && "text-muted-foreground")}>
+                      {opt.label}
+                    </span>
+                    {opt.sub && (
+                      <span className={cn(
+                        "text-[10px]",
+                        opt.disabled ? "text-amber-700" : "text-muted-foreground",
+                      )}
+                      >
+                        {opt.sub}
+                      </span>
+                    )}
                   </div>
-                  {selected?.value === opt.value && <Check className="flex-shrink-0 w-3 h-3 text-brand-600" />}
+                  {selected?.value === opt.value && !opt.disabled && (
+                    <Check className="flex-shrink-0 w-3 h-3 text-brand-600" />
+                  )}
                 </button>
               ))}
           </div>
@@ -1238,6 +1293,7 @@ export default function EmployeeForm({
   onValidationFail,
   isSubmitting,
   businessGeography = [],
+  geographyOccupancy = [],
 }: EmployeeFormProps) {
   const allEmployees = loadEmployees();
   const isApiMode = Boolean(onRoleIdChange);
@@ -1452,6 +1508,80 @@ export default function EmployeeForm({
     setActiveMobilePerms(mobileSet);
   };
 
+  const handleAutoFillPersonalDetails = () => {
+    const roleHint = (form.role || "User").replace(/[^a-zA-Z0-9]/g, "").slice(0, 5).toLowerCase();
+    const uniqueSuffix = `${Date.now().toString().slice(-4)}${Math.floor(100 + Math.random() * 900)}`;
+    const randomFirstNames = ["Rohan", "Vikram", "Aarav", "Amit", "Karan", "Pooja", "Ananya", "Neha", "Rahul", "Suresh"];
+    const randomLastNames = ["Sharma", "Verma", "Patel", "Mehta", "Singh", "Joshi", "Deshmukh", "Gupta", "Rao", "Nair"];
+    const firstName = randomFirstNames[Math.floor(Math.random() * randomFirstNames.length)];
+    const lastName = randomLastNames[Math.floor(Math.random() * randomLastNames.length)];
+    const fullName = `${firstName} ${lastName}`;
+    
+    // Generate valid 10-digit mobile starting with 9 that won't collide
+    const uniqueMobile = `9${Math.floor(100000000 + Math.random() * 900000000)}`;
+    // Generate valid unique email
+    const uniqueEmail = `${firstName.toLowerCase()}.${lastName.toLowerCase()}.${roleHint}${uniqueSuffix}@pvb.com`;
+    // Generate valid emergency mobile
+    const emergencyMobile = `8${Math.floor(100000000 + Math.random() * 900000000)}`;
+
+    setFormState(prev => ({
+      ...prev,
+      firstName,
+      lastName,
+      fullName,
+      email: uniqueEmail,
+      mobile: uniqueMobile,
+      countryCode: "+91",
+      dob: "1994-06-15",
+      gender: prev.gender || "Male",
+      bloodGroup: prev.bloodGroup === "Unknown" ? "O+" : prev.bloodGroup,
+      emergencyContactName: `${lastName} Family`,
+      emergencyContactRelation: "Spouse",
+      emergencyContactMobile: emergencyMobile,
+    }));
+
+    // Auto-fill address if empty with valid address structure
+    if (!currentAddr.line1) {
+      const defaultAddr: StructuredAddress = {
+        line1: "Plot 42, Tech Park Road",
+        line2: "Sector 5",
+        pincode: "400001",
+        city: "Mumbai",
+        town: "Mumbai",
+        district: "Mumbai",
+        state: "Maharashtra",
+      };
+      setCurrentAddr(defaultAddr);
+      if (sameAddress || !permanentAddr.line1) {
+        setPermanentAddr(defaultAddr);
+      }
+      if (!emergencyAddr.line1) {
+        setEmergencyAddr(defaultAddr);
+      }
+    }
+
+    // Clear personal-related validation errors
+    setErrors(prev => {
+      const copy = { ...prev };
+      delete copy.firstName;
+      delete copy.lastName;
+      delete copy.fullName;
+      delete copy.email;
+      delete copy.mobile;
+      delete copy.dob;
+      delete copy.gender;
+      delete copy.emergencyContactName;
+      delete copy.emergencyContactMobile;
+      delete copy.current_line1;
+      delete copy.current_pincode;
+      delete copy.current_city;
+      delete copy.current_town;
+      delete copy.current_district;
+      delete copy.current_state;
+      return copy;
+    });
+  };
+
   const handleRoleChange = (newRoleIdVal: number | string) => {
     const hasExistingPerms = activeWebPerms.size > 0 || activeMobilePerms.size > 0;
     if (hasExistingPerms) {
@@ -1557,14 +1687,66 @@ export default function EmployeeForm({
       (item) => item.level === "Territory" && (!selectedArea || item.parent_id === selectedArea.geography_id),
     );
 
-    const toOptions = (items: GeographyLookupItem[]) =>
-      items.map((item) => ({ label: item.name, value: item.name }));
+    const currentUserIds = new Set(
+      [employee?.userUuid, employee?.id]
+        .filter((v) => v != null && String(v).trim() !== "")
+        .map((v) => String(v)),
+    );
+
+    // Only the role's assignment level is exclusive (e.g. Territory for TM).
+    // Parent Zone / Region / Area are just hierarchy path — never block those.
+    const assignmentLevel = (geoFields[geoFields.length - 1] || "") as
+      | "Zone"
+      | "Region"
+      | "Area"
+      | "Territory"
+      | "";
+
+    const occupancyByLevel = {
+      Zone: new Map<string, { userId: string; fullName: string }>(),
+      Region: new Map<string, { userId: string; fullName: string }>(),
+      Area: new Map<string, { userId: string; fullName: string }>(),
+      Territory: new Map<string, { userId: string; fullName: string }>(),
+    };
+    for (const user of geographyOccupancy) {
+      const level = (user.geographyLevel || "").trim().toLowerCase();
+      const entry = { userId: user.userId, fullName: user.fullName };
+      if (level === "zone" && user.zoneId) occupancyByLevel.Zone.set(user.zoneId, entry);
+      else if (level === "region" && user.regionId) occupancyByLevel.Region.set(user.regionId, entry);
+      else if (level === "area" && user.areaId) occupancyByLevel.Area.set(user.areaId, entry);
+      else if (level === "territory" && user.territoryId) {
+        occupancyByLevel.Territory.set(user.territoryId, entry);
+      }
+    }
+
+    const toOptions = (
+      items: GeographyLookupItem[],
+      level: "Zone" | "Region" | "Area" | "Territory",
+    ): ACOption[] =>
+      items.map((item) => {
+        if (level !== assignmentLevel) {
+          return { label: item.name, value: item.name };
+        }
+        const assignee = occupancyByLevel[level].get(item.geography_id);
+        const isOwn = Boolean(assignee && currentUserIds.has(String(assignee.userId)));
+        const takenByOther = Boolean(assignee && !isOwn);
+        return {
+          label: item.name,
+          value: item.name,
+          sub: takenByOther
+            ? `Already assigned to ${assignee!.fullName}`
+            : isOwn
+              ? "Currently assigned to this user"
+              : undefined,
+          disabled: takenByOther,
+        };
+      });
 
     return {
-      Zone: toOptions(zones),
-      Region: toOptions(regions),
-      Area: toOptions(areas),
-      Territory: toOptions(territories),
+      Zone: toOptions(zones, "Zone"),
+      Region: toOptions(regions, "Region"),
+      Area: toOptions(areas, "Area"),
+      Territory: toOptions(territories, "Territory"),
     };
   };
 
@@ -1926,7 +2108,21 @@ export default function EmployeeForm({
             <div className="space-y-5">
             {/* Basic Info */}
             <div>
-              <SectionHead label="Basic Information" />
+              <div className="flex items-center justify-between mb-2">
+                <SectionHead label="Basic Information" />
+                {mode === "add" && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleAutoFillPersonalDetails}
+                    className="h-7 px-2.5 text-xs text-brand-700 bg-brand-50 hover:bg-brand-100 border-brand-200 gap-1.5 shadow-none"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-brand-600" />
+                    Auto-fill Personal Details
+                  </Button>
+                )}
+              </div>
               <div className="grid grid-cols-7 gap-3">
 
                 {/* Full Name */}

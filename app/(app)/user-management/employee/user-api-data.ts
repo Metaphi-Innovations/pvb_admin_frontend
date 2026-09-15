@@ -383,6 +383,78 @@ export function usersDropdownToOptions(users: Array<{
   });
 }
 
+export type GeographyOccupancy = {
+  userId: string;
+  fullName: string;
+  geographyLevel: string;
+  zoneId?: string | null;
+  regionId?: string | null;
+  areaId?: string | null;
+  territoryId?: string | null;
+};
+
+export function usersDropdownToGeographyOccupancy(
+  users: Array<{
+    userId: string;
+    firstName: string;
+    lastName: string;
+    label?: string;
+    geographyLevel?: string;
+    zoneId?: string | null;
+    regionId?: string | null;
+    areaId?: string | null;
+    territoryId?: string | null;
+  }>,
+): GeographyOccupancy[] {
+  return users.map((user) => ({
+    userId: user.userId,
+    fullName:
+      user.label?.replace(/\s*\([^)]*\)\s*$/, "").trim() ||
+      `${user.firstName} ${user.lastName}`.trim() ||
+      "Assigned user",
+    geographyLevel: user.geographyLevel || "",
+    zoneId: user.zoneId,
+    regionId: user.regionId,
+    areaId: user.areaId,
+    territoryId: user.territoryId,
+  }));
+}
+
+/** Map geography node id → assignee for each business-geo level. */
+export function buildGeographyOccupancyMaps(
+  users: Array<{
+    userId: string;
+    firstName: string;
+    lastName: string;
+    label?: string;
+    geographyLevel?: string;
+    zoneId?: string | null;
+    regionId?: string | null;
+    areaId?: string | null;
+    territoryId?: string | null;
+  }>,
+): Record<"Zone" | "Region" | "Area" | "Territory", Map<string, { userId: string; fullName: string }>> {
+  const maps = {
+    Zone: new Map<string, { userId: string; fullName: string }>(),
+    Region: new Map<string, { userId: string; fullName: string }>(),
+    Area: new Map<string, { userId: string; fullName: string }>(),
+    Territory: new Map<string, { userId: string; fullName: string }>(),
+  };
+
+  for (const user of usersDropdownToGeographyOccupancy(users)) {
+    const level = (user.geographyLevel || "").trim().toLowerCase();
+    const entry = { userId: user.userId, fullName: user.fullName };
+    if (level === "zone" && user.zoneId) maps.Zone.set(user.zoneId, entry);
+    else if (level === "region" && user.regionId) maps.Region.set(user.regionId, entry);
+    else if (level === "area" && user.areaId) maps.Area.set(user.areaId, entry);
+    else if (level === "territory" && user.territoryId) {
+      maps.Territory.set(user.territoryId, entry);
+    }
+  }
+
+  return maps;
+}
+
 export function templatePermissionsToSets(template: {
   accessType: "web" | "mobile";
   webPermissions: Array<{ moduleKey: string; actionKey: string }>;

@@ -252,18 +252,41 @@ async function listLevel(
   level: BusinessGeoLevel,
   listUrl: string,
   signal?: AbortSignal,
+  options?: { includeInactive?: boolean },
 ): Promise<BusinessGeoListItem[]> {
-  const response = await axiosInstance.post(
-    `${listUrl}?page=1&limit=${TREE_PAGE_LIMIT}&search=&ordering=`,
-    { filters: {} },
-    { signal },
-  );
-  const payload = response.data as Record<string, unknown>;
-  const data = unwrapData(payload);
-  if (!Array.isArray(data)) {
-    throw new Error(`Unexpected ${level} list response shape.`);
+  const filters = options?.includeInactive ? {} : { status: true };
+  const all: BusinessGeoListItem[] = [];
+  let page = 1;
+  let totalPages = 1;
+
+  while (page <= totalPages) {
+    const response = await axiosInstance.post(
+      `${listUrl}?page=${page}&limit=${TREE_PAGE_LIMIT}&search=&ordering=`,
+      { filters },
+      { signal },
+    );
+    const payload = response.data as Record<string, unknown>;
+    const data = unwrapData(payload);
+    if (!Array.isArray(data)) {
+      throw new Error(`Unexpected ${level} list response shape.`);
+    }
+    all.push(
+      ...data.map((row) => mapByLevel(level, (row ?? {}) as Record<string, unknown>)),
+    );
+
+    const totalRecords = Number(payload.totalRecords ?? payload.count ?? 0);
+    if (totalRecords > 0) {
+      totalPages = Math.ceil(totalRecords / TREE_PAGE_LIMIT);
+    } else if (data.length < TREE_PAGE_LIMIT) {
+      break;
+    } else {
+      totalPages = page + 1;
+    }
+    page += 1;
+    if (page > 50) break;
   }
-  return data.map((row) => mapByLevel(level, (row ?? {}) as Record<string, unknown>));
+
+  return all;
 }
 
 function levelRank(level: BusinessGeoLevel): number {
@@ -375,12 +398,15 @@ function mapLookupRow(
 }
 
 export const BusinessGeographyService = {
-  async listAllForTree(signal?: AbortSignal): Promise<BusinessGeoListItem[]> {
+  async listAllForTree(
+    signal?: AbortSignal,
+    options?: { includeInactive?: boolean },
+  ): Promise<BusinessGeoListItem[]> {
     const [zones, regions, areas, territories] = await Promise.all([
-      listLevel("Zone", BG.ZONE.LIST, signal),
-      listLevel("Region", BG.REGION.LIST, signal),
-      listLevel("Area", BG.AREA.LIST, signal),
-      listLevel("Territory", BG.TERRITORY.LIST, signal),
+      listLevel("Zone", BG.ZONE.LIST, signal, options),
+      listLevel("Region", BG.REGION.LIST, signal, options),
+      listLevel("Area", BG.AREA.LIST, signal, options),
+      listLevel("Territory", BG.TERRITORY.LIST, signal, options),
     ]);
     return sortTreeFriendly([...zones, ...regions, ...areas, ...territories]);
   },
@@ -552,13 +578,11 @@ export const BusinessGeographyService = {
     return data.map((row) => {
       const item = (row ?? {}) as Record<string, unknown>;
       const pincode = asString(item.pincode);
-      const office = asString(item.officename);
       const locationName = asString(item.location_name);
-      const label = [pincode, office || locationName].filter(Boolean).join(" · ");
       const assigned = item.assigned_territory as { id: string; name: string } | null | undefined;
       return {
         id: asString(item.id),
-        label,
+        label: pincode || asString(item.id),
         code: pincode || undefined,
         extra: locationName || undefined,
         assignedGeography: assigned
@@ -773,6 +797,8 @@ export interface SplitMergeAssignableUser {
   region_id: string | null;
   area_id: string | null;
   territory_id: string | null;
+  /** Unassigned or on a job source → true; mapped to another geography → false */
+  is_selectable?: boolean;
 }
 
 export interface CreateSplitMergeJobPayload {
