@@ -69,15 +69,12 @@ export default function ViewStockTransferPage() {
     transfer.lineItems.some((l) => Number(l.igstAmount || 0) > 0) ||
     (transfer.additionalExpenses || []).some((e) => Number(e.igstAmount || 0) > 0);
   const showCgstSgst =
-    !showIgst &&
-    (transfer.lineItems.some(
+    transfer.lineItems.some(
       (l) => Number(l.cgstAmount || 0) > 0 || Number(l.sgstAmount || 0) > 0,
     ) ||
-      (transfer.additionalExpenses || []).some(
-        (e) => Number(e.cgstAmount || 0) > 0 || Number(e.sgstAmount || 0) > 0,
-      ) ||
-      transfer.lineItems.some((l) => Number(l.gstAmount || l.gstPercentage || 0) > 0) ||
-      (transfer.additionalExpenses || []).some((e) => Number(e.gstAmount || 0) > 0));
+    (transfer.additionalExpenses || []).some(
+      (e) => Number(e.cgstAmount || 0) > 0 || Number(e.sgstAmount || 0) > 0,
+    );
 
   const formatRupee = (n: number) =>
     `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;

@@ -74,10 +74,10 @@ function gstinStateCode(gstin?: string | null): string {
 }
 
 /**
- * ST item table has no IGST columns — inter-state tax is persisted as CGST with SGST=0.
- * Unfold that pattern (or an explicit inter-state flag) back into IGST for the UI.
+ * Legacy rows (before IGST columns) stored inter-state tax in CGST with SGST=0.
+ * Only unfold when IGST columns are empty and context indicates inter-state.
  */
-function unfoldStockTransferItemTax(params: {
+function unfoldLegacyFoldedIgst(params: {
   cgstPercentage: number;
   sgstPercentage: number;
   igstPercentage: number;
@@ -94,7 +94,7 @@ function unfoldStockTransferItemTax(params: {
   sgstAmount: number;
   igstAmount: number;
 } {
-  let {
+  const {
     cgstPercentage,
     sgstPercentage,
     igstPercentage,
@@ -105,25 +105,22 @@ function unfoldStockTransferItemTax(params: {
     treatAsIgst,
   } = params;
 
-  if (igstAmount > 0 && cgstAmount <= 0 && sgstAmount <= 0) {
+  if (igstAmount > 0 || igstPercentage > 0) {
     return {
-      cgstPercentage: 0,
-      sgstPercentage: 0,
-      igstPercentage: igstPercentage || gstPercentage,
-      cgstAmount: 0,
-      sgstAmount: 0,
+      cgstPercentage: igstAmount > 0 ? 0 : cgstPercentage,
+      sgstPercentage: igstAmount > 0 ? 0 : sgstPercentage,
+      igstPercentage: igstPercentage || (igstAmount > 0 ? gstPercentage : 0),
+      cgstAmount: igstAmount > 0 ? 0 : cgstAmount,
+      sgstAmount: igstAmount > 0 ? 0 : sgstAmount,
       igstAmount,
     };
   }
 
   const foldedIgst =
-    igstAmount <= 0 &&
+    Boolean(treatAsIgst) &&
     sgstAmount <= 0 &&
     sgstPercentage <= 0 &&
-    cgstAmount > 0 &&
-    (Boolean(treatAsIgst) ||
-      (gstPercentage > 0 && Math.abs(cgstPercentage - gstPercentage) < 0.05) ||
-      (cgstPercentage > 0 && gstPercentage <= 0));
+    cgstAmount > 0;
 
   if (foldedIgst) {
     return {
@@ -144,6 +141,47 @@ function unfoldStockTransferItemTax(params: {
     sgstAmount,
     igstAmount,
   };
+}
+
+function fillMissingTaxPercentages(params: {
+  cgstPercentage: number;
+  sgstPercentage: number;
+  igstPercentage: number;
+  cgstAmount: number;
+  sgstAmount: number;
+  igstAmount: number;
+  gstPercentage: number;
+}): {
+  cgstPercentage: number;
+  sgstPercentage: number;
+  igstPercentage: number;
+} {
+  let { cgstPercentage, sgstPercentage, igstPercentage, cgstAmount, sgstAmount, igstAmount, gstPercentage } =
+    params;
+
+  if (igstAmount > 0 && igstPercentage <= 0 && gstPercentage > 0) {
+    igstPercentage = gstPercentage;
+  }
+  if (
+    cgstAmount > 0 &&
+    sgstAmount > 0 &&
+    cgstPercentage <= 0 &&
+    sgstPercentage <= 0 &&
+    gstPercentage > 0
+  ) {
+    const halfPct = Math.round((gstPercentage / 2) * 100) / 100;
+    cgstPercentage = halfPct;
+    sgstPercentage = Math.round((gstPercentage - halfPct) * 100) / 100;
+  } else {
+    if (cgstAmount > 0 && cgstPercentage <= 0 && gstPercentage > 0 && igstAmount <= 0) {
+      cgstPercentage = Math.round((gstPercentage / 2) * 100) / 100;
+    }
+    if (sgstAmount > 0 && sgstPercentage <= 0 && gstPercentage > 0 && igstAmount <= 0) {
+      sgstPercentage = Math.round((gstPercentage / 2) * 100) / 100;
+    }
+  }
+
+  return { cgstPercentage, sgstPercentage, igstPercentage };
 }
 
 function mapBackendLineItem(
@@ -168,8 +206,8 @@ function mapBackendLineItem(
 
   const productGstPct = asNumber(prod.gst_percent ?? raw.gst_percent);
   const storedSplitPct = cgstPercentage + sgstPercentage + igstPercentage;
-  // Prefer product GST master rate (source of truth); stored split can be wrong from old save bug.
-  const gstPercentage = productGstPct || storedSplitPct || 0;
+  // Prefer stored tax; product GST master is fallback for display % only.
+  const gstPercentage = storedSplitPct || productGstPct || 0;
 
   const computedTaxable = Math.round(totalQty * costPrice * 100) / 100;
   const storedTaxable = asNumber(raw.taxable_amount);
@@ -180,7 +218,6 @@ function mapBackendLineItem(
         ? storedTaxable
         : Math.max(0, asNumber(raw.total_amount) - (cgstAmount + sgstAmount + igstAmount));
 
-  // Unfold IGST that was folded into CGST on save (no IGST columns on ST items).
   ({
     cgstPercentage,
     sgstPercentage,
@@ -188,44 +225,32 @@ function mapBackendLineItem(
     cgstAmount,
     sgstAmount,
     igstAmount,
-  } = unfoldStockTransferItemTax({
+  } = unfoldLegacyFoldedIgst({
     cgstPercentage,
     sgstPercentage,
     igstPercentage,
     cgstAmount,
     sgstAmount,
     igstAmount,
-    gstPercentage,
+    gstPercentage: gstPercentage || productGstPct,
     treatAsIgst: opts?.treatAsIgst,
   }));
 
-  // Repair amounts when stored GST was double-taxed / mismatched vs product rate.
-  const storedGst = cgstAmount + sgstAmount + igstAmount;
-  const expectedGst =
-    gstPercentage > 0
-      ? Math.round(taxableAmount * (gstPercentage / 100) * 100) / 100
-      : storedGst;
-  if (gstPercentage > 0 && Math.abs(expectedGst - storedGst) > 0.5) {
-    if (opts?.treatAsIgst || (igstAmount > 0 && cgstAmount <= 0 && sgstAmount <= 0)) {
-      igstAmount = expectedGst;
-      igstPercentage = gstPercentage;
-      cgstAmount = 0;
-      sgstAmount = 0;
-      cgstPercentage = 0;
-      sgstPercentage = 0;
-    } else {
-      const halfPct = Math.round((gstPercentage / 2) * 100) / 100;
-      cgstPercentage = halfPct;
-      sgstPercentage = Math.round((gstPercentage - halfPct) * 100) / 100;
-      cgstAmount = Math.round((expectedGst / 2) * 100) / 100;
-      sgstAmount = Math.round((expectedGst - cgstAmount) * 100) / 100;
-      igstAmount = 0;
-      igstPercentage = 0;
-    }
-  }
+  ({ cgstPercentage, sgstPercentage, igstPercentage } = fillMissingTaxPercentages({
+    cgstPercentage,
+    sgstPercentage,
+    igstPercentage,
+    cgstAmount,
+    sgstAmount,
+    igstAmount,
+    gstPercentage: cgstPercentage + sgstPercentage + igstPercentage || productGstPct || gstPercentage,
+  }));
 
   const gstAmount = cgstAmount + sgstAmount + igstAmount;
-  const lineTotal = Math.round((taxableAmount + gstAmount) * 100) / 100;
+  const resolvedGstPercentage =
+    cgstPercentage + sgstPercentage + igstPercentage || productGstPct || gstPercentage;
+  const lineTotal =
+    asNumber(raw.total_amount) || Math.round((taxableAmount + gstAmount) * 100) / 100;
 
   let quantityType = "Piece";
   if (raw.quantity_type) {
@@ -260,13 +285,13 @@ function mapBackendLineItem(
     cgstPercentage,
     sgstPercentage,
     igstPercentage,
-    gstPercentage,
+    gstPercentage: resolvedGstPercentage,
     gstAmount,
     lineTotal,
     batchNumber: asString(batch.batch_code || raw.batch_no),
     batchInventoryId: raw.inventory_batch_id || undefined,
     expiryDate: batch.expiry_date ? asDateOnly(batch.expiry_date) : undefined,
-    gstRate: `${gstPercentage}%`,
+    gstRate: `${resolvedGstPercentage}%`,
     packingUnit: asString(prod.packing_unit || "Unit"),
     baseUnit: asString(prod.base_unit || "Unit"),
     unitsPerPackingUnit: unitsPerPacking,
@@ -284,6 +309,7 @@ function mapBackendExpense(raw: any, idx: number): SalesOrderAdditionalExpense {
   const igstAmount = asNumber(raw.igst_amount);
   const gstAmount = cgstAmount + sgstAmount + igstAmount;
   const amount = asNumber(raw.amount);
+  const gstPercent = asNumber(raw.gst_percent);
   return {
     id: asString(raw.stock_transfer_expense_id || raw.id || `exp-${idx}`),
     expenseName: asString(raw.charge_name),
@@ -291,7 +317,7 @@ function mapBackendExpense(raw: any, idx: number): SalesOrderAdditionalExpense {
     discountType: "percent",
     discountValue: 0,
     netAmount: amount,
-    gstRate: asString(raw.gst_percent || "0"),
+    gstRate: asString(raw.gst_percent ?? gstPercent ?? "0"),
     cgstAmount,
     sgstAmount,
     igstAmount,
@@ -310,11 +336,12 @@ export function mapBackendStockTransfer(raw: any): StockTransfer {
 
   const fromState = gstinStateCode(fromWh.gst_number);
   const toState = gstinStateCode(toWh.gst_number);
+  const itemHasIgst = rawItems.some((i: any) => asNumber(i.igst_amount) > 0);
   const expenseHasIgst = rawExpenses.some((e: any) => asNumber(e.igst_amount) > 0);
-  // Inter-state / IGST: different warehouse GSTIN states, or expenses already stored as IGST.
-  // ST items have no IGST columns, so tax is folded into CGST+SGST=0 on save.
+  // Legacy unfold only when items have no IGST amounts yet (pre-column / folded saves).
   const treatAsIgst =
-    expenseHasIgst || (Boolean(fromState) && Boolean(toState) && fromState !== toState);
+    !itemHasIgst &&
+    (expenseHasIgst || (Boolean(fromState) && Boolean(toState) && fromState !== toState));
 
   return {
     id: raw.stock_transfer_id,
@@ -373,16 +400,25 @@ function buildBackendWriteBody(
     const taxable = Math.round(Math.max(0, qty * rate) * 100) / 100;
     const cgstAmount = Math.round(Number(line.cgstAmount || 0) * 100) / 100;
     const sgstAmount = Math.round(Number(line.sgstAmount || 0) * 100) / 100;
-    // ST item schema has no IGST columns — fold IGST into CGST amount/percent for persistence.
     const igstAmount = Math.round(Number(line.igstAmount || 0) * 100) / 100;
-    const cgstPercent =
-      igstAmount > 0
-        ? Number(line.igstPercentage || line.gstPercentage || 0)
-        : Number(line.cgstPercentage || 0);
-    const sgstPercent = igstAmount > 0 ? 0 : Number(line.sgstPercentage || 0);
-    const persistedCgstAmount = igstAmount > 0 ? igstAmount : cgstAmount;
-    const persistedSgstAmount = igstAmount > 0 ? 0 : sgstAmount;
-    const lineGst = persistedCgstAmount + persistedSgstAmount;
+    const gstPct =
+      Number(line.gstPercentage || 0) ||
+      Number.parseFloat(String(line.gstRate || "0").replace("%", "")) ||
+      0;
+    let cgstPercent = Number(line.cgstPercentage || 0);
+    let sgstPercent = Number(line.sgstPercentage || 0);
+    let igstPercent = Number(line.igstPercentage || 0);
+
+    if (igstAmount > 0 && igstPercent <= 0 && gstPct > 0) {
+      igstPercent = gstPct;
+      cgstPercent = 0;
+      sgstPercent = 0;
+    } else if (cgstAmount > 0 && sgstAmount > 0 && cgstPercent <= 0 && sgstPercent <= 0 && gstPct > 0) {
+      cgstPercent = Math.round((gstPct / 2) * 100) / 100;
+      sgstPercent = Math.round((gstPct - cgstPercent) * 100) / 100;
+    }
+
+    const lineGst = cgstAmount + sgstAmount + igstAmount;
     return {
       product_id: line.productId,
       quantity_type: line.quantityType || "Piece",
@@ -390,9 +426,11 @@ function buildBackendWriteBody(
       transfer_base_qty: qty,
       cp_price: rate,
       cgst_percent: cgstPercent,
-      cgst_amount: persistedCgstAmount,
+      cgst_amount: cgstAmount,
       sgst_percent: sgstPercent,
-      sgst_amount: persistedSgstAmount,
+      sgst_amount: sgstAmount,
+      igst_percent: igstPercent,
+      igst_amount: igstAmount,
       taxable_amount: taxable,
       total_amount: Math.round((taxable + lineGst) * 100) / 100,
       remarks: "",
@@ -421,7 +459,11 @@ function buildBackendWriteBody(
   const productSubtotal = items.reduce((acc, curr) => acc + curr.taxable_amount, 0);
   const additionalExp = expenses.reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
   const productGst = items.reduce(
-    (acc, curr) => acc + Number(curr.cgst_amount || 0) + Number(curr.sgst_amount || 0),
+    (acc, curr) =>
+      acc +
+      Number(curr.cgst_amount || 0) +
+      Number(curr.sgst_amount || 0) +
+      Number(curr.igst_amount || 0),
     0,
   );
   const expenseGst = expenses.reduce(

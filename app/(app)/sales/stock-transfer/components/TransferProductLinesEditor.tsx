@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import type { ProductCatalogItem } from "@/app/(app)/sales/orders/orders-data";
 import {
+  applyLineTaxFields,
   computeLineTaxBreakdown,
   recalculateLineItem,
   type TaxSupplyType,
@@ -88,18 +89,14 @@ export default function TransferProductLinesEditor({
         }
 
         if (product?.gstRate) {
-          const breakdown = computeLineTaxBreakdown(next, product.gstRate, taxSupplyType);
-          next = {
-            ...next,
-            gstRate: product.gstRate,
-            gstAmount: breakdown.gstAmount,
-            cgstAmount: breakdown.cgstAmount,
-            sgstAmount: breakdown.sgstAmount,
-            igstAmount: breakdown.igstAmount,
-          };
+          next = applyLineTaxFields(
+            { ...next, gstRate: product.gstRate },
+            product.gstRate,
+            taxSupplyType,
+          ) as TransferLineItem;
+        } else {
+          next = recalculateLineItem(next) as TransferLineItem;
         }
-
-        next = recalculateLineItem(next) as TransferLineItem;
         return next;
       }),
     );
@@ -129,18 +126,14 @@ export default function TransferProductLinesEditor({
       }
 
       if (product?.gstRate) {
-        const breakdown = computeLineTaxBreakdown(next, product.gstRate, taxSupplyType);
-        next = {
-          ...next,
-          gstRate: product.gstRate,
-          gstAmount: breakdown.gstAmount,
-          cgstAmount: breakdown.cgstAmount,
-          sgstAmount: breakdown.sgstAmount,
-          igstAmount: breakdown.igstAmount,
-        };
+        next = applyLineTaxFields(
+          { ...next, gstRate: product.gstRate },
+          product.gstRate,
+          taxSupplyType,
+        ) as TransferLineItem;
+      } else {
+        next = recalculateLineItem(next) as TransferLineItem;
       }
-
-      next = recalculateLineItem(next) as TransferLineItem;
       return next;
     });
   };
@@ -200,17 +193,14 @@ export default function TransferProductLinesEditor({
       newLine.availableStock = selectedProduct.stock;
 
       if (selectedProduct.gstRate) {
-        const breakdown = computeLineTaxBreakdown(newLine, selectedProduct.gstRate, taxSupplyType);
-        newLine = {
-          ...newLine,
-          gstAmount: breakdown.gstAmount,
-          cgstAmount: breakdown.cgstAmount,
-          sgstAmount: breakdown.sgstAmount,
-          igstAmount: breakdown.igstAmount,
-        };
+        newLine = applyLineTaxFields(
+          newLine,
+          selectedProduct.gstRate,
+          taxSupplyType,
+        ) as TransferLineItem;
+      } else {
+        newLine = recalculateLineItem(newLine) as TransferLineItem;
       }
-
-      newLine = recalculateLineItem(newLine) as TransferLineItem;
       nextLines.push(newLine);
     }
 
