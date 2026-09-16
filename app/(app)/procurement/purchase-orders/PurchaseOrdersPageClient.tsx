@@ -21,6 +21,7 @@ import {
   Scissors,
   MessageSquare,
   FileText,
+  Mail,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/procurement/utils";
 import { Toast } from "../components/ProcurementUI";
@@ -30,6 +31,7 @@ import { ProcAvatar, HighlightText } from "../design/proc-design";
 import { FollowUpListingCell } from "./components/VendorFollowUpPanel";
 import { InvoiceListingCell } from "./components/POVendorInvoiceSection";
 import { ThreeWayMatchListingCell } from "./components/ThreeWayMatchListingCell";
+import { SendPOEmailModal } from "./components/SendPOEmailModal";
 import { useFlashToast } from "../hooks/useFlashToast";
 import { formatListingDate } from "../components/listing/ListingCells";
 import {
@@ -146,6 +148,8 @@ export default function PurchaseOrdersPageClient() {
   const [actionConfirmType, setActionConfirmType] = useState<POActionConfirmType>("close");
   const [modalFollowups, setModalFollowups] = useState<POFollowUpEntry[]>([]);
   const [downloadingPoId, setDownloadingPoId] = useState<string | null>(null);
+  const [sendEmailPoId, setSendEmailPoId] = useState<string | null>(null);
+  const [sendEmailOpen, setSendEmailOpen] = useState(false);
 
   const [filters, setFilters] = useState<FilterState>({});
   const { debouncedFilters, debouncedSearch, isDebouncing } = useDebouncedFilters(filters);
@@ -587,6 +591,18 @@ export default function PurchaseOrdersPageClient() {
               <FileText className="w-3.5 h-3.5" />
               {downloadingPoId === row.id ? "Generating PDF..." : "Download PDF"}
             </button>
+            {!["draft", "cancelled"].includes(row.status) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSendEmailPoId(row.id);
+                  setSendEmailOpen(true);
+                }}
+                className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted/60 transition-colors rounded-sm"
+              >
+                <Mail className="w-3.5 h-3.5" /> Send Email
+              </button>
+            )}
             {(["draft", "rejected"] as POListStatus[]).includes(row.status) && (
               <button
                 type="button"
@@ -750,6 +766,21 @@ export default function PurchaseOrdersPageClient() {
           onConfirm={handleActionConfirm}
         />
       )}
+
+      <SendPOEmailModal
+        open={sendEmailOpen}
+        purchaseOrderId={sendEmailPoId}
+        onOpenChange={(open) => {
+          setSendEmailOpen(open);
+          if (!open) setSendEmailPoId(null);
+        }}
+        onSent={(result) => {
+          setToast({
+            msg: `PO email sent to ${result.to}.`,
+            type: "success",
+          });
+        }}
+      />
 
       {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
     </ListingContainer>
