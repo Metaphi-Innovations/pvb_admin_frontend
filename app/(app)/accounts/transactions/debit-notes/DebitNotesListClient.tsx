@@ -61,7 +61,14 @@ import type { ReportMultiSelectOption } from "@/lib/accounts/report-multi-filter
 import { DebitNoteCancelDialog } from "../../debit-notes/components/DebitNoteCancelDialog";
 import { PendingDebitNotesPanel } from "../../debit-notes/components/PendingDebitNotesPanel";
 import { DEBIT_NOTE_SOURCE_LABELS, type DebitNoteRecord } from "../../debit-notes/debit-notes-data";
-import { DEBIT_NOTES_LIST_PATH, formatINR } from "../../debit-notes/note-utils";
+import {
+  DEBIT_NOTES_LIST_PATH,
+  debitNotesListHref,
+  formatINR,
+  parseDebitNotesModuleTab,
+  parseDebitNotesStatusTab,
+  withReturnTo,
+} from "../../debit-notes/note-utils";
 import {
   hasDocumentsListingFilters,
   parseDocumentsListingFiltersFromSearch,
@@ -106,6 +113,7 @@ function DebitNotesRecordsTable({
   loading,
   error,
   toolbarFiltered,
+  listReturnHref,
   page,
   pageSize,
   totalRecords,
@@ -121,6 +129,7 @@ function DebitNotesRecordsTable({
   loading: boolean;
   error: string | null;
   toolbarFiltered: DebitNoteRecord[];
+  listReturnHref: string;
   page: number;
   pageSize: number;
   totalRecords: number;
@@ -183,7 +192,7 @@ function DebitNotesRecordsTable({
                 <AccountsTableRow key={r.id}>
                   <AccountsTableCell mono>
                     <Link
-                      href={`${LIST_PATH}/${r.id}`}
+                      href={withReturnTo(`${LIST_PATH}/${r.id}`, listReturnHref)}
                       className="hover:underline font-mono text-xs font-semibold text-brand-700"
                     >
                       {r.debitNoteNo}
@@ -226,7 +235,9 @@ function DebitNotesRecordsTable({
                   </AccountsTableCell>
                   <AccountsTableCell align="right" className={accountsActionColClass("multi")}>
                     <AccountsTableActionCell>
-                      <AccountsViewAction href={`${LIST_PATH}/${r.id}`} />
+                      <AccountsViewAction
+                        href={withReturnTo(`${LIST_PATH}/${r.id}`, listReturnHref)}
+                      />
                       {canDownloadDebitNoteOfficialPdf(r.status) ? (
                         <button
                           type="button"
@@ -238,7 +249,12 @@ function DebitNotesRecordsTable({
                         </button>
                       ) : null}
                       {canEditRow && (
-                        <AccountsEditAction href={`${LIST_PATH}/${r.id}/edit`} />
+                        <AccountsEditAction
+                          href={withReturnTo(
+                            `${LIST_PATH}/${r.id}/edit`,
+                            listReturnHref,
+                          )}
+                        />
                       )}
                       {canCancelRow && (
                         <AccountsMoreActions contentClassName="w-44">
@@ -282,8 +298,12 @@ export default function DebitNotesListClient() {
   const hasCreatePermission = useMemo(() => canCreate(permissions, "accounts", "debit_note"), [permissions]);
   const hasUpdatePermission = useMemo(() => canEdit(permissions, "accounts", "debit_note"), [permissions]);
 
-  const [moduleTab, setModuleTab] = useState("pending");
-  const [statusTab, setStatusTab] = useState("all");
+  const moduleTab =
+    parseDebitNotesModuleTab(searchParams.get("tab")) ?? "pending";
+  const statusTab =
+    parseDebitNotesStatusTab(searchParams.get("status")) ?? "all";
+  const listReturnHref = debitNotesListHref(moduleTab, statusTab);
+
   const [filters, setFilters] = useState<NotesListingFilterState>(() => ({
     ...resetNotesListingFilters("this_year"),
     dateFrom,
@@ -605,8 +625,30 @@ export default function DebitNotesListClient() {
       setPreset("custom");
     }
     if (parsed.branch) setFilters((prev) => ({ ...prev, branches: [parsed.branch!] }));
-    setModuleTab("records");
-  }, [searchParams, setDateFrom, setDateTo, setPreset]);
+    if (moduleTab !== "records") {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("tab", "records");
+      router.replace(`${LIST_PATH}?${params.toString()}`, { scroll: false });
+    }
+  }, [searchParams, setDateFrom, setDateTo, setPreset, moduleTab, router]);
+
+  const handleModuleTabChange = useCallback(
+    (tab: string) => {
+      router.push(
+        debitNotesListHref(tab, tab === "records" ? statusTab : null),
+        { scroll: false },
+      );
+    },
+    [router, statusTab],
+  );
+
+  const handleStatusTabChange = useCallback(
+    (tab: string) => {
+      setPage(1);
+      router.push(debitNotesListHref("records", tab), { scroll: false });
+    },
+    [router],
+  );
 
   // Tab counts (since we paginate, let's keep counts mapped or static tab headers)
   const counts = useMemo(() => {
@@ -669,13 +711,13 @@ export default function DebitNotesListClient() {
   };
 
   const handleResetFilters = () => {
-    setStatusTab("all");
     setPage(1);
     const reset = resetNotesListingFilters("this_year");
     setPreset(reset.preset);
     setDateFrom(reset.dateFrom);
     setDateTo(reset.dateTo);
     setFilters(reset);
+    router.push(debitNotesListHref("records", "all"), { scroll: false });
   };
 
   const handleHeaderRefresh = () => {
@@ -695,7 +737,11 @@ export default function DebitNotesListClient() {
             onExportExcel={moduleTab === "records" ? handleExport : undefined}
             exportDisabled={exporting || records.length === 0}
             createLabel="Create Debit Note"
-            onCreate={() => router.push(`${LIST_PATH}/new?mode=fresh`)}
+            onCreate={() =>
+              router.push(
+                withReturnTo(`${LIST_PATH}/new?mode=fresh`, listReturnHref),
+              )
+            }
           />
         }
         layout="split"
@@ -705,7 +751,7 @@ export default function DebitNotesListClient() {
           <SectionTabs
             tabs={[...NOTES_MODULE_TABS]}
             active={moduleTab}
-            onChange={setModuleTab}
+            onChange={handleModuleTabChange}
             counts={{ pending: pendingCount, records: statusCounts.all }}
             compact
           />
@@ -728,10 +774,7 @@ export default function DebitNotesListClient() {
                   <SectionTabs
                     tabs={[...NOTES_STATUS_TABS]}
                     active={statusTab}
-                    onChange={(tab) => {
-                      setPage(1);
-                      setStatusTab(tab);
-                    }}
+                    onChange={handleStatusTabChange}
                     counts={statusCounts}
                     compact
                   />
@@ -759,6 +802,7 @@ export default function DebitNotesListClient() {
                   loading={loading}
                   error={error}
                   toolbarFiltered={records}
+                  listReturnHref={listReturnHref}
                   page={page}
                   pageSize={pageSize}
                   totalRecords={totalRecords}

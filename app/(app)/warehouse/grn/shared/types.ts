@@ -90,6 +90,8 @@ export interface GrnBatch {
   /** OCR invoice line fields — read-only display */
   invoiceQty?: number;
   unitPrice?: number;
+  /** Sample return: discount % from sample order (typically 100). */
+  discountPct?: number;
   gstPct?: number;
   gstAmount?: number;
   totalAmount?: number;

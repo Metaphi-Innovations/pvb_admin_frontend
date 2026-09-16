@@ -139,7 +139,9 @@ function mapRegion(raw: Record<string, unknown>): BusinessGeoListItem {
   const stateIds = states
     .map((row) => {
       const mapping = (row ?? {}) as Record<string, unknown>;
-      return asString(mapping.state_id || (mapping.state as Record<string, unknown> | undefined)?.id);
+      const nested = (mapping.state ?? {}) as Record<string, unknown>;
+      // Prefer FK state_id; fall back to nested state master id (never mapping row id)
+      return asString(mapping.state_id) || asString(nested.id);
     })
     .filter(Boolean);
 
@@ -165,10 +167,8 @@ function mapArea(raw: Record<string, unknown>): BusinessGeoListItem {
   const districtIds = districts
     .map((row) => {
       const mapping = (row ?? {}) as Record<string, unknown>;
-      return asString(
-        mapping.district_id ||
-          (mapping.district as Record<string, unknown> | undefined)?.id,
-      );
+      const nested = (mapping.district ?? {}) as Record<string, unknown>;
+      return asString(mapping.district_id) || asString(nested.id);
     })
     .filter(Boolean);
 
@@ -252,17 +252,21 @@ async function listLevel(
   level: BusinessGeoLevel,
   listUrl: string,
   signal?: AbortSignal,
-  options?: { includeInactive?: boolean },
+  options?: { includeInactive?: boolean; search?: string },
 ): Promise<BusinessGeoListItem[]> {
   const filters = options?.includeInactive ? {} : { status: true };
+  const search = options?.search?.trim() ?? "";
   const all: BusinessGeoListItem[] = [];
   let page = 1;
   let totalPages = 1;
 
   while (page <= totalPages) {
     const response = await axiosInstance.post(
-      `${listUrl}?page=${page}&limit=${TREE_PAGE_LIMIT}&search=&ordering=`,
-      { filters },
+      `${listUrl}?page=${page}&limit=${TREE_PAGE_LIMIT}&ordering=`,
+      {
+        filters,
+        ...(search ? { search } : {}),
+      },
       { signal },
     );
     const payload = response.data as Record<string, unknown>;
@@ -287,6 +291,74 @@ async function listLevel(
   }
 
   return all;
+}
+
+function parentLevelOf(level: BusinessGeoLevel): BusinessGeoLevel | null {
+  switch (level) {
+    case "Territory":
+      return "Area";
+    case "Area":
+      return "Region";
+    case "Region":
+      return "Zone";
+    case "Zone":
+      return null;
+  }
+}
+
+async function fetchById(
+  level: BusinessGeoLevel,
+  id: string,
+  signal?: AbortSignal,
+): Promise<BusinessGeoListItem | null> {
+  try {
+    const response = await axiosInstance.get(endpointsForLevel(level).VIEW(id), {
+      signal,
+    });
+    const payload = response.data as Record<string, unknown>;
+    assertSuccess(payload, `Failed to load ${level}.`);
+    const data = (unwrapData(payload) ?? {}) as Record<string, unknown>;
+    return mapByLevel(level, data);
+  } catch {
+    return null;
+  }
+}
+
+/** When search returns leaf matches, pull missing parents so the tree can render. */
+async function hydrateTreeAncestors(
+  items: BusinessGeoListItem[],
+  signal?: AbortSignal,
+): Promise<BusinessGeoListItem[]> {
+  const byId = new Map(items.map((item) => [item.id, item]));
+  let frontier = items.filter((item) => item.parentId && !byId.has(item.parentId));
+
+  while (frontier.length > 0) {
+    const missingParents = new Map<string, BusinessGeoLevel>();
+    for (const item of frontier) {
+      const parentLevel = parentLevelOf(item.level);
+      if (!parentLevel || !item.parentId || byId.has(item.parentId)) continue;
+      missingParents.set(item.parentId, parentLevel);
+    }
+    if (missingParents.size === 0) break;
+
+    const fetched = await Promise.all(
+      Array.from(missingParents.entries()).map(([id, level]) =>
+        fetchById(level, id, signal),
+      ),
+    );
+
+    const nextFrontier: BusinessGeoListItem[] = [];
+    for (const parent of fetched) {
+      if (!parent || byId.has(parent.id)) continue;
+      byId.set(parent.id, parent);
+      if (parent.parentId && !byId.has(parent.parentId)) {
+        nextFrontier.push(parent);
+      }
+    }
+    frontier = nextFrontier;
+  }
+
+  return Array.from(byId.values());
 }
 
 function levelRank(level: BusinessGeoLevel): number {
@@ -400,15 +472,20 @@ function mapLookupRow(
 export const BusinessGeographyService = {
   async listAllForTree(
     signal?: AbortSignal,
-    options?: { includeInactive?: boolean },
+    options?: { includeInactive?: boolean; search?: string },
   ): Promise<BusinessGeoListItem[]> {
+    const search = options?.search?.trim() ?? "";
     const [zones, regions, areas, territories] = await Promise.all([
       listLevel("Zone", BG.ZONE.LIST, signal, options),
       listLevel("Region", BG.REGION.LIST, signal, options),
       listLevel("Area", BG.AREA.LIST, signal, options),
       listLevel("Territory", BG.TERRITORY.LIST, signal, options),
     ]);
-    return sortTreeFriendly([...zones, ...regions, ...areas, ...territories]);
+    let items = [...zones, ...regions, ...areas, ...territories];
+    if (search) {
+      items = await hydrateTreeAncestors(items, signal);
+    }
+    return sortTreeFriendly(items);
   },
 
   async getById(
@@ -536,9 +613,13 @@ export const BusinessGeographyService = {
     });
     const data = unwrapData(response.data as Record<string, unknown>);
     if (!Array.isArray(data)) return [];
-    return data.map((row) =>
-      mapLookupRow((row ?? {}) as Record<string, unknown>, ["district_name"], "district_code"),
-    );
+    return data.map((row) => {
+      const item = (row ?? {}) as Record<string, unknown>;
+      return {
+        ...mapLookupRow(item, ["district_name"], "district_code"),
+        parentId: asString(item.state_id) || null,
+      };
+    });
   },
 
   async lookupLocations(
@@ -556,6 +637,7 @@ export const BusinessGeographyService = {
       return {
         ...mapLookupRow(item, ["location_name"], "location_code"),
         extra: asString(item.location_type) || undefined,
+        parentId: asString(item.district_id) || null,
       };
     });
   },
@@ -585,11 +667,57 @@ export const BusinessGeographyService = {
         label: pincode || asString(item.id),
         code: pincode || undefined,
         extra: locationName || undefined,
+        parentId: asString(item.location_id) || null,
         assignedGeography: assigned
           ? { id: asString(assigned.id), name: asString(assigned.name) }
           : null,
       };
     });
+  },
+
+  async lookupSalesPersonByPincode(
+    pincode: string,
+    signal?: AbortSignal,
+  ): Promise<{
+    pincode: string;
+    pincode_id: string | null;
+    territory_id: string | null;
+    territory_name: string | null;
+    sales_person: {
+      user_id: string;
+      first_name: string;
+      last_name: string;
+      employee_id: string | null;
+      role_name: string | null;
+    } | null;
+  } | null> {
+    const code = pincode.trim();
+    if (!/^\d{6}$/.test(code)) return null;
+    const response = await axiosInstance.get(BG.LOOKUP.SALES_PERSON_BY_PINCODE, {
+      params: { pincode: code },
+      signal,
+    });
+    const payload = response.data as Record<string, unknown>;
+    if (payload.success === false) return null;
+    const data = (unwrapData(payload) ?? null) as Record<string, unknown> | null;
+    if (!data) return null;
+
+    const salesPersonRaw = data.sales_person as Record<string, unknown> | null;
+    return {
+      pincode: asString(data.pincode) || code,
+      pincode_id: asString(data.pincode_id) || null,
+      territory_id: asString(data.territory_id) || null,
+      territory_name: asString(data.territory_name) || null,
+      sales_person: salesPersonRaw
+        ? {
+            user_id: asString(salesPersonRaw.user_id),
+            first_name: asString(salesPersonRaw.first_name),
+            last_name: asString(salesPersonRaw.last_name),
+            employee_id: asString(salesPersonRaw.employee_id) || null,
+            role_name: asString(salesPersonRaw.role_name) || null,
+          }
+        : null,
+    };
   },
 
   // ── Split / Merge ─────────────────────────────────────────────────────────
@@ -740,6 +868,14 @@ export interface SplitMergeJobChild {
   code?: string | null;
 }
 
+export interface SplitMergeJobSourceSummary {
+  id: string;
+  name: string;
+  code?: string | null;
+  status: boolean;
+  children?: SplitMergeJobChild[];
+}
+
 export interface SplitMergeJobView {
   id: string;
   operation_type: SplitMergeOperation;
@@ -780,7 +916,7 @@ export interface SplitMergeJobView {
     status: boolean;
     children: SplitMergeJobChild[];
   };
-  sources?: Array<{ id: string; name: string; code?: string | null; status: boolean }>;
+  sources?: SplitMergeJobSourceSummary[];
   assignment_roles: string[];
   published_at?: string | null;
   publish_summary?: unknown;

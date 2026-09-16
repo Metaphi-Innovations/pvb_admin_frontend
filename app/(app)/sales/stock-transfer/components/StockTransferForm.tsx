@@ -318,7 +318,11 @@ export default function StockTransferForm({
     const source = warehouses.find((w) => w.id === nextSourceId);
     const target = warehouses.find((w) => w.id === nextTargetId);
     const nextTaxSupplyType: TaxSupplyType =
-      source && target && source.state === target.state ? "intra" : "inter";
+      !source || !target
+        ? "intra"
+        : source.state === target.state
+          ? "intra"
+          : "inter";
 
     const hadProducts = form.lineItems.some((l) => l.productId);
     const updatedLineItems = key === "sourceWarehouseId" && hadProducts

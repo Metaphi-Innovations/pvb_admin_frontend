@@ -1,5 +1,11 @@
 import DebitNotesListClient from "./DebitNotesListClient";
 
+import { Suspense } from "react";
+
 export default function Page() {
-  return <DebitNotesListClient />;
+  return (
+    <Suspense>
+      <DebitNotesListClient />
+    </Suspense>
+  );
 }

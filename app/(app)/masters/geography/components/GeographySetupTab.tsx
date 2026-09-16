@@ -1,24 +1,19 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   ChevronDown,
   ChevronRight,
   Edit2,
-  Eye,
-  History,
   Plus,
   Search,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ActionMenu } from "@/components/listing/ActionMenu";
-import { ListingStatusToggle, isActiveStatus } from "@/components/listing";
-import { ActionItemConfig } from "@/components/listing/types";
+import { isActiveStatus } from "@/components/listing";
 import {
   useBusinessGeographyTree,
-  useToggleBusinessGeoStatus,
 } from "@/hooks/masters";
 import type {
   BusinessGeoLevel,
@@ -26,6 +21,15 @@ import type {
 } from "@/services/business-geography.service";
 import { GeographyFormSheet } from "./GeographyFormSheet";
 import { GeographyDetailSheet } from "./GeographyDetailSheet";
+
+function useDebouncedValue<T>(value: T, delayMs = 300): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebounced(value), delayMs);
+    return () => window.clearTimeout(timer);
+  }, [value, delayMs]);
+  return debounced;
+}
 
 // ── Level Colors: Zone (Blue), Region (Green), Area (Purple), Territory (Orange) ──
 const LEVEL_BADGE_STYLES: Record<
@@ -59,16 +63,15 @@ const LEVEL_BADGE_STYLES: Record<
 };
 
 export function GeographySetupTab(_props?: { postalRecordCount?: number }) {
-  const treeQuery = useBusinessGeographyTree();
-  const toggleStatus = useToggleBusinessGeoStatus();
+  const [searchQuery, setSearchQuery] = useState("");
+  const debouncedSearch = useDebouncedValue(searchQuery, 300);
+  const treeQuery = useBusinessGeographyTree(debouncedSearch);
 
   const [formOpen, setFormOpen] = useState(false);
   const [editRecord, setEditRecord] = useState<BusinessGeoListItem | null>(null);
   const [defaultParentId, setDefaultParentId] = useState<string | null>(null);
   const [defaultParentLevel, setDefaultParentLevel] = useState<BusinessGeoLevel | null>(null);
   const [viewRecord, setViewRecord] = useState<BusinessGeoListItem | null>(null);
-
-  const [searchQuery, setSearchQuery] = useState("");
 
   const records = useMemo(
     () => (treeQuery.data ?? []).filter((r) => isActiveStatus(r.status)),
@@ -118,6 +121,23 @@ export function GeographySetupTab(_props?: { postalRecordCount?: number }) {
     return map;
   }, [records]);
 
+  // When searching, expand ancestors so backend matches are visible in the tree
+  useEffect(() => {
+    const q = debouncedSearch.trim();
+    if (!q || records.length === 0) return;
+
+    const byId = new Map(records.map((r) => [r.id, r]));
+    const next = new Set<string>();
+    for (const item of records) {
+      let parentId = item.parentId;
+      while (parentId) {
+        next.add(parentId);
+        parentId = byId.get(parentId)?.parentId ?? null;
+      }
+    }
+    setExpandedIds(next);
+  }, [debouncedSearch, records]);
+
   // Count stats
   const countZones = records.filter((r) => r.level === "Zone").length;
   const countRegions = records.filter((r) => r.level === "Region").length;
@@ -131,23 +151,6 @@ export function GeographySetupTab(_props?: { postalRecordCount?: number }) {
   const totalLocalities = useMemo(() => {
     return records.reduce((acc, r) => acc + (r.locationIds?.length ?? 0), 0);
   }, [records]);
-
-  const rowActions = useMemo<ActionItemConfig<BusinessGeoListItem>[]>(
-    () => [
-      { label: "View", action: "view", icon: Eye, onClick: (g) => setViewRecord(g) },
-      {
-        label: "History",
-        action: "history",
-        icon: History,
-        onClick: () => {
-          if (typeof window !== "undefined") {
-            window.location.href = "/masters/geography?tab=audit";
-          }
-        },
-      },
-    ],
-    [],
-  );
 
   const topLevelZones = useMemo(() => {
     return records.filter((r) => r.level === "Zone");
@@ -165,30 +168,6 @@ export function GeographySetupTab(_props?: { postalRecordCount?: number }) {
     const children = childrenMap.get(item.id) ?? [];
     const canExpand = children.length > 0;
     const badgeStyle = LEVEL_BADGE_STYLES[item.level] || LEVEL_BADGE_STYLES.Territory;
-
-    const q = searchQuery.toLowerCase().trim();
-    const isMatched =
-      !q ||
-      item.name.toLowerCase().includes(q) ||
-      (item.code?.toLowerCase().includes(q) ?? false) ||
-      item.level.toLowerCase().includes(q);
-
-    if (!isMatched) {
-      // Still show row if any child matches search query
-      const hasMatchingChild = (node: BusinessGeoListItem): boolean => {
-        const cList = childrenMap.get(node.id) ?? [];
-        return cList.some(
-          (c) =>
-            c.name.toLowerCase().includes(q) ||
-            (c.code?.toLowerCase().includes(q) ?? false) ||
-            c.level.toLowerCase().includes(q) ||
-            hasMatchingChild(c),
-        );
-      };
-      if (q && !hasMatchingChild(item)) {
-        return null;
-      }
-    }
 
     const indentPadding = depth * 28 + 16;
 
@@ -322,6 +301,11 @@ export function GeographySetupTab(_props?: { postalRecordCount?: number }) {
     );
   };
 
+  const isSearching = Boolean(debouncedSearch.trim());
+  const emptyMessage = isSearching
+    ? "No geographies match your search."
+    : "No geographies yet.";
+
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
@@ -346,7 +330,7 @@ export function GeographySetupTab(_props?: { postalRecordCount?: number }) {
           <Input
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search name, code, pincode..."
+            placeholder="Search name or code…"
             className="pl-8 h-9 text-xs bg-white"
           />
         </div>
@@ -365,12 +349,12 @@ export function GeographySetupTab(_props?: { postalRecordCount?: number }) {
       </div>
 
       <div className="rounded-xl border border-border bg-white overflow-hidden shadow-2xs">
-        {treeQuery.isLoading ? (
+        {treeQuery.isLoading || (treeQuery.isFetching && isSearching) ? (
           <div className="p-12 text-center text-sm text-muted-foreground">Loading…</div>
         ) : treeQuery.isError ? (
           <div className="p-12 text-center text-sm text-red-600">Failed to load.</div>
         ) : records.length === 0 ? (
-          <div className="p-12 text-center text-sm text-muted-foreground">No geographies yet.</div>
+          <div className="p-12 text-center text-sm text-muted-foreground">{emptyMessage}</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-xs min-w-[750px]">

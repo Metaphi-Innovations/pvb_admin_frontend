@@ -53,7 +53,12 @@ import {
   PENDING_CREDIT_SOURCE_LABELS,
   type PendingCreditNoteRow,
 } from "../pending-credit-notes-data";
-import { CREDIT_NOTES_LIST_PATH, formatINR } from "../note-utils";
+import {
+  CREDIT_NOTES_LIST_PATH,
+  creditNotesListHref,
+  formatINR,
+  withReturnTo,
+} from "../note-utils";
 import { formatDisplayDate, toIsoDateOnly } from "@/lib/accounts/date-display";
 import { CreditNoteListApi, creditNoteListApiError } from "../credit-note-list-api";
 import { AccountsToast, useAccountsToast } from "@/components/accounts/AccountsToast";
@@ -408,13 +413,21 @@ export function PendingCreditNotesPanel({
   const handleGenerate = (row: PendingCreditNoteRow) => {
     if (!canGeneratePendingCreditNote(row)) return;
     router.push(
-      `${CREDIT_NOTES_LIST_PATH}/new?pendingId=${encodeURIComponent(row.pending_credit_note_id)}`,
+      withReturnTo(
+        `${CREDIT_NOTES_LIST_PATH}/new?pendingId=${encodeURIComponent(row.pending_credit_note_id)}`,
+        creditNotesListHref("pending"),
+      ),
     );
   };
 
   const handleViewCreditNote = (row: PendingCreditNoteRow) => {
     if (!row.credit_note_id) return;
-    router.push(`${CREDIT_NOTES_LIST_PATH}/${row.credit_note_id}`);
+    router.push(
+      withReturnTo(
+        `${CREDIT_NOTES_LIST_PATH}/${row.credit_note_id}`,
+        creditNotesListHref("pending"),
+      ),
+    );
   };
 
   useEffect(() => {

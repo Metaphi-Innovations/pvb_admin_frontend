@@ -64,3 +64,26 @@ export function formatMoneyOrDash(amount: number): string {
   if (!amount) return "—";
   return formatMoney(amount);
 }
+
+/**
+ * Format backend Decimal strings for display without frontend accounting math.
+ * Uses Number only for Indian grouping presentation.
+ */
+export function formatMoneyString(amount: string | number | null | undefined): string {
+  if (amount === null || amount === undefined || amount === "") {
+    return formatMoney(0);
+  }
+  const n = typeof amount === "number" ? amount : Number(amount);
+  if (!Number.isFinite(n)) return formatMoney(0);
+  return formatMoney(n);
+}
+
+/** Zero / empty opposite side → em dash (Accounts report convention). */
+export function formatMoneyStringOrDash(
+  amount: string | number | null | undefined
+): string {
+  if (amount === null || amount === undefined || amount === "") return "—";
+  const n = typeof amount === "number" ? amount : Number(amount);
+  if (!Number.isFinite(n) || n === 0) return "—";
+  return formatMoney(n);
+}

@@ -31,7 +31,7 @@ import { CreditNoteReasonDialog } from "./components/CreditNoteReasonDialog";
 import { CreditNoteSourceEntitlementSection } from "./components/CreditNoteSourceEntitlementSection";
 import { CreditNoteCustomerInfoButton } from "./components/CreditNoteCustomerInfoButton";
 import { CreditNoteWarehouseInfoButton } from "./components/CreditNoteWarehouseInfoButton";
-import { CREDIT_NOTES_LIST_PATH } from "./note-utils";
+import { CREDIT_NOTES_LIST_PATH, creditNoteReturnPath, withReturnTo } from "./note-utils";
 import { CreditNoteFormApi, creditNoteApiError, creditNoteErrorIncludes } from "./credit-note-form-api";
 import type {
   CreateDirectCreditNotePayload,
@@ -147,6 +147,10 @@ export default function CreditNoteFormPageClient({
   const routeCnId = extractCreditNoteIdFromPath(pathname);
   const pendingId = searchParams.get("pendingId")?.trim() || "";
   const invoiceIdFromUrl = searchParams.get("invoiceId")?.trim() || "";
+  const listHref = useMemo(
+    () => creditNoteReturnPath(searchParams.get("returnTo")),
+    [searchParams],
+  );
   const legacyPendingNav = Boolean(
     searchParams.get("returnId") ||
       searchParams.get("schemeKey") ||
@@ -885,17 +889,17 @@ export default function CreditNoteFormPageClient({
 
   const goToList = () => {
     navigatingAwayRef.current = true;
-    router.replace(CREDIT_NOTES_LIST_PATH);
+    router.replace(listHref);
   };
 
   const goToEdit = (id: string) => {
     navigatingAwayRef.current = true;
-    router.replace(`${CREDIT_NOTES_LIST_PATH}/${id}/edit`);
+    router.replace(withReturnTo(`${CREDIT_NOTES_LIST_PATH}/${id}/edit`, listHref));
   };
 
   const goToDetail = (id: string) => {
     navigatingAwayRef.current = true;
-    router.replace(`${CREDIT_NOTES_LIST_PATH}/${id}`);
+    router.replace(withReturnTo(`${CREDIT_NOTES_LIST_PATH}/${id}`, listHref));
   };
 
   const requireCreditNoteId = (detail: CreditNoteDetail | null | undefined): string => {
@@ -1288,7 +1292,7 @@ export default function CreditNoteFormPageClient({
   );
   const isDirty = useFormDirtySnapshot(snapshot, { ready: baselineReady && fieldsEditable });
   const { requestCancel, discardDialog } = useTransactionFormCancel({
-    listHref: CREDIT_NOTES_LIST_PATH,
+    listHref,
     isDirty,
   });
 
@@ -1316,8 +1320,8 @@ export default function CreditNoteFormPageClient({
           onBackClick={requestCancel}
           title={title}
           subtitle={subtitle}
-          breadcrumb={accountsBreadcrumb("Transactions", breadcrumbPage, CREDIT_NOTES_LIST_PATH)}
-          backHref={CREDIT_NOTES_LIST_PATH}
+          breadcrumb={accountsBreadcrumb("Transactions", breadcrumbPage, listHref)}
+          backHref={listHref}
           stickyFooter={
             isReadOnlyStatus(status) ? undefined : (
               <CreditNoteFormActionBar

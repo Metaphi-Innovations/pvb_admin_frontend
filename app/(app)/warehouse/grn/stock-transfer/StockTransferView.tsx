@@ -7,16 +7,10 @@ import {
   Calendar,
   Building,
   AlertCircle,
-  ClipboardCheck,
-  FileText,
-  CheckCircle2,
-  Clock,
-  Pencil,
+  LayoutList,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { BatchDetailsReadOnlyTable } from "../shared/components/BatchDetailsReadOnlyTable";
-import { StackedQtyCell } from "../shared/components/StackedQtyCell";
-import { ProductSkuCell } from "../shared/components/ProductSkuCell";
 import { cn } from "@/lib/utils";
 import { useGrn } from "@/hooks/warehouse/use-grn";
 import { formatQtyStackTotals } from "@/lib/warehouse/grn-quantity";
@@ -40,33 +34,6 @@ const STATUS_CONFIG = {
     variant: "active" as const,
   },
 };
-
-function DocumentStatusRow({
-  label,
-  value,
-  done,
-}: {
-  label: string;
-  value: string;
-  done: boolean;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-3 py-2 border-b border-border/60 last:border-0">
-      <span className="text-xs text-muted-foreground">{label}</span>
-      <span
-        className={cn(
-          "inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full border",
-          done
-            ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-            : "bg-amber-50 text-amber-700 border-amber-200",
-        )}
-      >
-        {done ? <CheckCircle2 className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
-        {value}
-      </span>
-    </div>
-  );
-}
 
 export function StockTransferView({ id }: { id: string }) {
   const router = useRouter();
@@ -168,65 +135,8 @@ export function StockTransferView({ id }: { id: string }) {
             }
           : undefined
       }
-      sidebar={{
-        summary: [
-          { label: "GRN Number", value: grn.grnNo, highlight: true },
-          { label: "Warehouse", value: grn.warehouse || "—" },
-          { label: "From Warehouse", value: grn.fromWarehouse || "—" },
-          { label: "To Warehouse", value: grn.toWarehouse || grn.warehouse || "—" },
-          { label: "GRN Date", value: grn.grnDate || "—" },
-          { label: "Items Received", value: grn.items.length },
-          { label: "Total Dispatched", value: totalOrderedLabel },
-          { label: "Total Received", value: totalReceivedLabel },
-          { label: "Batches", value: grn.batches.length },
-        ],
-        quickActions: [
-          ...(canEdit
-            ? [
-                {
-                  label: "Edit GRN",
-                  icon: Pencil,
-                  variant: "outline" as const,
-                  onClick: () => router.push(`/warehouse/grn/stock-transfer/${id}/edit`),
-                },
-              ]
-            : []),
-          ...(canStartQc
-            ? [
-                {
-                  label: "Perform QC Check",
-                  icon: ClipboardCheck,
-                  variant: "primary" as const,
-                  onClick: () => router.push(`/warehouse/qc/create?grnId=${id}`),
-                },
-              ]
-            : []),
-        ],
-      }}
     >
       <div className="w-full space-y-6">
-        <div className="bg-white rounded-xl border border-border p-4 shadow-sm space-y-3">
-          <h2 className="text-xs font-bold text-foreground uppercase tracking-wider border-b pb-2 flex items-center gap-2">
-            <FileText className="w-4 h-4 text-brand-600" />
-            Receipt Verification Status
-          </h2>
-          <p className="text-[11px] text-muted-foreground">
-            Read-only tracking for stock transfer receipt and quality control verification.
-          </p>
-          <div className="pt-1">
-            <DocumentStatusRow
-              label="GRN Receipt"
-              value="Completed"
-              done
-            />
-            <DocumentStatusRow
-              label="QC Status"
-              value={statusCfg.label}
-              done={grn.status === "qc_completed"}
-            />
-          </div>
-        </div>
-
         {grn.receiptRemarks && (
           <div className="bg-white rounded-xl border border-border p-4 shadow-sm space-y-2">
             <h2 className="text-xs font-bold text-foreground uppercase tracking-wider border-b pb-2">
@@ -240,59 +150,42 @@ export function StockTransferView({ id }: { id: string }) {
           <h2 className="text-xs font-bold text-foreground uppercase tracking-wider border-b pb-2">
             Received Items
           </h2>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="border-b border-border bg-muted/30">
-                  <th className="p-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground min-w-[160px]">
-                    Product
-                  </th>
-                  <th className="p-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-center">
-                    Dispatched
-                  </th>
-                  <th className="p-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground text-center">
-                    Received
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/60">
-                {grn.items.map((item, idx) => {
-                  const stackOpts = {
-                    packingSize: item.unitPerPacking || 1,
-                    unit: item.unit,
-                    netWeightPerPack: item.netWeightPerPack,
-                    weightUom: item.weightUom,
-                  };
-                  const orderedQty = orderedQtyByIndex[idx] || 0;
-                  const orderedStack = stackGrnLineQty(orderedQty, stackOpts);
-                  const receivedStack = stackGrnLineQty(item.receivedQty, stackOpts);
-                  return (
-                    <tr key={`${item.productId}-${idx}`} className="hover:bg-muted/10">
-                      <td className="p-2 align-middle min-w-[160px]">
-                        <ProductSkuCell name={item.productName} sku={item.productCode} />
-                      </td>
-                      <td className="p-2 align-middle">
-                        <StackedQtyCell
-                          stack={orderedStack}
-                          empty={!(orderedQty > 0)}
-                        />
-                      </td>
-                      <td className="p-2 align-middle">
-                        <StackedQtyCell
-                          stack={receivedStack}
-                          empty={!(item.receivedQty > 0)}
-                          className="[&_p:first-child]:text-brand-700"
-                        />
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <BatchDetailsReadOnlyTable batches={grn.batches} items={grn.items} />
         </div>
 
-        <BatchDetailsReadOnlyTable batches={grn.batches} items={grn.items} />
+        <div className="w-full max-w-sm ml-auto rounded-xl border border-border bg-white shadow-sm overflow-hidden">
+          <div className="flex items-center gap-2 border-b border-border/60 bg-muted/20 px-4 py-2.5">
+            <LayoutList className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+            <h3 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+              Summary
+            </h3>
+          </div>
+          <div className="p-3">
+            <dl className="space-y-2">
+              {[
+                { label: "GRN Date", value: grn.grnDate || "—" },
+                { label: "GRN Number", value: grn.grnNo, highlight: true },
+                { label: "From Warehouse", value: grn.fromWarehouse || "—" },
+                { label: "To Warehouse", value: grn.toWarehouse || grn.warehouse || "—" },
+                { label: "Received", value: totalReceivedLabel },
+                { label: "Dispatched", value: totalOrderedLabel },
+                { label: "Items", value: grn.items.length },
+              ].map((item) => (
+                <div key={item.label} className="flex justify-between gap-3 text-xs">
+                  <dt className="text-muted-foreground flex-shrink-0">{item.label}</dt>
+                  <dd
+                    className={cn(
+                      "text-right font-medium text-foreground min-w-0 break-words",
+                      item.highlight && "font-semibold text-brand-700",
+                    )}
+                  >
+                    {item.value}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        </div>
       </div>
     </RecordDetailPage>
   );

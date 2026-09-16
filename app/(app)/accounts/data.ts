@@ -15,6 +15,7 @@ export type RecordStatus =
   | "approved"
   | "rejected"
   | "posted"
+  | "reversed"
   | "cancelled";
 
 export type AccountType = "Asset" | "Liability" | "Income" | "Expense" | "Equity";

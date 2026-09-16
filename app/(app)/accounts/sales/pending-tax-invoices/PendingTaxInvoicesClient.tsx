@@ -2,7 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useClientMounted } from "@/lib/use-client-mounted";
+import {
+  pendingInvoicesListHref,
+  parsePendingInvoiceTabParam,
+} from "@/app/(app)/accounts/invoices/invoice-utils";
 import { Button } from "@/components/ui/button";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { CustomerPartyNameCell } from "@/app/(app)/accounts/invoices/components/CustomerPartyInfo";
@@ -664,7 +669,10 @@ function PendingInvoicesTable({
 
 export default function PendingTaxInvoicesClient() {
   const mounted = useClientMounted();
-  const [activeTab, setActiveTab] = useState<PendingInvoiceTabId>("sales_order");
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const activeTab =
+    parsePendingInvoiceTabParam(searchParams.get("tab")) ?? "sales_order";
 
   const [tabState, setTabState] = useState<Record<PendingInvoiceTabId, TabCache>>({
     sales_order: createEmptyTabCache(),
@@ -791,6 +799,7 @@ export default function PendingTaxInvoicesClient() {
         generateParams.set("dispatchId", item.dispatch_id);
         generateParams.set("dispatch", item.dispatch_no);
         generateParams.set("sourceType", tab);
+        generateParams.set("returnTo", pendingInvoicesListHref(tab));
         
         return {
           id: item.dispatch_id,
@@ -960,9 +969,12 @@ export default function PendingTaxInvoicesClient() {
     }
   }, [activeTab]);
 
-  const handleTabChange = useCallback((tab: PendingInvoiceTabId) => {
-    setActiveTab(tab);
-  }, []);
+  const handleTabChange = useCallback(
+    (tab: PendingInvoiceTabId) => {
+      router.push(pendingInvoicesListHref(tab), { scroll: false });
+    },
+    [router],
+  );
 
   const { data: warehouses } = useQuery({
     queryKey: ["warehouses", "dropdown"],

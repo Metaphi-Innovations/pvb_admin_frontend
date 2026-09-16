@@ -412,13 +412,16 @@ export function ProductForm({
 
 	const hsnOptions = useMemo(() => {
 		if (!hsnData) return [];
-		return hsnData.map((h) => ({
-			value: h.id,
-			label: h.hsnCode
-				? `${h.hsnCode}${h.hsnDescription ? ` — ${h.hsnDescription}` : ""}`
-				: h.hsnDescription || h.id,
-			searchText: `${h.hsnCode} ${h.hsnDescription}`,
-		}));
+		// Product Master is for goods — SAC (service) codes must not appear here.
+		return hsnData
+			.filter((h) => h.codeType === "HSN")
+			.map((h) => ({
+				value: h.id,
+				label: h.hsnCode
+					? `${h.hsnCode}${h.hsnDescription ? ` — ${h.hsnDescription}` : ""}`
+					: h.hsnDescription || h.id,
+				searchText: `${h.hsnCode} ${h.hsnDescription}`,
+			}));
 	}, [hsnData]);
 
 	const unitOptions = useMemo(() => [...PRODUCT_UNIT_OPTIONS], []);

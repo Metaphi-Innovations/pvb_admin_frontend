@@ -72,6 +72,9 @@ export interface SalesReturnLineItem {
   quantityType?: GrnQuantityType | null;
   productSnapshot: Record<string, unknown>;
   amount: number;
+  /** Unit price derived from return amount / qty or snapshot. */
+  unitPrice: number;
+  gstPct: number;
 }
 
 export interface SalesReturnDetail {
@@ -210,6 +213,40 @@ function mapLineItem(raw: Record<string, unknown>): SalesReturnLineItem {
     ),
     productSnapshot: snapshot,
     amount: asNumber(raw.amount),
+    unitPrice: (() => {
+      const returned =
+        asNumber(raw.total_return_pieces) ||
+        asNumber(raw.base_qty) ||
+        asNumber(raw.qty);
+      const amount = asNumber(raw.amount);
+      const derived = returned > 0 && amount > 0 ? amount / returned : 0;
+      const dispatchItem = asRecord(raw.dispatch_item);
+      const dispatchSnap = asRecord(dispatchItem.product_snapshot);
+      return (
+        derived ||
+        asNumber(snapshot.unit_price) ||
+        asNumber(snapshot.rate) ||
+        asNumber(snapshot.cp_price) ||
+        asNumber(snapshot.dp_price) ||
+        asNumber(snapshot.final_rate) ||
+        asNumber(snapshot.dealer_price) ||
+        asNumber(dispatchSnap.unit_price) ||
+        asNumber(dispatchSnap.rate) ||
+        asNumber(dispatchSnap.dp_price) ||
+        asNumber(dispatchSnap.final_rate) ||
+        0
+      );
+    })(),
+    gstPct:
+      asNumber(snapshot.gst_percent) ||
+      asNumber(snapshot.gst_percentage) ||
+      asNumber(snapshot.gst) ||
+      asNumber(snapshot.cgst_percent) +
+        asNumber(snapshot.sgst_percent) +
+        asNumber(snapshot.igst_percent) ||
+      asNumber(asRecord(product.gst_rate).gstPercentage) ||
+      asNumber(asRecord(product.gst_rate).gst_percentage) ||
+      0,
   };
 }
 

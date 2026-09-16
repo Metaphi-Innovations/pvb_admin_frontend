@@ -113,7 +113,7 @@ import {
   type InvoiceNearExpirySchemeSettlement,
   type InvoiceStatus,
 } from "./invoices-data";
-import { formatINR, INVOICES_LIST_PATH } from "./invoice-utils";
+import { formatINR, INVOICES_LIST_PATH, invoicesListHrefForSourceType, safeInternalReturnPath } from "./invoice-utils";
 import { showToast } from "@/lib/toast";
 import { sampleOrderInventoryImpactResolved } from "@/lib/accounts/resolved-impact-previews";
 import { dispatchAccountsDataChanged } from "@/lib/accounts/accounts-data-events";
@@ -370,6 +370,14 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
   const routeDispatchId = searchParams.get("dispatchId");
   const routeSoId = searchParams.get("so");
   const routeDispatchNo = searchParams.get("dispatch");
+  const listHref = useMemo(
+    () =>
+      safeInternalReturnPath(
+        searchParams.get("returnTo"),
+        invoicesListHrefForSourceType(routeSourceType || sourceType || undefined),
+      ),
+    [searchParams, routeSourceType, sourceType],
+  );
   /** Create flow opened from Pending → Sales Order Invoices → Generate. */
   const isSalesOrderGeneration =
     !isEdit && (routeSourceType === "sales_order" || sourceType === "sales_order");
@@ -1509,7 +1517,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
   );
   const isDirty = useFormDirtySnapshot(formSnapshot, { ready: baselineReady });
   const { requestCancel, discardDialog } = useTransactionFormCancel({
-    listHref: INVOICES_LIST_PATH,
+    listHref,
     isDirty,
   });
 
@@ -2359,7 +2367,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
         dispatchAccountsDataChanged("sales-invoices");
         showToast(message, "success");
         // replace + no post-success setState — setSaving(false) after push can abort soft nav
-        router.replace(INVOICES_LIST_PATH);
+        router.replace(listHref);
       };
 
       if ((isSalesOrderGeneration || isStockTransferGeneration) && !asDraft) {
@@ -2567,9 +2575,9 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
               : soGen
                 ? "Generate Invoice"
                 : "Create Invoice",
-        INVOICES_LIST_PATH,
+        listHref,
       )}
-      backHref={INVOICES_LIST_PATH}
+      backHref={listHref}
       onBackClick={requestCancel}
       stickyFooter={
         isSalesOrderGeneration ||

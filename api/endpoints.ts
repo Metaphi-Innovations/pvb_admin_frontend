@@ -544,6 +544,8 @@ export const API_ENDPOINTS = {
         DISTRICTS: "/user-management/business-geography/lookup/districts",
         LOCATIONS: "/user-management/business-geography/lookup/locations",
         PINCODES: "/user-management/business-geography/lookup/pincodes",
+        SALES_PERSON_BY_PINCODE:
+          "/user-management/business-geography/lookup/sales-person-by-pincode",
       },
       SPLIT_MERGE: {
         SOURCES: "/user-management/business-geography/split-merge/sources",
@@ -627,6 +629,7 @@ export const API_ENDPOINTS = {
       REVERT: (id: string) => `/warehouse/dispatch/${id}/revert`,
       DOWNLOAD_CHALLAN: (id: string) => `/warehouse/dispatch/${id}/download-challan`,
       CHALLAN_PREVIEW: (id: string) => `/warehouse/dispatch/${id}/challan-preview`,
+      SEND_CHALLAN_EMAIL: (id: string) => `/warehouse/dispatch/${id}/send-challan-email`,
       ALLOCATE_DC: (id: string) => `/warehouse/dispatch/${id}/allocate-dc`,
       ALLOCATE_SI: (id: string) => `/warehouse/dispatch/${id}/allocate-si`,
       ALLOCATE_ST: (id: string) => `/warehouse/dispatch/${id}/allocate-st`,
@@ -743,6 +746,8 @@ export const API_ENDPOINTS = {
         `/accounts/ledgers/${ledgerId}/opening-balances`,
       OPENING_BALANCE: (ledgerId: string, openingBalanceId: string) =>
         `/accounts/ledgers/${ledgerId}/opening-balances/${openingBalanceId}`,
+      OPENING_BALANCES_BY_FY: "/accounts/opening-balances",
+      OPENING_BALANCES_VALIDATE: "/accounts/opening-balances/validate",
     },
     FINANCIAL_YEARS: {
       CURRENT: "/accounts/financial-years/current",
@@ -795,6 +800,13 @@ export const API_ENDPOINTS = {
         EXPORT: "/accounts/banking/cash-book/export",
         EXPORT_EXCEL: "/accounts/banking/cash-book/export/excel",
         EXPORT_PDF: "/accounts/banking/cash-book/export/pdf",
+      },
+    },
+    REPORTS: {
+      TRIAL_BALANCE: {
+        LIST: "/accounts/reports/trial-balance",
+        FILTERS: "/accounts/reports/trial-balance/filters",
+        EXPORT: "/accounts/reports/trial-balance/export",
       },
     },
     DEBIT_NOTE: {

@@ -28,9 +28,12 @@ export function isPostedVoucherStatus(status: RecordStatus): boolean {
   return status === "posted";
 }
 
-/** Legacy postings that were approved before post workflow — still counted in movement totals. */
+/**
+ * Vouchers that affect ledger movement totals under append-only reversal:
+ * posted + approved (legacy) + reversed originals (pair with POSTED reversal).
+ */
 export function isLedgerMovementVoucherStatus(status: RecordStatus): boolean {
-  return status === "posted" || status === "approved";
+  return status === "posted" || status === "approved" || status === "reversed";
 }
 
 /** Signed balance: positive = Debit, negative = Credit. */

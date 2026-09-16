@@ -43,13 +43,21 @@ export function BatchDetailsReadOnlyTable({
   batches,
   items,
   invoiceMeta,
+  variant = "default",
 }: {
   batches: GrnBatch[];
   /** GRN line items — used for quantity_type + packing size (batches store base qty only). */
   items?: GrnItem[];
   invoiceMeta?: BatchDetailsInvoiceMeta;
+  /**
+   * sample_return: Cost Price + Discount % only (no GST / total columns).
+   * default: Unit Price + GST fields.
+   */
+  variant?: "default" | "sample_return";
 }) {
   if (batches.length === 0) return null;
+
+  const isSampleReturn = variant === "sample_return";
 
   return (
     <div className="space-y-3">
@@ -89,7 +97,7 @@ export function BatchDetailsReadOnlyTable({
 
       <div className="border border-border rounded-lg overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1040px]">
+          <table className={isSampleReturn ? "w-full min-w-[860px]" : "w-full min-w-[1040px]"}>
             <thead>
               <tr className="bg-muted/40 border-b border-border">
                 <th className="px-3 py-2.5 text-left text-xs font-semibold text-foreground min-w-[160px]">Product</th>
@@ -97,10 +105,20 @@ export function BatchDetailsReadOnlyTable({
                 <th className="px-3 py-2.5 text-left text-xs font-semibold text-foreground w-28">MFG Date</th>
                 <th className="px-3 py-2.5 text-left text-xs font-semibold text-foreground w-28">Expiry Date</th>
                 <th className="px-3 py-2.5 text-center text-xs font-semibold text-foreground w-32">Qty</th>
-                <th className="px-3 py-2.5 text-center text-xs font-semibold text-foreground w-24">Unit Price</th>
-                <th className="px-3 py-2.5 text-center text-xs font-semibold text-foreground w-20">GST %</th>
-                <th className="px-3 py-2.5 text-center text-xs font-semibold text-foreground w-28">GST Amount</th>
-                <th className="px-3 py-2.5 text-center text-xs font-semibold text-foreground w-28">Total Amount</th>
+                <th className="px-3 py-2.5 text-center text-xs font-semibold text-foreground w-28">
+                  {isSampleReturn ? "Cost Price" : "Unit Price"}
+                </th>
+                {isSampleReturn ? (
+                  <th className="px-3 py-2.5 text-center text-xs font-semibold text-foreground w-24">
+                    Discount %
+                  </th>
+                ) : (
+                  <>
+                    <th className="px-3 py-2.5 text-center text-xs font-semibold text-foreground w-20">GST %</th>
+                    <th className="px-3 py-2.5 text-center text-xs font-semibold text-foreground w-28">GST Amount</th>
+                    <th className="px-3 py-2.5 text-center text-xs font-semibold text-foreground w-28">Total Amount</th>
+                  </>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -115,6 +133,10 @@ export function BatchDetailsReadOnlyTable({
                 });
                 const taxable = round2(baseQty * (b.unitPrice ?? 0));
                 const lineTotal = round2(taxable + (b.gstAmount ?? 0));
+                const discountPct =
+                  b.discountPct != null && !Number.isNaN(Number(b.discountPct))
+                    ? Number(b.discountPct)
+                    : 100;
 
                 return (
                   <tr
@@ -131,11 +153,19 @@ export function BatchDetailsReadOnlyTable({
                       <StackedQtyCell stack={qtyStack} empty={!(baseQty > 0)} />
                     </td>
                     <td className="px-3 py-2.5 text-xs text-center tabular-nums">{fmtNum(b.unitPrice)}</td>
-                    <td className="px-3 py-2.5 text-xs text-center tabular-nums">
-                      {b.gstPct != null ? `${b.gstPct}%` : "—"}
-                    </td>
-                    <td className="px-3 py-2.5 text-xs text-center tabular-nums font-medium">{fmtNum(b.gstAmount)}</td>
-                    <td className="px-3 py-2.5 text-xs text-center tabular-nums font-semibold">{fmtNum(lineTotal)}</td>
+                    {isSampleReturn ? (
+                      <td className="px-3 py-2.5 text-xs text-center tabular-nums font-medium">
+                        {`${discountPct}%`}
+                      </td>
+                    ) : (
+                      <>
+                        <td className="px-3 py-2.5 text-xs text-center tabular-nums">
+                          {b.gstPct != null ? `${b.gstPct}%` : "—"}
+                        </td>
+                        <td className="px-3 py-2.5 text-xs text-center tabular-nums font-medium">{fmtNum(b.gstAmount)}</td>
+                        <td className="px-3 py-2.5 text-xs text-center tabular-nums font-semibold">{fmtNum(lineTotal)}</td>
+                      </>
+                    )}
                   </tr>
                 );
               })}
