@@ -109,19 +109,9 @@ export default function BalanceSheetPageClient() {
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
-    void import("@/lib/accounts/general-ledger-demo-seed").then(
-      ({ ensureGeneralLedgerDemoOnPageLoad }) => {
-        ensureGeneralLedgerDemoOnPageLoad();
-        if (!cancelled) setDataTick((t) => t + 1);
-      },
-    );
     const onVouchersUpdated = () => setDataTick((t) => t + 1);
     window.addEventListener(ACCOUNTS_VOUCHERS_UPDATED_EVENT, onVouchersUpdated);
-    return () => {
-      cancelled = true;
-      window.removeEventListener(ACCOUNTS_VOUCHERS_UPDATED_EVENT, onVouchersUpdated);
-    };
+    return () => window.removeEventListener(ACCOUNTS_VOUCHERS_UPDATED_EVENT, onVouchersUpdated);
   }, []);
 
   const handleFinancialYearChange = useCallback((fyId: string) => {

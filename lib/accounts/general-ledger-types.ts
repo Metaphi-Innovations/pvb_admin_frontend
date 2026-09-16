@@ -190,13 +190,6 @@ export interface GeneralLedgerListingFilters {
   search: string;
 }
 
-export interface GeneralLedgerDemoScenario {
-  id: string;
-  label: string;
-  ledgerName: string;
-  ledgerId: number | null;
-}
-
 export interface GeneralLedgerVoucherTypeOption {
   value: string;
   label: string;

@@ -1,5 +1,6 @@
 /**
- * General Ledger — routing helpers and shared re-exports.
+ * General Ledger routing helpers shared with other accounts screens.
+ * Statement rows come from the General Ledger API.
  */
 
 import { loadChartOfAccounts } from "@/app/(app)/accounts/data";
@@ -29,19 +30,6 @@ export function resolveLedgerIdByName(name: string): number | null {
   return partial?.id ?? null;
 }
 
-export function defaultGeneralLedgerDemoLedgerId(): number | null {
-  return resolveLedgerIdByName("ABC Agro Distributor");
-}
-
-export {
-  formatGeneralLedgerDate,
-  formatGlParticulars,
-  resolveContraLedgerNames,
-  buildGeneralLedgerStatementFromLedger,
-  buildGeneralLedgerGroupDrillDown,
-  ledgerClosingMatchesTrialBalance,
-} from "@/lib/accounts/general-ledger-compute";
-
 export type {
   GeneralLedgerDrillDownParams,
   GeneralLedgerDisplayRow,
@@ -54,12 +42,11 @@ export type {
   GeneralLedgerSourceReport,
   GeneralLedgerStatement,
   GeneralLedgerSummary,
-  GeneralLedgerDemoScenario,
 } from "@/lib/accounts/general-ledger-types";
 
 export { GENERAL_LEDGER_SOURCE_REPORTS } from "@/lib/accounts/general-ledger-types";
 
-// Legacy type alias used by transaction-detail-data
+/** Legacy row shape used by shared transaction-detail drill-down. */
 export interface GeneralLedgerRow {
   date: string;
   voucherNo: string;
