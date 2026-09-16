@@ -247,12 +247,14 @@ export function TransactionDetailsDrawer({
               </Link>
             </Button>
           )}
-          <Button variant="outline" size="sm" className="h-9 text-sm font-medium gap-1.5" asChild>
-            <Link href={detail.sourceHref} onClick={onClose}>
-              <ExternalLink className="w-4 h-4" />
-              Open Original Voucher
-            </Link>
-          </Button>
+          {detail.sourceHref ? (
+            <Button variant="outline" size="sm" className="h-9 text-sm font-medium gap-1.5" asChild>
+              <Link href={detail.sourceHref} onClick={onClose}>
+                <ExternalLink className="w-4 h-4" />
+                Open Original Voucher
+              </Link>
+            </Button>
+          ) : null}
         </SheetFooter>
       </SheetContent>
     </Sheet>

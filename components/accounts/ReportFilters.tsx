@@ -1129,15 +1129,19 @@ export function ReportBranchMultiFilter({
   values,
   onChange,
   options = REPORT_BRANCH_OPTIONS,
+  labeledOptions,
 }: {
   values: string[];
   onChange: (values: string[]) => void;
   options?: readonly string[];
+  labeledOptions?: ReportMultiSelectOption[];
 }) {
-  const selectOptions: ReportMultiSelectOption[] = options.map((b) => ({
-    value: b,
-    label: b,
-  }));
+  const selectOptions: ReportMultiSelectOption[] =
+    labeledOptions ??
+    options.map((b) => ({
+      value: b,
+      label: b,
+    }));
   return (
     <ReportMultiSelect
       label="Branch"
@@ -1155,14 +1159,18 @@ export function ReportWarehouseMultiFilter({
   values,
   onChange,
   options,
+  labeledOptions,
 }: {
   values: string[];
   onChange: (values: string[]) => void;
-  options: string[];
+  options?: string[];
+  labeledOptions?: ReportMultiSelectOption[];
 }) {
-  const selectOptions: ReportMultiSelectOption[] = options
-    .filter((w) => w !== "all")
-    .map((w) => ({ value: w, label: w }));
+  const selectOptions: ReportMultiSelectOption[] =
+    labeledOptions ??
+    (options ?? [])
+      .filter((w) => w !== "all")
+      .map((w) => ({ value: w, label: w }));
   return (
     <ReportMultiSelect
       label="Warehouse"

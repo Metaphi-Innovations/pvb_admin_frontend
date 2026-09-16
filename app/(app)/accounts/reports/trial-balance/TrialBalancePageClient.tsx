@@ -35,6 +35,7 @@ import {
 } from "@/components/accounts/AccountsTableListing";
 import { FinancialReportHeadCell } from "@/components/accounts/FinancialReportTableHead";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
+import { buildGeneralLedgerHref } from "@/lib/accounts/general-ledger-href";
 import {
   formatMoneyString,
   formatMoneyStringOrDash,
@@ -452,6 +453,21 @@ export default function TrialBalancePageClient() {
       expandedGroupIds,
       expandedSubgroupIds,
     ]
+  );
+
+  const generalLedgerHref = useCallback(
+    (target: { ledgerId?: string; groupId?: string }) => {
+      if (!dateFrom || !dateTo || !financialYearId || financialYearId === "all") return undefined;
+      return buildGeneralLedgerHref({
+        ...target,
+        fromDate: dateFrom,
+        toDate: dateTo,
+        financialYearId,
+        warehouse: warehouseId !== "all" ? warehouseId : undefined,
+        source: "trial-balance",
+      });
+    },
+    [dateFrom, dateTo, financialYearId, warehouseId],
   );
 
   const handleFinancialYearChange = useCallback(
@@ -947,10 +963,11 @@ export default function TrialBalancePageClient() {
                         className="group bg-muted/15 hover:bg-muted/30 transition-colors"
                       >
                         <AccountsTableCell className={TB_DETAILED_INDENT.group}>
-                          <AccountsCoaHierarchyRowLabel
-                            level="account_group"
-                            name={row.name}
-                            ledgerCount={row.ledgerCount}
+                            <AccountsCoaHierarchyRowLabel
+                              level="account_group"
+                              name={row.name}
+                              nameHref={generalLedgerHref({ groupId: row.id })}
+                              ledgerCount={row.ledgerCount}
                             expandable={row.ledgerCount > 0}
                             expanded={expanded}
                             onExpandClick={() => toggleGroup(row.id)}
@@ -972,6 +989,7 @@ export default function TrialBalancePageClient() {
                           <AccountsCoaHierarchyRowLabel
                             level="sub_group"
                             name={row.name}
+                            nameHref={generalLedgerHref({ groupId: row.id })}
                             ledgerCount={row.ledgerCount}
                             expandable={row.ledgerCount > 0}
                             expanded={expanded}
@@ -992,6 +1010,7 @@ export default function TrialBalancePageClient() {
                         <AccountsCoaHierarchyRowLabel
                           level="ledger"
                           name={row.code ? `${row.code} — ${row.name}` : row.name}
+                          nameHref={generalLedgerHref({ ledgerId: row.id })}
                           showTreeGuides
                         />
                       </AccountsTableCell>

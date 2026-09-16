@@ -3,43 +3,12 @@
  */
 
 import { loadChartOfAccounts } from "@/app/(app)/accounts/data";
-import type { GeneralLedgerDrillDownParams } from "@/lib/accounts/general-ledger-types";
 
-export const GENERAL_LEDGER_HREF = "/accounts/reports/general-ledger";
-
-export const GENERAL_LEDGER_LEGACY_HREF = "/accounts/reports/ledger";
-
-export function buildGeneralLedgerHref(
-  params: number | GeneralLedgerDrillDownParams,
-): string {
-  const p: GeneralLedgerDrillDownParams =
-    typeof params === "number" ? { ledgerId: params } : params;
-
-  const search = new URLSearchParams();
-
-  if (p.ledgerId != null) search.set("ledgerId", String(p.ledgerId));
-  if (p.groupId != null) search.set("groupId", String(p.groupId));
-  if (p.fromDate) search.set("fromDate", p.fromDate);
-  if (p.toDate) search.set("toDate", p.toDate);
-  if (p.source) search.set("source", p.source);
-  if (p.groupName) search.set("groupName", p.groupName);
-  if (p.branch && p.branch !== "all") search.set("branch", p.branch);
-  if (p.warehouse && p.warehouse !== "all") search.set("warehouse", p.warehouse);
-  if (p.company && p.company !== "all") search.set("company", p.company);
-  if (p.partyId && p.partyId !== "all") search.set("party", p.partyId);
-  if (p.ledgerType && p.ledgerType !== "all") search.set("ledgerType", p.ledgerType);
-  if (p.financialYearId && p.financialYearId !== "all") {
-    search.set("fy", p.financialYearId);
-  }
-
-  // Backward-compatible aliases used by existing report links
-  if (p.ledgerId != null && !search.has("ledger")) search.set("ledger", String(p.ledgerId));
-  if (p.fromDate && !search.has("from")) search.set("from", p.fromDate);
-  if (p.toDate && !search.has("to")) search.set("to", p.toDate);
-
-  const qs = search.toString();
-  return qs ? `${GENERAL_LEDGER_HREF}?${qs}` : GENERAL_LEDGER_HREF;
-}
+export {
+  GENERAL_LEDGER_HREF,
+  GENERAL_LEDGER_LEGACY_HREF,
+  buildGeneralLedgerHref,
+} from "@/lib/accounts/general-ledger-href";
 
 export function resolveLedgerIdByName(name: string): number | null {
   const trimmed = name.trim();
@@ -102,7 +71,7 @@ export interface GeneralLedgerRow {
   runningBalance: number;
   runningBalanceType: "Debit" | "Credit";
   isOpeningRow?: boolean;
-  voucherId?: number;
+  voucherId?: number | string;
   lineOrder?: number;
   viewHref?: string;
   viewLabel?: string;

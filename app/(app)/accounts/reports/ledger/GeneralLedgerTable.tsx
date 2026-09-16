@@ -1,10 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
 import { Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { MoneyCell } from "@/components/accounts/MoneyAmount";
-import { formatBalanceAmount, formatMoney } from "@/lib/accounts/money-format";
 import { FinancialReportHeadCell } from "@/components/accounts/FinancialReportTableHead";
 import {
   AccountsTable,
@@ -17,29 +14,43 @@ import {
   AccountsTableScroll,
 } from "@/components/accounts/AccountsTable";
 import { AccountsTablePagination } from "@/components/accounts/AccountsTableListing";
-import type { GeneralLedgerDisplayRow, GeneralLedgerSummary } from "./general-ledger-data";
-import { useBankReconDisplay } from "@/components/accounts/useBankReconDisplay";
+import { formatMoneyString } from "@/lib/accounts/money-format";
+import type {
+  GeneralLedgerApiRow,
+  GeneralLedgerSummary,
+} from "@/types/general-ledger.types";
+import {
+  formatApiMoneyOrDash,
+  formatApiRunningBalance,
+  formatGlDisplayDate,
+} from "./general-ledger-api-view";
 
 export function GeneralLedgerTable({
   openingRow,
   transactionRows,
   closingRow,
   summary,
+  filtersActive,
+  page,
+  pageSize,
+  totalTransactions,
+  onPageChange,
+  onPageSizeChange,
   onVoucherClick,
 }: {
-  openingRow: GeneralLedgerDisplayRow;
-  transactionRows: GeneralLedgerDisplayRow[];
-  closingRow?: GeneralLedgerDisplayRow;
+  openingRow: GeneralLedgerApiRow;
+  transactionRows: GeneralLedgerApiRow[];
+  closingRow: GeneralLedgerApiRow;
   summary: GeneralLedgerSummary;
-  onVoucherClick?: (row: GeneralLedgerDisplayRow) => void;
+  filtersActive: boolean;
+  page: number;
+  pageSize: number;
+  totalTransactions: number;
+  onPageChange: (page: number) => void;
+  onPageSizeChange: (pageSize: number) => void;
+  onVoucherClick?: (row: GeneralLedgerApiRow) => void;
 }) {
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
-
-  const paginatedTransactions = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return transactionRows.slice(start, start + pageSize);
-  }, [transactionRows, page, pageSize]);
+  const visibleTotals = filtersActive ? summary.filtered_period : summary.period;
 
   return (
     <>
@@ -63,14 +74,14 @@ export function GeneralLedgerTable({
           </AccountsTableHead>
           <AccountsTableBody>
             <GeneralLedgerTableRow row={openingRow} />
-            {paginatedTransactions.map((row, i) => (
+            {transactionRows.map((row, i) => (
               <GeneralLedgerTableRow
-                key={`${row.kind}-${row.date}-${row.voucherNo}-${i}`}
+                key={`${row.voucher_id ?? "tx"}-${row.date}-${i}`}
                 row={row}
                 onVoucherClick={onVoucherClick}
               />
             ))}
-            {closingRow ? <GeneralLedgerTableRow row={closingRow} /> : null}
+            <GeneralLedgerTableRow row={closingRow} />
           </AccountsTableBody>
           <AccountsTableFoot>
             <AccountsTableRow className="bg-muted/20 font-semibold border-t border-border/80">
@@ -78,13 +89,13 @@ export function GeneralLedgerTable({
                 Total
               </AccountsTableCell>
               <AccountsTableCell align="right" money className="py-2 font-bold">
-                {formatMoney(summary.totalDebit)}
+                {formatMoneyString(visibleTotals.debit)}
               </AccountsTableCell>
               <AccountsTableCell align="right" money className="py-2 font-bold">
-                {formatMoney(summary.totalCredit)}
+                {formatMoneyString(visibleTotals.credit)}
               </AccountsTableCell>
               <AccountsTableCell align="right" className="tabular-nums whitespace-nowrap py-2 text-xs font-bold">
-                {formatBalanceAmount(summary.closingBalance, summary.closingBalanceType)}
+                {formatApiRunningBalance(summary.closing.amount, summary.closing.side)}
               </AccountsTableCell>
               <AccountsTableCell />
             </AccountsTableRow>
@@ -93,28 +104,28 @@ export function GeneralLedgerTable({
                 Grand Total
               </AccountsTableCell>
               <AccountsTableCell align="right" money className="py-2 font-bold">
-                {formatMoney(summary.grandTotalDebit)}
+                {formatMoneyString(summary.grand_total.debit)}
               </AccountsTableCell>
               <AccountsTableCell align="right" money className="py-2 font-bold">
-                {formatMoney(summary.grandTotalCredit)}
+                {formatMoneyString(summary.grand_total.credit)}
               </AccountsTableCell>
               <AccountsTableCell colSpan={2} />
             </AccountsTableRow>
           </AccountsTableFoot>
         </AccountsTable>
       </AccountsTableScroll>
-      {transactionRows.length > 0 && (
+      {totalTransactions > 0 ? (
         <div className="flex-shrink-0 border-t border-border">
           <AccountsTablePagination
             page={page}
             pageSize={pageSize}
-            totalRecords={transactionRows.length}
-            onPageChange={setPage}
-            onPageSizeChange={setPageSize}
+            totalRecords={totalTransactions}
+            onPageChange={onPageChange}
+            onPageSizeChange={onPageSizeChange}
             recordLabel="transactions"
           />
         </div>
-      )}
+      ) : null}
     </>
   );
 }
@@ -123,65 +134,67 @@ function GeneralLedgerTableRow({
   row,
   onVoucherClick,
 }: {
-  row: GeneralLedgerDisplayRow;
-  onVoucherClick?: (row: GeneralLedgerDisplayRow) => void;
+  row: GeneralLedgerApiRow;
+  onVoucherClick?: (row: GeneralLedgerApiRow) => void;
 }) {
-  const isOpening = row.kind === "opening";
-  const isClosing = row.kind === "closing";
+  const isOpening = row.kind === "OPENING";
+  const isClosing = row.kind === "CLOSING";
   const isBalanceRow = isOpening || isClosing;
-  const canDrill = row.kind === "transaction" && row.voucherId && onVoucherClick;
-  const recon = useBankReconDisplay(
-    isBalanceRow ? null : row.voucherId,
-    isBalanceRow ? null : row.voucherNo,
-  );
+  const canView = row.kind === "TRANSACTION" && Boolean(row.voucher_id) && Boolean(onVoucherClick);
 
   return (
     <AccountsTableRow
       className={cn(
         isOpening && "bg-muted/20 font-medium",
         isClosing && "bg-brand-50/40 font-medium",
-        canDrill && "cursor-pointer hover:bg-muted/20 group",
+        canView && "cursor-pointer hover:bg-muted/20 group",
       )}
       onClick={() => {
-        if (canDrill) onVoucherClick(row);
+        if (canView) onVoucherClick?.(row);
       }}
     >
-      <AccountsTableCell className="whitespace-nowrap">{row.date}</AccountsTableCell>
+      <AccountsTableCell className="whitespace-nowrap">
+        {formatGlDisplayDate(row.date)}
+      </AccountsTableCell>
       <AccountsTableCell
         className={cn("max-w-[280px] truncate", isBalanceRow && "font-semibold")}
-        title={row.particulars}
+        title={row.narration ? `${row.particulars} — ${row.narration}` : row.particulars}
       >
         {row.particulars}
       </AccountsTableCell>
       <AccountsTableCell className="whitespace-nowrap text-muted-foreground">
-        {isOpening ? "Opening" : isClosing ? "—" : row.transactionType || row.voucherType}
+        {isOpening ? "Opening" : isClosing ? "—" : row.transaction_type || row.voucher_type || "—"}
       </AccountsTableCell>
       <AccountsTableCell className="whitespace-nowrap">
-        {isBalanceRow || !row.voucherNo ? (
+        {isBalanceRow || !row.voucher_number ? (
           <span className="text-muted-foreground">—</span>
         ) : (
-          <span className="font-mono text-xs font-semibold text-brand-700">{row.voucherNo}</span>
+          <span className="font-mono text-xs font-semibold text-brand-700">{row.voucher_number}</span>
         )}
       </AccountsTableCell>
       <AccountsTableCell className="whitespace-nowrap tabular-nums text-[11px]">
-        {isBalanceRow ? "—" : recon.isReconciled && recon.bankDate ? recon.bankDate : "—"}
+        {isBalanceRow || !row.bank_date ? "—" : formatGlDisplayDate(row.bank_date)}
       </AccountsTableCell>
       <AccountsTableCell className="whitespace-nowrap text-[11px]">
-        {isBalanceRow ? "—" : recon.statusLabel}
+        {isBalanceRow || !row.recon_status ? "—" : row.recon_status}
       </AccountsTableCell>
-      <MoneyCell amount={row.debit} dashIfZero className="accounts-table-td" />
-      <MoneyCell amount={row.credit} dashIfZero className="accounts-table-td" />
+      <AccountsTableCell align="right" money>
+        {formatApiMoneyOrDash(row.debit)}
+      </AccountsTableCell>
+      <AccountsTableCell align="right" money>
+        {formatApiMoneyOrDash(row.credit)}
+      </AccountsTableCell>
       <AccountsTableCell align="right" className="tabular-nums font-medium whitespace-nowrap">
-        {formatBalanceAmount(row.runningBalance, row.runningBalanceType)}
+        {formatApiRunningBalance(row.running_balance, row.running_balance_side)}
       </AccountsTableCell>
       <AccountsTableCell align="center" className="w-10">
-        {canDrill ? (
+        {canView ? (
           <button
             type="button"
             className="p-1 rounded-md text-muted-foreground hover:text-brand-600 hover:bg-brand-50 opacity-0 group-hover:opacity-100 transition-opacity"
             onClick={(e) => {
               e.stopPropagation();
-              onVoucherClick(row);
+              onVoucherClick?.(row);
             }}
             aria-label="View voucher details"
           >

@@ -808,6 +808,11 @@ export const API_ENDPOINTS = {
         FILTERS: "/accounts/reports/trial-balance/filters",
         EXPORT: "/accounts/reports/trial-balance/export",
       },
+      GENERAL_LEDGER: {
+        LIST: "/accounts/reports/general-ledger",
+        FILTERS: "/accounts/reports/general-ledger/filters",
+        EXPORT: "/accounts/reports/general-ledger/export",
+      },
     },
     DEBIT_NOTE: {
       CONFIG: "/accounts/debit-note/config",
