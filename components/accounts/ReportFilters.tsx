@@ -306,6 +306,13 @@ export function ReportAsOnDateFilter({
   );
 }
 
+export type ReportBranchOption = string | { id: string; name: string };
+
+/**
+ * Branch filter with search (ReportSingleSelect).
+ * - `string[]` options: value/label are the branch name (legacy reports).
+ * - `{ id, name }[]` options: value is id, label is name (warehouse-backed reports).
+ */
 export function ReportBranchFilter({
   value,
   onChange,
@@ -313,25 +320,25 @@ export function ReportBranchFilter({
 }: {
   value: string;
   onChange: (value: string) => void;
-  options?: readonly string[];
+  options?: readonly ReportBranchOption[];
 }) {
+  const selectOptions: ReportMultiSelectOption[] = options.map((opt) =>
+    typeof opt === "string"
+      ? { value: opt, label: opt }
+      : { value: opt.id, label: opt.name, searchText: opt.name }
+  );
+
   return (
-    <div className="space-y-0.5 min-w-[140px]">
-      <span className={filterLabelClass}>Branch</span>
-      <Select value={value} onValueChange={onChange}>
-        <SelectTrigger className={cn(filterSelectClass, "mt-0 w-[140px]")}>
-          <SelectValue placeholder="All branches" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">All branches</SelectItem>
-          {options.map((b) => (
-            <SelectItem key={b} value={b}>
-              {b}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
+    <ReportSingleSelect
+      label="Branch"
+      value={value === "all" ? "" : value}
+      onChange={(next) => onChange(next || "all")}
+      options={selectOptions}
+      placeholder="All branches"
+      allLabel="All branches"
+      allowClear
+      minWidthClass="min-w-[200px] w-[220px] max-w-[280px]"
+    />
   );
 }
 

@@ -194,6 +194,7 @@ export default function ChartOfAccountsPageClient() {
     ledgerId: selectedLedgerApiId,
     dateFrom,
     dateTo,
+    financialYearId: selectedFY?.id,
     refreshTick: ledgerDataTick,
     enabled: Boolean(
       selectedNode && isCoaLedgerDetailView(selectedNode, records) && datesReady,
@@ -204,6 +205,7 @@ export default function ChartOfAccountsPageClient() {
     ledgerIds: groupLedgerApiIds,
     dateFrom,
     dateTo,
+    financialYearId: selectedFY?.id,
     refreshTick: ledgerDataTick,
     enabled: Boolean(datesReady && groupLedgerApiIds.length > 0),
   });

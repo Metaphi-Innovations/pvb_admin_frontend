@@ -106,6 +106,8 @@ export const ACCOUNTS_ENDPOINTS = {
   },
   reports: {
     trialBalance: `${ACCOUNTS_API_BASE}/reports/trial-balance`,
+    trialBalanceFilters: `${ACCOUNTS_API_BASE}/reports/trial-balance/filters`,
+    trialBalanceExport: `${ACCOUNTS_API_BASE}/reports/trial-balance/export`,
     ledger: `${ACCOUNTS_API_BASE}/reports/ledger`,
     pl: `${ACCOUNTS_API_BASE}/reports/pl`,
     balanceSheet: `${ACCOUNTS_API_BASE}/reports/balance-sheet`,

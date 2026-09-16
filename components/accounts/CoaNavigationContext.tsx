@@ -29,6 +29,7 @@ import {
   chartOfAccountsKeys,
   useChartOfAccountsTree,
 } from "@/hooks/accounts/use-chart-of-accounts";
+import { useFY } from "@/lib/fy-store";
 import { useAccountsAccordion } from "./AccountsAccordionContext";
 
 const TREE_SEARCH_DEBOUNCE_MS = 350;
@@ -152,6 +153,8 @@ export function CoaNavigationProvider({
     return () => window.clearTimeout(handle);
   }, [treeSearchTerm]);
 
+  const { selectedFY } = useFY();
+
   const {
     data: apiRecords,
     isLoading,
@@ -162,6 +165,7 @@ export function CoaNavigationProvider({
   } = useChartOfAccountsTree({
     enabled: needsCoaData,
     includeLedgers: true,
+    financialYearId: selectedFY?.id,
     search: treeSearchQuery || undefined,
   });
 

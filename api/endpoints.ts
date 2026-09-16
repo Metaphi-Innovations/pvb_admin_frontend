@@ -746,6 +746,8 @@ export const API_ENDPOINTS = {
         `/accounts/ledgers/${ledgerId}/opening-balances`,
       OPENING_BALANCE: (ledgerId: string, openingBalanceId: string) =>
         `/accounts/ledgers/${ledgerId}/opening-balances/${openingBalanceId}`,
+      OPENING_BALANCES_BY_FY: "/accounts/opening-balances",
+      OPENING_BALANCES_VALIDATE: "/accounts/opening-balances/validate",
     },
     FINANCIAL_YEARS: {
       CURRENT: "/accounts/financial-years/current",
@@ -798,6 +800,13 @@ export const API_ENDPOINTS = {
         EXPORT: "/accounts/banking/cash-book/export",
         EXPORT_EXCEL: "/accounts/banking/cash-book/export/excel",
         EXPORT_PDF: "/accounts/banking/cash-book/export/pdf",
+      },
+    },
+    REPORTS: {
+      TRIAL_BALANCE: {
+        LIST: "/accounts/reports/trial-balance",
+        FILTERS: "/accounts/reports/trial-balance/filters",
+        EXPORT: "/accounts/reports/trial-balance/export",
       },
     },
     DEBIT_NOTE: {

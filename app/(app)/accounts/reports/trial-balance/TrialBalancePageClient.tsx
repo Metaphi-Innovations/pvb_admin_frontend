@@ -1,8 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
-import { AlertTriangle, CheckCircle2 } from "lucide-react";
+import { AlertCircle, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
@@ -19,137 +18,96 @@ import {
   ReportFilterRow,
   ReportDateRangeFilter,
   ReportFinancialYearFilter,
-  ReportBranchMultiFilter,
-  ReportLedgerGroupMultiFilter,
-  ReportLedgerMultiFilter,
+  ReportBranchFilter,
+  ReportLedgerFilter,
   ReportShowZeroBalanceToggle,
   ReportMoreFilters,
   ReportFilterSummary,
-  ReportIncludeOpeningBalanceToggle,
   ReportFromDateFilter,
   ReportToDateFilter,
-  ReportVoucherTypeMultiFilter,
-  REPORT_BRANCH_OPTIONS,
 } from "@/components/accounts/ReportFilters";
 import {
-  buildBranchFilterSummary,
-  buildEntityFilterSummary,
   countActiveMoreFilters,
-  formatMultiSelectLabel,
-  isMultiFilterActive,
   type ReportFilterSummaryItem,
 } from "@/lib/accounts/report-multi-filter-utils";
 import {
   AccountsTableListing,
-  AccountsTablePagination,
 } from "@/components/accounts/AccountsTableListing";
 import { FinancialReportHeadCell } from "@/components/accounts/FinancialReportTableHead";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
-import { formatMoney, formatMoneyOrDash } from "@/lib/accounts/money-format";
+import {
+  formatMoneyString,
+  formatMoneyStringOrDash,
+} from "@/lib/accounts/money-format";
 import {
   resolveDateRangePreset,
   type DateRangePresetId,
 } from "@/lib/accounts/report-date-presets";
 import { useClientMounted } from "@/lib/use-client-mounted";
+import { useFY } from "@/lib/fy-store";
+import { showToast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
+import { AccountsCoaHierarchyRowLabel } from "@/lib/accounts/accounts-coa-hierarchy-ui";
+import { ChartOfAccountsService } from "@/services/chart-of-accounts.service";
+import { LedgerService } from "@/services/ledger.service";
+import { TrialBalanceApiService } from "@/services/trial-balance.service";
+import type {
+  TrialBalanceBalanceType,
+  TrialBalanceFiltersConfig,
+  TrialBalanceHierarchyNode,
+  TrialBalanceQueryParams,
+  TrialBalanceReportResult,
+  TrialBalanceTab,
+} from "@/types/trial-balance.types";
+import { tabToReportType } from "@/types/trial-balance.types";
+import { TrialBalanceViewTabs } from "./TrialBalanceViewTabs";
 import {
-  buildTrialBalanceDetailedGroups,
-  buildTrialBalanceLedgerHref,
-  buildTrialBalanceGroupHref,
-  collectAllPrimaryHeadKeys,
-  computeTrialBalanceSummaryFromDetailedGroups,
-  computeTrialBalanceLedgerVoucherLines,
-  findTrialBalanceExceptions,
-  flattenTrialBalanceDetailedGroups,
-  getTrialBalanceBranchOptions,
-  getTrialBalanceLedgerGroupOptions,
-  getTrialBalanceLedgerOptions,
-  type TrialBalanceDetailedFlatRow,
-  type TrialBalanceFilters,
-  type TrialBalanceTab,
-  type TrialBalanceVoucherException,
-} from "./trial-balance-data";
-import {
-  flattenTrialBalanceNormalPrimaryHeadRows,
+  collectPrimaryHeadIds,
+  flattenDetailedHierarchy,
+  isHierarchyData,
+  toNormalPrimaryHeadRows,
   TB_DETAILED_INDENT,
   TB_NORMAL_INDENT,
-  type TrialBalanceNormalPrimaryHeadRow,
-} from "./trial-balance-display";
-import {
-  isRenderableTrialBalanceDetailedRow,
-  isRenderableTrialBalanceNormalRow,
-} from "./trial-balance-validation";
-import { formatTrialBalanceReportDate } from "./TrialBalanceReportSummary";
-import { TrialBalanceViewTabs } from "./TrialBalanceViewTabs";
-import { ensureFinancialYearsCurrent, loadFinancialYears } from "@/app/(app)/accounts/masters/masters-data";
-import { getActiveFinancialYearId } from "@/lib/accounts/day-book-data";
-import {
-  exportTrialBalanceDetailedToExcel,
-  exportTrialBalanceDetailedToPdf,
-  exportTrialBalanceNormalToExcel,
-  exportTrialBalanceNormalToPdf,
-} from "./trial-balance-export";
+} from "./trial-balance-api-display";
 import "./trial-balance-compact.css";
-import { AccountsCoaHierarchyRowLabel } from "@/lib/accounts/accounts-coa-hierarchy-ui";
 
-const PLACEHOLDER_DATE = "2025-04-01";
+const BALANCE_TYPE_OPTIONS: { value: TrialBalanceBalanceType; label: string }[] = [
+  { value: "ALL", label: "All" },
+  { value: "DEBIT", label: "Debit" },
+  { value: "CREDIT", label: "Credit" },
+];
 
-function mergeLedgerOptions(
-  getOptions: (ledgerGroupId: string) => { id: number; name: string }[],
-  ledgerGroupIds: string[],
-): { id: number; name: string }[] {
-  if (ledgerGroupIds.length === 0) return getOptions("all");
-  const seen = new Map<number, { id: number; name: string }>();
-  for (const groupId of ledgerGroupIds) {
-    for (const ledger of getOptions(groupId)) {
-      seen.set(ledger.id, ledger);
-    }
-  }
-  return [...seen.values()].sort((a, b) => a.name.localeCompare(b.name));
-}
-
-function defaultFyDateRange(): { from: string; to: string; fyId: string } {
-  ensureFinancialYearsCurrent();
-  const activeFyId = getActiveFinancialYearId();
-  const fy = loadFinancialYears().find((f) => f.id === activeFyId);
-  const today = new Date().toISOString().slice(0, 10);
-  if (!fy) return { from: PLACEHOLDER_DATE, to: today, fyId: "all" };
-  return {
-    from: fy.startDate,
-    to: today < fy.endDate ? today : fy.endDate,
-    fyId: String(fy.id),
-  };
-}
-
-function rowKey(
-  row: TrialBalanceNormalPrimaryHeadRow | TrialBalanceDetailedFlatRow,
-  index: number,
-): string {
-  if (row.type === "primary") return `p-${row.primaryHeadId}`;
-  if (row.type === "group") return `g-${row.groupKey}`;
-  if (row.type === "subgroup") return `sg-${row.subgroupKey}`;
-  if (row.type === "ledger") return `l-${row.ledger.ledgerId}`;
-  if (row.type === "voucher") {
-    return `v-${row.ledgerId}-${row.voucher.voucherId}-${row.voucher.debit}-${row.voucher.credit}`;
-  }
-  return `row-${index}`;
+function DebitCreditCells({
+  debit,
+  credit,
+  bold,
+}: {
+  debit: string;
+  credit: string;
+  bold?: boolean;
+}) {
+  const cellClass = bold ? "font-semibold" : undefined;
+  return (
+    <>
+      <AccountsTableCell align="right" money className={cellClass}>
+        {formatMoneyStringOrDash(debit)}
+      </AccountsTableCell>
+      <AccountsTableCell align="right" money className={cellClass}>
+        {formatMoneyStringOrDash(credit)}
+      </AccountsTableCell>
+    </>
+  );
 }
 
 function BalanceStatusBanner({
-  isBalanced,
-  openingDifference,
-  periodDifference,
-  closingDifference,
+  health,
   visible,
 }: {
-  isBalanced: boolean;
-  openingDifference: number;
-  periodDifference: number;
-  closingDifference: number;
+  health: TrialBalanceReportResult["trial_balance_health"] | null;
   visible: boolean;
 }) {
-  if (!visible) return null;
-  if (isBalanced) {
+  if (!visible || !health) return null;
+  if (health.is_balanced) {
     return (
       <div className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 border-t border-emerald-100 text-xs text-emerald-700">
         <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
@@ -157,115 +115,360 @@ function BalanceStatusBanner({
       </div>
     );
   }
+
+  const openingUnbalanced = !health.opening.is_balanced;
+  const periodBalanced = health.period.is_balanced;
+
   return (
-    <div className="flex-shrink-0 flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-1.5 bg-red-50 border-t border-red-100 text-xs text-red-700">
+    <div className="flex-shrink-0 flex flex-col gap-1 px-3 py-1.5 bg-red-50 border-t border-red-100 text-xs text-red-700">
       <span className="inline-flex items-center gap-1.5 font-medium">
         <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
         Trial Balance is not balanced (total Debits ≠ total Credits)
       </span>
-      <span title="Opening Dr minus Opening Cr">Opening Difference: {formatMoney(openingDifference)}</span>
-      <span title="Period Dr minus Period Cr">Period Difference: {formatMoney(periodDifference)}</span>
-      <span title="Closing Dr minus Closing Cr">Closing Difference: {formatMoney(closingDifference)}</span>
+      <span className="flex flex-wrap gap-x-3 gap-y-1">
+        <span>Opening Difference: {formatMoneyString(health.opening.difference)}</span>
+        <span>Period Difference: {formatMoneyString(health.period.difference)}</span>
+        <span>Closing Difference: {formatMoneyString(health.closing.difference)}</span>
+      </span>
+      {openingUnbalanced && periodBalanced && (
+        <span className="text-red-600/90">
+          Opening balances are unbalanced by {formatMoneyString(health.opening.difference)}.
+          Period transactions are balanced.
+        </span>
+      )}
     </div>
   );
 }
 
-/** Client-approved Trial Balance amount columns: Debit | Credit (closing balances). */
-function DebitCreditCells({
-  debit,
-  credit,
-  bold,
+function EmptyState({
+  hasFilters,
+  onClear,
 }: {
-  debit: number;
-  credit: number;
-  bold?: boolean;
+  hasFilters: boolean;
+  onClear: () => void;
 }) {
-  const cellClass = bold ? "font-semibold" : undefined;
   return (
-    <>
-      <AccountsTableCell align="right" money className={cellClass}>
-        {formatMoneyOrDash(debit)}
-      </AccountsTableCell>
-      <AccountsTableCell align="right" money className={cellClass}>
-        {formatMoneyOrDash(credit)}
-      </AccountsTableCell>
-    </>
+    <div className="flex flex-col items-center justify-center gap-2 py-14 text-center">
+      <p className="text-sm font-medium text-foreground">
+        No accounting entries found for the selected period.
+      </p>
+      <p className="text-xs text-muted-foreground">
+        Adjust Financial Year, date range, branch, or More Filters and try again.
+      </p>
+      {hasFilters && (
+        <button
+          type="button"
+          onClick={onClear}
+          className="text-xs text-brand-600 hover:underline mt-1"
+        >
+          Reset filters
+        </button>
+      )}
+    </div>
   );
 }
 
 export default function TrialBalancePageClient() {
   const mounted = useClientMounted();
+  const { selectedFY } = useFY();
 
   const [activeTab, setActiveTab] = useState<TrialBalanceTab>("normal");
   const [preset, setPreset] = useState<DateRangePresetId>("custom");
-  const [dateFrom, setDateFrom] = useState(PLACEHOLDER_DATE);
-  const [dateTo, setDateTo] = useState(PLACEHOLDER_DATE);
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [datesReady, setDatesReady] = useState(false);
-  const [financialYearId, setFinancialYearId] = useState("all");
-  const [branches, setBranches] = useState<string[]>([]);
-  const [ledgerGroupIds, setLedgerGroupIds] = useState<string[]>([]);
-  const [ledgerIds, setLedgerIds] = useState<string[]>([]);
-  const [voucherTypes, setVoucherTypes] = useState<string[]>([]);
+  const [financialYearId, setFinancialYearId] = useState("");
+
+  const [warehouseId, setWarehouseId] = useState("all");
+  const [primaryHeadId, setPrimaryHeadId] = useState("all");
+  const [groupId, setGroupId] = useState("all");
+  const [subGroupId, setSubGroupId] = useState("all");
+  const [ledgerId, setLedgerId] = useState("all");
+  const [balanceType, setBalanceType] = useState<TrialBalanceBalanceType>("ALL");
   const [showZeroBalance, setShowZeroBalance] = useState(false);
-  const [includeOpeningBalance, setIncludeOpeningBalance] = useState(true);
 
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
   const [exporting, setExporting] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [report, setReport] = useState<TrialBalanceReportResult | null>(null);
+  const [filtersConfig, setFiltersConfig] = useState<TrialBalanceFiltersConfig | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
-  const [expandedPrimaryIds, setExpandedPrimaryIds] = useState<Set<number>>(new Set());
+  const [expandedPrimaryIds, setExpandedPrimaryIds] = useState<Set<string>>(new Set());
   const [expandedGroupIds, setExpandedGroupIds] = useState<Set<string>>(new Set());
   const [expandedSubgroupIds, setExpandedSubgroupIds] = useState<Set<string>>(new Set());
 
-  const [expandedLedgerIds, setExpandedLedgerIds] = useState<Set<number>>(new Set());
+  const [primaryHeadOptions, setPrimaryHeadOptions] = useState<
+    { id: string; name: string }[]
+  >([]);
+  const [groupOptions, setGroupOptions] = useState<{ id: string; name: string }[]>([]);
+  const [subGroupOptions, setSubGroupOptions] = useState<{ id: string; name: string }[]>([]);
+  const [ledgerOptions, setLedgerOptions] = useState<{ id: string; name: string }[]>([]);
 
-  const effectiveBranches = branches;
-
-  // Bumped after demo voucher transactions are seeded / whenever vouchers change,
-  // so all derived trial-balance data recomputes against the freshest postings.
-  const [dataTick, setDataTick] = useState(0);
-
+  // Bootstrap FY + date range from global FY / filters config
   useEffect(() => {
-    const { from, to, fyId } = defaultFyDateRange();
-    setDateFrom(from);
-    setDateTo(to);
-    setFinancialYearId(fyId);
-    setDatesReady(true);
-  }, []);
-
-  useEffect(() => {
+    if (!mounted) return;
     let cancelled = false;
-    void import("@/lib/accounts/general-ledger-demo-seed").then(
-      ({ ensureGeneralLedgerDemoOnPageLoad }) => {
-        ensureGeneralLedgerDemoOnPageLoad();
-        if (!cancelled) setDataTick((t) => t + 1);
-      },
-    );
-    const onVouchersUpdated = () => setDataTick((t) => t + 1);
-    window.addEventListener("ds-accounts-vouchers-updated", onVouchersUpdated);
-    return () => {
-      cancelled = true;
-      window.removeEventListener("ds-accounts-vouchers-updated", onVouchersUpdated);
-    };
-  }, []);
 
-  const handleFinancialYearChange = useCallback((fyId: string) => {
-    setFinancialYearId(fyId);
-    if (fyId !== "all") {
-      const fy = loadFinancialYears().find((f) => String(f.id) === fyId);
-      if (fy) {
+    async function init() {
+      try {
+        const config = await TrialBalanceApiService.getFilters();
+        if (cancelled) return;
+        setFiltersConfig(config);
+
+        const fyId =
+          selectedFY?.id ||
+          config.defaults.financial_year_id ||
+          config.financial_years.find((f) => f.is_current)?.financial_year_id ||
+          config.financial_years[0]?.financial_year_id ||
+          "";
+
+        const fy =
+          config.financial_years.find((f) => f.financial_year_id === fyId) ||
+          null;
         const today = new Date().toISOString().slice(0, 10);
-        setDateFrom(fy.startDate);
-        setDateTo(today < fy.endDate ? today : fy.endDate);
-        setPreset("custom");
+        const from = fy?.start_date || config.defaults.from_date || today;
+        const toEnd = fy?.end_date || config.defaults.to_date || today;
+        const to = today < toEnd ? today : toEnd;
+
+        setFinancialYearId(fyId);
+        setDateFrom(from);
+        setDateTo(to);
+        setShowZeroBalance(config.defaults.include_zero_balance ?? false);
+        setBalanceType(config.defaults.balance_type ?? "ALL");
+        setDatesReady(Boolean(fyId));
+      } catch (err) {
+        if (cancelled) return;
+        // Fallback to global FY context
+        if (selectedFY?.id) {
+          setFinancialYearId(selectedFY.id);
+          setDateFrom(selectedFY.startDate);
+          const today = new Date().toISOString().slice(0, 10);
+          setDateTo(today < selectedFY.endDate ? today : selectedFY.endDate);
+          setDatesReady(true);
+        }
+        console.warn("Trial Balance filters config failed:", err);
       }
     }
-  }, []);
 
-  const handleLedgerGroupChange = useCallback((values: string[]) => {
-    setLedgerGroupIds(values);
-    setLedgerIds([]);
-  }, []);
+    void init();
+    return () => {
+      cancelled = true;
+    };
+  }, [mounted, selectedFY?.id, selectedFY?.startDate, selectedFY?.endDate]);
+
+  // Cascading COA options
+  useEffect(() => {
+    if (!mounted) return;
+    const controller = new AbortController();
+    void ChartOfAccountsService.getPrimaryHeads({ signal: controller.signal })
+      .then((rows) =>
+        setPrimaryHeadOptions(rows.map((r) => ({ id: r.id, name: r.name })))
+      )
+      .catch(() => setPrimaryHeadOptions([]));
+    return () => controller.abort();
+  }, [mounted]);
+
+  useEffect(() => {
+    if (!mounted) return;
+    const controller = new AbortController();
+    void ChartOfAccountsService.getGroups({
+      primaryHeadId: primaryHeadId !== "all" ? primaryHeadId : undefined,
+      signal: controller.signal,
+    })
+      .then((rows) =>
+        setGroupOptions(rows.map((r) => ({ id: r.id, name: r.name })))
+      )
+      .catch(() => setGroupOptions([]));
+    return () => controller.abort();
+  }, [mounted, primaryHeadId]);
+
+  useEffect(() => {
+    if (!mounted) return;
+    const controller = new AbortController();
+    void ChartOfAccountsService.getSubGroups({
+      primaryHeadId: primaryHeadId !== "all" ? primaryHeadId : undefined,
+      accountGroupId: groupId !== "all" ? groupId : undefined,
+      signal: controller.signal,
+    })
+      .then((rows) =>
+        setSubGroupOptions(rows.map((r) => ({ id: r.id, name: r.name })))
+      )
+      .catch(() => setSubGroupOptions([]));
+    return () => controller.abort();
+  }, [mounted, primaryHeadId, groupId]);
+
+  useEffect(() => {
+    if (!mounted) return;
+    const controller = new AbortController();
+    void LedgerService.getDropdown(
+      {
+        primaryHeadId: primaryHeadId !== "all" ? primaryHeadId : undefined,
+        accountGroupId: groupId !== "all" ? groupId : undefined,
+        accountSubGroupId: subGroupId !== "all" ? subGroupId : undefined,
+        status: "ACTIVE",
+      },
+      controller.signal
+    )
+      .then((res) =>
+        setLedgerOptions(
+          res.ledgers.map((l) => ({
+            id: l.ledgerId,
+            name: `${l.ledgerCode} — ${l.ledgerName}`,
+          }))
+        )
+      )
+      .catch(() => setLedgerOptions([]));
+    return () => controller.abort();
+  }, [mounted, primaryHeadId, groupId, subGroupId]);
+
+  const branchOptions = useMemo(
+    () =>
+      (filtersConfig?.branches ?? []).map((b) => ({
+        id: b.warehouse_id,
+        name: b.warehouse_name,
+      })),
+    [filtersConfig]
+  );
+
+  const queryParams = useMemo((): TrialBalanceQueryParams | null => {
+    if (!datesReady || !financialYearId || financialYearId === "all") return null;
+    if (!dateFrom || !dateTo) return null;
+    if (dateFrom > dateTo) return null;
+
+    return {
+      // Listing always uses DETAILED so Normal can show Primary Head roll-ups
+      // from backend hierarchy (Assets / Liabilities / Income / Expenses).
+      report_type: "DETAILED",
+      financial_year_id: financialYearId,
+      from_date: dateFrom,
+      to_date: dateTo,
+      warehouse_id: warehouseId !== "all" ? warehouseId : undefined,
+      primary_head_id: primaryHeadId !== "all" ? primaryHeadId : undefined,
+      group_id: groupId !== "all" ? groupId : undefined,
+      sub_group_id: subGroupId !== "all" ? subGroupId : undefined,
+      ledger_id: ledgerId !== "all" ? ledgerId : undefined,
+      balance_type: balanceType,
+      include_zero_balance: showZeroBalance,
+    };
+  }, [
+    datesReady,
+    financialYearId,
+    dateFrom,
+    dateTo,
+    warehouseId,
+    primaryHeadId,
+    groupId,
+    subGroupId,
+    ledgerId,
+    balanceType,
+    showZeroBalance,
+  ]);
+
+  // Fetch report — AbortController prevents stale overwrites
+  useEffect(() => {
+    if (!mounted || !queryParams) return;
+
+    const controller = new AbortController();
+    setLoading(true);
+    setError(null);
+
+    void TrialBalanceApiService.getReport(queryParams, controller.signal)
+      .then((result) => {
+        setReport(result);
+        setLoading(false);
+      })
+      .catch((err: unknown) => {
+        if (controller.signal.aborted) return;
+        const message =
+          err instanceof Error ? err.message : "Unable to load Trial Balance.";
+        setError(message);
+        setReport(null);
+        setLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [mounted, queryParams, refreshKey]);
+
+  const detailedNodes: TrialBalanceHierarchyNode[] = useMemo(() => {
+    if (!report) return [];
+    return isHierarchyData(report.data) ? report.data : [];
+  }, [report]);
+
+  /** Normal Report: one row per Primary Head (Assets, Liabilities, Income, Expenses). */
+  const normalPrimaryHeadRows = useMemo(
+    () => toNormalPrimaryHeadRows(detailedNodes),
+    [detailedNodes]
+  );
+
+  const detailedExpandInitializedRef = React.useRef(false);
+
+  useEffect(() => {
+    if (activeTab !== "detailed") {
+      detailedExpandInitializedRef.current = false;
+      return;
+    }
+    if (detailedNodes.length === 0) return;
+    if (detailedExpandInitializedRef.current) return;
+    setExpandedPrimaryIds(collectPrimaryHeadIds(detailedNodes));
+    setExpandedGroupIds(new Set());
+    setExpandedSubgroupIds(new Set());
+    detailedExpandInitializedRef.current = true;
+  }, [activeTab, detailedNodes]);
+
+  // Reset expansion when major filters change
+  useEffect(() => {
+    detailedExpandInitializedRef.current = false;
+    setExpandedPrimaryIds(new Set());
+    setExpandedGroupIds(new Set());
+    setExpandedSubgroupIds(new Set());
+  }, [
+    financialYearId,
+    dateFrom,
+    dateTo,
+    warehouseId,
+    primaryHeadId,
+    groupId,
+    subGroupId,
+    ledgerId,
+    balanceType,
+    showZeroBalance,
+  ]);
+
+  const detailedFlatRows = useMemo(
+    () =>
+      activeTab === "detailed"
+        ? flattenDetailedHierarchy(
+            detailedNodes,
+            expandedPrimaryIds,
+            expandedGroupIds,
+            expandedSubgroupIds
+          )
+        : [],
+    [
+      activeTab,
+      detailedNodes,
+      expandedPrimaryIds,
+      expandedGroupIds,
+      expandedSubgroupIds,
+    ]
+  );
+
+  const handleFinancialYearChange = useCallback(
+    (fyId: string) => {
+      setFinancialYearId(fyId);
+      const fy = filtersConfig?.financial_years.find(
+        (f) => f.financial_year_id === fyId
+      );
+      if (fy) {
+        const today = new Date().toISOString().slice(0, 10);
+        setDateFrom(fy.start_date);
+        setDateTo(today < fy.end_date ? today : fy.end_date);
+        setPreset("custom");
+      }
+    },
+    [filtersConfig]
+  );
 
   const handlePresetChange = useCallback((value: DateRangePresetId) => {
     setPreset(value);
@@ -276,492 +479,213 @@ export default function TrialBalancePageClient() {
     }
   }, []);
 
-  const tbFilters = useMemo((): TrialBalanceFilters => ({
-    financialYearId,
-    dateFrom,
-    dateTo,
-    branch: effectiveBranches,
-    warehouse: [],
-    ledgerGroupId: ledgerGroupIds,
-    ledgerId: ledgerIds,
-    voucherType: voucherTypes,
-    showZeroBalance,
-    search: "",
-  }), [
-    financialYearId,
-    dateFrom,
-    dateTo,
-    effectiveBranches,
-    ledgerGroupIds,
-    ledgerIds,
-    voucherTypes,
-    showZeroBalance,
-  ]);
+  const handlePrimaryHeadChange = useCallback((value: string) => {
+    setPrimaryHeadId(value);
+    setGroupId("all");
+    setSubGroupId("all");
+    setLedgerId("all");
+  }, []);
 
-  const ledgerGroupOptions = useMemo(
-    () => (mounted ? getTrialBalanceLedgerGroupOptions() : []),
-    [mounted, dataTick],
-  );
-  const ledgerOptions = useMemo(
-    () => (mounted ? mergeLedgerOptions(getTrialBalanceLedgerOptions, ledgerGroupIds) : []),
-    [mounted, ledgerGroupIds, dataTick],
-  );
-  const branchOptions = useMemo(
-    () => (mounted ? getTrialBalanceBranchOptions() : REPORT_BRANCH_OPTIONS),
-    [mounted, dataTick],
-  );
+  const handleGroupChange = useCallback((value: string) => {
+    setGroupId(value);
+    setSubGroupId("all");
+    setLedgerId("all");
+  }, []);
 
-  const ledgerGroupSelectOptions = useMemo(
-    () => ledgerGroupOptions.map((g) => ({ value: String(g.id), label: g.name })),
-    [ledgerGroupOptions],
-  );
-  const ledgerSelectOptions = useMemo(
-    () => ledgerOptions.map((l) => ({ value: String(l.id), label: l.name })),
-    [ledgerOptions],
-  );
-
-  const moreFiltersActiveCount =
-    countActiveMoreFilters({
-      ledgerGroupId: ledgerGroupIds,
-      ledgerId: ledgerIds,
-      voucherType: voucherTypes,
-      showZeroBalance,
-    }) + (!includeOpeningBalance ? 1 : 0);
-
-  const exceptions = useMemo(
-    () => (mounted ? findTrialBalanceExceptions(tbFilters) : []),
-    [mounted, tbFilters, dataTick],
-  );
-
-  const sourceDetailedGroups = useMemo(() => {
-    if (!mounted) return [];
-    const groups = buildTrialBalanceDetailedGroups(tbFilters);
-    return groups;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mounted, tbFilters, dataTick]);
-
-  const detailedExpandInitializedRef = React.useRef(false);
-
-  useEffect(() => {
-    if (activeTab !== "detailed") {
-      detailedExpandInitializedRef.current = false;
-      return;
-    }
-    if (!mounted || sourceDetailedGroups.length === 0) return;
-    if (detailedExpandInitializedRef.current) return;
-    // Detailed: expand primary heads so Account Groups are visible; groups/subgroups start collapsed.
-    setExpandedPrimaryIds(collectAllPrimaryHeadKeys(sourceDetailedGroups));
-    setExpandedGroupIds(new Set());
-    setExpandedSubgroupIds(new Set());
-    setExpandedLedgerIds(new Set());
-    detailedExpandInitializedRef.current = true;
-  }, [mounted, activeTab, sourceDetailedGroups]);
-
-  const filteredDetailedGroups = sourceDetailedGroups;
-
-  const normalFlatRows = useMemo(
-    () =>
-      flattenTrialBalanceNormalPrimaryHeadRows(filteredDetailedGroups).filter(
-        isRenderableTrialBalanceNormalRow,
-      ),
-    [filteredDetailedGroups],
-  );
-
-  const voucherLinesByLedgerId = useMemo(() => {
-    const map = new Map<number, ReturnType<typeof computeTrialBalanceLedgerVoucherLines>>();
-    if (activeTab !== "detailed") return map;
-    for (const ledgerId of expandedLedgerIds) {
-      map.set(ledgerId, computeTrialBalanceLedgerVoucherLines(tbFilters, ledgerId));
-    }
-    return map;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, expandedLedgerIds, tbFilters, dataTick]);
-
-  const detailedFlatRows = useMemo(() => {
-    if (activeTab !== "detailed") return [];
-    const rows = flattenTrialBalanceDetailedGroups(
-      filteredDetailedGroups,
-      expandedPrimaryIds,
-      expandedGroupIds,
-      expandedSubgroupIds,
-      {
-        expandedLedgerIds,
-        voucherLinesByLedgerId,
-      },
-    ).filter(isRenderableTrialBalanceDetailedRow);
-    return rows;
-  }, [
-    activeTab,
-    filteredDetailedGroups,
-    expandedPrimaryIds,
-    expandedGroupIds,
-    expandedSubgroupIds,
-    expandedLedgerIds,
-    voucherLinesByLedgerId,
-  ]);
-
-  const hasFilters =
-    isMultiFilterActive(branches) ||
-    isMultiFilterActive(ledgerGroupIds) ||
-    isMultiFilterActive(ledgerIds) ||
-    isMultiFilterActive(voucherTypes) ||
-    showZeroBalance ||
-    !includeOpeningBalance ||
-    (datesReady && financialYearId !== defaultFyDateRange().fyId);
+  const handleSubGroupChange = useCallback((value: string) => {
+    setSubGroupId(value);
+    setLedgerId("all");
+  }, []);
 
   const resetFilters = useCallback(() => {
-    const { from, to, fyId } = defaultFyDateRange();
+    const fyId =
+      selectedFY?.id ||
+      filtersConfig?.defaults.financial_year_id ||
+      filtersConfig?.financial_years.find((f) => f.is_current)?.financial_year_id ||
+      financialYearId;
+    const fy = filtersConfig?.financial_years.find(
+      (f) => f.financial_year_id === fyId
+    );
+    const today = new Date().toISOString().slice(0, 10);
     setPreset("custom");
-    setDateFrom(from);
-    setDateTo(to);
-    setFinancialYearId(fyId);
-    setBranches([]);
-    setLedgerGroupIds([]);
-    setLedgerIds([]);
-    setVoucherTypes([]);
+    setFinancialYearId(fyId || "");
+    if (fy) {
+      setDateFrom(fy.start_date);
+      setDateTo(today < fy.end_date ? today : fy.end_date);
+    } else if (selectedFY) {
+      setDateFrom(selectedFY.startDate);
+      setDateTo(today < selectedFY.endDate ? today : selectedFY.endDate);
+    }
+    setWarehouseId("all");
+    setPrimaryHeadId("all");
+    setGroupId("all");
+    setSubGroupId("all");
+    setLedgerId("all");
+    setBalanceType("ALL");
     setShowZeroBalance(false);
-    setIncludeOpeningBalance(true);
-    setPage(1);
-  }, []);
+  }, [filtersConfig, selectedFY, financialYearId]);
 
-  useEffect(() => {
-    setPage(1);
-  }, [
-    pageSize,
-    activeTab,
-    financialYearId,
-    dateFrom,
-    dateTo,
-    branches,
-    ledgerGroupIds,
-    ledgerIds,
-    voucherTypes,
+  const hasFilters =
+    warehouseId !== "all" ||
+    primaryHeadId !== "all" ||
+    groupId !== "all" ||
+    subGroupId !== "all" ||
+    ledgerId !== "all" ||
+    balanceType !== "ALL" ||
+    showZeroBalance;
+
+  const moreFiltersActiveCount = countActiveMoreFilters({
+    primaryHeadId: primaryHeadId !== "all" ? [primaryHeadId] : [],
+    groupId: groupId !== "all" ? [groupId] : [],
+    subGroupId: subGroupId !== "all" ? [subGroupId] : [],
+    ledgerId: ledgerId !== "all" ? [ledgerId] : [],
+    balanceType: balanceType !== "ALL" ? [balanceType] : [],
     showZeroBalance,
-    includeOpeningBalance,
+  });
+
+  const filterSummaryItems = useMemo((): ReportFilterSummaryItem[] => {
+    const items: Array<ReportFilterSummaryItem | null> = [
+      warehouseId !== "all"
+        ? {
+            id: "branch",
+            label: "Branch",
+            value:
+              branchOptions.find((b) => b.id === warehouseId)?.name ?? warehouseId,
+            onRemove: () => setWarehouseId("all"),
+          }
+        : null,
+      primaryHeadId !== "all"
+        ? {
+            id: "primaryHead",
+            label: "Primary Head",
+            value:
+              primaryHeadOptions.find((o) => o.id === primaryHeadId)?.name ??
+              primaryHeadId,
+            onRemove: () => handlePrimaryHeadChange("all"),
+          }
+        : null,
+      groupId !== "all"
+        ? {
+            id: "group",
+            label: "Group",
+            value: groupOptions.find((o) => o.id === groupId)?.name ?? groupId,
+            onRemove: () => handleGroupChange("all"),
+          }
+        : null,
+      subGroupId !== "all"
+        ? {
+            id: "subGroup",
+            label: "Sub-Group",
+            value:
+              subGroupOptions.find((o) => o.id === subGroupId)?.name ?? subGroupId,
+            onRemove: () => handleSubGroupChange("all"),
+          }
+        : null,
+      ledgerId !== "all"
+        ? {
+            id: "ledger",
+            label: "Ledger",
+            value: ledgerOptions.find((o) => o.id === ledgerId)?.name ?? ledgerId,
+            onRemove: () => setLedgerId("all"),
+          }
+        : null,
+      balanceType !== "ALL"
+        ? {
+            id: "balanceType",
+            label: "Balance Type",
+            value: balanceType,
+            onRemove: () => setBalanceType("ALL"),
+          }
+        : null,
+      showZeroBalance
+        ? {
+            id: "zeroBalance",
+            label: "Zero balance",
+            value: "Included",
+            onRemove: () => setShowZeroBalance(false),
+          }
+        : null,
+    ];
+    return items.filter((i): i is ReportFilterSummaryItem => i != null);
+  }, [
+    warehouseId,
+    branchOptions,
+    primaryHeadId,
+    primaryHeadOptions,
+    groupId,
+    groupOptions,
+    subGroupId,
+    subGroupOptions,
+    ledgerId,
+    ledgerOptions,
+    balanceType,
+    showZeroBalance,
+    handlePrimaryHeadChange,
+    handleGroupChange,
+    handleSubGroupChange,
   ]);
 
-  const financialYearLabel = useMemo(() => {
-    if (financialYearId === "all") return "All years";
-    return loadFinancialYears().find((f) => String(f.id) === financialYearId)?.name ?? "";
-  }, [financialYearId]);
-
-  const exportMeta = useMemo(
-    () => ({
-      dateFrom,
-      dateTo,
-      financialYear: financialYearLabel,
-      view: activeTab,
-      branch:
-        effectiveBranches.length === 0
-          ? ""
-          : formatMultiSelectLabel(
-              effectiveBranches,
-              branchOptions.map((b) => ({ value: b, label: b })),
-              "Branch",
-            ),
-      includeOpeningBalance,
-    }),
-    [dateFrom, dateTo, activeTab, financialYearLabel, effectiveBranches, branchOptions, includeOpeningBalance],
-  );
-
-  const filterSummaryItems = useMemo((): ReportFilterSummaryItem[] =>
-      [
-        buildBranchFilterSummary(effectiveBranches, () => setBranches([])),
-        buildEntityFilterSummary(
-          "ledgerGroup",
-          "Ledger Group",
-          ledgerGroupIds,
-          ledgerGroupSelectOptions,
-          () => setLedgerGroupIds([]),
-        ),
-        buildEntityFilterSummary(
-          "ledger",
-          "Ledger",
-          ledgerIds,
-          ledgerSelectOptions,
-          () => setLedgerIds([]),
-        ),
-        showZeroBalance
-          ? {
-              id: "zeroBalance",
-              label: "Zero balance",
-              value: "Included",
-              onRemove: () => setShowZeroBalance(false),
-            }
-          : null,
-        !includeOpeningBalance
-          ? {
-              id: "openingBalance",
-              label: "Opening balance",
-              value: "Hidden",
-              onRemove: () => setIncludeOpeningBalance(true),
-            }
-          : null,
-      ].filter((item): item is ReportFilterSummaryItem => item != null),
-    [
-      effectiveBranches,
-      ledgerGroupIds,
-      ledgerGroupSelectOptions,
-      ledgerIds,
-      ledgerSelectOptions,
-      showZeroBalance,
-      includeOpeningBalance,
-    ],
-  );
-
-  const togglePrimary = useCallback((primaryHeadId: number) => {
+  const togglePrimary = useCallback((id: string) => {
     setExpandedPrimaryIds((prev) => {
       const next = new Set(prev);
-      if (next.has(primaryHeadId)) next.delete(primaryHeadId);
-      else next.add(primaryHeadId);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   }, []);
 
-  const toggleGroup = useCallback((groupKey: string) => {
+  const toggleGroup = useCallback((id: string) => {
     setExpandedGroupIds((prev) => {
       const next = new Set(prev);
-      if (next.has(groupKey)) next.delete(groupKey);
-      else next.add(groupKey);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   }, []);
 
-  const toggleLedger = useCallback((ledgerId: number) => {
-    setExpandedLedgerIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(ledgerId)) next.delete(ledgerId);
-      else next.add(ledgerId);
-      return next;
-    });
-  }, []);
-
-  const toggleSubgroup = useCallback((subgroupKey: string) => {
+  const toggleSubgroup = useCallback((id: string) => {
     setExpandedSubgroupIds((prev) => {
       const next = new Set(prev);
-      if (next.has(subgroupKey)) next.delete(subgroupKey);
-      else next.add(subgroupKey);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   }, []);
 
-  return (
-      <TrialBalancePageBody
-        mounted={mounted}
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        filteredDetailedGroups={filteredDetailedGroups}
-        normalFlatRows={normalFlatRows}
-        detailedFlatRows={detailedFlatRows}
-        expandedPrimaryIds={expandedPrimaryIds}
-        expandedGroupIds={expandedGroupIds}
-        expandedSubgroupIds={expandedSubgroupIds}
-        expandedLedgerIds={expandedLedgerIds}
-        togglePrimary={togglePrimary}
-        toggleGroup={toggleGroup}
-        toggleSubgroup={toggleSubgroup}
-        toggleLedger={toggleLedger}
-        financialYearLabel={financialYearLabel}
-        hasFilters={hasFilters}
-        resetFilters={resetFilters}
-        preset={preset}
-        handlePresetChange={handlePresetChange}
-        financialYearId={financialYearId}
-        onFinancialYearChange={handleFinancialYearChange}
-        branch={branches}
-        onBranchChange={setBranches}
-        ledgerGroupIds={ledgerGroupIds}
-        onLedgerGroupChange={handleLedgerGroupChange}
-        ledgerIds={ledgerIds}
-        onLedgerChange={setLedgerIds}
-        voucherTypes={voucherTypes}
-        onVoucherTypesChange={setVoucherTypes}
-        showZeroBalance={showZeroBalance}
-        onShowZeroBalanceChange={setShowZeroBalance}
-        includeOpeningBalance={includeOpeningBalance}
-        onIncludeOpeningBalanceChange={setIncludeOpeningBalance}
-        moreFiltersActiveCount={moreFiltersActiveCount}
-        filterSummaryItems={filterSummaryItems}
-        ledgerGroupOptions={ledgerGroupOptions}
-        ledgerOptions={ledgerOptions}
-        branchOptions={branchOptions}
-        dateFrom={dateFrom}
-        setDateFrom={setDateFrom}
-        dateTo={dateTo}
-        setDateTo={setDateTo}
-        page={page}
-        setPage={setPage}
-        pageSize={pageSize}
-        setPageSize={setPageSize}
-        exporting={exporting}
-        setExporting={setExporting}
-        exportMeta={exportMeta}
-        exceptions={exceptions}
-      />
-  );
-}
-
-function TrialBalancePageBody({
-  mounted,
-  activeTab,
-  setActiveTab,
-  filteredDetailedGroups,
-  normalFlatRows,
-  detailedFlatRows,
-  expandedPrimaryIds,
-  expandedGroupIds,
-  expandedSubgroupIds,
-  expandedLedgerIds,
-  togglePrimary,
-  toggleGroup,
-  toggleSubgroup,
-  toggleLedger,
-  financialYearLabel,
-  hasFilters,
-  resetFilters,
-  preset,
-  handlePresetChange,
-  financialYearId,
-  onFinancialYearChange,
-  branch,
-  onBranchChange,
-  ledgerGroupIds,
-  onLedgerGroupChange,
-  ledgerIds,
-  onLedgerChange,
-  voucherTypes,
-  onVoucherTypesChange,
-  showZeroBalance,
-  onShowZeroBalanceChange,
-  includeOpeningBalance,
-  onIncludeOpeningBalanceChange,
-  moreFiltersActiveCount,
-  filterSummaryItems,
-  ledgerGroupOptions,
-  ledgerOptions,
-  branchOptions,
-  dateFrom,
-  setDateFrom,
-  dateTo,
-  setDateTo,
-  page,
-  setPage,
-  pageSize,
-  setPageSize,
-  exporting,
-  setExporting,
-  exportMeta,
-  exceptions,
-}: {
-  mounted: boolean;
-  activeTab: TrialBalanceTab;
-  setActiveTab: (v: TrialBalanceTab) => void;
-  filteredDetailedGroups: ReturnType<typeof buildTrialBalanceDetailedGroups>;
-  normalFlatRows: TrialBalanceNormalPrimaryHeadRow[];
-  detailedFlatRows: TrialBalanceDetailedFlatRow[];
-  expandedPrimaryIds: Set<number>;
-  expandedGroupIds: Set<string>;
-  expandedSubgroupIds: Set<string>;
-  expandedLedgerIds: Set<number>;
-  togglePrimary: (id: number) => void;
-  toggleGroup: (groupKey: string) => void;
-  toggleSubgroup: (subgroupKey: string) => void;
-  toggleLedger: (ledgerId: number) => void;
-  financialYearLabel: string;
-  hasFilters: boolean;
-  resetFilters: () => void;
-  preset: DateRangePresetId;
-  handlePresetChange: (value: DateRangePresetId) => void;
-  financialYearId: string;
-  onFinancialYearChange: (value: string) => void;
-  branch: string[];
-  onBranchChange: (value: string[]) => void;
-  ledgerGroupIds: string[];
-  onLedgerGroupChange: (value: string[]) => void;
-  ledgerIds: string[];
-  onLedgerChange: (value: string[]) => void;
-  voucherTypes: string[];
-  onVoucherTypesChange: (value: string[]) => void;
-  showZeroBalance: boolean;
-  onShowZeroBalanceChange: (value: boolean) => void;
-  includeOpeningBalance: boolean;
-  onIncludeOpeningBalanceChange: (value: boolean) => void;
-  moreFiltersActiveCount: number;
-  filterSummaryItems: ReportFilterSummaryItem[];
-  ledgerGroupOptions: { id: number; name: string }[];
-  ledgerOptions: { id: number; name: string }[];
-  branchOptions: string[];
-  dateFrom: string;
-  setDateFrom: (v: string) => void;
-  dateTo: string;
-  setDateTo: (v: string) => void;
-  page: number;
-  setPage: (p: number) => void;
-  pageSize: number;
-  setPageSize: (s: number) => void;
-  exporting: boolean;
-  setExporting: (v: boolean) => void;
-  exportMeta: Parameters<typeof exportTrialBalanceNormalToExcel>[1];
-  exceptions: TrialBalanceVoucherException[];
-}) {
-  const glDrillDownFilters = useMemo(
-    () => ({
-      dateFrom,
-      dateTo,
-      branch,
-      warehouse: [] as string[],
-      financialYearId,
-    }),
-    [dateFrom, dateTo, branch, financialYearId],
-  );
-
-  const paginatedNormalRows = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return normalFlatRows.slice(start, start + pageSize);
-  }, [normalFlatRows, page, pageSize]);
-
-  const paginatedDetailedRows = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return detailedFlatRows.slice(start, start + pageSize);
-  }, [detailedFlatRows, page, pageSize]);
-
-  const summary = useMemo(
-    () =>
-      computeTrialBalanceSummaryFromDetailedGroups(
-        filteredDetailedGroups,
-        exceptions.length > 0,
-      ),
-    [filteredDetailedGroups, exceptions.length],
-  );
-
-  const handleExportExcel = async () => {
+  const handleExport = async (format: "EXCEL" | "PDF") => {
+    if (!queryParams || exporting) return;
     setExporting(true);
     try {
-      if (activeTab === "normal") {
-        await exportTrialBalanceNormalToExcel(filteredDetailedGroups, exportMeta, summary);
-      } else {
-        await exportTrialBalanceDetailedToExcel(filteredDetailedGroups, exportMeta, summary);
-      }
+      await TrialBalanceApiService.exportReport({
+        ...queryParams,
+        // Layout follows active tab; backend still builds DETAILED hierarchy.
+        report_type: tabToReportType(activeTab),
+        format,
+      });
+      showToast(
+        format === "EXCEL" ? "Excel exported successfully." : "PDF exported successfully.",
+        "success"
+      );
+    } catch (err) {
+      showToast(
+        err instanceof Error ? err.message : "Failed to export Trial Balance.",
+        "error"
+      );
     } finally {
       setExporting(false);
     }
   };
 
-  const handleExportPdf = () => {
-    if (activeTab === "normal") {
-      exportTrialBalanceNormalToPdf(filteredDetailedGroups, exportMeta, summary);
-    } else {
-      exportTrialBalanceDetailedToPdf(filteredDetailedGroups, exportMeta, summary);
-    }
-  };
+  const health = report?.trial_balance_health ?? null;
+  const displaySummary = report?.display_summary ?? null;
+  const closingUnbalanced = health ? !health.closing.is_balanced : false;
+  const branchNote = report?.notes?.opening_balance_branch_limitation ?? null;
 
-  const totalRecords =
-    activeTab === "normal" ? normalFlatRows.length : detailedFlatRows.length;
-  const recordLabel = activeTab === "normal" ? "rows" : "rows";
-  const showEmpty = mounted && totalRecords === 0;
-  const showTable = mounted && totalRecords > 0;
-  const hasExportData = filteredDetailedGroups.length > 0;
-  const showDetailedPagination = activeTab === "detailed" && detailedFlatRows.length > pageSize;
+  const hasData =
+    activeTab === "normal"
+      ? normalPrimaryHeadRows.length > 0
+      : detailedFlatRows.length > 0;
+  const dateInvalid = Boolean(dateFrom && dateTo && dateFrom > dateTo);
 
   return (
     <AccountsPageShell
@@ -774,17 +698,18 @@ function TrialBalancePageBody({
       subHeader={<TrialBalanceViewTabs value={activeTab} onChange={setActiveTab} />}
       filters={
         <ReportFilterRow
+          className="gap-2"
           end={
             <AccountsExportMenu
-              onExcel={handleExportExcel}
-              onPdf={handleExportPdf}
-              disabled={exporting || !mounted || !hasExportData}
+              onExcel={() => void handleExport("EXCEL")}
+              onPdf={() => void handleExport("PDF")}
+              disabled={exporting || !mounted || !queryParams || !!error}
             />
           }
         >
           <ReportFinancialYearFilter
-            value={financialYearId}
-            onChange={onFinancialYearChange}
+            value={financialYearId || "all"}
+            onChange={handleFinancialYearChange}
           />
           <ReportDateRangeFilter
             preset={preset}
@@ -797,33 +722,57 @@ function TrialBalancePageBody({
           />
           <ReportFromDateFilter value={dateFrom} onChange={setDateFrom} />
           <ReportToDateFilter value={dateTo} onChange={setDateTo} />
-          <ReportBranchMultiFilter
-            values={branch}
-            onChange={onBranchChange}
-            options={branchOptions.length ? branchOptions : REPORT_BRANCH_OPTIONS}
+          <ReportBranchFilter
+            value={warehouseId}
+            onChange={setWarehouseId}
+            options={branchOptions}
           />
           <ReportMoreFilters activeCount={moreFiltersActiveCount}>
-            <ReportLedgerGroupMultiFilter
-              values={ledgerGroupIds}
-              onChange={onLedgerGroupChange}
-              groups={ledgerGroupOptions}
+            <ReportLedgerFilter
+              label="Primary Head"
+              value={primaryHeadId}
+              onChange={handlePrimaryHeadChange}
+              ledgers={primaryHeadOptions}
             />
-            <ReportLedgerMultiFilter
-              values={ledgerIds}
-              onChange={onLedgerChange}
+            <ReportLedgerFilter
+              label="Group"
+              value={groupId}
+              onChange={handleGroupChange}
+              ledgers={groupOptions}
+            />
+            <ReportLedgerFilter
+              label="Sub-Group"
+              value={subGroupId}
+              onChange={handleSubGroupChange}
+              ledgers={subGroupOptions}
+            />
+            <ReportLedgerFilter
+              label="Ledger"
+              value={ledgerId}
+              onChange={setLedgerId}
               ledgers={ledgerOptions}
             />
-            <ReportVoucherTypeMultiFilter
-              values={voucherTypes}
-              onChange={onVoucherTypesChange}
-            />
+            <div className="space-y-0.5 min-w-[140px]">
+              <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+                Balance Type
+              </span>
+              <select
+                className="h-8 w-full rounded-md border border-border bg-background px-2 text-xs"
+                value={balanceType}
+                onChange={(e) =>
+                  setBalanceType(e.target.value as TrialBalanceBalanceType)
+                }
+              >
+                {BALANCE_TYPE_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
             <ReportShowZeroBalanceToggle
               checked={showZeroBalance}
-              onChange={onShowZeroBalanceChange}
-            />
-            <ReportIncludeOpeningBalanceToggle
-              checked={includeOpeningBalance}
-              onChange={onIncludeOpeningBalanceChange}
+              onChange={setShowZeroBalance}
             />
           </ReportMoreFilters>
           {hasFilters && (
@@ -839,64 +788,89 @@ function TrialBalancePageBody({
         </ReportFilterRow>
       }
     >
-      {mounted && exceptions.length > 0 && (
-        <TrialBalanceExceptionsPanel exceptions={exceptions} />
-      )}
       <div className="accounts-listing-card trial-balance-compact flex flex-col flex-1 min-h-0">
         {filterSummaryItems.length > 0 && (
           <div className="flex-shrink-0 px-2">
             <ReportFilterSummary items={filterSummaryItems} />
           </div>
         )}
+
+        {branchNote && (
+          <div className="flex-shrink-0 mx-2 mt-1 px-2 py-1.5 rounded-md bg-amber-50 border border-amber-200 text-[11px] text-amber-800">
+            {branchNote}
+          </div>
+        )}
+
         <AccountsTableListing
           className="flex-1 min-h-0"
           footer={
             <>
               <BalanceStatusBanner
-                isBalanced={summary.isBalanced}
-                openingDifference={summary.openingDifference}
-                periodDifference={summary.periodDifference}
-                closingDifference={summary.closingDifference}
-                visible={mounted && totalRecords > 0}
+                health={health}
+                visible={Boolean(mounted && report && !loading && !error)}
               />
-              {mounted && totalRecords > 0 && (activeTab === "normal" || showDetailedPagination) && (
-                <AccountsTablePagination
-                  page={page}
-                  pageSize={pageSize}
-                  totalRecords={totalRecords}
-                  onPageChange={setPage}
-                  onPageSizeChange={setPageSize}
-                  recordLabel={recordLabel}
-                />
-              )}
             </>
           }
         >
-          {!mounted ? (
+          {!mounted || (!datesReady && loading) ? (
             <div className="flex items-center justify-center py-6 text-xs text-muted-foreground">
               Loading trial balance…
             </div>
-          ) : showEmpty ? (
+          ) : !queryParams && !dateInvalid ? (
+            <div className="flex items-center justify-center py-8 text-xs text-muted-foreground">
+              Select a Financial Year and date range to load the Trial Balance.
+            </div>
+          ) : dateInvalid ? (
+            <div className="flex items-center justify-center gap-2 py-8 text-xs text-red-600">
+              <AlertCircle className="w-4 h-4" />
+              From Date must be less than or equal to To Date.
+            </div>
+          ) : loading ? (
+            <div className="flex items-center justify-center py-10 text-xs text-muted-foreground">
+              Loading trial balance…
+            </div>
+          ) : error ? (
+            <div className="flex flex-col items-center justify-center gap-2 py-10 text-center">
+              <AlertCircle className="w-5 h-5 text-red-500" />
+              <p className="text-sm font-medium text-foreground">
+                Unable to load Trial Balance.
+              </p>
+              <p className="text-xs text-muted-foreground max-w-md">{error}</p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs mt-1"
+                onClick={() => {
+                  setError(null);
+                  setRefreshKey((k) => k + 1);
+                }}
+              >
+                Retry
+              </Button>
+            </div>
+          ) : !hasData ? (
             <EmptyState hasFilters={hasFilters} onClear={resetFilters} />
-          ) : showTable && activeTab === "normal" ? (
+          ) : activeTab === "normal" ? (
             <AccountsTable minWidth={720}>
               <AccountsTableHead>
                 <AccountsTableHeadRow>
-                  <FinancialReportHeadCell className="min-w-[280px]">Particular</FinancialReportHeadCell>
+                  <FinancialReportHeadCell className="min-w-[280px]">
+                    Particular
+                  </FinancialReportHeadCell>
                   <FinancialReportHeadCell align="right">Debit</FinancialReportHeadCell>
                   <FinancialReportHeadCell align="right">Credit</FinancialReportHeadCell>
                 </AccountsTableHeadRow>
               </AccountsTableHead>
               <AccountsTableBody>
-                {paginatedNormalRows.map((row, i) => (
+                {normalPrimaryHeadRows.map((row) => (
                   <AccountsTableRow
-                    key={rowKey(row, i)}
+                    key={row.id}
                     className="group border-b border-border/80 bg-muted/20 hover:bg-muted/30 transition-colors"
                   >
-                    <AccountsTableCell className={TB_NORMAL_INDENT.ledger}>
+                    <AccountsTableCell className={TB_NORMAL_INDENT.primary}>
                       <AccountsCoaHierarchyRowLabel
                         level="primary_head"
-                        name={row.primaryHead}
+                        name={row.name}
                       />
                     </AccountsTableCell>
                     <DebitCreditCells debit={row.debit} credit={row.credit} bold />
@@ -911,182 +885,117 @@ function TrialBalancePageBody({
                   <AccountsTableCell
                     align="right"
                     money
-                    className={cn(
-                      "font-bold",
-                      summary.closingDifference !== 0 && "text-red-600",
-                    )}
+                    className={cn("font-bold", closingUnbalanced && "text-red-600")}
                   >
-                    {formatMoney(summary.totalDebit)}
+                    {formatMoneyString(displaySummary?.closing.debit ?? "0")}
                   </AccountsTableCell>
                   <AccountsTableCell
                     align="right"
                     money
-                    className={cn(
-                      "font-bold",
-                      summary.closingDifference !== 0 && "text-red-600",
-                    )}
+                    className={cn("font-bold", closingUnbalanced && "text-red-600")}
                   >
-                    {formatMoney(summary.totalCredit)}
+                    {formatMoneyString(displaySummary?.closing.credit ?? "0")}
                   </AccountsTableCell>
                 </AccountsTableRow>
               </AccountsTableFoot>
             </AccountsTable>
-          ) : showTable && activeTab === "detailed" ? (
+          ) : (
             <AccountsTable minWidth={720}>
               <AccountsTableHead>
                 <AccountsTableHeadRow>
-                  <FinancialReportHeadCell className="min-w-[280px]">Particular</FinancialReportHeadCell>
+                  <FinancialReportHeadCell className="min-w-[280px]">
+                    Particular
+                  </FinancialReportHeadCell>
                   <FinancialReportHeadCell align="right">Debit</FinancialReportHeadCell>
                   <FinancialReportHeadCell align="right">Credit</FinancialReportHeadCell>
                 </AccountsTableHeadRow>
               </AccountsTableHead>
               <AccountsTableBody>
-                {(showDetailedPagination ? paginatedDetailedRows : detailedFlatRows).map((row, i) => {
+                {detailedFlatRows.map((row) => {
                   if (row.type === "primary") {
-                    const expanded = expandedPrimaryIds.has(row.primaryHeadId);
+                    const expanded = expandedPrimaryIds.has(row.id);
                     return (
                       <AccountsTableRow
-                        key={rowKey(row, i)}
+                        key={`p-${row.id}`}
                         className="group border-b border-border/80 bg-muted/20 hover:bg-muted/30 transition-colors"
                       >
                         <AccountsTableCell className={TB_DETAILED_INDENT.primary}>
                           <button
                             type="button"
-                            onClick={() => togglePrimary(row.primaryHeadId)}
+                            onClick={() => togglePrimary(row.id)}
                             className="w-full text-left"
                           >
                             <AccountsCoaHierarchyRowLabel
                               level="primary_head"
-                              name={row.primaryHead}
+                              name={row.name}
                               expandable
                               expanded={expanded}
+                              ledgerCount={row.ledgerCount}
                               showTreeGuides
                             />
                           </button>
                         </AccountsTableCell>
-                        <DebitCreditCells
-                          debit={row.amounts.closingDebit}
-                          credit={row.amounts.closingCredit}
-                          bold
-                        />
+                        <DebitCreditCells debit={row.debit} credit={row.credit} bold />
                       </AccountsTableRow>
                     );
                   }
                   if (row.type === "group") {
-                    const expanded = expandedGroupIds.has(row.groupKey);
+                    const expanded = expandedGroupIds.has(row.id);
                     return (
                       <AccountsTableRow
-                        key={rowKey(row, i)}
+                        key={`g-${row.id}`}
                         className="group bg-muted/15 hover:bg-muted/30 transition-colors"
                       >
                         <AccountsTableCell className={TB_DETAILED_INDENT.group}>
                           <AccountsCoaHierarchyRowLabel
                             level="account_group"
-                            name={row.groupName}
-                            nameHref={buildTrialBalanceGroupHref(
-                              row.groupId,
-                              row.groupName,
-                              glDrillDownFilters,
-                            )}
+                            name={row.name}
                             ledgerCount={row.ledgerCount}
                             expandable={row.ledgerCount > 0}
                             expanded={expanded}
-                            onExpandClick={() => toggleGroup(row.groupKey)}
+                            onExpandClick={() => toggleGroup(row.id)}
                             showTreeGuides
                           />
                         </AccountsTableCell>
-                        <DebitCreditCells
-                          debit={row.amounts.closingDebit}
-                          credit={row.amounts.closingCredit}
-                          bold
-                        />
+                        <DebitCreditCells debit={row.debit} credit={row.credit} bold />
                       </AccountsTableRow>
                     );
                   }
                   if (row.type === "subgroup") {
-                    const expanded = expandedSubgroupIds.has(row.subgroupKey);
+                    const expanded = expandedSubgroupIds.has(row.id);
                     return (
                       <AccountsTableRow
-                        key={rowKey(row, i)}
+                        key={`sg-${row.id}`}
                         className="group bg-muted/10 hover:bg-muted/30 transition-colors"
                       >
                         <AccountsTableCell className={TB_DETAILED_INDENT.subgroup}>
                           <AccountsCoaHierarchyRowLabel
                             level="sub_group"
-                            name={row.subgroupName}
-                            nameHref={buildTrialBalanceGroupHref(
-                              row.subgroupId,
-                              row.subgroupName,
-                              glDrillDownFilters,
-                            )}
+                            name={row.name}
                             ledgerCount={row.ledgerCount}
                             expandable={row.ledgerCount > 0}
                             expanded={expanded}
-                            onExpandClick={() => toggleSubgroup(row.subgroupKey)}
+                            onExpandClick={() => toggleSubgroup(row.id)}
                             showTreeGuides
                           />
                         </AccountsTableCell>
-                        <DebitCreditCells
-                          debit={row.amounts.closingDebit}
-                          credit={row.amounts.closingCredit}
-                        />
-                      </AccountsTableRow>
-                    );
-                  }
-                  if (row.type === "ledger") {
-                    return (
-                      <AccountsTableRow
-                        key={rowKey(row, i)}
-                        className="group hover:bg-muted/30 transition-colors cursor-pointer"
-                        onClick={() => toggleLedger(row.ledger.ledgerId)}
-                      >
-                        <AccountsTableCell className={TB_DETAILED_INDENT.ledger}>
-                          <AccountsCoaHierarchyRowLabel
-                            level="ledger"
-                            name={row.ledger.ledgerName}
-                            nameHref={buildTrialBalanceLedgerHref(row.ledger.ledgerId, glDrillDownFilters)}
-                            expandable
-                            expanded={expandedLedgerIds.has(row.ledger.ledgerId)}
-                            showTreeGuides
-                          />
-                        </AccountsTableCell>
-                        <DebitCreditCells
-                          debit={row.ledger.closingDebit}
-                          credit={row.ledger.closingCredit}
-                        />
+                        <DebitCreditCells debit={row.debit} credit={row.credit} />
                       </AccountsTableRow>
                     );
                   }
                   return (
                     <AccountsTableRow
-                      key={rowKey(row, i)}
-                      className="group bg-muted/10 hover:bg-muted/25 transition-colors"
+                      key={`l-${row.id}`}
+                      className="group hover:bg-muted/20 transition-colors"
                     >
-                      <AccountsTableCell className={TB_DETAILED_INDENT.voucher}>
-                        <div className="space-y-0.5">
-                          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px]">
-                            <span className="text-muted-foreground">
-                              {formatTrialBalanceReportDate(row.voucher.date)}
-                            </span>
-                            <Link
-                              href={row.voucher.viewHref}
-                              className="font-mono text-brand-700 hover:underline"
-                            >
-                              {row.voucher.voucherNo}
-                            </Link>
-                            <span className="text-muted-foreground">
-                              {row.voucher.voucherTypeLabel}
-                            </span>
-                          </div>
-                          <p className="text-[11px] text-muted-foreground line-clamp-2">
-                            {row.voucher.narration}
-                          </p>
-                        </div>
+                      <AccountsTableCell className={TB_DETAILED_INDENT.ledger}>
+                        <AccountsCoaHierarchyRowLabel
+                          level="ledger"
+                          name={row.code ? `${row.code} — ${row.name}` : row.name}
+                          showTreeGuides
+                        />
                       </AccountsTableCell>
-                      <DebitCreditCells
-                        debit={row.voucher.debit}
-                        credit={row.voucher.credit}
-                      />
+                      <DebitCreditCells debit={row.debit} credit={row.credit} />
                     </AccountsTableRow>
                   );
                 })}
@@ -1099,106 +1008,23 @@ function TrialBalancePageBody({
                   <AccountsTableCell
                     align="right"
                     money
-                    className={cn(
-                      "font-bold",
-                      summary.closingDifference !== 0 && "text-red-600",
-                    )}
+                    className={cn("font-bold", closingUnbalanced && "text-red-600")}
                   >
-                    {formatMoney(summary.totalDebit)}
+                    {formatMoneyString(displaySummary?.closing.debit ?? "0")}
                   </AccountsTableCell>
                   <AccountsTableCell
                     align="right"
                     money
-                    className={cn(
-                      "font-bold",
-                      summary.closingDifference !== 0 && "text-red-600",
-                    )}
+                    className={cn("font-bold", closingUnbalanced && "text-red-600")}
                   >
-                    {formatMoney(summary.totalCredit)}
+                    {formatMoneyString(displaySummary?.closing.credit ?? "0")}
                   </AccountsTableCell>
                 </AccountsTableRow>
               </AccountsTableFoot>
             </AccountsTable>
-          ) : null}
+          )}
         </AccountsTableListing>
       </div>
     </AccountsPageShell>
-  );
-}
-
-function TrialBalanceExceptionsPanel({
-  exceptions,
-}: {
-  exceptions: TrialBalanceVoucherException[];
-}) {
-  return (
-    <div className="flex-shrink-0 mb-2 rounded-lg border border-red-200 bg-red-50/70 overflow-hidden">
-      <div className="flex items-center gap-1.5 px-3 py-2 border-b border-red-100">
-        <AlertTriangle className="w-3.5 h-3.5 text-red-600 flex-shrink-0" />
-        <span className="text-xs font-semibold text-red-700">
-          Unbalanced Vouchers ({exceptions.length})
-        </span>
-        <span className="text-[11px] text-red-600/80">
-          — these vouchers do not satisfy Total Debit = Total Credit and must be corrected at source.
-        </span>
-      </div>
-      <div className="overflow-x-auto">
-        <table className="w-full text-xs">
-          <thead>
-            <tr className="bg-red-100/40 text-red-700">
-              <th className="px-3 py-1.5 text-left font-semibold">Voucher No.</th>
-              <th className="px-3 py-1.5 text-left font-semibold">Date</th>
-              <th className="px-3 py-1.5 text-left font-semibold">Type</th>
-              <th className="px-3 py-1.5 text-right font-semibold">Total Debit</th>
-              <th className="px-3 py-1.5 text-right font-semibold">Total Credit</th>
-              <th className="px-3 py-1.5 text-right font-semibold">Difference</th>
-              <th className="px-3 py-1.5 text-right font-semibold">Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {exceptions.map((ex) => (
-              <tr key={ex.voucherId} className="border-t border-red-100">
-                <td className="px-3 py-1.5 font-mono text-brand-700">{ex.voucherNo}</td>
-                <td className="px-3 py-1.5 text-foreground">{ex.date}</td>
-                <td className="px-3 py-1.5 text-foreground">{ex.voucherTypeLabel}</td>
-                <td className="px-3 py-1.5 text-right tabular-nums">{formatMoney(ex.totalDebit)}</td>
-                <td className="px-3 py-1.5 text-right tabular-nums">{formatMoney(ex.totalCredit)}</td>
-                <td className="px-3 py-1.5 text-right tabular-nums font-semibold text-red-600">
-                  {formatMoney(ex.difference)}
-                </td>
-                <td className="px-3 py-1.5 text-right">
-                  <Link href={ex.viewHref} className="text-brand-700 hover:underline font-medium">
-                    View
-                  </Link>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
-function EmptyState({
-  hasFilters,
-  onClear,
-}: {
-  hasFilters: boolean;
-  onClear: () => void;
-}) {
-  return (
-    <div className="accounts-table-empty py-4 text-center">
-      No records found.
-      {hasFilters && (
-        <button
-          type="button"
-          onClick={onClear}
-          className="block mx-auto mt-1 text-brand-600 hover:underline"
-        >
-          Clear filters
-        </button>
-      )}
-    </div>
   );
 }
