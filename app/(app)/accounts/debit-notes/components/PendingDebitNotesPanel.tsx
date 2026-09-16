@@ -28,7 +28,12 @@ import {
   AccountsColumnHeader,
   SortTh,
 } from "@/app/(app)/accounts/components/AccountsUI";
-import { DEBIT_NOTES_LIST_PATH, formatINR } from "../note-utils";
+import {
+  DEBIT_NOTES_LIST_PATH,
+  debitNotesListHref,
+  formatINR,
+  withReturnTo,
+} from "../note-utils";
 import {
   Select,
   SelectContent,
@@ -297,7 +302,12 @@ export function PendingDebitNotesPanel({
   );
 
   const handleCreate = (row: PendingDebitNoteRow) => {
-    router.push(`${DEBIT_NOTES_LIST_PATH}/new?pendingId=${encodeURIComponent(row.returnId)}`);
+    router.push(
+      withReturnTo(
+        `${DEBIT_NOTES_LIST_PATH}/new?pendingId=${encodeURIComponent(row.returnId)}`,
+        debitNotesListHref("pending"),
+      ),
+    );
   };
 
   return (

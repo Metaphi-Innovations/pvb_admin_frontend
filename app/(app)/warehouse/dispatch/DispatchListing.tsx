@@ -5,7 +5,7 @@ import { MasterListing } from "@/components/listing/MasterListing";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
 import {
   Eye, Pencil, RotateCcw, FileText, CheckCircle2,
-  Download, Printer, X
+  Download, Printer
 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
@@ -177,7 +177,6 @@ export function DispatchListing({ selectedWarehouse = "All" }: DispatchListingPr
   // Modal states
   const [revertTarget, setRevertTarget] = useState<any>(null);
   const [deliveryTarget, setDeliveryTarget] = useState<any>(null);
-  const [closeTarget, setCloseTarget] = useState<any>(null);
   // TODO: re-enable when delivery confirmation fields are stored
   // const [deliveryForm, setDeliveryForm] = useState<DeliveryDetails>({ deliveryDate: "", receiverName: "", remarks: "" });
 
@@ -633,13 +632,6 @@ export function DispatchListing({ selectedWarehouse = "All" }: DispatchListingPr
       },
       hide: (row) => row.status === "DELIVERED" || row.status === "CLOSED" || row.status === "CANCELLED",
     },
-    {
-      label: "Close Dispatch",
-      action: "close_dispatch",
-      icon: X,
-      onClick: (row) => setCloseTarget(row),
-      hide: (row) => row.status === "DELIVERED" || row.status === "CLOSED" || row.status === "CANCELLED",
-    },
   ];
 
   const handleRevertConfirm = async () => {
@@ -664,18 +656,6 @@ export function DispatchListing({ selectedWarehouse = "All" }: DispatchListingPr
       console.error(error);
     } finally {
       setDeliveryTarget(null);
-    }
-  };
-
-  const handleCloseConfirm = async () => {
-    if (!closeTarget) return;
-    try {
-      await updateDispatchStatus(closeTarget.id, "CLOSED");
-      fetchData();
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setCloseTarget(null);
     }
   };
 
@@ -818,32 +798,6 @@ export function DispatchListing({ selectedWarehouse = "All" }: DispatchListingPr
         </DialogContent>
       </Dialog>
 
-      {/* ── CLOSE DISPATCH DIALOG ── */}
-      <Dialog open={!!closeTarget} onOpenChange={() => setCloseTarget(null)}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-base">
-              <div className="w-8 h-8 rounded-lg bg-red-50 border border-red-200 flex items-center justify-center">
-                <X className="w-4 h-4 text-red-500" />
-              </div>
-              Close Dispatch?
-            </DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            Are you sure you want to close{" "}
-            <span className="font-semibold text-foreground">{closeTarget?.dispatchNumber || closeTarget?.dispatch_no}</span>? 
-            You will no longer be able to edit or revert it.
-          </p>
-          <DialogFooter className="flex gap-2 justify-end pt-2">
-            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setCloseTarget(null)}>
-              Cancel
-            </Button>
-            <Button size="sm" className="h-8 text-xs bg-red-600 hover:bg-red-700 text-white" onClick={handleCloseConfirm}>
-              Confirm Close
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

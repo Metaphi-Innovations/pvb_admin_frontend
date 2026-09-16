@@ -77,6 +77,8 @@ export interface SampleReturnLineItem {
   dispatchQty: number;
   returnedQty: number;
   amount?: number;
+  unitPrice: number;
+  gstPct: number;
   remarks?: string;
 }
 
@@ -219,6 +221,38 @@ function mapLineItem(raw: Record<string, unknown>): SampleReturnLineItem {
     dispatchQty: asNumber(raw.dispatch_qty) / packingFactor,
     returnedQty: returnedPackingQty,
     amount: asNumber(raw.return_amount) || asNumber(raw.amount),
+    unitPrice:
+      asNumber(raw.unit_price) ||
+      (() => {
+        const packingFactorLocal =
+          asNumber(snapshot.unit_per_packing) ||
+          asNumber(snapshot.conversion_qty) ||
+          1;
+        const returnedPacking = asNumber(raw.returned_qty);
+        const qtyTypeLocal = asString(raw.quantity_type).toLowerCase();
+        const base =
+          qtyTypeLocal === "piece" || qtyTypeLocal === "pieces"
+            ? returnedPacking
+            : returnedPacking * (packingFactorLocal > 0 ? packingFactorLocal : 1);
+        const amt = asNumber(raw.return_amount) || asNumber(raw.amount);
+        return base > 0 && amt > 0 ? amt / base : 0;
+      })() ||
+      asNumber(snapshot.unit_price) ||
+      asNumber(snapshot.rate) ||
+      asNumber(snapshot.dp_price) ||
+      asNumber(asRecord(dispatchItem.product_snapshot).unit_price) ||
+      asNumber(asRecord(dispatchItem.product_snapshot).dp_price) ||
+      0,
+    gstPct:
+      asNumber(snapshot.gst_percent) ||
+      asNumber(snapshot.gst_percentage) ||
+      asNumber(snapshot.gst) ||
+      asNumber(snapshot.cgst_percent) +
+        asNumber(snapshot.sgst_percent) +
+        asNumber(snapshot.igst_percent) ||
+      asNumber(asRecord(product.gst_rate).gstPercentage) ||
+      asNumber(asRecord(product.gst_rate).gst_percentage) ||
+      0,
     remarks: asString(raw.remarks),
   };
 }

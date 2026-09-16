@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Download, Loader2 } from "lucide-react";
 import { AccountsFormLayout } from "../expenses/components/AccountsFormLayout";
@@ -16,7 +16,13 @@ import {
   buildVoucherViewMeta,
   voucherStatusToBadgeKey,
 } from "@/components/accounts/voucher-form/TransactionViewHero";
-import { DEBIT_NOTES_BREADCRUMB, DEBIT_NOTES_LIST_PATH, formatINR } from "./note-utils";
+import {
+  DEBIT_NOTES_BREADCRUMB,
+  DEBIT_NOTES_LIST_PATH,
+  debitNoteReturnPath,
+  formatINR,
+  withReturnTo,
+} from "./note-utils";
 import { formatDisplayDate } from "@/lib/accounts/date-display";
 import { LedgerImpactPreview } from "@/components/accounts/LedgerImpactPreview";
 import { debitNoteImpactResolved } from "@/lib/accounts/resolved-impact-previews";
@@ -106,6 +112,11 @@ function resolvePrCharges(raw: Record<string, unknown> | null | undefined): PrCh
 
 export default function DebitNoteViewPageClient({ debitNoteId }: { debitNoteId: string | number }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const listHref = useMemo(
+    () => debitNoteReturnPath(searchParams.get("returnTo")),
+    [searchParams],
+  );
   const { permissions } = usePermissions();
 
   const hasCreatePermission = canCreate(permissions, "accounts", "debit_note");
@@ -200,7 +211,7 @@ export default function DebitNoteViewPageClient({ debitNoteId }: { debitNoteId: 
       <div className="p-8 text-center text-xs text-red-600">
         {error || "Debit Note details not found."}
         <div className="mt-4">
-          <Button size="sm" onClick={() => router.push(DEBIT_NOTES_LIST_PATH)}>
+          <Button size="sm" onClick={() => router.push(listHref)}>
             Back to List
           </Button>
         </div>
@@ -434,7 +445,7 @@ export default function DebitNoteViewPageClient({ debitNoteId }: { debitNoteId: 
                 variant="outline"
                 size="sm"
                 className="h-8 text-xs"
-                onClick={() => router.push(DEBIT_NOTES_LIST_PATH)}
+                onClick={() => router.push(listHref)}
               >
                 Back
               </Button>
@@ -455,7 +466,14 @@ export default function DebitNoteViewPageClient({ debitNoteId }: { debitNoteId: 
                   <Button
                     size="sm"
                     className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white"
-                    onClick={() => router.push(`${DEBIT_NOTES_LIST_PATH}/${record.id}/edit`)}
+                    onClick={() =>
+                      router.push(
+                        withReturnTo(
+                          `${DEBIT_NOTES_LIST_PATH}/${record.id}/edit`,
+                          listHref,
+                        ),
+                      )
+                    }
                   >
                     Edit
                   </Button>

@@ -274,8 +274,21 @@ export function mapGrnDetail(raw: Record<string, unknown>): GrnRecord {
       const invoiceId = asString(batch.invoiceId);
       const invoice = invoiceById.get(invoiceId) ?? {};
       const qty = asNumber(batch.quantity_base_qty);
-      const rate = asNumber(batch.rate);
-      const gstPct = asNumber(batch.gst);
+      const snapRate =
+        asNumber(snapshot.unit_price) ||
+        asNumber(snapshot.rate) ||
+        asNumber(snapshot.cp_price) ||
+        asNumber(snapshot.dp_price) ||
+        asNumber(item.price);
+      const snapGst =
+        asNumber(snapshot.gst_percent) ||
+        asNumber(snapshot.gst_percentage) ||
+        asNumber(snapshot.gst) ||
+        asNumber(snapshot.cgst_percent) +
+          asNumber(snapshot.sgst_percent) +
+          asNumber(snapshot.igst_percent);
+      const rate = asNumber(batch.rate) || snapRate;
+      const gstPct = asNumber(batch.gst) || snapGst;
       const taxable = qty * rate;
       const hasStoredGstAmount =
         batch.gstAmount !== null &&
@@ -288,6 +301,10 @@ export function mapGrnDetail(raw: Record<string, unknown>): GrnRecord {
           ? Math.max(0, asNumber(batch.totalPrice) - taxable)
           : (taxable * gstPct) / 100;
       const totalAmount = asNumber(batch.totalPrice) || taxable + gstAmount;
+      const discountPct =
+        asNumber(batch.discount_percent) ||
+        asNumber(batch.discountPct) ||
+        undefined;
 
       batches.push({
         productId,
@@ -300,6 +317,7 @@ export function mapGrnDetail(raw: Record<string, unknown>): GrnRecord {
         invoiceNumber: asString(invoice.invoiceNumber),
         invoiceQty: qty,
         unitPrice: rate || undefined,
+        discountPct: discountPct || undefined,
         gstPct: gstPct || undefined,
         gstAmount: gstAmount || undefined,
         totalAmount: totalAmount || undefined,

@@ -212,6 +212,7 @@ function GrnSelector({
 export function PurchaseInvoiceGrnForm({
   preselectedGrnId,
   sourceType,
+  listHref = "/accounts/purchase-invoices",
   onSourceTypeChange,
   toast,
   showToast,
@@ -219,6 +220,7 @@ export function PurchaseInvoiceGrnForm({
 }: {
   preselectedGrnId: string | null;
   sourceType: PurchaseSourceType;
+  listHref?: string;
   onSourceTypeChange: (v: PurchaseSourceType) => void;
   toast: AccountsToastState | null;
   showToast: (msg: string) => void;
@@ -434,7 +436,7 @@ export function PurchaseInvoiceGrnForm({
           ? "Purchase invoice was already posted for this GRN."
           : "Purchase invoice posted. Supplier outstanding and ledger entries were created.",
       );
-      router.replace("/accounts/purchase-invoices");
+      router.replace(listHref);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Save failed.");
       setSaving(false);
@@ -460,7 +462,7 @@ export function PurchaseInvoiceGrnForm({
   );
   const isDirty = useFormDirtySnapshot(formSnapshot, { ready: baselineReady });
   const { requestCancel, discardDialog } = useTransactionFormCancel({
-    listHref: "/accounts/purchase-invoices",
+    listHref,
     isDirty,
   });
 
@@ -472,8 +474,8 @@ export function PurchaseInvoiceGrnForm({
         <InvoiceFormLayout
           title={title}
           subtitle="Accounts → Transactions → From GRN Purchase Invoice"
-          breadcrumb={accountsBreadcrumb("Transactions", "New Purchase Invoice")}
-          backHref="/accounts/purchase-invoices"
+          breadcrumb={accountsBreadcrumb("Transactions", "New Purchase Invoice", listHref)}
+          backHref={listHref}
           onBackClick={requestCancel}
           stickyFooter={
             <VoucherFormActionBar

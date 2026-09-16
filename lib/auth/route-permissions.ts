@@ -96,6 +96,7 @@ export const ROUTE_PERMISSION_RULES: RoutePermissionRule[] = [
   { prefix: "/database/distributor", candidates: [ref("database", "distributor")] },
 
   { prefix: "/accounts/masters/chart-of-accounts", candidates: [ref("accounts", "chart_of_accounts")] },
+  { prefix: "/accounts/masters/opening-balances", candidates: [ref("accounts", "chart_of_accounts")] },
   { prefix: "/accounts/sales/pending-tax-invoices", candidates: [ref("accounts", "pending_invoices")] },
   { prefix: "/accounts/transactions/invoices", candidates: [ref("accounts", "sales_invoice")] },
   { prefix: "/accounts/purchase-invoices", candidates: [ref("accounts", "purchase_invoice")] },
@@ -142,6 +143,7 @@ export const ROUTE_PERMISSION_RULES: RoutePermissionRule[] = [
 export const NAV_PERMISSION_MAP: Record<string, ModuleSubmoduleRef[]> = {
   "/dashboard": [],
   "/accounts/masters/chart-of-accounts": [ref("accounts", "chart_of_accounts")],
+  "/accounts/masters/opening-balances": [ref("accounts", "chart_of_accounts")],
   "/accounts/sales/pending-tax-invoices": [ref("accounts", "pending_invoices")],
   "/accounts/transactions/invoices": [ref("accounts", "sales_invoice")],
   "/accounts/purchase-invoices": [ref("accounts", "purchase_invoice")],

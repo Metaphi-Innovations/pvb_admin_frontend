@@ -7,14 +7,26 @@ import {
   type LedgerOpeningBalanceDto,
 } from "@/services/ledger.service";
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export const ledgerDetailKeys = {
   all: ["accounts", "chart-of-accounts", "selected-ledger-detail"] as const,
   view: (
     ledgerId: string | null,
     dateFrom: string,
     dateTo: string,
+    financialYearId = "",
     refreshTick = 0,
-  ) => [...ledgerDetailKeys.all, ledgerId, dateFrom, dateTo, refreshTick] as const,
+  ) =>
+    [
+      ...ledgerDetailKeys.all,
+      ledgerId,
+      dateFrom,
+      dateTo,
+      financialYearId,
+      refreshTick,
+    ] as const,
 };
 
 function resolveLedgerOpeningBalance(
@@ -34,26 +46,45 @@ export function useLedgerDetail(options: {
   ledgerId: string | null;
   dateFrom: string;
   dateTo: string;
+  financialYearId?: string;
   enabled?: boolean;
   refreshTick?: number;
 }) {
-  const { ledgerId, dateFrom, dateTo, enabled = true, refreshTick = 0 } = options;
+  const {
+    ledgerId,
+    dateFrom,
+    dateTo,
+    financialYearId,
+    enabled = true,
+    refreshTick = 0,
+  } = options;
+
+  const fyId =
+    financialYearId && UUID_RE.test(financialYearId) ? financialYearId : undefined;
 
   return useQuery({
-    queryKey: ledgerDetailKeys.view(ledgerId, dateFrom, dateTo, refreshTick),
+    queryKey: ledgerDetailKeys.view(
+      ledgerId,
+      dateFrom,
+      dateTo,
+      fyId ?? "",
+      refreshTick,
+    ),
     enabled: Boolean(enabled && ledgerId && dateFrom && dateTo),
     queryFn: async ({ signal }) => {
       if (!ledgerId) return null;
-      const [detail, currentFy] = await Promise.all([
-        LedgerService.view(ledgerId, { dateFrom, dateTo }, signal),
-        LedgerService.getCurrentFinancialYear(),
-      ]);
+      const detail = await LedgerService.view(
+        ledgerId,
+        {
+          dateFrom,
+          dateTo,
+          ...(fyId ? { financialYearId: fyId } : {}),
+        },
+        signal,
+      );
       return {
         detail,
-        openingBalance: resolveLedgerOpeningBalance(
-          detail,
-          currentFy?.financialYearId,
-        ),
+        openingBalance: resolveLedgerOpeningBalance(detail, fyId),
       };
     },
     placeholderData: (previous) => previous,

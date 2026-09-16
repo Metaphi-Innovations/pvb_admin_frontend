@@ -350,18 +350,35 @@ export const LedgerService = {
 
   async view(
     ledgerId: string,
-    params?: { dateFrom?: string; dateTo?: string },
+    params?: { dateFrom?: string; dateTo?: string; financialYearId?: string },
     signal?: AbortSignal,
   ): Promise<LedgerDetailWithTransactionsDto> {
     const response = await axiosInstance.get<ApiResponse<LedgerDetailWithTransactionsDto>>(
       API_ENDPOINTS.ACCOUNTS.LEDGERS.VIEW(ledgerId),
-      { params, signal },
+      {
+        params: {
+          ...(params?.dateFrom ? { dateFrom: params.dateFrom } : {}),
+          ...(params?.dateTo ? { dateTo: params.dateTo } : {}),
+          ...(params?.financialYearId
+            ? { financialYearId: params.financialYearId }
+            : {}),
+        },
+        signal,
+        ...(params?.financialYearId
+          ? { headers: { "x-financial-year-id": params.financialYearId } }
+          : {}),
+      },
     );
     return unwrapData(response);
   },
 
   async getBalances(
-    payload: { ledgerIds: string[]; dateFrom?: string; dateTo?: string },
+    payload: {
+      ledgerIds: string[];
+      dateFrom?: string;
+      dateTo?: string;
+      financialYearId?: string;
+    },
     signal?: AbortSignal,
   ): Promise<LedgerPeriodBalanceDto[]> {
     const ids = [...new Set(payload.ledgerIds.filter(Boolean))];
@@ -380,8 +397,16 @@ export const LedgerService = {
             ledgerIds,
             ...(payload.dateFrom ? { dateFrom: payload.dateFrom } : {}),
             ...(payload.dateTo ? { dateTo: payload.dateTo } : {}),
+            ...(payload.financialYearId
+              ? { financialYearId: payload.financialYearId }
+              : {}),
           },
-          { signal },
+          {
+            signal,
+            ...(payload.financialYearId
+              ? { headers: { "x-financial-year-id": payload.financialYearId } }
+              : {}),
+          },
         );
         return unwrapData(response) ?? [];
       }),

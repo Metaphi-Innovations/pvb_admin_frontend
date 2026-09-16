@@ -59,10 +59,12 @@ function selectedLedgerId(ledgerId: string | number | null | undefined): string 
 export function PurchaseInvoiceDirectForm({
   onCancel,
   showToast,
+  listHref = "/accounts/purchase-invoices",
 }: {
   invoiceId?: number;
   onCancel: () => void;
   showToast: (msg: string) => void;
+  listHref?: string;
 }) {
   const router = useRouter();
   const { selectedFY, isLoading: fyLoading } = useFY();
@@ -275,7 +277,7 @@ export function PurchaseInvoiceDirectForm({
           ? "Direct purchase invoice was already posted."
           : "Direct purchase posted. Supplier outstanding and ledger entries were created.",
       );
-      router.replace("/accounts/purchase-invoices");
+      router.replace(listHref);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Post failed.");
       setSaving(false);
@@ -287,8 +289,8 @@ export function PurchaseInvoiceDirectForm({
       <InvoiceFormLayout
         title="New Direct Purchase Invoice"
         subtitle="Accounts → Transactions → Direct Purchase Invoice"
-        breadcrumb={accountsBreadcrumb("Transactions", "New Direct Purchase")}
-        backHref="/accounts/purchase-invoices"
+        breadcrumb={accountsBreadcrumb("Transactions", "New Direct Purchase", listHref)}
+        backHref={listHref}
         onBackClick={onCancel}
         stickyFooter={
           <VoucherFormActionBar

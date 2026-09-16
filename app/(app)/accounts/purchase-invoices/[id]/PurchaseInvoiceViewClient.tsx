@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useCallback, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
   FileMinus,
@@ -48,6 +48,7 @@ import {
   PurchaseInvoiceMatchStatusBadge,
 } from "../PurchaseInvoiceQtyComparisonTable";
 import { DirectPurchaseAttachmentPanel } from "../DirectPurchaseAttachmentPanel";
+import { purchaseInvoiceReturnPath } from "../purchase-invoice-nav";
 import { formatDisplayDate, isoToDisplayDate } from "@/lib/accounts/date-display";
 import { VoucherFormSectionCard } from "@/components/accounts/voucher-form/VoucherFormSectionCard";
 import {
@@ -131,6 +132,11 @@ function PaymentBadge({ amountPaid, grandTotal }: { amountPaid: number; grandTot
 
 export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: string }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const listHref = useMemo(
+    () => purchaseInvoiceReturnPath(searchParams.get("returnTo")),
+    [searchParams],
+  );
   const [invoice, setInvoice] = useState<PurchaseInvoiceRecord | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -210,7 +216,7 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: st
   if (loading) {
     return (
       <PurchaseInvoicePageShell
-        breadcrumbs={accountsBreadcrumb("Purchase Invoices", "View")}
+        breadcrumbs={accountsBreadcrumb("Purchase Invoices", "View", listHref)}
         title="Purchase Invoice"
         description=""
       >
@@ -222,7 +228,7 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: st
   if (!invoice) {
     return (
       <PurchaseInvoicePageShell
-        breadcrumbs={accountsBreadcrumb("Purchase Invoices", "Not Found")}
+        breadcrumbs={accountsBreadcrumb("Purchase Invoices", "Not Found", listHref)}
         title="Invoice Not Found"
         description=""
       >
@@ -233,7 +239,7 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: st
             variant="outline"
             size="sm"
             className="h-9 text-sm font-medium"
-            onClick={() => router.push("/accounts/purchase-invoices")}
+            onClick={() => router.push(listHref)}
           >
             Back to List
           </Button>
@@ -290,7 +296,7 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: st
             variant="outline"
             size="sm"
             className="h-9 text-sm font-medium gap-1.5"
-            onClick={() => router.push("/accounts/purchase-invoices")}
+            onClick={() => router.push(listHref)}
           >
             <ArrowLeft className="w-4 h-4" />
             Back

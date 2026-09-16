@@ -42,7 +42,12 @@ import {
   type DebitReferencePreview,
   type NoteWorkflowStatus,
 } from "./debit-notes-data";
-import { DEBIT_NOTES_LIST_PATH, formatINR } from "./note-utils";
+import {
+  DEBIT_NOTES_LIST_PATH,
+  debitNoteReturnPath,
+  formatINR,
+  withReturnTo,
+} from "./note-utils";
 import { dispatchAccountsDataChanged } from "@/lib/accounts/accounts-data-events";
 import { DebitNoteService, mapDebitNoteToRecord } from "@/services/debit-note.service";
 import { SupplierService, type SupplierDetailRecord } from "@/services/supplier.service";
@@ -59,7 +64,7 @@ import { AccountsDateInput } from "@/components/accounts/AccountsDateInput";
 import { formatMoney, roundMoney } from "@/lib/accounts/money-format";
 import { VoucherFormSectionCard } from "@/components/accounts/voucher-form/VoucherFormSectionCard";
 import { VoucherSignedRoundOffInput } from "@/components/accounts/voucher-form/VoucherSignedRoundOffInput";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   NoteReferenceDocumentDetails,
 } from "@/components/accounts/voucher-form/NoteReferenceDocumentDetails";
@@ -158,6 +163,11 @@ export default function DebitNoteFormPageClient({
   mode?: FormMode;
 }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const listHref = useMemo(
+    () => debitNoteReturnPath(searchParams.get("returnTo")),
+    [searchParams],
+  );
   const { toast, showToast, dismissToast } = useAccountsToast();
   const pendingId = pendingIdProp?.trim() || "";
   const isPendingEntitlement = Boolean(pendingId) && isUuid(pendingId);
@@ -597,7 +607,10 @@ export default function DebitNoteFormPageClient({
         if (detail.debit_note?.debit_note_id) {
           showToast("This pending debit note was already converted.", "error");
           router.replace(
-            `${DEBIT_NOTES_LIST_PATH}/${detail.debit_note.debit_note_id}`,
+            withReturnTo(
+              `${DEBIT_NOTES_LIST_PATH}/${detail.debit_note.debit_note_id}`,
+              listHref,
+            ),
           );
           return;
         }
@@ -869,7 +882,7 @@ export default function DebitNoteFormPageClient({
         setReferencePreview(null);
       }
     }).catch(() => {
-      router.replace(DEBIT_NOTES_LIST_PATH);
+      router.replace(listHref);
     });
   }, [isEdit, debitNoteId, router, vendors]);
 
@@ -1472,7 +1485,7 @@ export default function DebitNoteFormPageClient({
         );
         showToast("Debit note saved as draft", "success");
         dispatchAccountsDataChanged("debit-notes");
-        router.replace(DEBIT_NOTES_LIST_PATH);
+        router.replace(listHref);
         return;
       }
       const input = buildInput("draft");
@@ -1485,7 +1498,7 @@ export default function DebitNoteFormPageClient({
         showToast("Debit note saved as draft", "success");
       }
       dispatchAccountsDataChanged("debit-notes");
-      router.replace(DEBIT_NOTES_LIST_PATH);
+      router.replace(listHref);
     } catch (e: any) {
       setError(e.message || "Could not save debit note.");
       setSaving(false);
@@ -1532,7 +1545,7 @@ export default function DebitNoteFormPageClient({
       dispatchAccountsDataChanged("debit-notes");
       showToast("Debit note submitted for approval", "success");
       setSubmitApproverOpen(false);
-      router.replace(DEBIT_NOTES_LIST_PATH);
+      router.replace(listHref);
     } catch (e: any) {
       setError(e.message || "Failed to submit for approval.");
       setSaving(false);
@@ -1561,7 +1574,7 @@ export default function DebitNoteFormPageClient({
         await DebitNoteService.post(targetId);
         dispatchAccountsDataChanged("debit-notes");
         showToast("Debit note posted successfully", "success");
-        router.replace(DEBIT_NOTES_LIST_PATH);
+        router.replace(listHref);
         return;
       }
       const input = buildInput("draft");
@@ -1577,7 +1590,7 @@ export default function DebitNoteFormPageClient({
         await DebitNoteService.post(targetId);
         dispatchAccountsDataChanged("debit-notes");
         showToast("Debit note posted successfully", "success");
-        router.replace(DEBIT_NOTES_LIST_PATH);
+        router.replace(listHref);
       } else {
         setError("Could not determine debit note ID after creation.");
         setSaving(false);
@@ -1649,7 +1662,7 @@ export default function DebitNoteFormPageClient({
   );
   const isDirty = useFormDirtySnapshot(formSnapshot, { ready: baselineReady });
   const { requestCancel, discardDialog } = useTransactionFormCancel({
-    listHref: DEBIT_NOTES_LIST_PATH,
+    listHref,
     isDirty,
   });
 
@@ -1691,8 +1704,8 @@ export default function DebitNoteFormPageClient({
           onBackClick={requestCancel}
           title={title}
           subtitle={subtitle}
-          breadcrumb={accountsBreadcrumb("Transactions", breadcrumbPage, DEBIT_NOTES_LIST_PATH)}
-          backHref={DEBIT_NOTES_LIST_PATH}
+          breadcrumb={accountsBreadcrumb("Transactions", breadcrumbPage, listHref)}
+          backHref={listHref}
           stickyFooter={stickyActions}
         >
           <div className="space-y-2.5">
