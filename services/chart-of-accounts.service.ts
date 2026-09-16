@@ -69,6 +69,51 @@ export const ChartOfAccountsService = {
     return Array.isArray(data) ? data : [];
   },
 
+  async getPrimaryHeads(params: {
+    status?: string;
+    search?: string;
+    signal?: AbortSignal;
+  } = {}): Promise<CoaApiTreeNode[]> {
+    const { signal, ...query } = params;
+    const response = await axiosInstance.get(
+      API_ENDPOINTS.ACCOUNTS.CHART_OF_ACCOUNTS.PRIMARY_HEADS,
+      { params: query, signal }
+    );
+    const data = unwrapData(response);
+    return Array.isArray(data) ? (data as CoaApiTreeNode[]) : [];
+  },
+
+  async getGroups(params: {
+    primaryHeadId?: string;
+    status?: string;
+    search?: string;
+    signal?: AbortSignal;
+  } = {}): Promise<CoaApiTreeNode[]> {
+    const { signal, ...query } = params;
+    const response = await axiosInstance.get(
+      API_ENDPOINTS.ACCOUNTS.CHART_OF_ACCOUNTS.GROUPS,
+      { params: query, signal }
+    );
+    const data = unwrapData(response);
+    return Array.isArray(data) ? (data as CoaApiTreeNode[]) : [];
+  },
+
+  async getSubGroups(params: {
+    primaryHeadId?: string;
+    accountGroupId?: string;
+    status?: string;
+    search?: string;
+    signal?: AbortSignal;
+  } = {}): Promise<CoaApiTreeNode[]> {
+    const { signal, ...query } = params;
+    const response = await axiosInstance.get(
+      API_ENDPOINTS.ACCOUNTS.CHART_OF_ACCOUNTS.SUB_GROUPS,
+      { params: query, signal }
+    );
+    const data = unwrapData(response);
+    return Array.isArray(data) ? (data as CoaApiTreeNode[]) : [];
+  },
+
   async previewLedgerNumber(signal?: AbortSignal): Promise<string> {
     const response = await axiosInstance.get<ApiResponse<{ previewNumber: string }>>(
       API_ENDPOINTS.ACCOUNTS.LEDGERS.PREVIEW_NUMBER,

@@ -1,7 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import type { TrialBalanceTab } from "./trial-balance-data";
+import type { TrialBalanceTab } from "@/types/trial-balance.types";
 
 const TABS: { id: TrialBalanceTab; label: string }[] = [
   { id: "normal", label: "Normal Report" },

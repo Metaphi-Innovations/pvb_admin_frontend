@@ -129,6 +129,8 @@ export const ACCOUNTING_SETTINGS_SETUP_LINKS: AccountsNavLink[] = [
 
   { label: "Financial Years", href: "/accounts/masters/financial-years", icon: CalendarRange },
 
+  { label: "Opening Balances", href: "/accounts/masters/opening-balances", icon: Scale },
+
   { label: "Voucher Types", href: "/accounts/masters/voucher-types", icon: Tags },
 
   { label: "GST Settings", href: "/settings/gst-tax-configuration", icon: Layers },
