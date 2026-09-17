@@ -33,6 +33,8 @@ export const ROUTE_PERMISSION_RULES: RoutePermissionRule[] = [
   { prefix: "/masters/gst", candidates: [ref("masters", "gst")] },
   { prefix: "/masters/customers", candidates: [ref("masters", "customerMaster")] },
   { prefix: "/masters/customer-types", candidates: [ref("masters", "customerCategory")] },
+  { prefix: "/masters/suppliers", candidates: [ref("masters", "supplier")] },
+  // Legacy vendor URL (redirects to /masters/suppliers)
   { prefix: "/masters/vendors", candidates: [ref("masters", "supplier")] },
   { prefix: "/masters/vendor-type", candidates: [ref("masters", "supplier_type")] },
   { prefix: "/masters/warehouse", candidates: [ref("masters", "warehouseMaster")] },
@@ -199,6 +201,7 @@ export const NAV_PERMISSION_MAP: Record<string, ModuleSubmoduleRef[]> = {
   "/masters/additional-charges": [ref("masters", "additional_charge")],
   "/masters/uom": [ref("masters", "uomMaster")],
   "/masters/vendor-type": [ref("masters", "supplier_type")],
+  "/masters/suppliers": [ref("masters", "supplier")],
   "/masters/vendors": [ref("masters", "supplier")],
   "/masters/warehouse": [ref("masters", "warehouseMaster")],
 

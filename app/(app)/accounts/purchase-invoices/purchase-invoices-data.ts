@@ -1,7 +1,7 @@
 import { ACCOUNTS_CURRENT_USER } from "@/lib/accounts/config";
 import { splitInvoiceGst } from "@/lib/accounts/invoice-gst-breakup";
 import { COMPANY_BILLING } from "@/lib/procurement/config";
-import { getActiveVendors } from "@/app/(app)/masters/vendors/vendor-data";
+import { getActiveVendors } from "@/app/(app)/masters/suppliers/vendor-data";
 import { mergePurchaseInvoiceDemoScenarios } from "./purchase-invoice-seed";
 import { mergeDirectPurchaseDemoScenarios } from "./purchase-invoice-direct-seed";
 import {
@@ -1275,8 +1275,8 @@ export function createPurchaseFromGrn(input: GrnPurchaseInput): PurchaseInvoiceR
   const existing = all.find((p) => p.grnId === input.grnId);
   if (existing) throw new Error(`Invoice already created for ${input.grnNo} (${existing.invoiceNo}).`);
 
-  const { getActiveVendors } = require("@/app/(app)/masters/vendors/vendor-data");
-  const vendor = (getActiveVendors() as import("@/app/(app)/masters/vendors/vendor-data").Vendor[]).find(
+  const { getActiveVendors } = require("@/app/(app)/masters/suppliers/vendor-data");
+  const vendor = (getActiveVendors() as import("@/app/(app)/masters/suppliers/vendor-data").Vendor[]).find(
     (v) => v.id === input.vendorId,
   );
 

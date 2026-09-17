@@ -1,13 +1,13 @@
 /**
  * Procurement PO supplier dropdown — backed by Supplier Master.
- * @see app/(app)/masters/vendors/vendor-data.ts
+ * @see app/(app)/masters/suppliers/vendor-data.ts
  */
 import {
   loadVendors,
   getActiveVendors,
   VENDOR_TYPE_LABELS,
   type Vendor,
-} from "@/app/(app)/masters/vendors/vendor-data";
+} from "@/app/(app)/masters/suppliers/vendor-data";
 import { nextId, todayStr } from "@/lib/procurement/utils";
 
 export type SupplierStatus = "active" | "inactive";

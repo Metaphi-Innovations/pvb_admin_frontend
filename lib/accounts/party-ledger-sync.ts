@@ -1,5 +1,5 @@
 import type { Customer } from "@/app/(app)/masters/customers/customer-data";
-import type { Vendor } from "@/app/(app)/masters/vendors/vendor-data";
+import type { Vendor } from "@/app/(app)/masters/suppliers/vendor-data";
 import type { ChartOfAccount } from "@/app/(app)/accounts/data";
 import { syncCustomerLedger, syncVendorLedger } from "@/lib/accounts/erp-accounting-mapping";
 import { resolveMappingLedger } from "@/lib/accounts/ledger-mappings";

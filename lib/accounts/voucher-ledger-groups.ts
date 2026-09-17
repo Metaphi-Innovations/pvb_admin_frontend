@@ -2,7 +2,7 @@ import type { ChartOfAccount } from "@/app/(app)/accounts/data";
 import { loadChartOfAccounts } from "@/app/(app)/accounts/data";
 import type { VoucherLine } from "@/app/(app)/accounts/vouchers/voucher-data";
 import { loadCustomers } from "@/app/(app)/masters/customers/customer-data";
-import { loadVendors } from "@/app/(app)/masters/vendors/vendor-data";
+import { loadVendors } from "@/app/(app)/masters/suppliers/vendor-data";
 import {
   findErpPartyLinkByLedgerId,
 } from "@/lib/accounts/erp-party-links";

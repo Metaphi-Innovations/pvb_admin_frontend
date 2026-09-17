@@ -66,7 +66,7 @@ import {
   CUSTOMER_TYPE_OPTIONS,
   loadCustomers,
 } from "@/app/(app)/masters/customers/customer-data";
-import { loadVendors } from "@/app/(app)/masters/vendors/vendor-data";
+import { loadVendors } from "@/app/(app)/masters/suppliers/vendor-data";
 import { loadProducts } from "@/app/(app)/masters/products/product-data";
 import { loadFinancialYears } from "@/app/(app)/accounts/masters/masters-data";
 import { WAREHOUSE_FILTER_OPTIONS } from "@/lib/accounts/inventory-accounting-data";

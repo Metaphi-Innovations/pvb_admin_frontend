@@ -7,7 +7,7 @@ import type { CoaTransactionRow } from "@/lib/accounts/coa-accounting-view";
 import { resolveTransactionDetail } from "@/lib/accounts/transaction-detail-data";
 import { loadTdsPartyWiseRows } from "@/lib/accounts/tds-party-wise-data";
 import { loadCustomers } from "@/app/(app)/masters/customers/customer-data";
-import { getActiveVendors } from "@/app/(app)/masters/vendors/vendor-data";
+import { getActiveVendors } from "@/app/(app)/masters/suppliers/vendor-data";
 import type { AccountingVoucher } from "@/app/(app)/accounts/vouchers/voucher-data";
 import { loadCreditNotes } from "@/app/(app)/accounts/credit-notes/credit-notes-data";
 import { loadDebitNotes } from "@/app/(app)/accounts/debit-notes/debit-notes-data";

@@ -375,7 +375,7 @@ export function CoaGroupDrillDownPanel({
                 </Link>
               </Button>
               <Button asChild size="sm" className="h-9 text-sm font-medium bg-brand-600 text-white">
-                <Link href="/masters/vendors">Open Supplier Master</Link>
+                <Link href="/masters/suppliers">Open Supplier Master</Link>
               </Button>
               <Button asChild variant="outline" size="sm" className="h-9 text-sm font-medium">
                 <Link href="/accounts/vouchers/payment/new">Create Payment</Link>

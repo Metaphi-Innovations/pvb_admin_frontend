@@ -8,7 +8,7 @@ import {
   recordPurchaseInvoicePayment,
   type PurchaseInvoiceRecord,
 } from "@/app/(app)/accounts/purchase-invoices/purchase-invoices-data";
-import { loadVendors, type Vendor } from "@/app/(app)/masters/vendors/vendor-data";
+import { loadVendors, type Vendor } from "@/app/(app)/masters/suppliers/vendor-data";
 import {
   loadVouchers,
   type AccountingVoucher,

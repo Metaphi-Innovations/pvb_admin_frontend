@@ -5,7 +5,7 @@ import {
   vendorMasterToTransactionFields,
 } from "@/lib/accounts/transaction-master-fetch";
 import type { Customer } from "@/app/(app)/masters/customers/customer-data";
-import type { Vendor } from "@/app/(app)/masters/vendors/vendor-data";
+import type { Vendor } from "@/app/(app)/masters/suppliers/vendor-data";
 import type { Employee } from "@/app/(app)/user-management/employee/employee-data";
 import { MasterFetchedBadge } from "./MasterFetchedBadge";
 

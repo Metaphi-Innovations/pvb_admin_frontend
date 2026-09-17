@@ -60,7 +60,7 @@ import { getActiveFinancialYearId } from "@/lib/accounts/day-book-data";
 import { useFY } from "@/lib/fy-store";
 import { useTransactionDetailsDrawer } from "@/components/accounts/TransactionDetailsDrawer";
 import { loadCustomers } from "@/app/(app)/masters/customers/customer-data";
-import { getVendorById } from "@/app/(app)/masters/vendors/vendor-data";
+import { getVendorById } from "@/app/(app)/masters/suppliers/vendor-data";
 import {
   buildGeneralLedgerGroupDrillDown,
   buildGeneralLedgerStatement,

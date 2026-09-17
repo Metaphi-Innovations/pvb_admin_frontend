@@ -11,7 +11,7 @@ import {
   type PurchaseInvoiceRecord,
 } from "@/app/(app)/accounts/purchase-invoices/purchase-invoices-data";
 import { loadDebitNotes, type DebitNoteRecord } from "@/app/(app)/accounts/debit-notes/debit-notes-data";
-import { loadVendors } from "@/app/(app)/masters/vendors/vendor-data";
+import { loadVendors } from "@/app/(app)/masters/suppliers/vendor-data";
 import { loadFinancialYears } from "@/app/(app)/accounts/masters/masters-data";
 import { COMPANY_BILLING } from "@/lib/procurement/config";
 import { roundMoney } from "@/lib/accounts/money-format";

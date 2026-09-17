@@ -55,7 +55,7 @@ import { useClientMounted } from "@/lib/use-client-mounted";
 import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
 import { cn } from "@/lib/utils";
 import { loadFinancialYears } from "@/app/(app)/accounts/masters/masters-data";
-import { loadVendors } from "@/app/(app)/masters/vendors/vendor-data";
+import { loadVendors } from "@/app/(app)/masters/suppliers/vendor-data";
 import { WAREHOUSE_FILTER_OPTIONS } from "@/lib/accounts/inventory-accounting-data";
 import {
   buildBranchFilterSummary,

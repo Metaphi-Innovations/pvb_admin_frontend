@@ -6,7 +6,7 @@ import {
   vendorMasterToTransactionFields,
   type VendorTransactionFields,
 } from "@/lib/accounts/transaction-master-fetch";
-import type { Vendor } from "@/app/(app)/masters/vendors/vendor-data";
+import type { Vendor } from "@/app/(app)/masters/suppliers/vendor-data";
 import {
   formatVendorDropdownLabel,
   formatVendorDropdownSublabel,
@@ -65,7 +65,7 @@ export function VendorMasterPanel({
     <div className="space-y-3">
       <p className="text-xs text-muted-foreground">
         {title} data is loaded from{" "}
-        <Link href="/masters/vendors" className="text-brand-700 hover:underline">
+        <Link href="/masters/suppliers" className="text-brand-700 hover:underline">
           Supplier Master
         </Link>
         . Edit master records there — not on this form.

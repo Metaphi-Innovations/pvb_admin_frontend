@@ -33,7 +33,7 @@ export function VendorFormLayout({
             <div className="flex items-center gap-3 min-w-0">
               <button
                 type="button"
-                onClick={() => router.push("/masters/vendors")}
+                onClick={() => router.push("/masters/suppliers")}
                 className="w-8 h-8 flex items-center justify-center rounded-lg border border-border/70 hover:bg-muted/40 transition-colors"
               >
                 <ArrowLeft className="w-4 h-4 text-muted-foreground" />
@@ -41,11 +41,11 @@ export function VendorFormLayout({
               <div className="min-w-0">
                 <h1 className="text-sm font-semibold text-foreground tracking-tight">{title}</h1>
                 <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
-                  <Link href="/masters/vendors" className="hover:text-brand-600">
+                  <Link href="/masters/suppliers" className="hover:text-brand-600">
                     Masters
                   </Link>
                   <span className="mx-1">/</span>
-                  <Link href="/masters/vendors" className="hover:text-brand-600">
+                  <Link href="/masters/suppliers" className="hover:text-brand-600">
                     Supplier Master
                   </Link>
                   <span className="mx-1">/</span>

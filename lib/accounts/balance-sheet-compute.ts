@@ -6,7 +6,7 @@ import type { ChartOfAccount } from "@/app/(app)/accounts/data";
 import { getCoaLedgers, loadChartOfAccounts } from "@/app/(app)/accounts/data";
 import { loadFinancialYears } from "@/app/(app)/accounts/masters/masters-data";
 import { loadCustomers } from "@/app/(app)/masters/customers/customer-data";
-import { getActiveVendors } from "@/app/(app)/masters/vendors/vendor-data";
+import { getActiveVendors } from "@/app/(app)/masters/suppliers/vendor-data";
 import {
   isPostingLedger,
   resolveHierarchyPath,

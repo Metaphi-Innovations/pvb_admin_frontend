@@ -1,636 +1,406 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
+  Plus,
+  Eye,
+  Edit2,
   Building2,
   CheckCircle2,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  ChevronsUpDown,
-  Edit2,
-  Eye,
-  Filter,
-  MoreVertical,
-  Plus,
-  Search,
-  SlidersHorizontal,
-  X,
   XCircle,
+  X,
+  AlertTriangle,
 } from "lucide-react";
 import {
-  getPaymentTermLabel,
-  loadSuppliers,
-  saveSuppliers,
-  type Supplier,
-  type SupplierStatus,
-} from "./supplier-data";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
-type SortKey = "supplierName" | "status";
+import {
+  SupplierListService,
+  sortStateToOrdering,
+  type SupplierListRecord,
+} from "@/services/supplier-list.service";
+import type { MasterListKeyParams } from "@/lib/masters/master-query-keys";
+import { MiniKPICard } from "@/components/ui/KPICard";
 
-function TableTh({
-  label,
-  colKey,
-  sortKey,
-  sortDir,
-  onSort,
-  filterValues,
-  filterOptions,
-  onFilterChange,
-  className,
-}: {
-  label: string;
-  colKey: string;
-  sortKey?: SortKey;
-  sortDir?: "asc" | "desc";
-  onSort?: (key: SortKey) => void;
-  filterValues?: string[];
-  filterOptions?: string[];
-  onFilterChange?: (vals: string[]) => void;
-  className?: string;
-}) {
-  const active = sortKey === colKey;
-  const sortable = !!onSort;
-  const selected = filterValues?.[0] ?? "";
-  const [open, setOpen] = useState(false);
-  const [draftValue, setDraftValue] = useState(selected);
+import { MasterListing } from "@/components/listing/MasterListing";
+import { ColumnConfig, SortState, ActionItemConfig } from "@/components/listing/types";
+import { ListingUserCell, ListingStatusToggle, isActiveStatus } from "@/components/listing";
+import {
+  useSuppliers,
+  useSupplierSummary,
+  useToggleSupplierStatus,
+  useExportSuppliers,
+  useSupplierFilterDropdown,
+} from "@/hooks/masters";
+import { useAppliedListFilters } from "@/lib/masters/use-applied-list-filters";
+import { mergeListRequestFilters, MASTER_FILTER_FIELD_MAPS, resolveListStatus } from "@/lib/masters/list-api-filters";
+import { useLazyFilterColumns } from "@/lib/masters/use-lazy-filter-columns";
 
-  useEffect(() => {
-    if (open) setDraftValue(selected);
-  }, [open, selected]);
-
-  return (
-    <th className={cn("h-11 px-3 text-left text-[13px] font-semibold select-none group whitespace-nowrap", active && "bg-brand-50/60", className)} title={label}>
-      <div className="inline-flex items-center gap-1.5">
-        <div className={cn("inline-flex items-center gap-1.5", sortable && "cursor-pointer")} onClick={() => sortable && onSort(colKey as SortKey)}>
-          <span className={active ? "text-brand-700" : "text-foreground"}>{label}</span>
-          {sortable &&
-            <span className="inline-flex shrink-0 items-center gap-0.5">
-              {active ? (
-                <ChevronDown className={cn("w-3 h-3 text-brand-600 transition-transform", sortDir === "desc" && "rotate-180")} />
-              ) : (
-                <ChevronsUpDown className="w-3 h-3 text-muted-foreground/40 group-hover:text-muted-foreground" />
-              )}
-            </span>
-          }
-        </div>
-
-        {onFilterChange && (
-          <Popover open={open} onOpenChange={setOpen}>
-            <PopoverTrigger asChild>
-              <button
-                type="button"
-                onClick={(e) => e.stopPropagation()}
-                className={cn(
-                  "inline-flex shrink-0 items-center justify-center rounded p-1 transition-colors hover:bg-muted",
-                  selected ? "text-brand-600 bg-brand-50" : "text-muted-foreground/40 hover:text-muted-foreground/80",
-                )}
-              >
-                <Filter className="w-3 h-3" />
-              </button>
-            </PopoverTrigger>
-            <PopoverContent align="start" className="z-50 w-[220px] p-2.5 shadow-xl" onClick={(e) => e.stopPropagation()}>
-              <div className="space-y-2">
-                <div className="text-[11px] font-medium text-muted-foreground">Select</div>
-                <Select value={draftValue || "all"} onValueChange={(value) => setDraftValue(value === "all" ? "" : value)}>
-                  <SelectTrigger className="h-9 w-full rounded-md border border-border bg-white px-2 text-xs text-foreground shadow-sm data-[state=open]:border-orange-500 data-[state=open]:ring-1 data-[state=open]:ring-orange-200">
-                    <SelectValue placeholder="All" />
-                  </SelectTrigger>
-                  <SelectContent className="z-50 bg-white border-border shadow-lg">
-                    <SelectItem value="all" className="text-xs">
-                      All
-                    </SelectItem>
-                    {(filterOptions ?? []).map((option) => (
-                      <SelectItem key={option} value={option} className="text-xs hover:bg-orange-50 focus:bg-orange-50">
-                        {option}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <div className="flex items-center justify-end gap-1.5 pt-1">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-8 px-2.5 text-[11px]"
-                    onClick={() => setOpen(false)}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    type="button"
-                    className="h-8 px-2.5 text-[11px] bg-orange-500 hover:bg-orange-600 text-white"
-                    onClick={() => {
-                      onFilterChange(draftValue ? [draftValue] : []);
-                      setOpen(false);
-                    }}
-                  >
-                    Apply
-                  </Button>
-                </div>
-              </div>
-            </PopoverContent>
-          </Popover>
-        )}
-      </div>
-    </th>
-  );
+interface ToastState {
+  msg: string;
+  type: "success" | "error";
 }
 
-function KpiCard({
-  label,
-  value,
-  icon: Icon,
-  accent,
-  color,
-}: {
-  label: string;
-  value: number;
-  icon: React.ElementType;
-  accent?: boolean;
-  color?: string;
-}) {
+function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void }) {
   return (
-    <div className="flex items-center gap-3 p-3 bg-white border rounded-xl border-border">
-      <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0", accent ? "bg-brand-600" : color ?? "bg-muted")}>
-        <Icon className={cn("w-4 h-4", accent ? "text-white" : "text-muted-foreground")} />
-      </div>
-      <div>
-        <p className="text-base font-bold leading-none text-foreground">{value}</p>
-        <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight">{label}</p>
-      </div>
+    <div
+      className={cn(
+        "fixed top-5 right-5 z-[100] flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl text-white text-sm font-medium",
+        toast.type === "success" ? "bg-emerald-600" : "bg-red-600",
+      )}
+    >
+      <CheckCircle2 className="flex-shrink-0 w-4 h-4" />
+      {toast.msg}
+      <button onClick={onDismiss} className="ml-1 opacity-70 hover:opacity-100"><X className="h-3.5 w-3.5" /></button>
     </div>
   );
 }
 
-function StatusBadge({ status }: { status: SupplierStatus }) {
-  const cfg = status === "active"
-    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-    : "border-slate-200 bg-slate-100 text-slate-700";
-
-  return (
-    <Badge variant="outline" className={cn("rounded-full px-2.5 py-0.5 text-[11px] font-medium", cfg)}>
-      {status === "active" ? "Active" : "Inactive"}
-    </Badge>
-  );
-}
-
-export default function SuppliersPage() {
-  const [records, setRecords] = useState<Supplier[]>([]);
-  const [search, setSearch] = useState("");
-  const [filterStatus, setFilterStatus] = useState<string[]>([]);
-  const [sortKey, setSortKey] = useState<SortKey>("supplierName");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
-  const [toast, setToast] = useState<string | null>(null);
+export default function VendorMasterPage() {
+  const router = useRouter();
+  const {
+    draftFilters: filters,
+    setDraftFilters: setFilters,
+    appliedFilters,
+    applyFilters,
+    appliedSearch,
+  } = useAppliedListFilters();
+  const { handleOpenFilter, isFilterOpen } = useLazyFilterColumns();
+  const [sort, setSort] = useState<SortState>({ key: "", direction: "none" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  const [colFilters, setColFilters] = useState<Record<string, string[]>>({});
+  const [toast, setToast] = useState<ToastState | null>(null);
+  const [statusTarget, setStatusTarget] = useState<SupplierListRecord | null>(null);
+
+  const apiFilters = useMemo(
+    () => mergeListRequestFilters(appliedFilters, MASTER_FILTER_FIELD_MAPS.supplier),
+    [appliedFilters],
+  );
+  const listStatus = useMemo(
+    () => resolveListStatus(appliedFilters),
+    [appliedFilters],
+  );
+  const listParams: MasterListKeyParams = useMemo(() => ({
+    page,
+    pageSize,
+    search: appliedSearch,
+    ordering: sortStateToOrdering(sort.key, sort.direction),
+    status: listStatus,
+    apiFilters,
+  }), [page, pageSize, appliedSearch, sort, listStatus, apiFilters]);
+
+  const { data } = useSuppliers(listParams);
+  const { data: summary } = useSupplierSummary();
+  const items = data?.items ?? [];
+  const total = data?.total ?? 0;
+
+  const supplierCodeOptionsQuery = useSupplierFilterDropdown("supplier_code", {
+    enabled: isFilterOpen("supplierCode"),
+  });
+  const supplierNameOptionsQuery = useSupplierFilterDropdown("supplier_name", {
+    enabled: isFilterOpen("supplierName"),
+  });
+  const supplierTypeOptionsQuery = useSupplierFilterDropdown("supplier_type__supplier_type_name", {
+    enabled: isFilterOpen("supplierType"),
+  });
+  const contactPersonOptionsQuery = useSupplierFilterDropdown("contact_person", {
+    enabled: isFilterOpen("contactPerson"),
+  });
+  const mobileOptionsQuery = useSupplierFilterDropdown("mobile_number", {
+    enabled: isFilterOpen("mobile"),
+  });
+  const gstinOptionsQuery = useSupplierFilterDropdown("gstin_number", {
+    enabled: isFilterOpen("gstNumber"),
+  });
+  const statusOptionsQuery = useSupplierFilterDropdown("is_active", {
+    enabled: isFilterOpen("status"),
+  });
+
+  const supplierCodeOptions = useMemo(() => supplierCodeOptionsQuery.data ?? [], [supplierCodeOptionsQuery.data]);
+  const supplierNameOptions = useMemo(() => supplierNameOptionsQuery.data ?? [], [supplierNameOptionsQuery.data]);
+  const supplierTypeOptions = useMemo(() => supplierTypeOptionsQuery.data ?? [], [supplierTypeOptionsQuery.data]);
+  const contactPersonOptions = useMemo(() => contactPersonOptionsQuery.data ?? [], [contactPersonOptionsQuery.data]);
+  const mobileOptions = useMemo(() => mobileOptionsQuery.data ?? [], [mobileOptionsQuery.data]);
+  const gstinOptions = useMemo(() => gstinOptionsQuery.data ?? [], [gstinOptionsQuery.data]);
+  const statusOptions = useMemo(
+    () =>
+      statusOptionsQuery.data?.length
+        ? statusOptionsQuery.data
+        : [
+            { label: "Active", value: "active" },
+            { label: "Inactive", value: "inactive" },
+          ],
+    [statusOptionsQuery.data],
+  );
 
   useEffect(() => {
-    setRecords(loadSuppliers());
-  }, []);
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 3000);
+    return () => clearTimeout(t);
+  }, [toast]);
 
-  const handleColFilter = (key: string, vals: string[]) => {
-    setColFilters((prev) => {
-      const next = { ...prev };
-      if (!vals.length) delete next[key];
-      else next[key] = vals;
-      return next;
-    });
-    setPage(1);
+  const toggleStatusMutation = useToggleSupplierStatus();
+
+  const requestStatusToggle = (record: SupplierListRecord) => {
+    setStatusTarget(record);
   };
 
-  const updateStatus = (supplierId: number, status: SupplierStatus) => {
-    const today = new Date().toISOString().slice(0, 10);
-    const updated = records.map((item) =>
-      item.id === supplierId ? { ...item, status, updatedBy: "Admin", updatedDate: today } : item,
+  const confirmStatusChange = () => {
+    if (!statusTarget) return;
+    const nextActive = statusTarget.status !== "active";
+    toggleStatusMutation.mutate(
+      { id: statusTarget.supplierUuid, isActive: nextActive },
+      {
+        onSuccess: () =>
+          setToast({
+            msg: `Vendor status updated to ${nextActive ? "Active" : "Inactive"}`,
+            type: "success",
+          }),
+        onError: (err) =>
+          setToast({
+            msg: SupplierListService.extractErrorMessage(err, "Failed to update status"),
+            type: "error",
+          }),
+        onSettled: () => setStatusTarget(null),
+      },
     );
-    setRecords(updated);
-    saveSuppliers(updated);
-    setToast("Status updated.");
-    setTimeout(() => setToast(null), 3200);
   };
 
-  const filtered = useMemo(() => {
-    let data = [...records];
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      data = data.filter((item) =>
-        item.supplierName.toLowerCase().includes(q) ||
-        item.supplierCode.toLowerCase().includes(q) ||
-        item.mobile.includes(q) ||
-        item.email.toLowerCase().includes(q) ||
-        item.gstin.toLowerCase().includes(q) ||
-        item.address.toLowerCase().includes(q) ||
-        item.cibRegn.toLowerCase().includes(q) ||
-        item.fcoRegn.toLowerCase().includes(q),
-      );
-    }
+  const columns: ColumnConfig<SupplierListRecord>[] = [
+    {
+      key: "supplierCode",
+      header: "Supplier Code",
+      sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: supplierCodeOptions,
+      width: "110px",
+      render: (_val, row) => (
+        <span className="font-mono text-xs font-semibold text-foreground">{row.supplierCode || "—"}</span>
+      ),
+    },
+    {
+      key: "supplierName",
+      header: "Supplier Name",
+      sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: supplierNameOptions,
+      width: "180px",
+      render: (_val, row) => (
+        <button
+          type="button"
+          className="block group/name text-left w-full"
+          onClick={() => router.push(`/masters/suppliers/${row.supplierUuid}`)}
+        >
+          <p className="text-xs font-semibold leading-4 text-foreground group-hover/name:text-brand-700">{row.supplierName}</p>
+        </button>
+      ),
+    },
+    {
+      key: "supplierType",
+      header: "Supplier Type",
+      sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: supplierTypeOptions,
+      width: "160px",
+      render: (_val, row) => row.supplierType?.supplier_type_name || "—",
+    },
+    {
+      key: "contactPerson",
+      header: "Contact Person",
+      sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: contactPersonOptions,
+      width: "140px",
+      render: (_val, row) => row.contactPerson || "—",
+    },
+    {
+      key: "mobile",
+      header: "Mobile Number",
+      sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: mobileOptions,
+      width: "140px",
+      render: (_val, row) => (
+        <span className="font-mono text-xs text-muted-foreground">
+          {row.mobileNumber ? `${row.mobileCountryCode} ${row.mobileNumber}` : "—"}
+        </span>
+      ),
+    },
+    {
+      key: "gstNumber",
+      header: "GST Number",
+      sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: gstinOptions,
+      width: "150px",
+      render: (_val, row) => (
+        <span className="font-mono text-[11px]">{row.gstinNumber || "—"}</span>
+      ),
+    },
+    {
+      key: "status",
+      header: "Status",
+      sortable: true,
+      filterable: true,
+      filterType: "dropdown",
+      filterOptions: statusOptions,
+      width: "110px",
+      render: (_val, row) => (
+        <ListingStatusToggle active={isActiveStatus(row.status)} onChange={() => requestStatusToggle(row)} />
+      ),
+    },
+    {
+      key: "createdBy",
+      header: "Created By",
+      sortable: true,
+      filterable: true,
+      filterType: "date",
+      width: "150px",
+      render: (_val, row) => (
+        <ListingUserCell name={row.createdBy} date={row.createdAt} />
+      ),
+    },
+    {
+      key: "updatedBy",
+      header: "Updated By",
+      sortable: true,
+      filterable: true,
+      filterType: "date",
+      width: "150px",
+      render: (_val, row) => (
+        <ListingUserCell name={row.updatedBy} date={row.updatedAt} />
+      ),
+    },
+  ];
 
-    if (filterStatus.length) data = data.filter((item) => filterStatus.includes(item.status));
+  const actions: ActionItemConfig<SupplierListRecord>[] = [
+    {
+      label: "View",
+      action: "view",
+      icon: Eye,
+      onClick: (row) => router.push(`/masters/suppliers/${row.supplierUuid}`),
+    },
+    {
+      label: "Edit",
+      action: "edit",
+      icon: Edit2,
+      onClick: (row) => router.push(`/masters/suppliers/${row.supplierUuid}/edit`),
+    },
+  ];
 
-    if (Object.keys(colFilters).length > 0) {
-      data = data.filter((item) =>
-        Object.entries(colFilters).every(([key, values]) => {
-          if (!values.length) return true;
-          let rowValue = "";
-          if (key === "paymentTerms") rowValue = getPaymentTermLabel(item.paymentTerms);
-          else if (key === "status") rowValue = item.status === "active" ? "Active" : "Inactive";
-          else rowValue = String(item[key as keyof Supplier] ?? "");
-          return values.some((value) => value.toLowerCase() === rowValue.toLowerCase());
-        }),
-      );
-    }
-
-    data.sort((a, b) => {
-      const av = String(a[sortKey] ?? "");
-      const bv = String(b[sortKey] ?? "");
-      return sortDir === "asc" ? av.localeCompare(bv) : bv.localeCompare(av);
-    });
-    return data;
-  }, [records, search, filterStatus, sortKey, sortDir, colFilters]);
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const paginated = filtered.slice((page - 1) * pageSize, page * pageSize);
-  const hasFilters = search.trim() !== "" || filterStatus.length > 0 || Object.keys(colFilters).length > 0;
-  const total = records.length;
-  const active = records.filter((item) => item.status === "active").length;
-  const inactive = records.filter((item) => item.status === "inactive").length;
-  const start = filtered.length === 0 ? 0 : (page - 1) * pageSize + 1;
-  const end = Math.min(page * pageSize, filtered.length);
-
-  const handleSort = (key: SortKey) => {
-    if (sortKey === key) setSortDir((prev) => (prev === "asc" ? "desc" : "asc"));
-    else {
-      setSortKey(key);
-      setSortDir("asc");
-    }
+  const exportMutation = useExportSuppliers();
+  const handleExport = () => {
+    exportMutation.mutate(
+      { search: listParams.search, status: listParams.status, ordering: listParams.ordering, apiFilters: listParams.apiFilters },
+      { onError: (err) => setToast({ msg: SupplierListService.extractErrorMessage(err, "Failed to export"), type: "error" }) },
+    );
   };
 
-  const toggleStatusFilter = (value: string) => {
-    setFilterStatus((prev) => (prev.includes(value) ? prev.filter((item) => item !== value) : [...prev, value]));
+  useEffect(() => {
     setPage(1);
-  };
+  }, [filters, sort, pageSize]);
 
   return (
     <AppLayout>
       <div className="space-y-5">
-        <div className="flex items-start justify-between">
-          <div>
-            <h1 className="text-xl font-bold text-foreground">Supplier Master</h1>
-            <p className="text-xs text-muted-foreground mt-0.5">Manage supplier records, payment terms, and compliance details</p>
-          </div>
-          <Link href="/masters/suppliers/add">
-            <Button size="sm" className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white">
-              <Plus className="w-3.5 h-3.5" /> Add Supplier
-            </Button>
-          </Link>
+        <div>
+          <h1 className="text-xl font-bold text-foreground">Supplier Master</h1>
+          <p className="mt-0.5 text-xs text-muted-foreground">Manage supplier information for procurement and accounts payable</p>
         </div>
 
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <KpiCard label="Total Suppliers" value={total} icon={Building2} accent />
-          <KpiCard label="Active" value={active} icon={CheckCircle2} color="bg-emerald-50" />
-          <KpiCard label="Inactive" value={inactive} icon={XCircle} color="bg-slate-100" />
+        <div className="grid grid-cols-3 gap-3">
+          <MiniKPICard label="Total Suppliers" value={summary?.total ?? total} icon={Building2} accent={true} />
+          <MiniKPICard label="Active" value={summary?.active ?? 0} icon={CheckCircle2} accent={false} />
+          <MiniKPICard label="Inactive" value={summary?.inactive ?? 0} icon={XCircle} accent={false} />
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative flex-1 min-w-[220px] max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-            <Input
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(1);
-              }}
-              placeholder="Search supplier, GSTIN, mobile..."
-              className="h-8 text-xs pl-9"
-            />
-          </div>
-
-          <Popover>
-            <PopoverTrigger asChild>
-              <button
-                type="button"
-                className={cn(
-                  "h-8 px-2.5 text-xs border rounded-lg inline-flex items-center gap-1.5 font-medium transition-colors",
-                  filterStatus.length > 0 ? "border-brand-400 bg-brand-50 text-brand-700" : "border-border text-muted-foreground hover:bg-muted",
-                )}
-              >
-                <SlidersHorizontal className="w-3.5 h-3.5" />
-                Filter
-                {filterStatus.length > 0 && (
-                  <span className="w-4 h-4 text-[10px] bg-brand-600 text-white rounded-full inline-flex items-center justify-center font-bold">
-                    {filterStatus.length}
-                  </span>
-                )}
-              </button>
-            </PopoverTrigger>
-            <PopoverContent align="start" className="p-0 w-56">
-              <div className="px-3 py-2.5 border-b border-border">
-                <p className="text-xs font-semibold text-foreground">Filter Suppliers</p>
-              </div>
-              <div className="px-3 py-3 space-y-2">
-                {(["active", "inactive"] as SupplierStatus[]).map((value) => (
-                  <label key={value} className="flex items-center gap-2.5 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      className="w-4 h-4 rounded accent-brand-600"
-                      checked={filterStatus.includes(value)}
-                      onChange={() => toggleStatusFilter(value)}
-                    />
-                    <span className="text-xs capitalize text-foreground">{value}</span>
-                  </label>
-                ))}
-              </div>
-              {filterStatus.length > 0 && (
-                <div className="px-3 py-2 border-t border-border">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setFilterStatus([]);
-                      setPage(1);
-                    }}
-                    className="text-xs text-brand-600 hover:underline"
-                  >
-                    Clear all filters
-                  </button>
-                </div>
-              )}
-            </PopoverContent>
-          </Popover>
-
-          {filterStatus.map((value) => (
-            <span key={value} className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium border rounded-md bg-brand-50 border-brand-200 text-brand-700">
-              {value.charAt(0).toUpperCase() + value.slice(1)}
-              <button type="button" onClick={() => toggleStatusFilter(value)}>
-                <X className="w-3 h-3" />
-              </button>
-            </span>
-          ))}
-        </div>
-
-        <div className="w-full max-w-full overflow-hidden bg-white border rounded-xl border-border shadow-sm">
-          <div className="max-w-full overflow-x-auto overflow-y-hidden">
-            <table className="w-max min-w-full border-collapse table-fixed">
-              <thead>
-                <tr className="border-b bg-muted/40 border-border">
-                  <TableTh
-                    label="Supplier Name"
-                    colKey="supplierName"
-                    sortKey={sortKey}
-                    sortDir={sortDir}
-                    onSort={handleSort}
-                    filterValues={colFilters.supplierName}
-                    filterOptions={Array.from(new Set(records.map((item) => item.supplierName).filter(Boolean))).sort()}
-                    onFilterChange={(value) => handleColFilter("supplierName", value)}
-                    className="w-[190px] pl-4 py-3"
-                  />
-                  <TableTh
-                    label="Mobile Number"
-                    colKey="mobile"
-                    filterValues={colFilters.mobile}
-                    filterOptions={Array.from(new Set(records.map((item) => item.mobile).filter(Boolean))).sort()}
-                    onFilterChange={(value) => handleColFilter("mobile", value)}
-                    className="w-[130px]"
-                  />
-                  <TableTh
-                    label="Email Address"
-                    colKey="email"
-                    filterValues={colFilters.email}
-                    filterOptions={Array.from(new Set(records.map((item) => item.email).filter(Boolean))).sort()}
-                    onFilterChange={(value) => handleColFilter("email", value)}
-                    className="w-[190px]"
-                  />
-                  <TableTh
-                    label="GSTIN"
-                    colKey="gstin"
-                    filterValues={colFilters.gstin}
-                    filterOptions={Array.from(new Set(records.map((item) => item.gstin).filter(Boolean))).sort()}
-                    onFilterChange={(value) => handleColFilter("gstin", value)}
-                    className="w-[150px]"
-                  />
-                  <TableTh
-                    label="Address"
-                    colKey="address"
-                    filterValues={colFilters.address}
-                    filterOptions={Array.from(new Set(records.map((item) => item.address).filter(Boolean))).sort()}
-                    onFilterChange={(value) => handleColFilter("address", value)}
-                    className="w-[240px]"
-                  />
-                  <TableTh
-                    label="Payment Terms"
-                    colKey="paymentTerms"
-                    filterValues={colFilters.paymentTerms}
-                    filterOptions={Array.from(new Set(records.map((item) => getPaymentTermLabel(item.paymentTerms)).filter(Boolean))).sort()}
-                    onFilterChange={(value) => handleColFilter("paymentTerms", value)}
-                    className="w-[130px]"
-                  />
-                  <TableTh
-                    label="Status"
-                    colKey="status"
-                    sortKey={sortKey}
-                    sortDir={sortDir}
-                    onSort={handleSort}
-                    filterValues={colFilters.status}
-                    filterOptions={["Active", "Inactive"]}
-                    onFilterChange={(value) => handleColFilter("status", value)}
-                    className="w-[110px]"
-                  />
-                  <TableTh
-                    label="CIB Regn #"
-                    colKey="cibRegn"
-                    filterValues={colFilters.cibRegn}
-                    filterOptions={Array.from(new Set(records.map((item) => item.cibRegn).filter(Boolean))).sort()}
-                    onFilterChange={(value) => handleColFilter("cibRegn", value)}
-                    className="w-[140px]"
-                  />
-                  <TableTh
-                    label="CIB Regn Expiry"
-                    colKey="cibRegnExpiry"
-                    filterValues={colFilters.cibRegnExpiry}
-                    filterOptions={Array.from(new Set(records.map((item) => item.cibRegnExpiry).filter(Boolean))).sort()}
-                    onFilterChange={(value) => handleColFilter("cibRegnExpiry", value)}
-                    className="w-[130px]"
-                  />
-                  <TableTh
-                    label="FCO Regn #"
-                    colKey="fcoRegn"
-                    filterValues={colFilters.fcoRegn}
-                    filterOptions={Array.from(new Set(records.map((item) => item.fcoRegn).filter(Boolean))).sort()}
-                    onFilterChange={(value) => handleColFilter("fcoRegn", value)}
-                    className="w-[140px]"
-                  />
-                  <TableTh
-                    label="FCO Regn Expiry"
-                    colKey="fcoRegnExpiry"
-                    filterValues={colFilters.fcoRegnExpiry}
-                    filterOptions={Array.from(new Set(records.map((item) => item.fcoRegnExpiry).filter(Boolean))).sort()}
-                    onFilterChange={(value) => handleColFilter("fcoRegnExpiry", value)}
-                    className="w-[130px] pr-4"
-                  />
-                  <th className="sticky right-0 z-30 w-[96px] min-w-[96px] h-11 px-3 text-left text-[13px] font-semibold whitespace-nowrap bg-white border-l border-border shadow-[-8px_0_12px_-12px_rgba(0,0,0,0.25)]">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {paginated.length === 0 ? (
-                  <tr>
-                    <td colSpan={12} className="px-4 py-14 text-center">
-                      <div className="flex flex-col items-center gap-2">
-                        <div className="flex items-center justify-center w-10 h-10 rounded-full bg-muted">
-                          <Building2 className="w-5 h-5 text-muted-foreground" />
-                        </div>
-                        <p className="text-sm font-medium text-foreground">
-                          {hasFilters ? "No suppliers match your filters" : "No suppliers yet"}
-                        </p>
-                        {!hasFilters && (
-                          <Link href="/masters/suppliers/add" className="text-xs text-brand-600 hover:underline">
-                            + Add your first supplier
-                          </Link>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ) : (
-                  paginated.map((item) => (
-                    <tr key={item.id} className="border-b border-border/60 hover:bg-muted/30 transition-colors align-top">
-                      <td className="px-4 py-2">
-                        <Link href={`/masters/suppliers/${item.id}`} className="block group/name">
-                          <p className="text-xs font-semibold leading-4 text-foreground group-hover/name:text-brand-700">
-                            {item.supplierName}
-                          </p>
-                          <p className="font-mono text-[10px] text-brand-700 mt-0.5 leading-3">{item.supplierCode}</p>
-                        </Link>
-                      </td>
-                      <td className="px-3 py-2 font-mono text-xs text-foreground whitespace-nowrap">{item.mobile}</td>
-                      <td className="px-3 py-2 text-xs text-foreground whitespace-nowrap">{item.email || "-"}</td>
-                      <td className="px-3 py-2 font-mono text-xs text-foreground whitespace-nowrap">{item.gstin || "-"}</td>
-                      <td className="px-3 py-2 text-xs leading-4 text-foreground">{item.address || "-"}</td>
-                      <td className="px-3 py-2 text-xs text-foreground whitespace-nowrap">{getPaymentTermLabel(item.paymentTerms)}</td>
-                      <td className="px-3 py-2">
-                        <button
-                          type="button"
-                          onClick={() => updateStatus(item.id, item.status === "active" ? "inactive" : "active")}
-                          className={cn(
-                            "inline-flex items-center gap-1.5 rounded-full px-0.5 py-0.5 transition-opacity",
-                            item.status === "active" ? "hover:opacity-90" : "hover:opacity-90",
-                          )}
-                          title="Click to toggle status"
-                        >
-                          <StatusBadge status={item.status} />
-                        </button>
-                      </td>
-                      <td className="px-3 py-2 text-xs text-foreground whitespace-nowrap">{item.cibRegn || "-"}</td>
-                      <td className="px-3 py-2 text-xs text-foreground whitespace-nowrap">{item.cibRegnExpiry || "-"}</td>
-                      <td className="px-3 py-2 text-xs text-foreground whitespace-nowrap">{item.fcoRegn || "-"}</td>
-                      <td className="px-3 py-2 text-xs text-foreground whitespace-nowrap">{item.fcoRegnExpiry || "-"}</td>
-                      <td className="sticky right-0 z-20 w-[96px] min-w-[96px] px-3 py-2 pr-4 bg-white border-l border-border shadow-[-8px_0_12px_-12px_rgba(0,0,0,0.25)]">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <button
-                              type="button"
-                              className="inline-flex items-center justify-center transition-colors rounded-md w-7 h-7 text-muted-foreground hover:bg-muted"
-                              aria-label="Row actions"
-                            >
-                              <MoreVertical className="w-3.5 h-3.5" />
-                            </button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-44">
-                            <DropdownMenuLabel className="text-[10px] text-muted-foreground uppercase tracking-widest py-1">
-                              Actions
-                            </DropdownMenuLabel>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem asChild className="gap-2 text-xs cursor-pointer">
-                              <Link href={`/masters/suppliers/${item.id}`}>
-                                <Eye className="w-3.5 h-3.5" /> View
-                              </Link>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem asChild className="gap-2 text-xs cursor-pointer">
-                              <Link href={`/masters/suppliers/${item.id}/edit`}>
-                                <Edit2 className="w-3.5 h-3.5" /> Edit
-                              </Link>
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="flex items-center justify-between px-4 py-3 border-t border-border bg-muted/20">
-            <p className="text-[11px] text-muted-foreground">
-              {filtered.length === 0 ? (
-                "No records"
-              ) : (
-                <>
-                  Showing <span className="font-medium text-foreground">{start}–{end}</span> of{" "}
-                  <span className="font-medium text-foreground">{filtered.length}</span> suppliers
-                </>
-              )}
-            </p>
-            <div className="flex items-center gap-2">
-              <AutocompleteSelect
-                options={[10, 25, 50, 100].map((value) => ({
-                  value: String(value),
-                  label: `${value} / page`,
-                }))}
-                value={String(pageSize)}
-                onChange={(v) => {
-                  setPageSize(Number(v));
-                  setPage(1);
-                }}
-                placeholder="Page size…"
-                className="h-7 text-xs w-28"
-              />
-              <button
-                type="button"
-                onClick={() => setPage((prev) => Math.max(1, prev - 1))}
-                disabled={page === 1}
-                className="flex items-center justify-center text-xs border rounded-md w-7 h-7 border-border disabled:opacity-40 hover:bg-muted"
-              >
-                <ChevronLeft className="w-3.5 h-3.5" />
-              </button>
-              <span className="text-xs text-muted-foreground px-2 min-w-[48px] text-center">
-                {page} / {totalPages}
-              </span>
-              <button
-                type="button"
-                onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
-                disabled={page === totalPages}
-                className="flex items-center justify-center text-xs border rounded-md w-7 h-7 border-border disabled:opacity-40 hover:bg-muted"
-              >
-                <ChevronRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-        </div>
+        <MasterListing
+          columns={columns}
+          data={items}
+          totalRecords={total}
+          page={page}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+          onSortChange={setSort}
+          onFilterChange={(next) => {
+            setFilters(next);
+            applyFilters(next);
+          }}
+          actions={actions}
+          onAdd={() => router.push("/masters/suppliers/new")}
+          addLabel="Create Supplier"
+          onExport={handleExport}
+          emptyMessage="suppliers"
+          searchPlaceholder="Search supplier code, name, type, contact, GST…"
+          currentFilters={filters}
+          currentSort={sort}
+          onOpenFilter={handleOpenFilter}
+          onPageJumpError={(msg) => setToast({ msg, type: "error" })}
+        />
       </div>
 
-      {toast && (
-        <div className="fixed top-5 right-5 z-[100] flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl text-white text-sm font-medium bg-emerald-600">
-          {toast}
-        </div>
-      )}
+      <Dialog open={!!statusTarget} onOpenChange={(o) => !o && setStatusTarget(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-amber-50 border border-amber-200">
+                <AlertTriangle className="w-4 h-4 text-amber-500" />
+              </div>
+              {statusTarget?.status === "active" ? "Deactivate Supplier?" : "Activate Supplier?"}
+            </DialogTitle>
+            <DialogDescription className="pt-1 text-xs">
+              {statusTarget && (
+                <>
+                  <strong className="text-foreground">{statusTarget.supplierName}</strong> will be marked
+                  as {statusTarget.status === "active" ? "inactive" : "active"}.
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs"
+              onClick={() => setStatusTarget(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              className={cn(
+                "h-8 text-xs text-white",
+                statusTarget?.status === "active"
+                  ? "bg-red-600 hover:bg-red-700"
+                  : "bg-emerald-600 hover:bg-emerald-700",
+              )}
+              onClick={confirmStatusChange}
+              disabled={toggleStatusMutation.isPending}
+            >
+              {statusTarget?.status === "active" ? "Deactivate" : "Activate"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
     </AppLayout>
   );
 }

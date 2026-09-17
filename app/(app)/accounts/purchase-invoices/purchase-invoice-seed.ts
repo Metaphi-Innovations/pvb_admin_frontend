@@ -1,6 +1,6 @@
 import { demoDateAt } from "@/lib/accounts/demo-date-utils";
 import { ACCOUNTS_CURRENT_USER } from "@/lib/accounts/config";
-import { getActiveVendors } from "@/app/(app)/masters/vendors/vendor-data";
+import { getActiveVendors } from "@/app/(app)/masters/suppliers/vendor-data";
 import type {
   PurchaseInvoiceLine,
   PurchaseInvoiceLineQtyComparison,

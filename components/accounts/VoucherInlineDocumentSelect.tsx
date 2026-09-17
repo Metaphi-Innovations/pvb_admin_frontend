@@ -14,7 +14,7 @@ import { getOpenInvoicesForCustomer } from "@/lib/accounts/receivables-data";
 import { getOpenGenericBillWiseDocuments, isGenericBillWiseLedger } from "@/lib/accounts/generic-bill-wise-store";
 import { resolveAutoPartyFromLedger, isCustomerPartyLedger, isVendorPartyLedger } from "@/lib/accounts/voucher-ledger-groups";
 import { getCustomerById } from "@/lib/accounts/transaction-master-fetch";
-import { getVendorById } from "@/app/(app)/masters/vendors/vendor-data";
+import { getVendorById } from "@/app/(app)/masters/suppliers/vendor-data";
 import type { ChartOfAccount } from "@/app/(app)/accounts/data";
 import { cn } from "@/lib/utils";
 import { ExternalLink } from "lucide-react";
