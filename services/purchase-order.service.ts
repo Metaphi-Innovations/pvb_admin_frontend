@@ -26,6 +26,22 @@ import {
   openPurchaseOrderPdfWindow,
 } from "@/app/(app)/procurement/purchase-orders/po-pdf/poPdfGenerator";
 
+export type PurchaseOrderEmailPreview = {
+  to: string | null;
+  subject: string;
+  text: string;
+  html: string;
+  vendorName: string;
+  contactPerson: string;
+  poNo: string;
+  poDate: string;
+  poAmount: string;
+  attachmentFileName: string;
+  poStatus: string | null;
+  canSend: boolean;
+  missingReason?: string;
+};
+
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -506,8 +522,15 @@ export function mapDetail(raw: Record<string, unknown>): PurchaseOrder {
     supplierGstin,
     referenceNumber: "",
     currency: "INR",
-    paymentType: asString(raw.payment_type),
+    paymentType: (() => {
+      const paymentRaw = asString(raw.payment_type).toLowerCase();
+      if (paymentRaw.startsWith("advance")) return "Advance";
+      if (paymentRaw.startsWith("immediate")) return "Immediate";
+      if (paymentRaw) return "Credit";
+      return "";
+    })(),
     creditDays: asNumber(raw.credit_days),
+    advancePercentage: asNumber(raw.advance),
     deliveryTerms: "",
     expectedDeliveryDate: asDateOnly(raw.delivery_date),
     state: asString(raw.state),
@@ -653,6 +676,10 @@ function buildWriteBody(
     po_status: backendStatus,
     payment_type: form.paymentType || null,
     credit_days: form.creditDays ?? null,
+    advance:
+      form.paymentType?.toLowerCase() === "advance"
+        ? form.advancePercentage ?? null
+        : null,
     state: form.state?.trim() || "Maharashtra",
     warehouse_id: toUuidOrNull(form.warehouseId),
     billing_warehouse_id:
@@ -905,6 +932,50 @@ export const PurchaseOrderService = {
       outputFileName: fileName,
       onDownload: () => this.downloadPdfFileById(id, options?.signal),
     });
+  },
+
+  async fetchEmailPreviewById(
+    id: string,
+    signal?: AbortSignal,
+  ): Promise<PurchaseOrderEmailPreview> {
+    const response = await axiosInstance.get(
+      API_ENDPOINTS.PROCUREMENT.PURCHASE_ORDER.EMAIL_PREVIEW(id),
+      { signal },
+    );
+    const data = ((response.data as Record<string, unknown>)?.data ||
+      {}) as Record<string, unknown>;
+    return {
+      to: asString(data.to) || null,
+      subject: asString(data.subject),
+      text: asString(data.text),
+      html: asString(data.html),
+      vendorName: asString(data.vendor_name),
+      contactPerson: asString(data.contact_person),
+      poNo: asString(data.po_no),
+      poDate: asString(data.po_date),
+      poAmount: asString(data.po_amount),
+      attachmentFileName: asString(data.attachment_file_name),
+      poStatus: asString(data.po_status) || null,
+      canSend: Boolean(data.can_send),
+      missingReason: asString(data.missing_reason) || undefined,
+    };
+  },
+
+  async sendEmailById(
+    id: string,
+    options?: { to?: string; signal?: AbortSignal },
+  ): Promise<{ to: string; poNo: string }> {
+    const response = await axiosInstance.post(
+      API_ENDPOINTS.PROCUREMENT.PURCHASE_ORDER.SEND_EMAIL(id),
+      options?.to ? { to: options.to } : {},
+      { signal: options?.signal },
+    );
+    const data = ((response.data as Record<string, unknown>)?.data ||
+      {}) as Record<string, unknown>;
+    return {
+      to: asString(data.to),
+      poNo: asString(data.po_no),
+    };
   },
 
   async getPreviewNumber(

@@ -277,6 +277,8 @@ export const API_ENDPOINTS = {
       DETAILS: (id: string) => `/procurement/purchase-order/details/${id}`,
       PREVIEW: (id: string) => `/procurement/purchase-order/${id}/preview`,
       PDF: (id: string) => `/procurement/purchase-order/${id}/pdf`,
+      EMAIL_PREVIEW: (id: string) => `/procurement/purchase-order/${id}/email-preview`,
+      SEND_EMAIL: (id: string) => `/procurement/purchase-order/${id}/send-email`,
       FOLLOWUP_CREATE: "/procurement/purchase-order/followup/create",
       INVOICE_UPLOAD: "/procurement/purchase-order/invoice/upload",
       SHORT_CLOSE: "/procurement/purchase-order/short-close",
@@ -615,6 +617,10 @@ export const API_ENDPOINTS = {
       DETAILS: (id: string) => `/warehouse/packing-list/details/${id}`,
       PREVIEW: (id: string) => `/warehouse/packing-list/details/${id}/preview`,
       PDF: (id: string) => `/warehouse/packing-list/details/${id}/pdf`,
+      EMAIL_PREVIEW: (id: string) =>
+        `/warehouse/packing-list/details/${id}/email-preview`,
+      SEND_EMAIL: (id: string) =>
+        `/warehouse/packing-list/details/${id}/send-email`,
       PDF_PREVIEW_BY_SOURCE: "/warehouse/packing-list/pdf-preview",
       PDF_BY_SOURCE: "/warehouse/packing-list/pdf",
       REVERT: (id: string) => `/warehouse/packing-list/revert/${id}`,
@@ -629,6 +635,8 @@ export const API_ENDPOINTS = {
       REVERT: (id: string) => `/warehouse/dispatch/${id}/revert`,
       DOWNLOAD_CHALLAN: (id: string) => `/warehouse/dispatch/${id}/download-challan`,
       CHALLAN_PREVIEW: (id: string) => `/warehouse/dispatch/${id}/challan-preview`,
+      CHALLAN_EMAIL_PREVIEW: (id: string) =>
+        `/warehouse/dispatch/${id}/challan-email-preview`,
       SEND_CHALLAN_EMAIL: (id: string) => `/warehouse/dispatch/${id}/send-challan-email`,
       ALLOCATE_DC: (id: string) => `/warehouse/dispatch/${id}/allocate-dc`,
       ALLOCATE_SI: (id: string) => `/warehouse/dispatch/${id}/allocate-si`,
@@ -688,6 +696,10 @@ export const API_ENDPOINTS = {
         `/accounts/sales-invoice/${id}/tax-invoice-preview`,
       TAX_INVOICE_PDF: (id: string) =>
         `/accounts/sales-invoice/${id}/tax-invoice-pdf`,
+      EMAIL_PREVIEW: (id: string) =>
+        `/accounts/sales-invoice/${id}/email-preview`,
+      SEND_EMAIL: (id: string) =>
+        `/accounts/sales-invoice/${id}/send-email`,
     },
     PURCHASE_INVOICE: {
       LIST: "/accounts/purchase-invoice",
@@ -807,6 +819,16 @@ export const API_ENDPOINTS = {
         LIST: "/accounts/reports/trial-balance",
         FILTERS: "/accounts/reports/trial-balance/filters",
         EXPORT: "/accounts/reports/trial-balance/export",
+      },
+      GENERAL_LEDGER: {
+        LIST: "/accounts/reports/general-ledger",
+        FILTERS: "/accounts/reports/general-ledger/filters",
+        EXPORT: "/accounts/reports/general-ledger/export",
+      },
+      DAY_BOOK: {
+        LIST: "/accounts/reports/day-book",
+        FILTERS: "/accounts/reports/day-book/filters",
+        EXPORT: "/accounts/reports/day-book/export",
       },
     },
     DEBIT_NOTE: {

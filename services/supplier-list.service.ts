@@ -24,6 +24,7 @@ export interface SupplierBankAccountPayload {
     is_primary: boolean;
     payment_type?: string | null;
     credit_days?: string | number | null;
+    advance?: string | number | null;
 }
 
 export interface SupplierProductPayload {
@@ -65,6 +66,7 @@ export interface SupplierBankAccount {
     swift_code?: string | null;
     payment_type?: string | null;
     credit_days?: string | number | null;
+    advance?: string | number | null;
     is_primary: boolean;
     created_at: string;
     updated_at: string;
@@ -387,6 +389,7 @@ function mapBankAccounts(value: unknown): SupplierBankAccount[] {
         swift_code: asString(b.swift_code) || null,
         payment_type: asString(b.payment_type) || null,
         credit_days: asString(b.credit_days) || null,
+        advance: asString(b.advance) || null,
         is_primary: toBool(b.is_primary),
         created_at: asString(b.created_at),
         updated_at: asString(b.updated_at),

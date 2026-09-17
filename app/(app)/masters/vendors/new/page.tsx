@@ -162,6 +162,10 @@ export default function NewSupplierPage() {
           is_primary: true,
           payment_type: form.paymentType,
           credit_days: form.creditDays,
+          advance:
+            form.paymentType === "advance" && form.advancePercentage
+              ? form.advancePercentage
+              : null,
         },
       ],
       products: form.vendorProducts.map((p) => ({

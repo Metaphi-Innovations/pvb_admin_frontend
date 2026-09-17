@@ -330,6 +330,64 @@ export const PackingListService = {
     );
     return response.data;
   },
+
+  async fetchEmailPreview(
+    packingListId: string,
+    signal?: AbortSignal,
+  ): Promise<PackingListEmailPreview> {
+    const response = await axiosInstance.get(
+      API_ENDPOINTS.WAREHOUSE.PACKING_LIST.EMAIL_PREVIEW(packingListId),
+      { signal },
+    );
+    const data = ((response.data as Record<string, unknown>)?.data ||
+      {}) as Record<string, unknown>;
+    return {
+      to: asString(data.to) || null,
+      subject: asString(data.subject),
+      text: asString(data.text),
+      html: asString(data.html),
+      customerName: asString(data.customer_name),
+      packingListNo: asString(data.packing_list_no),
+      orderNo: asString(data.order_no),
+      dispatchDate: asString(data.dispatch_date),
+      packageCount: asString(data.package_count),
+      attachmentFileName: asString(data.attachment_file_name),
+      canSend: Boolean(data.can_send),
+      missingReason: asString(data.missing_reason) || undefined,
+    };
+  },
+
+  async sendEmail(
+    packingListId: string,
+    options?: { to?: string; signal?: AbortSignal },
+  ): Promise<{ to: string; packingListNo: string }> {
+    const response = await axiosInstance.post(
+      API_ENDPOINTS.WAREHOUSE.PACKING_LIST.SEND_EMAIL(packingListId),
+      options?.to ? { to: options.to } : {},
+      { signal: options?.signal },
+    );
+    const data = ((response.data as Record<string, unknown>)?.data ||
+      {}) as Record<string, unknown>;
+    return {
+      to: asString(data.to),
+      packingListNo: asString(data.packing_list_no),
+    };
+  },
+};
+
+export type PackingListEmailPreview = {
+  to: string | null;
+  subject: string;
+  text: string;
+  html: string;
+  customerName: string;
+  packingListNo: string;
+  orderNo: string;
+  dispatchDate: string;
+  packageCount: string;
+  attachmentFileName: string;
+  canSend: boolean;
+  missingReason?: string;
 };
 
 function mapDetailToSalesOrderRecord(raw: any): SalesOrderRecord {

@@ -1217,6 +1217,7 @@ const SUPPLIER_BANK_API_FIELD_MAP: Record<string, string> = {
   ifsc_code: "ifscCode",
   payment_type: "paymentType",
   credit_days: "creditDays",
+  advance: "advancePercentage",
 };
 
 const SUPPLIER_API_MESSAGE_FIELD_HINTS: Array<{ pattern: RegExp; field: string }> = [
@@ -1235,6 +1236,7 @@ const SUPPLIER_API_MESSAGE_FIELD_HINTS: Array<{ pattern: RegExp; field: string }
   { pattern: /account number/i, field: "accountNumber" },
   { pattern: /payment type/i, field: "paymentType" },
   { pattern: /credit days/i, field: "creditDays" },
+  { pattern: /advance/i, field: "advancePercentage" },
   { pattern: /address/i, field: "address" },
   { pattern: /contact name/i, field: "contact_0_name" },
   { pattern: /document/i, field: "_form" },

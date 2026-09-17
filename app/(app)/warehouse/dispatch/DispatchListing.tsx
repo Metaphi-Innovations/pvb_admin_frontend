@@ -4,7 +4,7 @@ import React, { useState, useMemo, useEffect, useCallback, useRef } from "react"
 import { MasterListing } from "@/components/listing/MasterListing";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
 import {
-  Eye, Pencil, RotateCcw, FileText, CheckCircle2,
+  Eye, Pencil, RotateCcw, FileText, CheckCircle2, Mail,
   Download, Printer
 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -64,6 +64,8 @@ import {
 } from "@/app/(app)/warehouse/lib/order-document-type";
 import { getSampleOrderByDocumentNo } from "@/app/(app)/sales/sample-order/packing-sync";
 import { downloadProformaInvoice } from "@/app/(app)/sales/sample-order/pi-document";
+import { SendChallanEmailModal } from "./components/SendChallanEmailModal";
+import { Toast } from "@/app/(app)/procurement/components/ProcurementUI";
 
 function asText(value: unknown): string {
   if (value === null || value === undefined) return "";
@@ -177,6 +179,9 @@ export function DispatchListing({ selectedWarehouse = "All" }: DispatchListingPr
   // Modal states
   const [revertTarget, setRevertTarget] = useState<any>(null);
   const [deliveryTarget, setDeliveryTarget] = useState<any>(null);
+  const [sendEmailDispatchId, setSendEmailDispatchId] = useState<string | null>(null);
+  const [sendEmailOpen, setSendEmailOpen] = useState(false);
+  const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
   // TODO: re-enable when delivery confirmation fields are stored
   // const [deliveryForm, setDeliveryForm] = useState<DeliveryDetails>({ deliveryDate: "", receiverName: "", remarks: "" });
 
@@ -572,6 +577,16 @@ export function DispatchListing({ selectedWarehouse = "All" }: DispatchListingPr
       ],
     },
     {
+      label: "Send Email",
+      action: "send_challan_email",
+      icon: Mail,
+      onClick: (row) => {
+        setSendEmailDispatchId(row.id);
+        setSendEmailOpen(true);
+      },
+      hide: (row) => row.status === "CANCELLED",
+    },
+    {
       label: "Download Stock Transfer",
       action: "stock_transfer_pdf",
       icon: FileText,
@@ -703,6 +718,23 @@ export function DispatchListing({ selectedWarehouse = "All" }: DispatchListingPr
         currentFilters={filters}
         currentSort={sort}
       />
+
+      <SendChallanEmailModal
+        open={sendEmailOpen}
+        dispatchId={sendEmailDispatchId}
+        onOpenChange={(open) => {
+          setSendEmailOpen(open);
+          if (!open) setSendEmailDispatchId(null);
+        }}
+        onSent={(result) => {
+          setToast({
+            msg: `Delivery Challan email sent to ${result.to}.`,
+            type: "success",
+          });
+        }}
+      />
+
+      {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
 
       {/* ── REVERT CONFIRMATION DIALOG ── */}
       <Dialog open={!!revertTarget} onOpenChange={() => setRevertTarget(null)}>

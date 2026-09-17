@@ -1,107 +1,115 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import { AlertCircle, ArrowLeft, BookOpen, Printer } from "lucide-react";
 import {
   ACCOUNTS_FILTER_LABEL_CLASS as filterLabelClass,
   ACCOUNTS_FILTER_CONTROL_CLASS as filterControlClass,
 } from "@/components/accounts/ReportFilters";
-import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, BookOpen, Printer } from "lucide-react";
 import {
-  InventoryProductWisePanel,
   CogsProductWisePanel,
+  InventoryProductWisePanel,
 } from "@/components/accounts/InventoryProductWisePanels";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { AccountsListingTableCard } from "@/components/accounts/AccountsListingHeader";
 import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
+import { BillWiseOutstandingButton } from "@/components/accounts/BillWiseOutstandingButton";
+import { useTransactionDetailsDrawer } from "@/components/accounts/TransactionDetailsDrawer";
 import {
-  AccountsColumnFilterProvider,
-} from "@/app/(app)/accounts/components/AccountsUI";
-import { drCrSideFilterValue } from "@/lib/accounts/column-filter-display";
-import {
-  ReportFilterRow,
-  ReportDateRangeFilter,
-  ReportFinancialYearFilter,
   ReportBranchMultiFilter,
-  ReportWarehouseMultiFilter,
-  ReportVoucherTypeMultiFilter,
-  ReportMoreFilters,
+  ReportDateRangeFilter,
+  ReportFilterRow,
   ReportFilterSummary,
+  ReportFinancialYearFilter,
+  ReportMoreFilters,
+  ReportVoucherTypeMultiFilter,
   useReportDateRange,
 } from "@/components/accounts/ReportFilters";
-import { getTrialBalanceWarehouseOptions } from "@/app/(app)/accounts/reports/trial-balance/trial-balance-data";
 import {
-  buildBranchFilterSummary,
   buildEntityFilterSummary,
   countActiveMoreFilters,
   type ReportFilterSummaryItem,
+  type ReportMultiSelectOption,
 } from "@/lib/accounts/report-multi-filter-utils";
-import { VOUCHER_TYPE_LABELS, type VoucherTypeCode } from "@/app/(app)/accounts/masters/masters-data";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
+import { GENERAL_LEDGER_SOURCE_REPORTS } from "@/lib/accounts/general-ledger-types";
+import { buildGeneralLedgerHref } from "@/lib/accounts/general-ledger-href";
+import { billWiseOutstandingHref } from "@/lib/accounts/bill-wise-outstanding";
 import {
-  buildGeneralLedgerHref,
-  GENERAL_LEDGER_SOURCE_REPORTS,
-  type GeneralLedgerDrillDownParams,
-} from "@/lib/accounts/general-ledger-data";
-import {
-  resolveCustomerReceivableLedger,
-  resolveVendorPayableLedger,
-} from "@/lib/accounts/party-ledger-statement";
+  resolveCustomerPartyLedgerId,
+  resolveSupplierPartyLedgerId,
+} from "@/lib/accounts/resolve-party-ledger";
 import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
 import { useClientMounted } from "@/lib/use-client-mounted";
-import { BillWiseOutstandingButton } from "@/components/accounts/BillWiseOutstandingButton";
-import { loadChartOfAccounts } from "@/app/(app)/accounts/masters/chart-of-accounts/chart-of-accounts-data";
+import { showToast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
-import { ensureFinancialYearsCurrent, loadFinancialYears } from "@/app/(app)/accounts/masters/masters-data";
-import { getActiveFinancialYearId } from "@/lib/accounts/day-book-data";
-import { useFY } from "@/lib/fy-store";
-import { useTransactionDetailsDrawer } from "@/components/accounts/TransactionDetailsDrawer";
-import { loadCustomers } from "@/app/(app)/masters/customers/customer-data";
-import { getVendorById } from "@/app/(app)/masters/vendors/vendor-data";
+import { LedgerService } from "@/services/ledger.service";
 import {
-  buildGeneralLedgerGroupDrillDown,
-  buildGeneralLedgerStatement,
-  GENERAL_LEDGER_TYPE_OPTIONS,
-  getGeneralLedgerLedgers,
-  type GeneralLedgerDisplayRow,
-  type GeneralLedgerFilters,
-} from "./general-ledger-data";
+  GeneralLedgerApiError,
+  GeneralLedgerApiService,
+} from "@/services/general-ledger.service";
+import type {
+  GeneralLedgerApiRow,
+  GeneralLedgerBalanceSideFilter,
+  GeneralLedgerFiltersConfig,
+  GeneralLedgerGroupResponse,
+  GeneralLedgerQueryParams,
+  GeneralLedgerStatementResponse,
+} from "@/types/general-ledger.types";
 import {
-  exportGeneralLedgerToExcel,
-  exportGeneralLedgerToPdf,
-} from "./general-ledger-export";
-import { GeneralLedgerTable } from "./GeneralLedgerTable";
-import { GeneralLedgerSelect } from "./GeneralLedgerSelect";
-import { GeneralLedgerReportHeader } from "./GeneralLedgerReportHeader";
+  mapDropdownLedger,
+  type GeneralLedgerPickerOption,
+} from "./general-ledger-api-view";
 import { GeneralLedgerGroupDrillDownView } from "./GeneralLedgerGroupDrillDown";
+import { GeneralLedgerReportHeader } from "./GeneralLedgerReportHeader";
+import { GeneralLedgerSelect } from "./GeneralLedgerSelect";
+import { GeneralLedgerTable } from "./GeneralLedgerTable";
 
-function defaultFyId(): string {
-  ensureFinancialYearsCurrent();
-  return String(getActiveFinancialYearId());
+const FALLBACK_LEDGER_TYPES: Array<{ value: string; label: string }> = [
+  { value: "all", label: "All Types" },
+  { value: "Customer", label: "Customer" },
+  { value: "Vendor", label: "Vendor" },
+  { value: "Bank", label: "Bank" },
+  { value: "Cash", label: "Cash" },
+  { value: "Sales", label: "Sales" },
+  { value: "Purchase", label: "Purchase" },
+  { value: "GST", label: "GST" },
+  { value: "Expense", label: "Expense" },
+  { value: "Income", label: "Income" },
+  { value: "Inventory", label: "Inventory" },
+  { value: "Employee", label: "Employee" },
+  { value: "General", label: "General" },
+];
+
+const SOURCE_HREFS: Record<string, string> = {
+  "trial-balance": "/accounts/reports/trial-balance",
+  "balance-sheet": "/accounts/reports/balance-sheet",
+  "profit-loss": "/accounts/reports/pl",
+  "cash-flow": "/accounts/reports/cash-flow",
+  "day-book": "/accounts/reports/day-book",
+  "chart-of-accounts": "/accounts/masters/chart-of-accounts",
+};
+
+type DebitCreditFilter = "all" | "debit" | "credit";
+
+interface UrlSnapshot {
+  ledgerId: string;
+  groupId: string;
+  ledgerType: string;
+  fyId: string;
+  dateFrom: string;
+  dateTo: string;
+  branches: string[];
+  sourceReport: string;
 }
 
-function resolveLedgerFromUrl(urlLedgerId: string): string {
-  if (!urlLedgerId) return "";
-  const ledgers = getGeneralLedgerLedgers();
-  if (ledgers.some((l) => l.id === urlLedgerId)) return urlLedgerId;
-  const numericId = String(Number(urlLedgerId));
-  if (numericId !== "NaN" && ledgers.some((l) => l.id === numericId)) return numericId;
-  return "";
-}
-
-const STOCK_IN_HAND_LEDGER_NAME = "stock in hand";
-const COGS_LEDGER_NAMES = new Set(["cost of goods sold", "cogs"]);
-
-function isInventoryProductWiseLedger(ledgerName: string, ledgerType: string): boolean {
-  const name = ledgerName.trim().toLowerCase();
-  return name === STOCK_IN_HAND_LEDGER_NAME || ledgerType === "Inventory";
-}
-
-function isCOGSProductWiseLedger(ledgerName: string): boolean {
-  return COGS_LEDGER_NAMES.has(ledgerName.trim().toLowerCase());
+function splitParam(value: string | null): string[] {
+  if (!value) return [];
+  return value.split(",").map((item) => item.trim()).filter(Boolean);
 }
 
 function GeneralLedgerSkeleton() {
@@ -118,81 +126,84 @@ function GeneralLedgerPageContent() {
   const mounted = useClientMounted();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { selectedFY } = useFY();
   const { openTransaction, drawer: voucherDrawer } = useTransactionDetailsDrawer();
+  const sectionRefresh = useAccountsSectionRefresh("*", { apiListing: true });
 
+  const [hydrated, setHydrated] = useState(false);
   const [ledgerId, setLedgerId] = useState("");
   const [groupId, setGroupId] = useState("");
   const [ledgerType, setLedgerType] = useState("all");
   const [sourceReport, setSourceReport] = useState("");
-  const [fyId, setFyId] = useState("all");
+  const [fyId, setFyId] = useState("");
   const [branches, setBranches] = useState<string[]>([]);
-  const [warehouses, setWarehouses] = useState<string[]>([]);
-  const [debitCredit, setDebitCredit] = useState<"all" | "debit" | "credit">("all");
+  const [debitCredit, setDebitCredit] = useState<DebitCreditFilter>("all");
   const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_year");
   const [voucherTypes, setVoucherTypes] = useState<string[]>([]);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [pickerLedgers, setPickerLedgers] = useState<GeneralLedgerPickerOption[]>([]);
+  const [pickerLoading, setPickerLoading] = useState(false);
+  const [filtersConfig, setFiltersConfig] = useState<GeneralLedgerFiltersConfig | null>(null);
+  const [statement, setStatement] = useState<GeneralLedgerStatementResponse | null>(null);
+  const [groupReport, setGroupReport] = useState<GeneralLedgerGroupResponse | null>(null);
+  const [reportLoading, setReportLoading] = useState(false);
+  const [reportError, setReportError] = useState<GeneralLedgerApiError | null>(null);
+  const [partyResolving, setPartyResolving] = useState(false);
+  const [partyError, setPartyError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
-  const [dataTick, setDataTick] = useState(0);
-  const [loading, setLoading] = useState(true);
-
-  const ledgers = useMemo(
-    () => (mounted ? getGeneralLedgerLedgers() : []),
-    [mounted, dataTick],
+  const [refreshKey, setRefreshKey] = useState(0);
+  const appliedDefaultDates = useRef(false);
+  const lastScopeKey = useRef("");
+  const wroteDefaultUrl = useRef(false);
+  const snapshot = useMemo<UrlSnapshot>(
+    () => ({
+      ledgerId,
+      groupId,
+      ledgerType,
+      fyId,
+      dateFrom,
+      dateTo,
+      branches,
+      sourceReport,
+    }),
+    [ledgerId, groupId, ledgerType, fyId, dateFrom, dateTo, branches, sourceReport],
   );
+  const snapshotRef = useRef(snapshot);
+  snapshotRef.current = snapshot;
 
-  const filteredLedgers = useMemo(() => {
-    if (ledgerType === "all") return ledgers;
-    return ledgers.filter((l) => l.ledgerType === ledgerType);
-  }, [ledgers, ledgerType]);
-
-  const sectionRefresh = useAccountsSectionRefresh();
-
-  useEffect(() => {
-    void import("@/lib/accounts/general-ledger-seed").then((m) =>
-      m.ensureGeneralLedgerScenariosOnPageLoad(),
-    );
-  }, []);
-
-  useEffect(() => {
-    setDataTick((t) => t + 1);
-  }, [sectionRefresh]);
+  const syncUrl = useCallback(
+    (overrides?: Partial<UrlSnapshot>) => {
+      const next = { ...snapshotRef.current, ...overrides };
+      snapshotRef.current = next;
+      const href = buildGeneralLedgerHref({
+        ledgerId: next.ledgerId || undefined,
+        groupId: next.ledgerId ? undefined : next.groupId || undefined,
+        fromDate: next.dateFrom,
+        toDate: next.dateTo,
+        source: next.sourceReport || undefined,
+        financialYearId: next.fyId && next.fyId !== "all" ? next.fyId : undefined,
+        branch: next.branches.length > 0 ? next.branches.join(",") : undefined,
+        ledgerType: next.ledgerType !== "all" ? next.ledgerType : undefined,
+      });
+      const url = new URL(href, "http://local");
+      for (const key of ["customer", "supplier", "company", "party"] as const) {
+        const existing = searchParams.get(key);
+        if (existing && !url.searchParams.has(key)) url.searchParams.set(key, existing);
+      }
+      const qs = url.searchParams.toString();
+      router.replace(qs ? `${url.pathname}?${qs}` : url.pathname, { scroll: false });
+    },
+    [router, searchParams],
+  );
 
   useEffect(() => {
     if (!mounted) return;
-    const ledgerParam =
-      searchParams.get("ledgerId") ?? searchParams.get("ledger") ?? "";
+    const ledgerParam = searchParams.get("ledgerId") ?? searchParams.get("ledger") ?? "";
     const groupParam = searchParams.get("groupId") ?? "";
-    const urlLedgerType = searchParams.get("ledgerType") ?? "all";
-    setLedgerType(urlLedgerType || "all");
-
-    let resolved = resolveLedgerFromUrl(ledgerParam);
-
-    const customerParam = searchParams.get("customer");
-    const supplierParam = searchParams.get("supplier");
-    if (!resolved && customerParam) {
-      const customer = loadCustomers().find((c) => String(c.id) === customerParam);
-      if (customer) {
-        const ledger = resolveCustomerReceivableLedger(customer);
-        if (ledger) {
-          resolved = String(ledger.id);
-          setLedgerType("Customer");
-        }
-      }
-    }
-    if (!resolved && supplierParam) {
-      const vendorId = Number(supplierParam);
-      const vendor = Number.isFinite(vendorId) ? getVendorById(vendorId) : undefined;
-      if (vendor) {
-        const ledger = resolveVendorPayableLedger(vendor);
-        if (ledger) {
-          resolved = String(ledger.id);
-          setLedgerType("Vendor");
-        }
-      }
-    }
-
-    setLedgerId(resolved);
-    setGroupId(groupParam && !resolved ? groupParam : "");
+    setLedgerId(ledgerParam);
+    setGroupId(ledgerParam ? "" : groupParam);
+    setLedgerType(searchParams.get("ledgerType") ?? "all");
+    setSourceReport(searchParams.get("source") ?? "");
 
     const urlFrom = searchParams.get("fromDate") ?? searchParams.get("from");
     const urlTo = searchParams.get("toDate") ?? searchParams.get("to");
@@ -205,48 +216,218 @@ function GeneralLedgerPageContent() {
       setPreset("custom");
     }
 
-    const urlSource = searchParams.get("source") ?? "";
-    setSourceReport(urlSource);
-
     const urlFy = searchParams.get("fy") ?? searchParams.get("fyId") ?? "";
-    if (urlFy) setFyId(urlFy);
-    else if (fyId === "all") setFyId(defaultFyId());
+    if (urlFy && urlFy !== "all") setFyId(urlFy);
 
-    const urlBranch = searchParams.get("branch");
-    if (urlBranch) setBranches(urlBranch.split(",").filter(Boolean));
+    const urlBranch = splitParam(searchParams.get("branch"));
+    const urlWarehouse = splitParam(searchParams.get("warehouse"));
+    setBranches(urlBranch.length > 0 ? urlBranch : urlWarehouse);
+    setPage(1);
+    setHydrated(true);
+  }, [mounted, searchParams, setDateFrom, setDateTo, setPreset]);
 
-    const urlWarehouse = searchParams.get("warehouse");
-    if (urlWarehouse) setWarehouses(urlWarehouse.split(",").filter(Boolean));
+  useEffect(() => {
+    if (!mounted) return;
+    const controller = new AbortController();
+    setPickerLoading(true);
+    void LedgerService.getDropdown({ status: "ACTIVE" }, controller.signal)
+      .then((result) => {
+        setPickerLedgers(result.ledgers.map(mapDropdownLedger));
+      })
+      .catch((err: unknown) => {
+        if (controller.signal.aborted) return;
+        setReportError(
+          err instanceof GeneralLedgerApiError
+            ? err
+            : new GeneralLedgerApiError(
+                err instanceof Error ? err.message : "Failed to load ledgers.",
+              ),
+        );
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setPickerLoading(false);
+      });
+    return () => controller.abort();
+  }, [mounted]);
 
-    setLoading(false);
-  }, [searchParams, mounted, setDateFrom, setDateTo, setPreset]);
+  useEffect(() => {
+    if (!mounted) return;
+    const controller = new AbortController();
+    void GeneralLedgerApiService.getFilters(controller.signal)
+      .then((config) => setFiltersConfig(config))
+      .catch(() => {
+        if (!controller.signal.aborted) setFiltersConfig(null);
+      });
+    return () => controller.abort();
+  }, [mounted]);
 
-  const syncUrl = useCallback(
-    (next: { ledgerId?: string; groupId?: string; ledgerType?: string }) => {
-      const nextType = next.ledgerType !== undefined ? next.ledgerType : ledgerType;
-      const params: GeneralLedgerDrillDownParams = {
-        fromDate: dateFrom,
-        toDate: dateTo,
-        source: sourceReport || undefined,
-        financialYearId: fyId !== "all" ? fyId : undefined,
-        branch: branches.length > 0 ? branches.join(",") : undefined,
-        warehouse: warehouses.length > 0 ? warehouses.join(",") : undefined,
-        ledgerType: nextType !== "all" ? nextType : undefined,
-      };
-      const resolvedLedgerId = next.ledgerId !== undefined ? next.ledgerId : ledgerId;
-      const resolvedGroupId = next.groupId !== undefined ? next.groupId : groupId;
-      if (resolvedLedgerId) params.ledgerId = Number(resolvedLedgerId);
-      else if (resolvedGroupId) params.groupId = Number(resolvedGroupId);
-      router.replace(buildGeneralLedgerHref(params), { scroll: false });
-    },
-    [router, ledgerId, groupId, ledgerType, dateFrom, dateTo, sourceReport, fyId, branches, warehouses],
-  );
+  useEffect(() => {
+    if (!hydrated || !filtersConfig) return;
+    const urlFy = searchParams.get("fy") ?? searchParams.get("fyId");
+    if ((!urlFy || urlFy === "all") && filtersConfig.defaults.financial_year_id) {
+      setFyId((current) =>
+        current && current !== "all" ? current : filtersConfig.defaults.financial_year_id || current,
+      );
+    }
+    const urlFrom = searchParams.get("fromDate") ?? searchParams.get("from");
+    const urlTo = searchParams.get("toDate") ?? searchParams.get("to");
+    if (!urlFrom && !urlTo && !appliedDefaultDates.current) {
+      if (filtersConfig.defaults.from_date) setDateFrom(filtersConfig.defaults.from_date);
+      if (filtersConfig.defaults.to_date) setDateTo(filtersConfig.defaults.to_date);
+      setPreset("custom");
+      appliedDefaultDates.current = true;
+    }
+  }, [filtersConfig, hydrated, searchParams, setDateFrom, setDateTo, setPreset]);
+
+  useEffect(() => {
+    if (!hydrated || !fyId || fyId === "all" || !dateFrom || !dateTo || wroteDefaultUrl.current) return;
+    const urlFy = searchParams.get("fy") ?? searchParams.get("fyId");
+    const urlFrom = searchParams.get("fromDate") ?? searchParams.get("from");
+    const urlTo = searchParams.get("toDate") ?? searchParams.get("to");
+    if (urlFy && urlFrom && urlTo) {
+      wroteDefaultUrl.current = true;
+      return;
+    }
+    wroteDefaultUrl.current = true;
+    syncUrl({ fyId, dateFrom, dateTo });
+  }, [hydrated, fyId, dateFrom, dateTo, searchParams, syncUrl]);
+
+  useEffect(() => {
+    if (!hydrated || ledgerId) return;
+    const customer = searchParams.get("customer");
+    const supplier = searchParams.get("supplier");
+    if (!customer && !supplier) return;
+
+    let cancelled = false;
+    setPartyResolving(true);
+    setPartyError(null);
+    const request = customer
+      ? resolveCustomerPartyLedgerId(customer).then((id) => ({
+          id,
+          type: "Customer" as const,
+          missing: "No accounting ledger is linked to this customer.",
+        }))
+      : resolveSupplierPartyLedgerId(supplier!).then((id) => ({
+          id,
+          type: "Vendor" as const,
+          missing: "No accounting ledger is linked to this supplier.",
+        }));
+
+    void request.then((result) => {
+      if (cancelled) return;
+      setPartyResolving(false);
+      if (!result.id) {
+        setPartyError(result.missing);
+        return;
+      }
+      setLedgerId(result.id);
+      setLedgerType(result.type);
+      setGroupId("");
+      setPage(1);
+      syncUrl({ ledgerId: result.id, groupId: "", ledgerType: result.type });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [hydrated, ledgerId, searchParams, syncUrl]);
+
+  const balanceSide: GeneralLedgerBalanceSideFilter =
+    debitCredit === "debit" ? "DEBIT" : debitCredit === "credit" ? "CREDIT" : "ALL";
+
+  const queryParams = useMemo((): GeneralLedgerQueryParams | null => {
+    if (!hydrated || !fyId || fyId === "all" || !dateFrom || !dateTo) return null;
+    if (!ledgerId && !groupId) return null;
+    if (dateFrom > dateTo) return null;
+    return {
+      financial_year_id: fyId,
+      from_date: dateFrom,
+      to_date: dateTo,
+      ledger_id: ledgerId || undefined,
+      group_id: ledgerId ? undefined : groupId || undefined,
+      branch_ids: branches,
+      voucher_types: voucherTypes,
+      balance_side: balanceSide,
+      page,
+      page_size: pageSize,
+    };
+  }, [
+    hydrated,
+    fyId,
+    dateFrom,
+    dateTo,
+    ledgerId,
+    groupId,
+    branches,
+    voucherTypes,
+    balanceSide,
+    page,
+    pageSize,
+  ]);
+
+  useEffect(() => {
+    if (!queryParams) return;
+    const scopeKey = [
+      queryParams.ledger_id ?? "",
+      queryParams.group_id ?? "",
+      queryParams.financial_year_id,
+      queryParams.from_date,
+      queryParams.to_date,
+      (queryParams.branch_ids ?? []).join(","),
+    ].join("|");
+    const scopeChanged = lastScopeKey.current !== scopeKey;
+    lastScopeKey.current = scopeKey;
+    if (scopeChanged) {
+      setStatement(null);
+      setGroupReport(null);
+    }
+
+    const controller = new AbortController();
+    setReportLoading(true);
+    setReportError(null);
+    void GeneralLedgerApiService.getReport(queryParams, controller.signal)
+      .then((result) => {
+        if (result.mode === "LEDGER") {
+          setStatement(result);
+          setGroupReport(null);
+        } else {
+          setGroupReport(result);
+          setStatement(null);
+        }
+        setReportLoading(false);
+      })
+      .catch((err: unknown) => {
+        if (controller.signal.aborted) return;
+        const apiError =
+          err instanceof GeneralLedgerApiError
+            ? err
+            : new GeneralLedgerApiError(
+                err instanceof Error ? err.message : "Failed to load General Ledger.",
+              );
+        setReportError(apiError);
+        setReportLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [queryParams, refreshKey, sectionRefresh]);
+
+  const filteredLedgers = useMemo(() => {
+    if (ledgerType === "all") return pickerLedgers;
+    return pickerLedgers.filter((ledger) => ledger.ledgerType === ledgerType);
+  }, [pickerLedgers, ledgerType]);
+
+  const selectedType = useMemo(() => {
+    if (statement && statement.ledger.ledger_id === ledgerId) return statement.ledger.ledger_type;
+    return pickerLedgers.find((ledger) => ledger.id === ledgerId)?.ledgerType ?? null;
+  }, [statement, ledgerId, pickerLedgers]);
 
   const handleLedgerChange = useCallback(
     (value: string) => {
       setLedgerId(value);
       setGroupId("");
-      syncUrl({ ledgerId: value });
+      setPage(1);
+      setPartyError(null);
+      syncUrl({ ledgerId: value, groupId: "" });
     },
     [syncUrl],
   );
@@ -254,10 +435,8 @@ function GeneralLedgerPageContent() {
   const handleLedgerTypeChange = useCallback(
     (value: string) => {
       setLedgerType(value);
-      const stillValid =
-        !ledgerId ||
-        value === "all" ||
-        ledgers.some((l) => l.id === ledgerId && l.ledgerType === value);
+      setPage(1);
+      const stillValid = !ledgerId || value === "all" || selectedType == null || selectedType === value;
       if (!stillValid) {
         setLedgerId("");
         syncUrl({ ledgerId: "", ledgerType: value });
@@ -265,81 +444,125 @@ function GeneralLedgerPageContent() {
         syncUrl({ ledgerType: value });
       }
     },
-    [ledgerId, ledgers, syncUrl],
+    [ledgerId, selectedType, syncUrl],
   );
 
-  const statementFilters = useMemo(
-    (): GeneralLedgerFilters => ({
-      dateFrom,
-      dateTo,
-      financialYearId: fyId,
-      voucherType: voucherTypes,
-      transactionType: voucherTypes,
-      debitCredit,
-      branch: branches,
-      warehouse: warehouses,
-      search: "",
-    }),
-    [dateFrom, dateTo, fyId, voucherTypes, debitCredit, branches, warehouses],
+  const handleFyChange = useCallback(
+    (value: string) => {
+      if (!value || value === "all") return;
+      const fy = filtersConfig?.financial_years.find((item) => item.financial_year_id === value);
+      let nextFrom = dateFrom;
+      let nextTo = dateTo;
+      if (
+        fy &&
+        (dateFrom < fy.start_date ||
+          dateFrom > fy.end_date ||
+          dateTo < fy.start_date ||
+          dateTo > fy.end_date)
+      ) {
+        nextFrom = fy.start_date;
+        nextTo = fy.end_date;
+        setDateFrom(nextFrom);
+        setDateTo(nextTo);
+        setPreset("custom");
+      }
+      setFyId(value);
+      setPage(1);
+      syncUrl({ fyId: value, dateFrom: nextFrom, dateTo: nextTo });
+    },
+    [dateFrom, dateTo, filtersConfig, setDateFrom, setDateTo, setPreset, syncUrl],
   );
 
-  const statement = useMemo(() => {
-    if (!mounted || !ledgerId) return null;
-    return buildGeneralLedgerStatement(ledgerId, statementFilters);
-  }, [mounted, ledgerId, statementFilters, dataTick]);
+  const handleDateFromChange = useCallback(
+    (value: string) => {
+      setDateFrom(value);
+      setPreset("custom");
+      setPage(1);
+      syncUrl({ dateFrom: value });
+    },
+    [setDateFrom, setPreset, syncUrl],
+  );
 
-  const groupDrillDown = useMemo(() => {
-    if (!mounted || !groupId || ledgerId) return null;
-    return buildGeneralLedgerGroupDrillDown(groupId, statementFilters);
-  }, [mounted, groupId, ledgerId, statementFilters, dataTick]);
+  const handleDateToChange = useCallback(
+    (value: string) => {
+      setDateTo(value);
+      setPreset("custom");
+      setPage(1);
+      syncUrl({ dateTo: value });
+    },
+    [setDateTo, setPreset, syncUrl],
+  );
 
-  const openingRow = statement?.displayRows[0] ?? null;
-  const closingRow = statement ? statement.displayRows[statement.displayRows.length - 1] : null;
-  const allTransactionRows = statement?.transactionRows ?? [];
+  const handleBranchesChange = useCallback(
+    (values: string[]) => {
+      setBranches(values);
+      setPage(1);
+      syncUrl({ branches: values });
+    },
+    [syncUrl],
+  );
+
+  const handleVoucherTypesChange = useCallback((values: string[]) => {
+    setVoucherTypes(values);
+    setPage(1);
+  }, []);
+
+  const handleDebitCreditChange = useCallback((value: DebitCreditFilter) => {
+    setDebitCredit(value);
+    setPage(1);
+  }, []);
+
+  const handleSelectGroup = useCallback(
+    (nextGroupId: string) => {
+      setGroupId(nextGroupId);
+      setLedgerId("");
+      setPage(1);
+      syncUrl({ groupId: nextGroupId, ledgerId: "" });
+    },
+    [syncUrl],
+  );
+
+  const branchOptions = useMemo<ReportMultiSelectOption[]>(
+    () =>
+      (filtersConfig?.branches ?? []).map((branch) => ({
+        value: branch.warehouse_id,
+        label: branch.warehouse_name,
+      })),
+    [filtersConfig],
+  );
+  const voucherTypeOptions = useMemo(
+    () => filtersConfig?.voucher_types ?? [],
+    [filtersConfig],
+  );
+  const ledgerTypeOptions = useMemo(() => {
+    const fromApi = filtersConfig?.ledger_types ?? [];
+    if (fromApi.length === 0) return FALLBACK_LEDGER_TYPES;
+    return [{ value: "all", label: "All Types" }, ...fromApi];
+  }, [filtersConfig]);
 
   const financialYearLabel = useMemo(() => {
-    if (fyId === "all") return selectedFY.label;
-    const fy = loadFinancialYears().find((f) => String(f.id) === fyId);
-    return fy?.name ?? selectedFY.label;
-  }, [fyId, selectedFY.label]);
+    return (
+      statement?.scope.financial_year_name ||
+      groupReport?.scope.financial_year_name ||
+      filtersConfig?.financial_years.find((fy) => fy.financial_year_id === fyId)?.name ||
+      ""
+    );
+  }, [statement, groupReport, filtersConfig, fyId]);
 
   const sourceLabel = sourceReport
     ? (GENERAL_LEDGER_SOURCE_REPORTS[sourceReport as keyof typeof GENERAL_LEDGER_SOURCE_REPORTS] ??
       sourceReport)
     : null;
-  const sourceHref = sourceReport
-    ? ({
-        "trial-balance": "/accounts/reports/trial-balance",
-        "balance-sheet": "/accounts/reports/balance-sheet",
-        "profit-loss": "/accounts/reports/pl",
-        "cash-flow": "/accounts/reports/cash-flow",
-        "day-book": "/accounts/reports/day-book",
-        "chart-of-accounts": "/accounts/masters/chart-of-accounts",
-      }[sourceReport] ?? null)
-    : null;
+  const sourceHref = sourceReport ? (SOURCE_HREFS[sourceReport] ?? null) : null;
 
-  const exportMeta = useMemo(
-    () => ({
-      dateFrom,
-      dateTo,
-      financialYear: financialYearLabel,
-    }),
-    [dateFrom, dateTo, financialYearLabel],
-  );
+  const filtersActive = voucherTypes.length > 0 || debitCredit !== "all";
+  const scopeNote =
+    statement?.notes.opening_balance_branch_limitation ||
+    groupReport?.notes.opening_balance_branch_limitation ||
+    null;
 
-  const warehouseOptions = useMemo(() => getTrialBalanceWarehouseOptions(), []);
-
-  const voucherTypeOptions = useMemo(
-    () =>
-      (Object.entries(VOUCHER_TYPE_LABELS) as [VoucherTypeCode, string][]).map(([code, label]) => ({
-        value: code,
-        label,
-      })),
-    [],
-  );
-
-  const filterSummaryItems = useMemo((): ReportFilterSummaryItem[] =>
-    [
+  const filterSummaryItems = useMemo((): ReportFilterSummaryItem[] => {
+    return [
       ledgerType !== "all"
         ? {
             id: "ledgerType",
@@ -348,277 +571,124 @@ function GeneralLedgerPageContent() {
             onRemove: () => handleLedgerTypeChange("all"),
           }
         : null,
-      buildBranchFilterSummary(branches, () => setBranches([])),
+      buildEntityFilterSummary("branch", "Branches", branches, branchOptions, () =>
+        handleBranchesChange([]),
+      ),
       buildEntityFilterSummary(
         "voucherType",
         "Voucher Types",
         voucherTypes,
         voucherTypeOptions,
-        () => setVoucherTypes([]),
+        () => handleVoucherTypesChange([]),
       ),
       debitCredit !== "all"
         ? {
             id: "debitCredit",
             label: "Dr/Cr",
             value: debitCredit === "debit" ? "Debit only" : "Credit only",
-            onRemove: () => setDebitCredit("all"),
+            onRemove: () => handleDebitCreditChange("all"),
           }
         : null,
-    ].filter((item): item is ReportFilterSummaryItem => item != null),
-  [voucherTypes, voucherTypeOptions, branches, debitCredit, ledgerType, handleLedgerTypeChange]);
+    ].filter((item): item is ReportFilterSummaryItem => item != null);
+  }, [
+    ledgerType,
+    branches,
+    voucherTypes,
+    debitCredit,
+    branchOptions,
+    voucherTypeOptions,
+    handleLedgerTypeChange,
+    handleBranchesChange,
+    handleDebitCreditChange,
+  ]);
 
-  const moreFiltersActiveCount = countActiveMoreFilters({
-    warehouse: warehouses,
-    voucherType: voucherTypes,
-  }) + (debitCredit !== "all" ? 1 : 0);
+  const moreFiltersActiveCount =
+    countActiveMoreFilters({
+      voucherType: voucherTypes,
+    }) + (debitCredit !== "all" ? 1 : 0);
 
   const handleVoucherClick = useCallback(
-    (row: GeneralLedgerDisplayRow) => {
-      if (!row.voucherId) return;
+    (row: GeneralLedgerApiRow) => {
+      if (!row.voucher_id) return;
+      const debit = Number(row.debit);
+      const credit = Number(row.credit);
       openTransaction({
         type: "general_ledger",
         row: {
-          date: row.isoDate || row.date,
-          voucherNo: row.voucherNo,
-          voucherType: row.voucherType,
-          referenceNo: row.referenceNo,
-          narration: row.particularsNarration,
-          debit: row.debit,
-          credit: row.credit,
-          runningBalance: row.runningBalance,
-          runningBalanceType: row.runningBalanceType,
-          voucherId: row.voucherId,
-          lineOrder: row.lineOrder,
-          viewHref: row.viewHref,
-          viewLabel: row.viewLabel,
-          contraLedger: row.particular,
+          date: row.date,
+          voucherNo: row.voucher_number ?? "",
+          voucherType: row.transaction_type || row.voucher_type || "",
+          referenceNo: row.reference_no ?? "",
+          narration: row.narration ?? "",
+          debit: Number.isFinite(debit) ? debit : 0,
+          credit: Number.isFinite(credit) ? credit : 0,
+          runningBalance: Number(row.running_balance) || 0,
+          runningBalanceType: row.running_balance_side === "CREDIT" ? "Credit" : "Debit",
+          voucherId: row.voucher_id,
+          viewHref: row.view_href ?? undefined,
+          viewLabel: row.view_href ? "Open Voucher" : undefined,
+          contraLedger: row.particulars,
         },
       });
     },
     [openTransaction],
   );
 
-  const breadcrumbs = sourceLabel
-    ? [
-        ...accountsBreadcrumb("Reports", "General Ledger").slice(0, -1),
-        { label: sourceLabel, href: sourceHref ?? undefined },
-        { label: statement?.summary.ledgerName ?? "General Ledger" },
-      ]
-    : accountsBreadcrumb("Reports", "General Ledger");
-
-  const getCellValue = useCallback((row: GeneralLedgerDisplayRow, key: string) => {
-    switch (key) {
-      case "transactionType":
-        return row.transactionType || row.voucherType;
-      case "voucher":
-        return row.voucherNo;
-      case "particulars":
-        return row.particulars;
-      case "balance":
-        return row.runningBalance;
-      case "side":
-        return drCrSideFilterValue({
-          debit: row.debit,
-          credit: row.credit,
-          runningBalanceType: row.runningBalanceType,
-          runningBalance: row.runningBalance,
-          isBalanceRow: row.kind === "opening" || row.kind === "closing",
-        });
-      default:
-        return (row as unknown as Record<string, unknown>)[key];
-    }
-  }, []);
-
-  const columnConfig = useMemo(
-    () => ({
-      date: { type: "date" as const },
-      particulars: { type: "text" as const },
-      transactionType: { type: "text" as const },
-      voucher: { type: "text" as const },
-      debit: { type: "amount" as const },
-      credit: { type: "amount" as const },
-      side: { type: "text" as const },
-    }),
-    [],
-  );
-
-  return (
-    <AccountsColumnFilterProvider
-      rows={allTransactionRows}
-      getCellValue={getCellValue}
-      columnConfig={columnConfig}
-      defaultSortKey="date"
-      defaultSortDir="asc"
-    >
-      <GeneralLedgerPageBody
-        loading={loading}
-        ledgerId={ledgerId}
-        groupId={groupId}
-        ledgerType={ledgerType}
-        ledgers={filteredLedgers}
-        statement={statement}
-        groupDrillDown={groupDrillDown}
-        allTransactionRows={allTransactionRows}
-        openingRow={openingRow}
-        closingRow={closingRow}
-        exporting={exporting}
-        setExporting={setExporting}
-        exportMeta={exportMeta}
-        handleLedgerChange={handleLedgerChange}
-        handleLedgerTypeChange={handleLedgerTypeChange}
-        preset={preset}
-        setPreset={setPreset}
-        dateFrom={dateFrom}
-        setDateFrom={setDateFrom}
-        dateTo={dateTo}
-        setDateTo={setDateTo}
-        fyId={fyId}
-        setFyId={setFyId}
-        financialYearLabel={financialYearLabel}
-        voucherTypes={voucherTypes}
-        setVoucherTypes={setVoucherTypes}
-        branches={branches}
-        setBranches={setBranches}
-        warehouses={warehouses}
-        setWarehouses={setWarehouses}
-        debitCredit={debitCredit}
-        setDebitCredit={setDebitCredit}
-        moreFiltersActiveCount={moreFiltersActiveCount}
-        warehouseOptions={warehouseOptions}
-        filterSummaryItems={filterSummaryItems}
-        voucherTypeOptions={voucherTypeOptions}
-        sourceLabel={sourceLabel}
-        sourceHref={sourceHref}
-        breadcrumbs={breadcrumbs}
-        onVoucherClick={handleVoucherClick}
-        onSelectLedgerFromGroup={handleLedgerChange}
-        voucherDrawer={voucherDrawer}
-      />
-    </AccountsColumnFilterProvider>
-  );
-}
-
-function GeneralLedgerPageBody({
-  loading,
-  ledgerId,
-  groupId,
-  ledgerType,
-  ledgers,
-  statement,
-  groupDrillDown,
-  allTransactionRows,
-  openingRow,
-  closingRow,
-  exporting,
-  setExporting,
-  exportMeta,
-  handleLedgerChange,
-  handleLedgerTypeChange,
-  preset,
-  setPreset,
-  dateFrom,
-  setDateFrom,
-  dateTo,
-  setDateTo,
-  fyId,
-  setFyId,
-  financialYearLabel,
-  voucherTypes,
-  setVoucherTypes,
-  branches,
-  setBranches,
-  warehouses,
-  setWarehouses,
-  debitCredit,
-  setDebitCredit,
-  moreFiltersActiveCount,
-  warehouseOptions,
-  filterSummaryItems,
-  voucherTypeOptions,
-  sourceLabel,
-  sourceHref,
-  breadcrumbs,
-  onVoucherClick,
-  onSelectLedgerFromGroup,
-  voucherDrawer,
-}: {
-  loading: boolean;
-  ledgerId: string;
-  groupId: string;
-  ledgerType: string;
-  ledgers: ReturnType<typeof getGeneralLedgerLedgers>;
-  statement: ReturnType<typeof buildGeneralLedgerStatement> | null;
-  groupDrillDown: ReturnType<typeof buildGeneralLedgerGroupDrillDown> | null;
-  allTransactionRows: GeneralLedgerDisplayRow[];
-  openingRow: GeneralLedgerDisplayRow | null;
-  closingRow: GeneralLedgerDisplayRow | null | undefined;
-  exporting: boolean;
-  setExporting: (v: boolean) => void;
-  exportMeta: { dateFrom: string; dateTo: string; financialYear: string };
-  handleLedgerChange: (value: string) => void;
-  handleLedgerTypeChange: (value: string) => void;
-  preset: ReturnType<typeof useReportDateRange>["preset"];
-  setPreset: ReturnType<typeof useReportDateRange>["setPreset"];
-  dateFrom: string;
-  setDateFrom: (v: string) => void;
-  dateTo: string;
-  setDateTo: (v: string) => void;
-  fyId: string;
-  setFyId: (v: string) => void;
-  financialYearLabel: string;
-  voucherTypes: string[];
-  setVoucherTypes: (v: string[]) => void;
-  branches: string[];
-  setBranches: (v: string[]) => void;
-  warehouses: string[];
-  setWarehouses: (v: string[]) => void;
-  debitCredit: "all" | "debit" | "credit";
-  setDebitCredit: (v: "all" | "debit" | "credit") => void;
-  moreFiltersActiveCount: number;
-  warehouseOptions: string[];
-  filterSummaryItems: ReportFilterSummaryItem[];
-  voucherTypeOptions: { value: string; label: string }[];
-  sourceLabel: string | null;
-  sourceHref: string | null;
-  breadcrumbs: { label: string; href?: string }[];
-  onVoucherClick: (row: GeneralLedgerDisplayRow) => void;
-  onSelectLedgerFromGroup: (ledgerId: string) => void;
-  voucherDrawer: React.ReactNode;
-}) {
-  const canExport = Boolean(statement && ledgerId);
-
-  const billWiseLedger = useMemo(() => {
-    if (!ledgerId) return null;
-    const id = Number(ledgerId);
-    if (!Number.isFinite(id)) return null;
-    return loadChartOfAccounts().find((r) => r.id === id && r.nodeLevel === "ledger") ?? null;
-  }, [ledgerId]);
-
-  const handleExportExcel = async () => {
-    if (!statement || !openingRow || !closingRow) return;
+  const handleExport = async (format: "EXCEL" | "PDF") => {
+    if (!queryParams?.ledger_id || exporting || !statement) return;
     setExporting(true);
     try {
-      const exportRows = [openingRow, ...allTransactionRows, closingRow];
-      await exportGeneralLedgerToExcel(exportRows, statement.summary, exportMeta);
+      await GeneralLedgerApiService.exportReport({
+        ...queryParams,
+        ledger_id: queryParams.ledger_id,
+        ledger_code: statement.ledger.ledger_code,
+        format,
+      });
+    } catch (err) {
+      showToast(
+        err instanceof Error ? err.message : "Failed to export General Ledger.",
+        "error",
+      );
     } finally {
       setExporting(false);
     }
   };
 
-  const handleExportPdf = () => {
-    if (!statement || !openingRow || !closingRow) return;
-    const exportRows = [openingRow, ...allTransactionRows, closingRow];
-    exportGeneralLedgerToPdf(exportRows, statement.summary, exportMeta);
-  };
+  const breadcrumbs = sourceLabel
+    ? [
+        ...accountsBreadcrumb("Reports", "General Ledger").slice(0, -1),
+        { label: sourceLabel, href: sourceHref ?? undefined },
+        { label: statement?.ledger.ledger_name ?? groupReport?.group.group_name ?? "General Ledger" },
+      ]
+    : accountsBreadcrumb("Reports", "General Ledger");
 
-  const showGroupView = Boolean(groupId && groupDrillDown && !ledgerId);
+  const showGroupView = Boolean(groupId && !ledgerId && groupReport);
   const showLedgerView = Boolean(ledgerId && statement);
-  const showNoTransactions =
+  const specialView = statement?.ledger.special_view ?? "NONE";
+  const dateInvalid = Boolean(dateFrom && dateTo && dateFrom > dateTo);
+  const waitingForSelection = hydrated && !ledgerId && !groupId && !partyResolving;
+  const initialLoading =
+    !hydrated ||
+    partyResolving ||
+    (Boolean(ledgerId || groupId) && reportLoading && !statement && !groupReport);
+  const notFound =
+    reportError?.status === 404 && !statement && !groupReport && Boolean(ledgerId || groupId);
+  const showPeriodEmpty =
     showLedgerView &&
-    statement &&
-    !statement.hasPeriodTransactions &&
-    voucherTypes.length === 0 &&
-    debitCredit === "all";
+    statement != null &&
+    statement.summary.has_period_transactions === false &&
+    !filtersActive;
+  const showFilterEmpty =
+    showLedgerView &&
+    statement != null &&
+    statement.summary.has_period_transactions &&
+    statement.transactions.length === 0 &&
+    filtersActive;
+
+  const billWiseHref =
+    statement?.ledger.bill_wise_outstanding && statement.ledger.ledger_id
+      ? billWiseOutstandingHref(statement.ledger.ledger_id, "gl", statement.ledger.ledger_id)
+      : null;
 
   return (
     <AccountsPageShell
@@ -637,13 +707,13 @@ function GeneralLedgerPageBody({
               </Link>
             </Button>
           ) : null}
-          <BillWiseOutstandingButton ledger={billWiseLedger} from="gl" />
+          <BillWiseOutstandingButton ledger={null} href={billWiseHref} from="gl" />
           <Button
             type="button"
             variant="outline"
             size="sm"
             className="h-8 text-xs gap-1.5"
-            disabled={!canExport}
+            disabled={!showLedgerView}
             onClick={() => window.print()}
           >
             <Printer className="w-3.5 h-3.5" />
@@ -657,20 +727,27 @@ function GeneralLedgerPageBody({
             className="items-end"
             end={
               <AccountsExportMenu
-                onExcel={handleExportExcel}
-                onPdf={handleExportPdf}
-                disabled={!canExport || exporting}
+                onExcel={() => void handleExport("EXCEL")}
+                onPdf={() => void handleExport("PDF")}
+                disabled={!showLedgerView || exporting}
               />
             }
           >
-            <ReportFinancialYearFilter value={fyId} onChange={setFyId} />
+            {fyId ? (
+              <ReportFinancialYearFilter value={fyId} onChange={handleFyChange} />
+            ) : (
+              <div className="h-8 w-[130px] bg-muted animate-pulse rounded-md" />
+            )}
             <ReportDateRangeFilter
               preset={preset}
               dateFrom={dateFrom}
               dateTo={dateTo}
-              onPresetChange={setPreset}
-              onDateFromChange={setDateFrom}
-              onDateToChange={setDateTo}
+              onPresetChange={(next) => {
+                setPreset(next);
+                setPage(1);
+              }}
+              onDateFromChange={handleDateFromChange}
+              onDateToChange={handleDateToChange}
             />
             <div className="space-y-1 min-w-[140px]">
               <Label className={filterLabelClass}>Ledger Type</Label>
@@ -679,27 +756,35 @@ function GeneralLedgerPageBody({
                 onChange={(e) => handleLedgerTypeChange(e.target.value)}
                 className={cn(filterControlClass, "mt-0 w-full")}
               >
-                {GENERAL_LEDGER_TYPE_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
+                {ledgerTypeOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
                   </option>
                 ))}
               </select>
             </div>
-            <GeneralLedgerSelect value={ledgerId} ledgers={ledgers} onChange={handleLedgerChange} />
-            <ReportBranchMultiFilter values={branches} onChange={setBranches} />
+            <GeneralLedgerSelect
+              value={ledgerId}
+              ledgers={filteredLedgers}
+              onChange={handleLedgerChange}
+              loading={pickerLoading}
+            />
+            <ReportBranchMultiFilter
+              values={branches}
+              onChange={handleBranchesChange}
+              labeledOptions={branchOptions}
+            />
             <ReportMoreFilters activeCount={moreFiltersActiveCount}>
-              <ReportWarehouseMultiFilter
-                values={warehouses}
-                onChange={setWarehouses}
-                options={warehouseOptions}
+              <ReportVoucherTypeMultiFilter
+                values={voucherTypes}
+                onChange={handleVoucherTypesChange}
+                options={voucherTypeOptions}
               />
-              <ReportVoucherTypeMultiFilter values={voucherTypes} onChange={setVoucherTypes} />
               <div className="space-y-1 min-w-[120px]">
                 <Label className={filterLabelClass}>Dr / Cr</Label>
                 <select
                   value={debitCredit}
-                  onChange={(e) => setDebitCredit(e.target.value as "all" | "debit" | "credit")}
+                  onChange={(e) => handleDebitCreditChange(e.target.value as DebitCreditFilter)}
                   className={cn(filterControlClass, "mt-0 w-full")}
                   disabled={!ledgerId}
                 >
@@ -711,19 +796,38 @@ function GeneralLedgerPageBody({
             </ReportMoreFilters>
           </ReportFilterRow>
           <ReportFilterSummary items={filterSummaryItems} />
+          {dateInvalid ? (
+            <p className="px-1 text-xs text-red-600">From Date must be less than or equal to To Date.</p>
+          ) : null}
+          {reportError && reportError.status !== 404 ? (
+            <div className="px-1 flex items-center gap-2 text-xs text-red-600">
+              <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+              <span>{reportError.message}</span>
+              {reportError.status !== 400 && reportError.status !== 403 ? (
+                <button
+                  type="button"
+                  className="text-brand-600 hover:underline"
+                  onClick={() => setRefreshKey((value) => value + 1)}
+                >
+                  Retry
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+          {scopeNote ? <p className="px-1 text-[11px] text-muted-foreground">{scopeNote}</p> : null}
         </>
       }
     >
       <AccountsListingTableCard className="flex-1 min-h-0">
-        <div className="flex flex-col flex-1 min-h-0">
-          {loading ? (
+        <div className={cn("flex flex-col flex-1 min-h-0", reportLoading && (statement || groupReport) && "opacity-70")}>
+          {initialLoading ? (
             <GeneralLedgerSkeleton />
-          ) : !ledgerId && !groupId ? (
+          ) : waitingForSelection ? (
             <div className="flex-1 flex items-center justify-center p-8">
               <div className="text-center space-y-2 max-w-sm">
                 <BookOpen className="w-10 h-10 text-muted-foreground mx-auto" />
                 <p className="text-sm font-medium text-foreground">
-                  Select a ledger or open from another report.
+                  {partyError ?? "Select a ledger or open from another report."}
                 </p>
                 <p className="text-xs text-muted-foreground">
                   Use Ledger Type (Customer / Vendor) to narrow party accounts, search for a ledger,
@@ -731,68 +835,98 @@ function GeneralLedgerPageBody({
                 </p>
               </div>
             </div>
-          ) : showGroupView && groupDrillDown ? (
+          ) : notFound ? (
+            <div className="flex-1 flex items-center justify-center p-8 text-sm text-muted-foreground">
+              {ledgerId
+                ? "Ledger not found or has no statement data."
+                : "Account group not found or has no drill-down data."}
+            </div>
+          ) : showGroupView && groupReport ? (
             <GeneralLedgerGroupDrillDownView
-              drillDown={groupDrillDown}
+              groupName={groupReport.group.group_name}
+              parentGroup={groupReport.group.parent_group}
+              children={groupReport.children}
               dateFrom={dateFrom}
               dateTo={dateTo}
               fyId={fyId}
-              onSelectLedger={onSelectLedgerFromGroup}
+              source={sourceReport || undefined}
+              branch={branches.length > 0 ? branches.join(",") : undefined}
+              onSelectLedger={handleLedgerChange}
+              onSelectGroup={handleSelectGroup}
             />
-          ) : showLedgerView && statement && openingRow && closingRow ? (
-            isInventoryProductWiseLedger(statement.summary.ledgerName, statement.summary.ledgerType) ? (
-              <InventoryProductWisePanel dateFrom={dateFrom} dateTo={dateTo} />
-            ) : isCOGSProductWiseLedger(statement.summary.ledgerName) ? (
-              <CogsProductWisePanel dateFrom={dateFrom} dateTo={dateTo} />
-            ) : (
-            <>
-              <GeneralLedgerReportHeader
-                ledgerName={statement.summary.ledgerName}
-                ledgerCode={statement.summary.ledgerCode}
-                parentGroup={statement.summary.parentGroup}
-                ledgerType={statement.summary.ledgerType}
-                gstin={statement.summary.gstin}
-                pan={statement.summary.pan}
+          ) : showLedgerView && statement ? (
+            specialView === "STOCK_IN_HAND" ? (
+              <InventoryProductWisePanel
                 dateFrom={dateFrom}
                 dateTo={dateTo}
-                financialYearLabel={financialYearLabel}
+                warehouseId={branches.length === 1 ? branches[0] : undefined}
+                hideWarehouseFilter
               />
-              {showNoTransactions ? (
-                <div className="px-4 py-3 border-b border-border/60 bg-amber-50/40">
-                  <p className="text-xs text-amber-800">
-                    No transactions found for the selected period. Opening and closing balances are
-                    shown below.
-                  </p>
-                </div>
-              ) : allTransactionRows.length === 0 && (voucherTypes.length > 0 || debitCredit !== "all") ? (
-                <div className="px-4 py-3 border-b border-border/60">
-                  <p className="text-xs text-muted-foreground">
-                    No transactions match your filters.{" "}
-                    <button
-                      type="button"
-                      className="text-brand-600 hover:underline"
-                      onClick={() => {
-                        setVoucherTypes([]);
-                        setDebitCredit("all");
-                      }}
-                    >
-                      Clear filters
-                    </button>
-                  </p>
-                </div>
-              ) : null}
-              <GeneralLedgerTable
-                openingRow={openingRow}
-                transactionRows={allTransactionRows}
-                closingRow={closingRow}
-                summary={statement.summary}
-                onVoucherClick={onVoucherClick}
-              />
-            </>
+            ) : specialView === "COGS" ? (
+              <CogsProductWisePanel dateFrom={dateFrom} dateTo={dateTo} />
+            ) : (
+              <>
+                <GeneralLedgerReportHeader
+                  companyName={statement.company.name}
+                  companyAddress={statement.company.address}
+                  companyContact={statement.company.contact}
+                  companyEmail={statement.company.email}
+                  ledgerName={statement.ledger.ledger_name}
+                  ledgerCode={statement.ledger.ledger_code}
+                  parentGroup={statement.ledger.parent_group}
+                  ledgerType={statement.ledger.ledger_type}
+                  gstin={statement.ledger.gstin}
+                  pan={statement.ledger.pan}
+                  dateFrom={statement.scope.from_date}
+                  dateTo={statement.scope.to_date}
+                  financialYearLabel={financialYearLabel}
+                />
+                {showPeriodEmpty ? (
+                  <div className="px-4 py-3 border-b border-border/60 bg-amber-50/40">
+                    <p className="text-xs text-amber-800">
+                      No transactions found for the selected period. Opening and closing balances are
+                      shown below.
+                    </p>
+                  </div>
+                ) : null}
+                {showFilterEmpty ? (
+                  <div className="px-4 py-3 border-b border-border/60">
+                    <p className="text-xs text-muted-foreground">
+                      No transactions match your filters.{" "}
+                      <button
+                        type="button"
+                        className="text-brand-600 hover:underline"
+                        onClick={() => {
+                          handleVoucherTypesChange([]);
+                          handleDebitCreditChange("all");
+                        }}
+                      >
+                        Clear filters
+                      </button>
+                    </p>
+                  </div>
+                ) : null}
+                <GeneralLedgerTable
+                  openingRow={statement.opening_row}
+                  transactionRows={statement.transactions}
+                  closingRow={statement.closing_row}
+                  summary={statement.summary}
+                  filtersActive={filtersActive}
+                  page={statement.pagination.page}
+                  pageSize={statement.pagination.page_size}
+                  totalTransactions={statement.pagination.total_transactions}
+                  onPageChange={setPage}
+                  onPageSizeChange={(next) => {
+                    setPageSize(next);
+                    setPage(1);
+                  }}
+                  onVoucherClick={handleVoucherClick}
+                />
+              </>
             )
-          ) : ledgerId ? (
+          ) : ledgerId || groupId ? (
             <div className="flex-1 flex items-center justify-center p-8 text-sm text-muted-foreground">
-              Ledger not found or has no statement data.
+              {reportError?.message ?? "Unable to load General Ledger."}
             </div>
           ) : null}
         </div>
@@ -802,23 +936,9 @@ function GeneralLedgerPageBody({
   );
 }
 
-function GeneralLedgerFallback() {
-  return (
-    <AccountsPageShell
-      breadcrumbs={accountsBreadcrumb("Reports", "General Ledger")}
-      title="General Ledger"
-      description="Complete transaction history for a selected ledger with running balance."
-      layout="split"
-      className="h-full min-h-0"
-    >
-      <GeneralLedgerSkeleton />
-    </AccountsPageShell>
-  );
-}
-
 export default function GeneralLedgerPageClient() {
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<GeneralLedgerSkeleton />}>
       <GeneralLedgerPageContent />
     </Suspense>
   );

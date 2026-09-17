@@ -9,7 +9,9 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { ChevronDown, Download } from "lucide-react";
+import { ChevronDown, Download, Mail } from "lucide-react";
+import { showToast } from "@/lib/toast";
+import { SendSalesInvoiceEmailModal } from "@/app/(app)/accounts/transactions/invoices/SendSalesInvoiceEmailModal";
 import { loadProducts } from "@/app/(app)/masters/products/product-data";
 import {
   calcLineAmounts,
@@ -427,6 +429,7 @@ export default function InvoiceViewPageClient({
   const searchParams = useSearchParams();
   const [record, setRecord] = useState<InvoiceRecord | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [sendEmailOpen, setSendEmailOpen] = useState(false);
 
   const listHref = useMemo(
     () =>
@@ -625,6 +628,17 @@ export default function InvoiceViewPageClient({
         </Button>
       ) : null}
       {downloadMenu}
+      {canDownloadPi && record.invoiceStatus !== "cancelled" ? (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-8 text-xs font-medium gap-1.5"
+          onClick={() => setSendEmailOpen(true)}
+        >
+          <Mail className="w-3.5 h-3.5" /> Send Email
+        </Button>
+      ) : null}
     </div>
   );
 
@@ -872,6 +886,20 @@ export default function InvoiceViewPageClient({
           />
         </div>
       </InvoiceFormLayout>
+
+      <SendSalesInvoiceEmailModal
+        open={sendEmailOpen}
+        salesInvoiceId={invoicePdfId || null}
+        onOpenChange={setSendEmailOpen}
+        onSent={(result) => {
+          showToast(
+            result.invoiceType === "STOCK_TRANSFER"
+              ? `Stock Transfer Invoice email sent to ${result.to}.`
+              : `Tax Invoice email sent to ${result.to}.`,
+            "success",
+          );
+        }}
+      />
     </div>
   );
 }

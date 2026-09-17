@@ -10,22 +10,30 @@ import {
   ACCOUNTS_FILTER_CONTROL_CLASS,
   ACCOUNTS_FILTER_LABEL_CLASS,
 } from "@/lib/accounts/accounts-typography";
-import {
-  filterGeneralLedgerLedgers,
-  formatGeneralLedgerTypeLabel,
-  type GeneralLedgerLedgerOption,
-} from "./general-ledger-data";
+import type { GeneralLedgerPickerOption } from "./general-ledger-api-view";
+
+function filterLedgers(ledgers: GeneralLedgerPickerOption[], query: string) {
+  const q = query.trim().toLowerCase();
+  if (!q) return ledgers;
+  return ledgers.filter((ledger) =>
+    [ledger.code, ledger.name, ledger.ledgerType, ledger.parentGroup].some((value) =>
+      value.toLowerCase().includes(q),
+    ),
+  );
+}
 
 export function GeneralLedgerSelect({
   value,
   ledgers,
   onChange,
   className,
+  loading,
 }: {
   value: string;
-  ledgers: GeneralLedgerLedgerOption[];
+  ledgers: GeneralLedgerPickerOption[];
   onChange: (ledgerId: string) => void;
   className?: string;
+  loading?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -35,20 +43,17 @@ export function GeneralLedgerSelect({
     [ledgers, value],
   );
 
-  const filtered = useMemo(
-    () => filterGeneralLedgerLedgers(ledgers, query),
-    [ledgers, query],
-  );
+  const filtered = useMemo(() => filterLedgers(ledgers, query), [ledgers, query]);
 
   const selectedLabel = selected
-    ? `${selected.name} — ${formatGeneralLedgerTypeLabel(selected.ledgerType)}`
-    : null;
+    ? `${selected.code} — ${selected.name}`
+    : value
+      ? "Selected ledger"
+      : null;
 
   return (
     <div className={cn("space-y-1 min-w-[260px]", className)}>
-      <Label className={ACCOUNTS_FILTER_LABEL_CLASS}>
-        Ledger <span className="text-red-500">*</span>
-      </Label>
+      <Label className={ACCOUNTS_FILTER_LABEL_CLASS}>Ledger</Label>
       <Popover
         open={open}
         onOpenChange={(next) => {
@@ -70,7 +75,9 @@ export function GeneralLedgerSelect({
                 selectedLabel ? "text-foreground font-medium" : "text-muted-foreground",
               )}
             >
-              {selectedLabel ?? "Search ledger by name…"}
+              {loading && !selectedLabel
+                ? "Loading ledgers…"
+                : selectedLabel ?? "Search ledger by code or name…"}
             </span>
             <ChevronsUpDown className="w-4 h-4 text-muted-foreground shrink-0" />
           </button>
@@ -83,7 +90,7 @@ export function GeneralLedgerSelect({
             <div className="relative">
               <Search className="w-3.5 h-3.5 absolute left-2.5 top-[7px] text-muted-foreground pointer-events-none" />
               <Input
-                placeholder="Search ledger name, group, type…"
+                placeholder="Search ledger code or name…"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 className="h-9 text-sm pl-8"
@@ -99,7 +106,6 @@ export function GeneralLedgerSelect({
             ) : (
               filtered.map((ledger) => {
                 const isSelected = ledger.id === value;
-                const typeLabel = formatGeneralLedgerTypeLabel(ledger.ledgerType);
                 return (
                   <button
                     key={ledger.id}
@@ -116,14 +122,13 @@ export function GeneralLedgerSelect({
                   >
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-semibold text-foreground truncate">
-                        {ledger.name}
-                        <span className="font-normal text-muted-foreground"> — {typeLabel}</span>
+                        <span className="font-mono text-brand-700">{ledger.code}</span>
+                        <span className="font-normal text-muted-foreground"> — {ledger.name}</span>
                       </p>
-                      {ledger.parentGroup && ledger.parentGroup !== "—" ? (
-                        <p className="text-[11px] text-muted-foreground truncate mt-0.5">
-                          {ledger.parentGroup}
-                        </p>
-                      ) : null}
+                      <p className="text-[11px] text-muted-foreground truncate mt-0.5">
+                        {ledger.ledgerType}
+                        {ledger.parentGroup ? ` · ${ledger.parentGroup}` : ""}
+                      </p>
                     </div>
                     {isSelected ? (
                       <Check className="w-3.5 h-3.5 text-brand-600 shrink-0 mt-0.5" />
