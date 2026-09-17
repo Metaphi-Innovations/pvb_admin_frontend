@@ -80,7 +80,11 @@ function buildPaymentTerms(po: PurchaseOrder): string {
   if (payment === "Credit" && po.creditDays > 0) {
     return `${po.creditDays} Days from Invoice Date`;
   }
-  return payment;
+  if (payment === "Advance") {
+    const pct = Number(po.advancePercentage ?? 0);
+    return pct > 0 ? `Advance ${pct}%` : "Advance";
+  }
+  return payment || "-";
 }
 
 function buildTransactionType(raw: Record<string, unknown>): string {

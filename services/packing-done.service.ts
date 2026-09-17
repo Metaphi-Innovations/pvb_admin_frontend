@@ -86,6 +86,10 @@ function mapListItemToPackingRecord(raw: Record<string, any>): PackingRecord {
     : raw.source_warehouse || raw.warehouse_name || "";
   return {
     id: raw.packing_done_id,
+    packingListId:
+      asString(raw.packing_list_id) ||
+      asString(raw.packing_list?.packing_list_id) ||
+      undefined,
     packingNo: raw.packing_done_no,
     salesOrderNo: raw.customer_snapshot?.source_document_no || raw.packing_list_no || "",
     customer: isStockTransfer ? targetWarehouse || raw.customer_name || "" : raw.customer_name || "",
@@ -99,6 +103,7 @@ function mapListItemToPackingRecord(raw: Record<string, any>): PackingRecord {
     sourceDocumentNo: raw.customer_snapshot?.source_document_no || raw.packing_list_no || "",
     sourceWarehouse,
     targetWarehouse,
+    packingListNo: raw.packing_list_no || "",
     poNumber:
       raw.po_number ||
       asString(raw.customer_snapshot?.po_number) ||
@@ -171,7 +176,10 @@ function mapDetailToPackingRecord(raw: any): PackingRecord {
 
   return {
     id: raw.packing_done_id,
-    packingListId: raw.packing_list_id || raw.packing_list?.packing_list_id,
+    packingListId:
+      asString(raw.packing_list_id) ||
+      asString(raw.packing_list?.packing_list_id) ||
+      undefined,
     packingNo: raw.packing_done_no,
     salesOrderNo: sourceDocumentNo,
     customer,
