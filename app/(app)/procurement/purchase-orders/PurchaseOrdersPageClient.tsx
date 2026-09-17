@@ -224,6 +224,7 @@ export default function PurchaseOrdersPageClient() {
       currency: "INR",
       paymentType: modalListItem.paymentType,
       creditDays: 0,
+      advancePercentage: 0,
       deliveryTerms: "",
       expectedDeliveryDate: "",
       state: "",

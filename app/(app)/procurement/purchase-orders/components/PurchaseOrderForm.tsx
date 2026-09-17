@@ -6,7 +6,7 @@ import {
 	Upload,
 	Trash2,
 } from "lucide-react";
-import { COMPANY_BILLING, PAYMENT_TYPE_OPTIONS } from "@/lib/procurement/config";
+import { COMPANY_BILLING } from "@/lib/procurement/config";
 import {
 	calcPackingToBaseQty,
 	enrichProductForProcurement,
@@ -337,6 +337,7 @@ export function defaultPOForm(sourcePrId: string | null = null): POFormValues {
 		currency: "INR",
 		paymentType: "Credit",
 		creditDays: 30,
+		advancePercentage: 0,
 		deliveryTerms: "",
 		expectedDeliveryDate: "",
 		state: "Maharashtra",
@@ -952,6 +953,9 @@ export function PurchaseOrderForm({
 				supplierGstin: "",
 				billToAddressId: "",
 				shipToAddressId: "",
+				paymentType: "Credit",
+				creditDays: 30,
+				advancePercentage: 0,
 			});
 			return;
 		}
@@ -978,6 +982,27 @@ export function PurchaseOrderForm({
 				form.lines.length > 0
 					? applyTaxSupplyToPOLines(form.lines, nextTaxSupplyType)
 					: form.lines;
+
+			const bankAccounts = Array.isArray(s.bank_accounts) ? s.bank_accounts : [];
+			const primaryBank =
+				bankAccounts.find((b: { is_primary?: boolean }) => b.is_primary) ||
+				bankAccounts[0];
+			const rawPaymentType = String(primaryBank?.payment_type || "credit").toLowerCase();
+			const paymentType =
+				rawPaymentType.startsWith("advance")
+					? "Advance"
+					: rawPaymentType.startsWith("immediate")
+						? "Immediate"
+						: "Credit";
+			const creditDays =
+				paymentType === "Credit"
+					? Number(primaryBank?.credit_days ?? 30) || 30
+					: 0;
+			const advancePercentage =
+				paymentType === "Advance"
+					? Number(primaryBank?.advance ?? 100) || 100
+					: 0;
+
 			patch({
 				supplierId: s.supplier_id,
 				supplierName: s.supplier_name,
@@ -989,6 +1014,9 @@ export function PurchaseOrderForm({
 				billToAddressId: form.billToAddressId || defaults.billToAddressId,
 				shipToAddressId: form.shipToAddressId || defaults.shipToAddressId,
 				lines: updatedLines,
+				paymentType,
+				creditDays,
+				advancePercentage,
 			});
 		} catch (err) {
 			console.error("Failed to fetch supplier details:", err);
@@ -1154,44 +1182,25 @@ export function PurchaseOrderForm({
 						
 						<div className="space-y-1">
 							<Label className="text-xs font-medium">Payment Type</Label>
-							{readOnly ? (
-								<ReadOnlyField value={form.paymentType} />
-							) : (
-								<AutocompleteSelect
-									options={PAYMENT_TYPE_OPTIONS}
-									value={form.paymentType}
-									onChange={(v) =>
-										patch({
-											paymentType: String(v),
-											creditDays:
-												String(v) === "Credit" ? form.creditDays || 30 : 0,
-										})
-									}
-									className={inputCls}
-								/>
-							)}
+							<ReadOnlyField value={form.paymentType || "—"} />
+							{!form.supplierId ? (
+								<p className="text-[11px] text-muted-foreground">
+									Fetched from supplier master
+								</p>
+							) : null}
 						</div>
-						<div className="space-y-1">
-							<Label className="text-xs font-medium">Credit Days</Label>
-							{readOnly ? (
-								<ReadOnlyField value={String(form.creditDays ?? "")} />
-							) : (
-								<Input
-									type="text"
-									inputMode="numeric"
-									value={form.paymentType === "Credit" ? String(form.creditDays ?? "") : "0"}
-									disabled={form.paymentType !== "Credit"}
-									onChange={(e) =>
-										patch({
-											creditDays: Number(sanitizeIntegerInput(e.target.value) || 0),
-										})
-									}
-									onKeyDown={preventInvalidNumberKeys}
-									className={cn(inputCls, form.paymentType !== "Credit" && "bg-muted/30 text-muted-foreground")}
-									placeholder="Enter Credit Days"
-								/>
-							)}
-						</div>
+						{form.paymentType === "Credit" ? (
+							<div className="space-y-1">
+								<Label className="text-xs font-medium">Credit Days</Label>
+								<ReadOnlyField value={String(form.creditDays ?? 0)} />
+							</div>
+						) : null}
+						{form.paymentType === "Advance" ? (
+							<div className="space-y-1">
+								<Label className="text-xs font-medium">Advance %</Label>
+								<ReadOnlyField value={String(form.advancePercentage ?? 0)} />
+							</div>
+						) : null}
 						<div id="po-field-state" className="space-y-1">
 							<Label className="text-xs font-medium">State</Label>
 							{readOnly ? (

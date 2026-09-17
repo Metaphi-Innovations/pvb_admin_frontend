@@ -522,8 +522,15 @@ export function mapDetail(raw: Record<string, unknown>): PurchaseOrder {
     supplierGstin,
     referenceNumber: "",
     currency: "INR",
-    paymentType: asString(raw.payment_type),
+    paymentType: (() => {
+      const paymentRaw = asString(raw.payment_type).toLowerCase();
+      if (paymentRaw.startsWith("advance")) return "Advance";
+      if (paymentRaw.startsWith("immediate")) return "Immediate";
+      if (paymentRaw) return "Credit";
+      return "";
+    })(),
     creditDays: asNumber(raw.credit_days),
+    advancePercentage: asNumber(raw.advance),
     deliveryTerms: "",
     expectedDeliveryDate: asDateOnly(raw.delivery_date),
     state: asString(raw.state),
@@ -669,6 +676,10 @@ function buildWriteBody(
     po_status: backendStatus,
     payment_type: form.paymentType || null,
     credit_days: form.creditDays ?? null,
+    advance:
+      form.paymentType?.toLowerCase() === "advance"
+        ? form.advancePercentage ?? null
+        : null,
     state: form.state?.trim() || "Maharashtra",
     warehouse_id: toUuidOrNull(form.warehouseId),
     billing_warehouse_id:
