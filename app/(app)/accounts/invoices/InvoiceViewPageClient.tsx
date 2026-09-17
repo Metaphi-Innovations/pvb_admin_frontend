@@ -29,6 +29,7 @@ import {
   resolveInvoiceAdditionalExpenses,
 } from "./invoice-additional-expenses";
 import { GoodsInvoiceAdditionalChargesEditor } from "./components/GoodsInvoiceAdditionalChargesEditor";
+import { InvoiceViewStatutorySection } from "./components/InvoiceViewStatutorySection";
 import { downloadInvoicePdf } from "./invoice-pdf";
 import {
   openProformaInvoicePreview,
@@ -543,10 +544,30 @@ export default function InvoiceViewPageClient({
     record.transportMode ||
       record.transporterName ||
       record.vehicleNo ||
-      record.ewayBillNo ||
-      record.eInvoiceNo ||
-      record.irn,
+      record.lrNo ||
+      record.transportDocNo ||
+      record.distanceKm,
   );
+
+  const showStatutorySection =
+    record.sourceType !== "service" && Boolean(record.salesInvoiceId);
+
+  const canGenerateStatutory =
+    record.invoiceStatus !== "cancelled" && Boolean(record.salesInvoiceId);
+
+  const handleGenerateIRN = () => {
+    showToast(
+      "IRN generation will be available once the PeriOne integration is connected.",
+      "info",
+    );
+  };
+
+  const handleGenerateEway = () => {
+    showToast(
+      "E-Way Bill generation will be available once the PeriOne integration is connected.",
+      "info",
+    );
+  };
 
   const narration =
     record.internalRemarks?.trim() ||
@@ -790,7 +811,7 @@ export default function InvoiceViewPageClient({
           </VoucherFormSectionCard>
 
           {hasTransport ? (
-            <VoucherFormSectionCard title="Transport & Statutory Details" highlight>
+            <VoucherFormSectionCard title="Transport Details" highlight>
               <div className={cn(INVOICE_FORM_GRID_CLASS, "lg:grid-cols-3 xl:grid-cols-5")}>
                 <Field label="Transport Mode" value={record.transportMode} />
                 <Field label="Transporter Name" value={record.transporterName} />
@@ -808,13 +829,18 @@ export default function InvoiceViewPageClient({
                 <Field label="LR Date" value={formatDisplayDate(record.lrDate)} />
                 <Field label="Transport Doc No." value={record.transportDocNo} />
                 <Field label="Transport Doc Date" value={formatDisplayDate(record.transportDocDate)} />
-                <Field label="E-Invoice Status" value={record.eInvoiceStatus} />
-                <Field label="E-Invoice No." value={record.eInvoiceNo} mono />
-                <Field label="IRN" value={record.irn} mono />
-                <Field label="E-Way Bill Status" value={record.ewayBillStatus} />
-                <Field label="E-Way Bill No." value={record.ewayBillNo} mono />
-                <Field label="E-Way Expiry" value={formatDisplayDate(record.ewayBillExpiryDate)} />
               </div>
+            </VoucherFormSectionCard>
+          ) : null}
+
+          {showStatutorySection ? (
+            <VoucherFormSectionCard title="E-Invoice & E-Way Bill" highlight>
+              <InvoiceViewStatutorySection
+                record={record}
+                canAct={canGenerateStatutory}
+                onGenerateEInvoice={handleGenerateIRN}
+                onGenerateEway={handleGenerateEway}
+              />
             </VoucherFormSectionCard>
           ) : null}
 

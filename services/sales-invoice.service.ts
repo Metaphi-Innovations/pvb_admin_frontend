@@ -322,6 +322,15 @@ export type SalesInvoiceDetailDto = SalesInvoiceListDto & {
     stock_transfer_id?: string;
     transfer_no?: string | null;
   } | null;
+  /** Nested statutory blocks from Sales Invoice View API. */
+  einvoice?: {
+    applicable: boolean;
+    status: string;
+    reason?: string;
+  } | null;
+  ewayBill?: {
+    status: string;
+  } | null;
 };
 
 export type PrepareDispatchInvoiceDto = {
@@ -1005,21 +1014,30 @@ export function mapSalesInvoiceDetailToRecord(
     roundOff: asNumber(dto.round_off_amount),
     irn: asString(dto.irn_number) || undefined,
     eInvoiceNo: asString(dto.acknowledgement_number) || undefined,
-    eInvoiceStatus: (dto.einvoice_status || dto.irn_number
-      ? statutoryStatus(dto.einvoice_status, Boolean(asString(dto.irn_number)))
-      : undefined) as InvoiceRecord["eInvoiceStatus"],
+    eInvoiceApplicable: dto.einvoice?.applicable ?? false,
+    eInvoiceApplicabilityReason: asString(dto.einvoice?.reason) || undefined,
+    eInvoiceStatus: (dto.einvoice?.status
+      ? statutoryStatus(dto.einvoice.status, Boolean(asString(dto.irn_number)))
+      : dto.einvoice_status || dto.irn_number
+        ? statutoryStatus(dto.einvoice_status, Boolean(asString(dto.irn_number)))
+        : "not_generated") as InvoiceRecord["eInvoiceStatus"],
     acknowledgementNo: asString(dto.acknowledgement_number) || undefined,
     acknowledgementDate: asDateOnly(dto.acknowledgement_date) || undefined,
     qrCodeAvailable: Boolean(asString(dto.signed_qr_code || dto.irn_number)),
     ewayBillNo: asString(dto.eway_bill_number) || undefined,
     ewayBillExpiryDate: asDateOnly(dto.eway_bill_valid_upto) || undefined,
     ewayBillGeneratedAt: asDateOnly(dto.eway_bill_date) || undefined,
-    ewayBillStatus: (dto.eway_bill_status || dto.eway_bill_number
+    ewayBillStatus: (dto.ewayBill?.status
       ? statutoryStatus(
-          dto.eway_bill_status,
+          dto.ewayBill.status,
           Boolean(asString(dto.eway_bill_number)),
         )
-      : undefined) as InvoiceRecord["ewayBillStatus"],
+      : dto.eway_bill_status || dto.eway_bill_number
+        ? statutoryStatus(
+            dto.eway_bill_status,
+            Boolean(asString(dto.eway_bill_number)),
+          )
+        : "not_generated") as InvoiceRecord["ewayBillStatus"],
     vehicleNo: asString(dto.dispatch?.vehicle_number) || undefined,
     transporterName: asString(dto.dispatch?.transporter) || undefined,
     transporterId: asString(dto.dispatch?.transporter_id) || undefined,

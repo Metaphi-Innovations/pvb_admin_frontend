@@ -48,10 +48,9 @@ import {
 	GstRegisteredToggleControl,
 } from "@/components/masters/GstRegistrationFields";
 import { BankDetailsFields } from "@/components/masters/BankDetailsFields";
-import {
-	fetchGstRegistrationDetailsAsync,
-	GST_REGISTRATION_TYPE_DEFAULT,
-} from "@/lib/masters/gst-compliance";
+import { GST_REGISTRATION_TYPE_DEFAULT } from "@/lib/masters/gst-compliance";
+import { useGstVerificationFlow } from "@/components/gst";
+import type { GstAutoFillPayload } from "@/components/gst";
 import { useCfDropdown, usePincode } from "@/hooks/masters";
 import { normalizePlaceName } from "@/lib/geography/india-post-normalize";
 
@@ -126,6 +125,7 @@ export interface ApiWarehouseMaster {
 	gstRegistrationType?: string;
 	registeredLegalName?: string;
 	registeredAddress?: string;
+	gstEinvoiceStatus?: string;
 	accountHolderName?: string;
 	bankName?: string;
 	branch?: string;
@@ -161,6 +161,7 @@ export interface WarehouseFormValues {
 	gstin: string;
 	registeredLegalName: string;
 	registeredAddress: string;
+	gstEinvoiceStatus: string;
 	accountHolderName: string;
 	bankName: string;
 	branch: string;
@@ -189,6 +190,7 @@ export const INITIAL_FORM: WarehouseFormValues = {
 	gstin: "",
 	registeredLegalName: "",
 	registeredAddress: "",
+	gstEinvoiceStatus: "",
 	accountHolderName: "",
 	bankName: "",
 	branch: "",
@@ -245,6 +247,7 @@ export function warehouseRecordToForm(record: ApiWarehouseMaster): WarehouseForm
 		gstin: record.gstNumber || "",
 		registeredLegalName: record.registeredLegalName || "",
 		registeredAddress: record.registeredAddress || "",
+		gstEinvoiceStatus: record.gstEinvoiceStatus || "",
 		accountHolderName: record.accountHolderName || "",
 		bankName: record.bankName || "",
 		branch: record.branch || "",
@@ -278,6 +281,7 @@ export function warehouseFormToRecordFields(
 	| "gstRegistrationType"
 	| "registeredLegalName"
 	| "registeredAddress"
+	| "gstEinvoiceStatus"
 	| "accountHolderName"
 	| "bankName"
 	| "branch"
@@ -310,6 +314,7 @@ export function warehouseFormToRecordFields(
 		gstRegistrationType: form.gstApplicable ? form.gstRegistrationType : GST_REGISTRATION_TYPE_DEFAULT,
 		registeredLegalName: form.gstApplicable ? form.registeredLegalName.trim() : "",
 		registeredAddress: form.gstApplicable ? form.registeredAddress.trim() : "",
+		gstEinvoiceStatus: form.gstApplicable ? form.gstEinvoiceStatus.trim() : "",
 		accountHolderName: form.accountHolderName.trim(),
 		bankName: form.bankName.trim(),
 		branch: form.branch.trim(),
@@ -897,13 +902,34 @@ export function WarehouseForm({
 		msg: string;
 		type: "success" | "error";
 	} | null>(null);
-	const [fetchingGst, setFetchingGst] = useState(false);
 
 	React.useEffect(() => {
 		if (!toast) return;
 		const t = setTimeout(() => setToast(null), 3200);
 		return () => clearTimeout(t);
 	}, [toast]);
+
+	const applyGstAutoFill = (payload: GstAutoFillPayload) => {
+		onChange({
+			...form,
+			registeredLegalName: payload.legalName,
+			registeredAddress: payload.legalAddress,
+			gstEinvoiceStatus: payload.details.einvoiceStatus || "",
+		});
+		setToast({
+			msg: "Legal name and legal address auto-filled from GSTIN.",
+			type: "success",
+		});
+	};
+
+	const gstVerification = useGstVerificationFlow({
+		onAutoFill: applyGstAutoFill,
+		onError: (message) => setToast({ msg: message, type: "error" }),
+	});
+
+	const handleFetchGst = async () => {
+		await gstVerification.verify(form.gstin);
+	};
 
 	const fileRefs = useRef<Record<string, HTMLInputElement | null>>({});
 	const [bulkDocumentTypeIds, setBulkDocumentTypeIds] = useState<string[]>([]);
@@ -1241,34 +1267,6 @@ export function WarehouseForm({
 		if (errors.district) onClearError("district");
 	};
 
-	const handleFetchGst = async () => {
-		if (!form.gstin.trim()) {
-			setToast({ msg: "Enter GSTIN before fetching details.", type: "error" });
-			return;
-		}
-		if (!validateGSTIN(form.gstin)) {
-			setToast({ msg: "Enter a valid 15-character GSTIN.", type: "error" });
-			return;
-		}
-		setFetchingGst(true);
-		try {
-			const details = await fetchGstRegistrationDetailsAsync(form.gstin);
-			if (!details) {
-				setToast({ msg: "Could not fetch GST details. Check GSTIN format.", type: "error" });
-				return;
-			}
-			onChange({
-				...form,
-				registeredLegalName: details.legalBusinessName || details.tradeName || "",
-				registeredAddress: details.registeredAddress || "",
-				warehouseName: form.warehouseName.trim() || details.tradeName || details.legalBusinessName || "",
-			});
-			setToast({ msg: "GST details fetched and applied.", type: "success" });
-		} finally {
-			setFetchingGst(false);
-		}
-	};
-
 	const inputCls = (key: string) =>
 		cn(
 			"h-8 text-xs",
@@ -1586,6 +1584,7 @@ export function WarehouseForm({
 										gstin: yes ? form.gstin : "",
 										registeredLegalName: yes ? form.registeredLegalName : "",
 										registeredAddress: yes ? form.registeredAddress : "",
+										gstEinvoiceStatus: yes ? form.gstEinvoiceStatus : "",
 									});
 									if (!yes) onClearError("gstin");
 								}}
@@ -1610,15 +1609,25 @@ export function WarehouseForm({
 								gstin: gst.gstin,
 								registeredLegalName: gst.registeredLegalName ?? "",
 								registeredAddress: gst.registeredAddress ?? "",
+								gstEinvoiceStatus: gst.gstRegistered ? form.gstEinvoiceStatus : "",
 							});
 							if (!gst.gstRegistered) onClearError("gstin");
 						}}
 						errors={errors}
-						fetchingGst={fetchingGst}
+						fetchingGst={gstVerification.loading}
 						onFetchGst={handleFetchGst}
 						inputClassName='h-8 text-xs'
 					/>
+					{form.gstApplicable && form.gstEinvoiceStatus ? (
+						<p className="mt-2 text-[11px] text-muted-foreground">
+							e-Invoice status (GST portal):{" "}
+							<span className="font-medium text-foreground">
+								{form.gstEinvoiceStatus}
+							</span>
+						</p>
+					) : null}
 				</ErpFormSection>
+				{gstVerification.dialog}
 			</div>
 			)}
 

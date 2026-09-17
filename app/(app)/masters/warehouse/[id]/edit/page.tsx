@@ -23,6 +23,7 @@ function warehouseApiRecordToForm(record: WarehouseListRecord): WarehouseFormVal
     gstin: record.gstNumber || "",
     registeredLegalName: record.registeredLegalName || "",
     registeredAddress: record.registeredGstAddress || "",
+    gstEinvoiceStatus: record.gstEinvoiceStatus || "",
     accountHolderName: record.accountHolderName || "",
     bankName: record.bankName || "",
     branch: record.branchName || "",
@@ -113,6 +114,9 @@ export default function EditWarehousePage() {
           registration_type: form.gstApplicable ? form.gstRegistrationType : null,
           registered_legal_name: form.gstApplicable ? form.registeredLegalName.trim() : null,
           registered_gst_address: form.gstApplicable ? form.registeredAddress.trim() : null,
+          gst_einvoice_status: form.gstApplicable
+            ? form.gstEinvoiceStatus.trim() || null
+            : null,
           account_holder_name: form.accountHolderName.trim() || null,
           bank_name: form.bankName.trim() || null,
           branch_name: form.branch.trim() || null,

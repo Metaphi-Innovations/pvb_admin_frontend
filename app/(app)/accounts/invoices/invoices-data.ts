@@ -311,6 +311,9 @@ export interface InvoiceRecord {
 	acknowledgementNo?: string;
 	acknowledgementDate?: string;
 	irn?: string;
+	/** From View API einvoice.applicable — warehouse GST e-invoice capability. */
+	eInvoiceApplicable?: boolean;
+	eInvoiceApplicabilityReason?: string;
 	eInvoiceStatus?:
 		| "not_applicable"
 		| "not_generated"
@@ -1007,6 +1010,8 @@ export type InvoiceFormInput = {
 	acknowledgementNo?: string;
 	acknowledgementDate?: string;
 	irn?: string;
+	eInvoiceApplicable?: boolean;
+	eInvoiceApplicabilityReason?: string;
 	eInvoiceStatus?:
 		| "not_applicable"
 		| "not_generated"
