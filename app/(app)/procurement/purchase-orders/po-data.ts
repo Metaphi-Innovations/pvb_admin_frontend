@@ -148,6 +148,8 @@ export interface PurchaseOrder {
   /** Backend `payment_type`: Immediate | Credit | Advance */
   paymentType: string;
   creditDays: number;
+  /** Advance percentage when paymentType is Advance */
+  advancePercentage: number;
   deliveryTerms: string;
   expectedDeliveryDate: string;
   state: string;
@@ -338,6 +340,7 @@ function migratePO(po: PurchaseOrder): PurchaseOrder {
     status: normalizePOStatus(po.status),
     paymentType,
     creditDays: po.creditDays ?? 0,
+    advancePercentage: po.advancePercentage ?? 0,
     state: po.state ?? "",
     warehouseId: po.warehouseId ?? null,
     warehouseName: po.warehouseName ?? po.shipping?.shipToLocation ?? "",

@@ -15,6 +15,19 @@ type AccountsSectionContextValue = {
 
 const AccountsSectionContext = createContext<AccountsSectionContextValue | null>(null);
 
+/** API-backed registers. Do not inject section demo vouchers while these pages are open. */
+function skipsAccountsSectionDemoSeed(pathname: string): boolean {
+  const path = pathname.split("?")[0]?.replace(/\/$/, "") || "/";
+  return (
+    path === "/accounts/reports/day-book" ||
+    path.startsWith("/accounts/reports/day-book/") ||
+    path === "/accounts/reports/general-ledger" ||
+    path.startsWith("/accounts/reports/general-ledger/") ||
+    path === "/accounts/reports/ledger" ||
+    path.startsWith("/accounts/reports/ledger/")
+  );
+}
+
 /**
  * Tracks the active Accounts nav section from the URL and lazily seeds that section’s demo data.
  * No accordion state — left sidebar always shows only this section.
@@ -27,12 +40,13 @@ export function AccountsAccordionProvider({ children }: { children: React.ReactN
   );
 
   useEffect(() => {
+    if (skipsAccountsSectionDemoSeed(pathname)) return;
     // Defer seed work until after route paint so navigation stays responsive.
     const timer = window.setTimeout(() => {
       scheduleAccountsSectionSeed(activeAccountsSection);
     }, 150);
     return () => window.clearTimeout(timer);
-  }, [activeAccountsSection]);
+  }, [activeAccountsSection, pathname]);
 
   const value = useMemo(
     () => ({ activeAccountsSection }),

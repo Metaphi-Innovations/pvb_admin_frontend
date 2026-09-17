@@ -76,7 +76,7 @@ export interface TransactionDetail {
   approvalDate?: string;
   approvalStatus?: string;
   attachments: TransactionAttachment[];
-  sourceHref: string;
+  sourceHref?: string;
   sourceLabel: string;
   /** Optional edit route for mock / voucher forms */
   editHref?: string;
@@ -525,7 +525,28 @@ function detailFromDayBookEntry(entry: DayBookVoucherGroup): TransactionDetail {
 function detailFromCoaRow(row: GeneralLedgerRow | CoaTransactionRow): TransactionDetail | null {
   if (row.isOpeningRow) return null;
 
-  if (row.voucherId) {
+  const apiVoucherId = typeof row.voucherId === "string" ? row.voucherId : null;
+  if (apiVoucherId) {
+    const debit = typeof row.debit === "number" ? row.debit : 0;
+    const credit = typeof row.credit === "number" ? row.credit : 0;
+    return {
+      voucherNumber: row.voucherNo,
+      voucherType: row.voucherType,
+      voucherDate: row.date,
+      status: "Posted",
+      referenceNumber: row.referenceNo,
+      partyName: "contraLedger" in row ? row.contraLedger : undefined,
+      totalAmount: Math.max(debit, credit),
+      debit,
+      credit,
+      narration: row.narration,
+      attachments: [],
+      sourceHref: row.viewHref,
+      sourceLabel: row.viewLabel ?? "Open Voucher",
+    };
+  }
+
+  if (typeof row.voucherId === "number") {
     const v = getVoucherById(row.voucherId);
     if (v) {
       return detailFromVoucher(v, {

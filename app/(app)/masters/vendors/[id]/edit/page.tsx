@@ -116,6 +116,11 @@ function supplierToForm(supplier: SupplierListRecord): VendorFormValues {
         : (supplier.bankAccounts?.[0]?.payment_type as VendorFormValues["paymentType"])) ||
       "credit",
     creditDays: String(supplier.bankAccounts?.[0]?.credit_days ?? "30"),
+    advancePercentage:
+      supplier.bankAccounts?.[0]?.advance != null &&
+      supplier.bankAccounts?.[0]?.advance !== ""
+        ? String(supplier.bankAccounts[0].advance)
+        : "",
   };
 }
 
@@ -263,6 +268,10 @@ export default function EditSupplierPage() {
           is_primary: true,
           payment_type: form.paymentType,
           credit_days: form.creditDays,
+          advance:
+            form.paymentType === "advance" && form.advancePercentage
+              ? form.advancePercentage
+              : null,
         },
       ],
       products: form.vendorProducts.map((p) => ({

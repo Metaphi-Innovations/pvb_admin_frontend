@@ -314,6 +314,67 @@ export async function fetchDeliveryChallanPdf(
   };
 }
 
+export type DeliveryChallanEmailPreview = {
+  to: string | null;
+  subject: string;
+  text: string;
+  html: string;
+  customerName: string;
+  dcNo: string;
+  dcDate: string;
+  orderNo: string;
+  vehicleNo: string;
+  transporter: string;
+  attachmentFileName: string;
+  canSend: boolean;
+  missingReason?: string;
+};
+
+export async function fetchDeliveryChallanEmailPreview(
+  id: string,
+  signal?: AbortSignal,
+): Promise<DeliveryChallanEmailPreview> {
+  const response = await api.get(
+    API_ENDPOINTS.WAREHOUSE.DISPATCH.CHALLAN_EMAIL_PREVIEW(id),
+    { signal },
+  );
+  const data = (response.data?.data || {}) as Record<string, unknown>;
+  return {
+    to: asString(data.to) || null,
+    subject: asString(data.subject),
+    text: asString(data.text),
+    html: asString(data.html),
+    customerName: asString(data.customer_name),
+    dcNo: asString(data.dc_no),
+    dcDate: asString(data.dc_date),
+    orderNo: asString(data.order_no),
+    vehicleNo: asString(data.vehicle_no),
+    transporter: asString(data.transporter),
+    attachmentFileName: asString(data.attachment_file_name),
+    canSend: Boolean(data.can_send),
+    missingReason: asString(data.missing_reason) || undefined,
+  };
+}
+
+export async function sendDeliveryChallanEmail(
+  id: string,
+  options?: { to?: string; withGoodsValue?: boolean; signal?: AbortSignal },
+): Promise<{ to: string; dcNo: string }> {
+  const response = await api.post(
+    API_ENDPOINTS.WAREHOUSE.DISPATCH.SEND_CHALLAN_EMAIL(id),
+    {
+      ...(options?.to ? { to: options.to } : {}),
+      with_goods_value: options?.withGoodsValue !== false,
+    },
+    { signal: options?.signal },
+  );
+  const data = (response.data?.data || {}) as Record<string, unknown>;
+  return {
+    to: asString(data.to),
+    dcNo: asString(data.dc_no),
+  };
+}
+
 /** Open official server PDF in a new tab for printing. */
 export async function printDeliveryChallan(
   id: string,

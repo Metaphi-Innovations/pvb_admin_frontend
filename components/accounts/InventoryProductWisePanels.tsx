@@ -337,16 +337,21 @@ function InventoryTableInner({
 export function InventoryProductWisePanel({
   dateFrom,
   dateTo,
+  warehouseId: controlledWarehouseId,
+  hideWarehouseFilter = false,
 }: {
   dateFrom: string;
   dateTo: string;
+  warehouseId?: string;
+  hideWarehouseFilter?: boolean;
 }) {
   const [rows, setRows] = useState<InventoryProductWiseRow[]>([]);
   const [summary, setSummary] = useState<{ totalProducts: number; totalInventoryValue: number } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [drillProduct, setDrillProduct] = useState<InventoryProductWiseRow | null>(null);
-  const [warehouseId, setWarehouseId] = useState("");
+  const [localWarehouseId, setLocalWarehouseId] = useState("");
+  const warehouseId = hideWarehouseFilter ? (controlledWarehouseId ?? "") : localWarehouseId;
 
   const getCellValue = useCallback((row: InventoryProductWiseRow, key: string) => {
     return (row as unknown as Record<string, unknown>)[key];
@@ -421,9 +426,11 @@ export function InventoryProductWisePanel({
   if (drillProduct) {
     return (
       <div className="flex flex-col flex-1 min-h-0">
-        <div className="flex items-center justify-between gap-3 px-4 py-2 border-b border-border bg-muted/20 flex-shrink-0">
-          <WarehouseFilterSelect value={warehouseId} onChange={setWarehouseId} />
-        </div>
+        {hideWarehouseFilter ? null : (
+          <div className="flex items-center justify-between gap-3 px-4 py-2 border-b border-border bg-muted/20 flex-shrink-0">
+            <WarehouseFilterSelect value={warehouseId} onChange={setLocalWarehouseId} />
+          </div>
+        )}
         <ProductTransactionsPanel
           ledgerKind="stock-in-hand"
           product={drillProduct}
@@ -439,14 +446,16 @@ export function InventoryProductWisePanel({
   return (
     <AccountsColumnFilterContext.Provider value={filterCtx}>
       <div className="flex flex-col flex-1 min-h-0">
-        <div className="flex items-center justify-between gap-3 px-4 py-2 border-b border-border bg-muted/20 flex-shrink-0">
-          <WarehouseFilterSelect value={warehouseId} onChange={setWarehouseId} />
-          <p className="text-[11px] text-muted-foreground truncate">
-            {warehouseId
-              ? "Showing product stock for the selected warehouse"
-              : "Select a warehouse to view stock per product in that warehouse"}
-          </p>
-        </div>
+        {hideWarehouseFilter ? null : (
+          <div className="flex items-center justify-between gap-3 px-4 py-2 border-b border-border bg-muted/20 flex-shrink-0">
+            <WarehouseFilterSelect value={warehouseId} onChange={setLocalWarehouseId} />
+            <p className="text-[11px] text-muted-foreground truncate">
+              {warehouseId
+                ? "Showing product stock for the selected warehouse"
+                : "Select a warehouse to view stock per product in that warehouse"}
+            </p>
+          </div>
+        )}
         {loading ? (
           <ProductWiseSkeleton />
         ) : error ? (

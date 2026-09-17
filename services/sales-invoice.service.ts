@@ -1282,7 +1282,88 @@ export const SalesInvoiceService = {
     return response.data as Blob;
   },
 
+  async fetchEmailPreview(
+    salesInvoiceId: string,
+    signal?: AbortSignal,
+  ): Promise<SalesInvoiceEmailPreview> {
+    const response = await axiosInstance.get(
+      API_ENDPOINTS.ACCOUNTS.SALES_INVOICE.EMAIL_PREVIEW(salesInvoiceId),
+      { signal },
+    );
+    const data = ((response.data as Record<string, unknown>)?.data ||
+      {}) as Record<string, unknown>;
+    return {
+      to: asString(data.to) || null,
+      subject: asString(data.subject),
+      text: asString(data.text),
+      html: asString(data.html),
+      invoiceType:
+        asString(data.invoice_type).toUpperCase() === "STOCK_TRANSFER"
+          ? "STOCK_TRANSFER"
+          : "SALES",
+      recipientLabel: asString(data.recipient_label),
+      invoiceNo: asString(data.invoice_no),
+      invoiceDate: asString(data.invoice_date) || undefined,
+      orderNo: asString(data.order_no) || undefined,
+      fromWarehouse: asString(data.from_warehouse) || undefined,
+      toWarehouse: asString(data.to_warehouse) || undefined,
+      dispatchDate: asString(data.dispatch_date) || undefined,
+      taxableAmount: asString(data.taxable_amount) || undefined,
+      gstAmount: asString(data.gst_amount) || undefined,
+      totalAmount: asString(data.total_amount) || undefined,
+      attachmentFileName: asString(data.attachment_file_name),
+      canSend: Boolean(data.can_send),
+      missingReason: asString(data.missing_reason) || undefined,
+    };
+  },
+
+  async sendEmail(
+    salesInvoiceId: string,
+    options?: { to?: string; signal?: AbortSignal },
+  ): Promise<{
+    to: string;
+    invoiceNo: string;
+    invoiceType: "SALES" | "STOCK_TRANSFER";
+  }> {
+    const response = await axiosInstance.post(
+      API_ENDPOINTS.ACCOUNTS.SALES_INVOICE.SEND_EMAIL(salesInvoiceId),
+      options?.to ? { to: options.to } : {},
+      { signal: options?.signal },
+    );
+    const data = ((response.data as Record<string, unknown>)?.data ||
+      {}) as Record<string, unknown>;
+    return {
+      to: asString(data.to),
+      invoiceNo: asString(data.invoice_no),
+      invoiceType:
+        asString(data.invoice_type).toUpperCase() === "STOCK_TRANSFER"
+          ? "STOCK_TRANSFER"
+          : "SALES",
+    };
+  },
+
   isUuid(value: string | null | undefined): boolean {
     return Boolean(value && UUID_RE.test(value.trim()));
   },
+};
+
+export type SalesInvoiceEmailPreview = {
+  to: string | null;
+  subject: string;
+  text: string;
+  html: string;
+  invoiceType: "SALES" | "STOCK_TRANSFER";
+  recipientLabel: string;
+  invoiceNo: string;
+  invoiceDate?: string;
+  orderNo?: string;
+  fromWarehouse?: string;
+  toWarehouse?: string;
+  dispatchDate?: string;
+  taxableAmount?: string;
+  gstAmount?: string;
+  totalAmount?: string;
+  attachmentFileName: string;
+  canSend: boolean;
+  missingReason?: string;
 };

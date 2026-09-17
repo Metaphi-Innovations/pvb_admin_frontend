@@ -3,7 +3,7 @@
 import React, { useCallback, useMemo, useState, useEffect, useRef } from "react";
 import { MasterListing } from "@/components/listing/MasterListing";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
-import { Eye, Truck, RotateCcw, Pencil } from "lucide-react";
+import { Eye, Truck, RotateCcw, Pencil, Mail } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { PackingRecord } from "../types";
@@ -38,7 +38,7 @@ import {
   type PackingDoneFilterField,
 } from "@/services/packing-done.service";
 import { invalidatePurchaseOrderModuleListingQueries } from "@/lib/procurement/invalidate-po-listing-queries";
-
+import { SendPackingListEmailModal } from "./SendPackingListEmailModal";
 type PackingSourceTab = Exclude<OrderTypeFilterTab, "all">;
 
 interface DonePackingListingProps {
@@ -102,6 +102,10 @@ export function DonePackingListing({ sourceFilter }: DonePackingListingProps) {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [revertTarget, setRevertTarget] = useState<PackingRecord | null>(null);
+  const [sendEmailPackingListId, setSendEmailPackingListId] = useState<
+    string | null
+  >(null);
+  const [sendEmailOpen, setSendEmailOpen] = useState(false);
 
   // Track which filter columns have already been loaded
   const loadedFiltersRef = useRef<Set<string>>(new Set());
@@ -432,6 +436,20 @@ export function DonePackingListing({ sourceFilter }: DonePackingListingProps) {
       },
     },
     {
+      label: "Send Email",
+      action: "send_packing_list_email",
+      icon: Mail,
+      hide: (row) => !row.packingListId,
+      onClick: (row) => {
+        if (!row.packingListId) {
+          showToast("Packing list id not found for this record.", "error");
+          return;
+        }
+        setSendEmailPackingListId(row.packingListId);
+        setSendEmailOpen(true);
+      },
+    },
+    {
       label: "Revert",
       action: "revert",
       icon: RotateCcw,
@@ -478,6 +496,21 @@ export function DonePackingListing({ sourceFilter }: DonePackingListingProps) {
         emptyMessage="packing done records"
         searchPlaceholder="Search packing done..."
         onOpenFilter={handleOpenFilter}
+      />
+
+      <SendPackingListEmailModal
+        open={sendEmailOpen}
+        packingListId={sendEmailPackingListId}
+        onOpenChange={(open) => {
+          setSendEmailOpen(open);
+          if (!open) setSendEmailPackingListId(null);
+        }}
+        onSent={(result) => {
+          showToast(
+            `Packing List email sent to ${result.to}.`,
+            "success",
+          );
+        }}
       />
 
       <Dialog open={!!revertTarget} onOpenChange={() => setRevertTarget(null)}>

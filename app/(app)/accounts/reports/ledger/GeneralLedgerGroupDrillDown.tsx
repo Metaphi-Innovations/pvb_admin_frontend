@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
-import { MoneyCell } from "@/components/accounts/MoneyAmount";
 import {
   AccountsTable,
   AccountsTableBody,
@@ -12,29 +11,42 @@ import {
   AccountsTableRow,
   AccountsTableScroll,
 } from "@/components/accounts/AccountsTable";
-import { buildGeneralLedgerHref } from "@/lib/accounts/general-ledger-data";
-import type { GeneralLedgerGroupDrillDown } from "./general-ledger-data";
+import { buildGeneralLedgerHref } from "@/lib/accounts/general-ledger-href";
+import type { GeneralLedgerGroupChild } from "@/types/general-ledger.types";
+import { formatApiMoneyOrDash } from "./general-ledger-api-view";
 
 export function GeneralLedgerGroupDrillDownView({
-  drillDown,
+  groupName,
+  parentGroup,
+  children,
   dateFrom,
   dateTo,
   source,
   fyId,
+  branch,
+  warehouse,
   onSelectLedger,
+  onSelectGroup,
 }: {
-  drillDown: GeneralLedgerGroupDrillDown;
+  groupName: string;
+  parentGroup?: string;
+  children: GeneralLedgerGroupChild[];
   dateFrom: string;
   dateTo: string;
   source?: string;
   fyId?: string;
+  branch?: string;
+  warehouse?: string;
   onSelectLedger: (ledgerId: string) => void;
+  onSelectGroup: (groupId: string) => void;
 }) {
   const linkParams = {
     fromDate: dateFrom,
     toDate: dateTo,
     source,
     financialYearId: fyId,
+    branch,
+    warehouse,
   };
 
   return (
@@ -43,9 +55,9 @@ export function GeneralLedgerGroupDrillDownView({
         <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
           Account Group Drill-down
         </p>
-        <h2 className="text-sm font-bold text-navy-700 mt-0.5">{drillDown.groupName}</h2>
-        {drillDown.parentGroup ? (
-          <p className="text-[11px] text-muted-foreground mt-0.5 truncate">{drillDown.parentGroup}</p>
+        <h2 className="text-sm font-bold text-navy-700 mt-0.5">{groupName}</h2>
+        {parentGroup ? (
+          <p className="text-[11px] text-muted-foreground mt-0.5 truncate">{parentGroup}</p>
         ) : null}
       </div>
       <AccountsTableScroll className="flex-1 min-h-0">
@@ -62,15 +74,15 @@ export function GeneralLedgerGroupDrillDownView({
             </AccountsTableHeadRow>
           </AccountsTableHead>
           <AccountsTableBody>
-            {drillDown.children.length === 0 ? (
+            {children.length === 0 ? (
               <AccountsTableRow>
                 <AccountsTableCell colSpan={7} className="accounts-table-empty py-10">
                   No child groups or ledgers under this account group.
                 </AccountsTableCell>
               </AccountsTableRow>
             ) : (
-              drillDown.children.map((row) => {
-                const isGroup = row.nodeLevel === "account_group";
+              children.map((row) => {
+                const isGroup = row.node_type === "GROUP";
                 const href = isGroup
                   ? buildGeneralLedgerHref({ groupId: row.id, ...linkParams })
                   : buildGeneralLedgerHref({ ledgerId: row.id, ...linkParams });
@@ -80,23 +92,33 @@ export function GeneralLedgerGroupDrillDownView({
                     key={row.id}
                     className="group cursor-pointer hover:bg-muted/20"
                     onClick={() => {
-                      if (isGroup) {
-                        window.location.href = href;
-                      } else {
-                        onSelectLedger(String(row.id));
-                      }
+                      if (isGroup) onSelectGroup(row.id);
+                      else onSelectLedger(row.id);
                     }}
                   >
                     <AccountsTableCell className="font-medium max-w-[220px] truncate" title={row.name}>
+                      {row.code ? (
+                        <span className="font-mono text-[11px] text-muted-foreground mr-1.5">
+                          {row.code}
+                        </span>
+                      ) : null}
                       {row.name}
                     </AccountsTableCell>
                     <AccountsTableCell className="text-muted-foreground whitespace-nowrap">
                       {isGroup ? "Group" : "Ledger"}
                     </AccountsTableCell>
-                    <MoneyCell amount={row.debit} dashIfZero className="accounts-table-td" />
-                    <MoneyCell amount={row.credit} dashIfZero className="accounts-table-td" />
-                    <MoneyCell amount={row.closingDebit} dashIfZero className="accounts-table-td" />
-                    <MoneyCell amount={row.closingCredit} dashIfZero className="accounts-table-td" />
+                    <AccountsTableCell align="right" money>
+                      {formatApiMoneyOrDash(row.debit)}
+                    </AccountsTableCell>
+                    <AccountsTableCell align="right" money>
+                      {formatApiMoneyOrDash(row.credit)}
+                    </AccountsTableCell>
+                    <AccountsTableCell align="right" money>
+                      {formatApiMoneyOrDash(row.closing_debit)}
+                    </AccountsTableCell>
+                    <AccountsTableCell align="right" money>
+                      {formatApiMoneyOrDash(row.closing_credit)}
+                    </AccountsTableCell>
                     <AccountsTableCell align="right" className="w-10">
                       <Link
                         href={href}

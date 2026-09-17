@@ -9,6 +9,7 @@ import {
   FileText,
   IndianRupee,
   ListOrdered,
+  Mail,
   RotateCcw,
   Scissors,
 } from "lucide-react";
@@ -28,6 +29,7 @@ import {
   POActionConfirmModal,
   type POActionConfirmType,
 } from "../components/POActionConfirmModal";
+import { SendPOEmailModal } from "../components/SendPOEmailModal";
 import { Toast } from "../../components/ProcurementUI";
 import {
   PurchaseOrderForm,
@@ -110,6 +112,7 @@ export default function PODetailPage() {
   );
   const [rawLoading, setRawLoading] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
+  const [sendEmailOpen, setSendEmailOpen] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -259,6 +262,16 @@ export default function PODetailPage() {
       >
         <FileText className="w-3.5 h-3.5" /> {pdfLoading ? "Generating..." : "Download PDF"}
       </Button>
+      {!["draft", "cancelled"].includes(po.status) && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 text-xs gap-1.5"
+          onClick={() => setSendEmailOpen(true)}
+        >
+          <Mail className="w-3.5 h-3.5" /> Send Email
+        </Button>
+      )}
     </>
   );
 
@@ -446,6 +459,18 @@ export default function PODetailPage() {
                 type: "error",
               });
             },
+          });
+        }}
+      />
+
+      <SendPOEmailModal
+        open={sendEmailOpen}
+        purchaseOrderId={po.id}
+        onOpenChange={setSendEmailOpen}
+        onSent={(result) => {
+          setToast({
+            msg: `PO email sent to ${result.to}.`,
+            type: "success",
           });
         }}
       />

@@ -9,8 +9,10 @@ import {
   parseSalesInvoiceTabParam,
   withReturnTo,
 } from "@/app/(app)/accounts/invoices/invoice-utils";
-import { Ban, Download, Plus } from "lucide-react";
+import { Ban, Download, Mail, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { showToast } from "@/lib/toast";
+import { SendSalesInvoiceEmailModal } from "./SendSalesInvoiceEmailModal";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import {
   AccountsTable,
@@ -49,6 +51,7 @@ import {
 } from "@/lib/accounts/report-export-presentation";
 import {
   AccountsEditAction,
+  AccountsMoreActions,
   AccountsTableActionCell,
   AccountsViewAction,
   ACCOUNTS_ACTION_BTN_CLASS,
@@ -425,6 +428,7 @@ function SalesInvoicesListing({
   hasToolbarFilters,
   onCancel,
   onPrint,
+  onSendEmail,
 }: {
   tab: SalesInvoiceTabId;
   listReturnHref: string;
@@ -440,6 +444,7 @@ function SalesInvoicesListing({
   hasToolbarFilters: boolean;
   onCancel: (row: SalesInvoiceListRow) => void;
   onPrint: (row: SalesInvoiceListRow) => void;
+  onSendEmail: (row: SalesInvoiceListRow) => void;
 }) {
   const visible = useAccountsFilteredRows(toolbarRows);
   return (
@@ -471,6 +476,7 @@ function SalesInvoicesListing({
         hasToolbarFilters={hasToolbarFilters}
         onCancel={onCancel}
         onPrint={onPrint}
+        onSendEmail={onSendEmail}
       />
     </AccountsTableListing>
   );
@@ -481,18 +487,27 @@ function RowActions({
   listReturnHref,
   onCancel,
   onPrint,
+  onSendEmail,
 }: {
   row: SalesInvoiceListRow;
   listReturnHref: string;
   onCancel: (row: SalesInvoiceListRow) => void;
   onPrint: (row: SalesInvoiceListRow) => void;
+  onSendEmail: (row: SalesInvoiceListRow) => void;
 }) {
   const invoiceId = String(row.salesInvoiceId || row.invoiceId);
   const showOfficialDownloads = row.canDownloadPi;
+  const showSendEmail =
+    row.canDownloadTaxInvoice &&
+    row.invoiceStatus !== "cancelled" &&
+    (row.sourceType === "sales_order" ||
+      row.sourceType === "stock_transfer" ||
+      row.sourceType === "sample_order");
   const viewHref = withReturnTo(row.viewHref, listReturnHref);
   const editHref = row.editHref
     ? withReturnTo(row.editHref, listReturnHref)
     : null;
+  const showMoreMenu = showSendEmail || row.canCancel;
 
   const handleOfficialError = (error: unknown, fallback: string) => {
     const err = error as { response?: { data?: { message?: string } }; message?: string };
@@ -554,16 +569,28 @@ function RowActions({
       {row.canEdit && editHref ? (
         <AccountsEditAction href={editHref} title="Edit Invoice" />
       ) : null}
-      {row.canCancel ? (
-        <button
-          type="button"
-          title="Cancel Invoice"
-          aria-label="Cancel Invoice"
-          className={cn(ACCOUNTS_ACTION_BTN_CLASS, "hover:bg-red-50")}
-          onClick={() => onCancel(row)}
-        >
-          <Ban className={cn(ACCOUNTS_ACTION_ICON_CLASS, "text-red-500")} />
-        </button>
+      {showMoreMenu ? (
+        <AccountsMoreActions contentClassName="w-48">
+          {showSendEmail ? (
+            <DropdownMenuItem
+              className="text-xs gap-2"
+              onClick={() => onSendEmail(row)}
+            >
+              <Mail className="w-3.5 h-3.5" />
+              Send Email
+            </DropdownMenuItem>
+          ) : null}
+          {showSendEmail && row.canCancel ? <DropdownMenuSeparator /> : null}
+          {row.canCancel ? (
+            <DropdownMenuItem
+              className="text-xs gap-2 text-red-600 focus:text-red-600"
+              onClick={() => onCancel(row)}
+            >
+              <Ban className="w-3.5 h-3.5" />
+              Cancel Invoice
+            </DropdownMenuItem>
+          ) : null}
+        </AccountsMoreActions>
       ) : null}
     </AccountsTableActionCell>
   );
@@ -620,6 +647,7 @@ function SalesInvoicesTable({
   hasToolbarFilters,
   onCancel,
   onPrint,
+  onSendEmail,
 }: {
   tab: SalesInvoiceTabId;
   listReturnHref: string;
@@ -634,6 +662,7 @@ function SalesInvoicesTable({
   hasToolbarFilters: boolean;
   onCancel: (row: SalesInvoiceListRow) => void;
   onPrint: (row: SalesInvoiceListRow) => void;
+  onSendEmail: (row: SalesInvoiceListRow) => void;
 }) {
   const meta = SALES_INVOICE_TAB_META[tab];
   const ctx = useAccountsColumnFilterContext();
@@ -736,6 +765,7 @@ function SalesInvoicesTable({
                     listReturnHref={listReturnHref}
                     onCancel={onCancel}
                     onPrint={onPrint}
+                    onSendEmail={onSendEmail}
                   />
                 </AccountsTableCell>
               </AccountsTableRow>
@@ -808,6 +838,7 @@ function SalesInvoicesTable({
                     listReturnHref={listReturnHref}
                     onCancel={onCancel}
                     onPrint={onPrint}
+                    onSendEmail={onSendEmail}
                   />
                 </AccountsTableCell>
               </AccountsTableRow>
@@ -887,6 +918,7 @@ function SalesInvoicesTable({
                   listReturnHref={listReturnHref}
                   onCancel={onCancel}
                   onPrint={onPrint}
+                  onSendEmail={onSendEmail}
                 />
               </AccountsTableCell>
             </AccountsTableRow>
@@ -908,6 +940,8 @@ export default function SalesInvoicesPageClient() {
   const [financialYearId, setFinancialYearId] = useState("all");
   const [branches, setBranches] = useState<string[]>([]);
   const [cancelTarget, setCancelTarget] = useState<SalesInvoiceListRow | null>(null);
+  const [sendEmailInvoiceId, setSendEmailInvoiceId] = useState<string | null>(null);
+  const [sendEmailOpen, setSendEmailOpen] = useState(false);
 
   const [tabState, setTabState] = useState<Record<SalesInvoiceTabId, TabCache>>({
     all: createEmptyTabCache(),
@@ -1344,6 +1378,10 @@ export default function SalesInvoicesPageClient() {
             hasToolbarFilters={hasToolbarFilters}
             onCancel={setCancelTarget}
             onPrint={handlePrint}
+            onSendEmail={(row) => {
+              setSendEmailInvoiceId(String(row.salesInvoiceId || row.invoiceId));
+              setSendEmailOpen(true);
+            }}
           />
         </AccountsPageShell>
       </AccountsColumnFilterProvider>
@@ -1353,6 +1391,23 @@ export default function SalesInvoicesPageClient() {
         onClose={() => setCancelTarget(null)}
         invoiceNo={cancelTarget?.invoiceNo ?? ""}
         onConfirm={handleCancelConfirm}
+      />
+
+      <SendSalesInvoiceEmailModal
+        open={sendEmailOpen}
+        salesInvoiceId={sendEmailInvoiceId}
+        onOpenChange={(open) => {
+          setSendEmailOpen(open);
+          if (!open) setSendEmailInvoiceId(null);
+        }}
+        onSent={(result) => {
+          showToast(
+            result.invoiceType === "STOCK_TRANSFER"
+              ? `Stock Transfer Invoice email sent to ${result.to}.`
+              : `Tax Invoice email sent to ${result.to}.`,
+            "success",
+          );
+        }}
       />
     </div>
   );
