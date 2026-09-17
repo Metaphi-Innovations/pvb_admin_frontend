@@ -18,13 +18,33 @@ export function BillWiseOutstandingButton({
   ledger,
   records,
   from,
+  href,
   className,
 }: {
   ledger: ChartOfAccount | null | undefined;
   records?: ChartOfAccount[];
   from?: "coa" | "gl";
+  /** When set, skip local Chart of Accounts detection and use this href. */
+  href?: string | null;
   className?: string;
 }) {
+  if (href) {
+    return (
+      <Button
+        asChild
+        type="button"
+        variant="outline"
+        size="sm"
+        className={cn("h-8 text-xs gap-1.5", className)}
+      >
+        <Link href={href}>
+          <ListOrdered className="w-3.5 h-3.5" />
+          Bill-wise Outstanding
+        </Link>
+      </Button>
+    );
+  }
+
   if (!ledger || !canShowBillWiseOutstanding(ledger, records)) return null;
 
   return (

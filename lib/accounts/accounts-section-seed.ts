@@ -127,8 +127,6 @@ export function ensureAccountsSectionData(groupId: AccountsNavGroupId): void {
         .then((m) => m.ensureBankBookDemoOnPageLoad())
         .then(() => import("@/app/(app)/accounts/reports/cash-book/cash-book-demo-seed"))
         .then((m) => m.ensureCashBookDemoOnPageLoad())
-        .then(() => import("./general-ledger-demo-seed"))
-        .then((m) => m.ensureGeneralLedgerDemoOnPageLoad())
         .then(() => import("./pl-demo-seed"))
         .then((m) => m.ensurePlDemoOnPageLoad())
         .then(finish)

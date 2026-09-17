@@ -13,8 +13,10 @@ export const GENERAL_LEDGER_SOURCE_REPORTS = {
 export type GeneralLedgerSourceReport = keyof typeof GENERAL_LEDGER_SOURCE_REPORTS;
 
 export interface GeneralLedgerDrillDownParams {
-  ledgerId?: number;
-  groupId?: number;
+  /** Ledger AccountLedger UUID. Numeric ids remain accepted only for legacy demo links. */
+  ledgerId?: string | number;
+  /** Account group or subgroup UUID. */
+  groupId?: string | number;
   fromDate?: string;
   toDate?: string;
   source?: GeneralLedgerSourceReport | string;
@@ -186,13 +188,6 @@ export interface GeneralLedgerListingFilters {
   ledgerType: string;
   parentGroup: string;
   search: string;
-}
-
-export interface GeneralLedgerDemoScenario {
-  id: string;
-  label: string;
-  ledgerName: string;
-  ledgerId: number | null;
 }
 
 export interface GeneralLedgerVoucherTypeOption {

@@ -820,6 +820,16 @@ export const API_ENDPOINTS = {
         FILTERS: "/accounts/reports/trial-balance/filters",
         EXPORT: "/accounts/reports/trial-balance/export",
       },
+      GENERAL_LEDGER: {
+        LIST: "/accounts/reports/general-ledger",
+        FILTERS: "/accounts/reports/general-ledger/filters",
+        EXPORT: "/accounts/reports/general-ledger/export",
+      },
+      DAY_BOOK: {
+        LIST: "/accounts/reports/day-book",
+        FILTERS: "/accounts/reports/day-book/filters",
+        EXPORT: "/accounts/reports/day-book/export",
+      },
     },
     DEBIT_NOTE: {
       CONFIG: "/accounts/debit-note/config",

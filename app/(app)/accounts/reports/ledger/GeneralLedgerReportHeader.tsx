@@ -1,18 +1,13 @@
 "use client";
 
-import { ACCOUNTS_COMPANY_NAME } from "@/lib/accounts/report-export-presentation";
 import { cn } from "@/lib/utils";
-import { formatGeneralLedgerDate } from "./general-ledger-data";
-
-const COMPANY_ADDRESS = "Plot 42, Agri Tech Park, Gachibowli, Hyderabad — 500032";
-const COMPANY_CONTACT = "+91 40 4521 8800";
-const COMPANY_EMAIL = "accounts@dharitrisutra.in";
-
-export function formatGeneralLedgerPeriod(dateFrom: string, dateTo: string): string {
-  return `${formatGeneralLedgerDate(dateFrom)} to ${formatGeneralLedgerDate(dateTo)}`;
-}
+import { formatGlPeriod } from "./general-ledger-api-view";
 
 export function GeneralLedgerReportHeader({
+  companyName,
+  companyAddress,
+  companyContact,
+  companyEmail,
   ledgerName,
   ledgerCode,
   parentGroup,
@@ -24,26 +19,30 @@ export function GeneralLedgerReportHeader({
   financialYearLabel,
   className,
 }: {
+  companyName?: string | null;
+  companyAddress?: string | null;
+  companyContact?: string | null;
+  companyEmail?: string | null;
   ledgerName?: string;
   ledgerCode?: string;
   parentGroup?: string;
   ledgerType?: string;
-  gstin?: string;
-  pan?: string;
+  gstin?: string | null;
+  pan?: string | null;
   dateFrom: string;
   dateTo: string;
   financialYearLabel?: string;
   className?: string;
 }) {
-  const period = formatGeneralLedgerPeriod(dateFrom, dateTo);
-  const emptyLike = (v?: string) => !v || v === "—" || v.trim() === "";
+  const period = formatGlPeriod(dateFrom, dateTo);
+  const emptyLike = (v?: string | null) => !v || v === "—" || v.trim() === "";
 
   const companyItems = [
-    { label: "Company", value: ACCOUNTS_COMPANY_NAME },
-    { label: "Address", value: COMPANY_ADDRESS },
-    { label: "Contact", value: COMPANY_CONTACT },
-    { label: "Email", value: COMPANY_EMAIL },
-  ];
+    !emptyLike(companyName) ? { label: "Company", value: companyName! } : null,
+    !emptyLike(companyAddress) ? { label: "Address", value: companyAddress! } : null,
+    !emptyLike(companyContact) ? { label: "Contact", value: companyContact! } : null,
+    !emptyLike(companyEmail) ? { label: "Email", value: companyEmail! } : null,
+  ].filter((item): item is { label: string; value: string } => item != null);
 
   const ledgerItems = ledgerName
     ? [
@@ -107,10 +106,14 @@ export function GeneralLedgerReportHeader({
         </div>
       </div>
       <p className="lg:hidden text-[11px] text-foreground leading-snug">
-        <span className="font-semibold text-navy-700">{ACCOUNTS_COMPANY_NAME}</span>
+        {!emptyLike(companyName) ? (
+          <span className="font-semibold text-navy-700">{companyName}</span>
+        ) : null}
         {ledgerName ? (
           <>
-            <span className="text-muted-foreground"> · </span>
+            {!emptyLike(companyName) ? (
+              <span className="text-muted-foreground"> · </span>
+            ) : null}
             <span className="font-semibold">{ledgerName}</span>
             {ledgerCode ? (
               <span className="font-mono text-brand-700"> ({ledgerCode})</span>
