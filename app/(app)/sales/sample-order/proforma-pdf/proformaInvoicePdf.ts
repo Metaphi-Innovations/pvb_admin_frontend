@@ -45,6 +45,39 @@ function pick(raw: Record<string, unknown>, keys: string[]): unknown {
   return undefined;
 }
 
+function resolveWeightUom(baseUnit: string): "Kg" | "Ltr" | "" {
+  const u = baseUnit.trim().toLowerCase();
+  if (u === "kg" || u === "gms" || u === "g" || u === "gram" || u === "grams") return "Kg";
+  if (u === "ltr" || u === "l" || u === "ml" || u === "litre" || u === "liter") return "Ltr";
+  return "";
+}
+
+function resolveNetWeightPerCase(
+  snapshot: Record<string, unknown>,
+  product: Record<string, unknown>,
+  baseUnit: string,
+): number {
+  const stored = toNumber(
+    snapshot.net_weight ?? snapshot.netWeight ?? product.net_weight ?? product.netWeight,
+  );
+  if (stored > 0) return stored;
+  const packSize = toNumber(
+    snapshot.pack_size ?? snapshot.packSize ?? product.pack_size ?? product.packSize,
+  );
+  const unitPerPacking = toNumber(
+    snapshot.unit_per_packing ??
+      snapshot.unitPerPacking ??
+      product.unit_per_packing ??
+      product.unitPerPacking,
+  );
+  if (!(packSize > 0) || !(unitPerPacking > 0)) return 0;
+  const raw = packSize * unitPerPacking;
+  const u = baseUnit.trim().toLowerCase();
+  if (u === "gms" || u === "g" || u === "gram" || u === "grams" || u === "ml") return raw / 1000;
+  if (u === "kg" || u === "ltr" || u === "l" || u === "litre" || u === "liter") return raw;
+  return 0;
+}
+
 function round2(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100;
 }
@@ -200,23 +233,42 @@ function buildLineFromSampleItem(
   const hsnObj = readRecord(product.hsn ?? productSnapshot.hsn);
   const gstRateObj = readRecord(product.gst_rate ?? productSnapshot.gst_rate);
 
-  const totalQty =
+  const totalUnits =
     packingOverride?.qty !== undefined
       ? packingOverride.qty
       : toNumber(item.base_qty ?? item.quantity);
-  const packSize = Math.max(
+  const packingUnits = Math.max(
     1,
     toNumber(
       product.unit_per_packing ??
-        product.pack_size ??
-        productSnapshot.conversion_qty ??
         productSnapshot.unit_per_packing ??
+        productSnapshot.unitPerPacking ??
         1,
     ),
   );
-  const qtyInCase = packSize > 1 ? Math.floor(totalQty / packSize) : totalQty;
+  const qtyInCase = packingUnits > 1 ? totalUnits / packingUnits : totalUnits;
+  const baseUnit = asText(
+    product.unit ||
+      product.mou ||
+      productSnapshot.base_unit ||
+      productSnapshot.unit ||
+      "Units",
+    "Units",
+  );
+  const weightUom = resolveWeightUom(baseUnit);
+  const netWeightPerCase = resolveNetWeightPerCase(
+    productSnapshot,
+    product,
+    baseUnit,
+  );
+  const totalQtyKgLtr =
+    qtyInCase > 0 && netWeightPerCase > 0
+      ? Math.round((qtyInCase * netWeightPerCase + Number.EPSILON) * 1000) / 1000
+      : 0;
+  const displayTotalQty = totalQtyKgLtr > 0 ? totalQtyKgLtr : 0;
+  const displayUom = weightUom || (displayTotalQty > 0 ? "Kg" : "—");
   const rate = toNumber(item.dp_price ?? item.unit_price);
-  const grossAmt = round2(totalQty * rate);
+  const grossAmt = round2(totalUnits * rate);
   const discPct = toNumber(
     item.discount_percent !== undefined
       ? item.discount_percent
@@ -244,8 +296,8 @@ function buildLineFromSampleItem(
       : toNumber(item.tax_amount);
   if (taxAmt > 0 && packingOverride?.qty === undefined) {
     // Prefer stored tax when using full SO line qty
-    const fullQty = toNumber(item.base_qty ?? item.quantity) || totalQty;
-    const share = fullQty > 0 ? totalQty / fullQty : 1;
+    const fullQty = toNumber(item.base_qty ?? item.quantity) || totalUnits;
+    const share = fullQty > 0 ? totalUnits / fullQty : 1;
     const scaledTax = round2(taxAmt * share);
     if (interstate) {
       igst = scaledTax;
@@ -315,15 +367,8 @@ function buildLineFromSampleItem(
       "",
     ),
     qtyInCase,
-    totalQty,
-    uom: asText(
-      product.unit ||
-        product.mou ||
-        productSnapshot.base_unit ||
-        productSnapshot.unit ||
-        "Units",
-      "Units",
-    ),
+    totalQty: displayTotalQty,
+    uom: displayUom,
     rate,
     grossAmt,
     discPct,

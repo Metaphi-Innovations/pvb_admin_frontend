@@ -135,7 +135,7 @@ export interface InvoiceLineItem {
 	dispatchReadyQty?: number;
 	/** Available stock for the batch (when known). */
 	batchAvailableQty?: number;
-	/** Qty in case / packaging, when available from master. */
+	/** Qty of cases (= base units ÷ units per case), when available. */
 	qtyInCase?: number | null;
 	/** Sales person from linked Sales Order. */
 	salesperson?: string;

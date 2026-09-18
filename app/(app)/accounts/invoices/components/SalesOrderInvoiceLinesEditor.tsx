@@ -209,7 +209,7 @@ const HEADER_COL: Record<string, string> = {
   SKU: COL.sku,
   "Batch No.": COL.batch,
   HSN: COL.hsn,
-  "Qty in Case": COL.qtyCase,
+  "Qty of Case": COL.qtyCase,
   Qty: COL.qty,
   UOM: COL.uom,
   Rate: COL.rate,
@@ -290,7 +290,7 @@ function SalesOrderInvoiceLinesEditorInner({
         "SKU",
         "Batch No.",
         "HSN",
-        "Qty in Case",
+        "Qty of Case",
         "Qty",
         "UOM",
         "Rate",
@@ -309,7 +309,7 @@ function SalesOrderInvoiceLinesEditorInner({
         "SKU",
         "Batch No.",
         "HSN",
-        "Qty in Case",
+        "Qty of Case",
         "Qty",
         "UOM",
         "Rate",
@@ -326,7 +326,7 @@ function SalesOrderInvoiceLinesEditorInner({
       ] as const);
 
   const rightAlign = new Set([
-    "Qty in Case",
+    "Qty of Case",
     "Qty",
     "Rate",
     "Gross Amount",

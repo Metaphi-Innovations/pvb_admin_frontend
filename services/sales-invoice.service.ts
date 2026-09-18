@@ -547,12 +547,18 @@ export function mapPrepareDispatchItemsToLineItems(
     const discountPct = Number(item.discount_percentage || 0);
     const discountAmt = Number(item.discount_amount || 0);
     const gstPercent = Number(item.gst_rate || 18);
+    const unitPerPacking =
+      item.unit_per_packing != null ? Number(item.unit_per_packing) : null;
+    const qtyInCaseFromApi =
+      item.qty_in_case != null ? Number(item.qty_in_case) : null;
     const qtyInCase =
-      item.qty_in_case != null
-        ? Number(item.qty_in_case)
-        : item.unit_per_packing != null
-          ? Number(item.unit_per_packing)
-          : null;
+      qtyInCaseFromApi != null && qtyInCaseFromApi > 0
+        ? qtyInCaseFromApi
+        : qty > 0 && unitPerPacking != null && unitPerPacking > 1
+          ? qty / unitPerPacking
+          : qty > 0
+            ? qty
+            : null;
     const schemeType = String(item.scheme_discount_type || "").toLowerCase();
     const schemeValue = Number(item.scheme_discount_value || 0);
     const schemeAmtPerUnit = Number(item.scheme_discount_amount || 0);
@@ -767,12 +773,20 @@ function mapBackendLineItem(
   const taxable = asNumber(raw.taxable_amount);
   const lineTotal = asNumber(raw.line_total);
   const serviceName = asString(raw.service_name);
-  const qtyInCaseRaw =
-    raw.qty_in_case ??
+  const unitPerPacking = asNumber(
     raw.unit_per_packing ??
-    productSnap.unit_per_packing ??
-    productSnap.unitPerPacking;
-  const qtyInCase = asNumber(qtyInCaseRaw);
+      productSnap.unit_per_packing ??
+      productSnap.unitPerPacking,
+  );
+  const qtyInCaseRaw = asNumber(raw.qty_in_case);
+  const qtyInCase =
+    qtyInCaseRaw > 0
+      ? qtyInCaseRaw
+      : qty > 0 && unitPerPacking > 1
+        ? qty / unitPerPacking
+        : qty > 0
+          ? qty
+          : 0;
   const salesperson =
     asString(raw.salesperson_name) ||
     asString(raw.salesperson) ||
