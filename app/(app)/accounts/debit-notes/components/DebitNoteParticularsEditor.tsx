@@ -264,6 +264,13 @@ export function DebitNoteParticularsEditor({
                   )}
                 >
                   {colLabel(col)}
+                  {!disabled &&
+                  (col === "particular" || col === "ledger" || col === "rate_benefit") ? (
+                    <span className="text-red-500" aria-hidden>
+                      {" "}
+                      *
+                    </span>
+                  ) : null}
                 </th>
               ))}
             </tr>
