@@ -5,8 +5,8 @@ import dynamic from "next/dynamic";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
-import { Label } from "@/components/ui/label";
+import { formatSignedRoundOff } from "@/components/accounts/voucher-form/VoucherSignedRoundOffInput";
+import { computeAutomaticRoundOff } from "@/lib/accounts/money-format";
 import { Textarea } from "@/components/ui/textarea";
 import {
 	isSezGstCategory,
@@ -115,7 +115,6 @@ import {
 } from "./invoices-data";
 import { formatINR, INVOICES_LIST_PATH, invoicesListHrefForSourceType, safeInternalReturnPath } from "./invoice-utils";
 import { showToast } from "@/lib/toast";
-import { sampleOrderInventoryImpactResolved } from "@/lib/accounts/resolved-impact-previews";
 import { dispatchAccountsDataChanged } from "@/lib/accounts/accounts-data-events";
 import { cn } from "@/lib/utils";
 import { useFormDirtySnapshot } from "@/lib/accounts/use-form-dirty-snapshot";
@@ -169,14 +168,6 @@ const SalesInvoiceAccountingPanel = dynamic(
   { ssr: false, loading: () => null },
 );
 
-const AccountingImpactSection = dynamic(
-  () =>
-    import("@/components/accounts/AccountingImpactSection").then((m) => ({
-      default: m.AccountingImpactSection,
-    })),
-  { ssr: false, loading: () => null },
-);
-
 const InvoiceApplicableSchemesPanel = dynamic(
   () =>
     import("./components/InvoiceApplicableSchemesPanel").then((m) => ({
@@ -189,14 +180,6 @@ const GoodsStatutoryGenerationSection = dynamic(
   () =>
     import("./components/GoodsStatutoryGenerationSection").then((m) => ({
       default: m.GoodsStatutoryGenerationSection,
-    })),
-  { ssr: false, loading: () => null },
-);
-
-const LedgerImpactPreview = dynamic(
-  () =>
-    import("@/components/accounts/LedgerImpactPreview").then((m) => ({
-      default: m.LedgerImpactPreview,
     })),
   { ssr: false, loading: () => null },
 );
@@ -253,9 +236,6 @@ function DetailsCard({
   return <InvoiceFormCard title={title}>{children}</InvoiceFormCard>;
 }
 
-const CHARGE_INPUT_CLASS =
-  "h-9 text-sm tabular-nums text-right w-28 ml-auto [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none";
-
 function computeDueDate(baseDate: string, creditDays: number): string {
   const d = new Date(baseDate);
   if (Number.isNaN(d.getTime())) return "";
@@ -311,7 +291,6 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     createEmptyAdditionalExpense(),
   ]);
   const [soOriginExpenses, setSoOriginExpenses] = useState<InvoiceAdditionalExpense[]>([]);
-  const [roundOff, setRoundOff] = useState(0);
   const [backendTotals, setBackendTotals] = useState<DispatchInvoiceTotalsPreview | null>(
     null,
   );
@@ -736,7 +715,6 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
       if (prefill.sourceType === "sample_order") {
         setAdditionalExpenses([]);
         setSoOriginExpenses([]);
-        setRoundOff(0);
       } else if (prefill.additionalExpenses?.length) {
         setSoOriginExpenses(
           prefill.additionalExpenses.map((e) => ({
@@ -996,7 +974,6 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
           if (prepared.totals) {
             dispatchTotalsReadyRef.current = true;
             setBackendTotals(prepared.totals);
-            setRoundOff(Number(prepared.totals.round_off_amount) || 0);
           }
         } catch (err) {
           setError(
@@ -1285,7 +1262,6 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
           if (prepared.totals) {
             dispatchTotalsReadyRef.current = true;
             setBackendTotals(prepared.totals);
-            setRoundOff(Number(prepared.totals.round_off_amount) || 0);
           }
         } catch (err) {
           console.error("Failed to load prefill from backend:", err);
@@ -1434,7 +1410,6 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     setAdditionalExpenses(
       expenses.length ? expenses : [createEmptyAdditionalExpense()],
     );
-    setRoundOff(rec.roundOff ?? 0);
     setInvoiceDate(rec.invoiceDate);
     setDueDate(rec.dueDate);
     setReferenceNo(rec.referenceNo);
@@ -1477,7 +1452,6 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
       narration,
       linesDirtyKey,
       expensesDirtyKey,
-      roundOff,
       invoiceType,
       sourceType,
       selectedDispatchId,
@@ -1502,7 +1476,6 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
       narration,
       linesDirtyKey,
       expensesDirtyKey,
-      roundOff,
       invoiceType,
       sourceType,
       selectedDispatchId,
@@ -1533,15 +1506,17 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
       Math.round((lineTotals.taxAmount + expenseTotals.gstAmount) * 100) / 100;
     const subtotal =
       Math.round((lineTotals.subtotal + expenseTotals.taxableAmount) * 100) / 100;
-    const grandTotal = Math.round(
-      (lineTotals.subtotal -
-        lineTotals.discountTotal +
-        lineTotals.taxAmount +
-        expenseTotals.taxableAmount +
-        expenseTotals.gstAmount +
-        roundOff) *
-        100,
-    ) / 100;
+    const unrounded =
+      Math.round(
+        (lineTotals.subtotal -
+          lineTotals.discountTotal +
+          lineTotals.taxAmount +
+          expenseTotals.taxableAmount +
+          expenseTotals.gstAmount) *
+          100,
+      ) / 100;
+    const autoRoundOff = computeAutomaticRoundOff(unrounded);
+    const grandTotal = Math.round((unrounded + autoRoundOff) * 100) / 100;
     return {
       subtotal,
       discountTotal: lineTotals.discountTotal,
@@ -1549,9 +1524,11 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
       productSubtotal: lineTotals.subtotal,
       expenseTaxable: expenseTotals.taxableAmount,
       expenseGst: expenseTotals.gstAmount,
+      roundOff: autoRoundOff,
       grandTotal,
     };
-  }, [lineTotals, expenseTotals, roundOff]);
+  }, [lineTotals, expenseTotals]);
+  const roundOff = totals.roundOff;
 
   const isDispatchGenerationPreview =
     !isEdit &&
@@ -3120,16 +3097,6 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
                   <p className="text-[10px] text-muted-foreground leading-snug pt-1">
                     Posts Dr Sample / Promotional Expense · Cr Inventory at Cost Price. No receivable or GST.
                   </p>
-                  <LedgerImpactPreview
-                    title="Inventory Accounting Impact"
-                    className="mt-2 border-0 p-0 shadow-none"
-                    lines={sampleOrderInventoryImpactResolved(
-                      lines.reduce((s, l) => {
-                        const cp = typeof l.costPrice === "number" && l.costPrice > 0 ? l.costPrice : 0;
-                        return s + (l.qty || 0) * cp;
-                      }, 0),
-                    )}
-                  />
                 </>
               ) : stGen ? (
                 <>
@@ -3167,12 +3134,10 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
                     <span className="so-summary-value">{formatINR(summaryTaxAmount)}</span>
                   </div>
                   <div className="flex items-center justify-between gap-4 py-0.5">
-                    <Label className="so-summary-label">Round Off</Label>
-                    <AccountsMoneyInput
-                      className={CHARGE_INPUT_CLASS}
-                      value={roundOff || ""}
-                      onChange={(v) => setRoundOff(v)}
-                    />
+                    <span className="so-summary-label">Round Off</span>
+                    <span className="so-summary-value tabular-nums">
+                      {formatSignedRoundOff(summaryRoundOff)}
+                    </span>
                   </div>
                   <div className="flex items-center justify-between gap-4 py-1.5 border-t border-border/60">
                     <span className="so-grand-total-label">Total Invoice Value</span>
@@ -3215,12 +3180,10 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
                     </>
                   )}
                   <div className="flex items-center justify-between gap-4 py-0.5">
-                    <Label className="so-summary-label">Round Off</Label>
-                    <AccountsMoneyInput
-                      className={CHARGE_INPUT_CLASS}
-                      value={roundOff || ""}
-                      onChange={(v) => setRoundOff(v)}
-                    />
+                    <span className="so-summary-label">Round Off</span>
+                    <span className="so-summary-value tabular-nums">
+                      {formatSignedRoundOff(summaryRoundOff)}
+                    </span>
                   </div>
                   <div className="flex items-center justify-between gap-4 py-1.5 border-t border-border/60">
                     <span className="so-grand-total-label">Grand Total</span>
@@ -3273,14 +3236,10 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
                 </>
               )}
               <div className="flex items-center justify-between gap-4 py-0.5">
-                <Label className="text-muted-foreground font-normal text-xs">
-                  Round Off
-                </Label>
-                <AccountsMoneyInput
-                  className={CHARGE_INPUT_CLASS}
-                  value={roundOff || ""}
-                  onChange={(v) => setRoundOff(v)}
-                />
+                <span className="text-muted-foreground text-xs">Round Off</span>
+                <span className="font-medium tabular-nums">
+                  {formatSignedRoundOff(summaryRoundOff)}
+                </span>
               </div>
               <div className="flex items-center justify-between gap-4 py-1.5 border-t border-border/60">
                 <span className="font-semibold text-sm">Grand Total</span>
@@ -3342,14 +3301,10 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
                 </>
               )}
               <div className="flex items-center justify-between gap-4 py-0.5">
-                <Label className="text-muted-foreground font-normal text-xs">
-                  Round Off
-                </Label>
-                <AccountsMoneyInput
-                  className={CHARGE_INPUT_CLASS}
-                  value={roundOff || ""}
-                  onChange={(v) => setRoundOff(v)}
-                />
+                <span className="text-muted-foreground text-xs">Round Off</span>
+                <span className="font-medium tabular-nums">
+                  {formatSignedRoundOff(summaryRoundOff)}
+                </span>
               </div>
               <div className="flex items-center justify-between gap-4 py-1.5 border-t border-border/60">
                 <span className="font-semibold text-sm">Grand Total</span>
@@ -3404,16 +3359,6 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
           </Section>
         )}
 
-        {!soGen ? (
-        <AccountingImpactSection
-          docKey={
-            stGen || isStockTransferInvoice
-              ? "stock_transfer_invoice"
-              : "sales_invoice"
-          }
-          className={compactGen ? "mt-2" : undefined}
-        />
-        ) : null}
       </div>
     </InvoiceFormLayout>
     {discardDialog}

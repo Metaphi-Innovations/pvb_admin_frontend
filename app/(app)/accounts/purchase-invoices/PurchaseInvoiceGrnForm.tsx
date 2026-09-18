@@ -22,7 +22,7 @@ import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { resolveProductSkuDisplay, resolveSkuFromProductSnapshot } from "@/lib/accounts/product-sku";
 import { useFormDirtySnapshot } from "@/lib/accounts/use-form-dirty-snapshot";
 import { useTransactionFormCancel } from "@/components/accounts/TransactionFormCancel";
-import { formatMoney, roundMoney } from "@/lib/accounts/money-format";
+import { computeAutomaticRoundOff, formatMoney, roundMoney } from "@/lib/accounts/money-format";
 import { normalizeGstAmounts } from "@/lib/accounts/gst-accounting";
 import { AccountsDateInput } from "@/components/accounts/AccountsDateInput";
 import { VoucherFormActionBar } from "@/components/accounts/voucher-form/VoucherFormActionBar";
@@ -241,7 +241,6 @@ export function PurchaseInvoiceGrnForm({
   const [remarks, setRemarks] = useState("");
   const [attachment, setAttachment] = useState<File | null>(null);
   const [additionalExpenses, setAdditionalExpenses] = useState<InvoiceAdditionalExpense[]>([]);
-  const [roundOff, setRoundOff] = useState(0);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const addChargeRowRef = useRef<(() => void) | null>(null);
@@ -255,7 +254,6 @@ export function PurchaseInvoiceGrnForm({
         "purchase_order",
       ),
     );
-    setRoundOff(0);
     setVendorInvoiceNo(data.supplier_invoice.supplier_invoice_number || "");
     setSupplierInvoiceDate(formatDateInput(data.supplier_invoice.supplier_invoice_date));
     setInvoiceDate(formatDateInput(data.grn.grn_date) || todayIsoDate());
@@ -371,8 +369,9 @@ export function PurchaseInvoiceGrnForm({
     { cgst: 0, sgst: 0, igst: 0 },
   );
   const chargeBreakdown = calcAdditionalExpensesTotals(additionalExpenses, interstate);
-  const grandTotal = subtotal + totalGst + chargeBreakdown.totalAmount;
-  const finalTotal = grandTotal + roundOff;
+  const unroundedTotal = roundMoney(subtotal + totalGst + chargeBreakdown.totalAmount);
+  const roundOff = computeAutomaticRoundOff(unroundedTotal);
+  const finalTotal = roundMoney(unroundedTotal + roundOff);
   const amountSummaryTotals: DirectPurchaseTotals = {
     grossAmount: Math.round(grossAmount * 100) / 100,
     discountTotal,
@@ -531,7 +530,6 @@ export function PurchaseInvoiceGrnForm({
                       setDueDate("");
                       setAttachment(null);
                       setAdditionalExpenses([]);
-                      setRoundOff(0);
                     }}
                   >
                     Change GRN
@@ -808,9 +806,7 @@ export function PurchaseInvoiceGrnForm({
                   <PurchaseInvoiceDirectTotals
                     totals={amountSummaryTotals}
                     roundingAdjustment={roundOff}
-                    onRoundingChange={setRoundOff}
                     additionalChargeTotal={chargeBreakdown.taxableAmount}
-                    readOnly={saving}
                   />
                 </VoucherFormSectionCard>
               </div>

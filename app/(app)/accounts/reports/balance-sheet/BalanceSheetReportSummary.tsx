@@ -3,36 +3,36 @@
 import { cn } from "@/lib/utils";
 import { formatTrialBalanceReportDate } from "../trial-balance/TrialBalanceReportSummary";
 
-export const BALANCE_SHEET_COMPANY_NAME = "Dharitri Sutra";
-
 export function BalanceSheetReportSummary({
+  companyName,
   financialYearLabel,
   asOnDate,
+  branchLabel,
   className,
 }: {
+  companyName: string;
   financialYearLabel: string;
   asOnDate: string;
+  branchLabel: string;
   className?: string;
 }) {
-  const asOn = formatTrialBalanceReportDate(asOnDate);
-
+  const asOn = asOnDate ? formatTrialBalanceReportDate(asOnDate) : "—";
   const items = [
-    { label: "Company", value: BALANCE_SHEET_COMPANY_NAME },
+    { label: "Company", value: companyName || "—" },
     { label: "Report", value: "Balance Sheet" },
-    { label: "Financial Year", value: financialYearLabel },
+    { label: "Financial Year", value: financialYearLabel || "—" },
     { label: "As On Date", value: asOn },
+    { label: "Branch", value: branchLabel || "All Branches" },
   ];
-
-  const compactLine = `Balance Sheet | ${financialYearLabel} | As on ${asOn}`;
 
   return (
     <div
       className={cn(
-        "flex-shrink-0 px-3 py-2 border-b border-border/60 bg-muted/10 text-[11px] w-full space-y-1",
+        "flex-shrink-0 px-3 py-2 border-b border-border/60 bg-muted/10 text-[11px] w-full",
         className,
       )}
     >
-      <div className="hidden sm:flex flex-wrap items-center gap-x-4 gap-y-1">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
         {items.map((item) => (
           <span key={item.label} className="inline-flex items-center gap-1">
             <span className="font-semibold text-foreground">{item.label}</span>
@@ -41,7 +41,6 @@ export function BalanceSheetReportSummary({
           </span>
         ))}
       </div>
-      <p className="sm:hidden text-foreground font-medium">{compactLine}</p>
     </div>
   );
 }

@@ -61,9 +61,8 @@ import { WarehouseService } from "@/services/warehouse.service";
 import { UserListService } from "@/services/user-list.service";
 import { AccountsToast, useAccountsToast } from "@/components/accounts/AccountsToast";
 import { AccountsDateInput } from "@/components/accounts/AccountsDateInput";
-import { formatMoney, roundMoney } from "@/lib/accounts/money-format";
+import { computeAutomaticRoundOff, formatMoney, roundMoney } from "@/lib/accounts/money-format";
 import { VoucherFormSectionCard } from "@/components/accounts/voucher-form/VoucherFormSectionCard";
-import { VoucherSignedRoundOffInput } from "@/components/accounts/voucher-form/VoucherSignedRoundOffInput";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   NoteReferenceDocumentDetails,
@@ -301,7 +300,6 @@ export default function DebitNoteFormPageClient({
   const [attachments, setAttachments] = useState<DebitNoteAttachment[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [bankAccountId, setBankAccountId] = useState<string | null>(null);
-  const [roundOff, setRoundOff] = useState(0);
   const [directExtraCharges, setDirectExtraCharges] = useState<DirectExtraCharge[]>([]);
   const [pendingDetail, setPendingDetail] = useState<any | null>(null);
   const [pendingLoading, setPendingLoading] = useState(isPendingEntitlement);
@@ -600,7 +598,6 @@ export default function DebitNoteFormPageClient({
           );
         }
         setRemarks(detail.remarks || "");
-        setRoundOff(0);
 
         if (detail.warehouse_id) setWarehouseId(String(detail.warehouse_id));
 
@@ -812,7 +809,6 @@ export default function DebitNoteFormPageClient({
         setParticular("");
         setParticularQty("1");
         setParticularRate("");
-        setRoundOff(rec.round_off ?? 0);
       } else {
         // Direct DN draft — infer On-account vs Against Purchase Invoice from stored PI.
         setUiRefType("direct");
@@ -861,22 +857,6 @@ export default function DebitNoteFormPageClient({
         }
         setGstApplicable(gstOn);
         setGstPct(gstPctStr);
-        const qtyStr = line && line.returnQty > 0 ? String(line.returnQty) : "1";
-        const rateStr =
-          line && line.unitPrice > 0
-            ? String(line.unitPrice)
-            : String(
-                taxable > 0
-                  ? taxable
-                  : Math.max(0, (rec.standaloneDebitAmount || 0) - (rec.gstAmount || 0)),
-              );
-        const expected = computeNoteParticularTotals(qtyStr, rateStr, gstOn, gstPctStr, false).total;
-        const savedTotal = rec.standaloneDebitAmount || rec.currentDebitAmount || expected;
-        setRoundOff(
-          rec.round_off != null && Math.abs(rec.round_off) > 0.0001
-            ? rec.round_off
-            : roundMoney(savedTotal - expected),
-        );
         setParticular(rec.reason || line?.productName || "");
         setLines([]);
         setReferencePreview(null);
@@ -978,13 +958,11 @@ export default function DebitNoteFormPageClient({
       : particularTotals.igst;
   const summaryGst = usesQuantityLines ? prGstTotal : combinedDirectGst;
   const summaryInterstate = usesQuantityLines ? false : directInterstate;
-  const totalDebit = Math.max(
-    0,
-    (usesQuantityLines
-      ? roundMoney(qtyLinesTotal)
-      : roundMoney(particularTotals.total + (isPendingEntitlement ? 0 : directExtraTotal))) +
-      roundOff,
-  );
+  const unroundedDebit = usesQuantityLines
+    ? roundMoney(qtyLinesTotal)
+    : roundMoney(particularTotals.total + (isPendingEntitlement ? 0 : directExtraTotal));
+  const roundOff = computeAutomaticRoundOff(unroundedDebit);
+  const totalDebit = Math.max(0, roundMoney(unroundedDebit + roundOff));
   /** Final Debit Note Amount shown in Amount Summary — used as allocated_amount when Against PI. */
   const finalDebitNoteAmount = totalDebit;
   const selectedEligiblePi = eligiblePurchaseInvoices.find(
@@ -2255,9 +2233,6 @@ export default function DebitNoteFormPageClient({
                 total={totalDebit}
                 interstate={summaryInterstate}
                 locked={saving}
-                roundOffSlot={
-                  <VoucherSignedRoundOffInput value={roundOff} onChange={setRoundOff} />
-                }
               />
             </div>
           </div>

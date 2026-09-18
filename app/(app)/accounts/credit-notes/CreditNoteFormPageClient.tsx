@@ -16,7 +16,7 @@ import { useTransactionFormCancel } from "@/components/accounts/TransactionFormC
 import { transactionsApprovalActive } from "@/lib/accounts/transaction-form-phase";
 import { useFormDirtySnapshot } from "@/lib/accounts/use-form-dirty-snapshot";
 import { VoucherFormSectionCard } from "@/components/accounts/voucher-form/VoucherFormSectionCard";
-import { VoucherSignedRoundOffInput } from "@/components/accounts/voucher-form/VoucherSignedRoundOffInput";
+import { computeAutomaticRoundOff } from "@/lib/accounts/money-format";
 import {
   INVOICE_DETAIL_INPUT_CLASS,
   INVOICE_DETAIL_SELECT_CLASS,
@@ -188,7 +188,6 @@ export default function CreditNoteFormPageClient({
   const [approvers, setApprovers] = useState<{ value: string; label: string }[]>([]);
   const [reasonDialog, setReasonDialog] = useState<"reject" | "cancel" | null>(null);
   const [directExtraCharges, setDirectExtraCharges] = useState<DirectExtraCharge[]>([]);
-  const [roundOff, setRoundOff] = useState(0);
   const [editablePendingLines, setEditablePendingLines] = useState<CreditNoteFormLine[]>([]);
 
   const { data: customerData } = useCustomersDropdown();
@@ -387,7 +386,6 @@ export default function CreditNoteFormPageClient({
     setWarehouseId(detail.warehouse_id || "");
     setCustomerId(detail.customer_id || "");
     setNarration(detail.narration || "");
-    setRoundOff(toNum(detail.round_off_amount));
     setArLedgerName(detail.party_ledger?.ledger_name || snapshotStr(detail.party_ledger_snapshot, "ledger_name"));
     setArLedgerCode(detail.party_ledger?.ledger_code || snapshotStr(detail.party_ledger_snapshot, "ledger_code"));
     const src = String(detail.source_type || "DIRECT");
@@ -699,25 +697,27 @@ export default function CreditNoteFormPageClient({
         gst = toNum(pending.gst_amount);
       }
       const raw = Math.round((taxable + gst) * 100) / 100;
+      const autoRoundOff = computeAutomaticRoundOff(raw);
       return {
         taxable: Math.round(taxable * 100) / 100,
         cgst: Math.round(cgst * 100) / 100,
         sgst: Math.round(sgst * 100) / 100,
         igst: Math.round(igst * 100) / 100,
         gst: Math.round(gst * 100) / 100,
-        roundOff,
-        total: Math.round((raw + roundOff) * 100) / 100,
+        roundOff: autoRoundOff,
+        total: Math.round((raw + autoRoundOff) * 100) / 100,
       };
     }
     const raw = Math.round(directTotals.raw * 100) / 100;
-    const total = Math.round((raw + roundOff) * 100) / 100;
+    const autoRoundOff = computeAutomaticRoundOff(raw);
+    const total = Math.round((raw + autoRoundOff) * 100) / 100;
     return {
       taxable: Math.round(directTotals.taxable * 100) / 100,
       cgst: Math.round(directTotals.cgst * 100) / 100,
       sgst: Math.round(directTotals.sgst * 100) / 100,
       igst: Math.round(directTotals.igst * 100) / 100,
       gst: Math.round(directTotals.gst * 100) / 100,
-      roundOff,
+      roundOff: autoRoundOff,
       total,
     };
   }, [
@@ -730,8 +730,8 @@ export default function CreditNoteFormPageClient({
     directTotals,
     directExtraCharges,
     interstate,
-    roundOff,
   ]);
+  const roundOff = amountPreview.roundOff;
 
   const buildPendingExtraChargesPayload = () => {
     if (isSalesReturnCn) return [];
@@ -1757,11 +1757,6 @@ export default function CreditNoteFormPageClient({
                 total={amountPreview.total}
                 interstate={interstate}
                 locked={!fieldsEditable}
-                roundOffSlot={
-                  fieldsEditable ? (
-                    <VoucherSignedRoundOffInput value={roundOff} onChange={setRoundOff} />
-                  ) : undefined
-                }
               />
             </div>
           </div>

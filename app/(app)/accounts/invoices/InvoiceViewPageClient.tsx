@@ -43,6 +43,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { formatSignedRoundOff } from "@/components/accounts/voucher-form/VoucherSignedRoundOffInput";
 import {
   formatINR,
   INVOICES_LIST_PATH,
@@ -81,7 +82,6 @@ import {
   resolveDisplayDiscountPct,
   resolveLineSku,
 } from "./invoice-view-display";
-import { AccountingImpactSection } from "@/components/accounts/AccountingImpactSection";
 import { formatDisplayDate } from "@/lib/accounts/date-display";
 import "./sales-order-invoice-form-compact.css";
 import "@/components/accounts/voucher-form/transaction-view.css";
@@ -868,7 +868,7 @@ export default function InvoiceViewPageClient({
                     value={formatINR(expenseTotals.taxableAmount)}
                   />
                 )}
-                <SummaryRow label="Round Off" value={formatINR(roundOff)} />
+                <SummaryRow label="Round Off" value={formatSignedRoundOff(roundOff)} />
                 <SummaryRow label="Grand Total" value={formatINR(gst.invoiceTotal)} grand />
                 {!isStockTransferView ? (
                   <>
@@ -879,11 +879,6 @@ export default function InvoiceViewPageClient({
               </div>
             </VoucherFormSectionCard>
           </div>
-
-          <AccountingImpactSection
-            docKey={isStockTransferView ? "stock_transfer_invoice" : "sales_invoice"}
-            className="mt-2"
-          />
         </div>
       </InvoiceFormLayout>
 

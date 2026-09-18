@@ -10,9 +10,10 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
+import { formatSignedRoundOff } from "@/components/accounts/voucher-form/VoucherSignedRoundOffInput";
+import { computeAutomaticRoundOff } from "@/lib/accounts/money-format";
 import { AccountsDateInput } from "@/components/accounts/AccountsDateInput";
 import { isoToDisplayDate } from "@/lib/accounts/date-display";
 import { InvoiceFormLayout } from "@/app/(app)/accounts/components/InvoiceFormLayout";
@@ -136,9 +137,6 @@ function formatPaymentTerms(paymentType?: string, creditDays?: number | string):
   return paymentType;
 }
 
-const CHARGE_INPUT_CLASS =
-  "h-9 text-sm tabular-nums text-right w-28 ml-auto [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none";
-
 export default function ServiceInvoiceFormPageClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -175,7 +173,6 @@ export default function ServiceInvoiceFormPageClient() {
   const [additionalExpenses, setAdditionalExpenses] = useState<InvoiceAdditionalExpense[]>([
     createEmptyAdditionalExpense("manual"),
   ]);
-  const [roundOff, setRoundOff] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const addChargeRowRef = useRef<(() => void) | null>(null);
@@ -226,16 +223,17 @@ export default function ServiceInvoiceFormPageClient() {
     [additionalExpenses],
   );
   const taxAmount = Math.round((lineTotals.taxAmount + expenseTotals.gstAmount) * 100) / 100;
-  const grandTotal =
+  const unroundedInvoice =
     Math.round(
       (lineTotals.subtotal -
         lineTotals.discountTotal +
         lineTotals.taxAmount +
         expenseTotals.taxableAmount +
-        expenseTotals.gstAmount +
-        roundOff) *
-      100,
+        expenseTotals.gstAmount) *
+        100,
     ) / 100;
+  const roundOff = computeAutomaticRoundOff(unroundedInvoice);
+  const grandTotal = Math.round((unroundedInvoice + roundOff) * 100) / 100;
   const gstSplit = useMemo(() => splitInvoiceGst(taxAmount, interstate), [taxAmount, interstate]);
   const summaryGrossAmount = lineTotals.subtotal;
   const summaryDiscountAmount = lineTotals.discountTotal;
@@ -866,12 +864,10 @@ export default function ServiceInvoiceFormPageClient() {
                   </>
                 )}
                 <div className="flex items-center justify-between gap-4 py-0.5">
-                  <Label className="so-summary-label">Round Off</Label>
-                  <AccountsMoneyInput
-                    className={CHARGE_INPUT_CLASS}
-                    value={roundOff || ""}
-                    onChange={(v) => setRoundOff(v)}
-                  />
+                  <span className="so-summary-label">Round Off</span>
+                  <span className="so-summary-value tabular-nums">
+                    {formatSignedRoundOff(roundOff)}
+                  </span>
                 </div>
                 <div className="flex items-center justify-between gap-4 py-1.5 border-t border-border/60">
                   <span className="so-grand-total-label">Grand Total</span>

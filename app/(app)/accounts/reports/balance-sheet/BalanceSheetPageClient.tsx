@@ -1,6 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { AccountsListingTableCard } from "@/components/accounts/AccountsListingHeader";
@@ -9,414 +11,423 @@ import {
   ReportFilterRow,
   ReportFinancialYearFilter,
   ReportAsOnDateFilter,
-  ReportBranchMultiFilter,
-  ReportWarehouseMultiFilter,
-  ReportPartyMultiFilter,
-  ReportLedgerGroupMultiFilter,
-  ReportLedgerMultiFilter,
-  ReportMoreFilters,
+  ReportBranchFilter,
   ReportFilterSummary,
+  ReportLedgerFilter,
+  ReportMoreFilters,
   ReportShowZeroBalanceToggle,
-  REPORT_BRANCH_OPTIONS,
 } from "@/components/accounts/ReportFilters";
-import {
-  buildBranchFilterSummary,
-  buildEntityFilterSummary,
-  countActiveMoreFilters,
-  formatMultiSelectLabel,
-  isMultiFilterActive,
-  type ReportFilterSummaryItem,
-} from "@/lib/accounts/report-multi-filter-utils";
+import type { ReportFilterSummaryItem } from "@/lib/accounts/report-multi-filter-utils";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
-import { useClientMounted } from "@/lib/use-client-mounted";
 import {
-  buildBalanceSheetStatement,
-  collectBalanceSheetGroupIds,
-  flattenBalanceSheetHorizontalForExport,
-  getBalanceSheetActivePartyOptions,
-  getBalanceSheetBranchOptions,
-  getBalanceSheetLedgerGroupOptions,
-  getBalanceSheetLedgerOptions,
-  getBalanceSheetWarehouseOptions,
-  resolveFinancialYearLabel,
-  splitBalanceSheetHorizontal,
-  type BalanceSheetFilters,
-} from "./balance-sheet-data";
-import { exportBalanceSheetToExcel, exportBalanceSheetToPdf } from "./balance-sheet-export";
+  buildBalanceSheetSearchParams,
+  canRequestBalanceSheet,
+  clearedBalanceSheetDisplayFilters,
+  defaultAsOnDate,
+  isBalanceSheetDisplayFilterActive,
+  resolveAsOnDate,
+  type FyDateBounds,
+} from "@/lib/accounts/balance-sheet-query";
+import { useClientMounted } from "@/lib/use-client-mounted";
+import { useFY } from "@/lib/fy-store";
+import { showToast } from "@/lib/toast";
+import { BalanceSheetApiService } from "@/services/balance-sheet.service";
+import { ChartOfAccountsService } from "@/services/chart-of-accounts.service";
+import { LedgerService } from "@/services/ledger.service";
+import type {
+  BalanceSheetFiltersConfig,
+  BalanceSheetQueryParams,
+  BalanceSheetReportResult,
+  BalanceSheetReportType,
+} from "@/types/balance-sheet.types";
+import { toBalanceSheetScreen } from "./balance-sheet-api-display";
 import { BalanceSheetHorizontalView } from "./BalanceSheetHorizontalView";
 import { BalanceSheetReportSummary } from "./BalanceSheetReportSummary";
-import { ensureFinancialYearsCurrent, loadFinancialYears } from "@/app/(app)/accounts/masters/masters-data";
-import { getActiveFinancialYearId } from "@/lib/accounts/day-book-data";
-import { ACCOUNTS_VOUCHERS_UPDATED_EVENT } from "@/lib/accounts/accounts-section-seed";
 import "../trial-balance/trial-balance-compact.css";
 
-const PLACEHOLDER_DATE = "2025-04-01";
-const EMPTY_MESSAGE = "No Balance Sheet data available for the selected date.";
+const DISPLAY_FILTER_NOTE =
+  "Detail rows are filtered. Balance Sheet totals continue to represent the full selected financial scope.";
 
-function defaultFyAsOnDate(): { asOn: string; fyId: string } {
-  ensureFinancialYearsCurrent();
-  const activeFyId = getActiveFinancialYearId();
-  const fy = loadFinancialYears().find((f) => f.id === activeFyId);
-  const today = new Date().toISOString().slice(0, 10);
-  if (!fy) return { asOn: today, fyId: "all" };
-  const asOn = today < fy.endDate ? today : fy.endDate;
-  return { asOn, fyId: String(fy.id) };
+function todayIso(): string {
+  return new Date().toISOString().slice(0, 10);
 }
 
-function resolveFyStartDate(financialYearId: string, asOnDate: string): string {
-  if (financialYearId !== "all" && financialYearId) {
-    const fy = loadFinancialYears().find((f) => String(f.id) === financialYearId);
-    if (fy) return fy.startDate;
-  }
-  const year = asOnDate.slice(0, 4);
-  return `${year}-04-01`;
-}
-
-function mergeLedgerOptions(
-  getOptions: (ledgerGroupId: string) => { id: number; name: string }[],
-  ledgerGroupIds: string[],
-): { id: number; name: string }[] {
-  if (ledgerGroupIds.length === 0) return getOptions("all");
-  const seen = new Map<number, { id: number; name: string }>();
-  for (const groupId of ledgerGroupIds) {
-    for (const ledger of getOptions(groupId)) {
-      seen.set(ledger.id, ledger);
-    }
-  }
-  return [...seen.values()].sort((a, b) => a.name.localeCompare(b.name));
+function readReportType(value: string | null): BalanceSheetReportType {
+  return value === "NORMAL" || value === "normal" ? "NORMAL" : "DETAILED";
 }
 
 export default function BalanceSheetPageClient() {
   const mounted = useClientMounted();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { selectedFY } = useFY();
 
-  const [asOnDate, setAsOnDate] = useState(PLACEHOLDER_DATE);
+  const [reportType, setReportType] = useState<BalanceSheetReportType>("DETAILED");
+  const [asOnDate, setAsOnDate] = useState("");
   const [datesReady, setDatesReady] = useState(false);
-  const [financialYearId, setFinancialYearId] = useState("all");
-  const [branches, setBranches] = useState<string[]>([]);
-  const [warehouses, setWarehouses] = useState<string[]>([]);
-  const [partyIds, setPartyIds] = useState<string[]>([]);
-  const [ledgerGroupIds, setLedgerGroupIds] = useState<string[]>([]);
-  const [ledgerIds, setLedgerIds] = useState<string[]>([]);
-  const [showZeroBalance, setShowZeroBalance] = useState(false);
+  const [financialYearId, setFinancialYearId] = useState("");
+  const [warehouseId, setWarehouseId] = useState("all");
+  const [groupId, setGroupId] = useState("all");
+  const [subGroupId, setSubGroupId] = useState("all");
+  const [ledgerId, setLedgerId] = useState("all");
+  const [showZero, setShowZero] = useState(false);
+  const [groupOptions, setGroupOptions] = useState<{ id: string; name: string }[]>([]);
+  const [subGroupOptions, setSubGroupOptions] = useState<{ id: string; name: string }[]>([]);
+  const [ledgerOptions, setLedgerOptions] = useState<{ id: string; name: string }[]>([]);
   const [exporting, setExporting] = useState(false);
-  const [dataTick, setDataTick] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [report, setReport] = useState<BalanceSheetReportResult | null>(null);
+  const [filtersConfig, setFiltersConfig] = useState<BalanceSheetFiltersConfig | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [urlReady, setUrlReady] = useState(false);
+  const bootstrapped = useRef(false);
 
   useEffect(() => {
-    const { asOn, fyId } = defaultFyAsOnDate();
-    setAsOnDate(asOn);
-    setFinancialYearId(fyId);
-    setDatesReady(true);
-  }, []);
+    if (!mounted || urlReady) return;
+    setReportType(readReportType(searchParams.get("reportType")));
+    const urlFy = searchParams.get("fy") ?? searchParams.get("fyId") ?? "";
+    const urlBranch = searchParams.get("branch") ?? searchParams.get("warehouse") ?? "";
+    if (urlFy && urlFy !== "all") setFinancialYearId(urlFy);
+    if (urlBranch && urlBranch !== "all" && !urlBranch.includes(",")) setWarehouseId(urlBranch);
+    const urlGroup = searchParams.get("groupId") ?? "";
+    const urlSub = searchParams.get("subGroupId") ?? "";
+    const urlLedger = searchParams.get("ledgerId") ?? "";
+    if (urlGroup) setGroupId(urlGroup);
+    if (urlSub) setSubGroupId(urlSub);
+    if (urlLedger) setLedgerId(urlLedger);
+    if (searchParams.get("showZero") === "true") setShowZero(true);
+    setUrlReady(true);
+  }, [mounted, searchParams, urlReady]);
 
   useEffect(() => {
-    const onVouchersUpdated = () => setDataTick((t) => t + 1);
-    window.addEventListener(ACCOUNTS_VOUCHERS_UPDATED_EVENT, onVouchersUpdated);
-    return () => window.removeEventListener(ACCOUNTS_VOUCHERS_UPDATED_EVENT, onVouchersUpdated);
-  }, []);
+    if (!mounted || !urlReady || bootstrapped.current) return;
+    let cancelled = false;
+    void BalanceSheetApiService.getFilters()
+      .then((config) => {
+        if (cancelled) return;
+        bootstrapped.current = true;
+        setFiltersConfig(config);
+        const urlFy = searchParams.get("fy") ?? searchParams.get("fyId") ?? "";
+        const fyId =
+          (urlFy && urlFy !== "all" ? urlFy : "") ||
+          selectedFY?.id ||
+          config.defaults.financial_year_id ||
+          config.financial_years.find((fy) => fy.is_current)?.financial_year_id ||
+          "";
+        const fy = config.financial_years.find((item) => item.financial_year_id === fyId);
+        if (!fyId || !fy) {
+          setError("Select a financial year. Balance Sheet is not available for All years.");
+          return;
+        }
+        const bounds = { start: fy.start_date, end: fy.end_date };
+        const resolved = resolveAsOnDate({
+          date: searchParams.get("asOnDate") ?? searchParams.get("asOn") ?? "",
+          bounds,
+          today: todayIso(),
+        });
+        setFinancialYearId(fyId);
+        setAsOnDate(resolved.asOn);
+        setShowZero(searchParams.get("showZero") === "true" || config.defaults.show_zero);
+        setDatesReady(true);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        bootstrapped.current = true;
+        if (selectedFY?.id && selectedFY.startDate && selectedFY.endDate) {
+          const resolved = resolveAsOnDate({
+            date: searchParams.get("asOnDate") ?? "",
+            bounds: { start: selectedFY.startDate, end: selectedFY.endDate },
+            today: todayIso(),
+          });
+          setFinancialYearId(selectedFY.id);
+          setAsOnDate(resolved.asOn);
+          setDatesReady(true);
+          return;
+        }
+        setError(err instanceof Error ? err.message : "Unable to load Balance Sheet filters.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [mounted, urlReady, selectedFY, searchParams]);
 
-  const handleFinancialYearChange = useCallback((fyId: string) => {
-    setFinancialYearId(fyId);
-    if (fyId !== "all") {
-      const fy = loadFinancialYears().find((f) => String(f.id) === fyId);
-      if (fy) {
-        const today = new Date().toISOString().slice(0, 10);
-        setAsOnDate(today < fy.endDate ? today : fy.endDate);
-      }
+  const selectedFy = filtersConfig?.financial_years.find(
+    (fy) => fy.financial_year_id === financialYearId,
+  );
+  const fyBounds = useMemo((): FyDateBounds | null => {
+    if (selectedFy?.start_date && selectedFy.end_date) {
+      return { start: selectedFy.start_date, end: selectedFy.end_date };
     }
-  }, []);
+    if (selectedFY?.id === financialYearId && selectedFY.startDate && selectedFY.endDate) {
+      return { start: selectedFY.startDate, end: selectedFY.endDate };
+    }
+    return null;
+  }, [selectedFy, selectedFY, financialYearId]);
 
-  const handleLedgerGroupChange = useCallback((values: string[]) => {
-    setLedgerGroupIds(values);
-    setLedgerIds([]);
-  }, []);
+  const showZeroDefault = filtersConfig?.defaults.show_zero ?? false;
+  const branchOptions = useMemo(
+    () =>
+      (filtersConfig?.branches ?? []).map((branch) => ({
+        id: branch.warehouse_id,
+        name: branch.warehouse_name,
+      })),
+    [filtersConfig],
+  );
 
-  const bsFilters = useMemo((): BalanceSheetFilters => ({
+  useEffect(() => {
+    if (!mounted) return;
+    const controller = new AbortController();
+    void ChartOfAccountsService.getGroups({ signal: controller.signal })
+      .then((rows) => setGroupOptions(rows.map((row) => ({ id: String(row.id), name: row.name }))))
+      .catch(() => setGroupOptions([]));
+    return () => controller.abort();
+  }, [mounted]);
+
+  useEffect(() => {
+    if (!mounted) return;
+    const controller = new AbortController();
+    void ChartOfAccountsService.getSubGroups({
+      accountGroupId: groupId !== "all" ? groupId : undefined,
+      signal: controller.signal,
+    })
+      .then((rows) =>
+        setSubGroupOptions(rows.map((row) => ({ id: String(row.id), name: row.name }))),
+      )
+      .catch(() => setSubGroupOptions([]));
+    return () => controller.abort();
+  }, [mounted, groupId]);
+
+  useEffect(() => {
+    if (!mounted) return;
+    const controller = new AbortController();
+    void LedgerService.getDropdown(
+      {
+        accountGroupId: groupId !== "all" ? groupId : undefined,
+        accountSubGroupId: subGroupId !== "all" ? subGroupId : undefined,
+        status: "ACTIVE",
+      },
+      controller.signal,
+    )
+      .then((res) =>
+        setLedgerOptions(
+          res.ledgers.map((ledger) => ({
+            id: ledger.ledgerId,
+            name: `${ledger.ledgerCode} — ${ledger.ledgerName}`,
+          })),
+        ),
+      )
+      .catch(() => setLedgerOptions([]));
+    return () => controller.abort();
+  }, [mounted, groupId, subGroupId]);
+
+  const queryParams = useMemo((): BalanceSheetQueryParams | null => {
+    if (!datesReady) return null;
+    if (!canRequestBalanceSheet({ financialYearId, asOnDate, bounds: fyBounds })) return null;
+    return {
+      report_type: reportType,
+      financial_year_id: financialYearId,
+      as_on_date: asOnDate,
+      warehouse_id: warehouseId !== "all" ? warehouseId : undefined,
+      group_id: groupId !== "all" ? groupId : undefined,
+      sub_group_id: subGroupId !== "all" ? subGroupId : undefined,
+      ledger_id: ledgerId !== "all" ? ledgerId : undefined,
+      show_zero: showZero,
+    };
+  }, [
+    datesReady,
     financialYearId,
     asOnDate,
-    branch: branches,
-    warehouse: warehouses,
-    partyId: partyIds,
-    ledgerGroupId: ledgerGroupIds,
-    ledgerId: ledgerIds,
-    viewType: "detailed",
-    showZeroBalance,
-    search: "",
-  }), [
-    financialYearId,
-    asOnDate,
-    branches,
-    warehouses,
-    partyIds,
-    ledgerGroupIds,
-    ledgerIds,
-    showZeroBalance,
+    warehouseId,
+    reportType,
+    groupId,
+    subGroupId,
+    ledgerId,
+    showZero,
+    fyBounds,
   ]);
 
-  const ledgerGroupOptions = useMemo(
-    () => (mounted ? getBalanceSheetLedgerGroupOptions() : []),
-    [mounted, dataTick],
-  );
-  const ledgerOptions = useMemo(
-    () => (mounted ? mergeLedgerOptions(getBalanceSheetLedgerOptions, ledgerGroupIds) : []),
-    [mounted, ledgerGroupIds, dataTick],
-  );
-  const branchOptions = useMemo(
-    () => (mounted ? getBalanceSheetBranchOptions() : [...REPORT_BRANCH_OPTIONS]),
-    [mounted, dataTick],
-  );
-  const warehouseOptions = useMemo(
-    () => (mounted ? getBalanceSheetWarehouseOptions() : []),
-    [mounted, dataTick],
-  );
-  const partyOptions = useMemo(
-    () => (mounted ? getBalanceSheetActivePartyOptions() : []),
-    [mounted, dataTick],
-  );
+  useEffect(() => {
+    if (!mounted || !queryParams) return;
+    const controller = new AbortController();
+    setLoading(true);
+    setError(null);
+    void BalanceSheetApiService.getReport(queryParams, controller.signal)
+      .then((result) => {
+        if (controller.signal.aborted) return;
+        setReport(result);
+        setLoading(false);
+      })
+      .catch((err: unknown) => {
+        if (controller.signal.aborted) return;
+        setError(err instanceof Error ? err.message : "Unable to load Balance Sheet.");
+        setLoading(false);
+      });
+    return () => controller.abort();
+  }, [mounted, queryParams, refreshKey]);
 
-  const warehouseSelectOptions = useMemo(
-    () => warehouseOptions.filter((w) => w !== "all").map((w) => ({ value: w, label: w })),
-    [warehouseOptions],
-  );
-  const ledgerGroupSelectOptions = useMemo(
-    () => ledgerGroupOptions.map((g) => ({ value: String(g.id), label: g.name })),
-    [ledgerGroupOptions],
-  );
-  const ledgerSelectOptions = useMemo(
-    () => ledgerOptions.map((l) => ({ value: String(l.id), label: l.name })),
-    [ledgerOptions],
-  );
-
-  const sourceStatement = useMemo(() => {
-    if (!mounted || !datesReady) {
-      return {
-        lines: [],
-        totalLiabilities: 0,
-        totalAssets: 0,
-        difference: 0,
-        isBalanced: true,
-        hasData: false,
-        netProfit: 0,
-        unpostedVoucherCount: 0,
-      };
+  useEffect(() => {
+    if (!datesReady || !canRequestBalanceSheet({ financialYearId, asOnDate, bounds: fyBounds })) {
+      return;
     }
-    const built = buildBalanceSheetStatement(bsFilters);
-    return built;
-  }, [mounted, datesReady, bsFilters, dataTick]);
+    const params = buildBalanceSheetSearchParams({
+      financialYearId,
+      asOnDate,
+      reportType,
+      warehouseId,
+      groupId,
+      subGroupId,
+      ledgerId,
+      showZero,
+    });
+    if (searchParams.toString() === params.toString()) return;
+    router.replace(`/accounts/reports/balance-sheet?${params.toString()}`, { scroll: false });
+  }, [
+    datesReady,
+    financialYearId,
+    asOnDate,
+    reportType,
+    warehouseId,
+    groupId,
+    subGroupId,
+    ledgerId,
+    showZero,
+    fyBounds,
+    router,
+    searchParams,
+  ]);
 
-  const exportExpandedIds = useMemo(() => {
-    const { liabilities, assets } = splitBalanceSheetHorizontal(sourceStatement);
-    return new Set([
-      ...collectBalanceSheetGroupIds(liabilities.tree),
-      ...collectBalanceSheetGroupIds(assets.tree),
-    ]);
-  }, [sourceStatement]);
+  const handleFinancialYearChange = useCallback(
+    (fyId: string) => {
+      if (!fyId || fyId === "all") {
+        setFinancialYearId(fyId);
+        setReport(null);
+        return;
+      }
+      const fy = filtersConfig?.financial_years.find((item) => item.financial_year_id === fyId);
+      const bounds = fy
+        ? { start: fy.start_date, end: fy.end_date }
+        : selectedFY?.id === fyId
+          ? { start: selectedFY.startDate, end: selectedFY.endDate }
+          : null;
+      setFinancialYearId(fyId);
+      if (!bounds) return;
+      const next = resolveAsOnDate({ date: asOnDate, bounds, today: todayIso() });
+      setAsOnDate(next.asOn);
+    },
+    [filtersConfig, selectedFY, asOnDate],
+  );
 
-  const defaultFy = useMemo(() => defaultFyAsOnDate(), []);
-
-  const moreFiltersActiveCount = countActiveMoreFilters({
-    warehouse: warehouses,
-    partyId: partyIds,
-    ledgerGroupId: ledgerGroupIds,
-    ledgerId: ledgerIds,
-    showZeroBalance,
-  });
-
-  const hasFilters =
-    (datesReady &&
-      (financialYearId !== defaultFy.fyId ||
-        asOnDate !== defaultFy.asOn ||
-        isMultiFilterActive(branches) ||
-        isMultiFilterActive(warehouses) ||
-        isMultiFilterActive(partyIds) ||
-        isMultiFilterActive(ledgerGroupIds) ||
-        isMultiFilterActive(ledgerIds) ||
-        showZeroBalance));
+  const clearDisplayFilters = useCallback(() => {
+    const cleared = clearedBalanceSheetDisplayFilters(showZeroDefault);
+    setGroupId(cleared.groupId);
+    setSubGroupId(cleared.subGroupId);
+    setLedgerId(cleared.ledgerId);
+    setShowZero(cleared.showZero);
+  }, [showZeroDefault]);
 
   const resetFilters = useCallback(() => {
-    const { asOn, fyId } = defaultFyAsOnDate();
-    setAsOnDate(asOn);
+    const fyId =
+      selectedFY?.id ||
+      filtersConfig?.defaults.financial_year_id ||
+      filtersConfig?.financial_years.find((fy) => fy.is_current)?.financial_year_id ||
+      financialYearId;
+    const fy = filtersConfig?.financial_years.find((item) => item.financial_year_id === fyId);
+    const bounds = fy
+      ? { start: fy.start_date, end: fy.end_date }
+      : selectedFY?.id === fyId
+        ? { start: selectedFY.startDate, end: selectedFY.endDate }
+        : null;
     setFinancialYearId(fyId);
-    setBranches([]);
-    setWarehouses([]);
-    setPartyIds([]);
-    setLedgerGroupIds([]);
-    setLedgerIds([]);
-    setShowZeroBalance(false);
-  }, []);
+    setAsOnDate(bounds ? defaultAsOnDate(bounds, todayIso()) : asOnDate);
+    setWarehouseId("all");
+    setReportType("DETAILED");
+    clearDisplayFilters();
+  }, [filtersConfig, selectedFY, financialYearId, asOnDate, clearDisplayFilters]);
 
-  const financialYearLabel = useMemo(
-    () => resolveFinancialYearLabel(financialYearId),
-    [financialYearId],
-  );
-
-  const exportMeta = useMemo(
-    () => ({
-      asOnDate,
-      financialYear: financialYearLabel,
-      branch: branches.length === 0
-        ? "All branches"
-        : formatMultiSelectLabel(
-            branches,
-            branchOptions.map((b) => ({ value: b, label: b })),
-            "Branch",
-          ),
-      warehouse: warehouses.length === 0
-        ? "All warehouses"
-        : formatMultiSelectLabel(warehouses, warehouseSelectOptions, "Warehouse"),
-      party: partyIds.length === 0
-        ? "All parties"
-        : formatMultiSelectLabel(
-            partyIds,
-            partyOptions.map((p) => ({
-              value: p.id,
-              label: p.kind === "vendor" ? `${p.name} (Vendor)` : `${p.name} (Customer)`,
-            })),
-            "Party",
-          ),
-    }),
-    [
-      asOnDate,
-      financialYearLabel,
-      branches,
-      branchOptions,
-      warehouses,
-      warehouseSelectOptions,
-      partyIds,
-      partyOptions,
-    ],
-  );
-
-  const drillDownFilters = useMemo(
-    () => ({
-      asOnDate,
-      dateFrom: resolveFyStartDate(financialYearId, asOnDate),
-      branch: branches[0],
-      warehouse: warehouses[0],
-      partyId: partyIds[0],
-    }),
-    [asOnDate, financialYearId, branches, warehouses, partyIds],
-  );
-
-  const filterSummaryItems = useMemo((): ReportFilterSummaryItem[] =>
-      [
-        buildBranchFilterSummary(branches, () => setBranches([])),
-        buildEntityFilterSummary(
-          "party",
-          "Party",
-          partyIds,
-          partyOptions.map((p) => ({
-            value: p.id,
-            label: p.kind === "vendor" ? `${p.name} (Vendor)` : `${p.name} (Customer)`,
-          })),
-          () => setPartyIds([]),
-        ),
-        buildEntityFilterSummary(
-          "warehouse",
-          "Warehouse",
-          warehouses,
-          warehouseSelectOptions,
-          () => setWarehouses([]),
-        ),
-        buildEntityFilterSummary(
-          "ledgerGroup",
-          "Account Group",
-          ledgerGroupIds,
-          ledgerGroupSelectOptions,
-          () => setLedgerGroupIds([]),
-        ),
-        buildEntityFilterSummary(
-          "ledger",
-          "Ledger",
-          ledgerIds,
-          ledgerSelectOptions,
-          () => setLedgerIds([]),
-        ),
-      ].filter((item): item is ReportFilterSummaryItem => item != null),
-    [
-      asOnDate,
-      branches,
-      partyIds,
-      partyOptions,
-      warehouses,
-      warehouseSelectOptions,
-      ledgerGroupIds,
-      ledgerGroupSelectOptions,
-      ledgerIds,
-      ledgerSelectOptions,
-    ],
-  );
-
-  const handleExportExcel = async () => {
+  const handleExport = async (format: "EXCEL" | "PDF") => {
+    if (!queryParams || exporting) return;
     setExporting(true);
     try {
-      const rows = flattenBalanceSheetHorizontalForExport(sourceStatement, exportExpandedIds);
-      await exportBalanceSheetToExcel(rows, exportMeta, sourceStatement);
+      await BalanceSheetApiService.exportReport({ ...queryParams, format });
+      showToast(format === "EXCEL" ? "Excel exported successfully." : "PDF exported successfully.", "success");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Failed to export Balance Sheet.");
     } finally {
       setExporting(false);
     }
   };
 
-  const handleExportPdf = () => {
-    const rows = flattenBalanceSheetHorizontalForExport(sourceStatement, exportExpandedIds);
-    exportBalanceSheetToPdf(rows, exportMeta, sourceStatement);
-  };
-
-  const filterBar = (
-    <ReportFilterRow
-      className="items-end gap-2"
-      end={
-        <AccountsExportMenu
-          onExcel={handleExportExcel}
-          onPdf={handleExportPdf}
-          disabled={exporting || !mounted || !sourceStatement.hasData}
-        />
-      }
-    >
-      <ReportFinancialYearFilter
-        value={financialYearId}
-        onChange={handleFinancialYearChange}
-      />
-      <ReportAsOnDateFilter value={asOnDate} onChange={setAsOnDate} />
-      <ReportBranchMultiFilter
-        values={branches}
-        onChange={setBranches}
-        options={branchOptions}
-      />
-      <ReportMoreFilters activeCount={moreFiltersActiveCount}>
-        <ReportPartyMultiFilter
-          values={partyIds}
-          onChange={setPartyIds}
-          parties={partyOptions}
-        />
-        <ReportWarehouseMultiFilter
-          values={warehouses}
-          onChange={setWarehouses}
-          options={warehouseOptions}
-        />
-        <ReportLedgerGroupMultiFilter
-          values={ledgerGroupIds}
-          onChange={handleLedgerGroupChange}
-          groups={ledgerGroupOptions}
-        />
-        <ReportLedgerMultiFilter
-          values={ledgerIds}
-          onChange={setLedgerIds}
-          ledgers={ledgerOptions}
-        />
-        <ReportShowZeroBalanceToggle
-          checked={showZeroBalance}
-          onChange={setShowZeroBalance}
-        />
-      </ReportMoreFilters>
-      {hasFilters && (
-        <Button variant="outline" size="sm" className="h-8 text-sm px-2" onClick={resetFilters}>
-          Reset
-        </Button>
-      )}
-    </ReportFilterRow>
+  const screen = useMemo(() => (report ? toBalanceSheetScreen(report) : null), [report]);
+  const warnings = report?.warnings ?? [];
+  const displayFiltered = isBalanceSheetDisplayFilterActive({
+    groupId,
+    subGroupId,
+    ledgerId,
+    showZero,
+    showZeroDefault,
+  });
+  const moreFiltersActiveCount =
+    (groupId !== "all" ? 1 : 0) +
+    (subGroupId !== "all" ? 1 : 0) +
+    (ledgerId !== "all" ? 1 : 0) +
+    (showZero !== showZeroDefault ? 1 : 0);
+  const scopeChanged =
+    warehouseId !== "all" ||
+    (selectedFy && asOnDate !== defaultAsOnDate(
+      { start: selectedFy.start_date, end: selectedFy.end_date },
+      todayIso(),
+    ));
+  const needsFinancialYear = !financialYearId || financialYearId === "all";
+  const dateOutsideFy = Boolean(
+    fyBounds && asOnDate && !canRequestBalanceSheet({ financialYearId, asOnDate, bounds: fyBounds }),
   );
 
-  const showTable = mounted && datesReady && sourceStatement.hasData;
+  const filterSummaryItems = useMemo((): ReportFilterSummaryItem[] => {
+    const items: ReportFilterSummaryItem[] = [];
+    if (groupId !== "all") {
+      items.push({
+        id: "group",
+        label: "Group",
+        value: groupOptions.find((item) => item.id === groupId)?.name ?? groupId,
+        onRemove: () => {
+          setGroupId("all");
+          setSubGroupId("all");
+          setLedgerId("all");
+        },
+      });
+    }
+    if (subGroupId !== "all") {
+      items.push({
+        id: "subgroup",
+        label: "Sub-Group",
+        value: subGroupOptions.find((item) => item.id === subGroupId)?.name ?? subGroupId,
+        onRemove: () => {
+          setSubGroupId("all");
+          setLedgerId("all");
+        },
+      });
+    }
+    if (ledgerId !== "all") {
+      items.push({
+        id: "ledger",
+        label: "Ledger",
+        value: ledgerOptions.find((item) => item.id === ledgerId)?.name ?? ledgerId,
+        onRemove: () => setLedgerId("all"),
+      });
+    }
+    return items;
+  }, [groupId, subGroupId, ledgerId, groupOptions, subGroupOptions, ledgerOptions]);
+
+  const companyName = report?.scope.company_name ?? "";
+  const financialYearLabel =
+    report?.scope.financial_year_name ?? selectedFy?.name ?? selectedFY?.label ?? "";
+  const branchLabel =
+    report?.scope.warehouse_name ??
+    (warehouseId === "all"
+      ? "All Branches"
+      : branchOptions.find((branch) => branch.id === warehouseId)?.name ?? warehouseId);
+  const movementFrom = report?.scope.movement_from_date ?? fyBounds?.start ?? "";
 
   return (
     <AccountsPageShell
@@ -426,35 +437,132 @@ export default function BalanceSheetPageClient() {
       hideDescription
       layout="form"
       className="min-h-0"
-      filters={filterBar}
+      filters={
+        <ReportFilterRow
+          className="items-end gap-2"
+          end={
+            <AccountsExportMenu
+              onExcel={() => void handleExport("EXCEL")}
+              onPdf={() => void handleExport("PDF")}
+              disabled={exporting || loading || !queryParams}
+            />
+          }
+        >
+          <ReportFinancialYearFilter
+            value={financialYearId || "all"}
+            onChange={handleFinancialYearChange}
+          />
+          <ReportAsOnDateFilter
+            value={asOnDate}
+            onChange={setAsOnDate}
+            min={fyBounds?.start}
+            max={fyBounds?.end}
+          />
+          <ReportBranchFilter value={warehouseId} onChange={setWarehouseId} options={branchOptions} />
+          <ReportMoreFilters activeCount={moreFiltersActiveCount}>
+            <ReportLedgerFilter
+              label="Group"
+              value={groupId}
+              onChange={(value) => {
+                setGroupId(value || "all");
+                setSubGroupId("all");
+                setLedgerId("all");
+              }}
+              ledgers={groupOptions}
+            />
+            <ReportLedgerFilter
+              label="Sub-Group"
+              value={subGroupId}
+              onChange={(value) => {
+                setSubGroupId(value || "all");
+                setLedgerId("all");
+              }}
+              ledgers={subGroupOptions}
+            />
+            <ReportLedgerFilter
+              label="Ledger"
+              value={ledgerId}
+              onChange={(value) => setLedgerId(value || "all")}
+              ledgers={ledgerOptions}
+            />
+            <ReportShowZeroBalanceToggle checked={showZero} onChange={setShowZero} />
+          </ReportMoreFilters>
+          {(scopeChanged || displayFiltered || reportType !== "DETAILED") && (
+            <Button variant="outline" size="sm" className="h-8 text-sm px-2" onClick={resetFilters}>
+              Reset
+            </Button>
+          )}
+        </ReportFilterRow>
+      }
     >
-      <AccountsListingTableCard className="flex flex-col !overflow-visible !flex-none">
+      <AccountsListingTableCard className="trial-balance-compact flex flex-col !overflow-visible !flex-none">
         <BalanceSheetReportSummary
+          companyName={companyName}
           financialYearLabel={financialYearLabel}
-          asOnDate={asOnDate}
+          asOnDate={report?.scope.as_on_date || asOnDate}
+          branchLabel={branchLabel}
         />
-        <ReportFilterSummary items={filterSummaryItems} />
-        {!mounted || !datesReady ? (
-          <div className="flex items-center justify-center py-6 text-xs text-muted-foreground">
-            Loading Balance Sheet…
+        {filterSummaryItems.length > 0 && <ReportFilterSummary items={filterSummaryItems} />}
+        {error && (
+          <div className="mx-3 mt-2 flex items-start justify-between gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+            <span>{error}</span>
+            <button type="button" className="font-medium underline" onClick={() => setRefreshKey((n) => n + 1)}>
+              Retry
+            </button>
           </div>
-        ) : !showTable ? (
-          <div className="accounts-table-empty py-4 text-center">
-            {EMPTY_MESSAGE}
-            {hasFilters && (
-              <button
-                type="button"
-                onClick={resetFilters}
-                className="block mx-auto mt-1 text-brand-600 hover:underline"
-              >
-                Clear filters
-              </button>
-            )}
+        )}
+        {warnings.length > 0 && (
+          <div className="mx-3 mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+            <p className="mb-1 inline-flex items-center gap-1.5 font-medium">
+              <AlertTriangle className="h-3.5 w-3.5" />
+              Accounting notes
+            </p>
+            <ul className="list-disc space-y-0.5 pl-4">
+              {warnings.map((warning) => (
+                <li key={`${warning.code}-${warning.message}`}>{warning.message}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {displayFiltered && report?.filters.filters_are_display_only && (
+          <div className="mx-3 mt-2 flex items-start justify-between gap-2 rounded-md border border-border bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
+            <span>{DISPLAY_FILTER_NOTE}</span>
+            <button type="button" className="shrink-0 font-medium text-brand-700 hover:underline" onClick={clearDisplayFilters}>
+              Clear display filters
+            </button>
+          </div>
+        )}
+        {(!datesReady && !error) || (loading && !screen) ? (
+          <div className="space-y-2 px-3 py-6">
+            {Array.from({ length: 6 }).map((_, index) => (
+              <div key={index} className="h-4 animate-pulse rounded bg-muted" />
+            ))}
+          </div>
+        ) : needsFinancialYear ? (
+          <div className="accounts-table-empty py-4 text-center text-xs text-muted-foreground">
+            Select a financial year. Balance Sheet is not available for All years.
+          </div>
+        ) : dateOutsideFy ? (
+          <div className="accounts-table-empty py-4 text-center text-xs text-red-700">
+            As On Date must fall within the selected financial year.
+          </div>
+        ) : error && !screen ? (
+          <div className="accounts-table-empty py-4 text-center text-xs text-muted-foreground">
+            {error}
+          </div>
+        ) : !screen ? (
+          <div className="accounts-table-empty py-4 text-center text-xs text-muted-foreground">
+            Balance Sheet could not be loaded.
           </div>
         ) : (
           <BalanceSheetHorizontalView
-            statement={sourceStatement}
-            drillDownFilters={drillDownFilters}
+            model={screen}
+            drillDown={{
+              financialYearId,
+              fromDate: movementFrom,
+              toDate: report?.scope.as_on_date || asOnDate,
+              warehouseId: warehouseId !== "all" ? warehouseId : undefined,
+            }}
           />
         )}
       </AccountsListingTableCard>
