@@ -4,11 +4,11 @@
  * Never reads/writes ERP Supplier Master storage (`ds_vendors`).
  */
 
-import type { Vendor, VendorContact } from "@/app/(app)/masters/vendors/vendor-data";
+import type { Vendor, VendorContact } from "@/app/(app)/masters/suppliers/vendor-data";
 import {
   generateVendorCodeForType,
   todayStr,
-} from "@/app/(app)/masters/vendors/vendor-data";
+} from "@/app/(app)/masters/suppliers/vendor-data";
 import {
   loadChartOfAccounts,
   nextId,

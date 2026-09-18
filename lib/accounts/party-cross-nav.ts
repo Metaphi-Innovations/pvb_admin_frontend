@@ -4,7 +4,7 @@
  */
 
 import { loadCustomers } from "@/app/(app)/masters/customers/customer-data";
-import { loadVendors } from "@/app/(app)/masters/vendors/vendor-data";
+import { loadVendors } from "@/app/(app)/masters/suppliers/vendor-data";
 import { buildGeneralLedgerHref } from "@/lib/accounts/general-ledger-data";
 import {
   billWiseAdjustHref,
@@ -104,7 +104,7 @@ export function buildBillWiseCrossNavLinks(opts: {
   if (partyId != null && partyId > 0) {
     links.push({
       label: "View Supplier Master",
-      href: `/masters/vendors/${partyId}`,
+      href: `/masters/suppliers/${partyId}`,
     });
   }
   links.push({
@@ -206,7 +206,7 @@ export function buildPayablesDetailCrossNavLinks(opts: {
   ) {
     links.push({
       label: "Supplier Master",
-      href: `/masters/vendors/${vendorId}`,
+      href: `/masters/suppliers/${vendorId}`,
     });
   }
   return links;

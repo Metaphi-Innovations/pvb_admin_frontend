@@ -1,3 +1,7 @@
+/**
+ * Demo Balance Sheet builder. Not used by the production page.
+ * Production rendering comes from BalanceSheetApiService and balance-sheet-api-display.ts.
+ */
 import { loadChartOfAccounts, type ChartOfAccount } from "@/app/(app)/accounts/data";
 import { getAncestorPath } from "@/app/(app)/accounts/masters/chart-of-accounts/chart-of-accounts-data";
 import { GENERAL_LEDGER_HREF } from "@/lib/accounts/general-ledger-data";

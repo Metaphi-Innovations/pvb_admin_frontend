@@ -6,7 +6,7 @@ import type { VoucherTypeCode } from "@/app/(app)/accounts/masters/masters-data"
 import { loadChartOfAccounts } from "@/app/(app)/accounts/data";
 import type { BankReconActivityEvent } from "@/app/(app)/accounts/bank-reconciliation/bank-reconciliation-v2-data";
 import { loadCustomers } from "@/app/(app)/masters/customers/customer-data";
-import { loadVendors } from "@/app/(app)/masters/vendors/vendor-data";
+import { loadVendors } from "@/app/(app)/masters/suppliers/vendor-data";
 import {
   buildContraVoucherLines,
   buildPaymentVoucherLines,

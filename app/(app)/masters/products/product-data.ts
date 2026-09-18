@@ -1331,7 +1331,7 @@ export function formatPackagingDisplay(
 export function loadActiveVendorOptions(): MasterSelectOption[] {
   if (typeof window === "undefined") return [];
   // Lazy require avoids pulling vendor master into every product/pricing chunk at init
-  const { loadVendors } = require("../vendors/vendor-data") as typeof import("../vendors/vendor-data");
+  const { loadVendors } = require("../suppliers/vendor-data") as typeof import("../suppliers/vendor-data");
   return loadVendors()
     .filter((v) => v.status === "active")
     .map((v) => ({ value: v.vendorName, label: v.vendorName }));
@@ -1344,7 +1344,7 @@ export function loadActiveSupplierOptions(): MasterSelectOption[] {
 export function resolveSupplierCode(supplierName: string): string {
   const name = supplierName.trim();
   if (!name || typeof window === "undefined") return "";
-  const { loadVendors } = require("../vendors/vendor-data") as typeof import("../vendors/vendor-data");
+  const { loadVendors } = require("../suppliers/vendor-data") as typeof import("../suppliers/vendor-data");
   const vendor = loadVendors().find(
     (v) =>
       v.status === "active" &&

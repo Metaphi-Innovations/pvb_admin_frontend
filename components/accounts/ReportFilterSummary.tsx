@@ -6,9 +6,11 @@ import type { ReportFilterSummaryItem } from "@/lib/accounts/report-multi-filter
 
 export function ReportFilterSummary({
   items,
+  heading,
   className,
 }: {
   items: ReportFilterSummaryItem[];
+  heading?: string;
   className?: string;
 }) {
   const visible = items.filter(Boolean);
@@ -21,6 +23,9 @@ export function ReportFilterSummary({
         className,
       )}
     >
+      {heading ? (
+        <span className="font-semibold text-foreground whitespace-nowrap">{heading}</span>
+      ) : null}
       {visible.map((item) => (
         <span key={item.id} className="inline-flex items-center gap-1 text-muted-foreground">
           <span className="font-medium text-foreground">{item.label}:</span>

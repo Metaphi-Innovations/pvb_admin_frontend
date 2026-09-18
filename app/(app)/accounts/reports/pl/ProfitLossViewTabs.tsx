@@ -1,9 +1,9 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import type { PandLTab } from "./pl-data";
+import type { ProfitLossTab } from "@/types/profit-loss.types";
 
-const TABS: { id: PandLTab; label: string }[] = [
+const TABS: { id: ProfitLossTab; label: string }[] = [
   { id: "normal", label: "Normal Report" },
   { id: "detailed", label: "Detailed Report" },
 ];
@@ -12,8 +12,8 @@ export function ProfitLossViewTabs({
   value,
   onChange,
 }: {
-  value: PandLTab;
-  onChange: (tab: PandLTab) => void;
+  value: ProfitLossTab;
+  onChange: (tab: ProfitLossTab) => void;
 }) {
   return (
     <div className="flex items-end gap-0 border-b border-border">
@@ -40,6 +40,6 @@ export function ProfitLossViewTabs({
   );
 }
 
-export function profitLossViewLabel(tab: PandLTab): string {
+export function profitLossViewLabel(tab: ProfitLossTab): string {
   return tab === "normal" ? "Normal Report" : "Detailed Report";
 }

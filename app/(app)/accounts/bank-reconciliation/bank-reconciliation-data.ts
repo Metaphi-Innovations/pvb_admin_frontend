@@ -24,7 +24,7 @@ import { loadDebitNotes } from "../debit-notes/debit-notes-data";
 import { formatReconciliationBankOption } from "@/lib/accounts/bank-account-display";
 import { loadBankAccountsForReconciliation } from "@/lib/accounts/bank-accounts-data";
 import { loadCustomers } from "@/app/(app)/masters/customers/customer-data";
-import { loadVendors } from "@/app/(app)/masters/vendors/vendor-data";
+import { loadVendors } from "@/app/(app)/masters/suppliers/vendor-data";
 import {
   resolveCustomerIdForLedger,
   resolveVendorIdForLedger,

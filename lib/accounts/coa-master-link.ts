@@ -19,7 +19,7 @@ import {
 import { formatBankAccountMaster } from "@/lib/accounts/bank-account-display";
 import { loadBankAccountMasters } from "@/lib/accounts/bank-accounts-data";
 import { loadCustomers } from "@/app/(app)/masters/customers/customer-data";
-import { loadVendors } from "@/app/(app)/masters/vendors/vendor-data";
+import { loadVendors } from "@/app/(app)/masters/suppliers/vendor-data";
 import { loadProducts } from "@/app/(app)/masters/products/product-data";
 import { loadHrEmployees } from "@/app/(app)/hr/employees/employee-master-data";
 import { loadWarehouses } from "@/app/(app)/masters/warehouse/warehouse-data";
@@ -58,7 +58,7 @@ const CATEGORY_LABELS: Record<CoaMasterLinkCategory, string> = {
 const LIST_HREFS: Record<CoaMasterLinkCategory, string> = {
   bank: "/accounts/banking/bank-accounts",
   customer: "/masters/customers",
-  vendor: "/masters/vendors",
+  vendor: "/masters/suppliers",
   employee: "/hr/employees",
   inventory: "/masters/products",
   fixed_asset: "/assets/register",
@@ -213,7 +213,7 @@ export function resolveCoaMasterLink(
       ledger.masterId,
       ledger.accountName,
       ledger.accountCode ?? "",
-      `/masters/vendors/${ledger.masterId}`,
+      `/masters/suppliers/${ledger.masterId}`,
     );
   }
 
@@ -258,7 +258,7 @@ export function resolveCoaMasterLink(
         vendor.id,
         vendor.vendorName,
         vendor.vendorCode,
-        `/masters/vendors/${vendor.id}`,
+        `/masters/suppliers/${vendor.id}`,
       );
     }
   }
@@ -355,7 +355,7 @@ function hrefForModule(
     case "customer_master":
       return `/masters/customers/${sourceId}`;
     case "vendor_master":
-      return `/masters/vendors/${sourceId}`;
+      return `/masters/suppliers/${sourceId}`;
     case "employee_master":
       return `/hr/employees/${sourceId}`;
     case "product_master":

@@ -5,6 +5,8 @@
  * No Product Code, MFG Date, Expiry Date, or Discount columns.
  */
 
+import { formatSignedRoundOff } from "@/components/accounts/voucher-form/VoucherSignedRoundOffInput";
+import { computeAutomaticRoundOff } from "@/lib/accounts/money-format";
 import { inferInterstateFromPlaceOfSupply } from "@/lib/accounts/gst-accounting";
 import { computeNoteTaxBreakup } from "@/lib/accounts/note-tax-breakup";
 import {
@@ -177,7 +179,9 @@ export function downloadCreditNotePdf(record: CreditNoteRecord): void {
     .join("");
 
   const tax = computeNoteTaxBreakup(printableLines, interstate);
-  const roundOff = round2(tax.total - (tax.taxableValue + tax.taxAmount));
+  const unroundedTotal = round2(tax.taxableValue + tax.taxAmount);
+  const roundOff = computeAutomaticRoundOff(unroundedTotal);
+  const grandTotal = round2(unroundedTotal + roundOff);
   const hsnRows = buildHsnSummary(printableLines, interstate);
 
   const schemeBlock =
@@ -281,8 +285,8 @@ export function downloadCreditNotePdf(record: CreditNoteRecord): void {
     <tr><td class="label">CGST</td><td align="right">${formatINR(tax.cgstAmount)}</td></tr>
     <tr><td class="label">SGST</td><td align="right">${formatINR(tax.sgstAmount)}</td></tr>
     <tr><td class="label">IGST</td><td align="right">${formatINR(tax.igstAmount)}</td></tr>
-    <tr><td class="label">Round Off</td><td align="right">${formatINR(roundOff)}</td></tr>
-    <tr><td class="grand">Grand Total</td><td align="right" class="grand">${formatINR(tax.total)}</td></tr>
+    <tr><td class="label">Round Off</td><td align="right">${formatSignedRoundOff(roundOff)}</td></tr>
+    <tr><td class="grand">Grand Total</td><td align="right" class="grand">${formatINR(grandTotal)}</td></tr>
   </table>
   ${hsnTable}
   ${rec.remarks ? `<p style="margin-top:16px"><strong>Narration:</strong> ${escapeHtml(rec.remarks)}</p>` : ""}

@@ -4,7 +4,7 @@ import {
   ACCOUNTS_STANDALONE_ADJUSTMENT_ALLOWED,
 } from "@/lib/accounts/config";
 import type { AccountsDocumentWorkflow } from "@/lib/accounts/accounts-maker-checker";
-import { getActiveVendors, type Vendor } from "@/app/(app)/masters/vendors/vendor-data";
+import { getActiveVendors, type Vendor } from "@/app/(app)/masters/suppliers/vendor-data";
 import { loadPurchaseOrders } from "@/app/(app)/procurement/purchase-orders/po-data";
 import { maybePostDebitNote } from "@/lib/accounts/document-posting-bridge";
 import {
@@ -523,7 +523,9 @@ export function normalizeDebitNote(rec: DebitNoteRecord): DebitNoteRecord {
         })()
       : computeDebitTotals(lineItems);
   const currentDebitAmount =
-    rec.againstType === "standalone_adjustment" ? rec.standaloneDebitAmount : totals.total;
+    rec.againstType === "standalone_adjustment"
+      ? rec.standaloneDebitAmount
+      : Math.round((totals.total + (rec.round_off ?? 0)) * 100) / 100;
   const balanceAfterAdjustment = Math.max(
     0,
     rec.originalAmount - rec.alreadyAdjustedAmount - currentDebitAmount,

@@ -9,7 +9,6 @@ import { cn } from "@/lib/utils";
 import { useFormDirtySnapshot } from "@/lib/accounts/use-form-dirty-snapshot";
 import { useTransactionFormCancel } from "@/components/accounts/TransactionFormCancel";
 import { LedgerImpactPreview } from "@/components/accounts/LedgerImpactPreview";
-import { AccountingImpactSection } from "@/components/accounts/AccountingImpactSection";
 import { purchaseInvoiceImpactResolved } from "@/lib/accounts/resolved-impact-previews";
 import { formatMoney } from "@/lib/accounts/money-format";
 import { splitInvoiceGst } from "@/lib/accounts/invoice-gst-breakup";
@@ -511,8 +510,6 @@ export default function PurchaseInvoiceFormClient({ invoiceId }: { invoiceId?: n
         lines={impactLines}
         className="border border-slate-200 rounded-lg"
       />
-
-      <AccountingImpactSection docKey="purchase_invoice" className="mt-4" />
     </InvoiceFormLayout>
     {discardDialog}
     </>

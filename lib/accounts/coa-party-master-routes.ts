@@ -89,7 +89,7 @@ export function coaPartyMasterCreateHref(
     return `/masters/customers/new?source=chart-of-accounts&parentNodeId=${parentGroupId}&returnTo=${encodeURIComponent(`${CHART_OF_ACCOUNTS_HREF}?node=${parentGroupId}`)}`;
   }
   if (kind === "vendor") {
-    return `/masters/vendors/new?source=chart-of-accounts&parentNodeId=${parentGroupId}&returnTo=${encodeURIComponent(`${CHART_OF_ACCOUNTS_HREF}?node=${parentGroupId}`)}`;
+    return `/masters/suppliers/new?source=chart-of-accounts&parentNodeId=${parentGroupId}&returnTo=${encodeURIComponent(`${CHART_OF_ACCOUNTS_HREF}?node=${parentGroupId}`)}`;
   }
   return null;
 }
@@ -99,5 +99,5 @@ export function coaPartyMasterEditHref(
   sourceId: number | string,
 ): string {
   if (category === "customer") return `/masters/customers/${sourceId}/edit`;
-  return `/masters/vendors/${sourceId}/edit`;
+  return `/masters/suppliers/${sourceId}/edit`;
 }

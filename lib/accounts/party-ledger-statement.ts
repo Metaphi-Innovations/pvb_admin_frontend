@@ -6,7 +6,7 @@
 import type { ChartOfAccount } from "@/app/(app)/accounts/data";
 import { loadChartOfAccounts } from "@/app/(app)/accounts/data";
 import type { Customer } from "@/app/(app)/masters/customers/customer-data";
-import type { Vendor } from "@/app/(app)/masters/vendors/vendor-data";
+import type { Vendor } from "@/app/(app)/masters/suppliers/vendor-data";
 import { collectLedgerRawCoaTransactions } from "@/lib/accounts/coa-accounting-view";
 import { syncCustomerLedger, syncVendorLedger } from "@/lib/accounts/erp-accounting-mapping";
 import { findErpPartyLink } from "@/lib/accounts/erp-party-links";

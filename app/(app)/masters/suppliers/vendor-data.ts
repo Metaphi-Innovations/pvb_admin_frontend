@@ -766,7 +766,7 @@ export const DEFAULT_VENDOR_FORM: VendorFormValues = {
   vendorType: "",
   contactPerson: "",
   paymentType: "credit",
-  creditDays: "30",
+  creditDays: "",
   advancePercentage: "",
   companyName: "",
   mobileCountryCode: "+91",

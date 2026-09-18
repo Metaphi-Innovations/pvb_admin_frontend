@@ -4,7 +4,7 @@
  */
 
 import type { Customer } from "@/app/(app)/masters/customers/customer-data";
-import type { Vendor } from "@/app/(app)/masters/vendors/vendor-data";
+import type { Vendor } from "@/app/(app)/masters/suppliers/vendor-data";
 import type { Product } from "@/app/(app)/masters/products/product-data";
 import type { GSTMaster } from "@/app/(app)/masters/gst/gst-data";
 import {
@@ -25,7 +25,7 @@ import {
 } from "@/lib/accounts/erp-party-links";
 import { coaHrefForLedger, isMasterLinkedLedger } from "@/lib/accounts/coa-master-link";
 import { loadCustomers } from "@/app/(app)/masters/customers/customer-data";
-import { loadVendors } from "@/app/(app)/masters/vendors/vendor-data";
+import { loadVendors } from "@/app/(app)/masters/suppliers/vendor-data";
 import { computeCustomerOutstanding } from "@/lib/accounts/receivables-data";
 import { computeVendorOutstanding } from "@/lib/accounts/payables-data";
 

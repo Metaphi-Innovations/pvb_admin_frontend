@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useMemo } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { AppLayout } from "@/components/layout/AppLayout";
@@ -8,56 +8,52 @@ import {
   RecordDetailPage,
   RecordKvRow,
   RecordSectionCard,
-  RecordStatusPill,
 } from "@/components/record-detail";
-import { Building2, Clock, FileText, IndianRupee, Mail, MapPin, Pencil, Phone, Truck } from "lucide-react";
 import {
-  getPaymentTermLabel,
-  loadSuppliers,
-  saveSuppliers,
-  type Supplier,
-  type SupplierStatus,
-} from "../supplier-data";
+  Building2,
+  Clock,
+  FileText,
+  Landmark,
+  Mail,
+  MapPin,
+  Package,
+  Phone,
+  User,
+} from "lucide-react";
+import { useSupplier } from "@/hooks/masters/use-supplier";
+import { resolveSupplierDocumentUrl } from "@/services/supplier-list.service";
+import { getGstCategoryLabel, deriveGstRegistered } from "@/lib/masters/gst-compliance";
+import { getActiveTDSMasters, formatTdsSummary } from "../../tds/tds-data";
+import { ErpPartyAccountingCard } from "@/components/masters/ErpPartyAccountingCard";
 
-function TypeBadge({ label }: { label: string }) {
-  return (
-    <span className="inline-flex items-center rounded-md bg-brand-50 border border-brand-100 px-2 py-0.5 text-[11px] font-semibold text-brand-700">
-      {label}
-    </span>
-  );
+function formatMobile(code: string, mobile: string) {
+  if (!mobile) return "—";
+  return `${code} ${mobile}`.trim();
 }
 
-export default function SupplierDetailPage() {
+export default function ViewVendorPage() {
+  const params = useParams();
   const router = useRouter();
-  const { id } = useParams<{ id: string }>();
-  const [supplier, setSupplier] = useState<Supplier | null>(null);
-  const [records, setRecords] = useState<Supplier[]>([]);
-  const [activeTab, setActiveTab] = useState("overview");
+  const id = params.id as string;
 
-  useEffect(() => {
-    const list = loadSuppliers();
-    setRecords(list);
-    setSupplier(list.find((item) => item.id === Number(id)) ?? null);
-  }, [id]);
+  const { data: vendor, isLoading, isError } = useSupplier(id);
 
-  const updateStatus = (status: SupplierStatus) => {
-    if (!supplier) return;
-    const updated = records.map((item) =>
-      item.id === supplier.id
-        ? {
-            ...item,
-            status,
-            updatedBy: "Admin",
-            updatedDate: new Date().toISOString().slice(0, 10),
-          }
-        : item,
+  const tds = useMemo(() => {
+    if (!vendor?.tdsSectionId) return null;
+    return getActiveTDSMasters().find((t) => t.id === Number(vendor.tdsSectionId) || t.sectionName === vendor.tdsSectionId) ?? null;
+  }, [vendor?.tdsSectionId]);
+
+  if (isLoading) {
+    return (
+      <AppLayout>
+        <div className="py-16 text-center text-xs text-muted-foreground">
+          Loading supplier details…
+        </div>
+      </AppLayout>
     );
-    setRecords(updated);
-    saveSuppliers(updated);
-    setSupplier(updated.find((item) => item.id === supplier.id) ?? null);
-  };
+  }
 
-  if (!supplier) {
+  if (isError || !vendor) {
     return (
       <AppLayout>
         <div className="py-16 text-center">
@@ -70,128 +66,348 @@ export default function SupplierDetailPage() {
     );
   }
 
-  const tabs = [
-    { value: "overview", label: "Overview" },
-    { value: "tax", label: "Tax & Compliance" },
-    { value: "bank", label: "Bank Details" },
-    { value: "po", label: "PO History", count: 0 },
-    { value: "grn", label: "GRN History", count: 0 },
-    { value: "activity", label: "Activity" },
-  ];
+  const gstRegistered = deriveGstRegistered(
+    vendor.gstRegistered,
+    vendor.gstinNumber,
+    vendor.registrationType,
+  );
 
-  const kpis = [
-    { icon: Truck, iconBg: "#E8F4FD", iconColor: "#1554B4", value: "0", label: "Total POs" },
-    { icon: IndianRupee, iconBg: "#E6F7EF", iconColor: "#1E9E61", value: "₹ 0.00", label: "Total Value" },
-    { icon: Clock, iconBg: "#FFF4E6", iconColor: "#E87B35", value: "0", label: "Pending GRN" },
-    { icon: Clock, iconBg: "#F3EEFF", iconColor: "#7C5CBF", value: "—", label: "Last PO" },
-    { icon: IndianRupee, iconBg: "#FEECEC", iconColor: "#D14343", value: "₹ 0.00", label: "Outstanding" },
-  ];
-
-  const renderTab = () => {
-    switch (activeTab) {
-      case "overview":
-        return (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <RecordSectionCard title="Supplier Details" icon={Building2} accent="blue">
-              <RecordKvRow label="Supplier Name" value={supplier.supplierName} highlight />
-              <RecordKvRow label="Code" value={supplier.supplierCode} mono copy />
-              <RecordKvRow label="Mobile" value={supplier.mobile} mono link href={`tel:${supplier.mobile}`} />
-              <RecordKvRow label="Email" value={supplier.email || "—"} link={!!supplier.email} href={supplier.email ? `mailto:${supplier.email}` : undefined} />
-              <RecordKvRow
-                label="Status"
-                value={<RecordStatusPill label={supplier.status === "active" ? "Active" : "Inactive"} variant={supplier.status} />}
-                isLast
-              />
-            </RecordSectionCard>
-            <RecordSectionCard title="Address" icon={MapPin} accent="purple">
-              <RecordKvRow label="Address" value={supplier.address} isLast />
-            </RecordSectionCard>
-          </div>
-        );
-      case "tax":
-        return (
-          <RecordSectionCard title="Tax & Registration" icon={FileText} accent="blue">
-            <RecordKvRow label="GSTIN" value={supplier.gstin} mono copy />
-            <RecordKvRow label="CIB Regn #" value={supplier.cibRegn} />
-            <RecordKvRow label="CIB Expiry" value={supplier.cibRegnExpiry} />
-            <RecordKvRow label="FCO Regn #" value={supplier.fcoRegn} />
-            <RecordKvRow label="FCO Expiry" value={supplier.fcoRegnExpiry} isLast />
-          </RecordSectionCard>
-        );
-      case "bank":
-        return (
-          <RecordSectionCard title="Bank Details" icon={IndianRupee} accent="green">
-            <p className="text-sm text-[#6B80A0] py-4">No bank details on file.</p>
-          </RecordSectionCard>
-        );
-      case "po":
-      case "grn":
-        return (
-          <RecordSectionCard title={activeTab === "po" ? "PO History" : "GRN History"} icon={Truck} accent="blue">
-            <p className="text-sm text-[#6B80A0] py-4">No records yet.</p>
-          </RecordSectionCard>
-        );
-      case "activity":
-        return (
-          <RecordSectionCard title="Activity" icon={Clock} accent="slate">
-            <p className="text-sm text-[#6B80A0] py-4">No activity recorded.</p>
-          </RecordSectionCard>
-        );
-      default:
-        return null;
-    }
+  // Accounting Ledger Summary compliant with PartyAccountingSummary
+  const accountingSummary = {
+    ledgerId: null as number | null,
+    ledgerName: vendor.supplierName + " - Creditors",
+    ledgerCode: "20101-0" + vendor.supplierCode,
+    outstanding: 0,
+    coaHref: "/accounts/coa",
+    ledgerHref: `/accounts/ledger?id=${vendor.supplierUuid}`,
+    isSystemGenerated: true,
   };
+
+  const mappedProducts = vendor.products ?? [];
 
   return (
     <RecordDetailPage
-        listHref="/masters/suppliers"
-        listLabel="Suppliers"
-        recordName={supplier.supplierName}
-        recordCode={supplier.supplierCode}
-        typeBadge={<TypeBadge label="Supplier" />}
-        statusLabel={supplier.status === "active" ? "Active" : "Inactive"}
-        statusVariant={supplier.status}
-        metaItems={[
-          { label: supplier.mobile, icon: Phone, href: `tel:${supplier.mobile}` },
-          ...(supplier.email ? [{ label: supplier.email, icon: Mail, href: `mailto:${supplier.email}` }] : []),
-        ]}
-        kpis={kpis}
-        tabs={tabs}
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-        active={supplier.status === "active"}
-        onActiveChange={(on) => updateStatus(on ? "active" : "inactive")}
-        onEdit={() => router.push(`/masters/suppliers/${supplier.id}/edit`)}
-        secondaryAction={{
-          label: "New PO",
-          onClick: () => router.push("/procurement/purchase-orders/new"),
-        }}
-        sidebar={{
-          quickActions: [
-            {
-              label: "New PO",
-              icon: Truck,
-              onClick: () => router.push("/procurement/purchase-orders/new"),
-              variant: "primary",
-            },
-            {
-              label: "Edit Supplier",
-              icon: Pencil,
-              onClick: () => router.push(`/masters/suppliers/${supplier.id}/edit`),
-              variant: "outline",
-            },
-          ],
-          summary: [
-            { label: "Payment Terms", value: getPaymentTermLabel(supplier.paymentTerms), highlight: true },
-            { label: "GSTIN", value: supplier.gstin || "—" },
-            { label: "Created By", value: supplier.createdBy },
-            { label: "Created", value: supplier.createdDate },
-            { label: "Updated", value: supplier.updatedDate },
-          ],
-          activity: [],
-        }}
-      >
-        {renderTab()}
-      </RecordDetailPage>
+      listHref="/masters/suppliers"
+      listLabel="Suppliers"
+      recordName={vendor.supplierName}
+      statusLabel={vendor.status === "active" ? "Active" : "Inactive"}
+      statusVariant={vendor.status}
+      metaItems={[
+        ...(vendor.contactPerson
+          ? [{ label: vendor.contactPerson, icon: User }]
+          : []),
+        ...(vendor.mobileNumber
+          ? [{
+            label: formatMobile(vendor.mobileCountryCode, vendor.mobileNumber),
+            icon: Phone,
+            href: `tel:${vendor.mobileNumber}`,
+          }]
+          : []),
+        ...(vendor.email
+          ? [{ label: vendor.email, icon: Mail, href: `mailto:${vendor.email}` }]
+          : []),
+      ]}
+      kpis={[
+        {
+          icon: Building2,
+          iconBg: "#EEF3FB",
+          iconColor: "#0C3F8A",
+          value: vendor.supplierType?.supplier_type_name || "—",
+          label: "Supplier Type",
+        },
+        {
+          icon: FileText,
+          iconBg: "#E6F7EF",
+          iconColor: "#1E9E61",
+          value: vendor.gstinNumber || "—",
+          label: "GST Number",
+        },
+        {
+          icon: Clock,
+          iconBg: "#FFFBEB",
+          iconColor: "#D97706",
+          value: vendor.paymentTerms || "30 Days",
+          label: "Payment Terms",
+        },
+        {
+          icon: Package,
+          iconBg: "#E8F4FD",
+          iconColor: "#1554B4",
+          value: String(mappedProducts.length),
+          label: "Mapped Products",
+        },
+      ]}
+      onEdit={() => router.push(`/masters/suppliers/${id}/edit`)}
+      sidebar={{
+        summary: [
+          { label: "Supplier Code", value: vendor.supplierCode || "—", highlight: true },
+          { label: "Supplier Type", value: vendor.supplierType?.supplier_type_name || "—" },
+          { label: "GST", value: vendor.gstinNumber || "—" },
+          { label: "PAN", value: vendor.panNumber || "—" },
+          { label: "Payment Terms", value: vendor.paymentTerms || "30 Days" },
+          { label: "Created", value: vendor.createdAt },
+          { label: "Updated", value: vendor.updatedAt },
+        ],
+      }}
+    >
+      <div className="space-y-4">
+        <ErpPartyAccountingCard
+          title="Accounting Integration"
+          summary={accountingSummary}
+          partyLabel="Supplier"
+        />
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:items-start">
+          <RecordSectionCard title="Supplier Information" icon={Building2} accent="blue">
+            <RecordKvRow label="Supplier Code" value={vendor.supplierCode || "—"} mono highlight />
+            <RecordKvRow label="Supplier Name" value={vendor.supplierName} highlight />
+            <RecordKvRow label="Supplier Type" value={vendor.supplierType?.supplier_type_name || "—"} />
+            <RecordKvRow label="Payment Terms" value={vendor.paymentTerms || "30 Days"} />
+            {vendor.contactPerson?.trim() ? (
+              <RecordKvRow label="Contact Person" value={vendor.contactPerson.trim()} />
+            ) : null}
+            {vendor.mobileNumber?.trim() ? (
+              <RecordKvRow
+                label="Mobile Number"
+                value={formatMobile(vendor.mobileCountryCode, vendor.mobileNumber.trim())}
+                mono
+                link
+                href={`tel:${vendor.mobileNumber.trim()}`}
+              />
+            ) : null}
+            <RecordKvRow
+              label="Email Address"
+              value={vendor.email?.trim() || "—"}
+              link={!!vendor.email?.trim()}
+              href={vendor.email?.trim() ? `mailto:${vendor.email.trim()}` : undefined}
+              isLast
+            />
+          </RecordSectionCard>
+
+          <RecordSectionCard title="Registered Address" icon={MapPin} accent="green">
+            <RecordKvRow
+              label="Address"
+              value={
+                [
+                  vendor.registeredGstAddress?.trim(),
+                  [vendor.address1, vendor.address2].filter((p) => p?.trim()).join(", "),
+                  [vendor.town, vendor.city, vendor.state].filter((p) => p?.trim()).join(", "),
+                  vendor.pincodeMaster?.pincode?.trim(),
+                ]
+                  .filter((part) => part && part.trim())
+                  .filter((part, idx, arr) => arr.indexOf(part) === idx)
+                  .join(" · ") || "—"
+              }
+              isLast
+            />
+          </RecordSectionCard>
+
+          <RecordSectionCard title="Tax & Registration" icon={FileText} accent="orange">
+            <RecordKvRow label="GST Registered" value={gstRegistered ? "Yes" : "No"} />
+            {gstRegistered && (
+              <>
+                <RecordKvRow
+                  label="GST Registration Type"
+                  value={getGstCategoryLabel(vendor.registrationType ?? "regular")}
+                />
+                <RecordKvRow label="GSTIN Number" value={vendor.gstinNumber} mono copy />
+              </>
+            )}
+            <RecordKvRow label="PAN Number" value={vendor.panNumber || "—"} mono copy />
+            <RecordKvRow label="TAN Number" value={vendor.tanNumber || "—"} mono copy />
+            <RecordKvRow
+              label="MSME No. (UDYAM)"
+              value={vendor.msmeRegistered ? vendor.msmeRegNo || "—" : "—"}
+              mono
+              copy={!!vendor.msmeRegNo}
+            />
+            <RecordKvRow label="TDS Applicable" value={vendor.tdsApplicable ? "Yes" : "No"} />
+            {vendor.tdsApplicable ? (
+              <RecordKvRow
+                label="TDS Section"
+                value={tds ? `${formatTdsSummary(tds)} — ${tds.sectionName}` : vendor.tdsSectionId || "—"}
+                mono
+                isLast
+              />
+            ) : (
+              <RecordKvRow label="TDS Section" value="—" isLast />
+            )}
+          </RecordSectionCard>
+
+          <RecordSectionCard title="Contact Information" icon={User} accent="blue">
+            {(vendor.contacts?.length ?? 0) > 0 ? (
+              <div className="space-y-0">
+                {vendor.contacts?.map((contact, idx) => (
+                  <div
+                    key={contact.supplier_contact_id}
+                    className={
+                      idx < (vendor.contacts?.length ?? 0) - 1
+                        ? "border-b border-border/60 pb-2 mb-2"
+                        : undefined
+                    }
+                  >
+                    <RecordKvRow label="Name" value={contact.contact_name} highlight />
+                    <RecordKvRow label="Designation" value={contact.designation || "—"} />
+                    <RecordKvRow
+                      label="Mobile"
+                      value={formatMobile(contact.mobile_country_code ?? "+91", contact.mobile_number)}
+                      mono
+                    />
+                    <RecordKvRow
+                      label="Email"
+                      value={contact.email || "—"}
+                      isLast
+                    />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <RecordKvRow label="Contacts" value="—" isLast />
+            )}
+          </RecordSectionCard>
+
+          <RecordSectionCard title="Bank Details" icon={Landmark} accent="purple">
+            <RecordKvRow label="Account Holder" value={vendor.supplierName || "—"} highlight />
+            {vendor.bankAccounts && vendor.bankAccounts.length > 0 ? (
+              <>
+                <RecordKvRow label="Bank Name" value={String(vendor.bankAccounts[0].bank_name || "—")} />
+                <RecordKvRow label="Branch" value={String(vendor.bankAccounts[0].branch_name || "—")} />
+                <RecordKvRow label="Account Number" value={String(vendor.bankAccounts[0].account_number || "—")} mono copy />
+                <RecordKvRow label="IFSC Code" value={String(vendor.bankAccounts[0].ifsc_code || "—")} mono copy isLast />
+              </>
+            ) : (
+              <RecordKvRow label="Bank Details" value="—" isLast />
+            )}
+          </RecordSectionCard>
+
+          <RecordSectionCard title="Audit" icon={Clock} accent="orange">
+            <RecordKvRow label="Created By" value={vendor.createdBy} />
+            <RecordKvRow label="Created Date" value={vendor.createdAt} mono />
+            <RecordKvRow label="Updated By" value={vendor.updatedBy} />
+            <RecordKvRow label="Updated Date" value={vendor.updatedAt} mono />
+            <RecordKvRow
+              label="Status"
+              value={vendor.status === "active" ? "Active" : "Inactive"}
+              isLast
+            />
+          </RecordSectionCard>
+
+          <RecordSectionCard
+            title="Mapped Products"
+            icon={Package}
+            accent="blue"
+            className="lg:col-span-2"
+          >
+            {mappedProducts.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4">
+                No products linked to this supplier. Assign a supplier in Product Master.
+              </p>
+            ) : (
+              <div className="overflow-hidden border border-border rounded-lg">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="bg-muted/40 border-b border-border">
+                        <th className="px-3 py-2 text-left font-semibold text-foreground">Product Code</th>
+                        <th className="px-3 py-2 text-left font-semibold text-foreground">Product Name</th>
+                        <th className="px-3 py-2 text-left font-semibold text-foreground">SKU</th>
+                        <th className="px-3 py-2 text-left font-semibold text-foreground">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {mappedProducts.map((product: any) => (
+                        <tr
+                          key={product.product_id}
+                          className="border-b border-border/60 last:border-0 hover:bg-muted/20"
+                        >
+                          <td className="px-3 py-2">
+                            <Link
+                              href={`/masters/products/${product.product_id}`}
+                              className="font-mono font-semibold text-brand-700 hover:underline"
+                            >
+                              {product.product_code}
+                            </Link>
+                          </td>
+                          <td className="px-3 py-2 font-medium text-foreground">{product.product_name}</td>
+                          <td className="px-3 py-2 font-mono text-muted-foreground">{product.sku || "—"}</td>
+                          <td className="px-3 py-2 capitalize text-muted-foreground">{product.status}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </RecordSectionCard>
+
+          <RecordSectionCard
+            title="Media & Documents"
+            icon={FileText}
+            accent="purple"
+            className="lg:col-span-2"
+          >
+            {vendor.documents && vendor.documents.length > 0 ? (
+              <div className="overflow-hidden rounded-lg border border-border">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-border bg-muted/40">
+                        <th className="px-3 py-2 text-left font-semibold">
+                          Document Type
+                        </th>
+                        <th className="px-3 py-2 text-left font-semibold">
+                          File Name
+                        </th>
+                        <th className="px-3 py-2 text-left font-semibold">
+                          Uploaded On
+                        </th>
+                        <th className="px-3 py-2 text-left font-semibold">
+                          Action
+                        </th>
+                      </tr>
+                    </thead>
+
+                    <tbody>
+                      {vendor.documents.map((doc) => (
+                        <tr
+                          key={doc.supplier_document_id}
+                          className="border-b border-border/60 last:border-0 hover:bg-muted/20"
+                        >
+                          <td className="px-3 py-2">
+                            {doc.document_name}
+                          </td>
+
+                          <td className="px-3 py-2 font-mono">
+                            {doc.file_name}
+                          </td>
+
+                          <td className="px-3 py-2 text-muted-foreground">
+                            {new Date(doc.created_at).toLocaleDateString()}
+                          </td>
+
+                          <td className="px-3 py-2">
+                            <a
+                              href={resolveSupplierDocumentUrl(doc.file_url)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-brand-700 hover:underline"
+                            >
+                              Download
+                            </a>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : (
+              <p className="py-4 text-sm text-muted-foreground">
+                No documents uploaded.
+              </p>
+            )}
+          </RecordSectionCard>
+        </div>
+      </div>
+    </RecordDetailPage>
   );
 }

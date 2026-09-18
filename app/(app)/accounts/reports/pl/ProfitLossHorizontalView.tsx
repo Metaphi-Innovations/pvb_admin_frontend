@@ -1,9 +1,14 @@
 "use client";
 
-import { memo, useMemo } from "react";
+import { memo } from "react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import { formatMoneyNumber, MONEY_AMOUNT_CLASS } from "@/lib/accounts/money-format";
+import {
+  formatMoneyString,
+  formatMoneyStringOrDash,
+  MONEY_AMOUNT_CLASS,
+} from "@/lib/accounts/money-format";
+import { buildGeneralLedgerHref } from "@/lib/accounts/general-ledger-href";
 import {
   AccountsTable,
   AccountsTableBody,
@@ -14,131 +19,88 @@ import {
   AccountsTableHeadRow,
   AccountsTableRow,
 } from "@/components/accounts/AccountsTable";
-import {
-  buildPandLLedgerHref,
-  type PandLDrillDownFilters,
-  type PandLSideDisplayRow,
-  type PandLStatement,
-} from "./pl-data";
+import type { PlScreenModel, PlScreenPair, PlScreenRow } from "./profit-loss-api-display";
+import { plRowIndentPx } from "./pl-display";
 
-function formatAmount(amount: number, isReturn?: boolean): string {
-  if (isReturn) return `(${formatMoneyNumber(amount)})`;
-  return formatMoneyNumber(amount);
+export interface PlDrillDownScope {
+  dateFrom: string;
+  dateTo: string;
+  financialYearId: string;
+  warehouseId?: string;
 }
 
-function isBoldRow(row: PandLSideDisplayRow): boolean {
-  return (
-    row.rowType === "group" ||
-    row.rowType === "carried" ||
-    row.rowType === "section_total" ||
-    row.rowType === "net" ||
-    row.rowType === "grand_total"
-  );
+function displayAmount(row: PlScreenRow): string {
+  if (row.emphasis === "detail") return formatMoneyStringOrDash(row.amount);
+  return formatMoneyString(row.amount);
 }
 
 function ParticularLabel({
   row,
-  drillDownFilters,
+  scope,
 }: {
-  row: PandLSideDisplayRow;
-  drillDownFilters: PandLDrillDownFilters;
+  row: PlScreenRow;
+  scope: PlDrillDownScope;
 }) {
-  const bold = isBoldRow(row);
+  const bold = row.emphasis !== "detail";
+  const navigable = Boolean(row.ledgerId || row.groupId);
   const labelClass = cn(
     "text-xs truncate",
     bold ? "font-bold text-foreground" : "font-normal text-foreground",
-    row.ledgerId && "text-brand-700 hover:text-brand-800 hover:underline",
+    navigable && "text-brand-700 hover:text-brand-800 hover:underline",
   );
 
-  if (row.ledgerId) {
-    return (
-      <Link
-        href={buildPandLLedgerHref(row.ledgerId, drillDownFilters)}
-        className={labelClass}
-        title={`View ${row.particular} ledger`}
-      >
-        {row.particular}
-      </Link>
-    );
-  }
+  const label = (
+    <span className={labelClass} title={row.particular} style={{ paddingLeft: plRowIndentPx(row.depth) }}>
+      {row.particular}
+    </span>
+  );
+
+  if (!navigable) return label;
 
   return (
-    <span className={labelClass} title={row.particular}>
+    <Link
+      href={buildGeneralLedgerHref({
+        ledgerId: row.ledgerId ?? undefined,
+        groupId: row.ledgerId ? undefined : row.groupId ?? undefined,
+        fromDate: scope.dateFrom,
+        toDate: scope.dateTo,
+        financialYearId: scope.financialYearId,
+        warehouse: scope.warehouseId,
+        source: "profit-loss",
+      })}
+      className={labelClass}
+      style={{ paddingLeft: plRowIndentPx(row.depth) }}
+      title={row.ledgerId ? `View ${row.particular} ledger` : `View ${row.particular} in General Ledger`}
+    >
       {row.particular}
+    </Link>
+  );
+}
+
+function AmountCell({ row }: { row: PlScreenRow }) {
+  const bold = row.emphasis !== "detail";
+  return (
+    <span className={cn("text-right tabular-nums", MONEY_AMOUNT_CLASS, bold && "font-bold")}>
+      {displayAmount(row)}
     </span>
   );
 }
 
-function DualAmountCell({ row }: { row: PandLSideDisplayRow }) {
-  const bold = isBoldRow(row);
-
-  if (row.rowType === "ledger") {
-    return (
-      <div className="grid grid-cols-[1fr_1fr] w-full items-center gap-2">
-        <span className={cn("text-left tabular-nums", MONEY_AMOUNT_CLASS)}>
-          {row.ledgerAmount != null ? formatAmount(row.ledgerAmount, row.isReturn) : ""}
-        </span>
-        <span />
-      </div>
-    );
-  }
-
-  return (
-    <div className="grid grid-cols-[1fr_1fr] w-full items-center gap-2">
-      <span />
-      <span className={cn("text-right tabular-nums", MONEY_AMOUNT_CLASS, bold && "font-bold")}>
-        {row.groupTotal != null ? formatAmount(row.groupTotal, row.isReturn) : ""}
-      </span>
-    </div>
-  );
-}
-
-function zipRows(statement: PandLStatement) {
-  const debitBody = statement.debitRows.filter((r) => r.rowType !== "grand_total");
-  const creditBody = statement.creditRows.filter((r) => r.rowType !== "grand_total");
-  const rowCount = Math.max(debitBody.length, creditBody.length);
-
-  const bodyRows = Array.from({ length: rowCount }, (_, i) => ({
-    debit: debitBody[i] ?? null,
-    credit: creditBody[i] ?? null,
-  }));
-
-  const grandDebit: PandLSideDisplayRow =
-    statement.debitRows.find((r) => r.rowType === "grand_total") ?? {
-      id: "pl-grand-dr",
-      particular: "Total",
-      rowType: "grand_total",
-      groupTotal: statement.finalDebitTotal,
-    };
-
-  const grandCredit: PandLSideDisplayRow =
-    statement.creditRows.find((r) => r.rowType === "grand_total") ?? {
-      id: "pl-grand-cr",
-      particular: "Total",
-      rowType: "grand_total",
-      groupTotal: statement.finalCreditTotal,
-    };
-
-  return { bodyRows, grandDebit, grandCredit };
-}
-
-function sectionTotalRowClass(row: PandLSideDisplayRow | null): string | undefined {
-  if (row?.rowType === "section_total") return "border-t-2 border-foreground/20 bg-muted/20";
-  if (row?.rowType === "group" || row?.rowType === "carried") return "bg-muted/10";
+function sectionClass(pair: PlScreenPair): string | undefined {
+  const emphasis = [pair.debit?.emphasis, pair.credit?.emphasis];
+  if (emphasis.includes("section")) return "border-t-2 border-foreground/20 bg-muted/20";
+  if (emphasis.includes("category") || emphasis.includes("presentation")) return "bg-muted/10";
   return undefined;
 }
 
 export const ProfitLossHorizontalView = memo(function ProfitLossHorizontalView({
-  statement,
-  drillDownFilters,
+  model,
+  scope,
 }: {
-  statement: PandLStatement;
-  drillDownFilters: PandLDrillDownFilters;
+  model: PlScreenModel;
+  scope: PlDrillDownScope;
 }) {
-  const { bodyRows, grandDebit, grandCredit } = useMemo(
-    () => zipRows(statement),
-    [statement],
-  );
+  const bodyRows = model.pairs;
 
   return (
     <div className="w-full">
@@ -159,57 +121,47 @@ export const ProfitLossHorizontalView = memo(function ProfitLossHorizontalView({
             </AccountsTableHeadCell>
           </AccountsTableHeadRow>
         </AccountsTableHead>
-
         <AccountsTableBody>
           {bodyRows.map((pair, index) => (
             <AccountsTableRow
               key={`pl-row-${index}`}
               className={cn(
                 "hover:bg-muted/30 transition-colors",
-                sectionTotalRowClass(pair.debit) ?? sectionTotalRowClass(pair.credit),
+                sectionClass(pair),
               )}
             >
               <AccountsTableCell className="border-r border-border/60 align-top">
-                {pair.debit ? (
-                  <ParticularLabel row={pair.debit} drillDownFilters={drillDownFilters} />
-                ) : null}
+                {pair.debit ? <ParticularLabel row={pair.debit} scope={scope} /> : null}
               </AccountsTableCell>
-              <AccountsTableCell
-                align="right"
-                money
-                className="border-r-2 border-border align-top"
-              >
-                {pair.debit ? <DualAmountCell row={pair.debit} /> : null}
+              <AccountsTableCell align="right" money className="border-r-2 border-border align-top">
+                {pair.debit ? <AmountCell row={pair.debit} /> : null}
               </AccountsTableCell>
               <AccountsTableCell className="border-r border-border/60 align-top">
-                {pair.credit ? (
-                  <ParticularLabel row={pair.credit} drillDownFilters={drillDownFilters} />
-                ) : null}
+                {pair.credit ? <ParticularLabel row={pair.credit} scope={scope} /> : null}
               </AccountsTableCell>
               <AccountsTableCell align="right" money className="align-top">
-                {pair.credit ? <DualAmountCell row={pair.credit} /> : null}
+                {pair.credit ? <AmountCell row={pair.credit} /> : null}
               </AccountsTableCell>
             </AccountsTableRow>
           ))}
         </AccountsTableBody>
-
         <AccountsTableFoot>
           <AccountsTableRow className="border-t-2 border-foreground/20 bg-brand-50/60">
             <AccountsTableCell className="border-r border-border/60 font-bold text-xs text-foreground">
-              {grandDebit.particular}
+              Total
             </AccountsTableCell>
-            <AccountsTableCell
-              align="right"
-              money
-              className="border-r-2 border-border font-bold"
-            >
-              <DualAmountCell row={grandDebit} />
+            <AccountsTableCell align="right" money className="border-r-2 border-border font-bold">
+              <span className={cn(MONEY_AMOUNT_CLASS, "font-bold")}>
+                {formatMoneyString(model.debitTotal)}
+              </span>
             </AccountsTableCell>
             <AccountsTableCell className="border-r border-border/60 font-bold text-xs text-foreground">
-              {grandCredit.particular}
+              Total
             </AccountsTableCell>
             <AccountsTableCell align="right" money className="font-bold">
-              <DualAmountCell row={grandCredit} />
+              <span className={cn(MONEY_AMOUNT_CLASS, "font-bold")}>
+                {formatMoneyString(model.creditTotal)}
+              </span>
             </AccountsTableCell>
           </AccountsTableRow>
         </AccountsTableFoot>

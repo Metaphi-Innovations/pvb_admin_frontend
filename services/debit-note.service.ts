@@ -60,16 +60,28 @@ export function mapDebitNoteToRecord(item: any): DebitNoteRecord {
     currentDebitAmount: dnAmount,
     balanceAfterAdjustment: 0,
     standaloneDebitAmount: dnAmount,
-    lineItems: item.lines?.map((line: any) => ({
-      id: line.id,
-      productName: line.description || "—",
-      returnQty: parseFloat(line.quantity || "0"),
-      unitPrice: parseFloat(line.rate || "0"),
-      debitAmount: parseFloat(line.taxable_amount || "0"),
-      taxPct: parseFloat(line.gst_rate || "0"),
-      adjustmentLedgerId: line.ledger_id,
-      adjustmentLedgerName: line.ledger?.ledger_name || "",
-    })) || [],
+    lineItems: item.lines?.map((line: any) => {
+      const qtyRaw = parseFloat(String(line.quantity ?? "0"));
+      const qty = Number.isFinite(qtyRaw) ? qtyRaw : 0;
+      const taxable = parseFloat(String(line.taxable_amount ?? "0")) || 0;
+      const rateFromApi = parseFloat(String(line.rate ?? "0")) || 0;
+      const unitPrice =
+        rateFromApi > 0 ? rateFromApi : qty > 0 ? taxable / qty : taxable;
+      const taxPct = parseFloat(String(line.gst_rate ?? "0")) || 0;
+      return {
+        id: line.debit_note_line_id || line.id,
+        productName: line.description || "—",
+        returnQty: qty > 0 ? qty : 1,
+        unitPrice,
+        debitAmount: taxable,
+        taxPct,
+        gstApplicable: taxPct > 0,
+        gstAmount: parseFloat(String(line.gst_amount ?? "0")) || 0,
+        lineAmount: parseFloat(String(line.line_total ?? taxable)) || taxable,
+        adjustmentLedgerId: line.ledger_id,
+        adjustmentLedgerName: line.ledger?.ledger_name || "",
+      };
+    }) || [],
     reason: item.remarks || item.narration || "",
     remarks: item.remarks || item.narration || "",
     attachments: item.attachments || [],

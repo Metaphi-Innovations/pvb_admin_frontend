@@ -161,7 +161,10 @@ export default function NewSupplierPage() {
           swift_code: form.swiftCode,
           is_primary: true,
           payment_type: form.paymentType,
-          credit_days: form.creditDays,
+          credit_days:
+            form.paymentType === "credit" && form.creditDays !== ""
+              ? form.creditDays
+              : null,
           advance:
             form.paymentType === "advance" && form.advancePercentage
               ? form.advancePercentage
@@ -205,7 +208,7 @@ export default function NewSupplierPage() {
           }
         }
         setToast({ msg: "Supplier created successfully.", type: "success" });
-        setTimeout(() => router.push("/masters/vendors"), 900);
+        setTimeout(() => router.push("/masters/suppliers"), 900);
       },
       onError: (err: unknown) => {
         if (isSupplierApiValidationError(err)) {

@@ -433,6 +433,11 @@ export function CreditNoteParticularsEditor({
         ) : null
       }
     >
+      {canAddRemoveLines ? (
+        <p className="px-3 pt-2 text-[11px] text-muted-foreground">
+          Enter adjustments, freight, packing, or other direct credit note lines here.
+        </p>
+      ) : null}
       <div className="so-invoice-charges-table-wrap w-full">
         <table className="so-invoice-table text-xs w-full table-fixed">
           <thead>
@@ -465,6 +470,13 @@ export function CreditNoteParticularsEditor({
                   )}
                 >
                   {columnLabel(col)}
+                  {canAddRemoveLines &&
+                  (col === "particular" || col === "ledger" || col === "rate_benefit") ? (
+                    <span className="text-red-500" aria-hidden>
+                      {" "}
+                      *
+                    </span>
+                  ) : null}
                 </th>
               ))}
             </tr>

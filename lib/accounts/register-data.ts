@@ -6,7 +6,7 @@ import {
 } from "@/app/(app)/accounts/invoices/invoices-data";
 import { loadPurchaseInvoices } from "@/app/(app)/accounts/purchase-invoices/purchase-invoices-data";
 import { loadCustomers } from "@/app/(app)/masters/customers/customer-data";
-import { loadVendors } from "@/app/(app)/masters/vendors/vendor-data";
+import { loadVendors } from "@/app/(app)/masters/suppliers/vendor-data";
 import { loadProducts } from "@/app/(app)/masters/products/product-data";
 import { roundMoney } from "@/lib/accounts/money-format";
 import {

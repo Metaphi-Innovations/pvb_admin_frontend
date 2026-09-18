@@ -5,7 +5,7 @@
 
 import type { InvoiceRecord } from "@/app/(app)/accounts/invoices/invoices-data";
 import { loadCustomers } from "@/app/(app)/masters/customers/customer-data";
-import { loadVendors } from "@/app/(app)/masters/vendors/vendor-data";
+import { loadVendors } from "@/app/(app)/masters/suppliers/vendor-data";
 import {
   findErpPartyLink,
   findErpPartyLinkByLedgerId,

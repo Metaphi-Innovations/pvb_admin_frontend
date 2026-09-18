@@ -1,3 +1,4 @@
+import { formatSignedRoundOff } from "@/components/accounts/voucher-form/VoucherSignedRoundOffInput";
 import { formatMoney, formatMoneyNumber } from "@/lib/accounts/money-format";
 import {
   buildTabularReportBodyHtml,
@@ -105,14 +106,18 @@ function cellHtml(row: PurchaseRegisterRow, key: PurchaseRegisterColKey): string
     return escapeHtml(formatPurchaseRegisterDate(raw));
   }
   if (MONEY_KEYS.has(key)) {
-    return formatMoney(Number(row[key as keyof PurchaseRegisterRow] ?? 0));
+    const n = Number(row[key as keyof PurchaseRegisterRow] ?? 0);
+    return key === "roundOff" ? formatSignedRoundOff(n) : formatMoney(n);
   }
   return escapeHtml(String(formatCellDisplay(row, key, LABEL_MAPS)));
 }
 
 function totalCell(key: PurchaseRegisterColKey, totals: PurchaseRegisterTotals): string {
   const def = getVisibleColumnDefs([key])[0];
-  if (def?.totalKey) return formatMoney(totals[def.totalKey] as number);
+  if (def?.totalKey) {
+    const value = totals[def.totalKey] as number;
+    return key === "roundOff" ? formatSignedRoundOff(value) : formatMoney(value);
+  }
   if (key.startsWith("eligibleItc")) {
     return key === "eligibleItcCgst" ? formatMoney(totals.eligibleItc) : "";
   }

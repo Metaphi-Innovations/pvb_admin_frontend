@@ -1,6 +1,6 @@
 import type { Customer } from "@/app/(app)/masters/customers/customer-data";
 import { CUSTOMER_TYPE_LABELS } from "@/app/(app)/masters/customers/customer-data";
-import type { Vendor } from "@/app/(app)/masters/vendors/vendor-data";
+import type { Vendor } from "@/app/(app)/masters/suppliers/vendor-data";
 
 export function formatCustomerDropdownLabel(customer: Customer): string {
   return `${customer.customerCode} | ${customer.customerName}`;

@@ -36,21 +36,14 @@ export function PaymentTermsFields({
 	const handlePaymentTypeChange = (next: string) => {
 		const paymentType = next as PaymentType;
 		if (paymentType === "immediate") {
-			onChange({ paymentType, creditDays: "0", advancePercentage: "" });
+			onChange({ paymentType, creditDays: "", advancePercentage: "" });
 			return;
 		}
-		if (paymentType === "credit") {
-			onChange({
-				paymentType,
-				creditDays: values.creditDays === "0" ? "30" : values.creditDays,
-				advancePercentage: "",
-			});
-			return;
-		}
+		// Clear sibling field on switch — do not autofill days or advance %.
 		onChange({
 			paymentType,
-			creditDays: "0",
-			advancePercentage: values.advancePercentage || "100",
+			creditDays: "",
+			advancePercentage: "",
 		});
 	};
 

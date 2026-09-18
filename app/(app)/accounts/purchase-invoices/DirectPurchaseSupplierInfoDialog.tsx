@@ -93,7 +93,7 @@ export function DirectPurchaseSupplierInfoDialog({
             Close
           </Button>
           <Button size="sm" className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white" asChild>
-            <Link href={`/masters/vendors/${fields.vendorId}`} onClick={() => onOpenChange(false)}>
+            <Link href={`/masters/suppliers/${fields.vendorId}`} onClick={() => onOpenChange(false)}>
               Open Supplier Master
             </Link>
           </Button>
