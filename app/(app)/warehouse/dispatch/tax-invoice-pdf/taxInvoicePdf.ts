@@ -574,9 +574,21 @@ export function mapDispatchToTaxInvoice(
     stateCode: stateCodeFromGstin(customerGstin),
     transportDocNo: asText(dispatch?.lr_number || dispatch?.lrNumber, "—"),
     transportDocDate: formatDisplayDate(dispatch?.dispatch_date),
-    eInvoiceNo: asText(dispatch?.e_invoice_no, "—"),
-    acknowledgementNo: asText(dispatch?.acknowledgement_no, "—"),
-    acknowledgementDate: asText(dispatch?.acknowledgement_date, "—"),
+    eInvoiceNo: asText(
+      dispatch?.sales_invoice?.acknowledgement_number ||
+        dispatch?.e_invoice_no,
+      "—",
+    ),
+    acknowledgementNo: asText(
+      dispatch?.sales_invoice?.acknowledgement_number ||
+        dispatch?.acknowledgement_no,
+      "—",
+    ),
+    acknowledgementDate: asText(
+      dispatch?.sales_invoice?.acknowledgement_date ||
+        dispatch?.acknowledgement_date,
+      "—",
+    ),
     ewayBillNo: asText(
       dispatch?.sales_invoice?.eway_bill_number || dispatch?.eway_bill_number,
       "—",
@@ -587,7 +599,10 @@ export function mapDispatchToTaxInvoice(
         dispatch?.eway_bill_date,
       "—",
     ),
-    irn: asText(dispatch?.irn, "—"),
+    irn: asText(
+      dispatch?.sales_invoice?.irn_number || dispatch?.irn,
+      "—",
+    ),
     billFrom,
     billTo: billing,
     shipTo: shipping,

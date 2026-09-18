@@ -2,7 +2,7 @@
 
 /**
  * Sales Invoice View — E-Invoice / E-Way Bill status + generate actions.
- * Uses View API nested applicability/status. Generation APIs are wired later.
+ * Uses View API nested applicability/status. IRN generation calls PVB backend only.
  */
 
 import { useState } from "react";
@@ -104,7 +104,10 @@ export function InvoiceViewStatutorySection({
 
   const showGenerateIRN =
     canAct && eInvApplicable && eInvStatus === "not_generated";
-  const showGenerateEway = canAct && ewayStatus === "not_generated";
+  const showGenerateEway =
+    canAct &&
+    Boolean(record.irn?.trim()) &&
+    ewayStatus === "not_generated";
 
   const hasGeneratedDetails = Boolean(
     record.ewayBillNo?.trim() ||
@@ -147,7 +150,7 @@ export function InvoiceViewStatutorySection({
               disabled={eInvoiceBusy}
               onClick={onGenerateEInvoice}
             >
-              Generate IRN
+              {eInvoiceBusy ? "Generating…" : "Generate IRN"}
             </Button>
           ) : null}
         </div>

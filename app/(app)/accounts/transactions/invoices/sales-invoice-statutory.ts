@@ -47,6 +47,8 @@ export interface SalesInvoiceEInvoiceDetails {
   acknowledgementDate: string;
   generatedAt: string;
   qrCodeAvailable: boolean;
+  /** NIC SignedQRCode / data URL — used to render QR in the listing popup. */
+  signedQrCode?: string;
   cancelledAt: string;
   cancelledReason: string;
 }
@@ -110,7 +112,9 @@ export function resolveListingEInvoiceStatus(
   kind: InvoiceKind,
 ): ListingEInvoiceStatus {
   if (kind === "sample_order") return "Not Applicable";
-  return mapStoredEInvoice(inv.eInvoiceStatus);
+  const mapped = mapStoredEInvoice(inv.eInvoiceStatus);
+  if (mapped === "Not Generated" && inv.irn?.trim()) return "Generated";
+  return mapped;
 }
 
 export function resolveListingEWayStatus(
@@ -118,21 +122,33 @@ export function resolveListingEWayStatus(
   kind: InvoiceKind,
 ): ListingEWayStatus {
   if (kind === "sample_order" || kind === "service") return "Not Applicable";
-  return mapStoredEWay(inv.ewayBillStatus);
+  const mapped = mapStoredEWay(inv.ewayBillStatus);
+  if (mapped === "Not Generated" && inv.ewayBillNo?.trim()) return "Generated";
+  return mapped;
 }
 
 export function buildEInvoiceDetails(
   inv: InvoiceRecord,
   status: ListingEInvoiceStatus,
 ): SalesInvoiceEInvoiceDetails {
+  const ackNo = inv.acknowledgementNo?.trim() || inv.eInvoiceNo?.trim() || "";
+  const ackDate = inv.acknowledgementDate?.trim() || "";
+  const irn = inv.irn?.trim() || "";
+  const signedQr = inv.signedQrCode?.trim() || "";
+
   return {
     status,
-    eInvoiceNo: inv.eInvoiceNo?.trim() || "—",
-    irn: inv.irn?.trim() || "—",
-    acknowledgementNo: inv.acknowledgementNo?.trim() || "—",
-    acknowledgementDate: inv.acknowledgementDate?.trim() || "—",
-    generatedAt: inv.eInvoiceGeneratedAt?.trim() || inv.updatedAt?.trim() || "—",
-    qrCodeAvailable: Boolean(inv.qrCodeAvailable),
+    eInvoiceNo: ackNo || "—",
+    irn: irn || "—",
+    acknowledgementNo: ackNo || "—",
+    acknowledgementDate: ackDate || "—",
+    generatedAt:
+      inv.eInvoiceGeneratedAt?.trim() ||
+      ackDate ||
+      inv.updatedAt?.trim() ||
+      "—",
+    qrCodeAvailable: Boolean(inv.qrCodeAvailable || signedQr || irn),
+    signedQrCode: signedQr || undefined,
     cancelledAt: inv.eInvoiceCancelledAt?.trim() || "—",
     cancelledReason: inv.eInvoiceCancelledReason?.trim() || "—",
   };

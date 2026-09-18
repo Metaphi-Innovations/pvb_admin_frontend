@@ -182,6 +182,29 @@ export type SalesInvoiceCancelResult = {
   already_reversed?: boolean;
 };
 
+export type GenerateIrnResult = {
+  already_generated: boolean;
+  sales_invoice_id: string;
+  invoice_number?: string;
+  irn_number: string;
+  acknowledgement_number?: string | null;
+  acknowledgement_date?: string | null;
+  signed_qr_code?: string | null;
+  einvoice_status?: string | null;
+};
+
+export type GenerateEwayBillResult = {
+  already_generated: boolean;
+  sales_invoice_id: string;
+  invoice_number?: string;
+  irn_number?: string | null;
+  eway_bill_number: string;
+  eway_bill_date?: string | Date | null;
+  eway_bill_valid_upto?: string | Date | null;
+  eway_bill_status?: string | null;
+  eway_bill_qr_code?: string | null;
+};
+
 export type EligibleDispatchDto = {
   dispatch_id: string;
   dispatch_number: string;
@@ -216,6 +239,7 @@ export type SalesInvoiceListDto = {
   einvoice_status?: string | null;
   acknowledgement_number?: string | null;
   acknowledgement_date?: string | null;
+  signed_qr_code?: string | null;
   eway_bill_number?: string | null;
   eway_bill_date?: string | null;
   eway_bill_valid_upto?: string | null;
@@ -1024,6 +1048,7 @@ export function mapSalesInvoiceDetailToRecord(
     acknowledgementNo: asString(dto.acknowledgement_number) || undefined,
     acknowledgementDate: asDateOnly(dto.acknowledgement_date) || undefined,
     qrCodeAvailable: Boolean(asString(dto.signed_qr_code || dto.irn_number)),
+    signedQrCode: asString(dto.signed_qr_code) || undefined,
     ewayBillNo: asString(dto.eway_bill_number) || undefined,
     ewayBillExpiryDate: asDateOnly(dto.eway_bill_valid_upto) || undefined,
     ewayBillGeneratedAt: asDateOnly(dto.eway_bill_date) || undefined,
@@ -1268,6 +1293,35 @@ export const SalesInvoiceService = {
       return unwrapData(response) as SalesInvoiceCancelResult;
     } catch (error) {
       throw new Error(extractErrorMessage(error, "Failed to cancel sales invoice."));
+    }
+  },
+
+  async generateIrn(id: string): Promise<GenerateIrnResult> {
+    try {
+      const response = await axiosInstance.post(
+        API_ENDPOINTS.ACCOUNTS.SALES_INVOICE.GENERATE_IRN(id),
+      );
+      return unwrapData(response) as GenerateIrnResult;
+    } catch (error) {
+      throw new Error(
+        extractErrorMessage(error, "Failed to generate IRN for sales invoice."),
+      );
+    }
+  },
+
+  async generateEwayBill(id: string): Promise<GenerateEwayBillResult> {
+    try {
+      const response = await axiosInstance.post(
+        API_ENDPOINTS.ACCOUNTS.SALES_INVOICE.GENERATE_EWAY_BILL(id),
+      );
+      return unwrapData(response) as GenerateEwayBillResult;
+    } catch (error) {
+      throw new Error(
+        extractErrorMessage(
+          error,
+          "Failed to generate E-Way Bill for sales invoice.",
+        ),
+      );
     }
   },
 

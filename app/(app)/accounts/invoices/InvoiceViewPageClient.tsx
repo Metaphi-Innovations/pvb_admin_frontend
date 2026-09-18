@@ -431,6 +431,8 @@ export default function InvoiceViewPageClient({
   const [record, setRecord] = useState<InvoiceRecord | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [sendEmailOpen, setSendEmailOpen] = useState(false);
+  const [eInvoiceBusy, setEInvoiceBusy] = useState(false);
+  const [ewayBusy, setEwayBusy] = useState(false);
 
   const listHref = useMemo(
     () =>
@@ -555,18 +557,56 @@ export default function InvoiceViewPageClient({
   const canGenerateStatutory =
     record.invoiceStatus !== "cancelled" && Boolean(record.salesInvoiceId);
 
-  const handleGenerateIRN = () => {
-    showToast(
-      "IRN generation will be available once the PeriOne integration is connected.",
-      "info",
-    );
+  const handleGenerateIRN = async () => {
+    if (!record?.salesInvoiceId || eInvoiceBusy) return;
+    setEInvoiceBusy(true);
+    try {
+      const result = await SalesInvoiceService.generateIrn(
+        String(record.salesInvoiceId),
+      );
+      showToast(
+        result.already_generated
+          ? "IRN was already generated for this invoice."
+          : "IRN generated successfully.",
+        "success",
+      );
+      await refresh();
+    } catch (e) {
+      showToast(
+        e instanceof Error ? e.message : "Failed to generate IRN.",
+        "error",
+      );
+    } finally {
+      setEInvoiceBusy(false);
+    }
   };
 
-  const handleGenerateEway = () => {
-    showToast(
-      "E-Way Bill generation will be available once the PeriOne integration is connected.",
-      "info",
-    );
+  const handleGenerateEway = async () => {
+    if (!record?.salesInvoiceId || ewayBusy) return;
+    if (!record.irn?.trim()) {
+      showToast("IRN must be generated before generating E-Way Bill.", "error");
+      return;
+    }
+    setEwayBusy(true);
+    try {
+      const result = await SalesInvoiceService.generateEwayBill(
+        String(record.salesInvoiceId),
+      );
+      showToast(
+        result.already_generated
+          ? "E-Way Bill was already generated for this invoice."
+          : "E-Way Bill generated successfully.",
+        "success",
+      );
+      await refresh();
+    } catch (e) {
+      showToast(
+        e instanceof Error ? e.message : "Failed to generate E-Way Bill.",
+        "error",
+      );
+    } finally {
+      setEwayBusy(false);
+    }
   };
 
   const narration =
@@ -838,8 +878,10 @@ export default function InvoiceViewPageClient({
               <InvoiceViewStatutorySection
                 record={record}
                 canAct={canGenerateStatutory}
-                onGenerateEInvoice={handleGenerateIRN}
-                onGenerateEway={handleGenerateEway}
+                onGenerateEInvoice={() => void handleGenerateIRN()}
+                onGenerateEway={() => void handleGenerateEway()}
+                eInvoiceBusy={eInvoiceBusy}
+                ewayBusy={ewayBusy}
               />
             </VoucherFormSectionCard>
           ) : null}

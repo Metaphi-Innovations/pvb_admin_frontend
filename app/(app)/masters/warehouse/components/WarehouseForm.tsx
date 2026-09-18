@@ -32,7 +32,7 @@ import {
 	type WarehouseMaster,
 } from "../warehouse-data";
 import { loadCustomers } from "../../customers/customer-data";
-import { validateGSTIN, validateIFSC } from "../../customers/customer-data";
+import { /* validateGSTIN, */ validateIFSC } from "../../customers/customer-data";
 import { loadCustomerTypes } from "../../customer-types/customer-type-data";
 import { loadDocumentTypes } from "../../document-types/document-type-data";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
@@ -346,16 +346,17 @@ export function validateWarehouseForm(
 	const e: Record<string, string> = {};
 	if (!form.warehouseName.trim())
 		e.warehouseName = "Warehouse Name is required";
-	if (form.gstApplicable) {
-		if (!form.gstRegistrationType.trim()) {
-			e.gstRegistrationType = "Registration type is required";
-		}
-		if (!form.gstin.trim()) {
-			e.gstin = "GSTIN is required when GST is applicable";
-		} else if (!validateGSTIN(form.gstin)) {
-			e.gstin = "Enter a valid 15-character GSTIN";
-		}
-	}
+	// TEMP: warehouse master GST validation commented out.
+	// if (form.gstApplicable) {
+	// 	if (!form.gstRegistrationType.trim()) {
+	// 		e.gstRegistrationType = "Registration type is required";
+	// 	}
+	// 	if (!form.gstin.trim()) {
+	// 		e.gstin = "GSTIN is required when GST is applicable";
+	// 	} else if (!validateGSTIN(form.gstin)) {
+	// 		e.gstin = "Enter a valid 15-character GSTIN";
+	// 	}
+	// }
 	if (form.accountNumber && form.accountNumber !== form.confirmAccountNumber) {
 		e.confirmAccountNumber = "Account number mismatch";
 	}

@@ -325,6 +325,8 @@ export interface InvoiceRecord {
 	eInvoiceCancelledAt?: string;
 	eInvoiceCancelledReason?: string;
 	qrCodeAvailable?: boolean;
+	/** NIC SignedQRCode payload from Generate IRN. */
+	signedQrCode?: string;
 	customerNotes?: string;
 	termsAndConditions?: string;
 	internalRemarks?: string;
