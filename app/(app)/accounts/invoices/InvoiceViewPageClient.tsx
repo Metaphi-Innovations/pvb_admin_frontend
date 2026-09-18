@@ -157,7 +157,7 @@ function ProductTable({
         "SKU",
         "Batch No.",
         "HSN",
-        "Qty in Case",
+        "Qty of Case",
         "Qty",
         "UOM",
         "Rate",
@@ -176,7 +176,7 @@ function ProductTable({
         "SKU",
         "Batch No.",
         "HSN",
-        "Qty in Case",
+        "Qty of Case",
         "Qty",
         "UOM",
         "Rate",
@@ -193,7 +193,7 @@ function ProductTable({
       ] as const);
 
   const rightAlign = new Set([
-    "Qty in Case",
+    "Qty of Case",
     "Qty",
     "Rate",
     "Gross Amount",
@@ -212,7 +212,7 @@ function ProductTable({
     SKU: "so-col-sku",
     "Batch No.": "so-col-batch",
     HSN: "so-col-hsn",
-    "Qty in Case": "so-col-qty-case",
+    "Qty of Case": "so-col-qty-case",
     Qty: "so-col-qty",
     UOM: "so-col-uom",
     Rate: "so-col-rate",

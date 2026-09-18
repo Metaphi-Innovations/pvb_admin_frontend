@@ -170,7 +170,7 @@ function StockTransferInvoiceLinesEditorInner({
         "SKU",
         "Batch No.",
         "HSN",
-        "Qty in Case",
+        "Qty of Case",
         "Qty",
         "UOM",
         "Cost Price",
@@ -184,7 +184,7 @@ function StockTransferInvoiceLinesEditorInner({
         "SKU",
         "Batch No.",
         "HSN",
-        "Qty in Case",
+        "Qty of Case",
         "Qty",
         "UOM",
         "Cost Price",
@@ -196,7 +196,7 @@ function StockTransferInvoiceLinesEditorInner({
       ] as const);
 
   const rightAlign = new Set([
-    "Qty in Case",
+    "Qty of Case",
     "Qty",
     "Cost Price",
     "Gross Amount",
