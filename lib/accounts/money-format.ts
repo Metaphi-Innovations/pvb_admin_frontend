@@ -18,6 +18,23 @@ export function roundMoney(amount: number): number {
   return Math.round(n * 100) / 100;
 }
 
+/**
+ * Signed round-off that makes a transaction total a whole rupee.
+ * Matches backend ROUND_HALF_UP: fractional part >= 0.50 rounds away from zero.
+ * Examples: 2000.50 → +0.50 (final 2001); 2000.25 → -0.25 (final 2000).
+ * Derived after taxes, discounts, and additional charges — never typed in.
+ */
+export function computeAutomaticRoundOff(unroundedAmount: number): number {
+  const amount = roundMoney(unroundedAmount);
+  if (amount === 0) return 0;
+  const sign = amount < 0 ? -1 : 1;
+  const abs = Math.abs(amount);
+  const whole = Math.floor(abs + 1e-9);
+  const fraction = roundMoney(abs - whole);
+  const roundedAbs = fraction >= 0.5 ? whole + 1 : whole;
+  return roundMoney(sign * roundedAbs - amount);
+}
+
 /** Parse typed amount to 2-decimal number without changing user intent */
 export function parseMoneyInput(raw: string): number {
   const sanitized = raw.replace(/[₹,\s]/g, "").trim();

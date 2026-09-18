@@ -1,3 +1,4 @@
+import { formatSignedRoundOff } from "@/components/accounts/voucher-form/VoucherSignedRoundOffInput";
 import { normalizeDebitNote, REFERENCE_TYPE_LABELS, type DebitNoteRecord } from "./debit-notes-data";
 import { formatINR } from "./note-utils";
 
@@ -53,6 +54,7 @@ export function downloadDebitNotePdf(record: DebitNoteRecord): void {
   <table class="totals">
     <tr><td class="label">Taxable Amount</td><td align="right">${formatINR(rec.taxableAmount)}</td></tr>
     <tr><td class="label">GST Amount</td><td align="right">${formatINR(rec.gstAmount)}</td></tr>
+    <tr><td class="label">Round Off</td><td align="right">${formatSignedRoundOff(rec.round_off ?? 0)}</td></tr>
     <tr><td class="grand">Total Debit</td><td align="right" class="grand">${formatINR(rec.currentDebitAmount)}</td></tr>
   </table>
   ${rec.remarks ? `<p style="margin-top:16px"><strong>Remarks:</strong> ${escapeHtml(rec.remarks)}</p>` : ""}

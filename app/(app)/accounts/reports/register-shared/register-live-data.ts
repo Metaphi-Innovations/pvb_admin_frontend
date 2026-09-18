@@ -5,7 +5,7 @@ import {
 } from "@/app/(app)/accounts/invoices/invoices-data";
 import { loadPurchaseInvoices, type PurchaseInvoiceRecord } from "@/app/(app)/accounts/purchase-invoices/purchase-invoices-data";
 import { loadCustomers } from "@/app/(app)/masters/customers/customer-data";
-import { loadVendors } from "@/app/(app)/masters/vendors/vendor-data";
+import { loadVendors } from "@/app/(app)/masters/suppliers/vendor-data";
 import { demoToday } from "@/lib/accounts/demo-date-utils";
 import { getInvoiceGstBreakup } from "@/lib/accounts/invoice-gst-breakup";
 import { resolveInvoiceDocumentType } from "@/lib/accounts/invoice-type";

@@ -14,8 +14,8 @@ import {
   loadPricingRecords,
   type PricingRecord,
 } from "@/app/(app)/masters/pricing/pricing-data";
-import { getVendorById } from "@/app/(app)/masters/vendors/vendor-data";
-import type { VendorProductMapping } from "@/app/(app)/masters/vendors/vendor-data";
+import { getVendorById } from "@/app/(app)/masters/suppliers/vendor-data";
+import type { VendorProductMapping } from "@/app/(app)/masters/suppliers/vendor-data";
 import { loadCustomers } from "@/app/(app)/masters/customers/customer-data";
 import type { CustomerProductMapping } from "@/app/(app)/masters/customers/customer-data";
 

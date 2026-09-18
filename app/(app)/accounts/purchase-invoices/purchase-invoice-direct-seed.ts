@@ -1,7 +1,7 @@
 import { demoDateAt } from "@/lib/accounts/demo-date-utils";
 import { ACCOUNTS_CURRENT_USER } from "@/lib/accounts/config";
 import { COMPANY_BILLING } from "@/lib/procurement/config";
-import { getActiveVendors } from "@/app/(app)/masters/vendors/vendor-data";
+import { getActiveVendors } from "@/app/(app)/masters/suppliers/vendor-data";
 import {
   createInitialWorkflow,
   markWorkflowPosted,

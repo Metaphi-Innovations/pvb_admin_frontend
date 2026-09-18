@@ -4,13 +4,13 @@ import React, { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ArrowLeft, CheckCircle2, Save, X, XCircle } from "lucide-react";
-import { VendorForm } from "@/app/(app)/masters/vendors/components/VendorForm";
+import { VendorForm } from "@/app/(app)/masters/suppliers/components/VendorForm";
 import {
   DEFAULT_VENDOR_FORM,
   collectVendorFormFieldErrors,
   validateVendorForm,
   type VendorFormValues,
-} from "@/app/(app)/masters/vendors/vendor-data";
+} from "@/app/(app)/masters/suppliers/vendor-data";
 import {
   useCreateSupplier,
   useSupplier,

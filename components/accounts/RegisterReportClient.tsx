@@ -27,7 +27,7 @@ import {
   useReportDateRange,
 } from "@/components/accounts/ReportFilters";
 import { loadCustomers } from "@/app/(app)/masters/customers/customer-data";
-import { loadVendors } from "@/app/(app)/masters/vendors/vendor-data";
+import { loadVendors } from "@/app/(app)/masters/suppliers/vendor-data";
 import { loadProducts } from "@/app/(app)/masters/products/product-data";
 import { formatMoney } from "@/lib/accounts/money-format";
 import {

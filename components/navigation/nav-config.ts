@@ -92,7 +92,7 @@ export const NAV_ITEMS: NavItem[] = [
       { label: "TCS", href: "/masters/tcs" },
       { label: "Unit", href: "/masters/uom" },
       { label: "Supplier Type", href: "/masters/vendor-type" },
-      { label: "Supplier Master", href: "/masters/vendors" },
+      { label: "Supplier Master", href: "/masters/suppliers" },
       { label: "Warehouse", href: "/masters/warehouse" },
     ],
   },

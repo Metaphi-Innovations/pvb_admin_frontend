@@ -14,7 +14,7 @@ import {
   loadVendors,
   type Vendor,
   type VendorAddress,
-} from "@/app/(app)/masters/vendors/vendor-data";
+} from "@/app/(app)/masters/suppliers/vendor-data";
 import { loadProducts, type Product } from "@/app/(app)/masters/products/product-data";
 import {
   resolveSalesUnitPrice,

@@ -62,6 +62,11 @@ const nextConfig = {
       { source: "/accounts/reports/payment-register", destination: "/accounts/vouchers?tab=payment", permanent: false },
       { source: "/accounts/reports/contra-register", destination: "/accounts/vouchers?tab=contra", permanent: false },
       { source: "/accounts/reports/journal-register", destination: "/accounts/vouchers?tab=journal", permanent: false },
+      // Supplier master renamed from /masters/vendors
+      { source: "/masters/vendors", destination: "/masters/suppliers", permanent: false },
+      { source: "/masters/vendors/new", destination: "/masters/suppliers/new", permanent: false },
+      { source: "/masters/vendors/:id", destination: "/masters/suppliers/:id", permanent: false },
+      { source: "/masters/vendors/:id/edit", destination: "/masters/suppliers/:id/edit", permanent: false },
     ];
   },
 };

@@ -1,3 +1,7 @@
+/**
+ * Demo client-side Balance Sheet export. Not used by the production page.
+ * Production Excel/PDF is BalanceSheetApiService.exportReport.
+ */
 import { formatMoneyNumber } from "@/lib/accounts/money-format";
 import {
   buildHorizontalTAccountBodyHtml,
