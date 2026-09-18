@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { formatSignedRoundOff } from "@/components/accounts/voucher-form/VoucherSignedRoundOffInput";
+import { AutoRoundOffDisplay } from "@/components/accounts/voucher-form/AutoRoundOffDisplay";
 import { computeAutomaticRoundOff } from "@/lib/accounts/money-format";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -3135,9 +3135,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
                   </div>
                   <div className="flex items-center justify-between gap-4 py-0.5">
                     <span className="so-summary-label">Round Off</span>
-                    <span className="so-summary-value tabular-nums">
-                      {formatSignedRoundOff(summaryRoundOff)}
-                    </span>
+                    <AutoRoundOffDisplay value={summaryRoundOff} />
                   </div>
                   <div className="flex items-center justify-between gap-4 py-1.5 border-t border-border/60">
                     <span className="so-grand-total-label">Total Invoice Value</span>
@@ -3181,9 +3179,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
                   )}
                   <div className="flex items-center justify-between gap-4 py-0.5">
                     <span className="so-summary-label">Round Off</span>
-                    <span className="so-summary-value tabular-nums">
-                      {formatSignedRoundOff(summaryRoundOff)}
-                    </span>
+                    <AutoRoundOffDisplay value={summaryRoundOff} />
                   </div>
                   <div className="flex items-center justify-between gap-4 py-1.5 border-t border-border/60">
                     <span className="so-grand-total-label">Grand Total</span>
@@ -3237,9 +3233,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
               )}
               <div className="flex items-center justify-between gap-4 py-0.5">
                 <span className="text-muted-foreground text-xs">Round Off</span>
-                <span className="font-medium tabular-nums">
-                  {formatSignedRoundOff(summaryRoundOff)}
-                </span>
+                <AutoRoundOffDisplay value={summaryRoundOff} />
               </div>
               <div className="flex items-center justify-between gap-4 py-1.5 border-t border-border/60">
                 <span className="font-semibold text-sm">Grand Total</span>
@@ -3302,9 +3296,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
               )}
               <div className="flex items-center justify-between gap-4 py-0.5">
                 <span className="text-muted-foreground text-xs">Round Off</span>
-                <span className="font-medium tabular-nums">
-                  {formatSignedRoundOff(summaryRoundOff)}
-                </span>
+                <AutoRoundOffDisplay value={summaryRoundOff} />
               </div>
               <div className="flex items-center justify-between gap-4 py-1.5 border-t border-border/60">
                 <span className="font-semibold text-sm">Grand Total</span>

@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
-import { formatSignedRoundOff } from "@/components/accounts/voucher-form/VoucherSignedRoundOffInput";
+import { AutoRoundOffDisplay } from "@/components/accounts/voucher-form/AutoRoundOffDisplay";
 import { computeAutomaticRoundOff } from "@/lib/accounts/money-format";
 import { AccountsDateInput } from "@/components/accounts/AccountsDateInput";
 import { isoToDisplayDate } from "@/lib/accounts/date-display";
@@ -865,9 +865,7 @@ export default function ServiceInvoiceFormPageClient() {
                 )}
                 <div className="flex items-center justify-between gap-4 py-0.5">
                   <span className="so-summary-label">Round Off</span>
-                  <span className="so-summary-value tabular-nums">
-                    {formatSignedRoundOff(roundOff)}
-                  </span>
+                  <AutoRoundOffDisplay value={roundOff} />
                 </div>
                 <div className="flex items-center justify-between gap-4 py-1.5 border-t border-border/60">
                   <span className="so-grand-total-label">Grand Total</span>

@@ -1,6 +1,6 @@
 "use client";
 
-import { formatSignedRoundOff } from "@/components/accounts/voucher-form/VoucherSignedRoundOffInput";
+import { AutoRoundOffDisplay } from "@/components/accounts/voucher-form/AutoRoundOffDisplay";
 import { formatMoney } from "@/lib/accounts/money-format";
 import type { DirectPurchaseTotals } from "./purchase-invoice-direct-utils";
 
@@ -34,9 +34,7 @@ export function PurchaseInvoiceDirectTotals({
       <SummaryRow label="Additional Charges" value={formatMoney(additionalChargeTotal)} />
       <div className="flex items-center justify-between gap-4 py-0.5">
         <span className="so-summary-label text-muted-foreground">Round Off</span>
-        <span className="so-summary-value tabular-nums font-medium">
-          {formatSignedRoundOff(roundingAdjustment)}
-        </span>
+        <AutoRoundOffDisplay value={roundingAdjustment} />
       </div>
       <div className="flex items-center justify-between gap-4 py-1.5 border-t border-border/60">
         <span className="so-grand-total-label font-semibold">Net Payable</span>
