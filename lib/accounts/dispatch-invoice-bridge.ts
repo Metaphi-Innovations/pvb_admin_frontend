@@ -43,6 +43,19 @@ import { getQcPassedStockRecords } from "@/app/(app)/warehouse/stockoverview/moc
 import { resolveWarehouseOrderType } from "@/app/(app)/warehouse/lib/order-document-type";
 import { loadWarehouses, type WarehouseMaster } from "@/app/(app)/masters/warehouse/warehouse-data";
 
+/** Qty of Case = dispatched units ÷ units per case (not the packing size itself). */
+function resolveQtyOfCase(
+  dispatchQty: number,
+  unitsPerCase: number | null | undefined,
+): number | null {
+  if (!(dispatchQty > 0)) return null;
+  const upc =
+    unitsPerCase != null && Number.isFinite(unitsPerCase) && unitsPerCase > 0
+      ? unitsPerCase
+      : 1;
+  return upc > 1 ? dispatchQty / upc : dispatchQty;
+}
+
 const INVOICE_READY_STATUSES = new Set<DispatchRecord["deliveryStatus"]>([
   "Delivered",
   "In Transit",
@@ -268,12 +281,13 @@ export function buildInvoiceLineFromDispatchProduct(
     batchNo,
   );
 
-  const qtyInCase =
+  const unitsPerCase =
     typeof (master as { unitsPerCase?: number }).unitsPerCase === "number"
       ? (master as { unitsPerCase?: number }).unitsPerCase
       : typeof (master as { caseQty?: number }).caseQty === "number"
         ? (master as { caseQty?: number }).caseQty
         : null;
+  const qtyInCase = resolveQtyOfCase(dp.dispatchQty, unitsPerCase);
 
   const line = recalculateLineItem({
     id: `dispatch-${dispatch.id}-${lineIndex}`,
@@ -378,13 +392,14 @@ export function buildSampleOrderLineFromDispatchProduct(
 
   const batchAvailableQty = resolveBatchAvailableQty(sku, dp.product, batchNo);
 
-  const qtyInCase =
+  const unitsPerCase =
     (typeof master.unitsPerCase === "number" && master.unitsPerCase > 0
       ? master.unitsPerCase
       : null) ??
     (typeof master.conversionQuantity === "number" && master.conversionQuantity > 0
       ? master.conversionQuantity
       : null);
+  const qtyInCase = resolveQtyOfCase(dp.dispatchQty, unitsPerCase);
 
   /** Reference-only commercial fields (billing remains ₹0). */
   const SAMPLE_ORDER_REF_DISCOUNT_PCT = 100;
@@ -486,7 +501,7 @@ export function buildStockTransferLineFromDispatchProduct(
     undefined;
   const batchAvailableQty = resolveBatchAvailableQty(sku, dp.product, batchNo);
 
-  const qtyInCase =
+  const unitsPerCase =
     (typeof master.unitsPerCase === "number" && master.unitsPerCase > 0
       ? master.unitsPerCase
       : null) ??
@@ -496,6 +511,7 @@ export function buildStockTransferLineFromDispatchProduct(
     (typeof (master as { caseQty?: number }).caseQty === "number"
       ? (master as { caseQty?: number }).caseQty
       : null);
+  const qtyInCase = resolveQtyOfCase(dp.dispatchQty, unitsPerCase);
 
   const line = recalculateLineItem({
     id: `dispatch-st-${dispatch.id}-${lineIndex}`,
