@@ -109,6 +109,15 @@ export function buildJournalMultipartFormData(
   appendScalar(formData, "amount", payload.amount);
   appendScalar(formData, "reference_number", payload.reference_number);
   appendScalar(formData, "narration", payload.narration);
+  appendScalar(formData, "party_ledger_id", payload.party_ledger_id ?? null);
+  appendScalar(
+    formData,
+    "tds_application_mode",
+    payload.tds_application_mode ?? null,
+  );
+  if (payload.tds_allocations != null) {
+    formData.append("tds_allocations", JSON.stringify(payload.tds_allocations));
+  }
 
   if (isUpdate) {
     const retained =

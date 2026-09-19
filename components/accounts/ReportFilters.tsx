@@ -1495,16 +1495,21 @@ export function ReportStatusMultiFilter<T extends string>({
 export function ReportTdsSectionMultiFilter({
   values,
   onChange,
+  options,
 }: {
   values: string[];
   onChange: (values: string[]) => void;
+  /** When provided (e.g. backend filter UUIDs), use these instead of local TDS master codes. */
+  options?: ReportMultiSelectOption[];
 }) {
-  const sections = getActiveTDSMasters();
-  const selectOptions: ReportMultiSelectOption[] = sections.map((s) => ({
-    value: getTdsSectionCode(s),
-    label: `${getTdsSectionCode(s)} — ${s.sectionName}`,
-    searchText: s.sectionName,
-  }));
+  const sections = options ? null : getActiveTDSMasters();
+  const selectOptions: ReportMultiSelectOption[] =
+    options ??
+    (sections ?? []).map((s) => ({
+      value: getTdsSectionCode(s),
+      label: `${getTdsSectionCode(s)} — ${s.sectionName}`,
+      searchText: s.sectionName,
+    }));
   return (
     <ReportMultiSelect
       label="TDS Section"

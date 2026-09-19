@@ -859,6 +859,11 @@ export const API_ENDPOINTS = {
         FILTERS: "/accounts/reports/sales-register/filters",
         EXPORT: "/accounts/reports/sales-register/export",
       },
+      TDS_SUMMARY: {
+        LIST: "/accounts/reports/tds-summary",
+        FILTERS: "/accounts/reports/tds-summary/filters",
+        EXPORT: "/accounts/reports/tds-summary/export",
+      },
     },
     DEBIT_NOTE: {
       CONFIG: "/accounts/debit-note/config",
@@ -962,6 +967,7 @@ export const API_ENDPOINTS = {
     JOURNAL_VOUCHER: {
       CONFIG: "/accounts/journal-voucher/config",
       ELIGIBLE_LEDGERS: "/accounts/journal-voucher/eligible-ledgers",
+      ELIGIBLE_TDS_OPEN_ITEMS: "/accounts/journal-voucher/eligible-tds-open-items",
       LIST: "/accounts/journal-voucher",
       CREATE: "/accounts/journal-voucher",
       GET_BY_ID: (id: string) => `/accounts/journal-voucher/${id}`,

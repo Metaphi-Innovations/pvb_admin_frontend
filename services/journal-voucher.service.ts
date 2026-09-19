@@ -6,6 +6,8 @@ import type {
   JournalAttachmentMeta,
   JournalEligibleLedgersQuery,
   JournalEligibleLedgersResponse,
+  JournalEligibleTdsOpenItem,
+  JournalTdsNature,
   JournalVoucherConfig,
   JournalVoucherDetail,
   JournalVoucherListQuery,
@@ -109,6 +111,47 @@ export const JournalVoucherService = {
         },
       };
     }, "Failed to load eligible Journal ledgers.");
+  },
+
+  async listEligibleTdsOpenItems(params: {
+    party_ledger_id: string;
+    tds_nature: JournalTdsNature;
+    page?: number;
+    page_size?: number;
+    search?: string;
+  }): Promise<{
+    data: JournalEligibleTdsOpenItem[];
+    pagination: {
+      page: number;
+      page_size: number;
+      total: number;
+      total_pages: number;
+    };
+  }> {
+    return withJournalError(async () => {
+      const response = await axiosInstance.get(
+        API_ENDPOINTS.ACCOUNTS.JOURNAL_VOUCHER.ELIGIBLE_TDS_OPEN_ITEMS,
+        { params },
+      );
+      const data = unwrapData<{
+        data: JournalEligibleTdsOpenItem[];
+        pagination: {
+          page: number;
+          page_size: number;
+          total: number;
+          total_pages: number;
+        };
+      }>(response);
+      return {
+        data: data?.data ?? [],
+        pagination: data?.pagination ?? {
+          page: 1,
+          page_size: params.page_size ?? 20,
+          total: 0,
+          total_pages: 1,
+        },
+      };
+    }, "Failed to load eligible TDS invoices.");
   },
 
   async list(params?: JournalVoucherListQuery): Promise<JournalVoucherListResponse> {
