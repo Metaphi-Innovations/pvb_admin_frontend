@@ -14,10 +14,10 @@ import {
   AccountsTableScroll,
 } from "@/components/accounts/AccountsTable";
 import {
-  formatSignedCashFlowAmount,
+  formatCashFlowDisplayAmount,
   type CashFlowLineItem,
   type CashFlowStatement,
-} from "./cash-flow-data";
+} from "./cash-flow-api-display";
 
 const LINE_INDENT_PX = 24;
 const BASE_INDENT_PX = 8;
@@ -26,35 +26,20 @@ function indentPx(depth: number): number {
   return BASE_INDENT_PX + depth * LINE_INDENT_PX;
 }
 
-function PeriodAmountHeader({
-  periodLabel,
-  className,
-}: {
-  periodLabel: string;
-  className?: string;
-}) {
-  return (
-    <div className={cn("flex flex-col items-end leading-tight", className)}>
-      <span className="text-[11px] font-semibold text-foreground text-right whitespace-normal">
-        {periodLabel}
-      </span>
-      <span className="text-[10px] font-medium text-muted-foreground mt-0.5">(₹)</span>
-    </div>
-  );
-}
-
-function PeriodAmountCell({
+function AmountCell({
   amount,
   drillDownHref,
   particular,
+  signed,
   className,
 }: {
-  amount: number | null;
+  amount: string | null;
   drillDownHref?: string;
   particular?: string;
+  signed?: boolean;
   className?: string;
 }) {
-  const formatted = formatSignedCashFlowAmount(amount);
+  const formatted = formatCashFlowDisplayAmount(amount, { signed });
 
   if (drillDownHref && amount != null) {
     return (
@@ -79,64 +64,12 @@ function PeriodAmountCell({
   );
 }
 
-function CashFlowAmountCells({
-  line,
-  comparePreviousPeriod,
-  bold,
-}: {
-  line: CashFlowLineItem;
-  comparePreviousPeriod: boolean;
-  bold?: boolean;
-}) {
-  if (comparePreviousPeriod) {
-    return (
-      <>
-        <AccountsTableCell align="right" money className={bold ? "py-2" : undefined}>
-          <PeriodAmountCell
-            amount={line.amount}
-            drillDownHref={line.drillDownHref}
-            particular={line.particular}
-            className={bold ? "font-bold" : undefined}
-          />
-        </AccountsTableCell>
-        <AccountsTableCell align="right" money className={bold ? "py-2" : undefined}>
-          <PeriodAmountCell
-            amount={line.previousAmount ?? null}
-            drillDownHref={line.previousDrillDownHref}
-            particular={line.particular}
-            className={bold ? "font-bold" : undefined}
-          />
-        </AccountsTableCell>
-      </>
-    );
-  }
-
-  return (
-    <AccountsTableCell align="right" money className={bold ? "py-2" : undefined}>
-      <PeriodAmountCell
-        amount={line.amount}
-        drillDownHref={line.drillDownHref}
-        particular={line.particular}
-        className={bold ? "font-bold" : undefined}
-      />
-    </AccountsTableCell>
-  );
-}
-
-function CashFlowStatementRow({
-  line,
-  comparePreviousPeriod,
-}: {
-  line: CashFlowLineItem;
-  comparePreviousPeriod: boolean;
-}) {
-  const fullColSpan = comparePreviousPeriod ? 3 : 2;
-
+function CashFlowStatementRow({ line }: { line: CashFlowLineItem }) {
   if (line.kind === "divider") {
     return (
       <AccountsTableRow className="pointer-events-none">
         <AccountsTableCell
-          colSpan={fullColSpan}
+          colSpan={2}
           className="py-0 px-0 h-2 border-t-2 border-border/80 bg-muted/10"
         />
       </AccountsTableRow>
@@ -147,7 +80,7 @@ function CashFlowStatementRow({
     return (
       <AccountsTableRow className="bg-white hover:bg-white">
         <AccountsTableCell
-          colSpan={fullColSpan}
+          colSpan={2}
           className="text-sm font-bold text-navy-700 py-2.5"
           style={{ paddingLeft: indentPx(0) }}
         >
@@ -161,7 +94,7 @@ function CashFlowStatementRow({
     return (
       <AccountsTableRow className="bg-muted/25 hover:bg-muted/25">
         <AccountsTableCell
-          colSpan={fullColSpan}
+          colSpan={2}
           className="text-xs font-bold text-navy-700 py-1.5"
           style={{ paddingLeft: indentPx(0) }}
         >
@@ -180,7 +113,9 @@ function CashFlowStatementRow({
         >
           {line.particular}
         </AccountsTableCell>
-        <CashFlowAmountCells line={line} comparePreviousPeriod={comparePreviousPeriod} bold />
+        <AccountsTableCell align="right" money className="py-2">
+          <AmountCell amount={line.amount} signed className="font-bold" />
+        </AccountsTableCell>
       </AccountsTableRow>
     );
   }
@@ -213,11 +148,15 @@ function CashFlowStatementRow({
         <AccountsTableCell style={{ paddingLeft: indentPx(0) }}>
           {labelContent}
         </AccountsTableCell>
-        <CashFlowAmountCells
-          line={line}
-          comparePreviousPeriod={comparePreviousPeriod}
-          bold
-        />
+        <AccountsTableCell align="right" money className="py-2">
+          <AmountCell
+            amount={line.amount}
+            drillDownHref={line.drillDownHref}
+            particular={line.particular}
+            signed
+            className="font-bold"
+          />
+        </AccountsTableCell>
       </AccountsTableRow>
     );
   }
@@ -239,7 +178,13 @@ function CashFlowStatementRow({
       <AccountsTableCell style={{ paddingLeft: indentPx(line.indent) }}>
         {particularContent}
       </AccountsTableCell>
-      <CashFlowAmountCells line={line} comparePreviousPeriod={comparePreviousPeriod} />
+      <AccountsTableCell align="right" money>
+        <AmountCell
+          amount={line.amount}
+          drillDownHref={line.drillDownHref}
+          particular={line.particular}
+        />
+      </AccountsTableCell>
     </AccountsTableRow>
   );
 }
@@ -250,33 +195,19 @@ export function CashFlowStatementView({
   statement: CashFlowStatement;
 }) {
   const rows = statement.lines;
-  const comparePreviousPeriod = Boolean(statement.comparePreviousPeriod);
-  const emptyColSpan = comparePreviousPeriod ? 3 : 2;
-  const tableMinWidth = comparePreviousPeriod ? 760 : 560;
 
   return (
     <div className="flex flex-col flex-1 min-h-0 h-full w-full">
       <AccountsTableScroll className="flex-1 min-h-0">
-        <AccountsTable minWidth={tableMinWidth} className="financial-report">
+        <AccountsTable minWidth={560} className="financial-report">
           <AccountsTableHead>
             <AccountsTableHeadRow>
               <FinancialReportHeadCell className="min-w-[300px]">
                 Particulars
               </FinancialReportHeadCell>
-              {comparePreviousPeriod ? (
-                <>
-                  <FinancialReportHeadCell align="right" className="min-w-[180px]">
-                    <PeriodAmountHeader periodLabel={statement.currentPeriodLabel ?? ""} />
-                  </FinancialReportHeadCell>
-                  <FinancialReportHeadCell align="right" className="min-w-[180px]">
-                    <PeriodAmountHeader periodLabel={statement.previousPeriodLabel ?? ""} />
-                  </FinancialReportHeadCell>
-                </>
-              ) : (
-                <FinancialReportHeadCell align="right" className="min-w-[140px]">
-                  Amount (₹)
-                </FinancialReportHeadCell>
-              )}
+              <FinancialReportHeadCell align="right" className="min-w-[140px]">
+                Amount (₹)
+              </FinancialReportHeadCell>
             </AccountsTableHeadRow>
           </AccountsTableHead>
 
@@ -284,7 +215,7 @@ export function CashFlowStatementView({
             {rows.length === 0 ? (
               <AccountsTableRow>
                 <AccountsTableCell
-                  colSpan={emptyColSpan}
+                  colSpan={2}
                   className="py-8 text-center text-xs text-muted-foreground"
                 >
                   No entries
@@ -292,11 +223,7 @@ export function CashFlowStatementView({
               </AccountsTableRow>
             ) : (
               rows.map((line) => (
-                <CashFlowStatementRow
-                  key={line.id}
-                  line={line}
-                  comparePreviousPeriod={comparePreviousPeriod}
-                />
+                <CashFlowStatementRow key={line.id} line={line} />
               ))
             )}
           </AccountsTableBody>
