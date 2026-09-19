@@ -182,12 +182,29 @@ export function JournalVoucherApiForm({
   const loadEligibleLedgers = useCallback(async (search?: string) => {
     setLedgersLoading(true);
     try {
-      const res = await JournalVoucherService.listEligibleLedgers({
-        page: 1,
-        page_size: 100,
-        search: search?.trim() || undefined,
-      });
-      setEligibleLedgers(res.data ?? []);
+      // Always merge a TDS search so TDS_RECEIVABLE / TDS_PAYABLE are in cache
+      // even when the unfiltered first page does not include them.
+      const [res, tdsRes] = await Promise.all([
+        JournalVoucherService.listEligibleLedgers({
+          page: 1,
+          page_size: 100,
+          search: search?.trim() || undefined,
+        }),
+        search?.trim()
+          ? Promise.resolve({ data: [] as typeof eligibleLedgers })
+          : JournalVoucherService.listEligibleLedgers({
+              page: 1,
+              page_size: 20,
+              search: "TDS",
+            }).catch(() => ({ data: [] as typeof eligibleLedgers })),
+      ]);
+      const merged = [...(res.data ?? [])];
+      for (const row of tdsRes.data ?? []) {
+        if (!merged.some((m) => m.ledger_id === row.ledger_id)) {
+          merged.push(row);
+        }
+      }
+      setEligibleLedgers(merged);
     } catch (e) {
       showToast(
         e instanceof Error ? e.message : "Failed to load eligible ledgers.",
@@ -332,38 +349,59 @@ export function JournalVoucherApiForm({
 
   const tdsNature = resolveJournalTdsNature(form);
 
+  const findEligibleMeta = useCallback(
+    (ledgerId: string, ledgerCode?: string) => {
+      return (
+        eligibleLedgers.find((l) => l.ledger_id === ledgerId) ||
+        (ledgerCode
+          ? eligibleLedgers.find((l) => l.ledger_code === ledgerCode)
+          : undefined)
+      );
+    },
+    [eligibleLedgers],
+  );
+
   const resolveLedgerMeta = useCallback(
     async (ledgerId: string, ledgerCode?: string) => {
-      const cached = eligibleLedgers.find((l) => l.ledger_id === ledgerId);
+      const cached = findEligibleMeta(ledgerId, ledgerCode);
       if (cached) {
         return {
           source_entity_type: cached.source_entity_type || "",
           system_ledger_type: cached.system_ledger_type || "",
         };
       }
+      const searches = [ledgerCode, "TDS"].filter(
+        (s): s is string => Boolean(s && s.trim()),
+      );
       try {
-        const res = await JournalVoucherService.listEligibleLedgers({
-          search: ledgerCode || "",
-          page: 1,
-          page_size: 50,
-        });
-        const found = res.data.find((l) => l.ledger_id === ledgerId);
-        if (found) {
-          setEligibleLedgers((prev) => {
-            if (prev.some((p) => p.ledger_id === found.ledger_id)) return prev;
-            return [...prev, found];
+        for (const search of searches) {
+          const res = await JournalVoucherService.listEligibleLedgers({
+            search,
+            page: 1,
+            page_size: 50,
           });
-          return {
-            source_entity_type: found.source_entity_type || "",
-            system_ledger_type: found.system_ledger_type || "",
-          };
+          const found =
+            res.data.find((l) => l.ledger_id === ledgerId) ||
+            (ledgerCode
+              ? res.data.find((l) => l.ledger_code === ledgerCode)
+              : undefined);
+          if (found) {
+            setEligibleLedgers((prev) => {
+              if (prev.some((p) => p.ledger_id === found.ledger_id)) return prev;
+              return [...prev, found];
+            });
+            return {
+              source_entity_type: found.source_entity_type || "",
+              system_ledger_type: found.system_ledger_type || "",
+            };
+          }
         }
       } catch {
         /* ignore — backend still validates */
       }
       return { source_entity_type: "", system_ledger_type: "" };
     },
-    [eligibleLedgers],
+    [findEligibleMeta],
   );
 
   const attachmentCount = form.persistedAttachments.length + form.pendingFiles.length;
@@ -689,14 +727,36 @@ export function JournalVoucherApiForm({
                 placeholder="Select debit account…"
                 className={INVOICE_DETAIL_SELECT_CLASS}
                 onChange={(ledger) => {
+                  const cached = findEligibleMeta(
+                    ledger.ledgerId,
+                    ledger.ledgerCode,
+                  );
+                  const immediateSystem =
+                    ledger.systemLedgerType ||
+                    cached?.system_ledger_type ||
+                    "";
+                  const immediateSource =
+                    ledger.sourceEntityType ||
+                    cached?.source_entity_type ||
+                    "";
                   patch({
                     debit_ledger_id: ledger.ledgerId,
                     debit_ledger_name: ledger.ledgerName,
                     debit_ledger_code: ledger.ledgerCode || "",
-                    debit_source_entity_type: "",
-                    debit_system_ledger_type: "",
+                    debit_source_entity_type: immediateSource,
+                    debit_system_ledger_type: immediateSystem,
                     tds_allocations: [],
+                    party_ledger_id:
+                      immediateSystem === "TDS_RECEIVABLE" ||
+                      immediateSystem === "TDS_PAYABLE"
+                        ? form.credit_ledger_id
+                        : resolveJournalPartyLedgerId({
+                            ...form,
+                            debit_ledger_id: ledger.ledgerId,
+                            debit_system_ledger_type: immediateSystem,
+                          }),
                   });
+                  if (immediateSystem || immediateSource) return;
                   void resolveLedgerMeta(ledger.ledgerId, ledger.ledgerCode).then(
                     (meta) => {
                       patch({
@@ -732,14 +792,36 @@ export function JournalVoucherApiForm({
                 placeholder="Select credit account…"
                 className={INVOICE_DETAIL_SELECT_CLASS}
                 onChange={(ledger) => {
+                  const cached = findEligibleMeta(
+                    ledger.ledgerId,
+                    ledger.ledgerCode,
+                  );
+                  const immediateSystem =
+                    ledger.systemLedgerType ||
+                    cached?.system_ledger_type ||
+                    "";
+                  const immediateSource =
+                    ledger.sourceEntityType ||
+                    cached?.source_entity_type ||
+                    "";
                   patch({
                     credit_ledger_id: ledger.ledgerId,
                     credit_ledger_name: ledger.ledgerName,
                     credit_ledger_code: ledger.ledgerCode || "",
-                    credit_source_entity_type: "",
-                    credit_system_ledger_type: "",
+                    credit_source_entity_type: immediateSource,
+                    credit_system_ledger_type: immediateSystem,
                     tds_allocations: [],
+                    party_ledger_id:
+                      immediateSystem === "TDS_RECEIVABLE" ||
+                      immediateSystem === "TDS_PAYABLE"
+                        ? form.debit_ledger_id
+                        : resolveJournalPartyLedgerId({
+                            ...form,
+                            credit_ledger_id: ledger.ledgerId,
+                            credit_system_ledger_type: immediateSystem,
+                          }),
                   });
+                  if (immediateSystem || immediateSource) return;
                   void resolveLedgerMeta(ledger.ledgerId, ledger.ledgerCode).then(
                     (meta) => {
                       patch({
