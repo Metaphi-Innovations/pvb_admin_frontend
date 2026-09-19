@@ -1,6 +1,7 @@
 "use client";
 
-import { Check, ChevronDown } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Check, ChevronsUpDown, Search, X } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
@@ -14,6 +15,7 @@ export interface SchemeSelectOption {
 interface SchemeMultiSelectProps {
   label: string;
   placeholder?: string;
+  searchPlaceholder?: string;
   options: SchemeSelectOption[];
   selectedIds: string[];
   onChange: (ids: string[]) => void;
@@ -25,9 +27,27 @@ interface SchemeMultiSelectProps {
   required?: boolean;
 }
 
+function handleScrollableWheel(event: React.WheelEvent<HTMLElement>) {
+  const current = event.currentTarget;
+  if (current.scrollHeight <= current.clientHeight) return;
+
+  const atTop = current.scrollTop <= 0;
+  const atBottom =
+    current.scrollTop + current.clientHeight >= current.scrollHeight - 1;
+  const scrollingUp = event.deltaY < 0;
+  const scrollingDown = event.deltaY > 0;
+
+  if ((scrollingUp && atTop) || (scrollingDown && atBottom)) return;
+
+  event.preventDefault();
+  event.stopPropagation();
+  current.scrollTop += event.deltaY;
+}
+
 export function SchemeMultiSelect({
   label,
   placeholder = "Select...",
+  searchPlaceholder = "Search...",
   options,
   selectedIds,
   onChange,
@@ -37,8 +57,29 @@ export function SchemeMultiSelect({
   dense = false,
   required = false,
 }: SchemeMultiSelectProps) {
-  const selected = options.filter((o) => selectedIds.includes(o.id));
-  const allSelected = options.length > 0 && selectedIds.length === options.length;
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+
+  const selected = useMemo(
+    () => options.filter((o) => selectedIds.includes(o.id)),
+    [options, selectedIds],
+  );
+  const allSelected =
+    options.length > 0 && selectedIds.length === options.length;
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return options;
+    return options.filter((option) => {
+      const haystack = `${option.name} ${option.helper ?? ""}`.toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [options, query]);
+
+  const filteredIds = filtered.map((o) => o.id);
+  const allFilteredSelected =
+    filteredIds.length > 0 && filteredIds.every((id) => selectedIds.includes(id));
+
   const summary =
     selected.length === 0
       ? placeholder
@@ -55,18 +96,24 @@ export function SchemeMultiSelect({
     }
     if (maxSelection === 1) {
       onChange([id]);
+      setOpen(false);
+      setQuery("");
       return;
     }
     if (maxSelection && selectedIds.length >= maxSelection) return;
     onChange([...selectedIds, id]);
   };
 
-  const selectAll = () => {
-    if (maxSelection === 1 || options.length === 0) return;
-    const ids = maxSelection
-      ? options.slice(0, maxSelection).map((o) => o.id)
-      : options.map((o) => o.id);
-    onChange(ids);
+  const selectAllFiltered = () => {
+    if (maxSelection === 1 || filteredIds.length === 0) return;
+    if (allFilteredSelected) {
+      onChange(selectedIds.filter((id) => !filteredIds.includes(id)));
+      return;
+    }
+    const merged = [...new Set([...selectedIds, ...filteredIds])];
+    onChange(
+      maxSelection ? merged.slice(0, maxSelection) : merged,
+    );
   };
 
   const showSelectAll = maxSelection !== 1 && options.length > 0;
@@ -81,7 +128,13 @@ export function SchemeMultiSelect({
         {label}
         {required ? <span className="text-red-500"> *</span> : null}
       </Label>
-      <Popover>
+      <Popover
+        open={open}
+        onOpenChange={(next) => {
+          setOpen(next);
+          if (!next) setQuery("");
+        }}
+      >
         <PopoverTrigger asChild>
           <button
             type="button"
@@ -102,29 +155,51 @@ export function SchemeMultiSelect({
             >
               {summary}
             </span>
-            <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
           </button>
         </PopoverTrigger>
         <PopoverContent
           align="start"
           className="w-[var(--radix-popover-trigger-width)] min-w-[16rem] p-0"
         >
+          <div className="border-b border-border p-2">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-2.5 top-[9px] h-3.5 w-3.5 text-muted-foreground" />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder={searchPlaceholder}
+                autoFocus
+                className="h-8 w-full rounded-lg border border-border bg-muted/10 pl-8 pr-8 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-200"
+              />
+              {query ? (
+                <button
+                  type="button"
+                  onClick={() => setQuery("")}
+                  className="absolute right-2 top-[7px] rounded p-0.5 text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              ) : null}
+            </div>
+          </div>
+
           <div className="flex items-center justify-between border-b border-border px-2.5 py-1.5">
             <div className="flex items-center gap-2">
               <span className="text-[11px] text-muted-foreground">
                 {selected.length} selected
               </span>
-              {showSelectAll && !allSelected && (
+              {showSelectAll && !allFilteredSelected && filteredIds.length > 0 ? (
                 <button
                   type="button"
-                  onClick={selectAll}
+                  onClick={selectAllFiltered}
                   className="text-[11px] font-semibold text-brand-600 hover:text-brand-700"
                 >
                   Select All
                 </button>
-              )}
+              ) : null}
             </div>
-            {selected.length > 0 && (
+            {selected.length > 0 ? (
               <button
                 type="button"
                 onClick={() => onChange([])}
@@ -132,63 +207,81 @@ export function SchemeMultiSelect({
               >
                 Clear
               </button>
-            )}
+            ) : null}
           </div>
-          <div className="max-h-[200px] overflow-y-auto p-1">
-            {showSelectAll && (
+
+          <div
+            className="max-h-[200px] overflow-y-auto p-1"
+            onWheelCapture={handleScrollableWheel}
+          >
+            {showSelectAll && filteredIds.length > 0 ? (
               <>
                 <button
                   type="button"
-                  onClick={() => (allSelected ? onChange([]) : selectAll())}
+                  onClick={selectAllFiltered}
                   className="flex w-full items-start gap-2 rounded px-1.5 py-1.5 text-left hover:bg-muted"
                 >
                   <span
                     className={cn(
                       "mt-0.5 inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border",
-                      allSelected
+                      allFilteredSelected
                         ? "border-brand-600 bg-brand-600 text-white"
                         : "border-border bg-white",
                     )}
                   >
-                    {allSelected && <Check className="h-2.5 w-2.5" />}
+                    {allFilteredSelected && <Check className="h-2.5 w-2.5" />}
                   </span>
                   <span className="text-xs font-semibold text-brand-700">
-                    Select All ({options.length})
+                    {query.trim()
+                      ? `Select All Filtered (${filteredIds.length})`
+                      : `Select All (${options.length})`}
                   </span>
                 </button>
                 <div className="my-1 border-t border-border" />
               </>
-            )}
-            {options.map((option) => {
-              const checked = selectedIds.includes(option.id);
-              return (
-                <button
-                  key={option.id}
-                  type="button"
-                  onClick={() => toggle(option.id)}
-                  className="flex w-full items-start gap-2 rounded px-1.5 py-1.5 text-left hover:bg-muted"
-                >
-                  <span
-                    className={cn(
-                      "mt-0.5 inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border",
-                      checked
-                        ? "border-brand-600 bg-brand-600 text-white"
-                        : "border-border bg-white",
-                    )}
+            ) : null}
+
+            {filtered.length === 0 ? (
+              <div className="flex flex-col items-center gap-1 py-4">
+                <Search className="h-4 w-4 text-muted-foreground" />
+                <p className="text-[11px] text-muted-foreground">
+                  {query.trim()
+                    ? `No results for "${query.trim()}"`
+                    : "No options available"}
+                </p>
+              </div>
+            ) : (
+              filtered.map((option) => {
+                const checked = selectedIds.includes(option.id);
+                return (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => toggle(option.id)}
+                    className="flex w-full items-start gap-2 rounded px-1.5 py-1.5 text-left hover:bg-muted"
                   >
-                    {checked && <Check className="h-2.5 w-2.5" />}
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block text-xs font-medium">{option.name}</span>
-                    {option.helper && (
-                      <span className="block text-[10px] text-muted-foreground">
-                        {option.helper}
-                      </span>
-                    )}
-                  </span>
-                </button>
-              );
-            })}
+                    <span
+                      className={cn(
+                        "mt-0.5 inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border",
+                        checked
+                          ? "border-brand-600 bg-brand-600 text-white"
+                          : "border-border bg-white",
+                      )}
+                    >
+                      {checked && <Check className="h-2.5 w-2.5" />}
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-xs font-medium">{option.name}</span>
+                      {option.helper ? (
+                        <span className="block text-[10px] text-muted-foreground">
+                          {option.helper}
+                        </span>
+                      ) : null}
+                    </span>
+                  </button>
+                );
+              })
+            )}
           </div>
         </PopoverContent>
       </Popover>

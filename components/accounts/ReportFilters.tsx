@@ -65,15 +65,25 @@ export function ReportFilterRow({
   children,
   end,
   className,
+  /** When true, filters wrap to additional rows instead of horizontal scroll. */
+  wrap,
 }: {
   children: React.ReactNode;
   /** Right-aligned actions (e.g. Export) — pinned to extreme right of the filter row */
   end?: React.ReactNode;
   className?: string;
+  wrap?: boolean;
 }) {
   return (
     <div className={cn("flex items-end gap-2 w-full min-w-0", className)}>
-      <div className="flex flex-nowrap items-end gap-x-2 min-w-0 flex-1 overflow-x-auto overscroll-x-contain pb-0.5 [scrollbar-width:thin]">
+      <div
+        className={cn(
+          "flex items-end gap-x-2 gap-y-2 min-w-0 flex-1 pb-0.5",
+          wrap
+            ? "flex-wrap"
+            : "flex-nowrap overflow-x-auto overscroll-x-contain [scrollbar-width:thin]",
+        )}
+      >
         {children}
       </div>
       {end ? (
