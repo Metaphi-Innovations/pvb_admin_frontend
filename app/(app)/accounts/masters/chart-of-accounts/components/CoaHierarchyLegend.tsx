@@ -11,12 +11,12 @@ import {
   type CoaVisualLevel,
 } from "./coa-tree-visual";
 
-const LEGEND_LEVELS: CoaVisualLevel[] = [
+const LEGEND_LEVELS = [
   "primary_head",
   "account_group",
   "sub_group",
   "ledger",
-];
+] as const satisfies readonly CoaVisualLevel[];
 
 const LEGEND_LEVEL_NUM: Record<(typeof LEGEND_LEVELS)[number], number> = {
   primary_head: 1,

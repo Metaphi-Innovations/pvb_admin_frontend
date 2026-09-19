@@ -962,6 +962,7 @@ export const API_ENDPOINTS = {
     JOURNAL_VOUCHER: {
       CONFIG: "/accounts/journal-voucher/config",
       ELIGIBLE_LEDGERS: "/accounts/journal-voucher/eligible-ledgers",
+      ELIGIBLE_TDS_OPEN_ITEMS: "/accounts/journal-voucher/eligible-tds-open-items",
       LIST: "/accounts/journal-voucher",
       CREATE: "/accounts/journal-voucher",
       GET_BY_ID: (id: string) => `/accounts/journal-voucher/${id}`,

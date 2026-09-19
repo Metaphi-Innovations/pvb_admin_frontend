@@ -38,6 +38,65 @@ export interface CreateJournalVoucherPayload {
   narration: string;
   attachments?: JournalAttachmentMeta[] | null;
   existing_attachments?: JournalAttachmentMeta[] | null;
+  party_ledger_id?: string | null;
+  tds_application_mode?: JournalTdsApplicationMode | null;
+  tds_allocations?: JournalTdsAllocationPayload[] | null;
+}
+
+export type JournalTdsApplicationMode = "AGAINST_INVOICE" | "ON_ACCOUNT";
+
+export type JournalTdsNature = "TDS_RECEIVABLE" | "TDS_PAYABLE";
+
+export interface JournalTdsAllocationPayload {
+  open_item_id?: string | null;
+  tds_section_id: string;
+  taxable_amount: number | string;
+  tax_amount: number | string;
+  narration?: string | null;
+}
+
+export interface JournalTdsAllocationDetail {
+  journal_voucher_tds_allocation_id?: string;
+  line_number?: number;
+  open_item_id?: string | null;
+  open_item_snapshot?: Record<string, unknown> | null;
+  source_entity_type?: string | null;
+  source_entity_id?: string | null;
+  tds_section_id: string;
+  tds_section_snapshot?: Record<string, unknown> | null;
+  tax_rate: string | number;
+  taxable_amount: string | number;
+  tax_amount: string | number;
+  narration?: string | null;
+  tds_section?: {
+    tds_id?: string;
+    tds_code?: string | null;
+    tds_section_name?: string | null;
+    tds_rate?: string | number | null;
+  } | null;
+  open_item?: {
+    open_item_id?: string;
+    document_number?: string | null;
+    document_date?: string | null;
+    original_amount?: string | number | null;
+    outstanding_amount?: string | number | null;
+  } | null;
+}
+
+export interface JournalEligibleTdsOpenItem {
+  open_item_id: string;
+  open_item_type?: string;
+  source_document_type?: string;
+  source_document_id?: string;
+  invoice_number: string;
+  invoice_date: string;
+  original_amount: string;
+  settled_amount: string;
+  outstanding_amount: string;
+  party_ledger_id?: string;
+  party_id?: string | null;
+  party_name?: string | null;
+  status?: string;
 }
 
 export interface UpdateJournalVoucherPayload extends CreateJournalVoucherPayload {
@@ -195,6 +254,11 @@ export interface JournalVoucherDetail {
   warehouse_snapshot?: Record<string, unknown> | null;
   debit_ledger_snapshot?: Record<string, unknown> | null;
   credit_ledger_snapshot?: Record<string, unknown> | null;
+  party_ledger_id?: string | null;
+  party_ledger?: JournalLedgerRef | null;
+  party_snapshot?: Record<string, unknown> | null;
+  tds_application_mode?: JournalTdsApplicationMode | null;
+  tds_allocations?: JournalTdsAllocationDetail[] | null;
   accounting_voucher?: JournalAccountingVoucherSummary | null;
   reversal_voucher?: {
     accounting_voucher_id: string;
