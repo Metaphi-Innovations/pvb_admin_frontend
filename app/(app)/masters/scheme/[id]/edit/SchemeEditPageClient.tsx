@@ -7,6 +7,7 @@ import { FormContainer } from "@/components/layout/FormContainer";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { SchemeUnifiedConfigForm } from "../../components/SchemeUnifiedConfigForm";
+import type { SchemeUsageConstraints } from "../../components/SchemeUnifiedConfigForm";
 import {
   validateUnifiedSchemeForm,
   type SchemeUnifiedForm,
@@ -27,6 +28,99 @@ import {
 import { getErrorMessage } from "@/lib/masters/master-query-errors";
 import { loadSchemeStateOptions } from "../../product-discount-scheme";
 import type { SchemeProductSelectOption } from "../../product-discount-scheme";
+
+function asString(value: unknown): string {
+  return typeof value === "string" ? value : value == null ? "" : String(value);
+}
+
+function asIsoDate(value: unknown): string | null {
+  const raw = asString(value).trim();
+  if (!raw) return null;
+  return raw.slice(0, 10);
+}
+
+function buildUsageConstraints(
+  detail: Record<string, unknown> | undefined,
+  optionLists: {
+    customerTypeIds: string[];
+    customerIds: string[];
+    stateNames: string[];
+    productIds: string[];
+  },
+): SchemeUsageConstraints | null {
+  if (!detail) return null;
+  const usage = detail.usage as Record<string, unknown> | undefined;
+  if (!usage || typeof usage !== "object") return null;
+
+  const isUsed = Boolean(usage.is_used);
+  if (!isUsed) {
+    return {
+      isUsed: false,
+      documentCount: 0,
+      lastUsageDate: null,
+      lockStartDate: false,
+      minEndDate: null,
+      lockedCustomerTypeIds: [],
+      lockedCustomerIds: [],
+      lockedStateNames: [],
+      lockedProductIds: [],
+    };
+  }
+
+  const customerTypeScope = asString(detail.customer_type_scope).toUpperCase();
+  const customerScope = asString(detail.customer_scope).toUpperCase();
+  const stateScope = asString(detail.state_scope).toUpperCase();
+  const productScope = asString(detail.product_scope).toUpperCase();
+
+  const customerTypes = Array.isArray(detail.customer_types)
+    ? detail.customer_types
+    : [];
+  const customers = Array.isArray(detail.customers) ? detail.customers : [];
+  const states = Array.isArray(detail.states) ? detail.states : [];
+  const products = Array.isArray(detail.products) ? detail.products : [];
+
+  const lockedCustomerTypeIds =
+    customerTypeScope === "ALL"
+      ? optionLists.customerTypeIds
+      : customerTypes
+          .map((row) =>
+            asString((row as Record<string, unknown>).customer_type_id),
+          )
+          .filter(Boolean);
+
+  const lockedCustomerIds =
+    customerScope === "ALL"
+      ? optionLists.customerIds
+      : customers
+          .map((row) => asString((row as Record<string, unknown>).customer_id))
+          .filter(Boolean);
+
+  const lockedStateNames =
+    stateScope === "ALL"
+      ? optionLists.stateNames
+      : states
+          .map((row) => asString((row as Record<string, unknown>).state_name))
+          .filter(Boolean);
+
+  const lockedProductIds =
+    productScope === "ALL"
+      ? optionLists.productIds
+      : products
+          .map((row) => asString((row as Record<string, unknown>).product_id))
+          .filter(Boolean);
+
+  return {
+    isUsed: true,
+    documentCount: Number(usage.document_count ?? 0) || 0,
+    lastUsageDate: asIsoDate(usage.last_usage_date),
+    lockStartDate: Boolean(usage.lock_start_date),
+    minEndDate: asIsoDate(usage.min_end_date),
+    lockedCustomerTypeIds,
+    lockedCustomerIds,
+    lockedStateNames,
+    lockedProductIds,
+  };
+}
 
 type ToastState = { msg: string; type: "success" | "error" };
 
@@ -141,6 +235,15 @@ export default function SchemeEditPageClient() {
     ],
   );
 
+  const usageConstraints = useMemo(
+    () =>
+      buildUsageConstraints(
+        detailQuery.data as Record<string, unknown> | undefined,
+        scopeOptionLists,
+      ),
+    [detailQuery.data, scopeOptionLists],
+  );
+
   const optionsReady =
     !customerTypeQuery.isLoading &&
     !customerQuery.isLoading &&
@@ -170,6 +273,30 @@ export default function SchemeEditPageClient() {
     if (err) {
       setFormError(err);
       showToast({ msg: err, type: "error" });
+      return;
+    }
+
+    if (usageConstraints?.lockStartDate) {
+      const originalStart = asIsoDate(
+        (detailQuery.data as Record<string, unknown> | undefined)?.start_date,
+      );
+      if (originalStart && form.startDate !== originalStart) {
+        const msg =
+          "Valid From cannot be changed because this scheme is already applied.";
+        setFormError(msg);
+        showToast({ msg, type: "error" });
+        return;
+      }
+    }
+
+    if (
+      usageConstraints?.minEndDate &&
+      form.endDate &&
+      form.endDate < usageConstraints.minEndDate
+    ) {
+      const msg = `Valid To cannot be earlier than ${usageConstraints.minEndDate}.`;
+      setFormError(msg);
+      showToast({ msg, type: "error" });
       return;
     }
 
@@ -233,6 +360,7 @@ export default function SchemeEditPageClient() {
           schemeCode={schemeCode}
           error={formError}
           lockCategory
+          usageConstraints={usageConstraints}
           schemeCategoryOptions={API_SCHEME_CATEGORIES}
           productSelectOptions={productSelectOptions}
           stateSelectOptions={stateSelectOptions}

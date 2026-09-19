@@ -1,7 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Download, FileDown, FileSpreadsheet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -33,6 +32,7 @@ import {
   ReportWarehouseMultiFilter,
   ReportProductMultiFilter,
   ReportFilterSummary,
+  useReportDateRange,
 } from "@/components/accounts/ReportFilters";
 import {
   AccountsColumnFilterProvider,
@@ -43,87 +43,112 @@ import {
 } from "@/app/(app)/accounts/components/AccountsUI";
 import { EmptySearch } from "@/components/ui/EmptyState";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
-import { getActiveFinancialYearId } from "@/lib/accounts/day-book-data";
-import { formatMoney, MONEY_AMOUNT_CLASS, roundMoney } from "@/lib/accounts/money-format";
-import type { DateRangePresetId } from "@/lib/accounts/report-date-presets";
+import { formatMoney, MONEY_AMOUNT_CLASS } from "@/lib/accounts/money-format";
 import { ACCOUNTS_ACTION_BUTTON_CLASS } from "@/lib/accounts/accounts-typography";
-import { ensureFinancialYearsCurrent, loadFinancialYears } from "@/app/(app)/accounts/masters/masters-data";
 import {
   buildEntityFilterSummary,
-  formatMultiSelectLabel,
   type ReportFilterSummaryItem,
 } from "@/lib/accounts/report-multi-filter-utils";
 import { useClientMounted } from "@/lib/use-client-mounted";
 import { cn } from "@/lib/utils";
 import {
-  buildStockLedgerRows,
-  STOCK_LEDGER_TRANSACTION_TYPE_LABELS,
-  type StockLedgerRow,
-} from "@/lib/accounts/stock-movement-ledger";
-import {
-  buildStockLedgerDrillHref,
-  buildStockValuationRows,
-  computeStockValuationTotals,
-  filterStockValuationRows,
-  formatQtyWithUnit,
-  formatStockValuationDate,
-  getStockValuationProductOptions,
-  getValuationPeriodStart,
-  type AccountingDetailRow,
-  type CostRateMethod,
-  type StockValuationRow,
-  type StockValuationTab,
-} from "./stock-valuation-data";
-import {
-  exportStockValuationToExcel,
-  exportStockValuationToPdf,
-  type StockValuationExportBasis,
-  type StockValuationExportMeta,
-} from "./stock-valuation-export";
+  StockValuationApiError,
+  StockValuationApiService,
+} from "@/services/stock-valuation.service";
+import type {
+  StockValuationDetailApiRow,
+  StockValuationDetailsResult,
+  StockValuationFiltersConfig,
+  StockValuationQueryParams,
+  StockValuationSummaryApiRow,
+  StockValuationSummaryResult,
+  StockValuationTab,
+} from "@/types/stock-valuation.types";
+import { formatQtyWithUnit, formatStockValuationDate } from "./stock-valuation-data";
 import "./stock-valuation-compact.css";
-
-/** Default backend valuation method — not shown as a UI filter. */
-const DEFAULT_COST_RATE_METHOD: CostRateMethod = "weighted_average";
-
-const PLACEHOLDER_DATE = "2025-04-01";
 
 const TABS: { id: StockValuationTab; label: string }[] = [
   { id: "summary", label: "Summary" },
   { id: "detailed", label: "Accounting Details" },
 ];
 
-function defaultFyDateRange(): { from: string; to: string; fyId: string } {
-  ensureFinancialYearsCurrent();
-  const activeFyId = getActiveFinancialYearId();
-  const fy = loadFinancialYears().find((f) => f.id === activeFyId);
-  const today = new Date().toISOString().slice(0, 10);
-  if (!fy) return { from: PLACEHOLDER_DATE, to: today, fyId: "all" };
+function formatMoneyOrDash(
+  value: number | null | undefined,
+  missing: boolean,
+): string {
+  if (missing || value == null) return "—";
+  return formatMoney(value);
+}
+
+function num(value: string | null | undefined): number {
+  if (value == null || value === "") return 0;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
+type SummaryUiRow = {
+  id: string;
+  productName: string;
+  productCode: string;
+  warehouse: string;
+  unit: string;
+  closingQty: number;
+  costRate: number;
+  costRateMissing: boolean;
+  costValue: number;
+  marketRate: number | null;
+  marketRateMissing: boolean;
+  marketValue: number | null;
+  finalStockValue: number;
+};
+
+type DetailUiRow = {
+  id: string;
+  date: string;
+  voucherType: string;
+  voucherNumber: string;
+  productName: string;
+  productCode: string;
+  warehouse: string;
+  debitQty: number;
+  creditQty: number;
+  debitValue: number;
+  creditValue: number;
+  netValue: number;
+};
+
+function mapSummaryRow(row: StockValuationSummaryApiRow): SummaryUiRow {
   return {
-    from: fy.startDate,
-    to: today < fy.endDate ? today : fy.endDate,
-    fyId: String(fy.id),
+    id: row.id,
+    productName: row.product_name,
+    productCode: row.product_code ?? "",
+    warehouse: row.warehouse_name ?? "—",
+    unit: row.uom ?? "",
+    closingQty: num(row.closing_qty),
+    costRate: num(row.cost_rate),
+    costRateMissing: row.cost_rate_missing,
+    costValue: num(row.cost_value),
+    marketRate: null,
+    marketRateMissing: true,
+    marketValue: null,
+    finalStockValue: num(row.final_value),
   };
 }
 
-/** UI placeholder rows for Accounting Details — mapped from existing movement ledger until SIH API exists. */
-function mapLedgerRowToAccountingDetail(row: StockLedgerRow): AccountingDetailRow {
-  const debitQty = row.inQty > 0 ? row.inQty : 0;
-  const creditQty = row.outQty > 0 ? row.outQty : 0;
-  const debitValue = roundMoney(debitQty * (row.rate > 0 ? row.rate : 0));
-  const creditValue = roundMoney(creditQty * (row.rate > 0 ? row.rate : 0));
+function mapDetailRow(row: StockValuationDetailApiRow): DetailUiRow {
   return {
     id: row.id,
-    date: row.date,
-    voucherType: STOCK_LEDGER_TRANSACTION_TYPE_LABELS[row.transactionType] ?? row.transactionType,
-    voucherNumber: row.documentNo,
-    productName: row.productName,
-    productCode: row.productCode,
-    warehouse: row.warehouse,
-    debitQty,
-    creditQty,
-    debitValue,
-    creditValue,
-    netValue: roundMoney(debitValue - creditValue),
+    date: row.voucher_date,
+    voucherType: row.voucher_type,
+    voucherNumber: row.voucher_number,
+    productName: row.product_name,
+    productCode: row.product_code ?? "",
+    warehouse: row.warehouse_name ?? "—",
+    debitQty: num(row.debit_qty),
+    creditQty: num(row.credit_qty),
+    debitValue: num(row.debit_amount),
+    creditValue: num(row.credit_amount),
+    netValue: num(row.net_amount),
   };
 }
 
@@ -132,7 +157,7 @@ function StockValuationExportMenu({
   onExport,
 }: {
   disabled?: boolean;
-  onExport: (format: "excel" | "pdf", basis: StockValuationExportBasis) => void;
+  onExport: (format: "excel" | "pdf") => void;
 }) {
   return (
     <DropdownMenu>
@@ -146,183 +171,280 @@ function StockValuationExportMenu({
           <Download className="w-4 h-4" /> Export
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-52">
-        <DropdownMenuItem
-          className="text-xs gap-2"
-          onClick={() => onExport("excel", "cost")}
-        >
-          <FileSpreadsheet className="w-4 h-4" /> Excel (Cost Valuation)
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          className="text-xs gap-2"
-          onClick={() => onExport("excel", "market")}
-        >
-          <FileSpreadsheet className="w-4 h-4" /> Excel (Market Valuation)
+      <DropdownMenuContent align="end" className="w-44">
+        <DropdownMenuItem className="text-xs gap-2" onClick={() => onExport("excel")}>
+          <FileSpreadsheet className="w-4 h-4" /> Excel
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem
-          className="text-xs gap-2"
-          onClick={() => onExport("pdf", "cost")}
-        >
-          <FileDown className="w-4 h-4" /> PDF (Cost Valuation)
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          className="text-xs gap-2"
-          onClick={() => onExport("pdf", "market")}
-        >
-          <FileDown className="w-4 h-4" /> PDF (Market Valuation)
+        <DropdownMenuItem className="text-xs gap-2" onClick={() => onExport("pdf")}>
+          <FileDown className="w-4 h-4" /> PDF
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
 }
 
-function formatMoneyOrDash(
-  value: number | null | undefined,
-  missing: boolean,
-): string {
-  if (missing || value == null) return "—";
-  return formatMoney(value);
-}
-
-function formatCostValue(row: StockValuationRow): string {
-  if (row.costRateMissing && row.closingQty !== 0) return "—";
-  return formatMoney(row.costValue);
-}
-
-function buildAccountingDetailRows(params: {
-  asOnDate: string;
-  financialYearId: string;
-  warehouses: string[];
-  products: string[];
-}): AccountingDetailRow[] {
-  const years = loadFinancialYears();
-  const fy =
-    params.financialYearId && params.financialYearId !== "all"
-      ? years.find((y) => String(y.id) === params.financialYearId)
-      : null;
-
-  return buildStockLedgerRows()
-    .filter((row) => {
-      if (row.date > params.asOnDate) return false;
-      if (fy && (row.date < fy.startDate || row.date > fy.endDate)) return false;
-      if (params.warehouses.length > 0 && !params.warehouses.includes(row.warehouse)) return false;
-      if (
-        params.products.length > 0 &&
-        !params.products.includes(row.productName) &&
-        !params.products.includes(row.productCode)
-      ) {
-        return false;
-      }
-      return true;
-    })
-    .map(mapLedgerRowToAccountingDetail)
-    .sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
-}
-
 export default function StockValuationPageClient() {
   const mounted = useClientMounted();
+  const appliedDefaults = useRef(false);
+
+  const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } =
+    useReportDateRange("this_year");
 
   const [tab, setTab] = useState<StockValuationTab>("summary");
-  const [preset, setPreset] = useState<DateRangePresetId>("custom");
-  const [dateFrom, setDateFrom] = useState(PLACEHOLDER_DATE);
-  const [dateTo, setDateTo] = useState(PLACEHOLDER_DATE);
-  const [datesReady, setDatesReady] = useState(false);
-  const [financialYearId, setFinancialYearId] = useState("all");
+  const [filtersConfig, setFiltersConfig] =
+    useState<StockValuationFiltersConfig | null>(null);
+  const [filtersError, setFiltersError] = useState<string | null>(null);
+  const [financialYearId, setFinancialYearId] = useState("");
   const [warehouses, setWarehouses] = useState<string[]>([]);
   const [products, setProducts] = useState<string[]>([]);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [exporting, setExporting] = useState(false);
+  const [ready, setReady] = useState(false);
+  const [retryKey, setRetryKey] = useState(0);
 
-  /** Valuation cutoff = To Date (same role as former As On Date). */
-  const asOnDate = dateTo;
+  const [summaryReport, setSummaryReport] =
+    useState<StockValuationSummaryResult | null>(null);
+  const [detailsReport, setDetailsReport] =
+    useState<StockValuationDetailsResult | null>(null);
+  const [reportLoading, setReportLoading] = useState(false);
+  const [reportError, setReportError] = useState<string | null>(null);
 
   useEffect(() => {
-    const { from, to, fyId } = defaultFyDateRange();
-    setDateFrom(from);
-    setDateTo(to);
-    setFinancialYearId(fyId);
-    setDatesReady(true);
-  }, []);
+    if (!mounted) return;
+    setReady(true);
+  }, [mounted]);
 
-  const handleFinancialYearChange = useCallback((fyId: string) => {
-    setFinancialYearId(fyId);
-    if (fyId !== "all") {
-      const fy = loadFinancialYears().find((f) => String(f.id) === fyId);
-      if (fy) {
-        setDateFrom(fy.startDate);
-        const today = new Date().toISOString().slice(0, 10);
-        setDateTo(today < fy.endDate ? today : fy.endDate);
-        setPreset("custom");
-      }
-    }
-  }, []);
-
-  const sourceRows = useMemo(() => {
-    if (!mounted || !datesReady) return [];
-    return buildStockValuationRows(asOnDate, DEFAULT_COST_RATE_METHOD, "all", {
-      financialYearId,
-      grouping: "product_warehouse",
-    });
-  }, [mounted, datesReady, asOnDate, financialYearId]);
-
-  const warehouseOptions = useMemo(() => {
-    if (!mounted) return [];
-    return Array.from(new Set(sourceRows.map((r) => r.warehouse).filter(Boolean))).sort();
-  }, [mounted, sourceRows]);
-
-  const productOptions = useMemo(() => {
-    if (!mounted) return [];
-    const fromValuation = sourceRows.map((r) => ({
-      value: r.productName,
-      label: r.productName,
-      searchText: r.productCode,
-    }));
-    if (fromValuation.length > 0) {
-      const seen = new Set<string>();
-      return fromValuation.filter((p) => {
-        if (seen.has(p.value)) return false;
-        seen.add(p.value);
-        return true;
+  useEffect(() => {
+    if (!mounted) return;
+    const controller = new AbortController();
+    void StockValuationApiService.getFilters(controller.signal)
+      .then((config) => {
+        if (!controller.signal.aborted) {
+          setFiltersConfig(config);
+          setFiltersError(null);
+        }
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return;
+        setFiltersConfig(null);
+        setFiltersError(
+          error instanceof Error
+            ? error.message
+            : "Failed to load Stock Valuation filters.",
+        );
       });
-    }
-    return getStockValuationProductOptions().map((name) => ({
-      value: name,
-      label: name,
-    }));
-  }, [mounted, sourceRows]);
+    return () => controller.abort();
+  }, [mounted]);
 
-  const filteredRows = useMemo(
-    () =>
-      filterStockValuationRows(sourceRows, {
-        asOnDate,
-        financialYearId,
-        warehouse: warehouses,
-        product: products,
-        stockStatus: "all",
-      }),
-    [sourceRows, asOnDate, financialYearId, warehouses, products],
+  useEffect(() => {
+    if (!ready || !filtersConfig || appliedDefaults.current) return;
+    if (filtersConfig.defaults.financial_year_id) {
+      setFinancialYearId(filtersConfig.defaults.financial_year_id);
+    }
+    if (filtersConfig.defaults.from_date) {
+      setDateFrom(filtersConfig.defaults.from_date);
+    }
+    if (filtersConfig.defaults.to_date) {
+      const today = new Date().toISOString().slice(0, 10);
+      const fyEnd = filtersConfig.defaults.to_date;
+      setDateTo(today < fyEnd ? today : fyEnd);
+    }
+    setPreset("custom");
+    setPageSize(filtersConfig.defaults.page_size || 25);
+    appliedDefaults.current = true;
+  }, [filtersConfig, ready, setDateFrom, setDateTo, setPreset]);
+
+  const handleFinancialYearChange = useCallback(
+    (fyId: string) => {
+      setFinancialYearId(fyId);
+      if (fyId !== "all" && filtersConfig) {
+        const fy = filtersConfig.financial_years.find(
+          (y) => y.financial_year_id === fyId,
+        );
+        if (fy) {
+          setDateFrom(fy.start_date);
+          const today = new Date().toISOString().slice(0, 10);
+          setDateTo(today < fy.end_date ? today : fy.end_date);
+          setPreset("custom");
+        }
+      }
+    },
+    [filtersConfig, setDateFrom, setDateTo, setPreset],
   );
 
-  const accountingDetailRows = useMemo(() => {
-    if (!mounted || tab !== "detailed") return [];
-    return buildAccountingDetailRows({
-      asOnDate,
-      financialYearId,
-      warehouses,
-      products,
-    });
-  }, [mounted, tab, asOnDate, financialYearId, warehouses, products]);
+  const warehouseOptions = useMemo(
+    () =>
+      (filtersConfig?.warehouses ?? []).map((w) => ({
+        value: w.warehouse_id,
+        label: w.warehouse_name,
+      })),
+    [filtersConfig],
+  );
 
-  const getSummaryCellValue = useCallback((row: StockValuationRow, key: string) => {
+  const productOptions = useMemo(
+    () =>
+      (filtersConfig?.products ?? []).map((p) => ({
+        value: p.product_id,
+        label: p.product_name,
+        searchText: p.product_code,
+      })),
+    [filtersConfig],
+  );
+
+  const queryParams = useMemo<StockValuationQueryParams | null>(() => {
+    if (!financialYearId || financialYearId === "all" || !dateFrom || !dateTo) {
+      return null;
+    }
+    return {
+      financial_year_id: financialYearId,
+      from_date: dateFrom,
+      to_date: dateTo,
+      warehouse_ids: warehouses,
+      product_ids: products,
+      page,
+      page_size: pageSize,
+      sort_by: tab === "detailed" ? "voucher_date" : "product_name",
+      sort_order: "asc",
+    };
+  }, [
+    financialYearId,
+    dateFrom,
+    dateTo,
+    warehouses,
+    products,
+    page,
+    pageSize,
+    tab,
+  ]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [dateFrom, dateTo, tab, pageSize, financialYearId, warehouses, products]);
+
+  useEffect(() => {
+    if (!queryParams) {
+      setSummaryReport(null);
+      setDetailsReport(null);
+      setReportError(
+        !financialYearId || financialYearId === "all"
+          ? "Select a financial year to load Stock Valuation."
+          : null,
+      );
+      return;
+    }
+
+    const controller = new AbortController();
+    setReportLoading(true);
+    setReportError(null);
+
+    const load =
+      tab === "detailed"
+        ? StockValuationApiService.getAccountingDetails(
+            queryParams,
+            controller.signal,
+          ).then((result) => {
+            if (!controller.signal.aborted) {
+              setDetailsReport(result);
+              setSummaryReport(null);
+            }
+          })
+        : StockValuationApiService.getSummary(
+            queryParams,
+            controller.signal,
+          ).then((result) => {
+            if (!controller.signal.aborted) {
+              setSummaryReport(result);
+              setDetailsReport(null);
+            }
+          });
+
+    void load
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return;
+        setSummaryReport(null);
+        setDetailsReport(null);
+        setReportError(
+          error instanceof StockValuationApiError
+            ? error.message
+            : error instanceof Error
+              ? error.message
+              : "Failed to load Stock Valuation.",
+        );
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setReportLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [queryParams, tab, retryKey, financialYearId]);
+
+  const summaryRows = useMemo(
+    () => (summaryReport?.rows ?? []).map(mapSummaryRow),
+    [summaryReport],
+  );
+
+  const detailRows = useMemo(
+    () => (detailsReport?.rows ?? []).map(mapDetailRow),
+    [detailsReport],
+  );
+
+  const hasFilters = warehouses.length > 0 || products.length > 0;
+
+  const clearFilters = useCallback(() => {
+    setWarehouses([]);
+    setProducts([]);
+  }, []);
+
+  const filterSummaryItems = useMemo((): ReportFilterSummaryItem[] => {
+    return [
+      buildEntityFilterSummary(
+        "warehouse",
+        "Warehouses",
+        warehouses,
+        warehouseOptions,
+        () => setWarehouses([]),
+      ),
+      buildEntityFilterSummary(
+        "product",
+        "Products",
+        products,
+        productOptions,
+        () => setProducts([]),
+      ),
+    ].filter((item): item is ReportFilterSummaryItem => item != null);
+  }, [warehouses, products, warehouseOptions, productOptions]);
+
+  const handleExport = useCallback(
+    async (format: "excel" | "pdf") => {
+      if (!queryParams || exporting) return;
+      setExporting(true);
+      try {
+        await StockValuationApiService.exportReport({
+          ...queryParams,
+          format: format === "pdf" ? "PDF" : "EXCEL",
+          view: tab === "detailed" ? "accounting_details" : "summary",
+        });
+      } catch (error: unknown) {
+        setReportError(
+          error instanceof Error ? error.message : "Export failed.",
+        );
+      } finally {
+        setExporting(false);
+      }
+    },
+    [queryParams, exporting, tab],
+  );
+
+  const getSummaryCellValue = useCallback((row: SummaryUiRow, key: string) => {
     const record = row as unknown as Record<string, unknown>;
     if (key === "marketRate") return row.marketRateMissing ? null : row.marketRate;
     if (key === "marketValue") return row.marketRateMissing ? null : row.marketValue;
     return record[key];
   }, []);
 
-  const getDetailCellValue = useCallback((row: AccountingDetailRow, key: string) => {
+  const getDetailCellValue = useCallback((row: DetailUiRow, key: string) => {
     return (row as unknown as Record<string, unknown>)[key];
   }, []);
 
@@ -356,70 +478,6 @@ export default function StockValuationPageClient() {
     [],
   );
 
-  const activeFyId = mounted ? getActiveFinancialYearId() : null;
-
-  const hasFilters =
-    warehouses.length > 0 ||
-    products.length > 0 ||
-    financialYearId !== (activeFyId ? String(activeFyId) : "all");
-
-  const clearFilters = useCallback(() => {
-    setWarehouses([]);
-    setProducts([]);
-    const { from, to, fyId } = defaultFyDateRange();
-    setFinancialYearId(activeFyId ? String(activeFyId) : fyId);
-    setDateFrom(from);
-    setDateTo(to);
-    setPreset("custom");
-  }, [activeFyId]);
-
-  const periodStart = useMemo(
-    () => getValuationPeriodStart(financialYearId, asOnDate),
-    [financialYearId, asOnDate],
-  );
-
-  const filterSummaryItems = useMemo((): ReportFilterSummaryItem[] => {
-    return [
-      buildEntityFilterSummary("warehouse", "Warehouses", warehouses, warehouseOptions.map((w) => ({ value: w, label: w })), () =>
-        setWarehouses([]),
-      ),
-      buildEntityFilterSummary("product", "Products", products, productOptions, () => setProducts([])),
-    ].filter((item): item is ReportFilterSummaryItem => item != null);
-  }, [warehouses, products, warehouseOptions, productOptions]);
-
-  const buildExportMeta = useCallback(
-    (exportBasis: StockValuationExportBasis): StockValuationExportMeta => {
-      const years = loadFinancialYears();
-      const fy =
-        financialYearId === "all"
-          ? "All years"
-          : (years.find((y) => String(y.id) === financialYearId)?.name ?? financialYearId);
-
-      return {
-        asOnDate,
-        financialYear: fy,
-        costRateMethod: DEFAULT_COST_RATE_METHOD,
-        warehouse: formatMultiSelectLabel(
-          warehouses,
-          warehouseOptions.map((w) => ({ value: w, label: w })),
-          "Warehouse",
-          "All warehouses",
-        ),
-        product: formatMultiSelectLabel(products, productOptions, "Product", "All products"),
-        stockStatus: "All",
-        grouping: "Product + Warehouse-wise",
-        tab,
-        showWarehouse: true,
-        exportBasis,
-      };
-    },
-    [asOnDate, financialYearId, warehouses, warehouseOptions, products, productOptions, tab],
-  );
-
-  useEffect(() => {
-    setPage(1);
-  }, [dateFrom, dateTo, tab, pageSize, financialYearId, warehouses, products]);
-
   if (!mounted) {
     return (
       <AccountsPageShell
@@ -434,174 +492,29 @@ export default function StockValuationPageClient() {
     );
   }
 
-  if (tab === "detailed") {
-    return (
-      <AccountsColumnFilterProvider
-        key="accounting-details"
-        rows={accountingDetailRows}
-        getCellValue={getDetailCellValue}
-        columnConfig={detailColumnConfig}
-        defaultSortKey="date"
-        defaultSortDir="asc"
-      >
-        <StockValuationAccountingBody
-          tab={tab}
-          setTab={setTab}
-          accountingRows={accountingDetailRows}
-          summaryRows={filteredRows}
-          hasFilters={hasFilters}
-          clearFilters={clearFilters}
-          buildExportMeta={buildExportMeta}
-          exporting={exporting}
-          setExporting={setExporting}
-          financialYearId={financialYearId}
-          onFinancialYearChange={handleFinancialYearChange}
-          preset={preset}
-          setPreset={setPreset}
-          dateFrom={dateFrom}
-          setDateFrom={setDateFrom}
-          dateTo={dateTo}
-          setDateTo={setDateTo}
-          asOnDate={asOnDate}
-          warehouses={warehouses}
-          setWarehouses={setWarehouses}
-          warehouseOptions={warehouseOptions}
-          products={products}
-          setProducts={setProducts}
-          productOptions={productOptions}
-          filterSummaryItems={filterSummaryItems}
-          page={page}
-          setPage={setPage}
-          pageSize={pageSize}
-          setPageSize={setPageSize}
-        />
-      </AccountsColumnFilterProvider>
-    );
-  }
-
-  return (
-    <AccountsColumnFilterProvider
-      key="summary"
-      rows={filteredRows}
-      getCellValue={getSummaryCellValue}
-      columnConfig={summaryColumnConfig}
-      defaultSortKey="productName"
-      defaultSortDir="asc"
-    >
-      <StockValuationSummaryBody
-        tab={tab}
-        setTab={setTab}
-        filteredRows={filteredRows}
-        hasFilters={hasFilters}
-        clearFilters={clearFilters}
-        buildExportMeta={buildExportMeta}
-        exporting={exporting}
-        setExporting={setExporting}
-        financialYearId={financialYearId}
-        onFinancialYearChange={handleFinancialYearChange}
-        preset={preset}
-        setPreset={setPreset}
-        dateFrom={dateFrom}
-        setDateFrom={setDateFrom}
-        dateTo={dateTo}
-        setDateTo={setDateTo}
-        asOnDate={asOnDate}
-        periodStart={periodStart}
-        warehouses={warehouses}
-        setWarehouses={setWarehouses}
-        warehouseOptions={warehouseOptions}
-        products={products}
-        setProducts={setProducts}
-        productOptions={productOptions}
-        filterSummaryItems={filterSummaryItems}
-        page={page}
-        setPage={setPage}
-        pageSize={pageSize}
-        setPageSize={setPageSize}
-      />
-    </AccountsColumnFilterProvider>
-  );
-}
-
-type SharedFilterProps = {
-  tab: StockValuationTab;
-  setTab: (t: StockValuationTab) => void;
-  hasFilters: boolean;
-  clearFilters: () => void;
-  buildExportMeta: (basis: StockValuationExportBasis) => StockValuationExportMeta;
-  exporting: boolean;
-  setExporting: (v: boolean) => void;
-  financialYearId: string;
-  onFinancialYearChange: (v: string) => void;
-  preset: DateRangePresetId;
-  setPreset: (v: DateRangePresetId) => void;
-  dateFrom: string;
-  setDateFrom: (v: string) => void;
-  dateTo: string;
-  setDateTo: (v: string) => void;
-  asOnDate: string;
-  warehouses: string[];
-  setWarehouses: (v: string[]) => void;
-  warehouseOptions: string[];
-  products: string[];
-  setProducts: (v: string[]) => void;
-  productOptions: { value: string; label: string; searchText?: string }[];
-  filterSummaryItems: ReportFilterSummaryItem[];
-  page: number;
-  setPage: (p: number) => void;
-  pageSize: number;
-  setPageSize: (s: number) => void;
-};
-
-function ValuationFilters({
-  financialYearId,
-  onFinancialYearChange,
-  preset,
-  setPreset,
-  dateFrom,
-  setDateFrom,
-  dateTo,
-  setDateTo,
-  warehouses,
-  setWarehouses,
-  warehouseOptions,
-  products,
-  setProducts,
-  productOptions,
-  filterSummaryItems,
-  onExport,
-  exporting,
-  exportDisabled,
-}: {
-  financialYearId: string;
-  onFinancialYearChange: (v: string) => void;
-  preset: DateRangePresetId;
-  setPreset: (v: DateRangePresetId) => void;
-  dateFrom: string;
-  setDateFrom: (v: string) => void;
-  dateTo: string;
-  setDateTo: (v: string) => void;
-  warehouses: string[];
-  setWarehouses: (v: string[]) => void;
-  warehouseOptions: string[];
-  products: string[];
-  setProducts: (v: string[]) => void;
-  productOptions: { value: string; label: string; searchText?: string }[];
-  filterSummaryItems: ReportFilterSummaryItem[];
-  onExport: (format: "excel" | "pdf", basis: StockValuationExportBasis) => void;
-  exporting: boolean;
-  exportDisabled: boolean;
-}) {
-  return (
+  const filtersEl = (
     <>
       <ReportFilterRow
         className="items-end"
         wrap
         end={
-          <StockValuationExportMenu onExport={onExport} disabled={exporting || exportDisabled} />
+          <StockValuationExportMenu
+            onExport={handleExport}
+            disabled={
+              exporting ||
+              reportLoading ||
+              !queryParams ||
+              (tab === "summary"
+                ? (summaryReport?.pagination.total_rows ?? 0) === 0
+                : (detailsReport?.pagination.total_rows ?? 0) === 0)
+            }
+          />
         }
       >
-        <ReportFinancialYearFilter value={financialYearId} onChange={onFinancialYearChange} />
+        <ReportFinancialYearFilter
+          value={financialYearId || "all"}
+          onChange={handleFinancialYearChange}
+        />
         <ReportDateRangeFilter
           preset={preset}
           dateFrom={dateFrom}
@@ -613,7 +526,7 @@ function ValuationFilters({
         <ReportWarehouseMultiFilter
           values={warehouses}
           onChange={setWarehouses}
-          options={warehouseOptions}
+          labeledOptions={warehouseOptions}
         />
         <ReportProductMultiFilter
           values={products}
@@ -622,128 +535,161 @@ function ValuationFilters({
         />
       </ReportFilterRow>
       <ReportFilterSummary items={filterSummaryItems} />
+      {(filtersError || reportError) && (
+        <div className="px-1 pt-1 text-xs text-destructive">
+          {filtersError || reportError}{" "}
+          {reportError ? (
+            <button
+              type="button"
+              className="underline"
+              onClick={() => setRetryKey((k) => k + 1)}
+            >
+              Retry
+            </button>
+          ) : null}
+        </div>
+      )}
     </>
+  );
+
+  if (tab === "detailed") {
+    return (
+      <AccountsColumnFilterProvider
+        key="accounting-details"
+        rows={detailRows}
+        getCellValue={getDetailCellValue}
+        columnConfig={detailColumnConfig}
+        defaultSortKey="date"
+        defaultSortDir="asc"
+      >
+        <DetailsBody
+          tab={tab}
+          setTab={setTab}
+          rows={detailRows}
+          report={detailsReport}
+          loading={reportLoading}
+          hasFilters={hasFilters}
+          clearFilters={clearFilters}
+          filtersEl={filtersEl}
+          page={page}
+          setPage={setPage}
+          pageSize={pageSize}
+          setPageSize={setPageSize}
+          asOnDate={dateTo}
+          periodLabel={`${formatStockValuationDate(dateFrom)} – ${formatStockValuationDate(dateTo)}`}
+        />
+      </AccountsColumnFilterProvider>
+    );
+  }
+
+  return (
+    <AccountsColumnFilterProvider
+      key="summary"
+      rows={summaryRows}
+      getCellValue={getSummaryCellValue}
+      columnConfig={summaryColumnConfig}
+      defaultSortKey="productName"
+      defaultSortDir="asc"
+    >
+      <SummaryBody
+        tab={tab}
+        setTab={setTab}
+        rows={summaryRows}
+        report={summaryReport}
+        loading={reportLoading}
+        hasFilters={hasFilters}
+        clearFilters={clearFilters}
+        filtersEl={filtersEl}
+        page={page}
+        setPage={setPage}
+        pageSize={pageSize}
+        setPageSize={setPageSize}
+        asOnDate={dateTo}
+      />
+    </AccountsColumnFilterProvider>
   );
 }
 
-function StockValuationSummaryBody({
+function SummaryBody({
   tab,
   setTab,
-  filteredRows,
+  rows,
+  report,
+  loading,
   hasFilters,
   clearFilters,
-  buildExportMeta,
-  exporting,
-  setExporting,
-  financialYearId,
-  onFinancialYearChange,
-  preset,
-  setPreset,
-  dateFrom,
-  setDateFrom,
-  dateTo,
-  setDateTo,
-  asOnDate,
-  periodStart,
-  warehouses,
-  setWarehouses,
-  warehouseOptions,
-  products,
-  setProducts,
-  productOptions,
-  filterSummaryItems,
+  filtersEl,
   page,
   setPage,
   pageSize,
   setPageSize,
-}: SharedFilterProps & {
-  filteredRows: StockValuationRow[];
-  periodStart: string;
+  asOnDate,
+}: {
+  tab: StockValuationTab;
+  setTab: (t: StockValuationTab) => void;
+  rows: SummaryUiRow[];
+  report: StockValuationSummaryResult | null;
+  loading: boolean;
+  hasFilters: boolean;
+  clearFilters: () => void;
+  filtersEl: ReactNode;
+  page: number;
+  setPage: (p: number) => void;
+  pageSize: number;
+  setPageSize: (s: number) => void;
+  asOnDate: string;
 }) {
   const ctx = useAccountsColumnFilterContext();
-  const columnFilteredRows = useAccountsFilteredRows(filteredRows);
-  const totals = useMemo(() => computeStockValuationTotals(columnFilteredRows), [columnFilteredRows]);
-
-  const paginatedRows = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return columnFilteredRows.slice(start, start + pageSize);
-  }, [columnFilteredRows, page, pageSize]);
+  const columnFilteredRows = useAccountsFilteredRows(rows);
 
   useEffect(() => {
     setPage(1);
   }, [ctx?.columnFilters, ctx?.sortKey, ctx?.sortDir, setPage]);
 
-  const handleExport = useCallback(
-    async (format: "excel" | "pdf", basis: StockValuationExportBasis) => {
-      if (columnFilteredRows.length === 0 || exporting) return;
-      const meta = buildExportMeta(basis);
-      if (format === "excel") {
-        setExporting(true);
-        try {
-          await exportStockValuationToExcel(columnFilteredRows, meta, totals);
-        } finally {
-          setExporting(false);
-        }
-      } else {
-        exportStockValuationToPdf(columnFilteredRows, meta, totals);
-      }
-    },
-    [columnFilteredRows, buildExportMeta, totals, exporting, setExporting],
-  );
-
-  const marketCardValue =
-    !totals.marketValueAvailable || totals.totalMarketValue == null
-      ? "Not Available"
-      : formatMoney(totals.totalMarketValue);
+  const serverTotals = report?.summary;
+  const pageTotals = useMemo(() => {
+    return {
+      closingQty: columnFilteredRows.reduce((s, r) => s + r.closingQty, 0),
+      costValue: columnFilteredRows.reduce((s, r) => s + r.costValue, 0),
+      finalValue: columnFilteredRows.reduce((s, r) => s + r.finalStockValue, 0),
+    };
+  }, [columnFilteredRows]);
 
   const summaryItems = [
     {
       label: "Total Closing Quantity",
-      value: totals.totalClosingQty.toLocaleString("en-IN"),
+      value: (serverTotals
+        ? num(serverTotals.total_closing_qty)
+        : pageTotals.closingQty
+      ).toLocaleString("en-IN"),
     },
-    { label: "Total Cost Value", value: formatMoney(totals.totalCostValue) },
-    { label: "Total Market Value", value: marketCardValue },
-    { label: "Final Stock Value", value: formatMoney(totals.totalFinalStockValue) },
+    {
+      label: "Total Cost Value",
+      value: formatMoney(
+        serverTotals ? num(serverTotals.total_cost_value) : pageTotals.costValue,
+      ),
+    },
+    { label: "Total Market Value", value: "Not Available" },
+    {
+      label: "Final Stock Value",
+      value: formatMoney(
+        serverTotals
+          ? num(serverTotals.total_final_value)
+          : pageTotals.finalValue,
+      ),
+    },
   ];
 
-  const drillHref = (row: StockValuationRow) =>
-    buildStockLedgerDrillHref({
-      productCode: row.productCode,
-      warehouse: row.warehouse,
-      financialYearId,
-      asOnDate,
-      periodStart,
-    });
+  const totalRecords = report?.pagination.total_rows ?? 0;
 
   return (
     <AccountsPageShell
       breadcrumbs={accountsBreadcrumb("Reports", "Stock Valuation")}
       title="Stock Valuation"
-      description="Accounting value of recognized inventory as on the selected date — Closing Quantity → Cost Rate → Cost Value → Final Stock Value."
+      description="Book value of inventory from STOCK_IN_HAND as on the selected To Date."
       layout="split"
       className="stock-valuation-compact h-full min-h-0"
-      filters={
-        <ValuationFilters
-          financialYearId={financialYearId}
-          onFinancialYearChange={onFinancialYearChange}
-          preset={preset}
-          setPreset={setPreset}
-          dateFrom={dateFrom}
-          setDateFrom={setDateFrom}
-          dateTo={dateTo}
-          setDateTo={setDateTo}
-          warehouses={warehouses}
-          setWarehouses={setWarehouses}
-          warehouseOptions={warehouseOptions}
-          products={products}
-          setProducts={setProducts}
-          productOptions={productOptions}
-          filterSummaryItems={filterSummaryItems}
-          onExport={handleExport}
-          exporting={exporting}
-          exportDisabled={columnFilteredRows.length === 0}
-        />
-      }
+      filters={filtersEl}
     >
       <AccountsTableListing
         className="h-full min-h-0"
@@ -757,11 +703,11 @@ function StockValuationSummaryBody({
         }
         summary={<AccountsSummaryBar items={summaryItems} className="!border-b" />}
         footer={
-          columnFilteredRows.length > 0 ? (
+          totalRecords > 0 ? (
             <AccountsTablePagination
               page={page}
               pageSize={pageSize}
-              totalRecords={columnFilteredRows.length}
+              totalRecords={totalRecords}
               onPageChange={setPage}
               onPageSizeChange={setPageSize}
               recordLabel="product lines"
@@ -769,7 +715,9 @@ function StockValuationSummaryBody({
           ) : undefined
         }
       >
-        {filteredRows.length === 0 ? (
+        {loading ? (
+          <div className="p-6 text-sm text-muted-foreground">Loading…</div>
+        ) : rows.length === 0 ? (
           <EmptySearch compact onClear={hasFilters ? clearFilters : undefined} />
         ) : columnFilteredRows.length === 0 ? (
           <div className="accounts-table-empty py-6 text-center text-sm text-muted-foreground">
@@ -790,24 +738,22 @@ function StockValuationSummaryBody({
               </AccountsTableHeadRow>
             </AccountsTableHead>
             <AccountsTableBody>
-              {paginatedRows.map((row) => (
+              {columnFilteredRows.map((row) => (
                 <AccountsTableRow key={row.id}>
                   <AccountsTableCell className="text-xs font-medium align-middle">
-                    <Link href={drillHref(row)} className="text-brand-700 hover:underline">
-                      {row.productName}
-                    </Link>
+                    {row.productName}
                   </AccountsTableCell>
                   <AccountsTableCell className="text-xs align-middle">{row.warehouse}</AccountsTableCell>
                   <AccountsTableCell align="right" className="text-xs tabular-nums font-medium align-middle">
-                    <Link href={drillHref(row)} className="text-brand-700 hover:underline">
-                      {formatQtyWithUnit(row.closingQty, row.unit)}
-                    </Link>
+                    {formatQtyWithUnit(row.closingQty, row.unit)}
                   </AccountsTableCell>
                   <AccountsTableCell align="right" money className={cn(MONEY_AMOUNT_CLASS, "align-middle")}>
                     {row.costRateMissing ? "—" : formatMoney(row.costRate)}
                   </AccountsTableCell>
                   <AccountsTableCell align="right" money className={cn(MONEY_AMOUNT_CLASS, "align-middle")}>
-                    {formatCostValue(row)}
+                    {row.costRateMissing && row.closingQty !== 0
+                      ? "—"
+                      : formatMoney(row.costValue)}
                   </AccountsTableCell>
                   <AccountsTableCell align="right" money className={cn(MONEY_AMOUNT_CLASS, "align-middle")}>
                     {formatMoneyOrDash(row.marketRate, row.marketRateMissing)}
@@ -828,23 +774,32 @@ function StockValuationSummaryBody({
             <AccountsTableFoot>
               <AccountsTableRow>
                 <AccountsTableCell colSpan={2} className="font-semibold text-xs text-foreground align-middle">
-                  Totals
+                  Totals {asOnDate ? `(as on ${formatStockValuationDate(asOnDate)})` : ""}
                 </AccountsTableCell>
                 <AccountsTableCell align="right" className="font-semibold text-xs tabular-nums align-middle">
-                  {totals.totalClosingQty.toLocaleString("en-IN")}
+                  {(serverTotals
+                    ? num(serverTotals.total_closing_qty)
+                    : pageTotals.closingQty
+                  ).toLocaleString("en-IN")}
                 </AccountsTableCell>
                 <AccountsTableCell />
                 <AccountsTableCell align="right" money className={cn("font-semibold align-middle", MONEY_AMOUNT_CLASS)}>
-                  {formatMoney(totals.totalCostValue)}
+                  {formatMoney(
+                    serverTotals
+                      ? num(serverTotals.total_cost_value)
+                      : pageTotals.costValue,
+                  )}
                 </AccountsTableCell>
                 <AccountsTableCell />
                 <AccountsTableCell align="right" money className={cn("font-semibold align-middle", MONEY_AMOUNT_CLASS)}>
-                  {!totals.marketValueAvailable || totals.totalMarketValue == null
-                    ? "—"
-                    : formatMoney(totals.totalMarketValue)}
+                  —
                 </AccountsTableCell>
                 <AccountsTableCell align="right" money className={cn("font-semibold align-middle", MONEY_AMOUNT_CLASS)}>
-                  {formatMoney(totals.totalFinalStockValue)}
+                  {formatMoney(
+                    serverTotals
+                      ? num(serverTotals.total_final_value)
+                      : pageTotals.finalValue,
+                  )}
                 </AccountsTableCell>
               </AccountsTableRow>
             </AccountsTableFoot>
@@ -855,125 +810,94 @@ function StockValuationSummaryBody({
   );
 }
 
-function StockValuationAccountingBody({
+function DetailsBody({
   tab,
   setTab,
-  accountingRows,
-  summaryRows,
+  rows,
+  report,
+  loading,
   hasFilters,
   clearFilters,
-  buildExportMeta,
-  exporting,
-  setExporting,
-  financialYearId,
-  onFinancialYearChange,
-  preset,
-  setPreset,
-  dateFrom,
-  setDateFrom,
-  dateTo,
-  setDateTo,
-  warehouses,
-  setWarehouses,
-  warehouseOptions,
-  products,
-  setProducts,
-  productOptions,
-  filterSummaryItems,
+  filtersEl,
   page,
   setPage,
   pageSize,
   setPageSize,
-}: SharedFilterProps & {
-  accountingRows: AccountingDetailRow[];
-  summaryRows: StockValuationRow[];
+  asOnDate,
+  periodLabel,
+}: {
+  tab: StockValuationTab;
+  setTab: (t: StockValuationTab) => void;
+  rows: DetailUiRow[];
+  report: StockValuationDetailsResult | null;
+  loading: boolean;
+  hasFilters: boolean;
+  clearFilters: () => void;
+  filtersEl: ReactNode;
+  page: number;
+  setPage: (p: number) => void;
+  pageSize: number;
+  setPageSize: (s: number) => void;
+  asOnDate: string;
+  periodLabel: string;
 }) {
   const ctx = useAccountsColumnFilterContext();
-  const columnFilteredRows = useAccountsFilteredRows(accountingRows);
-
-  const detailTotals = useMemo(() => {
-    return {
-      totalDebitQty: columnFilteredRows.reduce((s, r) => s + r.debitQty, 0),
-      totalCreditQty: columnFilteredRows.reduce((s, r) => s + r.creditQty, 0),
-      totalDebitValue: roundMoney(columnFilteredRows.reduce((s, r) => s + r.debitValue, 0)),
-      totalCreditValue: roundMoney(columnFilteredRows.reduce((s, r) => s + r.creditValue, 0)),
-      totalNetValue: roundMoney(columnFilteredRows.reduce((s, r) => s + r.netValue, 0)),
-    };
-  }, [columnFilteredRows]);
-
-  const summaryTotals = useMemo(() => computeStockValuationTotals(summaryRows), [summaryRows]);
-
-  const paginatedRows = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return columnFilteredRows.slice(start, start + pageSize);
-  }, [columnFilteredRows, page, pageSize]);
+  const columnFilteredRows = useAccountsFilteredRows(rows);
 
   useEffect(() => {
     setPage(1);
   }, [ctx?.columnFilters, ctx?.sortKey, ctx?.sortDir, setPage]);
 
-  const handleExport = useCallback(
-    async (format: "excel" | "pdf", basis: StockValuationExportBasis) => {
-      if (summaryRows.length === 0 || exporting) return;
-      const meta = buildExportMeta(basis);
-      if (format === "excel") {
-        setExporting(true);
-        try {
-          await exportStockValuationToExcel(summaryRows, meta, summaryTotals, columnFilteredRows);
-        } finally {
-          setExporting(false);
-        }
-      } else {
-        exportStockValuationToPdf(summaryRows, meta, summaryTotals, columnFilteredRows);
-      }
-    },
-    [summaryRows, summaryTotals, columnFilteredRows, buildExportMeta, exporting, setExporting],
-  );
-
-  const marketCardValue =
-    !summaryTotals.marketValueAvailable || summaryTotals.totalMarketValue == null
-      ? "Not Available"
-      : formatMoney(summaryTotals.totalMarketValue);
+  const serverTotals = report?.summary;
+  const pageTotals = useMemo(() => {
+    return {
+      debitQty: columnFilteredRows.reduce((s, r) => s + r.debitQty, 0),
+      creditQty: columnFilteredRows.reduce((s, r) => s + r.creditQty, 0),
+      debitValue: columnFilteredRows.reduce((s, r) => s + r.debitValue, 0),
+      creditValue: columnFilteredRows.reduce((s, r) => s + r.creditValue, 0),
+      netValue: columnFilteredRows.reduce((s, r) => s + r.netValue, 0),
+    };
+  }, [columnFilteredRows]);
 
   const summaryItems = [
     {
-      label: "Total Closing Quantity",
-      value: summaryTotals.totalClosingQty.toLocaleString("en-IN"),
+      label: "Lines (period)",
+      value: String(serverTotals?.line_count ?? columnFilteredRows.length),
     },
-    { label: "Total Cost Value", value: formatMoney(summaryTotals.totalCostValue) },
-    { label: "Total Market Value", value: marketCardValue },
-    { label: "Final Stock Value", value: formatMoney(summaryTotals.totalFinalStockValue) },
+    {
+      label: "Net Amount",
+      value: formatMoney(
+        serverTotals ? num(serverTotals.total_net_amount) : pageTotals.netValue,
+      ),
+    },
+    {
+      label: "Debit Amount",
+      value: formatMoney(
+        serverTotals
+          ? num(serverTotals.total_debit_amount)
+          : pageTotals.debitValue,
+      ),
+    },
+    {
+      label: "Credit Amount",
+      value: formatMoney(
+        serverTotals
+          ? num(serverTotals.total_credit_amount)
+          : pageTotals.creditValue,
+      ),
+    },
   ];
+
+  const totalRecords = report?.pagination.total_rows ?? 0;
 
   return (
     <AccountsPageShell
       breadcrumbs={accountsBreadcrumb("Reports", "Stock Valuation")}
       title="Stock Valuation"
-      description="Accounting value of recognized inventory as on the selected date — Closing Quantity → Cost Rate → Cost Value → Final Stock Value."
+      description={`STOCK_IN_HAND voucher lines for ${periodLabel}. Summary as-on remains ${formatStockValuationDate(asOnDate)}.`}
       layout="split"
       className="stock-valuation-compact h-full min-h-0"
-      filters={
-        <ValuationFilters
-          financialYearId={financialYearId}
-          onFinancialYearChange={onFinancialYearChange}
-          preset={preset}
-          setPreset={setPreset}
-          dateFrom={dateFrom}
-          setDateFrom={setDateFrom}
-          dateTo={dateTo}
-          setDateTo={setDateTo}
-          warehouses={warehouses}
-          setWarehouses={setWarehouses}
-          warehouseOptions={warehouseOptions}
-          products={products}
-          setProducts={setProducts}
-          productOptions={productOptions}
-          filterSummaryItems={filterSummaryItems}
-          onExport={handleExport}
-          exporting={exporting}
-          exportDisabled={summaryRows.length === 0}
-        />
-      }
+      filters={filtersEl}
     >
       <AccountsTableListing
         className="h-full min-h-0"
@@ -987,71 +911,67 @@ function StockValuationAccountingBody({
         }
         summary={<AccountsSummaryBar items={summaryItems} className="!border-b" />}
         footer={
-          columnFilteredRows.length > 0 ? (
+          totalRecords > 0 ? (
             <AccountsTablePagination
               page={page}
               pageSize={pageSize}
-              totalRecords={columnFilteredRows.length}
+              totalRecords={totalRecords}
               onPageChange={setPage}
               onPageSizeChange={setPageSize}
-              recordLabel="entries"
+              recordLabel="voucher lines"
             />
           ) : undefined
         }
       >
-        {accountingRows.length === 0 ? (
+        {loading ? (
+          <div className="p-6 text-sm text-muted-foreground">Loading…</div>
+        ) : rows.length === 0 ? (
           <EmptySearch compact onClear={hasFilters ? clearFilters : undefined} />
         ) : columnFilteredRows.length === 0 ? (
           <div className="accounts-table-empty py-6 text-center text-sm text-muted-foreground">
             No records match the column filters.
           </div>
         ) : (
-          <AccountsTable minWidth={1180}>
+          <AccountsTable minWidth={1100}>
             <AccountsTableHead>
               <AccountsTableHeadRow>
-                <SortTh label="Date" colKey="date" filterType="date" />
-                <SortTh label="Voucher Type" colKey="voucherType" filterType="text" />
-                <SortTh label="Voucher Number" colKey="voucherNumber" filterType="text" />
-                <SortTh label="Product Name" colKey="productName" filterType="text" />
-                <SortTh label="Warehouse" colKey="warehouse" filterType="text" />
-                <SortTh label="Debit Quantity" colKey="debitQty" filterType="amount" align="right" />
-                <SortTh label="Credit Quantity" colKey="creditQty" filterType="amount" align="right" />
+                <SortTh label="Date" colKey="date" />
+                <SortTh label="Voucher Type" colKey="voucherType" />
+                <SortTh label="Voucher No" colKey="voucherNumber" />
+                <SortTh label="Product" colKey="productName" />
+                <SortTh label="Warehouse" colKey="warehouse" />
+                <SortTh label="Debit Qty" colKey="debitQty" filterType="amount" align="right" />
+                <SortTh label="Credit Qty" colKey="creditQty" filterType="amount" align="right" />
                 <SortTh label="Debit Value" colKey="debitValue" filterType="amount" align="right" />
                 <SortTh label="Credit Value" colKey="creditValue" filterType="amount" align="right" />
                 <SortTh label="Net Value" colKey="netValue" filterType="amount" align="right" />
               </AccountsTableHeadRow>
             </AccountsTableHead>
             <AccountsTableBody>
-              {paginatedRows.map((row) => (
+              {columnFilteredRows.map((row) => (
                 <AccountsTableRow key={row.id}>
-                  <AccountsTableCell className="text-xs whitespace-nowrap align-middle">
+                  <AccountsTableCell className="text-xs align-middle">
                     {formatStockValuationDate(row.date)}
                   </AccountsTableCell>
                   <AccountsTableCell className="text-xs align-middle">{row.voucherType}</AccountsTableCell>
-                  <AccountsTableCell className="text-xs font-mono text-brand-700 align-middle">
-                    {row.voucherNumber}
-                  </AccountsTableCell>
+                  <AccountsTableCell className="text-xs align-middle">{row.voucherNumber}</AccountsTableCell>
                   <AccountsTableCell className="text-xs font-medium align-middle">
                     {row.productName}
                   </AccountsTableCell>
                   <AccountsTableCell className="text-xs align-middle">{row.warehouse}</AccountsTableCell>
                   <AccountsTableCell align="right" className="text-xs tabular-nums align-middle">
-                    {row.debitQty > 0 ? row.debitQty.toLocaleString("en-IN") : "—"}
+                    {row.debitQty.toLocaleString("en-IN")}
                   </AccountsTableCell>
                   <AccountsTableCell align="right" className="text-xs tabular-nums align-middle">
-                    {row.creditQty > 0 ? row.creditQty.toLocaleString("en-IN") : "—"}
+                    {row.creditQty.toLocaleString("en-IN")}
                   </AccountsTableCell>
                   <AccountsTableCell align="right" money className={cn(MONEY_AMOUNT_CLASS, "align-middle")}>
-                    {row.debitValue > 0 ? formatMoney(row.debitValue) : "—"}
+                    {formatMoney(row.debitValue)}
                   </AccountsTableCell>
                   <AccountsTableCell align="right" money className={cn(MONEY_AMOUNT_CLASS, "align-middle")}>
-                    {row.creditValue > 0 ? formatMoney(row.creditValue) : "—"}
+                    {formatMoney(row.creditValue)}
                   </AccountsTableCell>
-                  <AccountsTableCell
-                    align="right"
-                    money
-                    className={cn("font-medium align-middle", MONEY_AMOUNT_CLASS)}
-                  >
+                  <AccountsTableCell align="right" money className={cn(MONEY_AMOUNT_CLASS, "align-middle")}>
                     {formatMoney(row.netValue)}
                   </AccountsTableCell>
                 </AccountsTableRow>
@@ -1059,23 +979,41 @@ function StockValuationAccountingBody({
             </AccountsTableBody>
             <AccountsTableFoot>
               <AccountsTableRow>
-                <AccountsTableCell colSpan={5} className="font-semibold text-xs text-foreground align-middle">
-                  Totals
+                <AccountsTableCell colSpan={5} className="font-semibold text-xs align-middle">
+                  Period totals
                 </AccountsTableCell>
                 <AccountsTableCell align="right" className="font-semibold text-xs tabular-nums align-middle">
-                  {detailTotals.totalDebitQty.toLocaleString("en-IN")}
+                  {(serverTotals
+                    ? num(serverTotals.total_debit_qty)
+                    : pageTotals.debitQty
+                  ).toLocaleString("en-IN")}
                 </AccountsTableCell>
                 <AccountsTableCell align="right" className="font-semibold text-xs tabular-nums align-middle">
-                  {detailTotals.totalCreditQty.toLocaleString("en-IN")}
+                  {(serverTotals
+                    ? num(serverTotals.total_credit_qty)
+                    : pageTotals.creditQty
+                  ).toLocaleString("en-IN")}
                 </AccountsTableCell>
                 <AccountsTableCell align="right" money className={cn("font-semibold align-middle", MONEY_AMOUNT_CLASS)}>
-                  {formatMoney(detailTotals.totalDebitValue)}
+                  {formatMoney(
+                    serverTotals
+                      ? num(serverTotals.total_debit_amount)
+                      : pageTotals.debitValue,
+                  )}
                 </AccountsTableCell>
                 <AccountsTableCell align="right" money className={cn("font-semibold align-middle", MONEY_AMOUNT_CLASS)}>
-                  {formatMoney(detailTotals.totalCreditValue)}
+                  {formatMoney(
+                    serverTotals
+                      ? num(serverTotals.total_credit_amount)
+                      : pageTotals.creditValue,
+                  )}
                 </AccountsTableCell>
                 <AccountsTableCell align="right" money className={cn("font-semibold align-middle", MONEY_AMOUNT_CLASS)}>
-                  {formatMoney(detailTotals.totalNetValue)}
+                  {formatMoney(
+                    serverTotals
+                      ? num(serverTotals.total_net_amount)
+                      : pageTotals.netValue,
+                  )}
                 </AccountsTableCell>
               </AccountsTableRow>
             </AccountsTableFoot>

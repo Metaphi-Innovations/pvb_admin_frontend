@@ -1,39 +1,19 @@
 /**
- * Stock Valuation report — re-exports from compute layer (movement-based valuation).
+ * Stock Valuation report — display helpers + legacy export type re-exports.
+ * Live page uses SIH APIs via StockValuationApiService.
  */
 
 export {
-  buildStockLedgerDrillHref,
-  buildStockValuationRows,
-  computeStockValuationTotals,
-  consolidateStockValuationProductWise,
-  COST_RATE_METHOD_OPTIONS,
-  filterStockValuationRows,
-  formatOptionalMoney,
   formatQtyWithUnit,
   formatStockValuationDate,
   getCostRateMethodLabel,
-  getStockValuationCategoryOptions,
-  getStockValuationProductOptions,
-  getValuationBasisLabel,
-  getValuationPeriodStart,
-  getValuationRateFromPricing,
-  NEGATIVE_STOCK_PERMITTED,
-  sortStockValuationRows,
-  VALUATION_BASIS_OPTIONS,
   type CostRateMethod,
-  type StockValuationFilters,
-  type StockValuationGrouping,
   type StockValuationRow,
-  type StockValuationSortKey,
-  type StockValuationStatus,
-  type StockValuationStatusFilter,
   type StockValuationTab,
   type StockValuationTotals,
-  type ValuationBasis,
 } from "@/lib/accounts/stock-valuation-compute";
 
-/** UI placeholder row for Accounting Details tab (until STOCK_IN_HAND voucher API). */
+/** Legacy client-export row shape (server export is preferred). */
 export interface AccountingDetailRow {
   id: string;
   date: string;

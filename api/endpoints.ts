@@ -859,6 +859,12 @@ export const API_ENDPOINTS = {
         FILTERS: "/accounts/reports/sales-register/filters",
         EXPORT: "/accounts/reports/sales-register/export",
       },
+      STOCK_VALUATION: {
+        LIST: "/accounts/reports/stock-valuation",
+        DETAILS: "/accounts/reports/stock-valuation/accounting-details",
+        FILTERS: "/accounts/reports/stock-valuation/filters",
+        EXPORT: "/accounts/reports/stock-valuation/export",
+      },
       TDS_SUMMARY: {
         LIST: "/accounts/reports/tds-summary",
         FILTERS: "/accounts/reports/tds-summary/filters",

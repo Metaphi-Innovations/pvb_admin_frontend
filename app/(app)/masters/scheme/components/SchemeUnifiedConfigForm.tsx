@@ -153,11 +153,13 @@ function ProductsApplicability({
   onChange,
   productOptions,
   showProductError = false,
+  lockedProductIds = [],
 }: {
   form: SchemeUnifiedForm;
   onChange: (form: SchemeUnifiedForm) => void;
   productOptions: SchemeProductSelectOption[];
   showProductError?: boolean;
+  lockedProductIds?: string[];
 }) {
   const productFieldError =
     showProductError && form.productIds.length === 0
@@ -215,6 +217,7 @@ function ProductsApplicability({
           emptyAsSummary={false}
           error={Boolean(productFieldError)}
           errorMessage={productFieldError}
+          lockedValues={lockedProductIds}
         />
       </Field>
 
@@ -983,6 +986,8 @@ interface SchemeUnifiedConfigFormProps {
   error?: string;
   /** When editing, scheme type is locked to avoid orphaning specialised line data. */
   lockCategory?: boolean;
+  /** Usage constraints when scheme is already applied on documents. */
+  usageConstraints?: SchemeUsageConstraints | null;
   /** API-backed options (preferred). Falls back to local lists if omitted. */
   productSelectOptions?: SchemeProductSelectOption[];
   stateSelectOptions?: { id: string; name: string }[];
@@ -990,6 +995,18 @@ interface SchemeUnifiedConfigFormProps {
   customerTypeSelectOptions?: { id: string; name: string }[];
   schemeCategoryOptions?: SchemeCategory[];
 }
+
+export type SchemeUsageConstraints = {
+  isUsed: boolean;
+  documentCount: number;
+  lastUsageDate: string | null;
+  lockStartDate: boolean;
+  minEndDate: string | null;
+  lockedCustomerTypeIds: string[];
+  lockedCustomerIds: string[];
+  lockedStateNames: string[];
+  lockedProductIds: string[];
+};
 
 export function SchemeUnifiedConfigForm({
   form,
@@ -999,6 +1016,7 @@ export function SchemeUnifiedConfigForm({
   codePreview,
   error,
   lockCategory = false,
+  usageConstraints = null,
   productSelectOptions,
   stateSelectOptions,
   customerSelectOptions,
@@ -1231,6 +1249,24 @@ export function SchemeUnifiedConfigForm({
         })}
       </nav>
 
+      {usageConstraints?.isUsed ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-900">
+          <p className="font-semibold">
+            In use · {usageConstraints.documentCount} document
+            {usageConstraints.documentCount === 1 ? "" : "s"}
+          </p>
+          <p className="mt-0.5 leading-snug text-amber-800/90">
+            Already applied on transactions. Changes affect new transactions only.
+            Existing customers/products/states cannot be removed (you can still add
+            more). Valid From is locked
+            {usageConstraints.minEndDate
+              ? `; Valid To cannot be earlier than ${usageConstraints.minEndDate}`
+              : ""}
+            .
+          </p>
+        </div>
+      ) : null}
+
       {error ? (
         <div className="scheme-error-banner border border-red-200 bg-red-50 text-red-700">
           {error}
@@ -1278,16 +1314,42 @@ export function SchemeUnifiedConfigForm({
                 type="date"
                 value={form.startDate}
                 onChange={(e) => set("startDate", e.target.value)}
-                className={ctrl}
+                disabled={Boolean(usageConstraints?.lockStartDate)}
+                title={
+                  usageConstraints?.lockStartDate
+                    ? "Valid From cannot be changed — scheme already applied"
+                    : undefined
+                }
+                className={cn(
+                  ctrl,
+                  usageConstraints?.lockStartDate &&
+                    "cursor-not-allowed bg-muted/40",
+                )}
               />
             </Field>
             <Field className="scheme-w-date" label="Valid To" required>
               <Input
                 type="date"
                 value={form.endDate}
-                onChange={(e) => set("endDate", e.target.value)}
+                min={usageConstraints?.minEndDate || form.startDate || undefined}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  if (
+                    usageConstraints?.minEndDate &&
+                    next &&
+                    next < usageConstraints.minEndDate
+                  ) {
+                    return;
+                  }
+                  set("endDate", next);
+                }}
                 className={ctrl}
               />
+              {usageConstraints?.minEndDate ? (
+                <p className="mt-0.5 text-[10px] text-muted-foreground">
+                  Earliest allowed end: {usageConstraints.minEndDate}
+                </p>
+              ) : null}
             </Field>
           </div>
         </WizardStep>
@@ -1309,12 +1371,16 @@ export function SchemeUnifiedConfigForm({
                 required
                 options={customerTypeOptions}
                 selectedIds={form.customerTypes}
+                lockedIds={usageConstraints?.lockedCustomerTypeIds}
                 onChange={(ids) =>
                   onChange({
                     ...form,
                     customerTypes: ids,
                     customerType: resolveCustomerTypeFromMulti(ids),
-                    customerIds: [],
+                    // Keep existing customers when scheme is in use (add-only).
+                    customerIds: usageConstraints?.isUsed
+                      ? form.customerIds
+                      : [],
                   })
                 }
                 error={
@@ -1334,6 +1400,7 @@ export function SchemeUnifiedConfigForm({
                 required
                 options={customerOptions}
                 selectedIds={form.customerIds}
+                lockedIds={usageConstraints?.lockedCustomerIds}
                 onChange={(ids) => set("customerIds", ids)}
                 error={
                   error && /select at least one customer(?! type)/i.test(error)
@@ -1352,6 +1419,7 @@ export function SchemeUnifiedConfigForm({
                 required
                 options={stateOptions}
                 selectedIds={form.stateNames}
+                lockedIds={usageConstraints?.lockedStateNames}
                 onChange={(ids) => set("stateNames", ids)}
                 error={
                   error && /state/i.test(error)
@@ -1367,6 +1435,7 @@ export function SchemeUnifiedConfigForm({
                 form={form}
                 onChange={onChange}
                 productOptions={productOptions}
+                lockedProductIds={usageConstraints?.lockedProductIds}
                 showProductError={Boolean(
                   error && /product/i.test(error),
                 )}
