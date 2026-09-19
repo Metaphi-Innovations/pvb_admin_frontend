@@ -1,6 +1,10 @@
 /**
- * TDS Summary — transaction-wise rows for Accounts → Reports → TDS Summary.
- * Adapts shared TDS party-wise voucher lines into the client report format.
+ * TDS Summary — local adapters previously used by the report UI.
+ *
+ * Production page (`TdsSummaryApiPageClient`) now loads from backend
+ * `/accounts/reports/tds-summary` and does not call these helpers.
+ * Kept for reference / non-production tooling only — do not use as
+ * report financial truth.
  */
 
 import {

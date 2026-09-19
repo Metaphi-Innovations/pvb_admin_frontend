@@ -1,3 +1,8 @@
+/**
+ * Client-side TDS Summary export helpers.
+ * Production page exports via backend POST `/accounts/reports/tds-summary/export`
+ * (`TdsSummaryApiService.exportReport`). Do not use these helpers for live report truth.
+ */
 import { formatMoneyNumber } from "@/lib/accounts/money-format";
 import {
   buildReportExcelDocumentHtml,

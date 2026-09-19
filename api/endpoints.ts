@@ -859,6 +859,11 @@ export const API_ENDPOINTS = {
         FILTERS: "/accounts/reports/sales-register/filters",
         EXPORT: "/accounts/reports/sales-register/export",
       },
+      TDS_SUMMARY: {
+        LIST: "/accounts/reports/tds-summary",
+        FILTERS: "/accounts/reports/tds-summary/filters",
+        EXPORT: "/accounts/reports/tds-summary/export",
+      },
     },
     DEBIT_NOTE: {
       CONFIG: "/accounts/debit-note/config",
