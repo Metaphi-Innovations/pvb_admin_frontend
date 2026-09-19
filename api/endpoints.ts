@@ -845,6 +845,11 @@ export const API_ENDPOINTS = {
         FILTERS: "/accounts/reports/cash-flow/filters",
         EXPORT: "/accounts/reports/cash-flow/export",
       },
+      SALES_REGISTER: {
+        LIST: "/accounts/reports/sales-register",
+        FILTERS: "/accounts/reports/sales-register/filters",
+        EXPORT: "/accounts/reports/sales-register/export",
+      },
     },
     DEBIT_NOTE: {
       CONFIG: "/accounts/debit-note/config",

@@ -960,11 +960,20 @@ export function ReportStateFilter({
   value,
   onChange,
   states,
+  options,
 }: {
   value: string;
   onChange: (value: string) => void;
-  states: string[];
+  states?: string[];
+  /** Prefer value/label options when filtering by backend state codes. */
+  options?: { value: string; label: string }[];
 }) {
+  const items =
+    options ??
+    (states ?? []).map((s) => ({
+      value: s,
+      label: s,
+    }));
   return (
     <div className="space-y-0.5 min-w-[140px]">
       <span className={filterLabelClass}>State</span>
@@ -974,9 +983,9 @@ export function ReportStateFilter({
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="all">All states</SelectItem>
-          {states.map((s) => (
-            <SelectItem key={s} value={s}>
-              {s}
+          {items.map((s) => (
+            <SelectItem key={s.value} value={s.value}>
+              {s.label}
             </SelectItem>
           ))}
         </SelectContent>
@@ -1389,15 +1398,20 @@ export function ReportSalespersonMultiFilter({
   values,
   onChange,
   salespeople,
+  labeledOptions,
 }: {
   values: string[];
   onChange: (values: string[]) => void;
-  salespeople: string[];
+  salespeople?: string[];
+  /** Prefer when filtering by backend user IDs. */
+  labeledOptions?: ReportMultiSelectOption[];
 }) {
-  const selectOptions: ReportMultiSelectOption[] = salespeople.map((name) => ({
-    value: name,
-    label: name,
-  }));
+  const selectOptions: ReportMultiSelectOption[] =
+    labeledOptions ??
+    (salespeople ?? []).map((name) => ({
+      value: name,
+      label: name,
+    }));
   return (
     <ReportMultiSelect
       label="Salesperson"
