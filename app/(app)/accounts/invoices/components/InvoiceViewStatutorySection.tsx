@@ -104,10 +104,8 @@ export function InvoiceViewStatutorySection({
 
   const showGenerateIRN =
     canAct && eInvApplicable && eInvStatus === "not_generated";
-  const showGenerateEway =
-    canAct &&
-    Boolean(record.irn?.trim()) &&
-    ewayStatus === "not_generated";
+  // Backend chooses EWB-by-IRN vs standalone when IRN is absent.
+  const showGenerateEway = canAct && ewayStatus === "not_generated";
 
   const hasGeneratedDetails = Boolean(
     record.ewayBillNo?.trim() ||
