@@ -839,6 +839,26 @@ export const API_ENDPOINTS = {
         FILTERS: "/accounts/reports/day-book/filters",
         EXPORT: "/accounts/reports/day-book/export",
       },
+      PROFIT_LOSS: {
+        LIST: "/accounts/reports/profit-loss",
+        FILTERS: "/accounts/reports/profit-loss/filters",
+        EXPORT: "/accounts/reports/profit-loss/export",
+      },
+      BALANCE_SHEET: {
+        LIST: "/accounts/reports/balance-sheet",
+        FILTERS: "/accounts/reports/balance-sheet/filters",
+        EXPORT: "/accounts/reports/balance-sheet/export",
+      },
+      CASH_FLOW: {
+        LIST: "/accounts/reports/cash-flow",
+        FILTERS: "/accounts/reports/cash-flow/filters",
+        EXPORT: "/accounts/reports/cash-flow/export",
+      },
+      SALES_REGISTER: {
+        LIST: "/accounts/reports/sales-register",
+        FILTERS: "/accounts/reports/sales-register/filters",
+        EXPORT: "/accounts/reports/sales-register/export",
+      },
     },
     DEBIT_NOTE: {
       CONFIG: "/accounts/debit-note/config",

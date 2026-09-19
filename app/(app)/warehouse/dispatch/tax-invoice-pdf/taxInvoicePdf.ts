@@ -139,6 +139,49 @@ function pick(raw: Record<string, unknown>, keys: string[]): unknown {
   return undefined;
 }
 
+function resolveWeightUom(baseUnit: string): "Kg" | "Ltr" | "" {
+  const u = baseUnit.trim().toLowerCase();
+  if (u === "kg" || u === "gms" || u === "g" || u === "gram" || u === "grams") {
+    return "Kg";
+  }
+  if (u === "ltr" || u === "l" || u === "ml" || u === "litre" || u === "liter") {
+    return "Ltr";
+  }
+  return "";
+}
+
+function resolveNetWeightPerCase(
+  snapshot: Record<string, unknown>,
+  product: Record<string, unknown>,
+  baseUnit: string,
+): number {
+  const stored = toNumber(
+    pick(snapshot, ["net_weight", "netWeight"]) ??
+      pick(product, ["net_weight", "netWeight"]),
+  );
+  if (stored > 0) return stored;
+
+  const packSize = toNumber(
+    pick(snapshot, ["pack_size", "packSize"]) ??
+      pick(product, ["pack_size", "packSize"]),
+  );
+  const unitPerPacking = toNumber(
+    pick(snapshot, ["unit_per_packing", "unitPerPacking"]) ??
+      pick(product, ["unit_per_packing", "unitPerPacking"]),
+  );
+  if (!(packSize > 0) || !(unitPerPacking > 0)) return 0;
+
+  const raw = packSize * unitPerPacking;
+  const u = baseUnit.trim().toLowerCase();
+  if (u === "gms" || u === "g" || u === "gram" || u === "grams" || u === "ml") {
+    return raw / 1000;
+  }
+  if (u === "kg" || u === "ltr" || u === "l" || u === "litre" || u === "liter") {
+    return raw;
+  }
+  return 0;
+}
+
 function formatDisplayDate(value: unknown): string {
   return formatDate(value);
 }
@@ -269,20 +312,43 @@ export function mapDispatchToTaxInvoice(
     );
     const hsnObj = readRecord(product.hsn ?? productSnapshot.hsn);
 
-    const totalQty = toNumber(item.dispatched_base_qty ?? item.dispatchQty);
-    const packSize = Math.max(
+    const totalUnits = toNumber(item.dispatched_base_qty ?? item.dispatchQty);
+    // Prefer true units-per-case fields over pack_size (SKU size).
+    const packingUnits = Math.max(
       1,
       toNumber(
         product.unit_per_packing ??
-          product.pack_size ??
           productSnapshot.unit_per_packing ??
-          productSnapshot.pack_size ??
+          productSnapshot.unitPerPacking ??
           1,
       ),
     );
-    const qtyInCase = packSize > 1 ? Math.floor(totalQty / packSize) : totalQty;
+    const qtyInCase =
+      packingUnits > 1 ? totalUnits / packingUnits : totalUnits;
+    const baseUnit = asText(
+      product.unit ||
+        product.mou ||
+        productSnapshot.unit ||
+        productSnapshot.mou ||
+        item.quantity_type ||
+        "Units",
+      "Units",
+    );
+    const weightUom = resolveWeightUom(baseUnit);
+    const netWeightPerCase = resolveNetWeightPerCase(
+      productSnapshot,
+      product,
+      baseUnit,
+    );
+    const totalQtyKgLtr =
+      qtyInCase > 0 && netWeightPerCase > 0
+        ? Math.round((qtyInCase * netWeightPerCase + Number.EPSILON) * 1000) / 1000
+        : 0;
+    const displayTotalQty = totalQtyKgLtr > 0 ? totalQtyKgLtr : 0;
+    const displayUom =
+      weightUom || (displayTotalQty > 0 ? "Kg" : "—");
     const rate = toNumber(item.unit_price ?? item.unit_rate ?? product.unit_price);
-    const grossAmt = round2(totalQty * rate);
+    const grossAmt = round2(totalUnits * rate);
     const discPct = toNumber(item.discount_percentage);
     const discAmt =
       toNumber(item.discount_amount) ||
@@ -376,16 +442,8 @@ export function mapDispatchToTaxInvoice(
         "",
       ),
       qtyInCase,
-      totalQty,
-      uom: asText(
-        product.unit ||
-          product.mou ||
-          productSnapshot.unit ||
-          productSnapshot.mou ||
-          item.quantity_type ||
-          "Units",
-        "Units",
-      ),
+      totalQty: displayTotalQty,
+      uom: displayUom,
       rate,
       grossAmt,
       discPct,
@@ -705,7 +763,7 @@ function buildItemsTotalsRowHtml(options: {
   /** Extra blank cell after SKU (Sales Person column on proforma). */
   salesPersonColumn?: boolean;
 }): string {
-  // Sr | Code | Name | SKU | [Sales Person] | HSN | Qty In Case | Total Qty | Rate | Gross | Disc% | Disc Amt | Taxable | GST% | Tax | [SGST] | Total
+  // Sr | Code | Name | SKU | [Sales Person] | HSN | Qty of Case | Total Qty | Rate | Gross | Disc% | Disc Amt | Taxable | GST% | Tax | [SGST] | Total
   const sgstCell = options.useIgst
     ? ""
     : `<td class="pv-r pv-num">${escapeHtml(options.sgst)}</td>`;
@@ -717,7 +775,7 @@ function buildItemsTotalsRowHtml(options: {
     <td>&nbsp;</td>
     ${salesPersonCell}
     <td>&nbsp;</td>
-    <td class="pv-r pv-num ti-tot-qty">Grand Total Qty in Case:<br/>${escapeHtml(formatNumber(options.totalCases))}</td>
+    <td class="pv-r pv-num ti-tot-qty">Grand Total Qty of Case:<br/>${escapeHtml(formatNumber(options.totalCases))}</td>
     <td class="pv-r pv-num ti-tot-qty">Grand Total Qty:<br/>${escapeHtml(formatNumber(options.totalQty))} ${escapeHtml(options.uom)}</td>
     <td>&nbsp;</td>
     <td class="pv-r pv-num">${escapeHtml(options.gross)}</td>
@@ -761,7 +819,7 @@ export function buildTaxInvoiceHtml(
         { key: "sku", header: "SKU", width: "6%", nowrap: true },
         { key: "salesPerson", header: "Sales Person (TM)", width: "7%", nowrap: true },
         { key: "hsn", header: "HSN", width: "4%", align: "center", nowrap: true },
-        { key: "qtyCase", header: "Qty In Case", width: "4.5%", numeric: true },
+        { key: "qtyCase", header: "Qty of Case", width: "4.5%", numeric: true },
         { key: "totalQty", header: "Total Qty (Kg/Ltr)", width: "6.5%", numeric: true },
         { key: "rate", header: "Rate Per Unit", width: "5.5%", numeric: true },
         { key: "gross", header: "Gross Amt", width: "6%", numeric: true },
@@ -786,7 +844,7 @@ export function buildTaxInvoiceHtml(
         { key: "productName", header: "Product Name", width: "16%" },
         { key: "sku", header: "SKU", width: "7%", nowrap: true },
         { key: "hsn", header: "HSN", width: "4.5%", align: "center", nowrap: true },
-        { key: "qtyCase", header: "Qty In Case", width: "5%", numeric: true },
+        { key: "qtyCase", header: "Qty of Case", width: "5%", numeric: true },
         { key: "totalQty", header: "Total Qty (Kg/Ltr)", width: "7%", numeric: true },
         { key: "rate", header: "Rate Per Unit", width: "6%", numeric: true },
         { key: "gross", header: "Gross Amt", width: "6.5%", numeric: true },
@@ -817,7 +875,11 @@ export function buildTaxInvoiceHtml(
         salesPerson: data.salesPerson,
         hsn: line.hsnCode,
         qtyCase: isCharge ? "—" : formatNumber(line.qtyInCase),
-        totalQty: isCharge ? "—" : `${formatNumber(line.totalQty)} ${line.uom}`,
+        totalQty: isCharge
+          ? "—"
+          : line.totalQty > 0 && line.uom && line.uom !== "—"
+            ? `${formatNumber(line.totalQty)} ${line.uom}`
+            : "—",
         rate: formatCurrency(line.rate),
         gross: formatCurrency(line.grossAmt),
         discPct: line.discPct ? pctLabel(line.discPct) : "—",

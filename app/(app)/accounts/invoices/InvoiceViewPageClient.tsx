@@ -46,6 +46,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { formatSignedRoundOff } from "@/components/accounts/voucher-form/VoucherSignedRoundOffInput";
 import {
   formatINR,
   INVOICES_LIST_PATH,
@@ -84,7 +85,6 @@ import {
   resolveDisplayDiscountPct,
   resolveLineSku,
 } from "./invoice-view-display";
-import { AccountingImpactSection } from "@/components/accounts/AccountingImpactSection";
 import { formatDisplayDate } from "@/lib/accounts/date-display";
 import "./sales-order-invoice-form-compact.css";
 import "@/components/accounts/voucher-form/transaction-view.css";
@@ -160,7 +160,7 @@ function ProductTable({
         "SKU",
         "Batch No.",
         "HSN",
-        "Qty in Case",
+        "Qty of Case",
         "Qty",
         "UOM",
         "Rate",
@@ -179,7 +179,7 @@ function ProductTable({
         "SKU",
         "Batch No.",
         "HSN",
-        "Qty in Case",
+        "Qty of Case",
         "Qty",
         "UOM",
         "Rate",
@@ -196,7 +196,7 @@ function ProductTable({
       ] as const);
 
   const rightAlign = new Set([
-    "Qty in Case",
+    "Qty of Case",
     "Qty",
     "Rate",
     "Gross Amount",
@@ -215,7 +215,7 @@ function ProductTable({
     SKU: "so-col-sku",
     "Batch No.": "so-col-batch",
     HSN: "so-col-hsn",
-    "Qty in Case": "so-col-qty-case",
+    "Qty of Case": "so-col-qty-case",
     Qty: "so-col-qty",
     UOM: "so-col-uom",
     Rate: "so-col-rate",
@@ -968,7 +968,7 @@ export default function InvoiceViewPageClient({
                     value={formatINR(expenseTotals.taxableAmount)}
                   />
                 )}
-                <SummaryRow label="Round Off" value={formatINR(roundOff)} />
+                <SummaryRow label="Round Off" value={formatSignedRoundOff(roundOff)} />
                 <SummaryRow label="Grand Total" value={formatINR(gst.invoiceTotal)} grand />
                 {!isStockTransferView ? (
                   <>
@@ -979,11 +979,6 @@ export default function InvoiceViewPageClient({
               </div>
             </VoucherFormSectionCard>
           </div>
-
-          <AccountingImpactSection
-            docKey={isStockTransferView ? "stock_transfer_invoice" : "sales_invoice"}
-            className="mt-2"
-          />
         </div>
       </InvoiceFormLayout>
 

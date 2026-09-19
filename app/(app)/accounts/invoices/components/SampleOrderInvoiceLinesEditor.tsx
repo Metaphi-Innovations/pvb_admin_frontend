@@ -97,7 +97,7 @@ function SampleOrderInvoiceLinesEditorInner({ lines }: { lines: InvoiceLineItem[
     "SKU",
     "Batch No.",
     "HSN",
-    "Qty in Case",
+    "Qty of Case",
     "Qty",
     "UOM",
     "Rate",
@@ -109,7 +109,7 @@ function SampleOrderInvoiceLinesEditorInner({ lines }: { lines: InvoiceLineItem[
   ] as const;
 
   const rightAlign = new Set([
-    "Qty in Case",
+    "Qty of Case",
     "Qty",
     "Rate",
     "Disc. %",

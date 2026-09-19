@@ -1,6 +1,7 @@
 /**
- * REST API contracts for Accounts module.
- * Implement these endpoints on the backend; client uses local services until API is live.
+ * Legacy REST DTO / URL stubs for Accounts (older local-first contracts).
+ * Cash Flow report/filter/export URLs live only in API_ENDPOINTS.ACCOUNTS.REPORTS.CASH_FLOW
+ * and are consumed via CashFlowApiService (backend vouchers are the sole financial source).
  */
 
 import type { VoucherTypeCode } from "@/app/(app)/accounts/masters/masters-data";
@@ -117,7 +118,6 @@ export const ACCOUNTS_ENDPOINTS = {
     receivables: `${ACCOUNTS_API_BASE}/reports/receivables`,
     payables: `${ACCOUNTS_API_BASE}/reports/payables`,
     gst: `${ACCOUNTS_API_BASE}/reports/gst`,
-    cashFlow: `${ACCOUNTS_API_BASE}/reports/cash-flow`,
     stockValuation: `${ACCOUNTS_API_BASE}/reports/stock-valuation`,
   },
   masters: {

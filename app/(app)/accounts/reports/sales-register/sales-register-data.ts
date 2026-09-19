@@ -8,7 +8,10 @@ import type { RegisterPartyOption, RegisterReportRow } from "../register-shared/
 
 export { isSalesRegisterSourceInvoice, buildSalesRegisterRows };
 
-/** Canonical Sales Register source — posted (+ optionally cancelled) Sales Tax Invoices only. */
+/**
+ * @deprecated Production Sales Register (`SalesRegisterPageClient`) uses backend APIs.
+ * Kept for legacy helpers / tests that still read local invoice-shaped rows.
+ */
 export function buildSalesRegisterDemoRows(): RegisterReportRow[] {
   return buildSalesRegisterRows();
 }

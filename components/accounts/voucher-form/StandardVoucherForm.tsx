@@ -28,10 +28,6 @@ import { VoucherDocumentActions } from "@/components/accounts/voucher-form/Vouch
 import { VoucherBankReconciliationSection } from "@/components/accounts/VoucherBankReconciliationSection";
 import { VoucherDualEntryPanel } from "@/components/accounts/voucher-form/VoucherDualEntryPanel";
 import { VoucherFormSectionCard } from "@/components/accounts/voucher-form/VoucherFormSectionCard";
-import { VoucherAccountingPostingSummary } from "@/components/accounts/voucher-form/VoucherAccountingPostingSummary";
-import { AccountingImpactSection } from "@/components/accounts/AccountingImpactSection";
-import type { AccountingImpactDocKey } from "@/lib/accounts/accounting-impact-docs";
-import { defaultVisibilityForType } from "@/components/accounts/voucher-form/voucher-form-shell";
 import {
   VoucherInstrumentFields,
   getInstrumentFieldKind,
@@ -39,7 +35,6 @@ import {
 } from "@/components/accounts/voucher-form/VoucherInstrumentFields";
 import {
   VoucherAdjustmentsSection,
-  adjustmentRowsToPreviewLines,
   createEmptyAdjustmentRow,
   sumAdjustmentEffect,
   type VoucherAdjustmentRow,
@@ -50,23 +45,17 @@ import { loadWarehouseMappingOptions } from "@/lib/accounts/bank-warehouse-mappi
 import { Select, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { VoucherJournalEntryGrid } from "@/components/accounts/voucher-form/VoucherJournalEntryGrid";
 import { useVoucherForm } from "@/lib/accounts/use-voucher-form";
-import {
-  calcFormEntryTotals,
-  getFormEntry,
-} from "@/lib/accounts/voucher-form-model";
+import { getFormEntry } from "@/lib/accounts/voucher-form-model";
 import { getVendorById } from "@/lib/accounts/transaction-master-fetch";
 import { parseCashVoucherFromLines } from "@/app/(app)/accounts/vouchers/voucher-data";
 import { VOUCHER_TYPE_LABELS } from "@/app/(app)/accounts/vouchers/voucher-data";
 import type { VoucherTypeCode } from "@/app/(app)/accounts/masters/masters-data";
 import { loadFinancialYears } from "@/app/(app)/accounts/masters/masters-data";
 import type { AccountsVoucherCategory } from "@/lib/accounts/accounts-maker-checker";
-import { formatMoney, roundMoney } from "@/lib/accounts/money-format";
+import { roundMoney } from "@/lib/accounts/money-format";
 import { cn } from "@/lib/utils";
 import { useFormDirtySnapshot } from "@/lib/accounts/use-form-dirty-snapshot";
 import { useTransactionFormCancel } from "@/components/accounts/TransactionFormCancel";
-import { isBankAccountLedger } from "@/lib/accounts/bank-coa-utils";
-import { ledgerHasAncestorNamed } from "@/lib/accounts/coa-hierarchy";
-import type { ChartOfAccount } from "@/app/(app)/accounts/data";
 
 const VOUCHER_CATEGORY_MAP: Partial<Record<VoucherTypeCode, AccountsVoucherCategory>> = {
   journal: "journal_entry",
@@ -74,18 +63,6 @@ const VOUCHER_CATEGORY_MAP: Partial<Record<VoucherTypeCode, AccountsVoucherCateg
   payment: "payment_voucher",
   contra: "contra_voucher",
 };
-
-const VOUCHER_IMPACT_DOC_KEY: Partial<Record<VoucherTypeCode, AccountingImpactDocKey>> = {
-  payment: "payment_voucher",
-  receipt: "receipt_voucher",
-  contra: "contra_voucher",
-  journal: "journal_voucher",
-};
-
-function isCashLedger(ledger: ChartOfAccount | null | undefined, records: ChartOfAccount[]): boolean {
-  if (!ledger) return false;
-  return ledgerHasAncestorNamed(ledger, "Cash-in-Hand", records);
-}
 
 export interface StandardVoucherFormProps {
   voucherType: VoucherTypeCode;
@@ -322,7 +299,6 @@ export function StandardVoucherForm({
   ]);
 
   const pageTitle = isView ? `View ${label}` : !isNew ? `Edit ${label}` : `New ${label}`;
-  const { totalDebit, totalCredit } = calcFormEntryTotals(model.entries);
 
   const [baselineReady, setBaselineReady] = useState(false);
   useEffect(() => {
@@ -378,84 +354,6 @@ export function StandardVoucherForm({
     isDirty,
     onNavigate: onDone,
   });
-
-  const bankCashLedger =
-    voucherType === "payment"
-      ? creditEntry
-      : voucherType === "receipt"
-        ? debitEntry
-        : voucherType === "contra"
-          ? debitEntry
-          : null;
-
-  const bankCashCoa = bankCashLedger?.accountId
-    ? coaRecords.find((r) => r.id === bankCashLedger.accountId) ?? null
-    : null;
-
-  const includeCashBook = Boolean(
-    bankCashCoa && isCashLedger(bankCashCoa, coaRecords),
-  );
-  const includeBankBook = Boolean(
-    bankCashCoa && isBankAccountLedger(bankCashCoa),
-  );
-
-  const visibilityItems = useMemo(() => {
-    if (voucherType === "journal") {
-      return defaultVisibilityForType("journal");
-    }
-    if (voucherType === "contra") {
-      return defaultVisibilityForType("contra");
-    }
-    if (voucherType === "payment" || voucherType === "receipt") {
-      return defaultVisibilityForType(voucherType, {
-        isCash: includeCashBook,
-        isBank: includeBankBook,
-      });
-    }
-    return defaultVisibilityForType("journal");
-  }, [voucherType, includeCashBook, includeBankBook]);
-
-  const postingSummaryProps = useMemo(() => {
-    if (isJournalGrid) {
-      return {
-        voucherTypeLabel: label,
-        totalDebit,
-        totalCredit,
-        visibilityItems,
-      };
-    }
-
-    const adjustmentPreviewLines = showPaymentReceiptExtras
-      ? adjustmentRowsToPreviewLines(adjustmentRows)
-      : [];
-
-    return {
-      voucherTypeLabel: label,
-      debitLedgerLabel: "Debit",
-      debitLedgerName: debitEntry?.accountName || undefined,
-      creditLedgerLabel: "Credit",
-      creditLedgerName: creditEntry?.accountName || undefined,
-      voucherAmount: showPaymentReceiptExtras ? grossAmount : amount,
-      voucherAmountLabel: showPaymentReceiptExtras ? "Gross Amount" : "Voucher Amount",
-      netCashBankAmount: showPaymentReceiptExtras ? netCashBank : undefined,
-      netCashBankLabel: "Net Cash / Bank Amount",
-      adjustmentPreviewLines: showPaymentReceiptExtras ? adjustmentPreviewLines : undefined,
-      visibilityItems,
-    };
-  }, [
-    isJournalGrid,
-    label,
-    totalDebit,
-    totalCredit,
-    visibilityItems,
-    debitEntry?.accountName,
-    creditEntry?.accountName,
-    amount,
-    showPaymentReceiptExtras,
-    adjustmentRows,
-    grossAmount,
-    netCashBank,
-  ]);
 
   const breadcrumb = [
     { label: "Accounts", href: "/accounts" },
@@ -736,13 +634,6 @@ export function StandardVoucherForm({
               });
             }}
           />
-
-          {VOUCHER_IMPACT_DOC_KEY[voucherType] ? (
-            <AccountingImpactSection
-              docKey={VOUCHER_IMPACT_DOC_KEY[voucherType]!}
-              entryPreview={<VoucherAccountingPostingSummary {...postingSummaryProps} />}
-            />
-          ) : null}
 
           {readOnly &&
             resolvedVoucherId != null &&

@@ -1,4 +1,5 @@
 import { normalizeInvoice, type InvoiceRecord, getInvoiceAmountBreakup } from "./invoices-data";
+import { formatSignedRoundOff } from "@/components/accounts/voucher-form/VoucherSignedRoundOffInput";
 import { formatINR, INVOICE_AMOUNT_LABELS } from "./invoice-utils";
 import { getInvoiceGstBreakup } from "@/lib/accounts/invoice-gst-breakup";
 
@@ -110,6 +111,7 @@ export function downloadInvoicePdf(invoice: InvoiceRecord): void {
     <tr><td class="label">${INVOICE_AMOUNT_LABELS.taxableValue}</td><td align="right">${formatINR(taxableValue)}</td></tr>
     <tr><td class="label">Discount</td><td align="right">${formatINR(rec.discountTotal)}</td></tr>
     ${taxRows}
+    <tr><td class="label">Round Off</td><td align="right">${formatSignedRoundOff(rec.roundOff ?? 0)}</td></tr>
     <tr><td class="grand">${INVOICE_AMOUNT_LABELS.invoiceTotal}</td><td align="right" class="grand">${formatINR(invoiceTotal)}</td></tr>
     <tr><td class="label">Received</td><td align="right">${formatINR(rec.amountReceived)}</td></tr>
     <tr><td class="label">Balance Due</td><td align="right">${formatINR(rec.balanceAmount)}</td></tr>

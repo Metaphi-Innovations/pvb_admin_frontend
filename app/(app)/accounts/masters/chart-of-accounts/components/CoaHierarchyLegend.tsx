@@ -1,10 +1,6 @@
 "use client";
 
 import { FileText, HelpCircle } from "lucide-react";
-import {
-  COA_HIERARCHY_LEVEL_LABELS,
-  COA_MAX_HIERARCHY_LEVEL,
-} from "@/lib/accounts/coa-hierarchy-constants";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import {
@@ -20,18 +16,16 @@ const LEGEND_LEVELS: CoaVisualLevel[] = [
   "account_group",
   "sub_group",
   "ledger",
-  "sub_ledger",
 ];
 
-const LEGEND_LEVEL_NUM: Record<CoaVisualLevel, number> = {
+const LEGEND_LEVEL_NUM: Record<(typeof LEGEND_LEVELS)[number], number> = {
   primary_head: 1,
   account_group: 2,
   sub_group: 3,
   ledger: 4,
-  sub_ledger: 5,
 };
 
-function LegendRow({ level }: { level: CoaVisualLevel }) {
+function LegendRow({ level }: { level: (typeof LEGEND_LEVELS)[number] }) {
   const Icon = VISUAL_ICON[level] ?? FileText;
   const num = LEGEND_LEVEL_NUM[level];
   return (
@@ -67,7 +61,7 @@ export function CoaHierarchyLegend() {
       </TooltipTrigger>
       <TooltipContent side="right" className="max-w-[280px] text-xs p-3 space-y-2">
         <p className="font-semibold text-foreground">
-          Hierarchy legend (max {COA_MAX_HIERARCHY_LEVEL} levels)
+          Hierarchy legend (max {LEGEND_LEVELS.length} levels)
         </p>
         <p className="text-[11px] text-muted-foreground leading-snug">
           Icon and colour reflect tree depth only — the same level always looks the same across the
@@ -76,9 +70,6 @@ export function CoaHierarchyLegend() {
         {LEGEND_LEVELS.map((level) => (
           <LegendRow key={level} level={level} />
         ))}
-        <p className="text-[10px] text-muted-foreground pt-1 border-t border-border/60">
-          {COA_HIERARCHY_LEVEL_LABELS[5]} is the posting leaf — no further children allowed.
-        </p>
       </TooltipContent>
     </Tooltip>
   );

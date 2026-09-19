@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Download, Loader2 } from "lucide-react";
 import { AccountsFormLayout } from "../expenses/components/AccountsFormLayout";
 import { VoucherFormSectionCard } from "@/components/accounts/voucher-form/VoucherFormSectionCard";
+import { formatSignedRoundOff } from "@/components/accounts/voucher-form/VoucherSignedRoundOffInput";
 import {
   VoucherNoteField,
   VoucherNoteFieldGrid,
@@ -1026,7 +1027,7 @@ export default function DebitNoteViewPageClient({ debitNoteId }: { debitNoteId: 
                     <div className="flex items-center justify-between gap-4 py-0.5">
                       <span className="so-summary-label">Round Off</span>
                       <span className="so-summary-value tabular-nums">
-                        {formatINR(record.round_off)}
+                        {formatSignedRoundOff(record.round_off)}
                       </span>
                     </div>
                   ) : null}

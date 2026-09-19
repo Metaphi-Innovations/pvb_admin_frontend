@@ -11,15 +11,28 @@ export async function getPreviewNumber(warehouseId?: string | null): Promise<str
   return typeof data === "string" ? data : data?.dispatchNumber || data?.dispatch_number || "";
 }
 
-export async function getDispatches(payload: any = {}) {
-  const { page, page_size, search, ordering, filters } = payload;
-  const params: any = {};
+export async function getDispatches(
+  payload: {
+    page?: number;
+    page_size?: number;
+    search?: string;
+    ordering?: string;
+    filters?: Record<string, unknown>;
+    signal?: AbortSignal;
+  } = {},
+) {
+  const { page, page_size, search, ordering, filters, signal } = payload;
+  const params: Record<string, number | string> = {};
   if (page) params.page = page;
   if (page_size) params.page_size = page_size;
   if (search) params.search = search;
   if (ordering) params.ordering = ordering;
-  
-  const response = await api.post(API_ENDPOINTS.WAREHOUSE.DISPATCH.LIST, { filters: filters || {} }, { params });
+
+  const response = await api.post(
+    API_ENDPOINTS.WAREHOUSE.DISPATCH.LIST,
+    { filters: filters || {} },
+    { params, signal },
+  );
   return response.data;
 }
 

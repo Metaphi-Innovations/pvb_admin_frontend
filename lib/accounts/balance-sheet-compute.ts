@@ -1,5 +1,6 @@
 /**
- * Balance Sheet computation — cumulative balances as of a date with dimensional filters.
+ * Demo Balance Sheet calculator. Not used by the production page.
+ * Official Assets, Liabilities, Equity, profit, and difference come from the backend API.
  */
 
 import type { ChartOfAccount } from "@/app/(app)/accounts/data";

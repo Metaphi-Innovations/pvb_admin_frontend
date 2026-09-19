@@ -50,6 +50,7 @@ import {
   useAccountsFilteredRows,
 } from "@/app/(app)/accounts/components/AccountsUI";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
+import { formatSignedRoundOff } from "@/components/accounts/voucher-form/VoucherSignedRoundOffInput";
 import { formatMoney, MONEY_AMOUNT_CLASS } from "@/lib/accounts/money-format";
 import { useClientMounted } from "@/lib/use-client-mounted";
 import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
@@ -316,7 +317,8 @@ function PurchaseRegisterTableInner({
     }
     if (MONEY_KEYS.has(key)) {
       const n = Number(row[key as keyof PurchaseRegisterRow] ?? 0);
-      return <span className={MONEY_AMOUNT_CLASS}>{n === 0 ? "—" : formatMoney(n)}</span>;
+      const text = key === "roundOff" ? formatSignedRoundOff(n) : formatMoney(n);
+      return <span className={MONEY_AMOUNT_CLASS}>{n === 0 ? "—" : text}</span>;
     }
     if (key === "purchaseDate" || key === "postingDate" || key === "supplierInvoiceDate") {
       return formatPurchaseRegisterDate(String(row[key] ?? ""));
@@ -327,7 +329,8 @@ function PurchaseRegisterTableInner({
   const totalFor = (key: PurchaseRegisterColKey): string | null => {
     const def = defs.find((d) => d.key === key);
     if (!def?.totalKey) return null;
-    return formatMoney(totals[def.totalKey] as number);
+    const value = totals[def.totalKey] as number;
+    return key === "roundOff" ? formatSignedRoundOff(value) : formatMoney(value);
   };
 
   return (

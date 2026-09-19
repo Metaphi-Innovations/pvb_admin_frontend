@@ -48,7 +48,7 @@ import { PurchaseInvoiceDirectTotals } from "./PurchaseInvoiceDirectTotals";
 import { PurchaseInvoiceDirectLineTable } from "./PurchaseInvoiceDirectLineTable";
 import { DirectPurchaseSelectField } from "./DirectPurchaseSelectField";
 import { DP_FIELD_CLASS } from "./direct-purchase-form-ui";
-import { roundMoney } from "@/lib/accounts/money-format";
+import { computeAutomaticRoundOff, roundMoney } from "@/lib/accounts/money-format";
 import "@/app/(app)/accounts/invoices/sales-order-invoice-form-compact.css";
 
 function selectedLedgerId(ledgerId: string | number | null | undefined): string | null {
@@ -99,7 +99,6 @@ export function PurchaseInvoiceDirectForm({
   const [purchaseNature, setPurchaseNature] = useState<PurchaseNature>("expense");
   const [placeOfSupply, setPlaceOfSupply] = useState(COMPANY_BILLING.state);
   const [branchGstin] = useState(COMPANY_BILLING.gstNumber);
-  const [roundingAdjustment, setRoundingAdjustment] = useState(0);
   const [narration, setNarration] = useState("");
   const [attachment, setAttachment] = useState<File | null>(null);
   const defaultItc: ItcClassification = "eligible";
@@ -139,17 +138,21 @@ export function PurchaseInvoiceDirectForm({
   }, [branchGstin, placeOfSupply, purchaseNature, interstate]);
 
   const totals = useMemo(() => {
-    const base = computeDirectPurchaseInvoiceTotals(lines, { roundingAdjustment });
+    const base = computeDirectPurchaseInvoiceTotals(lines, { roundingAdjustment: 0 });
+    const unrounded = roundMoney(base.invoiceTotal + chargeBreakdown.totalAmount);
+    const automaticRoundOff = computeAutomaticRoundOff(unrounded);
     return {
       ...base,
       cgst: roundMoney(base.cgst + chargeBreakdown.cgst),
       sgst: roundMoney(base.sgst + chargeBreakdown.sgst),
       igst: roundMoney(base.igst + chargeBreakdown.igst),
       totalGst: roundMoney(base.totalGst + chargeBreakdown.gstAmount),
-      invoiceTotal: roundMoney(base.invoiceTotal + chargeBreakdown.totalAmount),
-      netPayable: roundMoney(base.netPayable + chargeBreakdown.totalAmount),
+      invoiceTotal: unrounded,
+      netPayable: roundMoney(unrounded + automaticRoundOff - base.tdsDeduction),
+      automaticRoundOff,
     };
-  }, [lines, roundingAdjustment, chargeBreakdown]);
+  }, [lines, chargeBreakdown]);
+  const roundingAdjustment = totals.automaticRoundOff;
 
   const purchaseNatureOptions = (Object.keys(PURCHASE_NATURE_LABELS) as PurchaseNature[]).map((k) => ({
     value: k,
@@ -519,7 +522,6 @@ export function PurchaseInvoiceDirectForm({
               <PurchaseInvoiceDirectTotals
                 totals={totals}
                 roundingAdjustment={roundingAdjustment}
-                onRoundingChange={setRoundingAdjustment}
                 additionalChargeTotal={chargeBreakdown.taxableAmount}
               />
             </VoucherFormSectionCard>
@@ -527,7 +529,7 @@ export function PurchaseInvoiceDirectForm({
 
           <p className="text-[11px] text-muted-foreground px-0.5">
             Posting creates supplier outstanding (Purchase Payable) and books GST automatically.
-            Round off is saved on the invoice and posted to Round Off Adjustment.
+            Round off is calculated automatically from the invoice total and posted to Round Off Adjustment.
           </p>
         </div>
       </InvoiceFormLayout>

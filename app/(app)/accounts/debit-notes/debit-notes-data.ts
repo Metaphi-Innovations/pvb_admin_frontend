@@ -523,7 +523,9 @@ export function normalizeDebitNote(rec: DebitNoteRecord): DebitNoteRecord {
         })()
       : computeDebitTotals(lineItems);
   const currentDebitAmount =
-    rec.againstType === "standalone_adjustment" ? rec.standaloneDebitAmount : totals.total;
+    rec.againstType === "standalone_adjustment"
+      ? rec.standaloneDebitAmount
+      : Math.round((totals.total + (rec.round_off ?? 0)) * 100) / 100;
   const balanceAfterAdjustment = Math.max(
     0,
     rec.originalAmount - rec.alreadyAdjustedAmount - currentDebitAmount,

@@ -14,10 +14,10 @@ import { Badge } from "@/components/ui/badge";
 import { PurchaseInvoicePageShell } from "../PurchaseInvoicePageShell";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { DEBIT_NOTES_LIST_PATH } from "@/app/(app)/accounts/debit-notes/note-utils";
+import { formatSignedRoundOff } from "@/components/accounts/voucher-form/VoucherSignedRoundOffInput";
 import { formatMoney, formatMoneyOrDash } from "@/lib/accounts/money-format";
 import { purchaseInvoiceImpactResolved } from "@/lib/accounts/resolved-impact-previews";
 import { LedgerImpactPreview } from "@/components/accounts/LedgerImpactPreview";
-import { AccountingImpactSection } from "@/components/accounts/AccountingImpactSection";
 import { cn } from "@/lib/utils";
 import {
   calcPurchaseLineGstSplit,
@@ -799,12 +799,12 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: st
               {isDirect && (
                 <AmountRow
                   label="Round Off"
-                  value={formatMoney(invoice.roundingAdjustment ?? 0)}
+                  value={formatSignedRoundOff(invoice.roundingAdjustment ?? 0)}
                   muted
                 />
               )}
               {!isDirect && (invoice.roundingAdjustment ?? 0) !== 0 && (
-                <AmountRow label="Rounding" value={formatMoney(invoice.roundingAdjustment!)} muted />
+                <AmountRow label="Rounding" value={formatSignedRoundOff(invoice.roundingAdjustment!)} muted />
               )}
               <div className="border-t border-border/60 pt-2">
                 <AmountRow
@@ -892,15 +892,13 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: st
         </VoucherFormSectionCard>
 
         {/* COA Posting Impact */}
-        {isStockTransfer ? (
-          <AccountingImpactSection docKey="purchase_invoice_stock_transfer" />
-        ) : (
+        {!isStockTransfer ? (
           <LedgerImpactPreview
             title="COA Posting Impact"
             lines={impactLines}
             className="border border-border rounded-xl shadow-sm"
           />
-        )}
+        ) : null}
 
         {/* Remarks / Narration */}
         {(invoice.narration || invoice.remarks) && (

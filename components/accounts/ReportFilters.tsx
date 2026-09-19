@@ -161,6 +161,8 @@ export function ReportDateRangeFilter({
   onDateToChange,
   presetOptions = DATE_RANGE_PRESET_OPTIONS,
   inlineCustomDates = true,
+  dateBounds,
+  disabledPresetIds = [],
 }: {
   preset: DateRangePresetId;
   dateFrom: string;
@@ -171,6 +173,10 @@ export function ReportDateRangeFilter({
   presetOptions?: { id: DateRangePresetId; label: string }[];
   /** When false, From/To fields are not rendered inline (use separate date filters). */
   inlineCustomDates?: boolean;
+  /** Optional report bounds. Defaults to the shared demo financial year. */
+  dateBounds?: { min: string; max: string };
+  /** Presets that cannot fit the selected financial year. */
+  disabledPresetIds?: readonly DateRangePresetId[];
 }) {
   React.useEffect(() => {
     if (preset === "custom") return;
@@ -181,6 +187,7 @@ export function ReportDateRangeFilter({
   }, [dateFrom, dateTo, preset, onPresetChange]);
 
   const handlePresetChange = (value: DateRangePresetId) => {
+    if (disabledPresetIds.includes(value)) return;
     if (value !== "custom") {
       const { from, to } = resolveDateRangePreset(value);
       // Set dates first, then preset last so parents that mark date edits as
@@ -191,6 +198,19 @@ export function ReportDateRangeFilter({
       return;
     }
     onPresetChange(value);
+    if (dateBounds) {
+      if (
+        !dateFrom ||
+        !dateTo ||
+        dateFrom < dateBounds.min ||
+        dateTo > dateBounds.max ||
+        dateFrom > dateTo
+      ) {
+        onDateFromChange(dateBounds.min);
+        onDateToChange(dateBounds.max);
+      }
+      return;
+    }
     const fyStart = demoFinancialYearStart();
     const fyEnd = demoFinancialYearEnd();
     if (!dateFrom || !dateTo || dateFrom < fyStart || dateTo > fyEnd) {
@@ -200,8 +220,8 @@ export function ReportDateRangeFilter({
     }
   };
 
-  const fyMin = demoFinancialYearStart();
-  const fyMax = demoFinancialYearEnd();
+  const fyMin = dateBounds?.min ?? demoFinancialYearStart();
+  const fyMax = dateBounds?.max ?? demoFinancialYearEnd();
 
   return (
     <div className="space-y-0.5 shrink-0">
@@ -218,7 +238,12 @@ export function ReportDateRangeFilter({
           </SelectTrigger>
           <SelectContent>
             {presetOptions.map((o) => (
-              <SelectItem key={o.id} value={o.id} className="text-xs">
+              <SelectItem
+                key={o.id}
+                value={o.id}
+                className="text-xs"
+                disabled={disabledPresetIds.includes(o.id)}
+              >
                 {o.label}
               </SelectItem>
             ))}
@@ -289,16 +314,27 @@ export function ReportFromToDateFilter({
 export function ReportAsOnDateFilter({
   value,
   onChange,
+  min,
+  max,
 }: {
   value: string;
   onChange: (value: string) => void;
+  min?: string;
+  max?: string;
 }) {
   return (
     <div className="space-y-0.5">
       <span className={filterLabelClass}>As On Date</span>
       <AccountsDateInput
         value={value}
-        onChange={onChange}
+        min={min}
+        max={max}
+        onChange={(next) => {
+          let clamped = next;
+          if (min && clamped && clamped < min) clamped = min;
+          if (max && clamped && clamped > max) clamped = max;
+          onChange(clamped);
+        }}
         className={cn("mt-0", ACCOUNTS_DATE_FILTER_WIDTH_CLASS)}
         aria-label="As on date"
       />
@@ -924,11 +960,20 @@ export function ReportStateFilter({
   value,
   onChange,
   states,
+  options,
 }: {
   value: string;
   onChange: (value: string) => void;
-  states: string[];
+  states?: string[];
+  /** Prefer value/label options when filtering by backend state codes. */
+  options?: { value: string; label: string }[];
 }) {
+  const items =
+    options ??
+    (states ?? []).map((s) => ({
+      value: s,
+      label: s,
+    }));
   return (
     <div className="space-y-0.5 min-w-[140px]">
       <span className={filterLabelClass}>State</span>
@@ -938,9 +983,9 @@ export function ReportStateFilter({
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="all">All states</SelectItem>
-          {states.map((s) => (
-            <SelectItem key={s} value={s}>
-              {s}
+          {items.map((s) => (
+            <SelectItem key={s.value} value={s.value}>
+              {s.label}
             </SelectItem>
           ))}
         </SelectContent>
@@ -1353,15 +1398,20 @@ export function ReportSalespersonMultiFilter({
   values,
   onChange,
   salespeople,
+  labeledOptions,
 }: {
   values: string[];
   onChange: (values: string[]) => void;
-  salespeople: string[];
+  salespeople?: string[];
+  /** Prefer when filtering by backend user IDs. */
+  labeledOptions?: ReportMultiSelectOption[];
 }) {
-  const selectOptions: ReportMultiSelectOption[] = salespeople.map((name) => ({
-    value: name,
-    label: name,
-  }));
+  const selectOptions: ReportMultiSelectOption[] =
+    labeledOptions ??
+    (salespeople ?? []).map((name) => ({
+      value: name,
+      label: name,
+    }));
   return (
     <ReportMultiSelect
       label="Salesperson"
