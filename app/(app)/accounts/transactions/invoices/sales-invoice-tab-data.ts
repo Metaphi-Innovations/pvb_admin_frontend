@@ -170,6 +170,7 @@ export function mapApiInvoiceToListRow(
     : "";
   const signedQr = String(dto.signed_qr_code || "").trim();
   const irn = String(dto.irn_number || "").trim();
+  const ewayQr = String(dto.eway_bill_qr_code || "").trim();
 
   const stubRecord = {
     invoiceNo: dto.invoice_number,
@@ -187,8 +188,9 @@ export function mapApiInvoiceToListRow(
     eInvoiceStatus:
       dto.einvoice_status || (irn ? "generated" : undefined),
     signedQrCode: signedQr || undefined,
-    qrCodeAvailable: Boolean(signedQr || irn),
+    qrCodeAvailable: Boolean(signedQr || irn || ewayQr),
     ewayBillNo: dto.eway_bill_number || undefined,
+    ewayBillQrCode: ewayQr || undefined,
     ewayBillStatus:
       dto.eway_bill_status || (dto.eway_bill_number ? "generated" : undefined),
     ewayBillExpiryDate: dto.eway_bill_valid_upto

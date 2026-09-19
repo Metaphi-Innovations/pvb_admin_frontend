@@ -23,6 +23,7 @@ import {
 import {
   SalesInvoiceService,
   mapSalesInvoiceDetailToRecord,
+  type PreviewEwayBillResult,
 } from "@/services/sales-invoice.service";
 import {
   calcAdditionalExpensesTotals,
@@ -30,6 +31,7 @@ import {
 } from "./invoice-additional-expenses";
 import { GoodsInvoiceAdditionalChargesEditor } from "./components/GoodsInvoiceAdditionalChargesEditor";
 import { InvoiceViewStatutorySection } from "./components/InvoiceViewStatutorySection";
+import { EwayBillPreviewDialog } from "./components/EwayBillPreviewDialog";
 import { downloadInvoicePdf } from "./invoice-pdf";
 import {
   openProformaInvoicePreview,
@@ -433,6 +435,11 @@ export default function InvoiceViewPageClient({
   const [sendEmailOpen, setSendEmailOpen] = useState(false);
   const [eInvoiceBusy, setEInvoiceBusy] = useState(false);
   const [ewayBusy, setEwayBusy] = useState(false);
+  const [ewayPreviewOpen, setEwayPreviewOpen] = useState(false);
+  const [ewayPreviewLoading, setEwayPreviewLoading] = useState(false);
+  const [ewayPreview, setEwayPreview] = useState<PreviewEwayBillResult | null>(
+    null,
+  );
 
   const listHref = useMemo(
     () =>
@@ -581,12 +588,35 @@ export default function InvoiceViewPageClient({
     }
   };
 
-  const handleGenerateEway = async () => {
-    if (!record?.salesInvoiceId || ewayBusy) return;
-    if (!record.irn?.trim()) {
-      showToast("IRN must be generated before generating E-Way Bill.", "error");
-      return;
+  const handleOpenEwayPreview = async () => {
+    if (!record?.salesInvoiceId || ewayBusy || ewayPreviewLoading) return;
+    setEwayPreviewLoading(true);
+    setEwayPreview(null);
+    setEwayPreviewOpen(true);
+    try {
+      const preview = await SalesInvoiceService.previewEwayBill(
+        String(record.salesInvoiceId),
+      );
+      setEwayPreview(preview);
+      if (preview.already_generated) {
+        showToast(
+          "E-Way Bill was already generated for this invoice.",
+          "success",
+        );
+      }
+    } catch (e) {
+      setEwayPreviewOpen(false);
+      showToast(
+        e instanceof Error ? e.message : "Failed to preview E-Way Bill.",
+        "error",
+      );
+    } finally {
+      setEwayPreviewLoading(false);
     }
+  };
+
+  const handleConfirmGenerateEway = async () => {
+    if (!record?.salesInvoiceId || ewayBusy) return;
     setEwayBusy(true);
     try {
       const result = await SalesInvoiceService.generateEwayBill(
@@ -598,6 +628,8 @@ export default function InvoiceViewPageClient({
           : "E-Way Bill generated successfully.",
         "success",
       );
+      setEwayPreviewOpen(false);
+      setEwayPreview(null);
       await refresh();
     } catch (e) {
       showToast(
@@ -879,9 +911,9 @@ export default function InvoiceViewPageClient({
                 record={record}
                 canAct={canGenerateStatutory}
                 onGenerateEInvoice={() => void handleGenerateIRN()}
-                onGenerateEway={() => void handleGenerateEway()}
+                onGenerateEway={() => void handleOpenEwayPreview()}
                 eInvoiceBusy={eInvoiceBusy}
-                ewayBusy={ewayBusy}
+                ewayBusy={ewayBusy || ewayPreviewLoading}
               />
             </VoucherFormSectionCard>
           ) : null}
@@ -967,6 +999,19 @@ export default function InvoiceViewPageClient({
             "success",
           );
         }}
+      />
+
+      <EwayBillPreviewDialog
+        open={ewayPreviewOpen}
+        onClose={() => {
+          if (ewayBusy || ewayPreviewLoading) return;
+          setEwayPreviewOpen(false);
+          setEwayPreview(null);
+        }}
+        preview={ewayPreview}
+        loading={ewayPreviewLoading}
+        generating={ewayBusy}
+        onConfirmGenerate={handleConfirmGenerateEway}
       />
     </div>
   );

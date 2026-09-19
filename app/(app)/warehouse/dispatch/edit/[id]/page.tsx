@@ -25,6 +25,14 @@ import {
   validateDispatchDateAgainstPacking,
 } from "../../dispatch-display-utils";
 import { DispatchStackedQty } from "../../components/DispatchStackedQty";
+import {
+  DispatchTransportDetailsSection,
+  EMPTY_DISPATCH_TRANSPORT,
+  buildDispatchTransportPayload,
+  transportFromDispatchRecord,
+  validateDispatchTransportSoft,
+  type DispatchTransportState,
+} from "../../components/DispatchTransportDetailsSection";
 import { showToast } from "@/lib/toast";
 
 type PackingDoneProductRow = NonNullable<
@@ -291,11 +299,14 @@ export default function EditDispatchPage() {
   const [selectedOrderId, setSelectedOrderId] = useState("");
   const [selectedPackingDoneIds, setSelectedPackingDoneIds] = useState<string[]>([]);
 
-  // Transportation details (only for Purchase Return dispatch)
+  // Transportation details
   const [transporter, setTransporter] = useState("");
   const [vehicleNumber, setVehicleNumber] = useState("");
   const [lrNumber, setLrNumber] = useState("");
   const [lrDate, setLrDate] = useState("");
+  const [stTransport, setStTransport] = useState<DispatchTransportState>(
+    EMPTY_DISPATCH_TRANSPORT,
+  );
 
   const orderField = SOURCE_FIELD_LABELS[sourceType];
   const listTab =
@@ -336,6 +347,7 @@ export default function EditDispatchPage() {
         if (data.lr_date) {
           setLrDate(new Date(data.lr_date).toISOString().split("T")[0]);
         }
+        setStTransport(transportFromDispatchRecord(data || {}));
 
         const packingDoneIds = Array.from(
           new Set(
@@ -496,6 +508,14 @@ export default function EditDispatchPage() {
       return;
     }
 
+    if (sourceType === "stock_transfer") {
+      const transportError = validateDispatchTransportSoft(stTransport);
+      if (transportError) {
+        showToast(transportError, "error");
+        return;
+      }
+    }
+
     setLoading(true);
     try {
       const payload: Record<string, unknown> = {
@@ -510,6 +530,10 @@ export default function EditDispatchPage() {
         payload.vehicle_number = vehicleNumber || null;
         payload.lr_number = lrNumber || null;
         payload.lr_date = lrDate ? new Date(lrDate).toISOString() : null;
+      }
+
+      if (sourceType === "stock_transfer") {
+        Object.assign(payload, buildDispatchTransportPayload(stTransport));
       }
 
       await updateDispatch(id, payload);
@@ -631,6 +655,21 @@ export default function EditDispatchPage() {
             </div>
           </div>
         </div>
+
+        {sourceType === "stock_transfer" && (
+          <div className="border-t border-border/80 pt-6 space-y-4">
+            <h2 className="text-xs font-bold text-foreground uppercase tracking-wider border-b pb-2 flex items-center gap-1.5">
+              <Truck className="w-4 h-4 text-brand-600" /> Transportation Details
+            </h2>
+            <DispatchTransportDetailsSection
+              value={stTransport}
+              onChange={(patch) =>
+                setStTransport((prev) => ({ ...prev, ...patch }))
+              }
+              hint="Same-GSTIN stock transfers do not create a Sales Invoice — enter transport details here for Delivery Challan / E-Way Bill."
+            />
+          </div>
+        )}
 
         {sourceType === "purchase_return" && (
           <div className="border-t border-border/80 pt-6 space-y-4">

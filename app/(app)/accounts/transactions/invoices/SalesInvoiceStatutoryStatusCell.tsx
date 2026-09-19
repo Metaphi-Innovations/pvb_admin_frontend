@@ -92,10 +92,10 @@ function StatusPill({
   );
 }
 
-function qrImageSrc(signedQrCode?: string, irn?: string): string | null {
+function qrImageSrc(signedQrCode?: string, fallbackPayload?: string): string | null {
   const signed = (signedQrCode || "").trim();
   if (signed.startsWith("data:") || /^https?:\/\//i.test(signed)) return signed;
-  const payload = signed || (irn && irn !== "—" ? irn : "");
+  const payload = signed || (fallbackPayload && fallbackPayload !== "—" ? fallbackPayload : "");
   if (!payload) return null;
   return `https://api.qrserver.com/v1/create-qr-code/?size=120x120&margin=0&data=${encodeURIComponent(payload)}`;
 }
@@ -197,6 +197,9 @@ export function SalesInvoiceEWayStatusCell({
   const [open, setOpen] = useState(false);
   const cfg = EWAY_CFG[details.status] ?? EWAY_CFG["Not Generated"];
   const canOpenDetails = details.status === "Generated";
+  const qrSrc = canOpenDetails
+    ? qrImageSrc(details.ewayBillQrCode, details.eWayBillNo)
+    : null;
 
   return (
     <>
@@ -236,6 +239,27 @@ export function SalesInvoiceEWayStatusCell({
               <InfoRow label="Vehicle Number" value={details.vehicleNo} />
               <InfoRow label="Transporter Name" value={details.transporterName} />
               <InfoRow label="Transport Mode" value={details.transportMode} />
+              <InfoRow
+                label="QR Code"
+                value={
+                  qrSrc ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={qrSrc}
+                      alt="E-Way Bill QR"
+                      width={72}
+                      height={72}
+                      className="rounded-md border border-border bg-white p-1"
+                    />
+                  ) : details.qrCodeAvailable ? (
+                    <span className="inline-flex h-14 w-14 items-center justify-center rounded-md border border-border bg-white text-[9px] text-muted-foreground">
+                      QR
+                    </span>
+                  ) : (
+                    "—"
+                  )
+                }
+              />
               {details.status === "Cancelled" ? (
                 <>
                   <InfoRow label="Cancelled Date" value={details.cancelledAt} />

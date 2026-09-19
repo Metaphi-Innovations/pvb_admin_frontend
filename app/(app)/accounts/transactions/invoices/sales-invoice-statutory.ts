@@ -61,6 +61,9 @@ export interface SalesInvoiceEWayDetails {
   vehicleNo: string;
   transporterName: string;
   transportMode: string;
+  /** PeriOne / NIC EWB QR payload when returned. */
+  ewayBillQrCode?: string;
+  qrCodeAvailable: boolean;
   cancelledAt: string;
   cancelledReason: string;
 }
@@ -158,6 +161,7 @@ export function buildEWayDetails(
   inv: InvoiceRecord,
   status: ListingEWayStatus,
 ): SalesInvoiceEWayDetails {
+  const ewayQr = inv.ewayBillQrCode?.trim() || "";
   return {
     status,
     eWayBillNo: inv.ewayBillNo?.trim() || "—",
@@ -166,6 +170,8 @@ export function buildEWayDetails(
     vehicleNo: inv.vehicleNo?.trim() || "—",
     transporterName: inv.transporterName?.trim() || "—",
     transportMode: inv.transportMode?.trim() || "—",
+    ewayBillQrCode: ewayQr || undefined,
+    qrCodeAvailable: Boolean(ewayQr),
     cancelledAt: inv.ewayBillCancelledAt?.trim() || "—",
     cancelledReason: inv.ewayBillCancelledReason?.trim() || "—",
   };

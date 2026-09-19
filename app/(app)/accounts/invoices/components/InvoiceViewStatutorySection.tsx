@@ -77,6 +77,14 @@ function DetailRow({
   );
 }
 
+function qrImageSrc(raw?: string | null, fallback?: string | null): string | null {
+  const signed = (raw || "").trim();
+  if (signed.startsWith("data:") || /^https?:\/\//i.test(signed)) return signed;
+  const payload = signed || (fallback || "").trim();
+  if (!payload) return null;
+  return `https://api.qrserver.com/v1/create-qr-code/?size=120x120&margin=0&data=${encodeURIComponent(payload)}`;
+}
+
 export function InvoiceViewStatutorySection({
   record,
   canAct,
@@ -98,14 +106,15 @@ export function InvoiceViewStatutorySection({
   const eInvApplicable = record.eInvoiceApplicable === true;
   const eInvStatus = record.eInvoiceStatus ?? "not_generated";
   const ewayStatus = record.ewayBillStatus ?? "not_generated";
+  const isStockTransfer = record.sourceType === "stock_transfer";
 
   const einv = eInvoiceLabel(record.eInvoiceApplicable, eInvStatus);
   const eway = ewayLabel(ewayStatus);
 
-  const showGenerateIRN =
-    canAct && eInvApplicable && eInvStatus === "not_generated";
   // Backend chooses EWB-by-IRN vs standalone when IRN is absent.
   const showGenerateEway = canAct && ewayStatus === "not_generated";
+  const showGenerateIRN =
+    canAct && eInvApplicable && eInvStatus === "not_generated";
 
   const hasGeneratedDetails = Boolean(
     record.ewayBillNo?.trim() ||
@@ -114,8 +123,17 @@ export function InvoiceViewStatutorySection({
       record.acknowledgementNo?.trim(),
   );
 
+  const ewayQrSrc = qrImageSrc(record.ewayBillQrCode, record.ewayBillNo);
+  const irnQrSrc = qrImageSrc(record.signedQrCode, record.irn);
+
   return (
     <div id="invoice-view-statutory" className="space-y-2.5 scroll-mt-24">
+      {isStockTransfer ? (
+        <p className="text-[11px] text-muted-foreground">
+          Stock Transfer Invoice: buyer / consignee is the destination warehouse
+          GSTIN. IRN and E-Way Bill use the same flows as Sales Invoice.
+        </p>
+      ) : null}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
         <div className="rounded-lg border border-border bg-muted/10 px-3 py-2.5 flex items-center justify-between gap-3 min-h-[52px]">
           <div className="min-w-0 space-y-0.5">
@@ -209,9 +227,34 @@ export function InvoiceViewStatutorySection({
                 value={record.ewayBillGeneratedAt}
               />
               <DetailRow label="E-Way Expiry" value={record.ewayBillExpiryDate} />
-              {record.qrCodeAvailable ? (
+              {ewayQrSrc ? (
+                <div className="grid grid-cols-[120px_1fr] gap-2 py-1">
+                  <span className="so-info-row-label">E-Way QR</span>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={ewayQrSrc}
+                    alt="E-Way Bill QR"
+                    width={72}
+                    height={72}
+                    className="rounded-md border border-border bg-white p-1"
+                  />
+                </div>
+              ) : null}
+              {irnQrSrc ? (
+                <div className="grid grid-cols-[120px_1fr] gap-2 py-1">
+                  <span className="so-info-row-label">E-Invoice QR</span>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={irnQrSrc}
+                    alt="E-Invoice QR"
+                    width={72}
+                    height={72}
+                    className="rounded-md border border-border bg-white p-1"
+                  />
+                </div>
+              ) : record.signedQrCode?.trim() || record.irn?.trim() ? (
                 <p className="pt-1 text-[11px] text-muted-foreground">
-                  QR code available on Tax Invoice PDF.
+                  E-Invoice QR available on Tax Invoice PDF.
                 </p>
               ) : null}
             </div>

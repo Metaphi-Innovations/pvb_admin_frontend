@@ -641,6 +641,10 @@ export const API_ENDPOINTS = {
       ALLOCATE_DC: (id: string) => `/warehouse/dispatch/${id}/allocate-dc`,
       ALLOCATE_SI: (id: string) => `/warehouse/dispatch/${id}/allocate-si`,
       ALLOCATE_ST: (id: string) => `/warehouse/dispatch/${id}/allocate-st`,
+      PREVIEW_EWAY_BILL: (id: string) =>
+        `/warehouse/dispatch/${id}/preview-eway-bill`,
+      GENERATE_EWAY_BILL: (id: string) =>
+        `/warehouse/dispatch/${id}/generate-eway-bill`,
     },
     PACKING_DONE: {
       PREVIEW_NUMBER: "/warehouse/packing-done/preview-number",
@@ -676,6 +680,8 @@ export const API_ENDPOINTS = {
       BY_ID: (id: string) => `/accounts/sales-invoice/${id}`,
       CANCEL: (id: string) => `/accounts/sales-invoice/${id}/cancel`,
       GENERATE_IRN: (id: string) => `/accounts/sales-invoice/${id}/generate-irn`,
+      PREVIEW_EWAY_BILL: (id: string) =>
+        `/accounts/sales-invoice/${id}/preview-eway-bill`,
       GENERATE_EWAY_BILL: (id: string) =>
         `/accounts/sales-invoice/${id}/generate-eway-bill`,
       PREVIEW_NUMBER: "/accounts/sales-invoice/preview-number",

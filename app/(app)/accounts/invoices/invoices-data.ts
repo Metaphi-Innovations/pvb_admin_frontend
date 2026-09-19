@@ -295,6 +295,8 @@ export interface InvoiceRecord {
 	distanceKm?: number | null;
 	ewayBillNo?: string;
 	ewayBillExpiryDate?: string;
+	/** EWB QR from PeriOne when returned (separate from IRN signed QR). */
+	ewayBillQrCode?: string;
 	ewayBillStatus?:
 		| "not_generated"
 		| "generated"
@@ -996,6 +998,7 @@ export type InvoiceFormInput = {
 	distanceKm?: number | null;
 	ewayBillNo?: string;
 	ewayBillExpiryDate?: string;
+	ewayBillQrCode?: string;
 	ewayBillStatus?:
 		| "not_generated"
 		| "generated"

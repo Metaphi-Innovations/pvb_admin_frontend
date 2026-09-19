@@ -205,6 +205,25 @@ export type GenerateEwayBillResult = {
   eway_bill_qr_code?: string | null;
 };
 
+export type PreviewEwayBillResult = {
+  already_generated: boolean;
+  flow: "by_irn" | "standalone";
+  sales_invoice_id?: string;
+  invoice_number?: string;
+  irn_number?: string | null;
+  /** Dispatch-level standalone EWB (same-GSTIN stock transfer). */
+  dispatch_id?: string;
+  dispatch_number?: string | null;
+  challan_number?: string | null;
+  transfer_no?: string | null;
+  eway_bill_number?: string | null;
+  eway_bill_date?: string | Date | null;
+  eway_bill_valid_upto?: string | Date | null;
+  eway_bill_status?: string | null;
+  summary: Record<string, string | number | null> | null;
+  payload: Record<string, unknown> | null;
+};
+
 export type EligibleDispatchDto = {
   dispatch_id: string;
   dispatch_number: string;
@@ -354,6 +373,10 @@ export type SalesInvoiceDetailDto = SalesInvoiceListDto & {
   } | null;
   ewayBill?: {
     status: string;
+    eway_bill_number?: string | null;
+    eway_bill_date?: string | Date | null;
+    eway_bill_valid_upto?: string | Date | null;
+    eway_bill_qr_code?: string | null;
   } | null;
 };
 
@@ -927,9 +950,30 @@ export function mapSalesInvoiceDetailToRecord(
   const customerName =
     dto.customer?.customer_name ||
     snapshotStr(customerSnap, "customer_name", "customerName", "name") ||
+    (kind === "stock_transfer"
+      ? snapshotStr(
+          customerSnap,
+          "warehouse_name",
+          "registered_legal_name",
+        ) ||
+        snapshotStr(
+          (dto.destination_warehouse_snapshot || null) as Record<
+            string,
+            unknown
+          > | null,
+          "warehouse_name",
+          "name",
+        )
+      : "") ||
     "";
   const gstin =
-    snapshotStr(customerSnap, "gstin_no", "gstin", "customerGst") || "";
+    snapshotStr(customerSnap, "gstin_no", "gstin", "customerGst", "gst_number") ||
+    (kind === "stock_transfer"
+      ? readWarehouseGstin(
+          dto.destination_warehouse_gst_snapshot as Record<string, unknown> | null,
+          customerSnap,
+        ) || ""
+      : "");
   const warehouseName =
     dto.warehouse?.warehouse_name ||
     snapshotStr(warehouseSnap, "warehouse_name", "warehouseName", "name") ||
@@ -1047,8 +1091,16 @@ export function mapSalesInvoiceDetailToRecord(
         : "not_generated") as InvoiceRecord["eInvoiceStatus"],
     acknowledgementNo: asString(dto.acknowledgement_number) || undefined,
     acknowledgementDate: asDateOnly(dto.acknowledgement_date) || undefined,
-    qrCodeAvailable: Boolean(asString(dto.signed_qr_code || dto.irn_number)),
+    qrCodeAvailable: Boolean(
+      asString(dto.signed_qr_code || dto.irn_number || dto.eway_bill_qr_code),
+    ),
     signedQrCode: asString(dto.signed_qr_code) || undefined,
+    ewayBillQrCode: asString(dto.eway_bill_qr_code) ||
+      asString(
+        (dto.ewayBill as { eway_bill_qr_code?: string | null } | undefined)
+          ?.eway_bill_qr_code,
+      ) ||
+      undefined,
     ewayBillNo: asString(dto.eway_bill_number) || undefined,
     ewayBillExpiryDate: asDateOnly(dto.eway_bill_valid_upto) || undefined,
     ewayBillGeneratedAt: asDateOnly(dto.eway_bill_date) || undefined,
@@ -1305,6 +1357,22 @@ export const SalesInvoiceService = {
     } catch (error) {
       throw new Error(
         extractErrorMessage(error, "Failed to generate IRN for sales invoice."),
+      );
+    }
+  },
+
+  async previewEwayBill(id: string): Promise<PreviewEwayBillResult> {
+    try {
+      const response = await axiosInstance.get(
+        API_ENDPOINTS.ACCOUNTS.SALES_INVOICE.PREVIEW_EWAY_BILL(id),
+      );
+      return unwrapData(response) as PreviewEwayBillResult;
+    } catch (error) {
+      throw new Error(
+        extractErrorMessage(
+          error,
+          "Failed to preview E-Way Bill for sales invoice.",
+        ),
       );
     }
   },
