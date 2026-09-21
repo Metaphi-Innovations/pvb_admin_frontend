@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Download, FileDown, FileSpreadsheet } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
+import { Check, Download, FileDown, FileSpreadsheet, Loader2, Pencil, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -43,7 +44,7 @@ import {
 } from "@/app/(app)/accounts/components/AccountsUI";
 import { EmptySearch } from "@/components/ui/EmptyState";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
-import { formatMoney, MONEY_AMOUNT_CLASS } from "@/lib/accounts/money-format";
+import { formatMoney, MONEY_AMOUNT_CLASS, roundMoney } from "@/lib/accounts/money-format";
 import { ACCOUNTS_ACTION_BUTTON_CLASS } from "@/lib/accounts/accounts-typography";
 import {
   buildEntityFilterSummary,
@@ -88,6 +89,8 @@ function num(value: string | null | undefined): number {
 
 type SummaryUiRow = {
   id: string;
+  productId: string;
+  warehouseId: string | null;
   productName: string;
   productCode: string;
   warehouse: string;
@@ -118,8 +121,18 @@ type DetailUiRow = {
 };
 
 function mapSummaryRow(row: StockValuationSummaryApiRow): SummaryUiRow {
+  const marketRate = row.market_rate != null ? num(row.market_rate) : null;
+  const marketRateMissing = marketRate == null || marketRate <= 0;
+  const marketValue =
+    !marketRateMissing && row.market_value != null
+      ? num(row.market_value)
+      : !marketRateMissing
+        ? num(row.closing_qty) * marketRate
+        : null;
   return {
     id: row.id,
+    productId: row.product_id,
+    warehouseId: row.warehouse_id,
     productName: row.product_name,
     productCode: row.product_code ?? "",
     warehouse: row.warehouse_name ?? "—",
@@ -128,9 +141,9 @@ function mapSummaryRow(row: StockValuationSummaryApiRow): SummaryUiRow {
     costRate: num(row.cost_rate),
     costRateMissing: row.cost_rate_missing,
     costValue: num(row.cost_value),
-    marketRate: null,
-    marketRateMissing: true,
-    marketValue: null,
+    marketRate: marketRateMissing ? null : marketRate,
+    marketRateMissing,
+    marketValue: marketRateMissing ? null : marketValue,
     finalStockValue: num(row.final_value),
   };
 }
@@ -154,10 +167,16 @@ function mapDetailRow(row: StockValuationDetailApiRow): DetailUiRow {
 
 function StockValuationExportMenu({
   disabled,
+  showBasisOptions,
   onExport,
 }: {
   disabled?: boolean;
-  onExport: (format: "excel" | "pdf") => void;
+  /** Summary tab: Cost vs Market. Details tab: plain Excel/PDF. */
+  showBasisOptions?: boolean;
+  onExport: (
+    format: "excel" | "pdf",
+    basis?: "cost" | "market",
+  ) => void;
 }) {
   return (
     <DropdownMenu>
@@ -171,14 +190,52 @@ function StockValuationExportMenu({
           <Download className="w-4 h-4" /> Export
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-44">
-        <DropdownMenuItem className="text-xs gap-2" onClick={() => onExport("excel")}>
-          <FileSpreadsheet className="w-4 h-4" /> Excel
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem className="text-xs gap-2" onClick={() => onExport("pdf")}>
-          <FileDown className="w-4 h-4" /> PDF
-        </DropdownMenuItem>
+      <DropdownMenuContent align="end" className="w-56">
+        {showBasisOptions ? (
+          <>
+            <DropdownMenuItem
+              className="text-xs gap-2"
+              onClick={() => onExport("excel", "cost")}
+            >
+              <FileSpreadsheet className="w-4 h-4" /> Excel (Cost Valuation)
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="text-xs gap-2"
+              onClick={() => onExport("excel", "market")}
+            >
+              <FileSpreadsheet className="w-4 h-4" /> Excel (Market Valuation)
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              className="text-xs gap-2"
+              onClick={() => onExport("pdf", "cost")}
+            >
+              <FileDown className="w-4 h-4" /> PDF (Cost Valuation)
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="text-xs gap-2"
+              onClick={() => onExport("pdf", "market")}
+            >
+              <FileDown className="w-4 h-4" /> PDF (Market Valuation)
+            </DropdownMenuItem>
+          </>
+        ) : (
+          <>
+            <DropdownMenuItem
+              className="text-xs gap-2"
+              onClick={() => onExport("excel")}
+            >
+              <FileSpreadsheet className="w-4 h-4" /> Excel
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              className="text-xs gap-2"
+              onClick={() => onExport("pdf")}
+            >
+              <FileDown className="w-4 h-4" /> PDF
+            </DropdownMenuItem>
+          </>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -200,6 +257,8 @@ export default function StockValuationPageClient() {
   const [products, setProducts] = useState<string[]>([]);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
+  const [sortBy, setSortBy] = useState("product_name");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [exporting, setExporting] = useState(false);
   const [ready, setReady] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
@@ -305,8 +364,8 @@ export default function StockValuationPageClient() {
       product_ids: products,
       page,
       page_size: pageSize,
-      sort_by: tab === "detailed" ? "voucher_date" : "product_name",
-      sort_order: "asc",
+      sort_by: sortBy,
+      sort_order: sortOrder,
     };
   }, [
     financialYearId,
@@ -316,12 +375,24 @@ export default function StockValuationPageClient() {
     products,
     page,
     pageSize,
-    tab,
+    sortBy,
+    sortOrder,
   ]);
 
   useEffect(() => {
     setPage(1);
-  }, [dateFrom, dateTo, tab, pageSize, financialYearId, warehouses, products]);
+  }, [dateFrom, dateTo, tab, pageSize, financialYearId, warehouses, products, sortBy, sortOrder]);
+
+  useEffect(() => {
+    // Reset sort defaults when switching tabs
+    if (tab === "detailed") {
+      setSortBy("voucher_date");
+      setSortOrder("asc");
+    } else {
+      setSortBy("product_name");
+      setSortOrder("asc");
+    }
+  }, [tab]);
 
   useEffect(() => {
     if (!queryParams) {
@@ -417,7 +488,7 @@ export default function StockValuationPageClient() {
   }, [warehouses, products, warehouseOptions, productOptions]);
 
   const handleExport = useCallback(
-    async (format: "excel" | "pdf") => {
+    async (format: "excel" | "pdf", basis?: "cost" | "market") => {
       if (!queryParams || exporting) return;
       setExporting(true);
       try {
@@ -425,6 +496,7 @@ export default function StockValuationPageClient() {
           ...queryParams,
           format: format === "pdf" ? "PDF" : "EXCEL",
           view: tab === "detailed" ? "accounting_details" : "summary",
+          basis: tab === "detailed" ? undefined : (basis ?? "cost"),
         });
       } catch (error: unknown) {
         setReportError(
@@ -500,6 +572,7 @@ export default function StockValuationPageClient() {
         end={
           <StockValuationExportMenu
             onExport={handleExport}
+            showBasisOptions={tab === "summary"}
             disabled={
               exporting ||
               reportLoading ||
@@ -596,6 +669,7 @@ export default function StockValuationPageClient() {
         setTab={setTab}
         rows={summaryRows}
         report={summaryReport}
+        setReport={setSummaryReport}
         loading={reportLoading}
         hasFilters={hasFilters}
         clearFilters={clearFilters}
@@ -605,8 +679,146 @@ export default function StockValuationPageClient() {
         pageSize={pageSize}
         setPageSize={setPageSize}
         asOnDate={dateTo}
+        financialYearId={financialYearId}
+        onRefresh={() => setRetryKey((k) => k + 1)}
       />
     </AccountsColumnFilterProvider>
+  );
+}
+
+function MarketRateCell({
+  row,
+  asOnDate,
+  financialYearId,
+  onSaved,
+}: {
+  row: SummaryUiRow;
+  asOnDate: string;
+  financialYearId: string;
+  onSaved: (next: {
+    marketRate: number | null;
+    marketValue: number | null;
+  }) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const startEdit = () => {
+    setDraft(row.marketRate != null && row.marketRate > 0 ? String(row.marketRate) : "");
+    setError(null);
+    setEditing(true);
+  };
+
+  const cancelEdit = () => {
+    setEditing(false);
+    setDraft("");
+    setError(null);
+  };
+
+  const save = async () => {
+    const trimmed = draft.trim();
+    let rate: number | null = null;
+    if (trimmed !== "") {
+      const n = Number(trimmed);
+      if (!Number.isFinite(n) || n < 0) {
+        setError("Enter a valid rate");
+        return;
+      }
+      rate = n === 0 ? null : roundMoney(n);
+    }
+
+    setSaving(true);
+    setError(null);
+    try {
+      const result = await StockValuationApiService.saveMarketRate(
+        {
+          product_id: row.productId,
+          warehouse_id: row.warehouseId,
+          as_on_date: asOnDate,
+          market_rate: rate,
+        },
+        financialYearId,
+      );
+      const savedRate =
+        result.market_rate != null ? num(result.market_rate) : null;
+      const marketValue =
+        savedRate != null && savedRate > 0
+          ? roundMoney(row.closingQty * savedRate)
+          : null;
+      onSaved({
+        marketRate: savedRate != null && savedRate > 0 ? savedRate : null,
+        marketValue,
+      });
+      setEditing(false);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Save failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (editing) {
+    return (
+      <div className="flex flex-col items-end gap-0.5">
+        <div className="inline-flex items-center gap-1">
+          <Input
+            type="number"
+            min={0}
+            step="0.01"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") void save();
+              if (e.key === "Escape") cancelEdit();
+            }}
+            className="h-7 w-[88px] text-xs text-right tabular-nums px-1.5"
+            disabled={saving}
+            autoFocus
+          />
+          <button
+            type="button"
+            className="p-1 rounded hover:bg-emerald-50 disabled:opacity-50"
+            title="Save market rate"
+            disabled={saving}
+            onClick={() => void save()}
+          >
+            {saving ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
+            ) : (
+              <Check className="w-3.5 h-3.5 text-emerald-600" />
+            )}
+          </button>
+          <button
+            type="button"
+            className="p-1 rounded hover:bg-muted disabled:opacity-50"
+            title="Cancel"
+            disabled={saving}
+            onClick={cancelEdit}
+          >
+            <X className="w-3.5 h-3.5 text-muted-foreground" />
+          </button>
+        </div>
+        {error ? <span className="text-[10px] text-destructive">{error}</span> : null}
+      </div>
+    );
+  }
+
+  return (
+    <div className="inline-flex items-center justify-end gap-1 w-full">
+      <span className={cn(MONEY_AMOUNT_CLASS, "text-xs")}>
+        {formatMoneyOrDash(row.marketRate, row.marketRateMissing)}
+      </span>
+      <button
+        type="button"
+        className="p-1 rounded hover:bg-muted"
+        title="Edit market rate"
+        onClick={startEdit}
+      >
+        <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
+      </button>
+    </div>
   );
 }
 
@@ -615,6 +827,7 @@ function SummaryBody({
   setTab,
   rows,
   report,
+  setReport,
   loading,
   hasFilters,
   clearFilters,
@@ -624,11 +837,14 @@ function SummaryBody({
   pageSize,
   setPageSize,
   asOnDate,
+  financialYearId,
+  onRefresh,
 }: {
   tab: StockValuationTab;
   setTab: (t: StockValuationTab) => void;
   rows: SummaryUiRow[];
   report: StockValuationSummaryResult | null;
+  setReport: Dispatch<SetStateAction<StockValuationSummaryResult | null>>;
   loading: boolean;
   hasFilters: boolean;
   clearFilters: () => void;
@@ -638,22 +854,82 @@ function SummaryBody({
   pageSize: number;
   setPageSize: (s: number) => void;
   asOnDate: string;
+  financialYearId: string;
+  onRefresh: () => void;
 }) {
   const ctx = useAccountsColumnFilterContext();
-  const columnFilteredRows = useAccountsFilteredRows(rows);
+  const [localRows, setLocalRows] = useState(rows);
+
+  useEffect(() => {
+    setLocalRows(rows);
+  }, [rows]);
+
+  const columnFilteredRows = useAccountsFilteredRows(localRows);
 
   useEffect(() => {
     setPage(1);
   }, [ctx?.columnFilters, ctx?.sortKey, ctx?.sortDir, setPage]);
+
+  const handleMarketSaved = useCallback(
+    (rowId: string, next: { marketRate: number | null; marketValue: number | null }) => {
+      setLocalRows((prev) =>
+        prev.map((r) =>
+          r.id === rowId
+            ? {
+                ...r,
+                marketRate: next.marketRate,
+                marketRateMissing: next.marketRate == null || next.marketRate <= 0,
+                marketValue: next.marketValue,
+              }
+            : r,
+        ),
+      );
+      // Update the saved row only — do NOT recompute KPI totals from the current page.
+      setReport((prev) => {
+        if (!prev) return prev;
+        const nextRows = prev.rows.map((r) => {
+          if (r.id !== rowId) return r;
+          return {
+            ...r,
+            market_rate:
+              next.marketRate != null && next.marketRate > 0
+                ? next.marketRate.toFixed(2)
+                : null,
+            market_value:
+              next.marketValue != null ? next.marketValue.toFixed(2) : null,
+          };
+        });
+        return {
+          ...prev,
+          rows: nextRows,
+        };
+      });
+      // Refresh full-dataset KPIs from the server.
+      onRefresh();
+    },
+    [setReport, onRefresh],
+  );
 
   const serverTotals = report?.summary;
   const pageTotals = useMemo(() => {
     return {
       closingQty: columnFilteredRows.reduce((s, r) => s + r.closingQty, 0),
       costValue: columnFilteredRows.reduce((s, r) => s + r.costValue, 0),
+      marketValue: columnFilteredRows.reduce(
+        (s, r) => s + (r.marketValue ?? 0),
+        0,
+      ),
+      marketAvailable: columnFilteredRows.some((r) => !r.marketRateMissing),
       finalValue: columnFilteredRows.reduce((s, r) => s + r.finalStockValue, 0),
     };
   }, [columnFilteredRows]);
+
+  const marketCardValue =
+    serverTotals?.market_value_available && serverTotals.total_market_value != null
+      ? formatMoney(num(serverTotals.total_market_value))
+      : pageTotals.marketAvailable
+        ? formatMoney(pageTotals.marketValue)
+        : "Not Available";
 
   const summaryItems = [
     {
@@ -669,7 +945,7 @@ function SummaryBody({
         serverTotals ? num(serverTotals.total_cost_value) : pageTotals.costValue,
       ),
     },
-    { label: "Total Market Value", value: "Not Available" },
+    { label: "Total Market Value", value: marketCardValue },
     {
       label: "Final Stock Value",
       value: formatMoney(
@@ -686,7 +962,7 @@ function SummaryBody({
     <AccountsPageShell
       breadcrumbs={accountsBreadcrumb("Reports", "Stock Valuation")}
       title="Stock Valuation"
-      description="Book value of inventory from STOCK_IN_HAND as on the selected To Date."
+      description="Book value of inventory from STOCK_IN_HAND as on the selected To Date. Market rate is user-entered."
       layout="split"
       className="stock-valuation-compact h-full min-h-0"
       filters={filtersEl}
@@ -717,7 +993,7 @@ function SummaryBody({
       >
         {loading ? (
           <div className="p-6 text-sm text-muted-foreground">Loading…</div>
-        ) : rows.length === 0 ? (
+        ) : localRows.length === 0 ? (
           <EmptySearch compact onClear={hasFilters ? clearFilters : undefined} />
         ) : columnFilteredRows.length === 0 ? (
           <div className="accounts-table-empty py-6 text-center text-sm text-muted-foreground">
@@ -755,8 +1031,13 @@ function SummaryBody({
                       ? "—"
                       : formatMoney(row.costValue)}
                   </AccountsTableCell>
-                  <AccountsTableCell align="right" money className={cn(MONEY_AMOUNT_CLASS, "align-middle")}>
-                    {formatMoneyOrDash(row.marketRate, row.marketRateMissing)}
+                  <AccountsTableCell align="right" className="align-middle">
+                    <MarketRateCell
+                      row={row}
+                      asOnDate={asOnDate}
+                      financialYearId={financialYearId}
+                      onSaved={(next) => handleMarketSaved(row.id, next)}
+                    />
                   </AccountsTableCell>
                   <AccountsTableCell align="right" money className={cn(MONEY_AMOUNT_CLASS, "align-middle")}>
                     {formatMoneyOrDash(row.marketValue, row.marketRateMissing)}
@@ -792,7 +1073,12 @@ function SummaryBody({
                 </AccountsTableCell>
                 <AccountsTableCell />
                 <AccountsTableCell align="right" money className={cn("font-semibold align-middle", MONEY_AMOUNT_CLASS)}>
-                  —
+                  {serverTotals?.market_value_available &&
+                  serverTotals.total_market_value != null
+                    ? formatMoney(num(serverTotals.total_market_value))
+                    : pageTotals.marketAvailable
+                      ? formatMoney(pageTotals.marketValue)
+                      : "—"}
                 </AccountsTableCell>
                 <AccountsTableCell align="right" money className={cn("font-semibold align-middle", MONEY_AMOUNT_CLASS)}>
                   {formatMoney(

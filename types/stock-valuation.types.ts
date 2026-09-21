@@ -2,6 +2,7 @@
 
 export type StockValuationExportFormat = "EXCEL" | "PDF";
 export type StockValuationExportView = "summary" | "accounting_details";
+export type StockValuationExportBasis = "cost" | "market";
 export type StockValuationSortOrder = "asc" | "desc";
 export type StockValuationTab = "summary" | "detailed";
 
@@ -20,6 +21,8 @@ export interface StockValuationQueryParams {
 export interface StockValuationExportPayload extends StockValuationQueryParams {
   format: StockValuationExportFormat;
   view: StockValuationExportView;
+  /** Summary export: cost columns only or market columns only. */
+  basis?: StockValuationExportBasis;
 }
 
 export interface StockValuationScope {
@@ -57,8 +60,8 @@ export interface StockValuationSummaryApiRow {
   closing_qty: string;
   cost_rate: string | null;
   cost_value: string;
-  market_rate: null;
-  market_value: null;
+  market_rate: string | null;
+  market_value: string | null;
   final_value: string;
   cost_rate_missing: boolean;
 }
@@ -67,6 +70,8 @@ export interface StockValuationSummaryTotals {
   product_count: number;
   total_closing_qty: string;
   total_cost_value: string;
+  total_market_value: string | null;
+  market_value_available: boolean;
   total_final_value: string;
 }
 
@@ -154,4 +159,20 @@ export interface StockValuationFiltersConfig {
     sort_by: string;
     sort_order: StockValuationSortOrder;
   };
+}
+
+export interface StockValuationSaveMarketRatePayload {
+  product_id: string;
+  warehouse_id: string | null;
+  as_on_date: string;
+  /** null clears the saved rate */
+  market_rate: number | null;
+}
+
+export interface StockValuationSaveMarketRateResult {
+  product_id: string;
+  warehouse_id: string | null;
+  as_on_date: string;
+  market_rate: string | null;
+  cleared: boolean;
 }

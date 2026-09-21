@@ -864,6 +864,16 @@ export const API_ENDPOINTS = {
         DETAILS: "/accounts/reports/stock-valuation/accounting-details",
         FILTERS: "/accounts/reports/stock-valuation/filters",
         EXPORT: "/accounts/reports/stock-valuation/export",
+        MARKET_RATE: "/accounts/reports/stock-valuation/market-rate",
+      },
+      STOCK_REGISTER: {
+        LIST: "/accounts/reports/stock-register",
+        DETAILED: "/accounts/reports/stock-register/detailed",
+        BATCH_WISE: "/accounts/reports/stock-register/batch-wise",
+        REJECTED: "/accounts/reports/stock-register/rejected",
+        REJECTED_DETAILED: "/accounts/reports/stock-register/rejected/detailed",
+        FILTERS: "/accounts/reports/stock-register/filters",
+        EXPORT: "/accounts/reports/stock-register/export",
       },
       TDS_SUMMARY: {
         LIST: "/accounts/reports/tds-summary",

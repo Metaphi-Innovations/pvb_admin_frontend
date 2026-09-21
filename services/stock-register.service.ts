@@ -1,21 +1,22 @@
 import { axiosInstance } from "@/api/axios";
 import { API_ENDPOINTS } from "@/api/endpoints";
 import type {
-  StockValuationDetailsResult,
-  StockValuationExportPayload,
-  StockValuationFiltersConfig,
-  StockValuationQueryParams,
-  StockValuationSaveMarketRatePayload,
-  StockValuationSaveMarketRateResult,
-  StockValuationSummaryResult,
-} from "@/types/stock-valuation.types";
+  StockRegisterBatchResult,
+  StockRegisterDetailedResult,
+  StockRegisterExportPayload,
+  StockRegisterFiltersConfig,
+  StockRegisterQueryParams,
+  StockRegisterRejectedDetailedResult,
+  StockRegisterRejectedSummaryResult,
+  StockRegisterSummaryResult,
+} from "@/types/stock-register.types";
 
-export class StockValuationApiError extends Error {
+export class StockRegisterApiError extends Error {
   status?: number;
 
   constructor(message: string, status?: number) {
     super(message);
-    this.name = "StockValuationApiError";
+    this.name = "StockRegisterApiError";
     this.status = status;
   }
 }
@@ -44,8 +45,8 @@ async function messageFromBlob(blob: Blob): Promise<string | null> {
 async function toApiError(
   error: unknown,
   fallback: string,
-): Promise<StockValuationApiError> {
-  if (error instanceof StockValuationApiError) return error;
+): Promise<StockRegisterApiError> {
+  if (error instanceof StockRegisterApiError) return error;
   const err = error as {
     status?: number;
     message?: string;
@@ -60,7 +61,7 @@ async function toApiError(
 
   if (typeof Blob !== "undefined" && data instanceof Blob) {
     const fromBlob = await messageFromBlob(data);
-    if (fromBlob) return new StockValuationApiError(fromBlob, status);
+    if (fromBlob) return new StockRegisterApiError(fromBlob, status);
   }
 
   const message =
@@ -73,7 +74,7 @@ async function toApiError(
     (status === 401 || status === 403
       ? "Session expired or unauthorized. Please sign in again."
       : fallback);
-  return new StockValuationApiError(message, status);
+  return new StockRegisterApiError(message, status);
 }
 
 function unwrapData<T>(response: { data?: { data?: T } | T }): T {
@@ -96,8 +97,8 @@ export function joinIds(ids: string[] | undefined): string | undefined {
   return unique.length > 0 ? unique.join(",") : undefined;
 }
 
-export function buildStockValuationQueryParams(
-  params: StockValuationQueryParams,
+export function buildStockRegisterQueryParams(
+  params: StockRegisterQueryParams,
   options?: { includePage?: boolean },
 ): Record<string, string | number> {
   const query: Record<string, string | number> = {
@@ -111,6 +112,10 @@ export function buildStockValuationQueryParams(
   if (options?.includePage !== false) {
     query.page = params.page ?? 1;
     query.page_size = params.page_size ?? 25;
+  }
+
+  if (params.include_rejected) {
+    query.include_rejected = "true";
   }
 
   const warehouseIds = joinIds(params.warehouse_ids);
@@ -166,131 +171,173 @@ async function assertExportBlob(
     type.includes("text/plain")
   ) {
     const message =
-      (await messageFromBlob(blob)) || "Failed to export Stock Valuation.";
-    throw new StockValuationApiError(message);
+      (await messageFromBlob(blob)) || "Failed to export Stock Register.";
+    throw new StockRegisterApiError(message);
   }
   if (!blob || blob.size === 0) {
-    throw new StockValuationApiError("Export returned an empty file.");
+    throw new StockRegisterApiError("Export returned an empty file.");
   }
 }
 
-export const StockValuationApiService = {
-  async getFilters(signal?: AbortSignal): Promise<StockValuationFiltersConfig> {
+export const StockRegisterApiService = {
+  async getFilters(signal?: AbortSignal): Promise<StockRegisterFiltersConfig> {
     try {
       const response = await axiosInstance.get(
-        API_ENDPOINTS.ACCOUNTS.REPORTS.STOCK_VALUATION.FILTERS,
+        API_ENDPOINTS.ACCOUNTS.REPORTS.STOCK_REGISTER.FILTERS,
         { signal },
       );
-      return unwrapData<StockValuationFiltersConfig>(response);
+      return unwrapData<StockRegisterFiltersConfig>(response);
     } catch (error) {
-      throw await toApiError(error, "Failed to load Stock Valuation filters.");
+      throw await toApiError(error, "Failed to load Stock Register filters.");
     }
   },
 
   async getSummary(
-    params: StockValuationQueryParams,
+    params: StockRegisterQueryParams,
     signal?: AbortSignal,
-  ): Promise<StockValuationSummaryResult> {
+  ): Promise<StockRegisterSummaryResult> {
     try {
       const response = await axiosInstance.get(
-        API_ENDPOINTS.ACCOUNTS.REPORTS.STOCK_VALUATION.LIST,
+        API_ENDPOINTS.ACCOUNTS.REPORTS.STOCK_REGISTER.LIST,
         {
-          params: buildStockValuationQueryParams(params),
+          params: buildStockRegisterQueryParams(params),
           headers: authHeaders(params.financial_year_id),
           signal,
         },
       );
-      return unwrapData<StockValuationSummaryResult>(response);
+      return unwrapData<StockRegisterSummaryResult>(response);
     } catch (error) {
-      throw await toApiError(error, "Failed to load Stock Valuation summary.");
+      throw await toApiError(error, "Failed to load Stock Register summary.");
     }
   },
 
-  async getAccountingDetails(
-    params: StockValuationQueryParams,
+  async getDetailed(
+    params: StockRegisterQueryParams,
     signal?: AbortSignal,
-  ): Promise<StockValuationDetailsResult> {
+  ): Promise<StockRegisterDetailedResult> {
     try {
       const response = await axiosInstance.get(
-        API_ENDPOINTS.ACCOUNTS.REPORTS.STOCK_VALUATION.DETAILS,
+        API_ENDPOINTS.ACCOUNTS.REPORTS.STOCK_REGISTER.DETAILED,
         {
-          params: buildStockValuationQueryParams({
+          params: buildStockRegisterQueryParams({
             ...params,
-            sort_by: params.sort_by ?? "voucher_date",
-            sort_order: params.sort_order ?? "asc",
+            sort_by: params.sort_by ?? "movement_date",
           }),
           headers: authHeaders(params.financial_year_id),
           signal,
         },
       );
-      return unwrapData<StockValuationDetailsResult>(response);
+      return unwrapData<StockRegisterDetailedResult>(response);
+    } catch (error) {
+      throw await toApiError(error, "Failed to load Stock Register detailed.");
+    }
+  },
+
+  async getBatchWise(
+    params: StockRegisterQueryParams,
+    signal?: AbortSignal,
+  ): Promise<StockRegisterBatchResult> {
+    try {
+      const response = await axiosInstance.get(
+        API_ENDPOINTS.ACCOUNTS.REPORTS.STOCK_REGISTER.BATCH_WISE,
+        {
+          params: buildStockRegisterQueryParams(params),
+          headers: authHeaders(params.financial_year_id),
+          signal,
+        },
+      );
+      return unwrapData<StockRegisterBatchResult>(response);
+    } catch (error) {
+      throw await toApiError(error, "Failed to load Stock Register batch-wise.");
+    }
+  },
+
+  async getRejectedSummary(
+    params: StockRegisterQueryParams,
+    signal?: AbortSignal,
+  ): Promise<StockRegisterRejectedSummaryResult> {
+    try {
+      const response = await axiosInstance.get(
+        API_ENDPOINTS.ACCOUNTS.REPORTS.STOCK_REGISTER.REJECTED,
+        {
+          params: buildStockRegisterQueryParams(params),
+          headers: authHeaders(params.financial_year_id),
+          signal,
+        },
+      );
+      return unwrapData<StockRegisterRejectedSummaryResult>(response);
     } catch (error) {
       throw await toApiError(
         error,
-        "Failed to load Stock Valuation accounting details.",
+        "Failed to load Stock Register rejected summary.",
       );
     }
   },
 
-  async exportReport(payload: StockValuationExportPayload): Promise<void> {
+  async getRejectedDetailed(
+    params: StockRegisterQueryParams,
+    signal?: AbortSignal,
+  ): Promise<StockRegisterRejectedDetailedResult> {
     try {
-      const query = buildStockValuationQueryParams(payload, {
-        includePage: false,
-      });
-      const response = await axiosInstance.post(
-        API_ENDPOINTS.ACCOUNTS.REPORTS.STOCK_VALUATION.EXPORT,
+      const response = await axiosInstance.get(
+        API_ENDPOINTS.ACCOUNTS.REPORTS.STOCK_REGISTER.REJECTED_DETAILED,
         {
-          ...query,
+          params: buildStockRegisterQueryParams({
+            ...params,
+            sort_by: params.sort_by ?? "movement_date",
+          }),
+          headers: authHeaders(params.financial_year_id),
+          signal,
+        },
+      );
+      return unwrapData<StockRegisterRejectedDetailedResult>(response);
+    } catch (error) {
+      throw await toApiError(
+        error,
+        "Failed to load Stock Register rejected detailed.",
+      );
+    }
+  },
+
+  async export(payload: StockRegisterExportPayload): Promise<void> {
+    try {
+      const response = await axiosInstance.post(
+        API_ENDPOINTS.ACCOUNTS.REPORTS.STOCK_REGISTER.EXPORT,
+        {
+          ...buildStockRegisterQueryParams(payload, { includePage: false }),
           format: payload.format,
           view: payload.view,
-          basis: payload.basis ?? "cost",
         },
         {
-          headers: authHeaders(payload.financial_year_id),
           responseType: "blob",
+          headers: authHeaders(payload.financial_year_id),
         },
       );
 
       const blob = response.data as Blob;
-      const contentType = String(
-        response.headers?.["content-type"] ?? blob.type ?? "",
-      );
+      const contentType = String(response.headers?.["content-type"] ?? "");
       await assertExportBlob(blob, contentType);
 
-      const fallback =
-        payload.format === "PDF"
-          ? "Stock_Valuation.pdf"
-          : "Stock_Valuation.xlsx";
+      const viewTag =
+        payload.view === "batch_wise"
+          ? "BatchWise"
+          : payload.view === "detailed"
+            ? "Detailed"
+            : payload.view === "rejected_detailed"
+              ? "Rejected_Detailed"
+              : payload.view === "rejected"
+                ? "Rejected"
+                : "Summary";
+      const fallback = `Stock_Register_${viewTag}_${payload.from_date}_${payload.to_date}.${
+        payload.format === "PDF" ? "pdf" : "xlsx"
+      }`;
       const filename = filenameFromDisposition(
         response.headers?.["content-disposition"],
         fallback,
       );
       downloadBlob(blob, filename);
     } catch (error) {
-      throw await toApiError(error, "Failed to export Stock Valuation.");
-    }
-  },
-
-  async saveMarketRate(
-    payload: StockValuationSaveMarketRatePayload,
-    financialYearId?: string,
-  ): Promise<StockValuationSaveMarketRateResult> {
-    try {
-      const response = await axiosInstance.put(
-        API_ENDPOINTS.ACCOUNTS.REPORTS.STOCK_VALUATION.MARKET_RATE,
-        {
-          product_id: payload.product_id,
-          warehouse_id: payload.warehouse_id,
-          as_on_date: payload.as_on_date,
-          market_rate: payload.market_rate,
-        },
-        {
-          headers: financialYearId ? authHeaders(financialYearId) : undefined,
-        },
-      );
-      return unwrapData<StockValuationSaveMarketRateResult>(response);
-    } catch (error) {
-      throw await toApiError(error, "Failed to save market rate.");
+      throw await toApiError(error, "Failed to export Stock Register.");
     }
   },
 };
