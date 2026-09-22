@@ -12,6 +12,7 @@ import {
   computePeriodOpeningBalance,
   ledgerMovementTotalsForRange,
 } from "@/lib/accounts/ledger-transaction-date-filter";
+import { roundMoney } from "@/lib/accounts/money-format";
 import {
   applyMovement,
   computeRunningBalances,
@@ -302,23 +303,42 @@ export function buildLedgerAccountingSummary(
   dateTo: string,
 ): CoaLedgerAccountingSummary {
   const raw = collectLedgerRawCoaTransactions(ledger);
-  const { totalDebit, totalCredit } = ledgerMovementTotalsForRange(raw, dateFrom, dateTo);
+  const periodMovement = ledgerMovementTotalsForRange(raw, dateFrom, dateTo);
   const periodOpening = computePeriodOpeningBalance(ledger, raw, dateFrom);
-  const periodClosing = computeClosingFromPeriodOpening(periodOpening, totalDebit, totalCredit);
+  const periodClosing = computeClosingFromPeriodOpening(
+    periodOpening,
+    periodMovement.totalDebit,
+    periodMovement.totalCredit,
+  );
   const lastTransactionDate =
     raw.length > 0 ? raw.reduce((max, row) => (row.date > max ? row.date : max), raw[0].date) : null;
+  const transactions = buildCoaTransactionsForDateRange(
+    ledger,
+    raw,
+    dateFrom,
+    dateTo,
+    periodOpening,
+  );
+  // Footer totals match Debit/Credit columns (opening row + period movements).
+  const totalDebit = roundMoney(
+    transactions.reduce((sum, row) => sum + (Number(row.debit) || 0), 0),
+  );
+  const totalCredit = roundMoney(
+    transactions.reduce((sum, row) => sum + (Number(row.credit) || 0), 0),
+  );
+  const lastRow = transactions.length > 0 ? transactions[transactions.length - 1] : null;
 
   return {
     ledgerId: ledger.id,
     ledgerName: ledger.accountName,
     openingBalance: periodOpening.amount,
     openingBalanceType: periodOpening.balanceType,
-    currentBalance: periodClosing.amount,
-    balanceType: periodClosing.balanceType,
+    currentBalance: lastRow?.runningBalance ?? periodClosing.amount,
+    balanceType: lastRow?.runningBalanceType ?? periodClosing.balanceType,
     totalDebit,
     totalCredit,
     lastTransactionDate,
-    transactions: buildCoaTransactionsForDateRange(ledger, raw, dateFrom, dateTo, periodOpening),
+    transactions,
   };
 }
 

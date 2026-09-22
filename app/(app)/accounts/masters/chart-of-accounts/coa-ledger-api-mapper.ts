@@ -3,6 +3,7 @@ import type {
   LedgerDetailWithTransactionsDto,
   LedgerOpeningBalanceDto,
 } from "@/services/ledger.service";
+import { roundMoney } from "@/lib/accounts/money-format";
 import type { CoaLedgerDetailRow } from "./coa-demo-accounting";
 
 const ACCOUNTING_VOUCHER_TYPE_LABELS: Record<string, string> = {
@@ -82,6 +83,20 @@ function mapApiTransactions(
   }));
 }
 
+/** Sum debit/credit columns on statement rows (includes opening balance row). */
+function statementColumnTotals(rows: CoaLedgerDetailRow[]): {
+  totalDebit: number;
+  totalCredit: number;
+} {
+  return rows.reduce(
+    (acc, row) => ({
+      totalDebit: acc.totalDebit + (Number(row.debit) || 0),
+      totalCredit: acc.totalCredit + (Number(row.credit) || 0),
+    }),
+    { totalDebit: 0, totalCredit: 0 },
+  );
+}
+
 /** Map ledger detail API response into COA statement rows + summary totals. */
 export function buildApiLedgerDetailSummary(
   ledger: ChartOfAccount,
@@ -110,15 +125,24 @@ export function buildApiLedgerDetailSummary(
     openingAmount > 0
       ? [buildOpeningBalanceRow(openingAmount, openingSide, periodStart)]
       : [];
+  const transactions = [...openingRow, ...transactionRows];
+  const columnTotals = statementColumnTotals(transactions);
+  const lastRow = transactions.length > 0 ? transactions[transactions.length - 1] : null;
+  // Prefer last running balance so footer closing always matches the statement grid.
+  const currentBalance = lastRow
+    ? lastRow.runningBalance
+    : (detail?.currentBalance ?? openingAmount);
+  const balanceType = lastRow ? lastRow.runningBalanceType : closingSide;
 
   return {
     ledgerId: ledger.id,
     openingBalance: openingAmount,
     openingBalanceType: openingSide,
-    currentBalance: detail?.currentBalance ?? openingAmount,
-    balanceType: closingSide,
-    totalDebit: detail?.totalDebit ?? 0,
-    totalCredit: detail?.totalCredit ?? 0,
-    transactions: [...openingRow, ...transactionRows],
+    currentBalance,
+    balanceType,
+    // Footer totals = sum of Debit/Credit columns (opening + period movements).
+    totalDebit: roundMoney(columnTotals.totalDebit),
+    totalCredit: roundMoney(columnTotals.totalCredit),
+    transactions,
   };
 }

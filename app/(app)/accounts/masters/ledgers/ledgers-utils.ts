@@ -104,23 +104,12 @@ export function computeLedgerBalanceBreakdown(ledger: ChartOfAccount): LedgerBal
 }
 
 /**
- * Opening side for signed math.
- * Trust stored balanceType, but recover common seed mistakes where Liability /
- * Income / Equity openings were stored as Debit (or Asset / Expense as Credit).
+ * Opening side for signed math — always trust the stored ledger balance type.
+ * Nature-based flipping caused Asset ledgers with a legitimate Credit opening
+ * (and Liability/Income Debit openings) to disagree with the API statement.
  */
 export function resolveOpeningSide(ledger: ChartOfAccount): "Debit" | "Credit" {
-  const type = ledger.accountType;
-  const stored = ledger.balanceType;
-  const creditNormal =
-    type === "Liability" || type === "Income" || type === "Equity";
-  const debitNormal = type === "Asset" || type === "Expense";
-  if (creditNormal && stored === "Debit" && ledger.openingBalance > 0.005) {
-    return "Credit";
-  }
-  if (debitNormal && stored === "Credit" && ledger.openingBalance > 0.005) {
-    return "Debit";
-  }
-  return stored;
+  return ledger.balanceType === "Credit" ? "Credit" : "Debit";
 }
 
 /**

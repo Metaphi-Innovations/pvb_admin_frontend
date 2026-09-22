@@ -11,18 +11,19 @@ import {
 } from "./chart-of-accounts-data";
 
 import { ledgerHasChildLedgers } from "@/lib/accounts/coa-hierarchy";
-import { collectDescendantLedgers } from "@/lib/accounts/coa-accounting-view";
+import { collectDescendantLedgers, collectLedgerRawCoaTransactions } from "@/lib/accounts/coa-accounting-view";
 import { isGstCoaLedger } from "@/lib/accounts/gst-coa-sync";
 import { isTdsCoaLedger, tdsLedgerKindAlias } from "@/lib/accounts/tds-coa-sync";
 import { parseTdsSectionCode } from "@/lib/accounts/tds-coa-utils";
 import { loadTDSMasters, formatTdsRateDisplay, formatApplicableToLabels, getTdsSectionCode } from "@/app/(app)/masters/tds/tds-data";
 
 import {
-  computePeriodClosingBalance,
+  computeClosingFromPeriodOpening,
+  computePeriodOpeningBalance,
   ledgerMovementMapForRange,
 } from "@/lib/accounts/ledger-transaction-date-filter";
 
-import { fromSignedBalance, openingSignedBalance, toSignedBalance } from "@/lib/accounts/running-balance";
+import { fromSignedBalance, toSignedBalance } from "@/lib/accounts/running-balance";
 import { computeLedgerCurrentBalance, resolveOpeningSide } from "../ledgers/ledgers-utils";
 import { roundMoney } from "@/lib/accounts/money-format";
 import {
@@ -295,11 +296,11 @@ function collectDescendantPostingLedgers(
 function ledgerPeriodBalances(
   ledger: ChartOfAccount,
   movement: { totalDebit: number; totalCredit: number },
+  dateFrom: string,
 ) {
   /** Stock in Hand current/closing balance = ERP total inventory value (COA display). */
   if (isStockInHandLedger(ledger)) {
     const display = resolveStockInHandDisplayBalance();
-    // Use corrected opening side (same as computeLedgerCurrentBalance)
     const openingSide = resolveOpeningSide(ledger);
     const openingSigned = toSignedBalance(roundMoney(ledger.openingBalance), openingSide);
     const opening = fromSignedBalance(openingSigned);
@@ -313,18 +314,16 @@ function ledgerPeriodBalances(
     };
   }
 
-  // Use resolveOpeningSide so the sign convention matches computeLedgerCurrentBalance
-  const openingSide = resolveOpeningSide(ledger);
-  const openingSigned = toSignedBalance(roundMoney(ledger.openingBalance), openingSide);
-  const opening = fromSignedBalance(openingSigned);
-  const closing = computePeriodClosingBalance(
-    ledger,
+  const raw = collectLedgerRawCoaTransactions(ledger);
+  const periodOpening = computePeriodOpeningBalance(ledger, raw, dateFrom);
+  const closing = computeClosingFromPeriodOpening(
+    periodOpening,
     movement.totalDebit,
     movement.totalCredit,
   );
   return {
-    openingAmount: opening.amount,
-    openingSide: opening.balanceType,
+    openingAmount: periodOpening.amount,
+    openingSide: periodOpening.balanceType,
     periodDebit: movement.totalDebit,
     periodCredit: movement.totalCredit,
     closingAmount: closing.amount,
@@ -335,85 +334,50 @@ function ledgerPeriodBalances(
 
 
 function aggregateSigned(
-
   ledgers: ChartOfAccount[],
-
   movementMap: Map<import("../../data").CoaNodeId, { totalDebit: number; totalCredit: number }>,
-
+  dateFrom: string,
 ) {
-
   let openingSigned = 0;
-
   let debit = 0;
-
   let credit = 0;
-
   let closingSigned = 0;
 
-
-
   for (const ledger of ledgers) {
-
     const movement = movementMap.get(ledger.id) ?? { totalDebit: 0, totalCredit: 0 };
-
-    const bal = ledgerPeriodBalances(ledger, movement);
-
+    const bal = ledgerPeriodBalances(ledger, movement, dateFrom);
     openingSigned += toSignedBalance(bal.openingAmount, bal.openingSide);
-
     debit += bal.periodDebit;
-
     credit += bal.periodCredit;
-
     closingSigned += toSignedBalance(bal.closingAmount, bal.closingSide);
-
   }
 
-
-
   const opening = fromSignedBalance(openingSigned);
-
   const closing = fromSignedBalance(closingSigned);
-
   return {
-
     openingAmount: opening.amount,
-
     openingSide: opening.balanceType,
-
     periodDebit: debit,
-
     periodCredit: credit,
-
     closingAmount: closing.amount,
-
     closingSide: closing.balanceType,
-
   };
-
 }
 
 
 
 function balancesForNode(
-
   records: ChartOfAccount[],
-
   node: ChartOfAccount,
-
   movementMap: Map<import("../../data").CoaNodeId, { totalDebit: number; totalCredit: number }>,
-
+  dateFrom: string,
 ) {
-
   const ledgers =
-
     node.nodeLevel === "ledger" && !node.bankGroupFlag
-
       ? [node]
-
       : collectDescendantPostingLedgers(records, node.id);
 
-  return aggregateSigned(ledgers, movementMap);
-
+  return aggregateSigned(ledgers, movementMap, dateFrom);
 }
 
 function sumRowBalances(rows: CoaListingRow[]) {
@@ -466,7 +430,7 @@ export function computeCoaListingSummary(
   const balances =
     hasSearch || showRoot || !selectedNode
       ? sumRowBalances(rows)
-      : balancesForNode(records, selectedNode, movementMap);
+      : balancesForNode(records, selectedNode, movementMap, dateFrom);
 
   return {
     totalAccounts: rows.length,
@@ -498,7 +462,7 @@ export function computeCoaGroupDetailSummary(
   const path = getAncestorPath(records, groupId);
   const parent = path.length >= 2 ? path[path.length - 2] : null;
   const movementMap = coaListingMovementMapForRange(dateFrom, dateTo);
-  const balances = balancesForNode(records, group, movementMap);
+  const balances = balancesForNode(records, group, movementMap, dateFrom);
 
   return {
     group,
@@ -588,7 +552,26 @@ function matchedApiBalancesForNode(
   const matched: CoaApiLedgerBalance[] = [];
   for (const ledger of descendantLedgersForNode(records, node)) {
     const id = ledger.apiNodeId ? String(ledger.apiNodeId) : "";
-    const balance = id ? balances.get(id) : undefined;
+    if (!id) continue;
+
+    // Stock in Hand uses inventory valuation for current/closing, not voucher balances.
+    if (isStockInHandLedger(ledger)) {
+      const display = resolveStockInHandDisplayBalance();
+      const openingSide = resolveOpeningSide(ledger);
+      const apiPeriod = balances.get(id);
+      matched.push({
+        ledgerId: id,
+        openingAmount: apiPeriod?.openingAmount ?? roundMoney(ledger.openingBalance),
+        openingSide: apiPeriod?.openingSide ?? openingSide,
+        currentAmount: display.amount,
+        currentSide: display.balanceType,
+        periodDebit: apiPeriod?.periodDebit ?? 0,
+        periodCredit: apiPeriod?.periodCredit ?? 0,
+      });
+      continue;
+    }
+
+    const balance = balances.get(id);
     if (balance) matched.push(balance);
   }
   return matched;
@@ -601,6 +584,7 @@ export function overlayApiBalancesOnLedgerRows(
 ): CoaLedgerListingRow[] {
   if (balances.size === 0) return rows;
   return rows.map((row) => {
+    if (isStockInHandLedger(row.ledger)) return row;
     const id = row.ledger.apiNodeId ? String(row.ledger.apiNodeId) : "";
     const balance = id ? balances.get(id) : undefined;
     if (!balance) return row;
@@ -702,7 +686,7 @@ export function buildCoaListingRows(
       return {
         node,
         ...listingMetaForNode(records, node),
-        ...balancesForNode(records, node, movementMap),
+        ...balancesForNode(records, node, movementMap, dateFrom),
         hasChildren: childCount > 0,
       };
     });
@@ -720,7 +704,7 @@ export function buildCoaListingRows(
     return {
       node,
       ...listingMetaForNode(records, node),
-      ...balancesForNode(records, node, movementMap),
+      ...balancesForNode(records, node, movementMap, dateFrom),
       hasChildren: childCount > 0,
     };
   });
