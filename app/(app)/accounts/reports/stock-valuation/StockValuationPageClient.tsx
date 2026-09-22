@@ -35,13 +35,8 @@ import {
   ReportFilterSummary,
   useReportDateRange,
 } from "@/components/accounts/ReportFilters";
-import {
-  AccountsColumnFilterProvider,
-  SectionTabs,
-  SortTh,
-  useAccountsColumnFilterContext,
-  useAccountsFilteredRows,
-} from "@/app/(app)/accounts/components/AccountsUI";
+import { SectionTabs } from "@/app/(app)/accounts/components/AccountsUI";
+import { AccountsColumnHeader } from "@/components/accounts/AccountsColumnHeader";
 import { EmptySearch } from "@/components/ui/EmptyState";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { formatMoney, MONEY_AMOUNT_CLASS, roundMoney } from "@/lib/accounts/money-format";
@@ -50,9 +45,19 @@ import {
   buildEntityFilterSummary,
   type ReportFilterSummaryItem,
 } from "@/lib/accounts/report-multi-filter-utils";
+import type {
+  AccountsColumnFilterState,
+  AccountsColumnFilters,
+  ColumnValueOption,
+} from "@/lib/accounts/column-filter-types";
+import { useLazyFilterColumns } from "@/lib/masters/use-lazy-filter-columns";
 import { useClientMounted } from "@/lib/use-client-mounted";
 import { cn } from "@/lib/utils";
 import {
+  buildStockValuationColumnFilterParams,
+  buildStockValuationOrdering,
+  mapStockValuationFilterOptions,
+  STOCK_VALUATION_FILTER_FIELD_BY_COLUMN,
   StockValuationApiError,
   StockValuationApiService,
 } from "@/services/stock-valuation.service";
@@ -72,6 +77,119 @@ const TABS: { id: StockValuationTab; label: string }[] = [
   { id: "summary", label: "Summary" },
   { id: "detailed", label: "Accounting Details" },
 ];
+
+const SUMMARY_SORT_FIELD_MAP: Record<string, string> = {
+  productName: "product_name",
+  warehouse: "warehouse_name",
+  closingQty: "closing_qty",
+  costValue: "cost_value",
+  finalStockValue: "final_value",
+};
+
+const DETAILS_SORT_FIELD_MAP: Record<string, string> = {
+  date: "voucher_date",
+  voucherNumber: "voucher_number",
+  productName: "product_name",
+  warehouse: "warehouse_name",
+};
+
+const STOCK_VALUATION_LAZY_FILTER_COLUMNS = [
+  "productName",
+  "warehouse",
+  "voucherNumber",
+] as const;
+
+type ColumnFilterHeaderProps = {
+  columnFilters: AccountsColumnFilters;
+  onFilterChange: (
+    colKey: string,
+    value: AccountsColumnFilterState | undefined,
+  ) => void;
+  filterOptionsByColumn: Record<string, ColumnValueOption[]>;
+  filterLoadingByColumn: Record<string, boolean>;
+  filterReadyByColumn: Record<string, boolean>;
+  onOpenFilter: (colKey: string) => void;
+};
+
+function sortFieldMapForTab(tab: StockValuationTab): Record<string, string> {
+  return tab === "detailed" ? DETAILS_SORT_FIELD_MAP : SUMMARY_SORT_FIELD_MAP;
+}
+
+function sortKeyForHeader(
+  tab: StockValuationTab,
+  backendSortBy: string | null,
+): string {
+  if (!backendSortBy) return "";
+  const map = sortFieldMapForTab(tab);
+  const entry = Object.entries(map).find(([, value]) => value === backendSortBy);
+  return entry?.[0] ?? backendSortBy;
+}
+
+function ServerSortTh({
+  label,
+  colKey,
+  activeKey,
+  sortDir,
+  onSort,
+  align = "left",
+  filterable = false,
+  filterValue,
+  onFilterChange,
+  valueOptions,
+  onFilterOpen,
+  optionsLoading,
+  optionsReady,
+}: {
+  label: string;
+  colKey: string;
+  activeKey: string;
+  sortDir: "asc" | "desc";
+  onSort: (key: string) => void;
+  align?: "left" | "right";
+  filterable?: boolean;
+  filterValue?: AccountsColumnFilterState;
+  onFilterChange?: (value: AccountsColumnFilterState | undefined) => void;
+  valueOptions?: ColumnValueOption[];
+  onFilterOpen?: () => void;
+  optionsLoading?: boolean;
+  optionsReady?: boolean;
+}) {
+  return (
+    <AccountsColumnHeader
+      label={label}
+      colKey={colKey}
+      align={align}
+      sortable
+      filterable={filterable}
+      filterType="text"
+      sortKey={activeKey}
+      sortDir={sortDir}
+      onSort={onSort}
+      filterValue={filterValue}
+      onFilterChange={onFilterChange}
+      valueOptions={valueOptions}
+      onFilterOpen={onFilterOpen}
+      optionsLoading={optionsLoading}
+      optionsReady={optionsReady}
+    />
+  );
+}
+
+function filterableColProps(
+  filterProps: ColumnFilterHeaderProps,
+  colKey: string,
+) {
+  return {
+    filterable: true as const,
+    filterValue: filterProps.columnFilters[colKey],
+    onFilterChange: (value: AccountsColumnFilterState | undefined) =>
+      filterProps.onFilterChange(colKey, value),
+    valueOptions: filterProps.filterOptionsByColumn[colKey] ?? [],
+    onFilterOpen: () => filterProps.onOpenFilter(colKey),
+    optionsLoading: Boolean(filterProps.filterLoadingByColumn[colKey]),
+    optionsReady: Boolean(filterProps.filterReadyByColumn[colKey]),
+  };
+}
 
 function formatMoneyOrDash(
   value: number | null | undefined,
@@ -257,8 +375,21 @@ export default function StockValuationPageClient() {
   const [products, setProducts] = useState<string[]>([]);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
-  const [sortBy, setSortBy] = useState("product_name");
+  /** Null = default listing order (no column chevron). */
+  const [sortBy, setSortBy] = useState<string | null>(null);
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+  const [columnFilters, setColumnFilters] = useState<AccountsColumnFilters>({});
+  const [filterOptionsByColumn, setFilterOptionsByColumn] = useState<
+    Record<string, ColumnValueOption[]>
+  >({});
+  const [filterLoadingByColumn, setFilterLoadingByColumn] = useState<
+    Record<string, boolean>
+  >({});
+  const [filterReadyByColumn, setFilterReadyByColumn] = useState<
+    Record<string, boolean>
+  >({});
+  const filterLoadedRef = useRef<Set<string>>(new Set());
+  const { handleOpenFilter, isFilterOpen } = useLazyFilterColumns();
   const [exporting, setExporting] = useState(false);
   const [ready, setReady] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
@@ -356,6 +487,7 @@ export default function StockValuationPageClient() {
     if (!financialYearId || financialYearId === "all" || !dateFrom || !dateTo) {
       return null;
     }
+    const ordering = buildStockValuationOrdering(sortBy, sortOrder);
     return {
       financial_year_id: financialYearId,
       from_date: dateFrom,
@@ -364,8 +496,8 @@ export default function StockValuationPageClient() {
       product_ids: products,
       page,
       page_size: pageSize,
-      sort_by: sortBy,
-      sort_order: sortOrder,
+      ...(ordering ? { ordering } : {}),
+      column_filters: buildStockValuationColumnFilterParams(columnFilters),
     };
   }, [
     financialYearId,
@@ -377,21 +509,28 @@ export default function StockValuationPageClient() {
     pageSize,
     sortBy,
     sortOrder,
+    columnFilters,
   ]);
 
   useEffect(() => {
     setPage(1);
-  }, [dateFrom, dateTo, tab, pageSize, financialYearId, warehouses, products, sortBy, sortOrder]);
+  }, [
+    dateFrom,
+    dateTo,
+    tab,
+    pageSize,
+    financialYearId,
+    warehouses,
+    products,
+    sortBy,
+    sortOrder,
+    columnFilters,
+  ]);
 
   useEffect(() => {
-    // Reset sort defaults when switching tabs
-    if (tab === "detailed") {
-      setSortBy("voucher_date");
-      setSortOrder("asc");
-    } else {
-      setSortBy("product_name");
-      setSortOrder("asc");
-    }
+    // Reset to default listing order (no column active) when switching tabs
+    setSortBy(null);
+    setSortOrder("asc");
   }, [tab]);
 
   useEffect(() => {
@@ -461,11 +600,17 @@ export default function StockValuationPageClient() {
     [detailsReport],
   );
 
-  const hasFilters = warehouses.length > 0 || products.length > 0;
+  const hasFilters =
+    warehouses.length > 0 ||
+    products.length > 0 ||
+    Object.values(columnFilters).some(
+      (f) => (f?.selectedValues?.length ?? 0) > 0,
+    );
 
   const clearFilters = useCallback(() => {
     setWarehouses([]);
     setProducts([]);
+    setColumnFilters({});
   }, []);
 
   const filterSummaryItems = useMemo((): ReportFilterSummaryItem[] => {
@@ -509,45 +654,109 @@ export default function StockValuationPageClient() {
     [queryParams, exporting, tab],
   );
 
-  const getSummaryCellValue = useCallback((row: SummaryUiRow, key: string) => {
-    const record = row as unknown as Record<string, unknown>;
-    if (key === "marketRate") return row.marketRateMissing ? null : row.marketRate;
-    if (key === "marketValue") return row.marketRateMissing ? null : row.marketValue;
-    return record[key];
-  }, []);
+  const handleSort = useCallback(
+    (colKey: string) => {
+      const map = sortFieldMapForTab(tab);
+      const backendField = map[colKey];
+      if (!backendField) return;
+      // ERP cycle: first ASC → DESC → clear to default (no column active)
+      if (sortBy !== backendField) {
+        setSortBy(backendField);
+        setSortOrder("asc");
+        return;
+      }
+      if (sortOrder === "asc") {
+        setSortOrder("desc");
+        return;
+      }
+      setSortBy(null);
+      setSortOrder("asc");
+    },
+    [tab, sortBy, sortOrder],
+  );
 
-  const getDetailCellValue = useCallback((row: DetailUiRow, key: string) => {
-    return (row as unknown as Record<string, unknown>)[key];
-  }, []);
-
-  const summaryColumnConfig = useMemo(
-    () => ({
-      productName: { type: "text" as const },
-      warehouse: { type: "text" as const },
-      closingQty: { type: "amount" as const },
-      costRate: { type: "amount" as const },
-      costValue: { type: "amount" as const },
-      marketRate: { type: "amount" as const },
-      marketValue: { type: "amount" as const },
-      finalStockValue: { type: "amount" as const },
-    }),
+  const handleColumnFilterChange = useCallback(
+    (colKey: string, value: AccountsColumnFilterState | undefined) => {
+      setColumnFilters((prev) => {
+        if (!value) {
+          const next = { ...prev };
+          delete next[colKey];
+          return next;
+        }
+        return { ...prev, [colKey]: value };
+      });
+    },
     [],
   );
 
-  const detailColumnConfig = useMemo(
+  const productNameFilterOpen = isFilterOpen("productName");
+  const warehouseFilterOpen = isFilterOpen("warehouse");
+  const voucherNumberFilterOpen = isFilterOpen("voucherNumber");
+
+  useEffect(() => {
+    const openByColumn: Record<string, boolean> = {
+      productName: productNameFilterOpen,
+      warehouse: warehouseFilterOpen,
+      voucherNumber: voucherNumberFilterOpen,
+    };
+    const toLoad = STOCK_VALUATION_LAZY_FILTER_COLUMNS.filter(
+      (colKey) => openByColumn[colKey] && !filterLoadedRef.current.has(colKey),
+    );
+    if (toLoad.length === 0) return;
+
+    const controller = new AbortController();
+    for (const colKey of toLoad) {
+      const fieldName = STOCK_VALUATION_FILTER_FIELD_BY_COLUMN[colKey];
+      if (!fieldName) continue;
+      filterLoadedRef.current.add(colKey);
+      setFilterLoadingByColumn((prev) => ({ ...prev, [colKey]: true }));
+      void StockValuationApiService.getFilterDropdown(fieldName, controller.signal)
+        .then((data) => {
+          if (controller.signal.aborted) return;
+          setFilterOptionsByColumn((prev) => ({
+            ...prev,
+            [colKey]: mapStockValuationFilterOptions(data, fieldName),
+          }));
+        })
+        .catch(() => {
+          if (controller.signal.aborted) return;
+          filterLoadedRef.current.delete(colKey);
+          setFilterOptionsByColumn((prev) => ({
+            ...prev,
+            [colKey]: prev[colKey] ?? [],
+          }));
+        })
+        .finally(() => {
+          if (controller.signal.aborted) {
+            filterLoadedRef.current.delete(colKey);
+            setFilterLoadingByColumn((prev) => ({ ...prev, [colKey]: false }));
+            return;
+          }
+          setFilterLoadingByColumn((prev) => ({ ...prev, [colKey]: false }));
+          setFilterReadyByColumn((prev) => ({ ...prev, [colKey]: true }));
+        });
+    }
+
+    return () => controller.abort();
+  }, [productNameFilterOpen, warehouseFilterOpen, voucherNumberFilterOpen]);
+
+  const columnFilterHeaderProps: ColumnFilterHeaderProps = useMemo(
     () => ({
-      date: { type: "date" as const },
-      voucherType: { type: "text" as const },
-      voucherNumber: { type: "text" as const },
-      productName: { type: "text" as const },
-      warehouse: { type: "text" as const },
-      debitQty: { type: "amount" as const },
-      creditQty: { type: "amount" as const },
-      debitValue: { type: "amount" as const },
-      creditValue: { type: "amount" as const },
-      netValue: { type: "amount" as const },
+      columnFilters,
+      onFilterChange: handleColumnFilterChange,
+      filterOptionsByColumn,
+      filterLoadingByColumn,
+      filterReadyByColumn,
+      onOpenFilter: handleOpenFilter,
     }),
-    [],
+    [
+      columnFilters,
+      handleColumnFilterChange,
+      filterOptionsByColumn,
+      filterLoadingByColumn,
+      filterReadyByColumn,
+      handleOpenFilter,
+    ],
   );
 
   if (!mounted) {
@@ -627,49 +836,11 @@ export default function StockValuationPageClient() {
 
   if (tab === "detailed") {
     return (
-      <AccountsColumnFilterProvider
-        key="accounting-details"
-        rows={detailRows}
-        getCellValue={getDetailCellValue}
-        columnConfig={detailColumnConfig}
-        defaultSortKey="date"
-        defaultSortDir="asc"
-      >
-        <DetailsBody
-          tab={tab}
-          setTab={setTab}
-          rows={detailRows}
-          report={detailsReport}
-          loading={reportLoading}
-          hasFilters={hasFilters}
-          clearFilters={clearFilters}
-          filtersEl={filtersEl}
-          page={page}
-          setPage={setPage}
-          pageSize={pageSize}
-          setPageSize={setPageSize}
-          asOnDate={dateTo}
-          periodLabel={`${formatStockValuationDate(dateFrom)} – ${formatStockValuationDate(dateTo)}`}
-        />
-      </AccountsColumnFilterProvider>
-    );
-  }
-
-  return (
-    <AccountsColumnFilterProvider
-      key="summary"
-      rows={summaryRows}
-      getCellValue={getSummaryCellValue}
-      columnConfig={summaryColumnConfig}
-      defaultSortKey="productName"
-      defaultSortDir="asc"
-    >
-      <SummaryBody
+      <DetailsBody
         tab={tab}
         setTab={setTab}
-        rows={summaryRows}
-        report={summaryReport}
-        setReport={setSummaryReport}
+        rows={detailRows}
+        report={detailsReport}
         loading={reportLoading}
         hasFilters={hasFilters}
         clearFilters={clearFilters}
@@ -679,10 +850,38 @@ export default function StockValuationPageClient() {
         pageSize={pageSize}
         setPageSize={setPageSize}
         asOnDate={dateTo}
-        financialYearId={financialYearId}
-        onRefresh={() => setRetryKey((k) => k + 1)}
+        periodLabel={`${formatStockValuationDate(dateFrom)} – ${formatStockValuationDate(dateTo)}`}
+        sortBy={sortBy}
+        sortOrder={sortOrder}
+        onSort={handleSort}
+        filterProps={columnFilterHeaderProps}
       />
-    </AccountsColumnFilterProvider>
+    );
+  }
+
+  return (
+    <SummaryBody
+      tab={tab}
+      setTab={setTab}
+      rows={summaryRows}
+      report={summaryReport}
+      setReport={setSummaryReport}
+      loading={reportLoading}
+      hasFilters={hasFilters}
+      clearFilters={clearFilters}
+      filtersEl={filtersEl}
+      page={page}
+      setPage={setPage}
+      pageSize={pageSize}
+      setPageSize={setPageSize}
+      asOnDate={dateTo}
+      financialYearId={financialYearId}
+      onRefresh={() => setRetryKey((k) => k + 1)}
+      sortBy={sortBy}
+      sortOrder={sortOrder}
+      onSort={handleSort}
+      filterProps={columnFilterHeaderProps}
+    />
   );
 }
 
@@ -839,6 +1038,10 @@ function SummaryBody({
   asOnDate,
   financialYearId,
   onRefresh,
+  sortBy,
+  sortOrder,
+  onSort,
+  filterProps,
 }: {
   tab: StockValuationTab;
   setTab: (t: StockValuationTab) => void;
@@ -856,19 +1059,17 @@ function SummaryBody({
   asOnDate: string;
   financialYearId: string;
   onRefresh: () => void;
+  sortBy: string | null;
+  sortOrder: "asc" | "desc";
+  onSort: (colKey: string) => void;
+  filterProps: ColumnFilterHeaderProps;
 }) {
-  const ctx = useAccountsColumnFilterContext();
   const [localRows, setLocalRows] = useState(rows);
+  const activeSortCol = sortKeyForHeader("summary", sortBy);
 
   useEffect(() => {
     setLocalRows(rows);
   }, [rows]);
-
-  const columnFilteredRows = useAccountsFilteredRows(localRows);
-
-  useEffect(() => {
-    setPage(1);
-  }, [ctx?.columnFilters, ctx?.sortKey, ctx?.sortDir, setPage]);
 
   const handleMarketSaved = useCallback(
     (rowId: string, next: { marketRate: number | null; marketValue: number | null }) => {
@@ -911,48 +1112,33 @@ function SummaryBody({
   );
 
   const serverTotals = report?.summary;
-  const pageTotals = useMemo(() => {
-    return {
-      closingQty: columnFilteredRows.reduce((s, r) => s + r.closingQty, 0),
-      costValue: columnFilteredRows.reduce((s, r) => s + r.costValue, 0),
-      marketValue: columnFilteredRows.reduce(
-        (s, r) => s + (r.marketValue ?? 0),
-        0,
-      ),
-      marketAvailable: columnFilteredRows.some((r) => !r.marketRateMissing),
-      finalValue: columnFilteredRows.reduce((s, r) => s + r.finalStockValue, 0),
-    };
-  }, [columnFilteredRows]);
 
   const marketCardValue =
     serverTotals?.market_value_available && serverTotals.total_market_value != null
       ? formatMoney(num(serverTotals.total_market_value))
-      : pageTotals.marketAvailable
-        ? formatMoney(pageTotals.marketValue)
-        : "Not Available";
+      : serverTotals
+        ? "Not Available"
+        : "—";
 
   const summaryItems = [
     {
       label: "Total Closing Quantity",
-      value: (serverTotals
-        ? num(serverTotals.total_closing_qty)
-        : pageTotals.closingQty
-      ).toLocaleString("en-IN"),
+      value: serverTotals
+        ? num(serverTotals.total_closing_qty).toLocaleString("en-IN")
+        : "—",
     },
     {
       label: "Total Cost Value",
-      value: formatMoney(
-        serverTotals ? num(serverTotals.total_cost_value) : pageTotals.costValue,
-      ),
+      value: serverTotals
+        ? formatMoney(num(serverTotals.total_cost_value))
+        : "—",
     },
     { label: "Total Market Value", value: marketCardValue },
     {
       label: "Final Stock Value",
-      value: formatMoney(
-        serverTotals
-          ? num(serverTotals.total_final_value)
-          : pageTotals.finalValue,
-      ),
+      value: serverTotals
+        ? formatMoney(num(serverTotals.total_final_value))
+        : "—",
     },
   ];
 
@@ -995,26 +1181,75 @@ function SummaryBody({
           <div className="p-6 text-sm text-muted-foreground">Loading…</div>
         ) : localRows.length === 0 ? (
           <EmptySearch compact onClear={hasFilters ? clearFilters : undefined} />
-        ) : columnFilteredRows.length === 0 ? (
-          <div className="accounts-table-empty py-6 text-center text-sm text-muted-foreground">
-            No records match the column filters.
-          </div>
         ) : (
           <AccountsTable minWidth={980}>
             <AccountsTableHead>
               <AccountsTableHeadRow>
-                <SortTh label="Product Name" colKey="productName" />
-                <SortTh label="Warehouse" colKey="warehouse" />
-                <SortTh label="Closing Quantity" colKey="closingQty" filterType="amount" align="right" />
-                <SortTh label="Cost Rate" colKey="costRate" filterType="amount" align="right" />
-                <SortTh label="Cost Value" colKey="costValue" filterType="amount" align="right" />
-                <SortTh label="Market Rate" colKey="marketRate" filterType="amount" align="right" />
-                <SortTh label="Market Value" colKey="marketValue" filterType="amount" align="right" />
-                <SortTh label="Final Stock Value" colKey="finalStockValue" filterType="amount" align="right" />
+                <ServerSortTh
+                  label="Product Name"
+                  colKey="productName"
+                  activeKey={activeSortCol}
+                  sortDir={sortOrder}
+                  onSort={onSort}
+                  {...filterableColProps(filterProps, "productName")}
+                />
+                <ServerSortTh
+                  label="Warehouse"
+                  colKey="warehouse"
+                  activeKey={activeSortCol}
+                  sortDir={sortOrder}
+                  onSort={onSort}
+                  {...filterableColProps(filterProps, "warehouse")}
+                />
+                <ServerSortTh
+                  label="Closing Quantity"
+                  colKey="closingQty"
+                  activeKey={activeSortCol}
+                  sortDir={sortOrder}
+                  onSort={onSort}
+                  align="right"
+                />
+                <AccountsColumnHeader
+                  label="Cost Rate"
+                  colKey="costRate"
+                  align="right"
+                  sortable={false}
+                  filterable={false}
+                />
+                <ServerSortTh
+                  label="Cost Value"
+                  colKey="costValue"
+                  activeKey={activeSortCol}
+                  sortDir={sortOrder}
+                  onSort={onSort}
+                  align="right"
+                />
+                <AccountsColumnHeader
+                  label="Market Rate"
+                  colKey="marketRate"
+                  align="right"
+                  sortable={false}
+                  filterable={false}
+                />
+                <AccountsColumnHeader
+                  label="Market Value"
+                  colKey="marketValue"
+                  align="right"
+                  sortable={false}
+                  filterable={false}
+                />
+                <ServerSortTh
+                  label="Final Stock Value"
+                  colKey="finalStockValue"
+                  activeKey={activeSortCol}
+                  sortDir={sortOrder}
+                  onSort={onSort}
+                  align="right"
+                />
               </AccountsTableHeadRow>
             </AccountsTableHead>
             <AccountsTableBody>
-              {columnFilteredRows.map((row) => (
+              {localRows.map((row) => (
                 <AccountsTableRow key={row.id}>
                   <AccountsTableCell className="text-xs font-medium align-middle">
                     {row.productName}
@@ -1058,34 +1293,27 @@ function SummaryBody({
                   Totals {asOnDate ? `(as on ${formatStockValuationDate(asOnDate)})` : ""}
                 </AccountsTableCell>
                 <AccountsTableCell align="right" className="font-semibold text-xs tabular-nums align-middle">
-                  {(serverTotals
-                    ? num(serverTotals.total_closing_qty)
-                    : pageTotals.closingQty
-                  ).toLocaleString("en-IN")}
+                  {serverTotals
+                    ? num(serverTotals.total_closing_qty).toLocaleString("en-IN")
+                    : "—"}
                 </AccountsTableCell>
                 <AccountsTableCell />
                 <AccountsTableCell align="right" money className={cn("font-semibold align-middle", MONEY_AMOUNT_CLASS)}>
-                  {formatMoney(
-                    serverTotals
-                      ? num(serverTotals.total_cost_value)
-                      : pageTotals.costValue,
-                  )}
+                  {serverTotals
+                    ? formatMoney(num(serverTotals.total_cost_value))
+                    : "—"}
                 </AccountsTableCell>
                 <AccountsTableCell />
                 <AccountsTableCell align="right" money className={cn("font-semibold align-middle", MONEY_AMOUNT_CLASS)}>
                   {serverTotals?.market_value_available &&
                   serverTotals.total_market_value != null
                     ? formatMoney(num(serverTotals.total_market_value))
-                    : pageTotals.marketAvailable
-                      ? formatMoney(pageTotals.marketValue)
-                      : "—"}
+                    : "—"}
                 </AccountsTableCell>
                 <AccountsTableCell align="right" money className={cn("font-semibold align-middle", MONEY_AMOUNT_CLASS)}>
-                  {formatMoney(
-                    serverTotals
-                      ? num(serverTotals.total_final_value)
-                      : pageTotals.finalValue,
-                  )}
+                  {serverTotals
+                    ? formatMoney(num(serverTotals.total_final_value))
+                    : "—"}
                 </AccountsTableCell>
               </AccountsTableRow>
             </AccountsTableFoot>
@@ -1111,6 +1339,10 @@ function DetailsBody({
   setPageSize,
   asOnDate,
   periodLabel,
+  sortBy,
+  sortOrder,
+  onSort,
+  filterProps,
 }: {
   tab: StockValuationTab;
   setTab: (t: StockValuationTab) => void;
@@ -1126,51 +1358,36 @@ function DetailsBody({
   setPageSize: (s: number) => void;
   asOnDate: string;
   periodLabel: string;
+  sortBy: string | null;
+  sortOrder: "asc" | "desc";
+  onSort: (colKey: string) => void;
+  filterProps: ColumnFilterHeaderProps;
 }) {
-  const ctx = useAccountsColumnFilterContext();
-  const columnFilteredRows = useAccountsFilteredRows(rows);
-
-  useEffect(() => {
-    setPage(1);
-  }, [ctx?.columnFilters, ctx?.sortKey, ctx?.sortDir, setPage]);
-
+  const activeSortCol = sortKeyForHeader("detailed", sortBy);
   const serverTotals = report?.summary;
-  const pageTotals = useMemo(() => {
-    return {
-      debitQty: columnFilteredRows.reduce((s, r) => s + r.debitQty, 0),
-      creditQty: columnFilteredRows.reduce((s, r) => s + r.creditQty, 0),
-      debitValue: columnFilteredRows.reduce((s, r) => s + r.debitValue, 0),
-      creditValue: columnFilteredRows.reduce((s, r) => s + r.creditValue, 0),
-      netValue: columnFilteredRows.reduce((s, r) => s + r.netValue, 0),
-    };
-  }, [columnFilteredRows]);
 
   const summaryItems = [
     {
       label: "Lines (period)",
-      value: String(serverTotals?.line_count ?? columnFilteredRows.length),
+      value: serverTotals ? String(serverTotals.line_count) : "—",
     },
     {
       label: "Net Amount",
-      value: formatMoney(
-        serverTotals ? num(serverTotals.total_net_amount) : pageTotals.netValue,
-      ),
+      value: serverTotals
+        ? formatMoney(num(serverTotals.total_net_amount))
+        : "—",
     },
     {
       label: "Debit Amount",
-      value: formatMoney(
-        serverTotals
-          ? num(serverTotals.total_debit_amount)
-          : pageTotals.debitValue,
-      ),
+      value: serverTotals
+        ? formatMoney(num(serverTotals.total_debit_amount))
+        : "—",
     },
     {
       label: "Credit Amount",
-      value: formatMoney(
-        serverTotals
-          ? num(serverTotals.total_credit_amount)
-          : pageTotals.creditValue,
-      ),
+      value: serverTotals
+        ? formatMoney(num(serverTotals.total_credit_amount))
+        : "—",
     },
   ];
 
@@ -1213,28 +1430,86 @@ function DetailsBody({
           <div className="p-6 text-sm text-muted-foreground">Loading…</div>
         ) : rows.length === 0 ? (
           <EmptySearch compact onClear={hasFilters ? clearFilters : undefined} />
-        ) : columnFilteredRows.length === 0 ? (
-          <div className="accounts-table-empty py-6 text-center text-sm text-muted-foreground">
-            No records match the column filters.
-          </div>
         ) : (
           <AccountsTable minWidth={1100}>
             <AccountsTableHead>
               <AccountsTableHeadRow>
-                <SortTh label="Date" colKey="date" />
-                <SortTh label="Voucher Type" colKey="voucherType" />
-                <SortTh label="Voucher No" colKey="voucherNumber" />
-                <SortTh label="Product" colKey="productName" />
-                <SortTh label="Warehouse" colKey="warehouse" />
-                <SortTh label="Debit Qty" colKey="debitQty" filterType="amount" align="right" />
-                <SortTh label="Credit Qty" colKey="creditQty" filterType="amount" align="right" />
-                <SortTh label="Debit Value" colKey="debitValue" filterType="amount" align="right" />
-                <SortTh label="Credit Value" colKey="creditValue" filterType="amount" align="right" />
-                <SortTh label="Net Value" colKey="netValue" filterType="amount" align="right" />
+                <ServerSortTh
+                  label="Date"
+                  colKey="date"
+                  activeKey={activeSortCol}
+                  sortDir={sortOrder}
+                  onSort={onSort}
+                />
+                <AccountsColumnHeader
+                  label="Voucher Type"
+                  colKey="voucherType"
+                  sortable={false}
+                  filterable={false}
+                />
+                <ServerSortTh
+                  label="Voucher No"
+                  colKey="voucherNumber"
+                  activeKey={activeSortCol}
+                  sortDir={sortOrder}
+                  onSort={onSort}
+                  {...filterableColProps(filterProps, "voucherNumber")}
+                />
+                <ServerSortTh
+                  label="Product"
+                  colKey="productName"
+                  activeKey={activeSortCol}
+                  sortDir={sortOrder}
+                  onSort={onSort}
+                  {...filterableColProps(filterProps, "productName")}
+                />
+                <ServerSortTh
+                  label="Warehouse"
+                  colKey="warehouse"
+                  activeKey={activeSortCol}
+                  sortDir={sortOrder}
+                  onSort={onSort}
+                  {...filterableColProps(filterProps, "warehouse")}
+                />
+                <AccountsColumnHeader
+                  label="Debit Qty"
+                  colKey="debitQty"
+                  align="right"
+                  sortable={false}
+                  filterable={false}
+                />
+                <AccountsColumnHeader
+                  label="Credit Qty"
+                  colKey="creditQty"
+                  align="right"
+                  sortable={false}
+                  filterable={false}
+                />
+                <AccountsColumnHeader
+                  label="Debit Value"
+                  colKey="debitValue"
+                  align="right"
+                  sortable={false}
+                  filterable={false}
+                />
+                <AccountsColumnHeader
+                  label="Credit Value"
+                  colKey="creditValue"
+                  align="right"
+                  sortable={false}
+                  filterable={false}
+                />
+                <AccountsColumnHeader
+                  label="Net Value"
+                  colKey="netValue"
+                  align="right"
+                  sortable={false}
+                  filterable={false}
+                />
               </AccountsTableHeadRow>
             </AccountsTableHead>
             <AccountsTableBody>
-              {columnFilteredRows.map((row) => (
+              {rows.map((row) => (
                 <AccountsTableRow key={row.id}>
                   <AccountsTableCell className="text-xs align-middle">
                     {formatStockValuationDate(row.date)}
@@ -1269,37 +1544,29 @@ function DetailsBody({
                   Period totals
                 </AccountsTableCell>
                 <AccountsTableCell align="right" className="font-semibold text-xs tabular-nums align-middle">
-                  {(serverTotals
-                    ? num(serverTotals.total_debit_qty)
-                    : pageTotals.debitQty
-                  ).toLocaleString("en-IN")}
+                  {serverTotals
+                    ? num(serverTotals.total_debit_qty).toLocaleString("en-IN")
+                    : "—"}
                 </AccountsTableCell>
                 <AccountsTableCell align="right" className="font-semibold text-xs tabular-nums align-middle">
-                  {(serverTotals
-                    ? num(serverTotals.total_credit_qty)
-                    : pageTotals.creditQty
-                  ).toLocaleString("en-IN")}
+                  {serverTotals
+                    ? num(serverTotals.total_credit_qty).toLocaleString("en-IN")
+                    : "—"}
                 </AccountsTableCell>
                 <AccountsTableCell align="right" money className={cn("font-semibold align-middle", MONEY_AMOUNT_CLASS)}>
-                  {formatMoney(
-                    serverTotals
-                      ? num(serverTotals.total_debit_amount)
-                      : pageTotals.debitValue,
-                  )}
+                  {serverTotals
+                    ? formatMoney(num(serverTotals.total_debit_amount))
+                    : "—"}
                 </AccountsTableCell>
                 <AccountsTableCell align="right" money className={cn("font-semibold align-middle", MONEY_AMOUNT_CLASS)}>
-                  {formatMoney(
-                    serverTotals
-                      ? num(serverTotals.total_credit_amount)
-                      : pageTotals.creditValue,
-                  )}
+                  {serverTotals
+                    ? formatMoney(num(serverTotals.total_credit_amount))
+                    : "—"}
                 </AccountsTableCell>
                 <AccountsTableCell align="right" money className={cn("font-semibold align-middle", MONEY_AMOUNT_CLASS)}>
-                  {formatMoney(
-                    serverTotals
-                      ? num(serverTotals.total_net_amount)
-                      : pageTotals.netValue,
-                  )}
+                  {serverTotals
+                    ? formatMoney(num(serverTotals.total_net_amount))
+                    : "—"}
                 </AccountsTableCell>
               </AccountsTableRow>
             </AccountsTableFoot>

@@ -97,6 +97,61 @@ export function joinIds(ids: string[] | undefined): string | undefined {
   return unique.length > 0 ? unique.join(",") : undefined;
 }
 
+/** Maps UI sort state to backend `ordering` query param (PO-style). */
+export function buildStockRegisterOrdering(
+  sortBy: string | null | undefined,
+  sortOrder: "asc" | "desc" | "none" | undefined,
+): string | undefined {
+  if (!sortBy || !sortOrder || sortOrder === "none") return undefined;
+  return sortOrder === "desc" ? `-${sortBy}` : sortBy;
+}
+
+/** UI column key → backend filter-dropdown field_name */
+export const STOCK_REGISTER_FILTER_FIELD_BY_COLUMN: Record<
+  string,
+  import("@/types/stock-register.types").StockRegisterFilterField
+> = {
+  productName: "product_name",
+  warehouse: "warehouse_name",
+  voucherNumber: "document_no",
+  batchNo: "batch_no",
+  stockType: "stock_type",
+};
+
+export function mapStockRegisterFilterOptions(
+  data: unknown[],
+  fieldName: string,
+): { value: string; count: number }[] {
+  const seen = new Set<string>();
+  const out: { value: string; count: number }[] = [];
+  for (const row of data) {
+    if (!row || typeof row !== "object") continue;
+    const raw = (row as Record<string, unknown>)[fieldName];
+    const value = raw == null ? "" : String(raw).trim();
+    if (!value || seen.has(value)) continue;
+    seen.add(value);
+    out.push({ value, count: 0 });
+  }
+  return out;
+}
+
+export function buildStockRegisterColumnFilterParams(
+  columnFilters: import("@/lib/accounts/column-filter-types").AccountsColumnFilters,
+): import("@/types/stock-register.types").StockRegisterColumnFilters {
+  const pick = (colKey: string): string[] => {
+    const selected = columnFilters[colKey]?.selectedValues;
+    if (!selected?.length) return [];
+    return selected.map((v) => String(v).trim()).filter(Boolean);
+  };
+  return {
+    product_name: pick("productName"),
+    warehouse_name: pick("warehouse"),
+    document_no: pick("voucherNumber"),
+    batch_no: pick("batchNo"),
+    stock_type: pick("stockType"),
+  };
+}
+
 export function buildStockRegisterQueryParams(
   params: StockRegisterQueryParams,
   options?: { includePage?: boolean },
@@ -105,9 +160,11 @@ export function buildStockRegisterQueryParams(
     financial_year_id: params.financial_year_id,
     from_date: params.from_date,
     to_date: params.to_date,
-    sort_by: params.sort_by ?? "product_name",
-    sort_order: params.sort_order ?? "asc",
   };
+
+  if (params.ordering?.trim()) {
+    query.ordering = params.ordering.trim();
+  }
 
   if (options?.includePage !== false) {
     query.page = params.page ?? 1;
@@ -123,6 +180,14 @@ export function buildStockRegisterQueryParams(
 
   const productIds = joinIds(params.product_ids);
   if (productIds) query.product_ids = productIds;
+
+  const cf = params.column_filters;
+  if (cf?.product_name?.length) query.product_name = cf.product_name.join(",");
+  if (cf?.warehouse_name?.length)
+    query.warehouse_name = cf.warehouse_name.join(",");
+  if (cf?.document_no?.length) query.document_no = cf.document_no.join(",");
+  if (cf?.batch_no?.length) query.batch_no = cf.batch_no.join(",");
+  if (cf?.stock_type?.length) query.stock_type = cf.stock_type.join(",");
 
   return query;
 }
@@ -192,6 +257,28 @@ export const StockRegisterApiService = {
     }
   },
 
+  async getFilterDropdown(
+    fieldName: string,
+    signal?: AbortSignal,
+  ): Promise<unknown[]> {
+    try {
+      const response = await axiosInstance.get(
+        API_ENDPOINTS.ACCOUNTS.REPORTS.STOCK_REGISTER.FILTER_DROPDOWN,
+        {
+          params: { field_name: fieldName },
+          signal,
+        },
+      );
+      const payload = response.data as { data?: unknown };
+      return Array.isArray(payload.data) ? payload.data : [];
+    } catch (error) {
+      throw await toApiError(
+        error,
+        "Failed to load Stock Register filter dropdown.",
+      );
+    }
+  },
+
   async getSummary(
     params: StockRegisterQueryParams,
     signal?: AbortSignal,
@@ -219,10 +306,7 @@ export const StockRegisterApiService = {
       const response = await axiosInstance.get(
         API_ENDPOINTS.ACCOUNTS.REPORTS.STOCK_REGISTER.DETAILED,
         {
-          params: buildStockRegisterQueryParams({
-            ...params,
-            sort_by: params.sort_by ?? "movement_date",
-          }),
+          params: buildStockRegisterQueryParams(params),
           headers: authHeaders(params.financial_year_id),
           signal,
         },
@@ -282,10 +366,7 @@ export const StockRegisterApiService = {
       const response = await axiosInstance.get(
         API_ENDPOINTS.ACCOUNTS.REPORTS.STOCK_REGISTER.REJECTED_DETAILED,
         {
-          params: buildStockRegisterQueryParams({
-            ...params,
-            sort_by: params.sort_by ?? "movement_date",
-          }),
+          params: buildStockRegisterQueryParams(params),
           headers: authHeaders(params.financial_year_id),
           signal,
         },
@@ -305,6 +386,7 @@ export const StockRegisterApiService = {
         API_ENDPOINTS.ACCOUNTS.REPORTS.STOCK_REGISTER.EXPORT,
         {
           ...buildStockRegisterQueryParams(payload, { includePage: false }),
+          include_rejected: "true",
           format: payload.format,
           view: payload.view,
         },

@@ -96,6 +96,57 @@ export function joinIds(ids: string[] | undefined): string | undefined {
   return unique.length > 0 ? unique.join(",") : undefined;
 }
 
+/** Maps UI sort state to backend `ordering` query param (PO-style). */
+export function buildStockValuationOrdering(
+  sortBy: string | null | undefined,
+  sortOrder: "asc" | "desc" | "none" | undefined,
+): string | undefined {
+  if (!sortBy || !sortOrder || sortOrder === "none") return undefined;
+  return sortOrder === "desc" ? `-${sortBy}` : sortBy;
+}
+
+/** UI column key → backend filter-dropdown field_name */
+export const STOCK_VALUATION_FILTER_FIELD_BY_COLUMN: Record<
+  string,
+  import("@/types/stock-valuation.types").StockValuationFilterField
+> = {
+  productName: "product_name",
+  warehouse: "warehouse_name",
+  voucherNumber: "voucher_number",
+};
+
+export function mapStockValuationFilterOptions(
+  data: unknown[],
+  fieldName: string,
+): { value: string; count: number }[] {
+  const seen = new Set<string>();
+  const out: { value: string; count: number }[] = [];
+  for (const row of data) {
+    if (!row || typeof row !== "object") continue;
+    const raw = (row as Record<string, unknown>)[fieldName];
+    const value = raw == null ? "" : String(raw).trim();
+    if (!value || seen.has(value)) continue;
+    seen.add(value);
+    out.push({ value, count: 0 });
+  }
+  return out;
+}
+
+export function buildStockValuationColumnFilterParams(
+  columnFilters: import("@/lib/accounts/column-filter-types").AccountsColumnFilters,
+): import("@/types/stock-valuation.types").StockValuationColumnFilters {
+  const pick = (colKey: string): string[] => {
+    const selected = columnFilters[colKey]?.selectedValues;
+    if (!selected?.length) return [];
+    return selected.map((v) => String(v).trim()).filter(Boolean);
+  };
+  return {
+    product_name: pick("productName"),
+    warehouse_name: pick("warehouse"),
+    voucher_number: pick("voucherNumber"),
+  };
+}
+
 export function buildStockValuationQueryParams(
   params: StockValuationQueryParams,
   options?: { includePage?: boolean },
@@ -104,9 +155,11 @@ export function buildStockValuationQueryParams(
     financial_year_id: params.financial_year_id,
     from_date: params.from_date,
     to_date: params.to_date,
-    sort_by: params.sort_by ?? "product_name",
-    sort_order: params.sort_order ?? "asc",
   };
+
+  if (params.ordering?.trim()) {
+    query.ordering = params.ordering.trim();
+  }
 
   if (options?.includePage !== false) {
     query.page = params.page ?? 1;
@@ -118,6 +171,13 @@ export function buildStockValuationQueryParams(
 
   const productIds = joinIds(params.product_ids);
   if (productIds) query.product_ids = productIds;
+
+  const cf = params.column_filters;
+  if (cf?.product_name?.length) query.product_name = cf.product_name.join(",");
+  if (cf?.warehouse_name?.length)
+    query.warehouse_name = cf.warehouse_name.join(",");
+  if (cf?.voucher_number?.length)
+    query.voucher_number = cf.voucher_number.join(",");
 
   return query;
 }
@@ -187,6 +247,28 @@ export const StockValuationApiService = {
     }
   },
 
+  async getFilterDropdown(
+    fieldName: string,
+    signal?: AbortSignal,
+  ): Promise<unknown[]> {
+    try {
+      const response = await axiosInstance.get(
+        API_ENDPOINTS.ACCOUNTS.REPORTS.STOCK_VALUATION.FILTER_DROPDOWN,
+        {
+          params: { field_name: fieldName },
+          signal,
+        },
+      );
+      const payload = response.data as { data?: unknown };
+      return Array.isArray(payload.data) ? payload.data : [];
+    } catch (error) {
+      throw await toApiError(
+        error,
+        "Failed to load Stock Valuation filter dropdown.",
+      );
+    }
+  },
+
   async getSummary(
     params: StockValuationQueryParams,
     signal?: AbortSignal,
@@ -214,11 +296,7 @@ export const StockValuationApiService = {
       const response = await axiosInstance.get(
         API_ENDPOINTS.ACCOUNTS.REPORTS.STOCK_VALUATION.DETAILS,
         {
-          params: buildStockValuationQueryParams({
-            ...params,
-            sort_by: params.sort_by ?? "voucher_date",
-            sort_order: params.sort_order ?? "asc",
-          }),
+          params: buildStockValuationQueryParams(params),
           headers: authHeaders(params.financial_year_id),
           signal,
         },

@@ -12,6 +12,21 @@ export type StockRegisterTab = "summary" | "detailed" | "batch-wise";
 /** Row-level stock bucket tag (Sellable vs Rejected shown together in each tab). */
 export type StockRegisterStockType = "sellable" | "rejected";
 
+export type StockRegisterFilterField =
+  | "product_name"
+  | "warehouse_name"
+  | "document_no"
+  | "batch_no"
+  | "stock_type";
+
+export interface StockRegisterColumnFilters {
+  product_name?: string[];
+  warehouse_name?: string[];
+  document_no?: string[];
+  batch_no?: string[];
+  stock_type?: string[];
+}
+
 export interface StockRegisterQueryParams {
   financial_year_id: string;
   from_date: string;
@@ -20,8 +35,9 @@ export interface StockRegisterQueryParams {
   product_ids?: string[];
   page?: number;
   page_size?: number;
-  sort_by?: string;
-  sort_order?: StockRegisterSortOrder;
+  /** PO-style: `field` ASC, `-field` DESC; omit for default order. */
+  ordering?: string;
+  column_filters?: StockRegisterColumnFilters;
   /** Merge sellable + rejected into one paged listing. */
   include_rejected?: boolean;
 }
@@ -43,8 +59,8 @@ export interface StockRegisterScope {
 
 export interface StockRegisterAppliedFilters {
   product_ids: string[];
-  sort_by: string;
-  sort_order: StockRegisterSortOrder;
+  ordering: string;
+  column_filters?: StockRegisterColumnFilters;
 }
 
 export interface StockRegisterPagination {
@@ -280,7 +296,6 @@ export interface StockRegisterFiltersConfig {
     to_date: string | null;
     page: number;
     page_size: number;
-    sort_by: string;
-    sort_order: StockRegisterSortOrder;
+    ordering: string;
   };
 }

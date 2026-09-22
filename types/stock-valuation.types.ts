@@ -6,6 +6,17 @@ export type StockValuationExportBasis = "cost" | "market";
 export type StockValuationSortOrder = "asc" | "desc";
 export type StockValuationTab = "summary" | "detailed";
 
+export type StockValuationFilterField =
+  | "product_name"
+  | "warehouse_name"
+  | "voucher_number";
+
+export interface StockValuationColumnFilters {
+  product_name?: string[];
+  warehouse_name?: string[];
+  voucher_number?: string[];
+}
+
 export interface StockValuationQueryParams {
   financial_year_id: string;
   from_date: string;
@@ -14,8 +25,9 @@ export interface StockValuationQueryParams {
   product_ids?: string[];
   page?: number;
   page_size?: number;
-  sort_by?: string;
-  sort_order?: StockValuationSortOrder;
+  /** PO-style: `field` ASC, `-field` DESC; omit for default order. */
+  ordering?: string;
+  column_filters?: StockValuationColumnFilters;
 }
 
 export interface StockValuationExportPayload extends StockValuationQueryParams {
@@ -38,8 +50,7 @@ export interface StockValuationScope {
 
 export interface StockValuationAppliedFilters {
   product_ids: string[];
-  sort_by: string;
-  sort_order: StockValuationSortOrder;
+  ordering: string;
 }
 
 export interface StockValuationPagination {
@@ -156,8 +167,7 @@ export interface StockValuationFiltersConfig {
     to_date: string | null;
     page: number;
     page_size: number;
-    sort_by: string;
-    sort_order: StockValuationSortOrder;
+    ordering: string;
   };
 }
 

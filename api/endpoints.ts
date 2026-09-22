@@ -863,6 +863,7 @@ export const API_ENDPOINTS = {
         LIST: "/accounts/reports/stock-valuation",
         DETAILS: "/accounts/reports/stock-valuation/accounting-details",
         FILTERS: "/accounts/reports/stock-valuation/filters",
+        FILTER_DROPDOWN: "/accounts/reports/stock-valuation/filter-dropdown",
         EXPORT: "/accounts/reports/stock-valuation/export",
         MARKET_RATE: "/accounts/reports/stock-valuation/market-rate",
       },
@@ -873,6 +874,7 @@ export const API_ENDPOINTS = {
         REJECTED: "/accounts/reports/stock-register/rejected",
         REJECTED_DETAILED: "/accounts/reports/stock-register/rejected/detailed",
         FILTERS: "/accounts/reports/stock-register/filters",
+        FILTER_DROPDOWN: "/accounts/reports/stock-register/filter-dropdown",
         EXPORT: "/accounts/reports/stock-register/export",
       },
       TDS_SUMMARY: {

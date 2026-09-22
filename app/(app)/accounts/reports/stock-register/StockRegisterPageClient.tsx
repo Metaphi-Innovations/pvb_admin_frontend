@@ -45,10 +45,20 @@ import {
   buildEntityFilterSummary,
   type ReportFilterSummaryItem,
 } from "@/lib/accounts/report-multi-filter-utils";
+import type {
+  AccountsColumnFilterState,
+  AccountsColumnFilters,
+  ColumnValueOption,
+} from "@/lib/accounts/column-filter-types";
+import { useLazyFilterColumns } from "@/lib/masters/use-lazy-filter-columns";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { formatDisplayDate } from "@/lib/accounts/date-display";
 import { useClientMounted } from "@/lib/use-client-mounted";
 import {
+  buildStockRegisterColumnFilterParams,
+  buildStockRegisterOrdering,
+  mapStockRegisterFilterOptions,
+  STOCK_REGISTER_FILTER_FIELD_BY_COLUMN,
   StockRegisterApiError,
   StockRegisterApiService,
 } from "@/services/stock-register.service";
@@ -74,6 +84,7 @@ const TABS: { id: StockRegisterTab; label: string }[] = [
 ];
 
 const SUMMARY_SORT_FIELD_MAP: Record<string, string> = {
+  stockType: "stock_type",
   productName: "product_name",
   warehouse: "warehouse_name",
   openingQty: "opening_qty",
@@ -83,6 +94,7 @@ const SUMMARY_SORT_FIELD_MAP: Record<string, string> = {
 };
 
 const DETAILED_SORT_FIELD_MAP: Record<string, string> = {
+  stockType: "stock_type",
   date: "movement_date",
   voucherNumber: "document_no",
   productName: "product_name",
@@ -92,6 +104,7 @@ const DETAILED_SORT_FIELD_MAP: Record<string, string> = {
 };
 
 const BATCH_SORT_FIELD_MAP: Record<string, string> = {
+  stockType: "stock_type",
   productName: "product_name",
   batchNo: "batch_no",
   warehouse: "warehouse_name",
@@ -101,14 +114,23 @@ const BATCH_SORT_FIELD_MAP: Record<string, string> = {
   closingQty: "closing_qty",
 };
 
+const STOCK_TYPE_OPTION_LABELS: Record<string, string> = {
+  sellable: "Sellable",
+  rejected: "Rejected",
+};
+
+const STOCK_REGISTER_LAZY_FILTER_COLUMNS = [
+  "productName",
+  "warehouse",
+  "voucherNumber",
+  "batchNo",
+  "stockType",
+] as const;
+
 type TabReport =
   | { tab: "summary"; data: StockRegisterSummaryResult }
   | { tab: "detailed"; data: StockRegisterDetailedResult }
   | { tab: "batch-wise"; data: StockRegisterBatchResult };
-
-function defaultSortForTab(tab: StockRegisterTab): string {
-  return tab === "detailed" ? "movement_date" : "product_name";
-}
 
 function sortFieldMapForTab(tab: StockRegisterTab): Record<string, string> {
   if (tab === "detailed") return DETAILED_SORT_FIELD_MAP;
@@ -118,8 +140,9 @@ function sortFieldMapForTab(tab: StockRegisterTab): Record<string, string> {
 
 function sortKeyForHeader(
   tab: StockRegisterTab,
-  backendSortBy: string,
+  backendSortBy: string | null,
 ): string {
+  if (!backendSortBy) return "";
   const map = sortFieldMapForTab(tab);
   const entry = Object.entries(map).find(([, value]) => value === backendSortBy);
   return entry?.[0] ?? backendSortBy;
@@ -265,6 +288,18 @@ function mapBatchRow(row: StockRegisterBatchApiRow): BatchUiRow {
   };
 }
 
+type ColumnFilterHeaderProps = {
+  columnFilters: AccountsColumnFilters;
+  onFilterChange: (
+    colKey: string,
+    value: AccountsColumnFilterState | undefined,
+  ) => void;
+  filterOptionsByColumn: Record<string, ColumnValueOption[]>;
+  filterLoadingByColumn: Record<string, boolean>;
+  filterReadyByColumn: Record<string, boolean>;
+  onOpenFilter: (colKey: string) => void;
+};
+
 function ServerSortTh({
   label,
   colKey,
@@ -272,6 +307,14 @@ function ServerSortTh({
   sortDir,
   onSort,
   align = "left",
+  filterable = false,
+  filterValue,
+  onFilterChange,
+  valueOptions,
+  onFilterOpen,
+  optionsLoading,
+  optionsReady,
+  optionLabels,
 }: {
   label: string;
   colKey: string;
@@ -279,6 +322,14 @@ function ServerSortTh({
   sortDir: StockRegisterSortOrder;
   onSort: (key: string) => void;
   align?: "left" | "right";
+  filterable?: boolean;
+  filterValue?: AccountsColumnFilterState;
+  onFilterChange?: (value: AccountsColumnFilterState | undefined) => void;
+  valueOptions?: ColumnValueOption[];
+  onFilterOpen?: () => void;
+  optionsLoading?: boolean;
+  optionsReady?: boolean;
+  optionLabels?: Record<string, string>;
 }) {
   return (
     <AccountsColumnHeader
@@ -286,10 +337,18 @@ function ServerSortTh({
       colKey={colKey}
       align={align}
       sortable
-      filterable={false}
+      filterable={filterable}
+      filterType="text"
       sortKey={activeKey}
       sortDir={sortDir}
       onSort={onSort}
+      filterValue={filterValue}
+      onFilterChange={onFilterChange}
+      valueOptions={valueOptions}
+      onFilterOpen={onFilterOpen}
+      optionsLoading={optionsLoading}
+      optionsReady={optionsReady}
+      optionLabels={optionLabels}
     />
   );
 }
@@ -315,8 +374,21 @@ export default function StockRegisterPageClient() {
   const [productIds, setProductIds] = useState<string[]>([]);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
-  const [sortBy, setSortBy] = useState("product_name");
+  /** Null = default listing order (no column chevron). */
+  const [sortBy, setSortBy] = useState<string | null>(null);
   const [sortOrder, setSortOrder] = useState<StockRegisterSortOrder>("asc");
+  const [columnFilters, setColumnFilters] = useState<AccountsColumnFilters>({});
+  const [filterOptionsByColumn, setFilterOptionsByColumn] = useState<
+    Record<string, ColumnValueOption[]>
+  >({});
+  const [filterLoadingByColumn, setFilterLoadingByColumn] = useState<
+    Record<string, boolean>
+  >({});
+  const [filterReadyByColumn, setFilterReadyByColumn] = useState<
+    Record<string, boolean>
+  >({});
+  const filterLoadedRef = useRef<Set<string>>(new Set());
+  const { handleOpenFilter, isFilterOpen } = useLazyFilterColumns();
   const [exporting, setExporting] = useState(false);
   const [ready, setReady] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
@@ -367,8 +439,8 @@ export default function StockRegisterPageClient() {
     }
     setPreset("custom");
     setPageSize(filtersConfig.defaults.page_size || 25);
-    setSortBy(defaultSortForTab("summary"));
-    setSortOrder(filtersConfig.defaults.sort_order || "asc");
+    setSortBy(null);
+    setSortOrder("asc");
     appliedDefaults.current = true;
   }, [filtersConfig, ready, setDateFrom, setDateTo, setPreset]);
 
@@ -387,7 +459,7 @@ export default function StockRegisterPageClient() {
     if (tabParam) {
       const nextTab = parseTab(tabParam);
       setTab(nextTab);
-      setSortBy(defaultSortForTab(nextTab));
+      setSortBy(null);
       setSortOrder("asc");
     }
     if (product) setProductIds([product]);
@@ -402,7 +474,7 @@ export default function StockRegisterPageClient() {
       const next = parseTab(id);
       setTab(next);
       setPage(1);
-      setSortBy(defaultSortForTab(next));
+      setSortBy(null);
       setSortOrder("asc");
       const qs = new URLSearchParams(searchParams.toString());
       qs.set("tab", next);
@@ -437,16 +509,114 @@ export default function StockRegisterPageClient() {
       const map = sortFieldMapForTab(tab);
       const backendField = map[colKey];
       if (!backendField) return;
-      setSortBy((current) => {
-        if (current === backendField) {
-          setSortOrder((order) => (order === "asc" ? "desc" : "asc"));
-          return current;
-        }
+      // ERP cycle: first ASC → DESC → clear to default (no column active)
+      if (sortBy !== backendField) {
+        setSortBy(backendField);
         setSortOrder("asc");
-        return backendField;
+        return;
+      }
+      if (sortOrder === "asc") {
+        setSortOrder("desc");
+        return;
+      }
+      setSortBy(null);
+      setSortOrder("asc");
+    },
+    [tab, sortBy, sortOrder],
+  );
+
+  const handleColumnFilterChange = useCallback(
+    (colKey: string, value: AccountsColumnFilterState | undefined) => {
+      setColumnFilters((prev) => {
+        if (!value) {
+          const next = { ...prev };
+          delete next[colKey];
+          return next;
+        }
+        return { ...prev, [colKey]: value };
       });
     },
-    [tab],
+    [],
+  );
+
+  const productNameFilterOpen = isFilterOpen("productName");
+  const warehouseFilterOpen = isFilterOpen("warehouse");
+  const voucherNumberFilterOpen = isFilterOpen("voucherNumber");
+  const batchNoFilterOpen = isFilterOpen("batchNo");
+  const stockTypeFilterOpen = isFilterOpen("stockType");
+
+  useEffect(() => {
+    const openByColumn: Record<string, boolean> = {
+      productName: productNameFilterOpen,
+      warehouse: warehouseFilterOpen,
+      voucherNumber: voucherNumberFilterOpen,
+      batchNo: batchNoFilterOpen,
+      stockType: stockTypeFilterOpen,
+    };
+    const toLoad = STOCK_REGISTER_LAZY_FILTER_COLUMNS.filter(
+      (colKey) => openByColumn[colKey] && !filterLoadedRef.current.has(colKey),
+    );
+    if (toLoad.length === 0) return;
+
+    const controller = new AbortController();
+    for (const colKey of toLoad) {
+      const fieldName = STOCK_REGISTER_FILTER_FIELD_BY_COLUMN[colKey];
+      if (!fieldName) continue;
+      filterLoadedRef.current.add(colKey);
+      setFilterLoadingByColumn((prev) => ({ ...prev, [colKey]: true }));
+      void StockRegisterApiService.getFilterDropdown(fieldName, controller.signal)
+        .then((data) => {
+          if (controller.signal.aborted) return;
+          setFilterOptionsByColumn((prev) => ({
+            ...prev,
+            [colKey]: mapStockRegisterFilterOptions(data, fieldName),
+          }));
+        })
+        .catch(() => {
+          if (controller.signal.aborted) return;
+          filterLoadedRef.current.delete(colKey);
+          setFilterOptionsByColumn((prev) => ({
+            ...prev,
+            [colKey]: prev[colKey] ?? [],
+          }));
+        })
+        .finally(() => {
+          if (controller.signal.aborted) {
+            filterLoadedRef.current.delete(colKey);
+            setFilterLoadingByColumn((prev) => ({ ...prev, [colKey]: false }));
+            return;
+          }
+          setFilterLoadingByColumn((prev) => ({ ...prev, [colKey]: false }));
+          setFilterReadyByColumn((prev) => ({ ...prev, [colKey]: true }));
+        });
+    }
+
+    return () => controller.abort();
+  }, [
+    productNameFilterOpen,
+    warehouseFilterOpen,
+    voucherNumberFilterOpen,
+    batchNoFilterOpen,
+    stockTypeFilterOpen,
+  ]);
+
+  const columnFilterHeaderProps: ColumnFilterHeaderProps = useMemo(
+    () => ({
+      columnFilters,
+      onFilterChange: handleColumnFilterChange,
+      filterOptionsByColumn,
+      filterLoadingByColumn,
+      filterReadyByColumn,
+      onOpenFilter: handleOpenFilter,
+    }),
+    [
+      columnFilters,
+      handleColumnFilterChange,
+      filterOptionsByColumn,
+      filterLoadingByColumn,
+      filterReadyByColumn,
+      handleOpenFilter,
+    ],
   );
 
   const warehouseOptions = useMemo(
@@ -472,6 +642,7 @@ export default function StockRegisterPageClient() {
     if (!financialYearId || financialYearId === "all" || !dateFrom || !dateTo) {
       return null;
     }
+    const ordering = buildStockRegisterOrdering(sortBy, sortOrder);
     return {
       financial_year_id: financialYearId,
       from_date: dateFrom,
@@ -480,8 +651,8 @@ export default function StockRegisterPageClient() {
       product_ids: productIds,
       page,
       page_size: pageSize,
-      sort_by: sortBy,
-      sort_order: sortOrder,
+      ...(ordering ? { ordering } : {}),
+      column_filters: buildStockRegisterColumnFilterParams(columnFilters),
       include_rejected: true,
     };
   }, [
@@ -494,6 +665,7 @@ export default function StockRegisterPageClient() {
     pageSize,
     sortBy,
     sortOrder,
+    columnFilters,
   ]);
 
   useEffect(() => {
@@ -508,6 +680,7 @@ export default function StockRegisterPageClient() {
     pageSize,
     sortBy,
     sortOrder,
+    columnFilters,
   ]);
 
   useEffect(() => {
@@ -724,8 +897,6 @@ export default function StockRegisterPageClient() {
     ].filter((item): item is ReportFilterSummaryItem => item != null);
   }, [productIds, warehouses, productOptions, warehouseOptions]);
 
-  const limitationNote = activeReport?.notes.limitation ?? null;
-
   const exportDisabled =
     exporting || reportLoading || !queryParams || totalRows === 0;
 
@@ -834,17 +1005,11 @@ export default function StockRegisterPageClient() {
       layout="split"
       className="h-full min-h-0"
     >
-      <AccountsReportBody>
+      <AccountsReportBody className="min-h-0">
         <SectionTabs tabs={TABS} active={tab} onChange={handleTabChange} compact />
 
-        {limitationNote ? (
-          <p className="mt-2 text-[11px] text-muted-foreground leading-snug">
-            {limitationNote}
-          </p>
-        ) : null}
-
         {kpiItems.length > 0 ? (
-          <AccountsReportKpiGrid className="mt-3">
+          <AccountsReportKpiGrid className="mt-3 flex-shrink-0">
             {kpiItems.map((item) => (
               <AccountsReportKpiCard
                 key={item.label}
@@ -857,7 +1022,7 @@ export default function StockRegisterPageClient() {
         ) : null}
 
         {(filtersError || reportError) && (
-          <div className="mt-3 flex items-center gap-3 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+          <div className="mt-3 flex items-center gap-3 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive flex-shrink-0">
             <span>{filtersError || reportError}</span>
             <button
               type="button"
@@ -874,8 +1039,25 @@ export default function StockRegisterPageClient() {
             Select a financial year and date range to load the Stock Register.
           </div>
         ) : (
-          <div className="mt-3 flex flex-col flex-1 min-h-0">
-            <AccountsTableListing>
+          <div className="mt-3 flex flex-col flex-1 min-h-0 overflow-hidden">
+            <AccountsTableListing
+              className="h-full min-h-0"
+              footer={
+                totalRows > 0 && !reportLoading ? (
+                  <AccountsTablePagination
+                    page={page}
+                    pageSize={pageSize}
+                    totalRecords={totalRows}
+                    onPageChange={setPage}
+                    onPageSizeChange={(size) => {
+                      setPageSize(size);
+                      setPage(1);
+                    }}
+                    recordLabel={recordLabel}
+                  />
+                ) : undefined
+              }
+            >
               {reportLoading && !activeReport ? (
                 <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -886,73 +1068,31 @@ export default function StockRegisterPageClient() {
                   {emptyLabel}
                 </div>
               ) : tab === "summary" && summaryTotals ? (
-                <>
-                  <SummaryTable
-                    rows={summaryRows}
-                    totals={summaryTotals}
-                    activeSortCol={activeSortCol}
-                    sortOrder={sortOrder}
-                    onSort={handleSort}
-                  />
-                  {totalRows > 0 ? (
-                    <AccountsTablePagination
-                      page={page}
-                      pageSize={pageSize}
-                      totalRecords={totalRows}
-                      onPageChange={setPage}
-                      onPageSizeChange={(size) => {
-                        setPageSize(size);
-                        setPage(1);
-                      }}
-                      recordLabel={recordLabel}
-                    />
-                  ) : null}
-                </>
+                <SummaryTable
+                  rows={summaryRows}
+                  totals={summaryTotals}
+                  activeSortCol={activeSortCol}
+                  sortOrder={sortOrder}
+                  onSort={handleSort}
+                  filterProps={columnFilterHeaderProps}
+                />
               ) : tab === "detailed" ? (
-                <>
-                  <DetailedMovementTable
-                    rows={detailedRows}
-                    activeSortCol={activeSortCol}
-                    sortOrder={sortOrder}
-                    onSort={handleSort}
-                  />
-                  {totalRows > 0 ? (
-                    <AccountsTablePagination
-                      page={page}
-                      pageSize={pageSize}
-                      totalRecords={totalRows}
-                      onPageChange={setPage}
-                      onPageSizeChange={(size) => {
-                        setPageSize(size);
-                        setPage(1);
-                      }}
-                      recordLabel={recordLabel}
-                    />
-                  ) : null}
-                </>
+                <DetailedMovementTable
+                  rows={detailedRows}
+                  activeSortCol={activeSortCol}
+                  sortOrder={sortOrder}
+                  onSort={handleSort}
+                  filterProps={columnFilterHeaderProps}
+                />
               ) : tab === "batch-wise" && batchTotals ? (
-                <>
-                  <BatchWiseSummaryTable
-                    rows={batchRows}
-                    totals={batchTotals}
-                    activeSortCol={activeSortCol}
-                    sortOrder={sortOrder}
-                    onSort={handleSort}
-                  />
-                  {totalRows > 0 ? (
-                    <AccountsTablePagination
-                      page={page}
-                      pageSize={pageSize}
-                      totalRecords={totalRows}
-                      onPageChange={setPage}
-                      onPageSizeChange={(size) => {
-                        setPageSize(size);
-                        setPage(1);
-                      }}
-                      recordLabel={recordLabel}
-                    />
-                  ) : null}
-                </>
+                <BatchWiseSummaryTable
+                  rows={batchRows}
+                  totals={batchTotals}
+                  activeSortCol={activeSortCol}
+                  sortOrder={sortOrder}
+                  onSort={handleSort}
+                  filterProps={columnFilterHeaderProps}
+                />
               ) : null}
             </AccountsTableListing>
           </div>
@@ -968,6 +1108,7 @@ function SummaryTable({
   activeSortCol,
   sortOrder,
   onSort,
+  filterProps,
 }: {
   rows: SummaryUiRow[];
   totals: {
@@ -979,16 +1120,39 @@ function SummaryTable({
   activeSortCol: string;
   sortOrder: StockRegisterSortOrder;
   onSort: (key: string) => void;
+  filterProps: ColumnFilterHeaderProps;
 }) {
+  const {
+    columnFilters,
+    onFilterChange,
+    filterOptionsByColumn,
+    filterLoadingByColumn,
+    filterReadyByColumn,
+    onOpenFilter,
+  } = filterProps;
+  const filterable = (colKey: string) => ({
+    filterable: true as const,
+    filterValue: columnFilters[colKey],
+    onFilterChange: (value: AccountsColumnFilterState | undefined) =>
+      onFilterChange(colKey, value),
+    valueOptions: filterOptionsByColumn[colKey] ?? [],
+    onFilterOpen: () => onOpenFilter(colKey),
+    optionsLoading: Boolean(filterLoadingByColumn[colKey]),
+    optionsReady: Boolean(filterReadyByColumn[colKey]),
+  });
+
   return (
     <AccountsTable>
       <AccountsTableHead>
         <AccountsTableHeadRow>
-          <AccountsColumnHeader
+          <ServerSortTh
             label="Stock Type"
             colKey="stockType"
-            sortable={false}
-            filterable={false}
+            activeKey={activeSortCol}
+            sortDir={sortOrder}
+            onSort={onSort}
+            optionLabels={STOCK_TYPE_OPTION_LABELS}
+            {...filterable("stockType")}
           />
           <ServerSortTh
             label="Product Name"
@@ -996,6 +1160,7 @@ function SummaryTable({
             activeKey={activeSortCol}
             sortDir={sortOrder}
             onSort={onSort}
+            {...filterable("productName")}
           />
           <ServerSortTh
             label="Warehouse"
@@ -1003,6 +1168,7 @@ function SummaryTable({
             activeKey={activeSortCol}
             sortDir={sortOrder}
             onSort={onSort}
+            {...filterable("warehouse")}
           />
           <AccountsColumnHeader
             label="UOM"
@@ -1055,16 +1221,16 @@ function SummaryTable({
             </AccountsTableCell>
             <AccountsTableCell>{row.warehouse}</AccountsTableCell>
             <AccountsTableCell>{row.uom || "—"}</AccountsTableCell>
-            <AccountsTableCell className="text-right tabular-nums">
+            <AccountsTableCell align="right" className="tabular-nums">
               {formatQty(row.openingQty, true)}
             </AccountsTableCell>
-            <AccountsTableCell className="text-right tabular-nums">
+            <AccountsTableCell align="right" className="tabular-nums">
               {formatQty(row.inwardQty, true)}
             </AccountsTableCell>
-            <AccountsTableCell className="text-right tabular-nums">
+            <AccountsTableCell align="right" className="tabular-nums">
               {formatQty(row.outwardQty, true)}
             </AccountsTableCell>
-            <AccountsTableCell className="text-right tabular-nums font-medium">
+            <AccountsTableCell align="right" className="tabular-nums font-medium">
               {formatQty(row.closingQty, true)}
             </AccountsTableCell>
           </AccountsTableRow>
@@ -1075,16 +1241,16 @@ function SummaryTable({
           <AccountsTableCell className="font-semibold" colSpan={4}>
             Combined totals (do not treat as one stock bucket)
           </AccountsTableCell>
-          <AccountsTableCell className="text-right font-semibold tabular-nums">
+          <AccountsTableCell align="right" className="font-semibold tabular-nums">
             {formatQty(totals.totalOpeningQty, true)}
           </AccountsTableCell>
-          <AccountsTableCell className="text-right font-semibold tabular-nums">
+          <AccountsTableCell align="right" className="font-semibold tabular-nums">
             {formatQty(totals.totalInwardQty, true)}
           </AccountsTableCell>
-          <AccountsTableCell className="text-right font-semibold tabular-nums">
+          <AccountsTableCell align="right" className="font-semibold tabular-nums">
             {formatQty(totals.totalOutwardQty, true)}
           </AccountsTableCell>
-          <AccountsTableCell className="text-right font-semibold tabular-nums">
+          <AccountsTableCell align="right" className="font-semibold tabular-nums">
             {formatQty(totals.totalClosingQty, true)}
           </AccountsTableCell>
         </AccountsTableRow>
@@ -1098,21 +1264,45 @@ function DetailedMovementTable({
   activeSortCol,
   sortOrder,
   onSort,
+  filterProps,
 }: {
   rows: DetailedUiRow[];
   activeSortCol: string;
   sortOrder: StockRegisterSortOrder;
   onSort: (key: string) => void;
+  filterProps: ColumnFilterHeaderProps;
 }) {
+  const {
+    columnFilters,
+    onFilterChange,
+    filterOptionsByColumn,
+    filterLoadingByColumn,
+    filterReadyByColumn,
+    onOpenFilter,
+  } = filterProps;
+  const filterable = (colKey: string) => ({
+    filterable: true as const,
+    filterValue: columnFilters[colKey],
+    onFilterChange: (value: AccountsColumnFilterState | undefined) =>
+      onFilterChange(colKey, value),
+    valueOptions: filterOptionsByColumn[colKey] ?? [],
+    onFilterOpen: () => onOpenFilter(colKey),
+    optionsLoading: Boolean(filterLoadingByColumn[colKey]),
+    optionsReady: Boolean(filterReadyByColumn[colKey]),
+  });
+
   return (
     <AccountsTable className="min-w-[1200px]">
       <AccountsTableHead>
         <AccountsTableHeadRow>
-          <AccountsColumnHeader
+          <ServerSortTh
             label="Stock Type"
             colKey="stockType"
-            sortable={false}
-            filterable={false}
+            activeKey={activeSortCol}
+            sortDir={sortOrder}
+            onSort={onSort}
+            optionLabels={STOCK_TYPE_OPTION_LABELS}
+            {...filterable("stockType")}
           />
           <ServerSortTh
             label="Date"
@@ -1133,6 +1323,7 @@ function DetailedMovementTable({
             activeKey={activeSortCol}
             sortDir={sortOrder}
             onSort={onSort}
+            {...filterable("voucherNumber")}
           />
           <ServerSortTh
             label="Product Name"
@@ -1140,6 +1331,7 @@ function DetailedMovementTable({
             activeKey={activeSortCol}
             sortDir={sortOrder}
             onSort={onSort}
+            {...filterable("productName")}
           />
           <ServerSortTh
             label="Warehouse"
@@ -1147,6 +1339,7 @@ function DetailedMovementTable({
             activeKey={activeSortCol}
             sortDir={sortOrder}
             onSort={onSort}
+            {...filterable("warehouse")}
           />
           <AccountsColumnHeader
             label="Party Name"
@@ -1218,13 +1411,13 @@ function DetailedMovementTable({
             >
               {row.rejectReason}
             </AccountsTableCell>
-            <AccountsTableCell className="text-right tabular-nums">
+            <AccountsTableCell align="right" className="tabular-nums">
               {formatQty(row.quantityIn)}
             </AccountsTableCell>
-            <AccountsTableCell className="text-right tabular-nums">
+            <AccountsTableCell align="right" className="tabular-nums">
               {formatQty(row.quantityOut)}
             </AccountsTableCell>
-            <AccountsTableCell className="text-right tabular-nums font-medium">
+            <AccountsTableCell align="right" className="tabular-nums font-medium">
               {formatQty(row.runningBalanceQty, true)}
             </AccountsTableCell>
           </AccountsTableRow>
@@ -1240,6 +1433,7 @@ function BatchWiseSummaryTable({
   activeSortCol,
   sortOrder,
   onSort,
+  filterProps,
 }: {
   rows: BatchUiRow[];
   totals: {
@@ -1251,16 +1445,39 @@ function BatchWiseSummaryTable({
   activeSortCol: string;
   sortOrder: StockRegisterSortOrder;
   onSort: (key: string) => void;
+  filterProps: ColumnFilterHeaderProps;
 }) {
+  const {
+    columnFilters,
+    onFilterChange,
+    filterOptionsByColumn,
+    filterLoadingByColumn,
+    filterReadyByColumn,
+    onOpenFilter,
+  } = filterProps;
+  const filterable = (colKey: string) => ({
+    filterable: true as const,
+    filterValue: columnFilters[colKey],
+    onFilterChange: (value: AccountsColumnFilterState | undefined) =>
+      onFilterChange(colKey, value),
+    valueOptions: filterOptionsByColumn[colKey] ?? [],
+    onFilterOpen: () => onOpenFilter(colKey),
+    optionsLoading: Boolean(filterLoadingByColumn[colKey]),
+    optionsReady: Boolean(filterReadyByColumn[colKey]),
+  });
+
   return (
     <AccountsTable className="min-w-[1100px]">
       <AccountsTableHead>
         <AccountsTableHeadRow>
-          <AccountsColumnHeader
+          <ServerSortTh
             label="Stock Type"
             colKey="stockType"
-            sortable={false}
-            filterable={false}
+            activeKey={activeSortCol}
+            sortDir={sortOrder}
+            onSort={onSort}
+            optionLabels={STOCK_TYPE_OPTION_LABELS}
+            {...filterable("stockType")}
           />
           <ServerSortTh
             label="Product Name"
@@ -1268,6 +1485,7 @@ function BatchWiseSummaryTable({
             activeKey={activeSortCol}
             sortDir={sortOrder}
             onSort={onSort}
+            {...filterable("productName")}
           />
           <ServerSortTh
             label="Batch Number"
@@ -1275,6 +1493,7 @@ function BatchWiseSummaryTable({
             activeKey={activeSortCol}
             sortDir={sortOrder}
             onSort={onSort}
+            {...filterable("batchNo")}
           />
           <AccountsColumnHeader
             label="Mfg Date"
@@ -1294,6 +1513,7 @@ function BatchWiseSummaryTable({
             activeKey={activeSortCol}
             sortDir={sortOrder}
             onSort={onSort}
+            {...filterable("warehouse")}
           />
           <ServerSortTh
             label="Opening Qty"
@@ -1348,16 +1568,16 @@ function BatchWiseSummaryTable({
               {row.expiryDate ? formatDisplayDate(row.expiryDate) : "—"}
             </AccountsTableCell>
             <AccountsTableCell>{row.warehouse}</AccountsTableCell>
-            <AccountsTableCell className="text-right tabular-nums">
+            <AccountsTableCell align="right" className="tabular-nums">
               {formatQty(row.openingQty, true)}
             </AccountsTableCell>
-            <AccountsTableCell className="text-right tabular-nums">
+            <AccountsTableCell align="right" className="tabular-nums">
               {formatQty(row.inwardQty, true)}
             </AccountsTableCell>
-            <AccountsTableCell className="text-right tabular-nums">
+            <AccountsTableCell align="right" className="tabular-nums">
               {formatQty(row.outwardQty, true)}
             </AccountsTableCell>
-            <AccountsTableCell className="text-right tabular-nums font-medium">
+            <AccountsTableCell align="right" className="tabular-nums font-medium">
               {formatQty(row.closingQty, true)}
             </AccountsTableCell>
           </AccountsTableRow>
@@ -1368,16 +1588,16 @@ function BatchWiseSummaryTable({
           <AccountsTableCell className="font-semibold" colSpan={6}>
             Combined totals (do not treat as one stock bucket)
           </AccountsTableCell>
-          <AccountsTableCell className="text-right font-semibold tabular-nums">
+          <AccountsTableCell align="right" className="font-semibold tabular-nums">
             {formatQty(totals.totalOpeningQty, true)}
           </AccountsTableCell>
-          <AccountsTableCell className="text-right font-semibold tabular-nums">
+          <AccountsTableCell align="right" className="font-semibold tabular-nums">
             {formatQty(totals.totalInwardQty, true)}
           </AccountsTableCell>
-          <AccountsTableCell className="text-right font-semibold tabular-nums">
+          <AccountsTableCell align="right" className="font-semibold tabular-nums">
             {formatQty(totals.totalOutwardQty, true)}
           </AccountsTableCell>
-          <AccountsTableCell className="text-right font-semibold tabular-nums">
+          <AccountsTableCell align="right" className="font-semibold tabular-nums">
             {formatQty(totals.totalClosingQty, true)}
           </AccountsTableCell>
         </AccountsTableRow>
