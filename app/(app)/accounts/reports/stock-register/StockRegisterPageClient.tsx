@@ -6,17 +6,9 @@ import {
   ArrowDownToLine,
   ArrowUpFromLine,
   Boxes,
+  Layers,
   Package,
-  Scale,
 } from "lucide-react";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import {
@@ -48,12 +40,9 @@ import {
   ReportFilterRow,
   ReportDateRangeFilter,
   ReportFinancialYearFilter,
-  ReportBranchFilter,
   ReportWarehouseMultiFilter,
   ReportProductMultiFilter,
   ReportFilterSummary,
-  ACCOUNTS_FILTER_LABEL_CLASS as filterLabelClass,
-  ACCOUNTS_FILTER_CONTROL_CLASS as filterControlClass,
 } from "@/components/accounts/ReportFilters";
 import {
   buildEntityFilterSummary,
@@ -62,7 +51,7 @@ import {
 } from "@/lib/accounts/report-multi-filter-utils";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { resolveFinancialYearLabel } from "@/lib/accounts/pl-compute";
-import { formatMoney, MONEY_AMOUNT_CLASS, roundMoney } from "@/lib/accounts/money-format";
+import { roundMoney } from "@/lib/accounts/money-format";
 import type { DateRangePresetId } from "@/lib/accounts/report-date-presets";
 import { useClientMounted } from "@/lib/use-client-mounted";
 import { cn } from "@/lib/utils";
@@ -74,14 +63,11 @@ import {
   buildStockRegisterSummary,
   formatQty,
   formatStockRegisterDate,
-  getStockRegisterBatchOptions,
-  getStockRegisterCategoryOptions,
   getStockRegisterProductOptions,
   getStockRegisterWarehouseOptions,
   type StockRegisterBatchWiseRow,
   type StockRegisterBatchWiseTotals,
   type StockRegisterDetailedRow,
-  type StockRegisterDetailedTotals,
   type StockRegisterFilters,
   type StockRegisterSummaryRow,
   type StockRegisterSummaryTotals,
@@ -90,16 +76,21 @@ import {
 import {
   exportStockRegisterToExcel,
   exportStockRegisterToPdf,
+  type StockRegisterBatchSummaryRow,
+  type StockRegisterBatchSummaryTotals,
   type StockRegisterExportMeta,
 } from "./stock-register-export";
 
 const PLACEHOLDER_DATE = "2025-04-01";
+const EMPTY_BATCH_NOS: string[] = [];
 
 const TABS: { id: StockRegisterTab; label: string }[] = [
   { id: "summary", label: "Summary" },
   { id: "detailed", label: "Detailed" },
   { id: "batch-wise", label: "Batch Wise" },
 ];
+
+type SummaryDisplayTotals = StockRegisterSummaryTotals & { totalClosingQty: number };
 
 function defaultFyDateRange(): { from: string; to: string; fyId: string } {
   ensureFinancialYearsCurrent();
@@ -117,6 +108,38 @@ function defaultFyDateRange(): { from: string; to: string; fyId: string } {
 function parseTab(raw: string | null): StockRegisterTab {
   if (raw === "detailed" || raw === "batch-wise" || raw === "summary") return raw;
   return "summary";
+}
+
+/** Map existing product+batch+warehouse aggregates into Batch Wise summary rows (presentation only). */
+function toBatchSummaryRow(r: StockRegisterDetailedRow): StockRegisterBatchSummaryRow {
+  const inwardQty =
+    r.purchaseQty + r.salesReturnQty + r.stockTransferIn + r.sampleReturn + r.positiveAdjustment;
+  const outwardQty =
+    r.salesQty + r.purchaseReturnQty + r.stockTransferOut + r.sampleIssue + r.negativeAdjustment;
+  return {
+    rowKey: r.rowKey,
+    productName: r.productName,
+    productCode: r.productCode,
+    batchNo: r.batchNo,
+    mfgDate: r.mfgDate,
+    expiryDate: r.expiryDate,
+    warehouse: r.warehouse,
+    openingQty: r.openingStock,
+    inwardQty,
+    outwardQty,
+    closingQty: r.closingStock,
+  };
+}
+
+function buildBatchSummaryTotals(rows: StockRegisterBatchSummaryRow[]): StockRegisterBatchSummaryTotals {
+  return {
+    totalProducts: new Set(rows.map((r) => r.productCode)).size,
+    totalBatches: rows.length,
+    totalOpeningQty: rows.reduce((s, r) => s + r.openingQty, 0),
+    totalInwardQty: rows.reduce((s, r) => s + r.inwardQty, 0),
+    totalOutwardQty: rows.reduce((s, r) => s + r.outwardQty, 0),
+    totalClosingQty: rows.reduce((s, r) => s + r.closingQty, 0),
+  };
 }
 
 type ExportBridge = {
@@ -137,11 +160,11 @@ export default function StockRegisterPageClient() {
   const [dateTo, setDateTo] = useState(PLACEHOLDER_DATE);
   const [datesReady, setDatesReady] = useState(false);
   const [financialYearId, setFinancialYearId] = useState("all");
-  const [branch, setBranch] = useState("all");
+  /** Kept at "all"/[] — Branch/Category/Batch are not shown (shared filter bar with Stock Valuation). */
+  const branch = "all";
+  const category = "all";
   const [warehouses, setWarehouses] = useState<string[]>([]);
   const [productIds, setProductIds] = useState<string[]>([]);
-  const [category, setCategory] = useState("all");
-  const [batchNos, setBatchNos] = useState<string[]>([]);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [exporting, setExporting] = useState(false);
@@ -152,9 +175,9 @@ export default function StockRegisterPageClient() {
     disabled: true,
   });
   const [kpiState, setKpiState] = useState<{
-    summary?: StockRegisterSummaryTotals;
-    detailed?: StockRegisterDetailedTotals;
-    batch?: StockRegisterBatchWiseTotals;
+    summary?: SummaryDisplayTotals;
+    detailedMovement?: StockRegisterBatchWiseTotals;
+    batch?: StockRegisterBatchSummaryTotals;
   }>({});
 
   useEffect(() => {
@@ -169,24 +192,20 @@ export default function StockRegisterPageClient() {
     if (!mounted || drilldownApplied.current) return;
     const product = searchParams.get("product");
     const warehouse = searchParams.get("warehouse");
-    const batch = searchParams.get("batch");
     const from = searchParams.get("dateFrom");
     const to = searchParams.get("dateTo");
     const fy = searchParams.get("fy");
     const tabParam = searchParams.get("tab");
-    const branchParam = searchParams.get("branch");
-    if (!product && !warehouse && !batch && !from && !to && !fy && !tabParam && !branchParam) return;
+    if (!product && !warehouse && !from && !to && !fy && !tabParam) return;
 
     drilldownApplied.current = true;
     setPreset("custom");
     if (tabParam) setTab(parseTab(tabParam));
     if (product) setProductIds([product]);
     if (warehouse) setWarehouses([warehouse]);
-    if (batch) setBatchNos([batch]);
     if (from) setDateFrom(from);
     if (to) setDateTo(to);
     if (fy) setFinancialYearId(fy);
-    if (branchParam) setBranch(branchParam);
   }, [mounted, searchParams]);
 
   useEffect(() => {
@@ -235,14 +254,6 @@ export default function StockRegisterPageClient() {
     () => (mounted ? getStockRegisterWarehouseOptions() : []),
     [mounted, refreshKey],
   );
-  const categoryOptions = useMemo(
-    () => (mounted ? getStockRegisterCategoryOptions() : []),
-    [mounted, refreshKey],
-  );
-  const batchOptions = useMemo(
-    () => (mounted ? getStockRegisterBatchOptions().map((b) => ({ value: b, label: b })) : []),
-    [mounted, refreshKey],
-  );
 
   const filters = useMemo(
     (): StockRegisterFilters => ({
@@ -253,9 +264,9 @@ export default function StockRegisterPageClient() {
       warehouse: warehouses,
       productId: productIds,
       category,
-      batchNo: batchNos,
+      batchNo: EMPTY_BATCH_NOS,
     }),
-    [dateFrom, dateTo, financialYearId, branch, warehouses, productIds, category, batchNos, refreshKey],
+    [dateFrom, dateTo, financialYearId, branch, warehouses, productIds, category, refreshKey],
   );
 
   const emptySummary = useMemo(
@@ -267,26 +278,13 @@ export default function StockRegisterPageClient() {
         totalInwardQty: 0,
         totalOutwardQty: 0,
         totalClosingValue: 0,
-      },
+        totalClosingQty: 0,
+      } satisfies SummaryDisplayTotals,
       hasData: false,
     }),
     [],
   );
   const emptyDetailed = useMemo(
-    () => ({
-      rows: [] as StockRegisterDetailedRow[],
-      totals: {
-        totalProducts: 0,
-        totalBatches: 0,
-        totalOpeningQty: 0,
-        totalClosingQty: 0,
-        totalClosingValue: 0,
-      },
-      hasData: false,
-    }),
-    [],
-  );
-  const emptyBatch = useMemo(
     () => ({
       rows: [] as StockRegisterBatchWiseRow[],
       totals: {
@@ -300,53 +298,77 @@ export default function StockRegisterPageClient() {
     }),
     [],
   );
+  const emptyBatchSummary = useMemo(
+    () => ({
+      rows: [] as StockRegisterBatchSummaryRow[],
+      totals: {
+        totalProducts: 0,
+        totalBatches: 0,
+        totalOpeningQty: 0,
+        totalInwardQty: 0,
+        totalOutwardQty: 0,
+        totalClosingQty: 0,
+      },
+      hasData: false,
+    }),
+    [],
+  );
 
   const summaryReport = useMemo(() => {
     if (!mounted || !datesReady || tab !== "summary") return emptySummary;
-    return buildStockRegisterSummary(filters);
+    const report = buildStockRegisterSummary(filters);
+    return {
+      ...report,
+      totals: {
+        ...report.totals,
+        totalClosingQty: report.rows.reduce((s, r) => s + r.closingQty, 0),
+      },
+    };
   }, [mounted, datesReady, filters, tab, emptySummary]);
 
+  /** Detailed = transaction / document movement rows. */
   const detailedReport = useMemo(() => {
     if (!mounted || !datesReady || tab !== "detailed") return emptyDetailed;
-    return buildStockRegisterDetailed(filters);
+    return buildStockRegisterBatchWise(filters);
   }, [mounted, datesReady, filters, tab, emptyDetailed]);
 
-  const batchReport = useMemo(() => {
-    if (!mounted || !datesReady || tab !== "batch-wise") return emptyBatch;
-    return buildStockRegisterBatchWise(filters);
-  }, [mounted, datesReady, filters, tab, emptyBatch]);
+  /**
+   * Batch Wise = product + batch + warehouse summary (reuses existing detailed aggregate builder;
+   * presentation maps buckets → Opening / Inward / Outward / Closing).
+   */
+  const batchSummaryReport = useMemo(() => {
+    if (!mounted || !datesReady || tab !== "batch-wise") return emptyBatchSummary;
+    const report = buildStockRegisterDetailed(filters);
+    const rows = report.rows.map(toBatchSummaryRow);
+    return {
+      rows,
+      totals: buildBatchSummaryTotals(rows),
+      hasData: rows.length > 0,
+    };
+  }, [mounted, datesReady, filters, tab, emptyBatchSummary]);
 
-  const handleSummaryTotals = useCallback((totals: StockRegisterSummaryTotals) => {
+  const handleSummaryTotals = useCallback((totals: SummaryDisplayTotals) => {
     setKpiState((s) => (s.summary === totals ? s : { ...s, summary: totals }));
   }, []);
-  const handleDetailedTotals = useCallback((totals: StockRegisterDetailedTotals) => {
-    setKpiState((s) => (s.detailed === totals ? s : { ...s, detailed: totals }));
+  const handleDetailedTotals = useCallback((totals: StockRegisterBatchWiseTotals) => {
+    setKpiState((s) => (s.detailedMovement === totals ? s : { ...s, detailedMovement: totals }));
   }, []);
-  const handleBatchTotals = useCallback((totals: StockRegisterBatchWiseTotals) => {
+  const handleBatchTotals = useCallback((totals: StockRegisterBatchSummaryTotals) => {
     setKpiState((s) => (s.batch === totals ? s : { ...s, batch: totals }));
   }, []);
 
-  const recomputeSummaryTotals = useCallback((filtered: StockRegisterSummaryRow[]) => {
+  const recomputeSummaryTotals = useCallback((filtered: StockRegisterSummaryRow[]): SummaryDisplayTotals => {
     return {
       totalProducts: filtered.length,
       totalOpeningQty: filtered.reduce((s, r) => s + r.openingQty, 0),
       totalInwardQty: filtered.reduce((s, r) => s + r.inwardQty, 0),
       totalOutwardQty: filtered.reduce((s, r) => s + r.outwardQty, 0),
       totalClosingValue: roundMoney(filtered.reduce((s, r) => s + r.closingValue, 0)),
+      totalClosingQty: filtered.reduce((s, r) => s + r.closingQty, 0),
     };
   }, []);
 
-  const recomputeDetailedTotals = useCallback((filtered: StockRegisterDetailedRow[]) => {
-    return {
-      totalProducts: new Set(filtered.map((r) => r.productCode)).size,
-      totalBatches: filtered.length,
-      totalOpeningQty: filtered.reduce((s, r) => s + r.openingStock, 0),
-      totalClosingQty: filtered.reduce((s, r) => s + r.closingStock, 0),
-      totalClosingValue: roundMoney(filtered.reduce((s, r) => s + r.closingValue, 0)),
-    };
-  }, []);
-
-  const recomputeBatchTotals = useCallback((filtered: StockRegisterBatchWiseRow[]) => {
+  const recomputeDetailedTotals = useCallback((filtered: StockRegisterBatchWiseRow[]): StockRegisterBatchWiseTotals => {
     const latestByKey = new Map<string, StockRegisterBatchWiseRow>();
     for (const row of filtered) {
       const key = `${row.productCode}|${row.warehouse}|${row.batchNo}`;
@@ -366,9 +388,14 @@ export default function StockRegisterPageClient() {
     };
   }, []);
 
+  const recomputeBatchSummaryTotals = useCallback(
+    (filtered: StockRegisterBatchSummaryRow[]) => buildBatchSummaryTotals(filtered),
+    [],
+  );
+
   useEffect(() => {
     setPage(1);
-  }, [tab, dateFrom, dateTo, financialYearId, branch, warehouses, productIds, category, batchNos, pageSize]);
+  }, [tab, dateFrom, dateTo, financialYearId, warehouses, productIds, pageSize]);
 
   const filterSummaryItems = useMemo((): ReportFilterSummaryItem[] => {
     return [
@@ -380,22 +407,15 @@ export default function StockRegisterPageClient() {
         warehouseOptions.map((w) => ({ value: w, label: w })),
         () => setWarehouses([]),
       ),
-      buildEntityFilterSummary("batch", "Batches", batchNos, batchOptions, () => setBatchNos([])),
-      category !== "all"
-        ? { id: "category", label: "Category", value: category, onRemove: () => setCategory("all") }
-        : null,
-      branch !== "all"
-        ? { id: "branch", label: "Branch", value: branch, onRemove: () => setBranch("all") }
-        : null,
     ].filter((item): item is ReportFilterSummaryItem => item != null);
-  }, [productIds, warehouses, batchNos, category, branch, productOptions, warehouseOptions, batchOptions]);
+  }, [productIds, warehouses, productOptions, warehouseOptions]);
 
   const exportMeta = useMemo((): StockRegisterExportMeta => {
     return {
       dateFrom,
       dateTo,
       financialYear: resolveFinancialYearLabel(financialYearId) || "All",
-      branch: branch === "all" ? "All" : branch,
+      branch: "All",
       warehouse: formatMultiSelectLabel(
         warehouses,
         warehouseOptions.map((w) => ({ value: w, label: w })),
@@ -403,22 +423,18 @@ export default function StockRegisterPageClient() {
         "All",
       ),
       product: formatMultiSelectLabel(productIds, productOptions, "Product", "All"),
-      category: category === "all" ? "All" : category,
-      batchNo: formatMultiSelectLabel(batchNos, batchOptions, "Batch", "All"),
+      category: "All",
+      batchNo: "All",
       tab,
     };
   }, [
     dateFrom,
     dateTo,
     financialYearId,
-    branch,
     warehouses,
     warehouseOptions,
     productIds,
     productOptions,
-    category,
-    batchNos,
-    batchOptions,
     tab,
   ]);
 
@@ -430,36 +446,36 @@ export default function StockRegisterPageClient() {
         { label: "Total Opening Quantity", value: formatQty(t.totalOpeningQty, true), icon: Boxes },
         { label: "Total Inward Quantity", value: formatQty(t.totalInwardQty, true), icon: ArrowDownToLine },
         { label: "Total Outward Quantity", value: formatQty(t.totalOutwardQty, true), icon: ArrowUpFromLine },
-        { label: "Total Closing Value", value: formatMoney(t.totalClosingValue), icon: Scale },
+        { label: "Total Closing Quantity", value: formatQty(t.totalClosingQty, true), icon: Layers },
       ];
     }
     if (tab === "detailed") {
-      const t = kpiState.detailed ?? detailedReport.totals;
+      const t = kpiState.detailedMovement ?? detailedReport.totals;
       return [
-        { label: "Total Products", value: String(t.totalProducts), icon: Package },
-        { label: "Total Batches", value: String(t.totalBatches), icon: Boxes },
-        { label: "Total Opening Quantity", value: formatQty(t.totalOpeningQty, true), icon: ArrowDownToLine },
-        { label: "Total Closing Quantity", value: formatQty(t.totalClosingQty, true), icon: ArrowUpFromLine },
-        { label: "Total Closing Value", value: formatMoney(t.totalClosingValue), icon: Scale },
+        { label: "Total Transactions", value: String(t.totalTransactions), icon: Package },
+        { label: "Total Quantity In", value: formatQty(t.totalQuantityIn, true), icon: ArrowDownToLine },
+        { label: "Total Quantity Out", value: formatQty(t.totalQuantityOut, true), icon: ArrowUpFromLine },
+        { label: "Net Movement", value: formatQty(t.totalQuantityIn - t.totalQuantityOut, true), icon: Boxes },
       ];
     }
-    const t = kpiState.batch ?? batchReport.totals;
+    const t = kpiState.batch ?? batchSummaryReport.totals;
     return [
-      { label: "Total Transactions", value: String(t.totalTransactions), icon: Package },
-      { label: "Total Quantity In", value: formatQty(t.totalQuantityIn, true), icon: ArrowDownToLine },
-      { label: "Total Quantity Out", value: formatQty(t.totalQuantityOut, true), icon: ArrowUpFromLine },
-      { label: "Current Balance Quantity", value: formatQty(t.currentBalanceQty, true), icon: Boxes },
-      { label: "Total Movement Value", value: formatMoney(t.totalMovementValue), icon: Scale },
+      { label: "Total Products", value: String(t.totalProducts), icon: Package },
+      { label: "Total Batches", value: String(t.totalBatches), icon: Layers },
+      { label: "Total Opening Quantity", value: formatQty(t.totalOpeningQty, true), icon: Boxes },
+      { label: "Total Inward Quantity", value: formatQty(t.totalInwardQty, true), icon: ArrowDownToLine },
+      { label: "Total Outward Quantity", value: formatQty(t.totalOutwardQty, true), icon: ArrowUpFromLine },
+      { label: "Total Closing Quantity", value: formatQty(t.totalClosingQty, true), icon: Boxes },
     ];
-  }, [tab, kpiState, summaryReport.totals, detailedReport.totals, batchReport.totals]);
+  }, [tab, kpiState, summaryReport.totals, detailedReport.totals, batchSummaryReport.totals]);
 
   const summaryGetCell = useCallback((row: StockRegisterSummaryRow, key: string) => {
     return (row as unknown as Record<string, unknown>)[key];
   }, []);
-  const detailedGetCell = useCallback((row: StockRegisterDetailedRow, key: string) => {
+  const detailedGetCell = useCallback((row: StockRegisterBatchWiseRow, key: string) => {
     return (row as unknown as Record<string, unknown>)[key];
   }, []);
-  const batchGetCell = useCallback((row: StockRegisterBatchWiseRow, key: string) => {
+  const batchGetCell = useCallback((row: StockRegisterBatchSummaryRow, key: string) => {
     return (row as unknown as Record<string, unknown>)[key];
   }, []);
 
@@ -467,11 +483,12 @@ export default function StockRegisterPageClient() {
     <AccountsPageShell
       breadcrumbs={accountsBreadcrumb("Reports", "Stock Register")}
       title="Stock Register"
-      description="Product summary, batch-level stock movement, and transaction-wise batch register."
+      description="Stock movement for the selected period — Summary (product), Detailed (transactions), Batch Wise (batch balance)."
       filters={
         <>
           <ReportFilterRow
             className="items-end"
+            wrap
             end={
               <AccountsExportMenu
                 onExcel={exportBridge.onExcel}
@@ -489,7 +506,6 @@ export default function StockRegisterPageClient() {
               onDateFromChange={setDateFrom}
               onDateToChange={setDateTo}
             />
-            <ReportBranchFilter value={branch} onChange={setBranch} />
             <ReportWarehouseMultiFilter
               values={warehouses}
               onChange={setWarehouses}
@@ -499,28 +515,6 @@ export default function StockRegisterPageClient() {
               values={productIds}
               onChange={setProductIds}
               products={productOptions}
-            />
-            <div className="space-y-0.5 min-w-[140px]">
-              <Label className={filterLabelClass}>Category</Label>
-              <Select value={category} onValueChange={setCategory}>
-                <SelectTrigger className={cn(filterControlClass, "w-[140px]")}>
-                  <SelectValue placeholder="All categories" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All categories</SelectItem>
-                  {categoryOptions.map((c) => (
-                    <SelectItem key={c} value={c}>
-                      {c}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <ReportProductMultiFilter
-              values={batchNos}
-              onChange={setBatchNos}
-              products={batchOptions}
-              label="Batch Number"
             />
           </ReportFilterRow>
           <ReportFilterSummary items={filterSummaryItems} />
@@ -553,8 +547,6 @@ export default function StockRegisterPageClient() {
               inwardQty: { type: "amount" },
               outwardQty: { type: "amount" },
               closingQty: { type: "amount" },
-              rate: { type: "amount" },
-              closingValue: { type: "amount" },
             }}
             defaultSortKey="productName"
             defaultSortDir="asc"
@@ -585,78 +577,22 @@ export default function StockRegisterPageClient() {
             rows={detailedReport.rows}
             getCellValue={detailedGetCell}
             columnConfig={{
-              productName: { type: "text" },
-              batchNo: { type: "text" },
-              mfgDate: { type: "date" },
-              expiryDate: { type: "date" },
-              openingStock: { type: "amount" },
-              purchaseQty: { type: "amount" },
-              purchaseReturnQty: { type: "amount" },
-              netPurchase: { type: "amount" },
-              salesQty: { type: "amount" },
-              salesReturnQty: { type: "amount" },
-              netSales: { type: "amount" },
-              stockTransferIn: { type: "amount" },
-              stockTransferOut: { type: "amount" },
-              sampleReturn: { type: "amount" },
-              sampleIssue: { type: "amount" },
-              positiveAdjustment: { type: "amount" },
-              negativeAdjustment: { type: "amount" },
-              closingStock: { type: "amount" },
-              rate: { type: "amount" },
-              closingValue: { type: "amount" },
-            }}
-            defaultSortKey="productName"
-            defaultSortDir="asc"
-          >
-            <TabListing
-              tab="detailed"
-              sourceRows={detailedReport.rows}
-              emptyLabel="No batch rows match the selected filters."
-              page={page}
-              setPage={setPage}
-              pageSize={pageSize}
-              setPageSize={setPageSize}
-              recordLabel="batches"
-              exporting={exporting}
-              setExporting={setExporting}
-              exportMeta={exportMeta}
-              baseTotals={detailedReport.totals}
-              setExportBridge={setExportBridge}
-              onTotals={handleDetailedTotals}
-              recomputeTotals={recomputeDetailedTotals}
-              renderTable={(rows, totals) => <DetailedTable rows={rows} totals={totals} />}
-            />
-          </AccountsColumnFilterProvider>
-        )}
-
-        {tab === "batch-wise" && (
-          <AccountsColumnFilterProvider
-            rows={batchReport.rows}
-            getCellValue={batchGetCell}
-            columnConfig={{
               date: { type: "date" },
               voucherType: { type: "text" },
               voucherNumber: { type: "text" },
               productName: { type: "text" },
-              batchNo: { type: "text" },
-              mfgDate: { type: "date" },
-              expiryDate: { type: "date" },
               warehouse: { type: "text" },
               partyName: { type: "text" },
               quantityIn: { type: "amount" },
               quantityOut: { type: "amount" },
               runningBalanceQty: { type: "amount" },
-              rate: { type: "amount" },
-              value: { type: "amount" },
-              remarks: { type: "text" },
             }}
             defaultSortKey="date"
             defaultSortDir="asc"
           >
             <TabListing
-              tab="batch-wise"
-              sourceRows={batchReport.rows}
+              tab="detailed"
+              sourceRows={detailedReport.rows}
               emptyLabel="No stock movements match the selected filters."
               page={page}
               setPage={setPage}
@@ -666,11 +602,50 @@ export default function StockRegisterPageClient() {
               exporting={exporting}
               setExporting={setExporting}
               exportMeta={exportMeta}
-              baseTotals={batchReport.totals}
+              baseTotals={detailedReport.totals}
+              setExportBridge={setExportBridge}
+              onTotals={handleDetailedTotals}
+              recomputeTotals={recomputeDetailedTotals}
+              renderTable={(rows) => <DetailedMovementTable rows={rows} />}
+            />
+          </AccountsColumnFilterProvider>
+        )}
+
+        {tab === "batch-wise" && (
+          <AccountsColumnFilterProvider
+            rows={batchSummaryReport.rows}
+            getCellValue={batchGetCell}
+            columnConfig={{
+              productName: { type: "text" },
+              batchNo: { type: "text" },
+              mfgDate: { type: "date" },
+              expiryDate: { type: "date" },
+              warehouse: { type: "text" },
+              openingQty: { type: "amount" },
+              inwardQty: { type: "amount" },
+              outwardQty: { type: "amount" },
+              closingQty: { type: "amount" },
+            }}
+            defaultSortKey="productName"
+            defaultSortDir="asc"
+          >
+            <TabListing
+              tab="batch-wise"
+              sourceRows={batchSummaryReport.rows}
+              emptyLabel="No batches match the selected filters."
+              page={page}
+              setPage={setPage}
+              pageSize={pageSize}
+              setPageSize={setPageSize}
+              recordLabel="batches"
+              exporting={exporting}
+              setExporting={setExporting}
+              exportMeta={exportMeta}
+              baseTotals={batchSummaryReport.totals}
               setExportBridge={setExportBridge}
               onTotals={handleBatchTotals}
-              recomputeTotals={recomputeBatchTotals}
-              renderTable={(rows) => <BatchWiseTable rows={rows} />}
+              recomputeTotals={recomputeBatchSummaryTotals}
+              renderTable={(rows, totals) => <BatchWiseSummaryTable rows={rows} totals={totals} />}
             />
           </AccountsColumnFilterProvider>
         )}
@@ -791,7 +766,7 @@ function SummaryTable({
   totals,
 }: {
   rows: StockRegisterSummaryRow[];
-  totals: StockRegisterSummaryTotals;
+  totals: SummaryDisplayTotals;
 }) {
   return (
     <AccountsTableScroll>
@@ -803,8 +778,6 @@ function SummaryTable({
             <SortTh label="Inward Quantity" colKey="inwardQty" align="right" filterType="amount" />
             <SortTh label="Outward Quantity" colKey="outwardQty" align="right" filterType="amount" />
             <SortTh label="Closing Quantity" colKey="closingQty" align="right" filterType="amount" />
-            <SortTh label="Rate" colKey="rate" align="right" filterType="amount" />
-            <SortTh label="Closing Stock Value" colKey="closingValue" align="right" filterType="amount" />
           </AccountsTableHeadRow>
         </AccountsTableHead>
         <AccountsTableBody>
@@ -815,8 +788,6 @@ function SummaryTable({
               <AccountsTableCell className="text-right tabular-nums">{formatQty(row.inwardQty, true)}</AccountsTableCell>
               <AccountsTableCell className="text-right tabular-nums">{formatQty(row.outwardQty, true)}</AccountsTableCell>
               <AccountsTableCell className="text-right tabular-nums font-medium">{formatQty(row.closingQty, true)}</AccountsTableCell>
-              <AccountsTableCell className={cn("text-right tabular-nums", MONEY_AMOUNT_CLASS)}>{formatMoney(row.rate)}</AccountsTableCell>
-              <AccountsTableCell className={cn("text-right tabular-nums font-medium", MONEY_AMOUNT_CLASS)}>{formatMoney(row.closingValue)}</AccountsTableCell>
             </AccountsTableRow>
           ))}
         </AccountsTableBody>
@@ -826,102 +797,7 @@ function SummaryTable({
             <AccountsTableCell className="text-right font-semibold tabular-nums">{formatQty(totals.totalOpeningQty, true)}</AccountsTableCell>
             <AccountsTableCell className="text-right font-semibold tabular-nums">{formatQty(totals.totalInwardQty, true)}</AccountsTableCell>
             <AccountsTableCell className="text-right font-semibold tabular-nums">{formatQty(totals.totalOutwardQty, true)}</AccountsTableCell>
-            <AccountsTableCell />
-            <AccountsTableCell />
-            <AccountsTableCell className={cn("text-right font-semibold tabular-nums", MONEY_AMOUNT_CLASS)}>
-              {formatMoney(totals.totalClosingValue)}
-            </AccountsTableCell>
-          </AccountsTableRow>
-        </AccountsTableFoot>
-      </AccountsTable>
-    </AccountsTableScroll>
-  );
-}
-
-function DetailedTable({
-  rows,
-  totals,
-}: {
-  rows: StockRegisterDetailedRow[];
-  totals: StockRegisterDetailedTotals;
-}) {
-  return (
-    <AccountsTableScroll>
-      <AccountsTable className="min-w-[1600px]">
-        <AccountsTableHead>
-          <AccountsTableHeadRow>
-            <SortTh label="Product Name" colKey="productName" filterType="text" />
-            <SortTh label="Batch Number" colKey="batchNo" filterType="text" />
-            <SortTh label="Manufacturing Date" colKey="mfgDate" filterType="date" />
-            <SortTh label="Expiry Date" colKey="expiryDate" filterType="date" />
-            <SortTh label="Opening Stock" colKey="openingStock" align="right" filterType="amount" />
-            <SortTh label="Purchase Quantity" colKey="purchaseQty" align="right" filterType="amount" />
-            <SortTh label="Purchase Return Quantity" colKey="purchaseReturnQty" align="right" filterType="amount" />
-            <SortTh label="Net Purchase" colKey="netPurchase" align="right" filterType="amount" />
-            <SortTh label="Sales Quantity" colKey="salesQty" align="right" filterType="amount" />
-            <SortTh label="Sales Return Quantity" colKey="salesReturnQty" align="right" filterType="amount" />
-            <SortTh label="Net Sales" colKey="netSales" align="right" filterType="amount" />
-            <SortTh label="Stock Transfer In" colKey="stockTransferIn" align="right" filterType="amount" />
-            <SortTh label="Stock Transfer Out" colKey="stockTransferOut" align="right" filterType="amount" />
-            <SortTh label="Sample Return" colKey="sampleReturn" align="right" filterType="amount" />
-            <SortTh label="Sample Issue" colKey="sampleIssue" align="right" filterType="amount" />
-            <SortTh label="Positive Adjustment" colKey="positiveAdjustment" align="right" filterType="amount" />
-            <SortTh label="Negative Adjustment" colKey="negativeAdjustment" align="right" filterType="amount" />
-            <SortTh label="Closing Stock" colKey="closingStock" align="right" filterType="amount" />
-            <SortTh label="Rate" colKey="rate" align="right" filterType="amount" />
-            <SortTh label="Closing Value" colKey="closingValue" align="right" filterType="amount" />
-          </AccountsTableHeadRow>
-        </AccountsTableHead>
-        <AccountsTableBody>
-          {rows.map((row) => (
-            <AccountsTableRow key={row.rowKey}>
-              <AccountsTableCell className="font-medium whitespace-nowrap">{row.productName}</AccountsTableCell>
-              <AccountsTableCell className="font-mono text-xs text-brand-700">{row.batchNo}</AccountsTableCell>
-              <AccountsTableCell>{row.mfgDate ? formatStockRegisterDate(row.mfgDate) : "—"}</AccountsTableCell>
-              <AccountsTableCell>{row.expiryDate ? formatStockRegisterDate(row.expiryDate) : "—"}</AccountsTableCell>
-              <AccountsTableCell className="text-right tabular-nums">{formatQty(row.openingStock, true)}</AccountsTableCell>
-              <AccountsTableCell className="text-right tabular-nums">{formatQty(row.purchaseQty, true)}</AccountsTableCell>
-              <AccountsTableCell className="text-right tabular-nums">{formatQty(row.purchaseReturnQty, true)}</AccountsTableCell>
-              <AccountsTableCell className="text-right tabular-nums">{formatQty(row.netPurchase, true)}</AccountsTableCell>
-              <AccountsTableCell className="text-right tabular-nums">{formatQty(row.salesQty, true)}</AccountsTableCell>
-              <AccountsTableCell className="text-right tabular-nums">{formatQty(row.salesReturnQty, true)}</AccountsTableCell>
-              <AccountsTableCell className="text-right tabular-nums">{formatQty(row.netSales, true)}</AccountsTableCell>
-              <AccountsTableCell className="text-right tabular-nums">{formatQty(row.stockTransferIn, true)}</AccountsTableCell>
-              <AccountsTableCell className="text-right tabular-nums">{formatQty(row.stockTransferOut, true)}</AccountsTableCell>
-              <AccountsTableCell className="text-right tabular-nums">{formatQty(row.sampleReturn, true)}</AccountsTableCell>
-              <AccountsTableCell className="text-right tabular-nums">{formatQty(row.sampleIssue, true)}</AccountsTableCell>
-              <AccountsTableCell className="text-right tabular-nums">{formatQty(row.positiveAdjustment, true)}</AccountsTableCell>
-              <AccountsTableCell className="text-right tabular-nums">{formatQty(row.negativeAdjustment, true)}</AccountsTableCell>
-              <AccountsTableCell className="text-right tabular-nums font-medium">{formatQty(row.closingStock, true)}</AccountsTableCell>
-              <AccountsTableCell className={cn("text-right tabular-nums", MONEY_AMOUNT_CLASS)}>{formatMoney(row.rate)}</AccountsTableCell>
-              <AccountsTableCell className={cn("text-right tabular-nums font-medium", MONEY_AMOUNT_CLASS)}>{formatMoney(row.closingValue)}</AccountsTableCell>
-            </AccountsTableRow>
-          ))}
-        </AccountsTableBody>
-        <AccountsTableFoot>
-          <AccountsTableRow>
-            <AccountsTableCell className="font-semibold">Totals</AccountsTableCell>
-            <AccountsTableCell />
-            <AccountsTableCell />
-            <AccountsTableCell />
-            <AccountsTableCell className="text-right font-semibold tabular-nums">{formatQty(totals.totalOpeningQty, true)}</AccountsTableCell>
-            <AccountsTableCell />
-            <AccountsTableCell />
-            <AccountsTableCell />
-            <AccountsTableCell />
-            <AccountsTableCell />
-            <AccountsTableCell />
-            <AccountsTableCell />
-            <AccountsTableCell />
-            <AccountsTableCell />
-            <AccountsTableCell />
-            <AccountsTableCell />
-            <AccountsTableCell />
             <AccountsTableCell className="text-right font-semibold tabular-nums">{formatQty(totals.totalClosingQty, true)}</AccountsTableCell>
-            <AccountsTableCell />
-            <AccountsTableCell className={cn("text-right font-semibold tabular-nums", MONEY_AMOUNT_CLASS)}>
-              {formatMoney(totals.totalClosingValue)}
-            </AccountsTableCell>
           </AccountsTableRow>
         </AccountsTableFoot>
       </AccountsTable>
@@ -929,28 +805,22 @@ function DetailedTable({
   );
 }
 
-function BatchWiseTable({ rows }: { rows: StockRegisterBatchWiseRow[] }) {
+function DetailedMovementTable({ rows }: { rows: StockRegisterBatchWiseRow[] }) {
   const router = useRouter();
   return (
     <AccountsTableScroll>
-      <AccountsTable className="min-w-[1400px]">
+      <AccountsTable className="min-w-[1000px]">
         <AccountsTableHead>
           <AccountsTableHeadRow>
             <SortTh label="Date" colKey="date" filterType="date" />
             <SortTh label="Voucher Type" colKey="voucherType" filterType="text" />
             <SortTh label="Voucher Number" colKey="voucherNumber" filterType="text" />
             <SortTh label="Product Name" colKey="productName" filterType="text" />
-            <SortTh label="Batch Number" colKey="batchNo" filterType="text" />
-            <SortTh label="Manufacturing Date" colKey="mfgDate" filterType="date" />
-            <SortTh label="Expiry Date" colKey="expiryDate" filterType="date" />
             <SortTh label="Warehouse" colKey="warehouse" filterType="text" />
             <SortTh label="Party Name" colKey="partyName" filterType="text" />
             <SortTh label="Quantity In" colKey="quantityIn" align="right" filterType="amount" />
             <SortTh label="Quantity Out" colKey="quantityOut" align="right" filterType="amount" />
-            <SortTh label="Running Balance Quantity" colKey="runningBalanceQty" align="right" filterType="amount" />
-            <SortTh label="Rate" colKey="rate" align="right" filterType="amount" />
-            <SortTh label="Value" colKey="value" align="right" filterType="amount" />
-            <SortTh label="Remarks" colKey="remarks" filterType="text" />
+            <SortTh label="Balance Quantity" colKey="runningBalanceQty" align="right" filterType="amount" />
           </AccountsTableHeadRow>
         </AccountsTableHead>
         <AccountsTableBody>
@@ -966,20 +836,68 @@ function BatchWiseTable({ rows }: { rows: StockRegisterBatchWiseRow[] }) {
               <AccountsTableCell>{row.voucherType}</AccountsTableCell>
               <AccountsTableCell className="font-mono text-xs text-brand-700">{row.voucherNumber}</AccountsTableCell>
               <AccountsTableCell className="font-medium whitespace-nowrap">{row.productName}</AccountsTableCell>
-              <AccountsTableCell className="font-mono text-xs">{row.batchNo}</AccountsTableCell>
-              <AccountsTableCell>{row.mfgDate ? formatStockRegisterDate(row.mfgDate) : "—"}</AccountsTableCell>
-              <AccountsTableCell>{row.expiryDate ? formatStockRegisterDate(row.expiryDate) : "—"}</AccountsTableCell>
               <AccountsTableCell>{row.warehouse}</AccountsTableCell>
               <AccountsTableCell>{row.partyName}</AccountsTableCell>
               <AccountsTableCell className="text-right tabular-nums">{formatQty(row.quantityIn)}</AccountsTableCell>
               <AccountsTableCell className="text-right tabular-nums">{formatQty(row.quantityOut)}</AccountsTableCell>
               <AccountsTableCell className="text-right tabular-nums font-medium">{formatQty(row.runningBalanceQty, true)}</AccountsTableCell>
-              <AccountsTableCell className={cn("text-right tabular-nums", MONEY_AMOUNT_CLASS)}>{formatMoney(row.rate)}</AccountsTableCell>
-              <AccountsTableCell className={cn("text-right tabular-nums", MONEY_AMOUNT_CLASS)}>{formatMoney(row.value)}</AccountsTableCell>
-              <AccountsTableCell className="max-w-[180px] truncate">{row.remarks || "—"}</AccountsTableCell>
             </AccountsTableRow>
           ))}
         </AccountsTableBody>
+      </AccountsTable>
+    </AccountsTableScroll>
+  );
+}
+
+function BatchWiseSummaryTable({
+  rows,
+  totals,
+}: {
+  rows: StockRegisterBatchSummaryRow[];
+  totals: StockRegisterBatchSummaryTotals;
+}) {
+  return (
+    <AccountsTableScroll>
+      <AccountsTable className="min-w-[1100px]">
+        <AccountsTableHead>
+          <AccountsTableHeadRow>
+            <SortTh label="Product Name" colKey="productName" filterType="text" />
+            <SortTh label="Batch Number" colKey="batchNo" filterType="text" />
+            <SortTh label="Manufacturing Date" colKey="mfgDate" filterType="date" />
+            <SortTh label="Expiry Date" colKey="expiryDate" filterType="date" />
+            <SortTh label="Warehouse" colKey="warehouse" filterType="text" />
+            <SortTh label="Opening Quantity" colKey="openingQty" align="right" filterType="amount" />
+            <SortTh label="Inward Quantity" colKey="inwardQty" align="right" filterType="amount" />
+            <SortTh label="Outward Quantity" colKey="outwardQty" align="right" filterType="amount" />
+            <SortTh label="Closing Quantity" colKey="closingQty" align="right" filterType="amount" />
+          </AccountsTableHeadRow>
+        </AccountsTableHead>
+        <AccountsTableBody>
+          {rows.map((row) => (
+            <AccountsTableRow key={row.rowKey}>
+              <AccountsTableCell className="font-medium whitespace-nowrap">{row.productName}</AccountsTableCell>
+              <AccountsTableCell className="font-mono text-xs">{row.batchNo}</AccountsTableCell>
+              <AccountsTableCell>{row.mfgDate ? formatStockRegisterDate(row.mfgDate) : "—"}</AccountsTableCell>
+              <AccountsTableCell>{row.expiryDate ? formatStockRegisterDate(row.expiryDate) : "—"}</AccountsTableCell>
+              <AccountsTableCell>{row.warehouse}</AccountsTableCell>
+              <AccountsTableCell className="text-right tabular-nums">{formatQty(row.openingQty, true)}</AccountsTableCell>
+              <AccountsTableCell className="text-right tabular-nums">{formatQty(row.inwardQty, true)}</AccountsTableCell>
+              <AccountsTableCell className="text-right tabular-nums">{formatQty(row.outwardQty, true)}</AccountsTableCell>
+              <AccountsTableCell className="text-right tabular-nums font-medium">{formatQty(row.closingQty, true)}</AccountsTableCell>
+            </AccountsTableRow>
+          ))}
+        </AccountsTableBody>
+        <AccountsTableFoot>
+          <AccountsTableRow>
+            <AccountsTableCell className="font-semibold" colSpan={5}>
+              Totals
+            </AccountsTableCell>
+            <AccountsTableCell className="text-right font-semibold tabular-nums">{formatQty(totals.totalOpeningQty, true)}</AccountsTableCell>
+            <AccountsTableCell className="text-right font-semibold tabular-nums">{formatQty(totals.totalInwardQty, true)}</AccountsTableCell>
+            <AccountsTableCell className="text-right font-semibold tabular-nums">{formatQty(totals.totalOutwardQty, true)}</AccountsTableCell>
+            <AccountsTableCell className="text-right font-semibold tabular-nums">{formatQty(totals.totalClosingQty, true)}</AccountsTableCell>
+          </AccountsTableRow>
+        </AccountsTableFoot>
       </AccountsTable>
     </AccountsTableScroll>
   );

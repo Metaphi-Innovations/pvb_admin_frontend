@@ -54,6 +54,7 @@ export interface WarehouseCreatePayload {
     registration_type?: string | null;
     registered_legal_name?: string | null;
     registered_gst_address?: string | null;
+    gst_einvoice_status?: string | null;
     account_holder_name?: string | null;
     bank_name?: string | null;
     branch_name?: string | null;
@@ -95,6 +96,7 @@ export interface WarehouseListRecord {
     registrationType: string;
     registeredLegalName: string;
     registeredGstAddress: string;
+    gstEinvoiceStatus: string;
     accountHolderName: string;
     bankName: string;
     branchName: string;
@@ -400,6 +402,7 @@ function mapItem(
         registrationType: asString(raw.registration_type),
         registeredLegalName: asString(raw.registered_legal_name),
         registeredGstAddress: asString(raw.registered_gst_address),
+        gstEinvoiceStatus: asString(raw.gst_einvoice_status),
         accountHolderName: asString(raw.account_holder_name),
         bankName: asString(raw.bank_name),
         branchName: asString(raw.branch_name),

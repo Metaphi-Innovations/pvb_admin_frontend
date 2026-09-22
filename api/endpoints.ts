@@ -641,6 +641,10 @@ export const API_ENDPOINTS = {
       ALLOCATE_DC: (id: string) => `/warehouse/dispatch/${id}/allocate-dc`,
       ALLOCATE_SI: (id: string) => `/warehouse/dispatch/${id}/allocate-si`,
       ALLOCATE_ST: (id: string) => `/warehouse/dispatch/${id}/allocate-st`,
+      PREVIEW_EWAY_BILL: (id: string) =>
+        `/warehouse/dispatch/${id}/preview-eway-bill`,
+      GENERATE_EWAY_BILL: (id: string) =>
+        `/warehouse/dispatch/${id}/generate-eway-bill`,
     },
     PACKING_DONE: {
       PREVIEW_NUMBER: "/warehouse/packing-done/preview-number",
@@ -675,6 +679,11 @@ export const API_ENDPOINTS = {
       LIST: "/accounts/sales-invoice",
       BY_ID: (id: string) => `/accounts/sales-invoice/${id}`,
       CANCEL: (id: string) => `/accounts/sales-invoice/${id}/cancel`,
+      GENERATE_IRN: (id: string) => `/accounts/sales-invoice/${id}/generate-irn`,
+      PREVIEW_EWAY_BILL: (id: string) =>
+        `/accounts/sales-invoice/${id}/preview-eway-bill`,
+      GENERATE_EWAY_BILL: (id: string) =>
+        `/accounts/sales-invoice/${id}/generate-eway-bill`,
       PREVIEW_NUMBER: "/accounts/sales-invoice/preview-number",
       ALLOCATE: "/accounts/sales-invoice/allocate",
       ELIGIBLE_DISPATCHES: "/accounts/sales-invoice/eligible-dispatches",
@@ -840,6 +849,21 @@ export const API_ENDPOINTS = {
         FILTERS: "/accounts/reports/balance-sheet/filters",
         EXPORT: "/accounts/reports/balance-sheet/export",
       },
+      CASH_FLOW: {
+        LIST: "/accounts/reports/cash-flow",
+        FILTERS: "/accounts/reports/cash-flow/filters",
+        EXPORT: "/accounts/reports/cash-flow/export",
+      },
+      SALES_REGISTER: {
+        LIST: "/accounts/reports/sales-register",
+        FILTERS: "/accounts/reports/sales-register/filters",
+        EXPORT: "/accounts/reports/sales-register/export",
+      },
+      TDS_SUMMARY: {
+        LIST: "/accounts/reports/tds-summary",
+        FILTERS: "/accounts/reports/tds-summary/filters",
+        EXPORT: "/accounts/reports/tds-summary/export",
+      },
     },
     DEBIT_NOTE: {
       CONFIG: "/accounts/debit-note/config",
@@ -943,6 +967,7 @@ export const API_ENDPOINTS = {
     JOURNAL_VOUCHER: {
       CONFIG: "/accounts/journal-voucher/config",
       ELIGIBLE_LEDGERS: "/accounts/journal-voucher/eligible-ledgers",
+      ELIGIBLE_TDS_OPEN_ITEMS: "/accounts/journal-voucher/eligible-tds-open-items",
       LIST: "/accounts/journal-voucher",
       CREATE: "/accounts/journal-voucher",
       GET_BY_ID: (id: string) => `/accounts/journal-voucher/${id}`,

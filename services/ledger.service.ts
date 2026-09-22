@@ -147,6 +147,8 @@ export interface LedgerDropdownNode {
   isSystemGenerated?: boolean;
   status?: string;
   sourceType?: string;
+  sourceEntityType?: string | null;
+  systemLedgerType?: string | null;
   children: LedgerDropdownNode[];
 }
 
@@ -160,6 +162,8 @@ export interface LedgerDropdownItem {
   isSystemGenerated: boolean;
   status: string;
   sourceType: string;
+  sourceEntityType?: string | null;
+  systemLedgerType?: string | null;
   primaryHead: { id: string; code: string; name: string };
   accountGroup: { id: string; code: string; name: string };
   accountSubGroup: { id: string; code: string; name: string };

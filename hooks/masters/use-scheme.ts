@@ -121,6 +121,9 @@ export function useToggleSchemeStatus() {
           queryKey: masterKeys.schemes.detail(variables.id),
         }),
         queryClient.invalidateQueries({ queryKey: masterKeys.schemes.dropdown() }),
+        queryClient.invalidateQueries({
+          queryKey: masterKeys.schemes.filterDropdowns(),
+        }),
         queryClient.invalidateQueries({ queryKey: masterKeys.schemes.summary() }),
       ]);
     },

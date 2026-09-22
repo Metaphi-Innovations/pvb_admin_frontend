@@ -443,7 +443,12 @@ export default function WarehouseDetailPage() {
             <RecordKvRow label="Registration Type" value={record.registrationType || "—"} />
             <RecordKvRow label="GSTIN" value={record.gstNumber} mono copy />
             <RecordKvRow label="Registered Legal Name" value={record.registeredLegalName || "—"} />
-            <RecordKvRow label="Registered GST Address" value={record.registeredGstAddress || "—"} isLast />
+            <RecordKvRow label="Registered GST Address" value={record.registeredGstAddress || "—"} />
+            <RecordKvRow
+              label="e-Invoice Status (GST)"
+              value={record.gstEinvoiceStatus || "—"}
+              isLast
+            />
           </>
         )}
       </RecordSectionCard>

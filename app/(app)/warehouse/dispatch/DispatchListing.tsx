@@ -259,35 +259,57 @@ export function DispatchListing({ selectedWarehouse = "All" }: DispatchListingPr
     setPage(1);
   }, []);
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
     try {
       const apiSourceType = resolveDispatchApiSourceType(subTab);
-      const payload: any = {
+      const payload: {
+        page: number;
+        page_size: number;
+        filters: ReturnType<typeof buildDispatchApiFilters>;
+        ordering?: string;
+        search?: string;
+        signal?: AbortSignal;
+      } = {
         page,
         page_size: pageSize,
         filters: buildDispatchApiFilters(filters, {
           selectedWarehouse,
           sourceType: apiSourceType,
         }),
+        signal,
       };
 
       const ordering = buildDispatchOrdering(sort.key, sort.direction);
       if (ordering) payload.ordering = ordering;
-      if (filters.search) payload.search = filters.search;
+      if (filters.search) payload.search = String(filters.search);
 
       const res = await getDispatches(payload);
+      if (signal?.aborted) return;
       setData(res?.data || []);
       setTotalRecords(res?.totalRecords || res?.count || 0);
     } catch (err) {
+      if (
+        (err as { name?: string } | null)?.name === "CanceledError" ||
+        (err as { name?: string } | null)?.name === "AbortError" ||
+        (err as { code?: string } | null)?.code === "ERR_CANCELED"
+      ) {
+        return;
+      }
       console.error(err);
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) {
+        setLoading(false);
+      }
     }
   }, [page, pageSize, sort, filters, selectedWarehouse, subTab]);
 
   useEffect(() => {
-    fetchData();
+    const controller = new AbortController();
+    void fetchData(controller.signal);
+    return () => {
+      controller.abort();
+    };
   }, [fetchData]);
 
 
@@ -680,6 +702,11 @@ export function DispatchListing({ selectedWarehouse = "All" }: DispatchListingPr
         value={subTab}
         onValueChange={(val: any) => {
           setSubTab(val);
+          // Clear immediately so the previous tab's rows never flash under the new tab
+          // while the reset effect / fetch run.
+          setData([]);
+          setTotalRecords(0);
+          setLoading(true);
           const params = new URLSearchParams(searchParams?.toString() || "");
           params.set("tab", val);
           router.replace(`?${params.toString()}`, { scroll: false });
@@ -695,6 +722,7 @@ export function DispatchListing({ selectedWarehouse = "All" }: DispatchListingPr
       </Tabs>
 
       <MasterListing<DispatchRecord>
+        key={subTab}
         columns={columns}
         data={data}
         loading={loading}

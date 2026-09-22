@@ -176,14 +176,6 @@ const InvoiceApplicableSchemesPanel = dynamic(
   { ssr: false, loading: () => null },
 );
 
-const GoodsStatutoryGenerationSection = dynamic(
-  () =>
-    import("./components/GoodsStatutoryGenerationSection").then((m) => ({
-      default: m.GoodsStatutoryGenerationSection,
-    })),
-  { ssr: false, loading: () => null },
-);
-
 function Section({
   title,
   children,
@@ -2100,94 +2092,6 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     return null;
   }, [customerName, invoiceDate, lines]);
 
-  const validateGoodsTransportForEway = useCallback((): string | null => {
-    if (!transport.transportMode.trim()) return "Transport Mode is required.";
-    if (!transport.vehicleNo.trim() && !transport.transporterName.trim() && !transport.transporterId.trim()) {
-      return "Enter Vehicle No. or Transporter Name / ID.";
-    }
-    if (!isStockTransferGeneration) {
-      if (!transport.distanceKm.trim() || Number(transport.distanceKm) <= 0) {
-        return "Distance (KM) is required.";
-      }
-    }
-    if (!transport.transportDocNo.trim()) return "Transport Document No. is required.";
-    if (!transport.transportDocDate.trim()) return "Transport Document Date is required.";
-    if (!placeOfSupply.trim()) return "Place of Supply is required.";
-    return null;
-  }, [transport, placeOfSupply, isStockTransferGeneration]);
-
-  const handleGenerateEInvoice = useCallback(() => {
-    setError(null);
-    setSuccess(null);
-    const coreErr = isStockTransferGeneration
-      ? validateStockTransferInvoiceCore()
-      : validateGoodsInvoiceCore();
-    if (coreErr) {
-      setError(coreErr);
-      scrollToStatutory();
-      return;
-    }
-    const today = new Date().toISOString().slice(0, 10);
-    const ack = `ACK${Date.now().toString().slice(-10)}`;
-    setTransport((prev) => ({
-      ...prev,
-      eInvoiceStatus: "generated",
-      eInvoiceNo: `EINV/${today.replace(/-/g, "")}/${Math.floor(Math.random() * 9000 + 1000)}`,
-      acknowledgementNo: ack,
-      acknowledgementDate: today,
-      irn: `${Date.now().toString(16)}${Math.random().toString(16).slice(2, 34)}`.slice(0, 64),
-      qrCodeAvailable: true,
-    }));
-    statutoryFingerprintRef.current = statutoryValueFingerprint;
-    setSuccess("E-Invoice / IRN generated.");
-  }, [
-    isStockTransferGeneration,
-    validateStockTransferInvoiceCore,
-    validateGoodsInvoiceCore,
-    scrollToStatutory,
-    statutoryValueFingerprint,
-  ]);
-
-  const handleGenerateEway = useCallback(() => {
-    setError(null);
-    setSuccess(null);
-    const coreErr = isStockTransferGeneration
-      ? validateStockTransferInvoiceCore()
-      : validateGoodsInvoiceCore();
-    if (coreErr) {
-      setError(coreErr);
-      scrollToStatutory();
-      return;
-    }
-    const transportErr = validateGoodsTransportForEway();
-    if (transportErr) {
-      setError(transportErr);
-      document.getElementById("goods-transport-section")?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
-      return;
-    }
-    const today = new Date();
-    const exp = new Date(today);
-    exp.setDate(exp.getDate() + 1);
-    setTransport((prev) => ({
-      ...prev,
-      ewayBillStatus: "generated",
-      ewayBillNo: `EWB${Date.now().toString().slice(-12)}`,
-      ewayBillExpiryDate: exp.toISOString().slice(0, 10),
-    }));
-    statutoryFingerprintRef.current = statutoryValueFingerprint;
-    setSuccess("E-Way Bill generated.");
-  }, [
-    isStockTransferGeneration,
-    validateStockTransferInvoiceCore,
-    validateGoodsInvoiceCore,
-    validateGoodsTransportForEway,
-    scrollToStatutory,
-    statutoryValueFingerprint,
-  ]);
-
   const submit = async (asDraft: boolean) => {
     if (savingRef.current || saving) return;
     setError(null);
@@ -2340,6 +2244,12 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
       setSaving(true);
       const status: InvoiceStatus = asDraft ? "draft" : "sent";
 
+      const goToInvoiceView = (salesInvoiceId: string, message: string) => {
+        dispatchAccountsDataChanged("sales-invoices");
+        showToast(message, "success");
+        router.replace(`${INVOICES_LIST_PATH}/${salesInvoiceId}`);
+      };
+
       const goToInvoiceList = (message: string) => {
         dispatchAccountsDataChanged("sales-invoices");
         showToast(message, "success");
@@ -2358,7 +2268,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
           rate: l.unitPrice != null ? Number(l.unitPrice) : undefined,
         }));
 
-        await SalesInvoiceService.createFromDispatch(sourceDispatchId, {
+        const created = await SalesInvoiceService.createFromDispatch(sourceDispatchId, {
           invoice_date: invoiceDate,
           due_date: dueDate || undefined,
           narration: narration.trim() || undefined,
@@ -2376,26 +2286,18 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
           approx_distance: transport.distanceKm.trim()
             ? Number(transport.distanceKm)
             : undefined,
-          irn_number: transport.irn.trim() || undefined,
-          acknowledgement_number:
-            transport.acknowledgementNo.trim() ||
-            transport.eInvoiceNo.trim() ||
-            undefined,
-          acknowledgement_date: transport.acknowledgementDate.trim() || undefined,
-          einvoice_status: transport.eInvoiceStatus || undefined,
-          eway_bill_number: transport.ewayBillNo?.trim() || undefined,
-          eway_bill_valid_upto: transport.ewayBillExpiryDate.trim() || undefined,
-          eway_bill_status: transport.ewayBillStatus || undefined,
+          // IRN / EWB are generated from invoice view after posting (real PeriOne flow).
           additional_charges: charges.length > 0 ? charges : undefined,
           round_off_amount: roundOff,
           line_item_overrides: lineItemOverrides.length > 0 ? lineItemOverrides : undefined,
           selected_cn_scheme_id: selectedCnSchemeId || undefined,
         });
 
-        goToInvoiceList(
+        goToInvoiceView(
+          created.sales_invoice_id,
           isStockTransferGeneration
-            ? "Stock Transfer Invoice generated successfully."
-            : "Sales Invoice generated successfully.",
+            ? "Stock Transfer Invoice generated. Use E-Invoice / E-Way Bill on this page to generate IRN or EWB."
+            : "Sales Invoice generated. Use E-Invoice / E-Way Bill on this page to generate IRN or EWB.",
         );
         return;
       }
@@ -3310,37 +3212,36 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
         </div>
 
         {stGen && !isEdit && !sameGstinStockTransferBlocked ? (
-          compactGen ? (
-            <VoucherFormSectionCard title="Statutory Generation">
-              <GoodsStatutoryGenerationSection
-                value={transport}
-                onGenerateEInvoice={handleGenerateEInvoice}
-                onGenerateEway={handleGenerateEway}
-                onViewQr={() =>
-                  setSuccess(
-                    transport.irn
-                      ? `QR available for IRN ${transport.irn.slice(0, 18)}…`
-                      : "QR code available.",
-                  )
-                }
-              />
-            </VoucherFormSectionCard>
-          ) : (
-          <InvoiceFormCard title="Statutory Generation">
-            <GoodsStatutoryGenerationSection
-              value={transport}
-              onGenerateEInvoice={handleGenerateEInvoice}
-              onGenerateEway={handleGenerateEway}
-              onViewQr={() =>
-                setSuccess(
-                  transport.irn
-                    ? `QR available for IRN ${transport.irn.slice(0, 18)}…`
-                    : "QR code available.",
-                )
-              }
-            />
-          </InvoiceFormCard>
-          )
+          <VoucherFormSectionCard title="E-Invoice & E-Way Bill">
+            <div
+              id="goods-statutory-generation"
+              className="space-y-2 rounded-lg border border-border bg-muted/10 px-3 py-3 text-xs text-muted-foreground"
+            >
+              <p className="font-medium text-foreground">
+                Same flow as Sales Invoice (after posting)
+              </p>
+              <ul className="list-disc space-y-1 pl-4">
+                <li>
+                  Buyer / consignee is the <strong>destination warehouse</strong>{" "}
+                  (not a customer).
+                </li>
+                <li>
+                  After you generate this invoice, open the invoice view to{" "}
+                  <strong>Generate IRN</strong> and/or{" "}
+                  <strong>Generate E-Way Bill</strong>.
+                </li>
+                <li>
+                  E-Way Bill: with IRN → EWB-by-IRN; without IRN → standalone EWB
+                  (preview payload, then confirm).
+                </li>
+              </ul>
+              <p>
+                Enter complete transport details here (mode, distance, vehicle /
+                transporter, document no. &amp; date) — they are required for EWB
+                generation.
+              </p>
+            </div>
+          </VoucherFormSectionCard>
         ) : null}
 
         {!compactGen && accountingPreview && (

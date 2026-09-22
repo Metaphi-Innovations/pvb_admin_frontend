@@ -7,16 +7,13 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { SchemeMultiSelect } from "./SchemeMultiSelect";
 import { SchemeProductMultiSelect } from "./SchemeProductMultiSelect";
+import {
+  SchemeSearchableSelect,
+  toSchemeSelectOptions,
+} from "./SchemeSearchableSelect";
 import {
   SchemeNumberField,
   schemeCompactFieldClass as compactFieldClass,
@@ -84,6 +81,40 @@ import "../scheme-form-dense.css";
 
 const labelClass = "scheme-field-label";
 const ctrl = cn(compactFieldClass, "scheme-ctrl");
+
+const DISCOUNT_TYPE_SELECT_OPTIONS = toSchemeSelectOptions(DISCOUNT_TYPE_OPTIONS);
+const DISCOUNT_TYPE_SHORT_OPTIONS = toSchemeSelectOptions(DISCOUNT_TYPE_OPTIONS, {
+  Percentage: "%",
+  "Fixed Amount": "₹ Fixed",
+});
+const DISCOUNT_SETUP_OPTIONS = [
+  {
+    value: "COMMON",
+    label: "Same Discount for All Selected Products",
+  },
+  {
+    value: "PRODUCT_WISE",
+    label: "Different Discount by Product",
+  },
+];
+const SPECIAL_EVALUATION_SCOPE_SELECT_OPTIONS = toSchemeSelectOptions(
+  SPECIAL_EVALUATION_SCOPE_OPTIONS,
+);
+const SPECIAL_SETTLEMENT_RUN_MODE_SELECT_OPTIONS = toSchemeSelectOptions(
+  SPECIAL_SETTLEMENT_RUN_MODE_OPTIONS,
+);
+const SPECIAL_DISCOUNT_BASED_ON_SELECT_OPTIONS = toSchemeSelectOptions(
+  SPECIAL_DISCOUNT_BASED_ON_OPTIONS,
+);
+const SCHEME_QUANTITY_UOM_SELECT_OPTIONS = toSchemeSelectOptions(
+  SCHEME_QUANTITY_UOM_OPTIONS,
+);
+const PAYMENT_CONDITION_SELECT_OPTIONS = toSchemeSelectOptions(
+  PAYMENT_CONDITION_OPTIONS,
+);
+const PAYMENT_CALCULATION_ON_SELECT_OPTIONS = toSchemeSelectOptions(
+  PAYMENT_CALCULATION_ON_OPTIONS,
+);
 
 type WizardStepId =
   | "basic"
@@ -280,49 +311,30 @@ function ProductDiscountConditionFields({
               Same Discount for All Products
             </div>
           ) : (
-            <Select
+            <SchemeSearchableSelect
               value={form.discountMode}
-              onValueChange={(v) =>
+              onChange={(v) =>
                 onChange(
                   applyDiscountSetupMode(form, v as ProductDiscountSetupMode),
                 )
               }
-            >
-              <SelectTrigger className={ctrl}>
-                <SelectValue placeholder="Select discount setup" />
-              </SelectTrigger>
-              <SelectContent className="min-w-[var(--radix-select-trigger-width)]">
-                <SelectItem value="COMMON" className="text-xs">
-                  Same Discount for All Selected Products
-                </SelectItem>
-                <SelectItem value="PRODUCT_WISE" className="text-xs">
-                  Different Discount by Product
-                </SelectItem>
-              </SelectContent>
-            </Select>
+              options={DISCOUNT_SETUP_OPTIONS}
+              placeholder="Select discount setup"
+            />
           )}
         </Field>
 
         {!isProductWise ? (
           <>
             <Field className="scheme-w-disc-type" label="Discount Type" required>
-              <Select
+              <SchemeSearchableSelect
                 value={form.discountType}
-                onValueChange={(v) =>
+                onChange={(v) =>
                   onChange({ ...form, discountType: v as DiscountType })
                 }
-              >
-                <SelectTrigger className={ctrl}>
-                  <SelectValue placeholder="Type" />
-                </SelectTrigger>
-                <SelectContent>
-                  {DISCOUNT_TYPE_OPTIONS.map((t) => (
-                    <SelectItem key={t} value={t} className="text-xs">
-                      {t}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                options={DISCOUNT_TYPE_SELECT_OPTIONS}
+                placeholder="Type"
+              />
             </Field>
             <Field className="scheme-w-disc-value" label="Discount Value" required>
               <SchemeNumberField
@@ -390,25 +402,15 @@ function ProductDiscountConditionFields({
                         ) : null}
                       </td>
                       <td className="scheme-pd-col-type">
-                        <Select
+                        <SchemeSearchableSelect
                           value={rule.discountType}
-                          onValueChange={(v) =>
+                          onChange={(v) =>
                             updateRule(rule.productId, {
                               discountType: v as DiscountType,
                             })
                           }
-                        >
-                          <SelectTrigger className={ctrl}>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {DISCOUNT_TYPE_OPTIONS.map((t) => (
-                              <SelectItem key={t} value={t} className="text-xs">
-                                {t}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                          options={DISCOUNT_TYPE_SELECT_OPTIONS}
+                        />
                       </td>
                       <td className="scheme-pd-col-value">
                         <SchemeNumberField
@@ -448,23 +450,13 @@ function DiscountTypeValueFields({
   return (
     <>
       <Field className="scheme-w-select-sm" label="Discount Type" required>
-        <Select
+        <SchemeSearchableSelect
           value={form.discountType}
-          onValueChange={(v) =>
+          onChange={(v) =>
             onChange({ ...form, discountType: v as DiscountType })
           }
-        >
-          <SelectTrigger className={ctrl}>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {DISCOUNT_TYPE_OPTIONS.map((t) => (
-              <SelectItem key={t} value={t} className="text-xs">
-                {t}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+          options={DISCOUNT_TYPE_SELECT_OPTIONS}
+        />
       </Field>
       <Field className="scheme-w-num" label="Discount Value" required>
         <SchemeNumberField
@@ -533,42 +525,22 @@ function SpecialDiscountConditionFields({
     <div className="space-y-2">
       <div className="scheme-row">
         <Field className="scheme-w-select-md" label="Evaluate On" required>
-          <Select
+          <SchemeSearchableSelect
             value={form.specialEvaluationScope}
-            onValueChange={(v) =>
+            onChange={(v) =>
               set("specialEvaluationScope", v as SpecialEvaluationScopeUI)
             }
-          >
-            <SelectTrigger className={ctrl}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {SPECIAL_EVALUATION_SCOPE_OPTIONS.map((o) => (
-                <SelectItem key={o} value={o} className="text-xs">
-                  {o}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            options={SPECIAL_EVALUATION_SCOPE_SELECT_OPTIONS}
+          />
         </Field>
         <Field className="scheme-w-select-md" label="Entitlement Mode" required>
-          <Select
+          <SchemeSearchableSelect
             value={form.specialSettlementRunMode}
-            onValueChange={(v) =>
+            onChange={(v) =>
               set("specialSettlementRunMode", v as SpecialSettlementRunModeUI)
             }
-          >
-            <SelectTrigger className={ctrl}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {SPECIAL_SETTLEMENT_RUN_MODE_OPTIONS.map((o) => (
-                <SelectItem key={o} value={o} className="text-xs">
-                  {o}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            options={SPECIAL_SETTLEMENT_RUN_MODE_SELECT_OPTIONS}
+          />
         </Field>
       </div>
 
@@ -607,9 +579,9 @@ function SpecialDiscountConditionFields({
           label="Special Discount Based On"
           required
         >
-          <Select
+          <SchemeSearchableSelect
             value={form.specialDiscountBasedOn}
-            onValueChange={(v) =>
+            onChange={(v) =>
               onChange(
                 applySpecialDiscountBasedOn(
                   form,
@@ -617,36 +589,16 @@ function SpecialDiscountConditionFields({
                 ),
               )
             }
-          >
-            <SelectTrigger className={ctrl}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {SPECIAL_DISCOUNT_BASED_ON_OPTIONS.map((o) => (
-                <SelectItem key={o} value={o} className="text-xs">
-                  {o}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            options={SPECIAL_DISCOUNT_BASED_ON_SELECT_OPTIONS}
+          />
         </Field>
         {isQty ? (
           <Field className="scheme-w-select-sm" label="UOM" required>
-            <Select
+            <SchemeSearchableSelect
               value={uom}
-              onValueChange={(v) => setQuantityUom(v as SchemeQuantityUom)}
-            >
-              <SelectTrigger className={ctrl}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {SCHEME_QUANTITY_UOM_OPTIONS.map((o) => (
-                  <SelectItem key={o} value={o} className="text-xs">
-                    {o}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              onChange={(v) => setQuantityUom(v as SchemeQuantityUom)}
+              options={SCHEME_QUANTITY_UOM_SELECT_OPTIONS}
+            />
           </Field>
         ) : null}
       </div>
@@ -671,21 +623,11 @@ function SpecialDiscountConditionFields({
             />
           </Field>
           <Field className="scheme-w-select-sm" label="Discount Type" required>
-            <Select
+            <SchemeSearchableSelect
               value={form.discountType}
-              onValueChange={(v) => set("discountType", v as DiscountType)}
-            >
-              <SelectTrigger className={ctrl}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {DISCOUNT_TYPE_OPTIONS.map((o) => (
-                  <SelectItem key={o} value={o} className="text-xs">
-                    {o}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              onChange={(v) => set("discountType", v as DiscountType)}
+              options={DISCOUNT_TYPE_SELECT_OPTIONS}
+            />
           </Field>
           <Field className="scheme-w-num-cell" label="Discount Value" required>
             <SchemeNumberField
@@ -751,9 +693,9 @@ function SpecialDiscountConditionFields({
                         />
                       </td>
                       <td>
-                        <Select
+                        <SchemeSearchableSelect
                           value={slab.discountType}
-                          onValueChange={(v) => {
+                          onChange={(v) => {
                             const slabs = [...form.specialDiscountAmountSlabs];
                             slabs[idx] = {
                               ...slab,
@@ -761,18 +703,8 @@ function SpecialDiscountConditionFields({
                             };
                             set("specialDiscountAmountSlabs", slabs);
                           }}
-                        >
-                          <SelectTrigger className={ctrl}>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {DISCOUNT_TYPE_OPTIONS.map((t) => (
-                              <SelectItem key={t} value={t} className="text-xs">
-                                {t === "Percentage" ? "%" : "₹ Fixed"}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                          options={DISCOUNT_TYPE_SHORT_OPTIONS}
+                        />
                       </td>
                       <td className="scheme-w-num-cell">
                         <SchemeNumberField
@@ -884,9 +816,9 @@ function SpecialDiscountConditionFields({
                         />
                       </td>
                       <td className="scheme-w-num-cell">
-                        <Select
+                        <SchemeSearchableSelect
                           value={normalizeSchemeQuantityUom(slab.uom || uom)}
-                          onValueChange={(v) => {
+                          onChange={(v) => {
                             const next = v as SchemeQuantityUom;
                             const slabs = [
                               ...form.specialDiscountQuantitySlabs,
@@ -901,23 +833,13 @@ function SpecialDiscountConditionFields({
                               })),
                             });
                           }}
-                        >
-                          <SelectTrigger className={ctrl}>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {SCHEME_QUANTITY_UOM_OPTIONS.map((o) => (
-                              <SelectItem key={o} value={o} className="text-xs">
-                                {o}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                          options={SCHEME_QUANTITY_UOM_SELECT_OPTIONS}
+                        />
                       </td>
                       <td>
-                        <Select
+                        <SchemeSearchableSelect
                           value={slab.discountType}
-                          onValueChange={(v) => {
+                          onChange={(v) => {
                             const slabs = [
                               ...form.specialDiscountQuantitySlabs,
                             ];
@@ -927,18 +849,8 @@ function SpecialDiscountConditionFields({
                             };
                             set("specialDiscountQuantitySlabs", slabs);
                           }}
-                        >
-                          <SelectTrigger className={ctrl}>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {DISCOUNT_TYPE_OPTIONS.map((t) => (
-                              <SelectItem key={t} value={t} className="text-xs">
-                                {t === "Percentage" ? "%" : "₹ Fixed"}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                          options={DISCOUNT_TYPE_SHORT_OPTIONS}
+                        />
                       </td>
                       <td className="scheme-w-num-cell">
                         <SchemeNumberField
@@ -1351,24 +1263,15 @@ export function SchemeUnifiedConfigForm({
               />
             </Field>
             <Field className="scheme-w-category" label="Scheme Type" required>
-              <Select
+              <SchemeSearchableSelect
                 value={form.schemeCategory}
-                onValueChange={(v) => onTypeChange(v as SchemeCategory)}
+                onChange={(v) => onTypeChange(v as SchemeCategory)}
                 disabled={lockCategory}
-              >
-                <SelectTrigger className={ctrl}>
-                  <SelectValue>
-                    {schemeTypeDisplayLabel(form.schemeCategory)}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {schemeTypeOptions.map((c) => (
-                    <SelectItem key={c} value={c} className="text-xs">
-                      {SCHEME_TYPE_DISPLAY_LABELS[c]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                options={schemeTypeOptions.map((c) => ({
+                  value: c,
+                  label: SCHEME_TYPE_DISPLAY_LABELS[c],
+                }))}
+              />
             </Field>
             <Field className="scheme-w-date" label="Valid From" required>
               <Input
@@ -1402,6 +1305,7 @@ export function SchemeUnifiedConfigForm({
               <SchemeMultiSelect
                 label="Customer Type"
                 placeholder="Select customer types"
+                searchPlaceholder="Search customer types…"
                 required
                 options={customerTypeOptions}
                 selectedIds={form.customerTypes}
@@ -1426,6 +1330,7 @@ export function SchemeUnifiedConfigForm({
               <SchemeMultiSelect
                 label="Customers"
                 placeholder="Select customers"
+                searchPlaceholder="Search customers…"
                 required
                 options={customerOptions}
                 selectedIds={form.customerIds}
@@ -1443,6 +1348,7 @@ export function SchemeUnifiedConfigForm({
               <SchemeMultiSelect
                 label="State"
                 placeholder="Select states"
+                searchPlaceholder="Search states…"
                 required
                 options={stateOptions}
                 selectedIds={form.stateNames}
@@ -1716,23 +1622,13 @@ export function SchemeUnifiedConfigForm({
           {form.schemeCategory === "Payment Discount" ? (
             <div className="scheme-row">
               <Field className="scheme-w-select-md" label="Payment Condition" required>
-                <Select
+                <SchemeSearchableSelect
                   value={form.paymentCondition}
-                  onValueChange={(v) =>
+                  onChange={(v) =>
                     set("paymentCondition", v as SchemePaymentCondition)
                   }
-                >
-                  <SelectTrigger className={ctrl}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {PAYMENT_CONDITION_OPTIONS.map((o) => (
-                      <SelectItem key={o} value={o} className="text-xs">
-                        {o}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  options={PAYMENT_CONDITION_SELECT_OPTIONS}
+                />
               </Field>
               {form.paymentCondition === "Minimum Payment Percentage" ? (
                 <Field className="scheme-w-num" label="Required Payment %" required>
@@ -1748,23 +1644,13 @@ export function SchemeUnifiedConfigForm({
               ) : null}
               <DiscountTypeValueFields form={form} onChange={onChange} />
               <Field className="scheme-w-select-md" label="Calculation On" required>
-                <Select
+                <SchemeSearchableSelect
                   value={form.paymentCalculationOn}
-                  onValueChange={(v) =>
+                  onChange={(v) =>
                     set("paymentCalculationOn", v as SchemePaymentCalculationOn)
                   }
-                >
-                  <SelectTrigger className={ctrl}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {PAYMENT_CALCULATION_ON_OPTIONS.map((o) => (
-                      <SelectItem key={o} value={o} className="text-xs">
-                        {o}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  options={PAYMENT_CALCULATION_ON_SELECT_OPTIONS}
+                />
               </Field>
             </div>
           ) : null}

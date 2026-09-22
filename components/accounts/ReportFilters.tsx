@@ -65,15 +65,25 @@ export function ReportFilterRow({
   children,
   end,
   className,
+  /** When true, filters wrap to additional rows instead of horizontal scroll. */
+  wrap,
 }: {
   children: React.ReactNode;
   /** Right-aligned actions (e.g. Export) — pinned to extreme right of the filter row */
   end?: React.ReactNode;
   className?: string;
+  wrap?: boolean;
 }) {
   return (
     <div className={cn("flex items-end gap-2 w-full min-w-0", className)}>
-      <div className="flex flex-nowrap items-end gap-x-2 min-w-0 flex-1 overflow-x-auto overscroll-x-contain pb-0.5 [scrollbar-width:thin]">
+      <div
+        className={cn(
+          "flex items-end gap-x-2 gap-y-2 min-w-0 flex-1 pb-0.5",
+          wrap
+            ? "flex-wrap"
+            : "flex-nowrap overflow-x-auto overscroll-x-contain [scrollbar-width:thin]",
+        )}
+      >
         {children}
       </div>
       {end ? (
@@ -960,11 +970,20 @@ export function ReportStateFilter({
   value,
   onChange,
   states,
+  options,
 }: {
   value: string;
   onChange: (value: string) => void;
-  states: string[];
+  states?: string[];
+  /** Prefer value/label options when filtering by backend state codes. */
+  options?: { value: string; label: string }[];
 }) {
+  const items =
+    options ??
+    (states ?? []).map((s) => ({
+      value: s,
+      label: s,
+    }));
   return (
     <div className="space-y-0.5 min-w-[140px]">
       <span className={filterLabelClass}>State</span>
@@ -974,9 +993,9 @@ export function ReportStateFilter({
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="all">All states</SelectItem>
-          {states.map((s) => (
-            <SelectItem key={s} value={s}>
-              {s}
+          {items.map((s) => (
+            <SelectItem key={s.value} value={s.value}>
+              {s.label}
             </SelectItem>
           ))}
         </SelectContent>
@@ -1389,15 +1408,20 @@ export function ReportSalespersonMultiFilter({
   values,
   onChange,
   salespeople,
+  labeledOptions,
 }: {
   values: string[];
   onChange: (values: string[]) => void;
-  salespeople: string[];
+  salespeople?: string[];
+  /** Prefer when filtering by backend user IDs. */
+  labeledOptions?: ReportMultiSelectOption[];
 }) {
-  const selectOptions: ReportMultiSelectOption[] = salespeople.map((name) => ({
-    value: name,
-    label: name,
-  }));
+  const selectOptions: ReportMultiSelectOption[] =
+    labeledOptions ??
+    (salespeople ?? []).map((name) => ({
+      value: name,
+      label: name,
+    }));
   return (
     <ReportMultiSelect
       label="Salesperson"
@@ -1471,16 +1495,21 @@ export function ReportStatusMultiFilter<T extends string>({
 export function ReportTdsSectionMultiFilter({
   values,
   onChange,
+  options,
 }: {
   values: string[];
   onChange: (values: string[]) => void;
+  /** When provided (e.g. backend filter UUIDs), use these instead of local TDS master codes. */
+  options?: ReportMultiSelectOption[];
 }) {
-  const sections = getActiveTDSMasters();
-  const selectOptions: ReportMultiSelectOption[] = sections.map((s) => ({
-    value: getTdsSectionCode(s),
-    label: `${getTdsSectionCode(s)} — ${s.sectionName}`,
-    searchText: s.sectionName,
-  }));
+  const sections = options ? null : getActiveTDSMasters();
+  const selectOptions: ReportMultiSelectOption[] =
+    options ??
+    (sections ?? []).map((s) => ({
+      value: getTdsSectionCode(s),
+      label: `${getTdsSectionCode(s)} — ${s.sectionName}`,
+      searchText: s.sectionName,
+    }));
   return (
     <ReportMultiSelect
       label="TDS Section"

@@ -182,6 +182,48 @@ export type SalesInvoiceCancelResult = {
   already_reversed?: boolean;
 };
 
+export type GenerateIrnResult = {
+  already_generated: boolean;
+  sales_invoice_id: string;
+  invoice_number?: string;
+  irn_number: string;
+  acknowledgement_number?: string | null;
+  acknowledgement_date?: string | null;
+  signed_qr_code?: string | null;
+  einvoice_status?: string | null;
+};
+
+export type GenerateEwayBillResult = {
+  already_generated: boolean;
+  sales_invoice_id: string;
+  invoice_number?: string;
+  irn_number?: string | null;
+  eway_bill_number: string;
+  eway_bill_date?: string | Date | null;
+  eway_bill_valid_upto?: string | Date | null;
+  eway_bill_status?: string | null;
+  eway_bill_qr_code?: string | null;
+};
+
+export type PreviewEwayBillResult = {
+  already_generated: boolean;
+  flow: "by_irn" | "standalone";
+  sales_invoice_id?: string;
+  invoice_number?: string;
+  irn_number?: string | null;
+  /** Dispatch-level standalone EWB (same-GSTIN stock transfer). */
+  dispatch_id?: string;
+  dispatch_number?: string | null;
+  challan_number?: string | null;
+  transfer_no?: string | null;
+  eway_bill_number?: string | null;
+  eway_bill_date?: string | Date | null;
+  eway_bill_valid_upto?: string | Date | null;
+  eway_bill_status?: string | null;
+  summary: Record<string, string | number | null> | null;
+  payload: Record<string, unknown> | null;
+};
+
 export type EligibleDispatchDto = {
   dispatch_id: string;
   dispatch_number: string;
@@ -216,6 +258,7 @@ export type SalesInvoiceListDto = {
   einvoice_status?: string | null;
   acknowledgement_number?: string | null;
   acknowledgement_date?: string | null;
+  signed_qr_code?: string | null;
   eway_bill_number?: string | null;
   eway_bill_date?: string | null;
   eway_bill_valid_upto?: string | null;
@@ -321,6 +364,19 @@ export type SalesInvoiceDetailDto = SalesInvoiceListDto & {
   stock_transfer?: {
     stock_transfer_id?: string;
     transfer_no?: string | null;
+  } | null;
+  /** Nested statutory blocks from Sales Invoice View API. */
+  einvoice?: {
+    applicable: boolean;
+    status: string;
+    reason?: string;
+  } | null;
+  ewayBill?: {
+    status: string;
+    eway_bill_number?: string | null;
+    eway_bill_date?: string | Date | null;
+    eway_bill_valid_upto?: string | Date | null;
+    eway_bill_qr_code?: string | null;
   } | null;
 };
 
@@ -908,9 +964,30 @@ export function mapSalesInvoiceDetailToRecord(
   const customerName =
     dto.customer?.customer_name ||
     snapshotStr(customerSnap, "customer_name", "customerName", "name") ||
+    (kind === "stock_transfer"
+      ? snapshotStr(
+          customerSnap,
+          "warehouse_name",
+          "registered_legal_name",
+        ) ||
+        snapshotStr(
+          (dto.destination_warehouse_snapshot || null) as Record<
+            string,
+            unknown
+          > | null,
+          "warehouse_name",
+          "name",
+        )
+      : "") ||
     "";
   const gstin =
-    snapshotStr(customerSnap, "gstin_no", "gstin", "customerGst") || "";
+    snapshotStr(customerSnap, "gstin_no", "gstin", "customerGst", "gst_number") ||
+    (kind === "stock_transfer"
+      ? readWarehouseGstin(
+          dto.destination_warehouse_gst_snapshot as Record<string, unknown> | null,
+          customerSnap,
+        ) || ""
+      : "");
   const warehouseName =
     dto.warehouse?.warehouse_name ||
     snapshotStr(warehouseSnap, "warehouse_name", "warehouseName", "name") ||
@@ -1019,21 +1096,39 @@ export function mapSalesInvoiceDetailToRecord(
     roundOff: asNumber(dto.round_off_amount),
     irn: asString(dto.irn_number) || undefined,
     eInvoiceNo: asString(dto.acknowledgement_number) || undefined,
-    eInvoiceStatus: (dto.einvoice_status || dto.irn_number
-      ? statutoryStatus(dto.einvoice_status, Boolean(asString(dto.irn_number)))
-      : undefined) as InvoiceRecord["eInvoiceStatus"],
+    eInvoiceApplicable: dto.einvoice?.applicable ?? false,
+    eInvoiceApplicabilityReason: asString(dto.einvoice?.reason) || undefined,
+    eInvoiceStatus: (dto.einvoice?.status
+      ? statutoryStatus(dto.einvoice.status, Boolean(asString(dto.irn_number)))
+      : dto.einvoice_status || dto.irn_number
+        ? statutoryStatus(dto.einvoice_status, Boolean(asString(dto.irn_number)))
+        : "not_generated") as InvoiceRecord["eInvoiceStatus"],
     acknowledgementNo: asString(dto.acknowledgement_number) || undefined,
     acknowledgementDate: asDateOnly(dto.acknowledgement_date) || undefined,
-    qrCodeAvailable: Boolean(asString(dto.signed_qr_code || dto.irn_number)),
+    qrCodeAvailable: Boolean(
+      asString(dto.signed_qr_code || dto.irn_number || dto.eway_bill_qr_code),
+    ),
+    signedQrCode: asString(dto.signed_qr_code) || undefined,
+    ewayBillQrCode: asString(dto.eway_bill_qr_code) ||
+      asString(
+        (dto.ewayBill as { eway_bill_qr_code?: string | null } | undefined)
+          ?.eway_bill_qr_code,
+      ) ||
+      undefined,
     ewayBillNo: asString(dto.eway_bill_number) || undefined,
     ewayBillExpiryDate: asDateOnly(dto.eway_bill_valid_upto) || undefined,
     ewayBillGeneratedAt: asDateOnly(dto.eway_bill_date) || undefined,
-    ewayBillStatus: (dto.eway_bill_status || dto.eway_bill_number
+    ewayBillStatus: (dto.ewayBill?.status
       ? statutoryStatus(
-          dto.eway_bill_status,
+          dto.ewayBill.status,
           Boolean(asString(dto.eway_bill_number)),
         )
-      : undefined) as InvoiceRecord["ewayBillStatus"],
+      : dto.eway_bill_status || dto.eway_bill_number
+        ? statutoryStatus(
+            dto.eway_bill_status,
+            Boolean(asString(dto.eway_bill_number)),
+          )
+        : "not_generated") as InvoiceRecord["ewayBillStatus"],
     vehicleNo: asString(dto.dispatch?.vehicle_number) || undefined,
     transporterName: asString(dto.dispatch?.transporter) || undefined,
     transporterId: asString(dto.dispatch?.transporter_id) || undefined,
@@ -1264,6 +1359,51 @@ export const SalesInvoiceService = {
       return unwrapData(response) as SalesInvoiceCancelResult;
     } catch (error) {
       throw new Error(extractErrorMessage(error, "Failed to cancel sales invoice."));
+    }
+  },
+
+  async generateIrn(id: string): Promise<GenerateIrnResult> {
+    try {
+      const response = await axiosInstance.post(
+        API_ENDPOINTS.ACCOUNTS.SALES_INVOICE.GENERATE_IRN(id),
+      );
+      return unwrapData(response) as GenerateIrnResult;
+    } catch (error) {
+      throw new Error(
+        extractErrorMessage(error, "Failed to generate IRN for sales invoice."),
+      );
+    }
+  },
+
+  async previewEwayBill(id: string): Promise<PreviewEwayBillResult> {
+    try {
+      const response = await axiosInstance.get(
+        API_ENDPOINTS.ACCOUNTS.SALES_INVOICE.PREVIEW_EWAY_BILL(id),
+      );
+      return unwrapData(response) as PreviewEwayBillResult;
+    } catch (error) {
+      throw new Error(
+        extractErrorMessage(
+          error,
+          "Failed to preview E-Way Bill for sales invoice.",
+        ),
+      );
+    }
+  },
+
+  async generateEwayBill(id: string): Promise<GenerateEwayBillResult> {
+    try {
+      const response = await axiosInstance.post(
+        API_ENDPOINTS.ACCOUNTS.SALES_INVOICE.GENERATE_EWAY_BILL(id),
+      );
+      return unwrapData(response) as GenerateEwayBillResult;
+    } catch (error) {
+      throw new Error(
+        extractErrorMessage(
+          error,
+          "Failed to generate E-Way Bill for sales invoice.",
+        ),
+      );
     }
   },
 

@@ -260,14 +260,19 @@ export function AutocompleteSelect({
             </div>
           ) : (
             <>
-              {multiple && (
+              {multiple && filtered.length > 0 && (
                 <>
                   <button
                     type="button"
                     onClick={() => {
-                      const allSelected =
-                        Array.isArray(activeValue) && activeValue.length === options.length;
-                      const next = allSelected ? [] : options.map((o) => o.value);
+                      const filteredValues = filtered.map((o) => o.value);
+                      const current = Array.isArray(activeValue) ? activeValue : [];
+                      const allFilteredSelected =
+                        filteredValues.length > 0 &&
+                        filteredValues.every((v) => current.includes(v));
+                      const next = allFilteredSelected
+                        ? current.filter((v) => !filteredValues.includes(v))
+                        : [...new Set([...current, ...filteredValues])];
                       if (confirmOnDone) {
                         setDraft(next);
                       } else {
@@ -277,10 +282,16 @@ export function AutocompleteSelect({
                     className="w-full flex items-center gap-2 px-2 py-1 text-[11px] font-semibold text-brand-600 hover:bg-muted/60 rounded-md"
                   >
                     <Checkbox
-                      checked={Array.isArray(activeValue) && activeValue.length === options.length}
+                      checked={
+                        Array.isArray(activeValue) &&
+                        filtered.length > 0 &&
+                        filtered.every((o) => activeValue.includes(o.value))
+                      }
                       className="w-3.5 h-3.5"
                     />
-                    Select All
+                    {q.trim()
+                      ? `Select All Filtered (${filtered.length})`
+                      : "Select All"}
                   </button>
                   <div className="border-t border-border my-1" />
                 </>

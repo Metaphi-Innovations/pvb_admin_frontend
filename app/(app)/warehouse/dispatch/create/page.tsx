@@ -24,6 +24,13 @@ import {
   validateDispatchDateAgainstPacking,
 } from "../dispatch-display-utils";
 import { DispatchStackedQty } from "../components/DispatchStackedQty";
+import {
+  DispatchTransportDetailsSection,
+  EMPTY_DISPATCH_TRANSPORT,
+  buildDispatchTransportPayload,
+  validateDispatchTransportSoft,
+  type DispatchTransportState,
+} from "../components/DispatchTransportDetailsSection";
 import { showToast } from "@/lib/toast";
 
 type PackingDoneProductRow = NonNullable<
@@ -120,11 +127,15 @@ export default function CreateDispatchPage() {
   const [selectedPackingDoneIds, setSelectedPackingDoneIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // Transportation details (only for Purchase Return dispatch)
+  // Transportation details
+  // purchase_return: short set; stock_transfer: full set for same-GSTIN EWB
   const [transporter, setTransporter] = useState("");
   const [vehicleNumber, setVehicleNumber] = useState("");
   const [lrNumber, setLrNumber] = useState("");
   const [lrDate, setLrDate] = useState("");
+  const [stTransport, setStTransport] = useState<DispatchTransportState>(
+    EMPTY_DISPATCH_TRANSPORT,
+  );
 
   useEffect(() => {
     getPackedOrdersDropdown({ source_type: sourceType })
@@ -284,6 +295,14 @@ export default function CreateDispatchPage() {
       return;
     }
 
+    if (sourceType === "stock_transfer") {
+      const transportError = validateDispatchTransportSoft(stTransport);
+      if (transportError) {
+        showToast(transportError, "error");
+        return;
+      }
+    }
+
     setLoading(true);
     try {
       const dispatchDateIso = new Date(dispatchDate).toISOString();
@@ -298,6 +317,10 @@ export default function CreateDispatchPage() {
         payload.vehicle_number = vehicleNumber || null;
         payload.lr_number = lrNumber || null;
         payload.lr_date = lrDate ? new Date(lrDate).toISOString() : null;
+      }
+
+      if (sourceType === "stock_transfer") {
+        Object.assign(payload, buildDispatchTransportPayload(stTransport));
       }
 
       await createDispatch(payload);
@@ -408,6 +431,21 @@ export default function CreateDispatchPage() {
             </div>
           </div>
         </div>
+
+        {sourceType === "stock_transfer" && (
+          <div className="border-t border-border/80 pt-6 space-y-4">
+            <h2 className="text-xs font-bold text-foreground uppercase tracking-wider border-b pb-2 flex items-center gap-1.5">
+              <Truck className="w-4 h-4 text-brand-600" /> Transportation Details
+            </h2>
+            <DispatchTransportDetailsSection
+              value={stTransport}
+              onChange={(patch) =>
+                setStTransport((prev) => ({ ...prev, ...patch }))
+              }
+              hint="Same-GSTIN stock transfers do not create a Sales Invoice — enter transport details here for Delivery Challan / E-Way Bill."
+            />
+          </div>
+        )}
 
         {sourceType === "purchase_return" && (
           <div className="border-t border-border/80 pt-6 space-y-4">

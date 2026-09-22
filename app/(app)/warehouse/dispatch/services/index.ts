@@ -11,15 +11,28 @@ export async function getPreviewNumber(warehouseId?: string | null): Promise<str
   return typeof data === "string" ? data : data?.dispatchNumber || data?.dispatch_number || "";
 }
 
-export async function getDispatches(payload: any = {}) {
-  const { page, page_size, search, ordering, filters } = payload;
-  const params: any = {};
+export async function getDispatches(
+  payload: {
+    page?: number;
+    page_size?: number;
+    search?: string;
+    ordering?: string;
+    filters?: Record<string, unknown>;
+    signal?: AbortSignal;
+  } = {},
+) {
+  const { page, page_size, search, ordering, filters, signal } = payload;
+  const params: Record<string, number | string> = {};
   if (page) params.page = page;
   if (page_size) params.page_size = page_size;
   if (search) params.search = search;
   if (ordering) params.ordering = ordering;
-  
-  const response = await api.post(API_ENDPOINTS.WAREHOUSE.DISPATCH.LIST, { filters: filters || {} }, { params });
+
+  const response = await api.post(
+    API_ENDPOINTS.WAREHOUSE.DISPATCH.LIST,
+    { filters: filters || {} },
+    { params, signal },
+  );
   return response.data;
 }
 
@@ -178,6 +191,82 @@ export async function getDispatchDropdown(params?: {
 export async function getDispatchById(id: string) {
   const response = await api.get(API_ENDPOINTS.WAREHOUSE.DISPATCH.DETAILS(id));
   return response.data?.data;
+}
+
+function extractDispatchErrorMessage(error: unknown, fallback: string): string {
+  const err = error as {
+    response?: { data?: { message?: string; error?: string } };
+    message?: string;
+  };
+  return (
+    err?.response?.data?.message ||
+    err?.response?.data?.error ||
+    err?.message ||
+    fallback
+  );
+}
+
+export type DispatchPreviewEwayBillResult = {
+  already_generated: boolean;
+  flow: "standalone";
+  dispatch_id: string;
+  dispatch_number?: string | null;
+  challan_number?: string | null;
+  transfer_no?: string | null;
+  eway_bill_number?: string | null;
+  eway_bill_date?: string | Date | null;
+  eway_bill_valid_upto?: string | Date | null;
+  eway_bill_status?: string | null;
+  summary: Record<string, string | number | null> | null;
+  payload: Record<string, unknown> | null;
+};
+
+export type DispatchGenerateEwayBillResult = {
+  already_generated: boolean;
+  dispatch_id: string;
+  dispatch_number?: string | null;
+  challan_number?: string | null;
+  eway_bill_number: string;
+  eway_bill_date?: string | Date | null;
+  eway_bill_valid_upto?: string | Date | null;
+  eway_bill_status?: string | null;
+  eway_bill_qr_code?: string | null;
+};
+
+export async function previewDispatchEwayBill(
+  id: string,
+): Promise<DispatchPreviewEwayBillResult> {
+  try {
+    const response = await api.get(
+      API_ENDPOINTS.WAREHOUSE.DISPATCH.PREVIEW_EWAY_BILL(id),
+    );
+    return response.data?.data as DispatchPreviewEwayBillResult;
+  } catch (error) {
+    throw new Error(
+      extractDispatchErrorMessage(
+        error,
+        "Failed to preview E-Way Bill for Dispatch.",
+      ),
+    );
+  }
+}
+
+export async function generateDispatchEwayBill(
+  id: string,
+): Promise<DispatchGenerateEwayBillResult> {
+  try {
+    const response = await api.post(
+      API_ENDPOINTS.WAREHOUSE.DISPATCH.GENERATE_EWAY_BILL(id),
+    );
+    return response.data?.data as DispatchGenerateEwayBillResult;
+  } catch (error) {
+    throw new Error(
+      extractDispatchErrorMessage(
+        error,
+        "Failed to generate E-Way Bill for Dispatch.",
+      ),
+    );
+  }
 }
 
 export async function createDispatch(payload: any) {

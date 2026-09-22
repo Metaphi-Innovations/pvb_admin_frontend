@@ -60,23 +60,44 @@ function StatusPill({
   label: string;
   bg: string;
   text: string;
-  onClick: () => void;
+  /** When omitted, pill is display-only (non-generated / N/A). */
+  onClick?: () => void;
 }) {
+  const className = cn(
+    "inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap",
+    bg,
+    text,
+    onClick
+      ? "hover:ring-2 hover:ring-brand-200 transition-shadow cursor-pointer"
+      : "cursor-default",
+  );
+
+  if (!onClick) {
+    return (
+      <span className={className} title={label}>
+        {label}
+      </span>
+    );
+  }
+
   return (
     <button
       type="button"
       onClick={onClick}
-      className={cn(
-        "inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap",
-        "hover:ring-2 hover:ring-brand-200 transition-shadow cursor-pointer",
-        bg,
-        text,
-      )}
+      className={className}
       title="View details"
     >
       {label}
     </button>
   );
+}
+
+function qrImageSrc(signedQrCode?: string, fallbackPayload?: string): string | null {
+  const signed = (signedQrCode || "").trim();
+  if (signed.startsWith("data:") || /^https?:\/\//i.test(signed)) return signed;
+  const payload = signed || (fallbackPayload && fallbackPayload !== "—" ? fallbackPayload : "");
+  if (!payload) return null;
+  return `https://api.qrserver.com/v1/create-qr-code/?size=120x120&margin=0&data=${encodeURIComponent(payload)}`;
 }
 
 export function SalesInvoiceEInvoiceStatusCell({
@@ -86,6 +107,10 @@ export function SalesInvoiceEInvoiceStatusCell({
 }) {
   const [open, setOpen] = useState(false);
   const cfg = EINVOICE_CFG[details.status] ?? EINVOICE_CFG["Not Generated"];
+  const canOpenDetails = details.status === "Generated";
+  const qrSrc = canOpenDetails
+    ? qrImageSrc(details.signedQrCode, details.irn)
+    : null;
 
   return (
     <>
@@ -93,62 +118,73 @@ export function SalesInvoiceEInvoiceStatusCell({
         label={details.status}
         bg={cfg.bg}
         text={cfg.text}
-        onClick={() => setOpen(true)}
+        onClick={canOpenDetails ? () => setOpen(true) : undefined}
       />
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="text-sm font-semibold">E-Invoice / IRN</DialogTitle>
-            <DialogDescription className="text-[11px]">
-              Statutory e-invoice details for this sales invoice.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="rounded-xl border border-border bg-muted/20 px-3 py-1">
-            <InfoRow
-              label="Status"
-              value={
-                <span
-                  className={cn(
-                    "inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold",
-                    cfg.bg,
-                    cfg.text,
-                  )}
-                >
-                  {details.status}
-                </span>
-              }
-            />
-            <InfoRow label="E-Invoice Number" value={details.eInvoiceNo} />
-            <InfoRow label="IRN" value={details.irn} />
-            <InfoRow label="Acknowledgement Number" value={details.acknowledgementNo} />
-            <InfoRow label="Acknowledgement Date" value={details.acknowledgementDate} />
-            <InfoRow label="Generated Date & Time" value={details.generatedAt} />
-            <InfoRow
-              label="QR Code"
-              value={
-                details.qrCodeAvailable ? (
-                  <span className="inline-flex h-14 w-14 items-center justify-center rounded-md border border-border bg-white text-[9px] text-muted-foreground">
-                    QR
+      {canOpenDetails ? (
+        <Dialog open={open} onOpenChange={setOpen}>
+          <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="text-sm font-semibold">E-Invoice / IRN</DialogTitle>
+              <DialogDescription className="text-[11px]">
+                Statutory e-invoice details for this sales invoice.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="rounded-xl border border-border bg-muted/20 px-3 py-1">
+              <InfoRow
+                label="Status"
+                value={
+                  <span
+                    className={cn(
+                      "inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold",
+                      cfg.bg,
+                      cfg.text,
+                    )}
+                  >
+                    {details.status}
                   </span>
-                ) : (
-                  "—"
-                )
-              }
-            />
-            {details.status === "Cancelled" ? (
-              <>
-                <InfoRow label="Cancelled Date" value={details.cancelledAt} />
-                <InfoRow label="Cancel Reason" value={details.cancelledReason} />
-              </>
-            ) : null}
-          </div>
-          <div className="flex justify-end">
-            <Button type="button" size="sm" variant="outline" className="h-8 text-xs" onClick={() => setOpen(false)}>
-              Close
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+                }
+              />
+              <InfoRow label="E-Invoice Number" value={details.eInvoiceNo} />
+              <InfoRow label="IRN" value={details.irn} />
+              <InfoRow label="Acknowledgement Number" value={details.acknowledgementNo} />
+              <InfoRow label="Acknowledgement Date" value={details.acknowledgementDate} />
+              <InfoRow label="Generated Date & Time" value={details.generatedAt} />
+              <InfoRow
+                label="QR Code"
+                value={
+                  qrSrc ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={qrSrc}
+                      alt="E-Invoice QR"
+                      width={72}
+                      height={72}
+                      className="rounded-md border border-border bg-white p-1"
+                    />
+                  ) : details.qrCodeAvailable ? (
+                    <span className="inline-flex h-14 w-14 items-center justify-center rounded-md border border-border bg-white text-[9px] text-muted-foreground">
+                      QR
+                    </span>
+                  ) : (
+                    "—"
+                  )
+                }
+              />
+              {details.status === "Cancelled" ? (
+                <>
+                  <InfoRow label="Cancelled Date" value={details.cancelledAt} />
+                  <InfoRow label="Cancel Reason" value={details.cancelledReason} />
+                </>
+              ) : null}
+            </div>
+            <div className="flex justify-end">
+              <Button type="button" size="sm" variant="outline" className="h-8 text-xs" onClick={() => setOpen(false)}>
+                Close
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      ) : null}
     </>
   );
 }
@@ -160,6 +196,10 @@ export function SalesInvoiceEWayStatusCell({
 }) {
   const [open, setOpen] = useState(false);
   const cfg = EWAY_CFG[details.status] ?? EWAY_CFG["Not Generated"];
+  const canOpenDetails = details.status === "Generated";
+  const qrSrc = canOpenDetails
+    ? qrImageSrc(details.ewayBillQrCode, details.eWayBillNo)
+    : null;
 
   return (
     <>
@@ -167,51 +207,74 @@ export function SalesInvoiceEWayStatusCell({
         label={details.status}
         bg={cfg.bg}
         text={cfg.text}
-        onClick={() => setOpen(true)}
+        onClick={canOpenDetails ? () => setOpen(true) : undefined}
       />
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="text-sm font-semibold">E-Way Bill</DialogTitle>
-            <DialogDescription className="text-[11px]">
-              Transport e-way bill details for this sales invoice.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="rounded-xl border border-border bg-muted/20 px-3 py-1">
-            <InfoRow
-              label="Status"
-              value={
-                <span
-                  className={cn(
-                    "inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold",
-                    cfg.bg,
-                    cfg.text,
-                  )}
-                >
-                  {details.status}
-                </span>
-              }
-            />
-            <InfoRow label="E-Way Bill Number" value={details.eWayBillNo} />
-            <InfoRow label="Generated Date" value={details.generatedAt} />
-            <InfoRow label="Expiry Date & Time" value={details.expiryAt} />
-            <InfoRow label="Vehicle Number" value={details.vehicleNo} />
-            <InfoRow label="Transporter Name" value={details.transporterName} />
-            <InfoRow label="Transport Mode" value={details.transportMode} />
-            {details.status === "Cancelled" ? (
-              <>
-                <InfoRow label="Cancelled Date" value={details.cancelledAt} />
-                <InfoRow label="Cancel Reason" value={details.cancelledReason} />
-              </>
-            ) : null}
-          </div>
-          <div className="flex justify-end">
-            <Button type="button" size="sm" variant="outline" className="h-8 text-xs" onClick={() => setOpen(false)}>
-              Close
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {canOpenDetails ? (
+        <Dialog open={open} onOpenChange={setOpen}>
+          <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="text-sm font-semibold">E-Way Bill</DialogTitle>
+              <DialogDescription className="text-[11px]">
+                Transport e-way bill details for this sales invoice.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="rounded-xl border border-border bg-muted/20 px-3 py-1">
+              <InfoRow
+                label="Status"
+                value={
+                  <span
+                    className={cn(
+                      "inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold",
+                      cfg.bg,
+                      cfg.text,
+                    )}
+                  >
+                    {details.status}
+                  </span>
+                }
+              />
+              <InfoRow label="E-Way Bill Number" value={details.eWayBillNo} />
+              <InfoRow label="Generated Date" value={details.generatedAt} />
+              <InfoRow label="Expiry Date & Time" value={details.expiryAt} />
+              <InfoRow label="Vehicle Number" value={details.vehicleNo} />
+              <InfoRow label="Transporter Name" value={details.transporterName} />
+              <InfoRow label="Transport Mode" value={details.transportMode} />
+              <InfoRow
+                label="QR Code"
+                value={
+                  qrSrc ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={qrSrc}
+                      alt="E-Way Bill QR"
+                      width={72}
+                      height={72}
+                      className="rounded-md border border-border bg-white p-1"
+                    />
+                  ) : details.qrCodeAvailable ? (
+                    <span className="inline-flex h-14 w-14 items-center justify-center rounded-md border border-border bg-white text-[9px] text-muted-foreground">
+                      QR
+                    </span>
+                  ) : (
+                    "—"
+                  )
+                }
+              />
+              {details.status === "Cancelled" ? (
+                <>
+                  <InfoRow label="Cancelled Date" value={details.cancelledAt} />
+                  <InfoRow label="Cancel Reason" value={details.cancelledReason} />
+                </>
+              ) : null}
+            </div>
+            <div className="flex justify-end">
+              <Button type="button" size="sm" variant="outline" className="h-8 text-xs" onClick={() => setOpen(false)}>
+                Close
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      ) : null}
     </>
   );
 }
