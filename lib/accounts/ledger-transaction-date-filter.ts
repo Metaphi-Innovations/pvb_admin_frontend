@@ -132,14 +132,21 @@ export function computeClosingFromPeriodOpening(
   return fromSignedBalance(signed);
 }
 
-/** Closing = opening (with corrected Dr/Cr side) + net movement in the selected period. */
+/** Closing = period opening + net movement in the selected period. */
 export function computePeriodClosingBalance(
   ledger: ChartOfAccount,
   totalDebit: number,
   totalCredit: number,
+  dateFrom?: string,
+  allTransactions?: CoaMovementRow[],
 ): BalanceAmount {
+  if (dateFrom && allTransactions) {
+    const periodOpening = computePeriodOpeningBalance(ledger, allTransactions, dateFrom);
+    return computeClosingFromPeriodOpening(periodOpening, totalDebit, totalCredit);
+  }
   const openingSide = resolveOpeningSide(ledger);
-  const signed = toSignedBalance(roundMoney(ledger.openingBalance), openingSide) + totalDebit - totalCredit;
+  const signed =
+    toSignedBalance(roundMoney(ledger.openingBalance), openingSide) + totalDebit - totalCredit;
   return fromSignedBalance(signed);
 }
 
@@ -169,9 +176,10 @@ export function buildCoaTransactionsForDateRange(
   );
   const withBalances = computeRunningBalances(opening, inRange);
 
-  const rows: CoaTransactionRow[] = [
-    {
-      date: "—",
+  const rows: CoaTransactionRow[] = [];
+  if (opening.amount > 0) {
+    rows.push({
+      date: from && /^\d{4}-\d{2}-\d{2}/.test(from) ? from.slice(0, 10) : "—",
       voucherNo: "—",
       voucherType: "Opening Balance",
       referenceNo: "—",
@@ -181,8 +189,8 @@ export function buildCoaTransactionsForDateRange(
       runningBalance: opening.amount,
       runningBalanceType: opening.balanceType,
       isOpeningRow: true,
-    },
-  ];
+    });
+  }
 
   for (const { row, runningBalance, runningBalanceType } of withBalances) {
     rows.push({
