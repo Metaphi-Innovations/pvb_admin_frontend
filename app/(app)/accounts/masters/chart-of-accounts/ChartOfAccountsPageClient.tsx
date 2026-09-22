@@ -177,13 +177,33 @@ export default function ChartOfAccountsPageClient() {
     ? String(selectedNode.apiNodeId)
     : null;
 
+  const fyIdReady = Boolean(
+    selectedFY?.id &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        selectedFY.id,
+      ),
+  );
+
   const groupLedgerApiIds = useMemo(() => {
-    if (!selectedNode || showRoot || isCoaLedgerDetailView(selectedNode, records)) {
+    if (selectedNode && isCoaLedgerDetailView(selectedNode, records)) {
       return [];
     }
-    return collectDescendantLedgers(records, selectedNode.id)
-      .filter((ledger) => !ledger.bankGroupFlag && ledger.apiNodeId)
-      .map((ledger) => String(ledger.apiNodeId));
+
+    const collectIds = (list: ChartOfAccount[], rootId?: CoaNodeId | null) => {
+      const ledgers =
+        rootId != null
+          ? collectDescendantLedgers(list, rootId)
+          : list.filter((r) => r.nodeLevel === "ledger");
+      return ledgers
+        .filter((ledger) => !ledger.bankGroupFlag && ledger.apiNodeId)
+        .map((ledger) => String(ledger.apiNodeId));
+    };
+
+    if (showRoot || !selectedNode) {
+      return [...new Set(collectIds(records))];
+    }
+
+    return [...new Set(collectIds(records, selectedNode.id))];
   }, [selectedNode, showRoot, records]);
 
   const {
@@ -197,7 +217,10 @@ export default function ChartOfAccountsPageClient() {
     financialYearId: selectedFY?.id,
     refreshTick: ledgerDataTick,
     enabled: Boolean(
-      selectedNode && isCoaLedgerDetailView(selectedNode, records) && datesReady,
+      selectedNode &&
+        isCoaLedgerDetailView(selectedNode, records) &&
+        datesReady &&
+        fyIdReady,
     ),
   });
 
@@ -207,7 +230,7 @@ export default function ChartOfAccountsPageClient() {
     dateTo,
     financialYearId: selectedFY?.id,
     refreshTick: ledgerDataTick,
-    enabled: Boolean(datesReady && groupLedgerApiIds.length > 0),
+    enabled: Boolean(datesReady && fyIdReady && groupLedgerApiIds.length > 0),
   });
 
   const groupLedgerBalanceMap = useMemo(() => {

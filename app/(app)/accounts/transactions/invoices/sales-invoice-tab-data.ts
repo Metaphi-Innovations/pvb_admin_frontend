@@ -159,6 +159,19 @@ export function mapApiInvoiceToListRow(
     "—";
   const totalQty = Math.round((Number(dto.total_quantity) || 0) * 100) / 100;
 
+  const ackNo = String(dto.acknowledgement_number || "").trim();
+  const ackDateRaw = dto.acknowledgement_date
+    ? String(dto.acknowledgement_date)
+    : "";
+  const ackDate = ackDateRaw
+    ? ackDateRaw.includes("T")
+      ? ackDateRaw.replace("T", " ").slice(0, 19)
+      : ackDateRaw.slice(0, 19)
+    : "";
+  const signedQr = String(dto.signed_qr_code || "").trim();
+  const irn = String(dto.irn_number || "").trim();
+  const ewayQr = String(dto.eway_bill_qr_code || "").trim();
+
   const stubRecord = {
     invoiceNo: dto.invoice_number,
     sourceType:
@@ -167,10 +180,17 @@ export function mapApiInvoiceToListRow(
         : kind === "stock_transfer"
           ? ("stock_transfer" as const)
           : ("sales_order" as const),
-    irn: dto.irn_number || undefined,
-    eInvoiceNo: dto.acknowledgement_number || undefined,
-    eInvoiceStatus: dto.einvoice_status || (dto.irn_number ? "generated" : undefined),
+    irn: irn || undefined,
+    eInvoiceNo: ackNo || undefined,
+    acknowledgementNo: ackNo || undefined,
+    acknowledgementDate: ackDate || undefined,
+    eInvoiceGeneratedAt: ackDate || undefined,
+    eInvoiceStatus:
+      dto.einvoice_status || (irn ? "generated" : undefined),
+    signedQrCode: signedQr || undefined,
+    qrCodeAvailable: Boolean(signedQr || irn || ewayQr),
     ewayBillNo: dto.eway_bill_number || undefined,
+    ewayBillQrCode: ewayQr || undefined,
     ewayBillStatus:
       dto.eway_bill_status || (dto.eway_bill_number ? "generated" : undefined),
     ewayBillExpiryDate: dto.eway_bill_valid_upto

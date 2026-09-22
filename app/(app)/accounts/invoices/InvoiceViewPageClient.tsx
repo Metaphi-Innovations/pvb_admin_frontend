@@ -23,12 +23,15 @@ import {
 import {
   SalesInvoiceService,
   mapSalesInvoiceDetailToRecord,
+  type PreviewEwayBillResult,
 } from "@/services/sales-invoice.service";
 import {
   calcAdditionalExpensesTotals,
   resolveInvoiceAdditionalExpenses,
 } from "./invoice-additional-expenses";
 import { GoodsInvoiceAdditionalChargesEditor } from "./components/GoodsInvoiceAdditionalChargesEditor";
+import { InvoiceViewStatutorySection } from "./components/InvoiceViewStatutorySection";
+import { EwayBillPreviewDialog } from "./components/EwayBillPreviewDialog";
 import { downloadInvoicePdf } from "./invoice-pdf";
 import {
   openProformaInvoicePreview,
@@ -430,6 +433,13 @@ export default function InvoiceViewPageClient({
   const [record, setRecord] = useState<InvoiceRecord | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [sendEmailOpen, setSendEmailOpen] = useState(false);
+  const [eInvoiceBusy, setEInvoiceBusy] = useState(false);
+  const [ewayBusy, setEwayBusy] = useState(false);
+  const [ewayPreviewOpen, setEwayPreviewOpen] = useState(false);
+  const [ewayPreviewLoading, setEwayPreviewLoading] = useState(false);
+  const [ewayPreview, setEwayPreview] = useState<PreviewEwayBillResult | null>(
+    null,
+  );
 
   const listHref = useMemo(
     () =>
@@ -543,10 +553,93 @@ export default function InvoiceViewPageClient({
     record.transportMode ||
       record.transporterName ||
       record.vehicleNo ||
-      record.ewayBillNo ||
-      record.eInvoiceNo ||
-      record.irn,
+      record.lrNo ||
+      record.transportDocNo ||
+      record.distanceKm,
   );
+
+  const showStatutorySection =
+    record.sourceType !== "service" && Boolean(record.salesInvoiceId);
+
+  const canGenerateStatutory =
+    record.invoiceStatus !== "cancelled" && Boolean(record.salesInvoiceId);
+
+  const handleGenerateIRN = async () => {
+    if (!record?.salesInvoiceId || eInvoiceBusy) return;
+    setEInvoiceBusy(true);
+    try {
+      const result = await SalesInvoiceService.generateIrn(
+        String(record.salesInvoiceId),
+      );
+      showToast(
+        result.already_generated
+          ? "IRN was already generated for this invoice."
+          : "IRN generated successfully.",
+        "success",
+      );
+      await refresh();
+    } catch (e) {
+      showToast(
+        e instanceof Error ? e.message : "Failed to generate IRN.",
+        "error",
+      );
+    } finally {
+      setEInvoiceBusy(false);
+    }
+  };
+
+  const handleOpenEwayPreview = async () => {
+    if (!record?.salesInvoiceId || ewayBusy || ewayPreviewLoading) return;
+    setEwayPreviewLoading(true);
+    setEwayPreview(null);
+    setEwayPreviewOpen(true);
+    try {
+      const preview = await SalesInvoiceService.previewEwayBill(
+        String(record.salesInvoiceId),
+      );
+      setEwayPreview(preview);
+      if (preview.already_generated) {
+        showToast(
+          "E-Way Bill was already generated for this invoice.",
+          "success",
+        );
+      }
+    } catch (e) {
+      setEwayPreviewOpen(false);
+      showToast(
+        e instanceof Error ? e.message : "Failed to preview E-Way Bill.",
+        "error",
+      );
+    } finally {
+      setEwayPreviewLoading(false);
+    }
+  };
+
+  const handleConfirmGenerateEway = async () => {
+    if (!record?.salesInvoiceId || ewayBusy) return;
+    setEwayBusy(true);
+    try {
+      const result = await SalesInvoiceService.generateEwayBill(
+        String(record.salesInvoiceId),
+      );
+      showToast(
+        result.already_generated
+          ? "E-Way Bill was already generated for this invoice."
+          : "E-Way Bill generated successfully.",
+        "success",
+      );
+      setEwayPreviewOpen(false);
+      setEwayPreview(null);
+      await refresh();
+    } catch (e) {
+      showToast(
+        e instanceof Error ? e.message : "Failed to generate E-Way Bill.",
+        "error",
+      );
+    } finally {
+      setEwayBusy(false);
+    }
+  };
 
   const narration =
     record.internalRemarks?.trim() ||
@@ -790,7 +883,7 @@ export default function InvoiceViewPageClient({
           </VoucherFormSectionCard>
 
           {hasTransport ? (
-            <VoucherFormSectionCard title="Transport & Statutory Details" highlight>
+            <VoucherFormSectionCard title="Transport Details" highlight>
               <div className={cn(INVOICE_FORM_GRID_CLASS, "lg:grid-cols-3 xl:grid-cols-5")}>
                 <Field label="Transport Mode" value={record.transportMode} />
                 <Field label="Transporter Name" value={record.transporterName} />
@@ -808,13 +901,20 @@ export default function InvoiceViewPageClient({
                 <Field label="LR Date" value={formatDisplayDate(record.lrDate)} />
                 <Field label="Transport Doc No." value={record.transportDocNo} />
                 <Field label="Transport Doc Date" value={formatDisplayDate(record.transportDocDate)} />
-                <Field label="E-Invoice Status" value={record.eInvoiceStatus} />
-                <Field label="E-Invoice No." value={record.eInvoiceNo} mono />
-                <Field label="IRN" value={record.irn} mono />
-                <Field label="E-Way Bill Status" value={record.ewayBillStatus} />
-                <Field label="E-Way Bill No." value={record.ewayBillNo} mono />
-                <Field label="E-Way Expiry" value={formatDisplayDate(record.ewayBillExpiryDate)} />
               </div>
+            </VoucherFormSectionCard>
+          ) : null}
+
+          {showStatutorySection ? (
+            <VoucherFormSectionCard title="E-Invoice & E-Way Bill" highlight>
+              <InvoiceViewStatutorySection
+                record={record}
+                canAct={canGenerateStatutory}
+                onGenerateEInvoice={() => void handleGenerateIRN()}
+                onGenerateEway={() => void handleOpenEwayPreview()}
+                eInvoiceBusy={eInvoiceBusy}
+                ewayBusy={ewayBusy || ewayPreviewLoading}
+              />
             </VoucherFormSectionCard>
           ) : null}
 
@@ -894,6 +994,19 @@ export default function InvoiceViewPageClient({
             "success",
           );
         }}
+      />
+
+      <EwayBillPreviewDialog
+        open={ewayPreviewOpen}
+        onClose={() => {
+          if (ewayBusy || ewayPreviewLoading) return;
+          setEwayPreviewOpen(false);
+          setEwayPreview(null);
+        }}
+        preview={ewayPreview}
+        loading={ewayPreviewLoading}
+        generating={ewayBusy}
+        onConfirmGenerate={handleConfirmGenerateEway}
       />
     </div>
   );

@@ -10,6 +10,8 @@ import {
   ColumnConfig,
   SortState,
   ActionItemConfig,
+  FilterState,
+  DEFAULT_MASTER_LIST_SORT,
 } from "@/components/listing/types";
 import {
   ListingAuditCell,
@@ -37,7 +39,6 @@ import {
   mergeListRequestFilters,
   resolveListStatus,
 } from "@/lib/masters/list-api-filters";
-import { useAppliedListFilters } from "@/lib/masters/use-applied-list-filters";
 import { useLazyFilterColumns } from "@/lib/masters/use-lazy-filter-columns";
 import {
   getErrorMessage,
@@ -70,6 +71,37 @@ const SCHEME_LIST_TABS: { value: SchemeListTab; label: string; approvalStatus?: 
   { value: "approved", label: "Approved", approvalStatus: "APPROVED" },
   { value: "rejected", label: "Rejected", approvalStatus: "REJECTED" },
 ];
+
+const STATUS_FILTER_OPTIONS = [
+  { label: "Active", value: "active" },
+  { label: "Inactive", value: "inactive" },
+] as const;
+
+type SchemeTabListState = {
+  draftFilters: FilterState;
+  appliedFilters: FilterState;
+  sort: SortState;
+  page: number;
+};
+
+function createEmptyTabListState(): SchemeTabListState {
+  return {
+    draftFilters: {},
+    appliedFilters: {},
+    sort: { ...DEFAULT_MASTER_LIST_SORT },
+    page: 1,
+  };
+}
+
+function createInitialTabListState(): Record<SchemeListTab, SchemeTabListState> {
+  return SCHEME_LIST_TABS.reduce(
+    (acc, tab) => {
+      acc[tab.value] = createEmptyTabListState();
+      return acc;
+    },
+    {} as Record<SchemeListTab, SchemeTabListState>,
+  );
+}
 
 function ApprovalStatusBadge({ status }: { status: SchemeApprovalStatus }) {
   const styles: Record<SchemeApprovalStatus, string> = {
@@ -109,20 +141,43 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
 
 export default function SchemeMasterPage() {
   const router = useRouter();
-  const {
-    draftFilters: filters,
-    setDraftFilters: setFilters,
-    appliedFilters,
-    applyFilters,
-    appliedSearch,
-  } = useAppliedListFilters();
   const { handleOpenFilter, isFilterOpen } = useLazyFilterColumns();
   const [activeTab, setActiveTab] = useState<SchemeListTab>("all");
-  const [sort, setSort] = useState<SortState>({ key: "", direction: "none" });
-  const [page, setPage] = useState(1);
+  const [tabListState, setTabListState] = useState(createInitialTabListState);
   const [pageSize, setPageSize] = useState(10);
   const [toast, setToast] = useState<ToastState | null>(null);
   const [statusTarget, setStatusTarget] = useState<SchemeListRecord | null>(null);
+
+  const activeTabState = tabListState[activeTab];
+  const filters = activeTabState.draftFilters;
+  const appliedFilters = activeTabState.appliedFilters;
+  const sort = activeTabState.sort;
+  const page = activeTabState.page;
+  const appliedSearch = useMemo(
+    () => String(appliedFilters.search ?? "").trim(),
+    [appliedFilters.search],
+  );
+
+  const patchActiveTabState = useCallback(
+    (patch: Partial<SchemeTabListState>) => {
+      setTabListState((prev) => ({
+        ...prev,
+        [activeTab]: { ...prev[activeTab], ...patch },
+      }));
+    },
+    [activeTab],
+  );
+
+  const setFiltersForActiveTab = useCallback(
+    (next: FilterState) => {
+      patchActiveTabState({
+        draftFilters: next,
+        appliedFilters: next,
+        page: 1,
+      });
+    },
+    [patchActiveTabState],
+  );
 
   const ordering = useMemo(
     () => sortStateToOrdering(sort.key, sort.direction),
@@ -160,49 +215,35 @@ export default function SchemeMasterPage() {
   const toggleStatusMutation = useToggleSchemeStatus();
   const exportMutation = useExportSchemes();
 
-  const countBase = useMemo(
-    () => ({
-      page: 1,
-      pageSize: 1,
-      search: appliedSearch,
-      status: listStatus as "all" | "active" | "inactive",
-      ordering: "",
-    }),
-    [appliedSearch, listStatus],
+  const buildTabCountParams = useCallback(
+    (tab: SchemeListTab): MasterListKeyParams => {
+      const state = tabListState[tab];
+      const search = String(state.appliedFilters.search ?? "").trim();
+      const status = resolveListStatus(state.appliedFilters);
+      const baseFilters = mergeListRequestFilters(
+        state.appliedFilters,
+        MASTER_FILTER_FIELD_MAPS.scheme,
+      );
+      const tabMeta = SCHEME_LIST_TABS.find((t) => t.value === tab);
+      return {
+        page: 1,
+        pageSize: 1,
+        search,
+        status,
+        ordering: "",
+        apiFilters: tabMeta?.approvalStatus
+          ? { ...baseFilters, approval_status: tabMeta.approvalStatus }
+          : baseFilters,
+      };
+    },
+    [tabListState],
   );
 
-  const allCountQuery = useSchemes({
-    ...countBase,
-    apiFilters: mergeListRequestFilters(appliedFilters, MASTER_FILTER_FIELD_MAPS.scheme),
-  });
-  const draftCountQuery = useSchemes({
-    ...countBase,
-    apiFilters: {
-      ...mergeListRequestFilters(appliedFilters, MASTER_FILTER_FIELD_MAPS.scheme),
-      approval_status: "DRAFT",
-    },
-  });
-  const pendingCountQuery = useSchemes({
-    ...countBase,
-    apiFilters: {
-      ...mergeListRequestFilters(appliedFilters, MASTER_FILTER_FIELD_MAPS.scheme),
-      approval_status: "PENDING_APPROVAL",
-    },
-  });
-  const approvedCountQuery = useSchemes({
-    ...countBase,
-    apiFilters: {
-      ...mergeListRequestFilters(appliedFilters, MASTER_FILTER_FIELD_MAPS.scheme),
-      approval_status: "APPROVED",
-    },
-  });
-  const rejectedCountQuery = useSchemes({
-    ...countBase,
-    apiFilters: {
-      ...mergeListRequestFilters(appliedFilters, MASTER_FILTER_FIELD_MAPS.scheme),
-      approval_status: "REJECTED",
-    },
-  });
+  const allCountQuery = useSchemes(buildTabCountParams("all"));
+  const draftCountQuery = useSchemes(buildTabCountParams("draft"));
+  const pendingCountQuery = useSchemes(buildTabCountParams("pending_approval"));
+  const approvedCountQuery = useSchemes(buildTabCountParams("approved"));
+  const rejectedCountQuery = useSchemes(buildTabCountParams("rejected"));
 
   const tabCounts: Record<SchemeListTab, number> = {
     all: allCountQuery.data?.total ?? 0,
@@ -217,9 +258,6 @@ export default function SchemeMasterPage() {
   });
   const schemeNameOptionsQuery = useSchemeFilterDropdown("scheme_name", {
     enabled: isFilterOpen("schemeName"),
-  });
-  const statusOptionsQuery = useSchemeFilterDropdown("is_active", {
-    enabled: isFilterOpen("status"),
   });
 
   const schemeCodeOptions = useMemo(
@@ -254,13 +292,10 @@ export default function SchemeMasterPage() {
       ),
     [],
   );
-  const statusOptions = useMemo(() => {
-    if (statusOptionsQuery.data?.length) return statusOptionsQuery.data;
-    return [
-      { label: "Active", value: "active" },
-      { label: "Inactive", value: "inactive" },
-    ];
-  }, [statusOptionsQuery.data]);
+  const statusOptions = useMemo(
+    () => [...STATUS_FILTER_OPTIONS],
+    [],
+  );
 
   const rows = listQuery.data?.items ?? [];
   const totalRecords = listQuery.data?.total ?? 0;
@@ -270,10 +305,6 @@ export default function SchemeMasterPage() {
     const t = setTimeout(() => setToast(null), 3000);
     return () => clearTimeout(t);
   }, [toast]);
-
-  useEffect(() => {
-    setPage(1);
-  }, [appliedFilters, appliedSearch, sort, pageSize, activeTab]);
 
   const requestToggle = useCallback((row: SchemeListRecord) => {
     setStatusTarget(row);
@@ -331,7 +362,7 @@ export default function SchemeMasterPage() {
         header: "Scheme Code",
         sortable: true,
         filterable: true,
-        filterType: "text",
+        filterType: "dropdown",
         filterOptions: schemeCodeOptions,
         width: "100px",
         render: (_v, row) => (
@@ -345,7 +376,7 @@ export default function SchemeMasterPage() {
         header: "Scheme Name",
         sortable: true,
         filterable: true,
-        filterType: "text",
+        filterType: "dropdown",
         filterOptions: schemeNameOptions,
         width: "170px",
         truncate: false,
@@ -383,7 +414,7 @@ export default function SchemeMasterPage() {
         key: "approvalStatus",
         header: "Approval",
         sortable: true,
-        filterable: true,
+        filterable: activeTab === "all",
         filterType: "dropdown",
         filterOptions: approvalOptions,
         width: "120px",
@@ -453,6 +484,7 @@ export default function SchemeMasterPage() {
       },
     ],
     [
+      activeTab,
       schemeCodeOptions,
       schemeNameOptions,
       schemeTypeOptions,
@@ -498,18 +530,21 @@ export default function SchemeMasterPage() {
         <p className="text-xs text-red-600 mb-2 px-1">{listError}</p>
       ) : null}
       <MasterListing<SchemeListRecord>
+        key={activeTab}
         columns={columns}
         data={rows}
         totalRecords={totalRecords}
         page={page}
         pageSize={pageSize}
-        onPageChange={setPage}
-        onPageSizeChange={setPageSize}
-        onSortChange={setSort}
-        onFilterChange={(next) => {
-          setFilters(next);
-          applyFilters(next);
+        onPageChange={(nextPage) => patchActiveTabState({ page: nextPage })}
+        onPageSizeChange={(nextSize) => {
+          setPageSize(nextSize);
+          patchActiveTabState({ page: 1 });
         }}
+        onSortChange={(nextSort) =>
+          patchActiveTabState({ sort: nextSort, page: 1 })
+        }
+        onFilterChange={setFiltersForActiveTab}
         onOpenFilter={handleOpenFilter}
         actions={actions}
         onAdd={() => router.push("/masters/scheme/add")}

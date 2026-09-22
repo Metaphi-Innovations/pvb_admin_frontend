@@ -295,6 +295,8 @@ export interface InvoiceRecord {
 	distanceKm?: number | null;
 	ewayBillNo?: string;
 	ewayBillExpiryDate?: string;
+	/** EWB QR from PeriOne when returned (separate from IRN signed QR). */
+	ewayBillQrCode?: string;
 	ewayBillStatus?:
 		| "not_generated"
 		| "generated"
@@ -311,6 +313,9 @@ export interface InvoiceRecord {
 	acknowledgementNo?: string;
 	acknowledgementDate?: string;
 	irn?: string;
+	/** From View API einvoice.applicable — warehouse GST e-invoice capability. */
+	eInvoiceApplicable?: boolean;
+	eInvoiceApplicabilityReason?: string;
 	eInvoiceStatus?:
 		| "not_applicable"
 		| "not_generated"
@@ -322,6 +327,8 @@ export interface InvoiceRecord {
 	eInvoiceCancelledAt?: string;
 	eInvoiceCancelledReason?: string;
 	qrCodeAvailable?: boolean;
+	/** NIC SignedQRCode payload from Generate IRN. */
+	signedQrCode?: string;
 	customerNotes?: string;
 	termsAndConditions?: string;
 	internalRemarks?: string;
@@ -991,6 +998,7 @@ export type InvoiceFormInput = {
 	distanceKm?: number | null;
 	ewayBillNo?: string;
 	ewayBillExpiryDate?: string;
+	ewayBillQrCode?: string;
 	ewayBillStatus?:
 		| "not_generated"
 		| "generated"
@@ -1007,6 +1015,8 @@ export type InvoiceFormInput = {
 	acknowledgementNo?: string;
 	acknowledgementDate?: string;
 	irn?: string;
+	eInvoiceApplicable?: boolean;
+	eInvoiceApplicabilityReason?: string;
 	eInvoiceStatus?:
 		| "not_applicable"
 		| "not_generated"
