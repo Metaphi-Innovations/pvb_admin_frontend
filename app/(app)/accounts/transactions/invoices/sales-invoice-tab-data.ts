@@ -99,6 +99,8 @@ export interface SalesInvoiceListRow {
   viewHref: string;
   editHref: string | null;
   canCancel: boolean;
+  /** Present when backend blocks cancel due to dependent vouchers. */
+  cancelBlockedReason?: string | null;
   canEdit: boolean;
   canPdf: boolean;
   canDownloadPi: boolean;
@@ -249,7 +251,11 @@ export function mapApiInvoiceToListRow(
     invoiceStatus: status,
     viewHref: `${LIST_PATH}/${id}`,
     editHref: null,
-    canCancel: status !== "cancelled",
+    canCancel:
+      typeof dto.can_cancel === "boolean"
+        ? dto.can_cancel
+        : status !== "cancelled",
+    cancelBlockedReason: dto.cancel_blocked_reason ?? null,
     canEdit: false,
     canPdf: kind === "service",
     canDownloadPi,

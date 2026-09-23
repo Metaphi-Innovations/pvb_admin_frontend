@@ -11,6 +11,7 @@ import { CustomerPartyInfoButton } from "./CustomerPartyInfo";
 import { formatDisplayDate } from "@/lib/accounts/date-display";
 
 export function SampleOrderCustomerSection({
+  customerId,
   customerName,
   customerCode,
   customerGst,
@@ -21,6 +22,7 @@ export function SampleOrderCustomerSection({
   customerType,
   salesperson,
 }: {
+  customerId?: string;
   customerName: string;
   customerCode?: string;
   customerGst?: string;
@@ -43,6 +45,7 @@ export function SampleOrderCustomerSection({
             {customerName ? (
               <CustomerPartyInfoButton
                 className="so-goods-info-btn"
+                customerId={customerId}
                 customerName={customerName}
                 customerCode={customerCode}
                 branch={branch}

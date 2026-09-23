@@ -62,18 +62,16 @@ export function Gstr2aFilterBar({
       ? filterState.gstRegistrationOptions
       : undefined;
 
-  // Prefer live GST Summary filter options; never silently use demo masters
-  // when the API filter hook is active.
-  const branchOptions =
-    apiBranchOptions && apiBranchOptions.length > 0
-      ? apiBranchOptions.map((o) => o.value)
-      : mounted
-        ? getGstReportBranchOptions()
-        : [...REPORT_BRANCH_OPTIONS];
-  const gstRegistrationOptions =
-    apiGstRegistrationOptions && apiGstRegistrationOptions.length > 0
-      ? apiGstRegistrationOptions
-      : GST_REGISTRATION_OPTIONS;
+  // When the API filter hook is active, never fall back to local/demo branch masters.
+  const usesApiFilters = "branchLabeledOptions" in filterState;
+  const branchOptions = usesApiFilters
+    ? (apiBranchOptions ?? []).map((o) => o.value)
+    : mounted
+      ? getGstReportBranchOptions()
+      : [...REPORT_BRANCH_OPTIONS];
+  const gstRegistrationOptions = usesApiFilters
+    ? (apiGstRegistrationOptions ?? [])
+    : GST_REGISTRATION_OPTIONS;
 
   const filterSummaryItems = useMemo((): ReportFilterSummaryItem[] => {
     const branchSummary = apiBranchOptions?.length

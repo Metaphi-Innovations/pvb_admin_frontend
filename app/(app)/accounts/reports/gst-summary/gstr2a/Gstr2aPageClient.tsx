@@ -82,8 +82,17 @@ import type {
   Gstr2aReviewStatusApi,
 } from "@/types/gst-summary.types";
 import { useGstSummaryApiFilters } from "../useGstSummaryApiFilters";
+import { useCanGstSummary } from "../use-can-gst-summary";
+import {
+  gstExportDisabledReason,
+  gstHistoryDisabledReason,
+  gstUploadDisabledReason,
+  isGstHistoryScopeReady,
+  isGstPeriodScopeReady,
+} from "../gst-summary-action-gating";
 import { GstReportNavTabs } from "../components/GstReportNavTabs";
 import { Gstr2aFilterBar } from "./components/Gstr2aFilterBar";
+import { GstSummaryExportMenu } from "../components/GstSummaryExportMenu";
 import { Gstr2aComparisonSheet } from "./components/Gstr2aComparisonSheet";
 import { Gstr2aCandidateMatchDrawer } from "./components/Gstr2aCandidateMatchDrawer";
 import {
@@ -358,6 +367,7 @@ export default function Gstr2aPageClient() {
     financialYearId,
     gstPeriod,
     gstRegistration,
+    handleGstPeriodChange,
     filtersLoading,
     filtersError,
   } = filterState;
@@ -403,6 +413,9 @@ export default function Gstr2aPageClient() {
   const [historyDetail, setHistoryDetail] = useState<Gstr2aImportDto | null>(
     null,
   );
+  const [historyImports, setHistoryImports] = useState<Gstr2aImportDto[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
   /** When set, reconciliation loads this import (supports historical/superseded). */
   const [viewImportId, setViewImportId] = useState<string | null>(null);
   const [portalOpen, setPortalOpen] = useState(false);
@@ -412,10 +425,40 @@ export default function Gstr2aPageClient() {
   const [portalError, setPortalError] = useState<string | null>(null);
   const [rerunConfirmOpen, setRerunConfirmOpen] = useState(false);
 
-  const scopeReady =
-    !!financialYearId &&
-    gstPeriod !== "all" &&
-    gstRegistration !== "all";
+  const canCreate = useCanGstSummary("create");
+  const canView = useCanGstSummary("view");
+
+  const scopeReady = isGstPeriodScopeReady({
+    financialYearId,
+    gstRegistration,
+    gstPeriod,
+  });
+  const historyScopeReady = isGstHistoryScopeReady({
+    financialYearId,
+    gstRegistration,
+  });
+
+  const uploadDisabledReason = gstUploadDisabledReason({
+    canCreate,
+    financialYearId,
+    gstRegistration,
+    gstPeriod,
+  });
+  const exportDisabledReason = gstExportDisabledReason({
+    canView,
+    financialYearId,
+    gstRegistration,
+    gstPeriod,
+  });
+  const historyDisabledReason = gstHistoryDisabledReason({
+    canView,
+    financialYearId,
+    gstRegistration,
+  });
+
+  const canUpload = !uploadDisabledReason;
+  const canExport = !exportDisabledReason;
+  const canOpenImportHistory = !historyDisabledReason;
 
   useEffect(() => {
     setPage(1);
@@ -501,6 +544,51 @@ export default function Gstr2aPageClient() {
     viewImportId,
   ]);
 
+  useEffect(() => {
+    if (!historyOpen || !historyScopeReady) {
+      if (!historyOpen) {
+        setHistoryImports([]);
+        setHistoryError(null);
+        setHistoryLoading(false);
+      }
+      return;
+    }
+    const controller = new AbortController();
+    setHistoryLoading(true);
+    setHistoryError(null);
+    void GstSummaryApiService.getGstr2aImports(
+      {
+        financial_year_id: financialYearId,
+        gstin: gstRegistration,
+        return_period: gstPeriod !== "all" ? gstPeriod : undefined,
+        page: 1,
+        page_size: 50,
+      },
+      controller.signal,
+    )
+      .then((result) => {
+        setHistoryImports(result.rows);
+        setHistoryLoading(false);
+      })
+      .catch((err) => {
+        if (controller.signal.aborted) return;
+        const message =
+          err instanceof GstSummaryApiError
+            ? err.message
+            : "Failed to load import history.";
+        setHistoryError(message);
+        setHistoryImports([]);
+        setHistoryLoading(false);
+      });
+    return () => controller.abort();
+  }, [
+    historyOpen,
+    historyScopeReady,
+    financialYearId,
+    gstRegistration,
+    gstPeriod,
+  ]);
+
   const currentImport = useMemo(() => {
     if (recon?.import) {
       const fromList = imports.find(
@@ -518,8 +606,12 @@ export default function Gstr2aPageClient() {
   const refresh = () => setRefreshKey((k) => k + 1);
 
   const handleUpload = async (file: File) => {
-    if (!scopeReady) {
-      showToast("Select GSTIN and Return Period before uploading.", "error");
+    if (!canUpload) {
+      showToast(
+        uploadDisabledReason ??
+          "Select a GST registration and a specific GST Period to upload JSON.",
+        "error",
+      );
       return;
     }
     setUploading(true);
@@ -691,26 +783,37 @@ export default function Gstr2aPageClient() {
   const shellActions = (
     <div className="flex items-center gap-2">
       {uploadInput}
-      <Button
-        variant="outline"
-        size="sm"
-        className="h-8 text-xs gap-1.5"
-        disabled={uploading || !scopeReady}
-        onClick={() => fileRef.current?.click()}
+      <span
+        className="inline-flex"
+        title={
+          uploading
+            ? "Upload in progress…"
+            : uploadDisabledReason
+        }
       >
-        <Upload className="w-3.5 h-3.5" />
-        {uploading ? "Uploading…" : "Upload GSTR-2A JSON"}
-      </Button>
-      <Button
-        variant="outline"
-        size="sm"
-        className="h-8 text-xs gap-1.5"
-        disabled={!scopeReady}
-        onClick={() => setHistoryOpen(true)}
-      >
-        <History className="w-3.5 h-3.5" />
-        Import History
-      </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 text-xs gap-1.5"
+          disabled={uploading || !canUpload}
+          onClick={() => fileRef.current?.click()}
+        >
+          <Upload className="w-3.5 h-3.5" />
+          {uploading ? "Uploading…" : "Upload GSTR-2A JSON"}
+        </Button>
+      </span>
+      <span className="inline-flex" title={historyDisabledReason}>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 text-xs gap-1.5"
+          disabled={!canOpenImportHistory}
+          onClick={() => setHistoryOpen(true)}
+        >
+          <History className="w-3.5 h-3.5" />
+          Import History
+        </Button>
+      </span>
       {isCurrent && (
         <Button
           variant="outline"
@@ -745,7 +848,35 @@ export default function Gstr2aPageClient() {
       layout="split"
       className="h-full min-h-0"
       actions={shellActions}
-      filters={<Gstr2aFilterBar filterState={filterState} mounted={mounted} />}
+      filters={
+        <Gstr2aFilterBar
+          filterState={filterState}
+          mounted={mounted}
+          end={
+            <GstSummaryExportMenu
+              disabled={!canExport}
+              disabledTitle={exportDisabledReason}
+              onExport={async (format) => {
+                await GstSummaryApiService.exportGstr2a({
+                  financial_year_id: financialYearId || undefined,
+                  gstin: gstRegistration !== "all" ? gstRegistration : undefined,
+                  return_period: gstPeriod !== "all" ? gstPeriod : undefined,
+                  import_id: viewImportId ?? undefined,
+                  match_status:
+                    matchStatusFilter !== "all" ? matchStatusFilter : undefined,
+                  review_status:
+                    reviewStatusFilter !== "all"
+                      ? reviewStatusFilter
+                      : undefined,
+                  supplier_gstin: supplierGstinApplied || undefined,
+                  document_number: documentNumberApplied || undefined,
+                  format,
+                });
+              }}
+            />
+          }
+        />
+      }
       subHeader={<GstReportNavTabs filters={filters} />}
     >
       <div className="flex-1 min-h-0 overflow-y-auto">
@@ -757,11 +888,11 @@ export default function Gstr2aPageClient() {
           ) : !scopeReady ? (
             <div className="flex flex-col items-center gap-1 py-10 text-center">
               <p className="text-sm font-medium text-foreground">
-                Select GSTIN and Return Period
+                Select GST registration and a specific GST Period
               </p>
               <p className="text-xs text-muted-foreground max-w-md">
-                Choose a GST registration and GST period to load GSTR-2A
-                reconciliation for that scope.
+                Choose a GST registration and a month (not All months) to load
+                GSTR-2A reconciliation, upload JSON, or export this report.
               </p>
             </div>
           ) : showLoading ? (
@@ -779,7 +910,8 @@ export default function Gstr2aPageClient() {
               <Button
                 size="sm"
                 className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white mt-1"
-                disabled={uploading}
+                disabled={uploading || !canUpload}
+                title={uploadDisabledReason}
                 onClick={() => fileRef.current?.click()}
               >
                 <Upload className="w-3.5 h-3.5" />
@@ -1259,15 +1391,28 @@ export default function Gstr2aPageClient() {
             <DialogDescription className="text-xs">
               Historical imports are read-only. Superseded versions cannot be
               mutated.
+              {gstPeriod === "all"
+                ? " Showing imports across all return periods for this GSTIN and financial year."
+                : null}
             </DialogDescription>
           </DialogHeader>
           <div className="max-h-[24rem] overflow-y-auto space-y-2">
-            {imports.length === 0 ? (
+            {historyLoading ? (
               <p className="text-xs text-muted-foreground py-4 text-center">
-                No imports for this GSTIN/period.
+                Loading import history…
+              </p>
+            ) : historyError ? (
+              <p className="text-xs text-red-600 py-4 text-center">
+                {historyError}
+              </p>
+            ) : historyImports.length === 0 ? (
+              <p className="text-xs text-muted-foreground py-4 text-center">
+                {gstPeriod === "all"
+                  ? "No imports for this GSTIN / financial year."
+                  : "No imports for this GSTIN/period."}
               </p>
             ) : (
-              imports.map((imp) => (
+              historyImports.map((imp) => (
                 <div
                   key={imp.import_id}
                   className="rounded-xl border border-border p-3 flex items-start justify-between gap-3"
@@ -1313,6 +1458,9 @@ export default function Gstr2aPageClient() {
                       size="sm"
                       className="h-7 text-[11px]"
                       onClick={() => {
+                        if (gstPeriod !== imp.return_period) {
+                          handleGstPeriodChange(imp.return_period);
+                        }
                         setViewImportId(imp.import_id);
                         setHistoryOpen(false);
                       }}

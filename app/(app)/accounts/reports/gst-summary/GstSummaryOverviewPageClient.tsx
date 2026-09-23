@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   ArrowDownLeft,
@@ -27,6 +27,7 @@ import { useGstSummaryApiFilters } from "./useGstSummaryApiFilters";
 import { GstReportFilterBar } from "./components/GstReportFilterBar";
 import { GstReportNavTabs } from "./components/GstReportNavTabs";
 import { GstOverviewMonthlyTable } from "./components/GstOverviewMonthlyTable";
+import { GstSummaryExportMenu } from "./components/GstSummaryExportMenu";
 
 const UNAVAILABLE = "—";
 
@@ -124,6 +125,14 @@ export default function GstSummaryOverviewPageClient() {
     !mounted || filtersLoading || !datesReady || (loading && !overview);
   const healthWarnings = overview?.health?.warnings ?? [];
 
+  const handleExport = useCallback(
+    async (format: "EXCEL" | "PDF") => {
+      if (!queryParams) return;
+      await GstSummaryApiService.exportOverview({ ...queryParams, format });
+    },
+    [queryParams],
+  );
+
   return (
     <AccountsPageShell
       breadcrumbs={accountsBreadcrumb("Reports", "GST Summary")}
@@ -137,12 +146,10 @@ export default function GstSummaryOverviewPageClient() {
           filterState={filterState}
           mounted={mounted}
           end={
-            <span
-              className="text-[11px] text-muted-foreground max-w-[14rem] leading-snug"
-              title="Backend export is not available for GST Overview yet."
-            >
-              Export unavailable
-            </span>
+            <GstSummaryExportMenu
+              disabled={!queryParams || loading || !overview}
+              onExport={handleExport}
+            />
           }
         />
       }
@@ -177,9 +184,9 @@ export default function GstSummaryOverviewPageClient() {
                   )}
                   {!overview.summary.net_gst_payable_available && (
                     <p className="text-[11px] text-amber-800">
-                      Statutory Net GST Payable:{" "}
+                      Statutory Net GST Payable is not computed in GST Summary.{" "}
                       {overview.notes.net_payable ||
-                        "Not available. Showing Books GST Working Difference only."}
+                        "Showing Books GST Working Difference (non-statutory control) only."}
                     </p>
                   )}
                   {!overview.summary.pending_reconciliation_available && (

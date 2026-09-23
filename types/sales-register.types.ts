@@ -1,6 +1,10 @@
 /** Sales Register report types — mirror backend `/accounts/reports/sales-register` contract. */
 
 export type SalesRegisterReportStatus = "POSTED" | "CANCELLED";
+export type SalesRegisterInvoiceType =
+  | "SALES"
+  | "DIRECT_SERVICE"
+  | "STOCK_TRANSFER";
 export type SalesRegisterGstType = "CGST_SGST" | "IGST";
 export type SalesRegisterGstTypeFilter = "ALL" | SalesRegisterGstType;
 export type SalesRegisterExportFormat = "EXCEL" | "PDF";
@@ -49,7 +53,7 @@ export interface SalesRegisterApiRow {
   payment_terms: string | null;
   invoice_status: SalesRegisterReportStatus;
   gst_type: SalesRegisterGstType;
-  invoice_type: "SALES" | "DIRECT_SERVICE";
+  invoice_type: SalesRegisterInvoiceType;
   posted_voucher_id: string | null;
   posted_voucher_no: string | null;
   customer_ledger_id: string | null;
@@ -102,6 +106,7 @@ export interface SalesRegisterAppliedFilters {
   invoice_number: string | null;
   state_code: string | null;
   statuses: SalesRegisterReportStatus[];
+  invoice_types: SalesRegisterInvoiceType[];
   gst_type: SalesRegisterGstTypeFilter;
   sort_by: SalesRegisterSortBy;
   sort_order: SalesRegisterSortOrder;
@@ -160,12 +165,14 @@ export interface SalesRegisterFiltersConfig {
     state_name: string;
   }>;
   statuses: Array<{ value: SalesRegisterReportStatus; label: string }>;
+  invoice_types: Array<{ value: SalesRegisterInvoiceType; label: string }>;
   gst_types: Array<{ value: SalesRegisterGstTypeFilter; label: string }>;
   defaults: {
     financial_year_id: string | null;
     from_date: string | null;
     to_date: string | null;
     statuses: SalesRegisterReportStatus[];
+    invoice_types: SalesRegisterInvoiceType[];
     gst_type: SalesRegisterGstTypeFilter;
     page: number;
     page_size: number;
@@ -186,6 +193,7 @@ export interface SalesRegisterQueryParams {
   invoice_number?: string;
   state_code?: string;
   statuses?: SalesRegisterReportStatus[];
+  invoice_types?: SalesRegisterInvoiceType[];
   gst_type?: SalesRegisterGstTypeFilter;
   page?: number;
   page_size?: number;

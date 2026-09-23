@@ -23,12 +23,14 @@ import type {
   GstSummaryFiltersConfig,
   GstSummaryQueryParams,
 } from "@/types/gst-summary.types";
+import { buildGstPeriodOptionsForRange } from "./gst-summary-action-gating";
 
 const PLACEHOLDER_DATE = "2025-04-01";
 
 /**
- * API-backed GST Summary filters for Overview, GSTR-1, GSTR-2A, GSTR-2B, and GSTR-3B.
- * Leaves the local/demo `useGstReportFilters` intact for Annual (and legacy demo paths).
+ * API-backed GST Summary filters for Overview, GSTR-1, GSTR-2A, GSTR-2B, GSTR-3B,
+ * and Annual GST Compliance Summary.
+ * Leaves the local/demo `useGstReportFilters` intact for any remaining legacy paths.
  */
 export function useGstSummaryApiFilters() {
   const mounted = useClientMounted();
@@ -208,14 +210,21 @@ export function useGstSummaryApiFilters() {
   }, [defaultFyRange]);
 
   const gstPeriodOptions = useMemo(() => {
-    if (filtersConfig?.gst_periods?.length) {
+    const all = { value: "all", label: "All months" };
+    const fy = filtersConfig?.financial_years.find(
+      (f) => f.financial_year_id === financialYearId,
+    );
+    if (fy?.start_date && fy?.end_date) {
       return [
-        { value: "all", label: "All months" },
-        ...filtersConfig.gst_periods,
+        all,
+        ...buildGstPeriodOptionsForRange(fy.start_date, fy.end_date),
       ];
     }
-    return [{ value: "all", label: "All months" }];
-  }, [filtersConfig]);
+    if (filtersConfig?.gst_periods?.length) {
+      return [all, ...filtersConfig.gst_periods];
+    }
+    return [all];
+  }, [filtersConfig, financialYearId]);
 
   const branchLabeledOptions = useMemo((): ReportMultiSelectOption[] => {
     return (filtersConfig?.branches ?? []).map((b) => ({

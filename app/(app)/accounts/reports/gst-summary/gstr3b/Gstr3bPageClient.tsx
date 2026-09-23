@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { AccountsReportBody } from "@/components/accounts/AccountsReportLayout";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
@@ -17,6 +17,7 @@ import type {
 import { useGstSummaryApiFilters } from "../useGstSummaryApiFilters";
 import { GstReportFilterBar } from "../components/GstReportFilterBar";
 import { GstReportNavTabs } from "../components/GstReportNavTabs";
+import { GstSummaryExportMenu } from "../components/GstSummaryExportMenu";
 import { Gstr1ReportHeaderBlock } from "../gstr1/components/Gstr1ReportHeaderBlock";
 import { Gstr3bWorkingReport } from "./components/Gstr3bWorkingReport";
 
@@ -87,6 +88,14 @@ export default function Gstr3bPageClient() {
 
   const branchLabel = resolveBranchFilterLabel(filters.branch);
 
+  const handleExport = useCallback(
+    async (format: "EXCEL" | "PDF") => {
+      if (!gstr3bParams) return;
+      await GstSummaryApiService.exportGstr3b({ ...gstr3bParams, format });
+    },
+    [gstr3bParams],
+  );
+
   return (
     <AccountsPageShell
       breadcrumbs={accountsBreadcrumb("Reports", "GST Summary", "GSTR-3B")}
@@ -100,12 +109,10 @@ export default function Gstr3bPageClient() {
           filterState={filterState}
           mounted={mounted}
           end={
-            <span
-              className="text-[11px] text-muted-foreground max-w-[14rem] leading-snug"
-              title="Backend GSTR-3B export is not available yet."
-            >
-              Export unavailable
-            </span>
+            <GstSummaryExportMenu
+              disabled={!gstr3bParams || loading || !report}
+              onExport={handleExport}
+            />
           }
         />
       }

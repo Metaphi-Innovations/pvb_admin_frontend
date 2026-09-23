@@ -446,54 +446,22 @@ export function buildGstr2aReport(filters: Gstr2aFilters): Gstr2aReport {
     filters.gstRegistration !== "all"
       ? filters.gstRegistration
       : COMPANY_BILLING.gstNumber;
-  const period = filters.gstPeriod !== "all" ? filters.gstPeriod : GSTR2A_DEMO_PERIOD;
-  const hasUpload = !!getActiveGstr2aUpload(gstin, period);
+  const period = filters.gstPeriod !== "all" ? filters.gstPeriod : "";
+  const hasUpload = period ? !!getActiveGstr2aUpload(gstin, period) : false;
 
   if (!hasUpload) {
-    const demoBooks = filterBooks(GSTR2A_DEMO_BOOKS_DOCS, {
-      ...filters,
-      gstPeriod: GSTR2A_DEMO_PERIOD,
-      dateFrom: "2026-06-01",
-      dateTo: "2026-06-30",
-    });
-    const demoPortal = filterPortal(GSTR2A_DEMO_PORTAL_DOCS, {
-      ...filters,
-      gstPeriod: GSTR2A_DEMO_PERIOD,
-      dateFrom: "2026-06-01",
-      dateTo: "2026-06-30",
-    });
-    const rows = applyOverrides(buildRows(demoBooks, demoPortal)).map((row) => {
-      // Diversify demo remarks for client walkthroughs
-      if (row.portalInvoiceNo === "ICP-JUNE-214") {
-        return { ...row, remarks: "GSTIN mismatch" };
-      }
-      if (row.status === "missing_in_books" && row.remarks === "Missing in books") {
-        return { ...row, remarks: "Present in GSTR-2A — missing in books" };
-      }
-      return row;
-    });
     return {
-      rows,
-      summary: summarize(rows),
-      uploads: resolveUploadHistory(filters, false),
-      activeUpload: GSTR2A_DEMO_UPLOAD_HISTORY.find((u) => u.isActive) ?? null,
-      hasData: rows.length > 0,
+      rows: [],
+      summary: summarize([]),
+      uploads: [],
+      activeUpload: null,
+      hasData: false,
     };
   }
 
   const liveBooks = collectLiveBooks(filters);
   const { portal } = resolvePortalDocs(filters);
-  let books = liveBooks;
-  if (books.length === 0) {
-    books = filterBooks(GSTR2A_DEMO_BOOKS_DOCS, {
-      ...filters,
-      gstPeriod: period,
-      dateFrom: periodDateRange(filters).from,
-      dateTo: periodDateRange(filters).to,
-    });
-  }
-
-  const rows = applyOverrides(buildRows(books, portal));
+  const rows = applyOverrides(buildRows(liveBooks, portal));
   return {
     rows,
     summary: summarize(rows),

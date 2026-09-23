@@ -67,7 +67,7 @@ import {
   validateGoodsAdditionalCharges,
 } from "./components/GoodsInvoiceAdditionalChargesEditor";
 import { SalesInvoiceCustomerSection } from "./components/SalesInvoiceCustomerSection";
-import { CustomerPartyInfoButton } from "./components/CustomerPartyInfo";
+import { CustomerPartyInfoButton, formatCustomerMasterPaymentTerms } from "./components/CustomerPartyInfo";
 import { InvoiceWarehouseInfoButton } from "./components/InvoiceWarehouseInfoButton";
 import { SalesInvoiceDocumentInfoSection } from "./components/SalesInvoiceDocumentInfoSection";
 import {
@@ -235,6 +235,30 @@ function computeDueDate(baseDate: string, creditDays: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+/** Payment terms / credit days from prepare-dispatch Customer master payload (no local seed). */
+function paymentFromPreparedCustomer(customer: Record<string, unknown> | null | undefined): {
+  paymentTerms: string;
+  creditDays: number;
+} {
+  const paymentType = String(customer?.payment_type ?? customer?.paymentType ?? "").trim();
+  const creditDaysRaw = customer?.credit_days ?? customer?.creditDays;
+  const advance = customer?.advance ?? customer?.advancePercentage;
+  const creditDays =
+    creditDaysRaw != null && creditDaysRaw !== "" && Number.isFinite(Number(creditDaysRaw))
+      ? Number(creditDaysRaw)
+      : 0;
+  const paymentTerms = formatCustomerMasterPaymentTerms({
+    paymentType,
+    creditDays,
+    advance: advance as number | string | null | undefined,
+  });
+  const type = paymentType.toLowerCase();
+  return {
+    paymentTerms,
+    creditDays: type === "credit" ? creditDays : 0,
+  };
+}
+
 export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: number }) {
   const router = useRouter();
   const isEdit = invoiceId != null;
@@ -256,8 +280,8 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
   const [shippingAddress, setShippingAddress] = useState("");
   const [pan, setPan] = useState("");
   const [contactPerson, setContactPerson] = useState("");
-  const [paymentTerms, setPaymentTerms] = useState("Net 30");
-  const [creditDays, setCreditDays] = useState(30);
+  const [paymentTerms, setPaymentTerms] = useState("");
+  const [creditDays, setCreditDays] = useState(0);
   const [placeOfSupply, setPlaceOfSupply] = useState("");
   const [stateName, setStateName] = useState("");
   const [sourceWarehouseGstin, setSourceWarehouseGstin] = useState("");
@@ -577,8 +601,8 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     setShippingAddress(f.shippingAddress || f.billingAddress);
     setPan(f.pan ?? "");
     setContactPerson(f.contactPerson ?? "");
-    setPaymentTerms(f.paymentTerms ?? "Net 30");
-    setCreditDays(f.creditDays ?? 30);
+    setPaymentTerms(f.paymentTerms ?? "");
+    setCreditDays(f.creditDays ?? 0);
     setPlaceOfSupply(f.placeOfSupply ?? "");
     setStateName(f.state ?? "");
     setGstTreatment(f.gstTreatment ?? "");
@@ -860,6 +884,10 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
           const warehouseUuid = String(
             warehouseSnap.warehouse_id || warehouseSnap.warehouseId || "",
           );
+          const customerPayment = paymentFromPreparedCustomer(
+            customer as Record<string, unknown>,
+          );
+          const invoiceDateToday = new Date().toISOString().split("T")[0];
 
           applySalesInvoicePrefill({
             invoiceType: "sales",
@@ -874,12 +902,10 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
             warehouse: warehouseName || "Central Warehouse",
             salesperson: salespersonName || "—",
             referenceNo: prepared.dispatch.dispatch_number,
-            paymentTerms: "Net 30",
-            creditDays: 30,
-            dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
-              .toISOString()
-              .split("T")[0],
-            invoiceDate: new Date().toISOString().split("T")[0],
+            paymentTerms: customerPayment.paymentTerms,
+            creditDays: customerPayment.creditDays,
+            dueDate: computeDueDate(invoiceDateToday, customerPayment.creditDays),
+            invoiceDate: invoiceDateToday,
             customerId: (prepared.customer as any)?.customer_id || customer.customer_id || null,
             customerLedgerId: prepared.customer_ledger_id || null,
             customerCode: String(customer.customer_code || customer.customerCode || ""),
@@ -1103,6 +1129,11 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
                   "",
               );
 
+          const customerPayment = paymentFromPreparedCustomer(
+            customer as Record<string, unknown>,
+          );
+          const invoiceDateToday = new Date().toISOString().split("T")[0];
+
           const prefill: any = {
             invoiceType: isSTDispatch ? "stock_transfer" : "sales",
             sourceType: routeSource,
@@ -1120,12 +1151,12 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
             referenceNo: isSTDispatch
               ? (stData?.transfer_no || prepared.dispatch.dispatch_number)
               : prepared.dispatch.dispatch_number,
-            paymentTerms: "Net 30",
-            creditDays: 30,
-            dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
-              .toISOString()
-              .split("T")[0],
-            invoiceDate: new Date().toISOString().split("T")[0],
+            paymentTerms: isSTDispatch ? "Immediate" : customerPayment.paymentTerms,
+            creditDays: isSTDispatch ? 0 : customerPayment.creditDays,
+            dueDate: isSTDispatch
+              ? invoiceDateToday
+              : computeDueDate(invoiceDateToday, customerPayment.creditDays),
+            invoiceDate: invoiceDateToday,
             customerId: prepared.customer?.customer_id || customer.customer_id || null,
             customerLedgerId: prepared.customer_ledger_id || null,
             customerCode: String(customer.customer_code || customer.customerCode || ""),
@@ -1330,8 +1361,8 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     setShippingAddress(rec.shippingAddress ?? rec.billingAddress);
     setPan(rec.pan ?? "");
     setContactPerson(rec.contactPerson ?? "");
-    setPaymentTerms(rec.paymentTerms ?? "Net 30");
-    setCreditDays(rec.creditDays ?? 30);
+    setPaymentTerms(rec.paymentTerms ?? "");
+    setCreditDays(rec.creditDays ?? 0);
     setPlaceOfSupply(rec.placeOfSupply ?? "");
     setStateName(rec.state ?? "");
     setGstTreatment(rec.gstTreatment ?? "");
@@ -2409,6 +2440,15 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     };
   }, [smGen, customerName, customerId, customers, salesperson]);
 
+  /** Prefer backend UUID from prepare/API — never resolve via local seed customers. */
+  const partyInfoCustomerId = useMemo(() => {
+    const id = customerId?.trim();
+    if (id && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) {
+      return id;
+    }
+    return undefined;
+  }, [customerId]);
+
   return (
     <div
       className={cn(
@@ -2566,6 +2606,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
             </div>
           ) : smGen ? (
             <SampleOrderCustomerSection
+              customerId={partyInfoCustomerId}
               customerName={customerName}
               customerCode={customerCode}
               customerGst={customerGst}
@@ -2662,7 +2703,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
               soGen ? (
                 <CustomerPartyInfoButton
                   className="so-goods-info-btn"
-                  customerId={customerId}
+                  customerId={partyInfoCustomerId}
                   customerName={customerName}
                   customerCode={customerCode}
                   branch={branch}
@@ -2670,13 +2711,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
                   billingAddress={billingAddress}
                   shippingAddress={shippingAddress}
                   placeOfSupply={placeOfSupply}
-                  paymentTerms={paymentTerms}
                   linkedLedger={receivableLedger || undefined}
-                  creditLimit={
-                    customerId
-                      ? customers.find((c) => c.id === Number(customerId))?.creditLimit
-                      : undefined
-                  }
                 />
               ) : undefined
             }

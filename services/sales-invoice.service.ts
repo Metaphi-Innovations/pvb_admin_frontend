@@ -309,6 +309,9 @@ export type SalesInvoiceListDto = {
     order_no?: string | null;
   } | null;
   total_quantity?: number | string | null;
+  can_cancel?: boolean;
+  cancel_blocked_reason?: string | null;
+  cancel_blockers?: string[];
 };
 
 export type SalesInvoiceDetailDto = SalesInvoiceListDto & {

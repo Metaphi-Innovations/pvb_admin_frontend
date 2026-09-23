@@ -507,7 +507,11 @@ function RowActions({
   const editHref = row.editHref
     ? withReturnTo(row.editHref, listReturnHref)
     : null;
-  const showMoreMenu = showSendEmail || row.canCancel;
+  const cancelBlocked =
+    row.invoiceStatus !== "cancelled" &&
+    !row.canCancel &&
+    Boolean(row.cancelBlockedReason);
+  const showMoreMenu = showSendEmail || row.canCancel || cancelBlocked;
 
   const handleOfficialError = (error: unknown, fallback: string) => {
     const err = error as { response?: { data?: { message?: string } }; message?: string };
@@ -580,7 +584,9 @@ function RowActions({
               Send Email
             </DropdownMenuItem>
           ) : null}
-          {showSendEmail && row.canCancel ? <DropdownMenuSeparator /> : null}
+          {showSendEmail && (row.canCancel || cancelBlocked) ? (
+            <DropdownMenuSeparator />
+          ) : null}
           {row.canCancel ? (
             <DropdownMenuItem
               className="text-xs gap-2 text-red-600 focus:text-red-600"
@@ -588,6 +594,15 @@ function RowActions({
             >
               <Ban className="w-3.5 h-3.5" />
               Cancel Invoice
+            </DropdownMenuItem>
+          ) : cancelBlocked ? (
+            <DropdownMenuItem
+              disabled
+              title={row.cancelBlockedReason ?? undefined}
+              className="text-xs gap-2 text-muted-foreground"
+            >
+              <Ban className="w-3.5 h-3.5" />
+              Cancel disabled
             </DropdownMenuItem>
           ) : null}
         </AccountsMoreActions>

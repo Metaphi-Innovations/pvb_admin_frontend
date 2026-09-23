@@ -29,7 +29,7 @@ const CARD_DESCRIPTIONS: Record<string, string> = {
   gstr3b: "Monthly return summary — tax liability and ITC",
   gstr2a: "Reconcile purchase ITC with GSTR-2A portal data",
   gstr2b: "Reconcile ITC with auto-drafted GSTR-2B statement",
-  "annual-computation": "Month-wise annual GST computation summary",
+  "annual-computation": "Annual GST compliance and reconciliation working",
 };
 
 export function GstReportNavCards({ filters }: { filters: GstReportFilters }) {

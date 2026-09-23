@@ -859,6 +859,11 @@ export const API_ENDPOINTS = {
         FILTERS: "/accounts/reports/sales-register/filters",
         EXPORT: "/accounts/reports/sales-register/export",
       },
+      PURCHASE_REGISTER: {
+        LIST: "/accounts/reports/purchase-register",
+        FILTERS: "/accounts/reports/purchase-register/filters",
+        EXPORT: "/accounts/reports/purchase-register/export",
+      },
       TDS_SUMMARY: {
         LIST: "/accounts/reports/tds-summary",
         FILTERS: "/accounts/reports/tds-summary/filters",
@@ -931,6 +936,13 @@ export const API_ENDPOINTS = {
             `/accounts/reports/gst-summary/gstr2b/reconciliation/${id}/itc-treatment`,
         },
         GSTR3B: "/accounts/reports/gst-summary/gstr3b",
+        GSTR3B_EXPORT: "/accounts/reports/gst-summary/gstr3b/export",
+        ANNUAL: "/accounts/reports/gst-summary/annual",
+        ANNUAL_EXPORT: "/accounts/reports/gst-summary/annual/export",
+        OVERVIEW_EXPORT: "/accounts/reports/gst-summary/overview/export",
+        GSTR1_EXPORT: "/accounts/reports/gst-summary/gstr1/export",
+        GSTR2A_EXPORT: "/accounts/reports/gst-summary/gstr2a/export",
+        GSTR2B_EXPORT: "/accounts/reports/gst-summary/gstr2b/export",
       },
     },
     DEBIT_NOTE: {
