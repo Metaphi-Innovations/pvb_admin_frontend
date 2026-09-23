@@ -839,6 +839,11 @@ export const API_ENDPOINTS = {
         FILTERS: "/accounts/reports/day-book/filters",
         EXPORT: "/accounts/reports/day-book/export",
       },
+      AUDIT_TRAIL: {
+        LIST: "/accounts/reports/audit-trail",
+        FILTERS: "/accounts/reports/audit-trail/filters",
+        EXPORT: "/accounts/reports/audit-trail/export",
+      },
       PROFIT_LOSS: {
         LIST: "/accounts/reports/profit-loss",
         FILTERS: "/accounts/reports/profit-loss/filters",
