@@ -1,6 +1,6 @@
 import type { CoaLedgerListingRow, CoaListingRow } from "./coa-listing-data";
 
-import type { CoaLedgerDetailRow } from "./coa-demo-accounting";
+import type { CoaLedgerDetailRow } from "./coa-ledger-detail-types";
 
 import type { ChartOfAccount } from "../../data";
 

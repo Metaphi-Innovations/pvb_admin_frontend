@@ -166,38 +166,9 @@ function requireLedger(name: string): ChartOfAccount {
   return ledger;
 }
 
-/** Assign opening balances to balance-sheet ledgers (assets & liabilities). */
+/** Assign opening balances to balance-sheet ledgers — disabled (COA openings come from API). */
 export function assignDemoOpeningBalances(): void {
-  const records = loadChartOfAccounts();
-  let changed = false;
-
-  for (const ledger of getCoaLedgers()) {
-    const sg = subGroupName(records, ledger);
-    if (SKIP_OPENING_SUBGROUPS.has(sg)) continue;
-    if (ledger.openingBalance > 0) continue;
-
-    if (ledger.accountType === "Asset") {
-      const base = ASSET_SUBGROUP_BASE[sg] ?? 85000;
-      const amount = hashAmount(ledger.accountName, base);
-      if (amount <= 0) continue;
-      const idx = records.findIndex((r) => r.id === ledger.id);
-      if (idx >= 0) {
-        records[idx] = { ...records[idx], openingBalance: amount, balanceType: "Debit" };
-        changed = true;
-      }
-    } else if (ledger.accountType === "Liability") {
-      const base = LIABILITY_SUBGROUP_BASE[sg] ?? 95000;
-      const amount = hashAmount(ledger.accountName, base);
-      if (amount <= 0) continue;
-      const idx = records.findIndex((r) => r.id === ledger.id);
-      if (idx >= 0) {
-        records[idx] = { ...records[idx], openingBalance: amount, balanceType: "Credit" };
-        changed = true;
-      }
-    }
-  }
-
-  if (changed) saveChartOfAccounts(records);
+  // No-op: do not write demo openings into localStorage COA.
 }
 
 const PRODUCT_INVENTORY_MAP: Array<{ pattern: RegExp; ledgerName: string }> = [
@@ -213,37 +184,9 @@ function mapProductToInventoryLedger(product: string): string {
   return "DAP Fertilizer Stock";
 }
 
-/** Post opening stock journal from Warehouse Batch Register valuation. */
+/** Post opening stock journal from Warehouse Batch Register — disabled for COA. */
 export function seedInventoryLedgersFromBatchRegister(): void {
-  ensurePricingDemoSeed();
-  ensureInventoryAccountingLedgers();
-
-  const batchRows = computeBatchRegister({ asOnDate: FY_OPENING_DATE });
-  const productSummary = computeBatchRegisterProductSummary(batchRows);
-
-  const byLedger = new Map<string, number>();
-  for (const row of productSummary) {
-    if (row.inventoryValue <= 0) continue;
-    const ledgerName = mapProductToInventoryLedger(row.product);
-    byLedger.set(ledgerName, (byLedger.get(ledgerName) ?? 0) + row.inventoryValue);
-  }
-
-  if (byLedger.size === 0) {
-    byLedger.set("Urea 50kg Stock", 840000);
-    byLedger.set("DAP Fertilizer Stock", 1030000);
-  }
-
-  for (const [ledgerName, value] of byLedger) {
-    const ledger = findLedger(ledgerName);
-    if (!ledger || value <= 0) continue;
-
-    const records = loadChartOfAccounts();
-    const idx = records.findIndex((r) => r.id === ledger.id);
-    if (idx >= 0 && records[idx].openingBalance <= 0) {
-      records[idx] = { ...records[idx], openingBalance: Math.round(value), balanceType: "Debit" };
-      saveChartOfAccounts(records);
-    }
-  }
+  // No-op: inventory opening on COA is API-backed.
 }
 
 function postBalancedJournal(

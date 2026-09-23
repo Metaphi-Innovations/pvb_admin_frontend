@@ -31,6 +31,8 @@ import { resolveCoaMasterLink } from "@/lib/accounts/coa-master-link";
 import { useCoaNavigation } from "@/components/accounts/CoaNavigationContext";
 import { LedgerService, type LedgerDetailDto } from "@/services/ledger.service";
 import { chartOfAccountsKeys } from "@/hooks/accounts/use-chart-of-accounts";
+import { invalidateLedgerBalanceQueries } from "@/hooks/accounts/use-ledger-balances";
+import { invalidateLedgerDetailQueries } from "@/hooks/accounts/use-ledger-detail";
 import { useQueryClient } from "@tanstack/react-query";
 
 interface ToastState {
@@ -367,6 +369,8 @@ export default function AccountsGenericLedgerFormClient({
       }
 
       await queryClient.invalidateQueries({ queryKey: chartOfAccountsKeys.all });
+      invalidateLedgerBalanceQueries(queryClient);
+      invalidateLedgerDetailQueries(queryClient);
       refreshRecords();
       dispatchAccountsDataChanged("ledgers", {
         operation: mode === "add" ? "create" : "update",

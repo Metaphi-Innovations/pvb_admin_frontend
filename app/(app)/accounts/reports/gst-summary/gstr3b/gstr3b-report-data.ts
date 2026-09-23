@@ -1,6 +1,7 @@
 /**
- * GSTR-3B Phase 1 — report compute from Sales / Purchase / Credit / Debit Notes.
- * No ITC classification, RCM, cash/credit ledger, interest, late fee, or cess.
+ * LEGACY / DEMO ONLY — not used by production GSTR-3B route (Step 7C).
+ * Canonical page uses GET /api/accounts/reports/gst-summary/gstr3b via GstSummaryApiService.getGstr3b.
+ * Kept temporarily for reference; do not wire back into Gstr3bPageClient.
  */
 
 import {

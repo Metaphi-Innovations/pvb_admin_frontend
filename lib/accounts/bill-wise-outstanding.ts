@@ -27,11 +27,6 @@ import {
 } from "@/lib/accounts/voucher-ledger-groups";
 import { resolveCoaLedgerBehavior } from "@/lib/accounts/coa-ledger-behavior";
 import {
-  getAbcDistributorBillWiseDemoReferences,
-  isBillWiseDemoLedgerName,
-} from "@/lib/accounts/bill-wise-demo-data";
-import { loadCustomers } from "@/app/(app)/masters/customers/customer-data";
-import {
   getGenericBillWiseReferencesForLedger,
   isGenericBillWiseLedger,
 } from "@/lib/accounts/generic-bill-wise-store";
@@ -144,31 +139,6 @@ function resolvePartyKindForLedger(
   return null;
 }
 
-function buildDemoBillWiseView(ledger: ChartOfAccount): BillWiseOutstandingView {
-  const references = getAbcDistributorBillWiseDemoReferences();
-  const currentOutstanding = references.reduce((sum, r) => sum + r.outstandingAmount, 0);
-  const nameKey = ledger.accountName.trim().toLowerCase();
-  const matchedCustomer = loadCustomers().find(
-    (c) => c.customerName.trim().toLowerCase() === nameKey,
-  );
-  return {
-    ledgerId: ledger.id,
-    ledgerName: ledger.accountName,
-    ledgerCode: ledger.accountCode,
-    partyKind: "customer",
-    partyId:
-      typeof ledger.erpSourceId === "number"
-        ? ledger.erpSourceId
-        : matchedCustomer?.id ?? -1,
-    partyName: ledger.accountName,
-    partyCode: ledger.accountCode,
-    currentOutstanding,
-    references,
-    adjustmentHistory: [],
-    onAccountAdvances: [],
-  };
-}
-
 function resolvePartyFromLedger(
   ledger: ChartOfAccount,
   records: ChartOfAccount[],
@@ -252,7 +222,6 @@ function mapPaymentHistory(rows: VendorPaymentHistoryRow[]): BillWiseAdjustmentH
 /**
  * Build Bill-wise Outstanding for a COA/GL ledger id.
  * Returns null when ledger is missing or not a customer/supplier party ledger.
- * ABC Distributor always uses frontend mock rows (no invoices required).
  */
 export function getBillWiseOutstandingForLedger(
   ledgerId: number,
@@ -260,10 +229,6 @@ export function getBillWiseOutstandingForLedger(
   const records = loadChartOfAccounts();
   const ledger = records.find((r) => r.id === ledgerId && r.nodeLevel === "ledger");
   if (!ledger || !canShowBillWiseOutstanding(ledger, records)) return null;
-
-  if (isBillWiseDemoLedgerName(ledger.accountName)) {
-    return buildDemoBillWiseView(ledger);
-  }
 
   if (isGenericBillWiseLedger(ledger.id)) {
     const refs = getGenericBillWiseReferencesForLedger(ledger.id);

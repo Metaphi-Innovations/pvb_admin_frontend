@@ -1,4 +1,8 @@
 import type { GstReportFilters } from "@/lib/accounts/gst-report-filters";
+import type {
+  Gstr2aMatchStatusApi,
+  Gstr2aReviewStatusApi,
+} from "@/types/gst-summary.types";
 
 export type Gstr2aDocType = "purchase_invoice" | "credit_note" | "debit_note";
 
@@ -10,6 +14,7 @@ export type Gstr2aMatchStatus =
   | "duplicate"
   | "needs_review";
 
+/** Demo / legacy UI labels (kept for unused demo modules). */
 export const GSTR2A_STATUS_LABELS: Record<Gstr2aMatchStatus, string> = {
   matched: "Matched",
   partial_match: "Partial Match",
@@ -17,6 +22,28 @@ export const GSTR2A_STATUS_LABELS: Record<Gstr2aMatchStatus, string> = {
   missing_in_books: "Missing in Books",
   duplicate: "Duplicate",
   needs_review: "Needs Review",
+};
+
+/** Backend match_status enum → display labels. */
+export const GSTR2A_MATCH_STATUS_LABELS: Record<Gstr2aMatchStatusApi, string> =
+  {
+    MATCHED: "Matched",
+    PARTIAL_MATCH: "Partial Match",
+    MISSING_IN_BOOKS: "Missing in Books",
+    MISSING_IN_GSTR: "Missing in GSTR-2A",
+    DUPLICATE: "Duplicate",
+    NEEDS_REVIEW: "Needs Review",
+  };
+
+/** Backend review_status enum → display labels. */
+export const GSTR2A_REVIEW_STATUS_LABELS: Record<
+  Gstr2aReviewStatusApi,
+  string
+> = {
+  PENDING: "Pending",
+  MARKED_FOR_REVIEW: "Marked for Review",
+  REVIEWED: "Reviewed",
+  RESOLVED: "Resolved",
 };
 
 /** Short display labels for the reconciliation table. */

@@ -61,13 +61,8 @@ export function ensureAccountsSectionData(groupId: AccountsNavGroupId): void {
 
   switch (groupId) {
     case "coa":
-      void import("./accounts-demo-seed")
-        .then((m) => m.seedCoaSectionDemoData())
-        .then(finish)
-        .catch((err) => {
-          inflightSections.delete(groupId);
-          console.error("[accounts] COA section bootstrap failed:", err);
-        });
+      // COA is API-backed — do not seed localStorage demo ledgers/vouchers.
+      finish();
       break;
     case "transactions":
       void import("./accounts-demo-seed")

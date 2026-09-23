@@ -4,7 +4,6 @@ import {
   EXPECTED_SYSTEM_NODE_COUNT,
   SYSTEM_COA_NODES,
 } from "./masters/coa-seed-nodes";
-import { mergeBundledCoaDemoLedgers } from "./masters/chart-of-accounts/coa-demo-bundle";
 import { stripMisplacedGstLedgers } from "./masters/chart-of-accounts/coa-gst-duplicate-cleanup";
 import { dispatchCoaChanged } from "@/lib/accounts/coa-events";
 
@@ -464,7 +463,7 @@ export function ensureCoaSystemStructure(stored: ChartOfAccount[]): ChartOfAccou
   }
 
   const combined = stripMisplacedGstLedgers(
-    mergeBundledCoaDemoLedgers([...mergedSystem, ...userGroups, ...userLedgers]),
+    [...mergedSystem, ...userGroups, ...userLedgers],
   );
   return combined;
 }

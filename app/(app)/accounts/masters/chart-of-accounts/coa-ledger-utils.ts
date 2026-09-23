@@ -1,4 +1,4 @@
-import type { CoaLedgerDetailRow } from "./coa-demo-accounting";
+import type { CoaLedgerDetailRow } from "./coa-ledger-detail-types";
 
 /** Filter ledger statement rows by toolbar search (selected ledger only). */
 export function filterLedgerStatementRows(

@@ -17,6 +17,9 @@ export type GstSummaryTableRow = {
   taxAmount: number;
   invoiceAmount: number;
   rowType: "section" | "supporting" | "total";
+  /** When false, section is intentionally unsupported (not a real ₹0 return). */
+  supported?: boolean;
+  notes?: string | null;
 };
 
 export const GST_SUMMARY_SECTION_COLUMN_CONFIG: AccountsColumnFilterConfig = {
