@@ -485,70 +485,7 @@ function findLedgerByName(name: string): ChartOfAccount | undefined {
 }
 
 function batchEnsureCoaDemoLedgers(): void {
-  const records = loadChartOfAccounts();
-  const existingNames = new Set(
-    records
-      .filter((r) => r.nodeLevel === "ledger")
-      .map((r) => r.accountName.trim().toLowerCase()),
-  );
-  const subGroupByName = new Map(
-    records
-      .filter((r) => r.nodeLevel === "account_group")
-      .map((r) => [r.accountName.trim().toLowerCase(), r]),
-  );
-
-  const ledgerIds = records.filter((r) => r.nodeLevel === "ledger").map((r) => r.id);
-  let nextLedgerId = ledgerIds.length ? Math.max(...ledgerIds) + 1 : 101;
-
-  const codeNums = records
-    .filter((r) => r.nodeLevel === "ledger")
-    .map((r) => {
-      const m = r.accountCode.match(/LED-(\d+)/);
-      return m ? parseInt(m[1], 10) : 0;
-    })
-    .filter((n) => n > 0);
-  let nextCodeNum = codeNums.length ? Math.max(...codeNums) + 1 : 1;
-
-  const additions: ChartOfAccount[] = [];
-
-  for (const entry of COA_DEMO_LEDGER_SEEDS) {
-    const ledgerKey = entry.name.trim().toLowerCase();
-    if (existingNames.has(ledgerKey)) continue;
-
-    const parent = subGroupByName.get(entry.subGroup.trim().toLowerCase());
-    if (!parent) continue;
-
-    const balanceType =
-      entry.accountType === "Liability" || entry.accountType === "Income" ? "Credit" : "Debit";
-
-    additions.push({
-      id: nextLedgerId++,
-      accountCode: `LED-${String(nextCodeNum++).padStart(3, "0")}`,
-      accountName: entry.name,
-      alias: "",
-      accountType: entry.accountType,
-      nodeLevel: "ledger",
-      parentAccountId: parent.id,
-      parentAccount: parent.accountName,
-      description: "",
-      status: "active",
-      usedIn: [],
-      isSystem: false,
-      openingBalance: 0,
-      balanceType,
-      gstApplicable: false,
-      tdsApplicable: false,
-      costCenterApplicable: false,
-      bankAccountFlag: false,
-      createdBy: ACCOUNTS_CURRENT_USER,
-      updatedBy: ACCOUNTS_CURRENT_USER,
-    });
-    existingNames.add(ledgerKey);
-  }
-
-  if (additions.length > 0) {
-    saveChartOfAccounts([...records, ...additions]);
-  }
+  // No-op: COA demo ledgers are not injected (API tree is source of truth).
 }
 
 function batchSetCustomerOpeningBalances(
@@ -1063,21 +1000,9 @@ export function ensureAccountsCoreDemoData(): void {
   }
 }
 
-/** Chart of Accounts section — masters, openings, and 2 demo transactions per posting ledger. */
+/** Chart of Accounts section — API-backed; no localStorage demo seed. */
 export function seedCoaSectionDemoData(): void {
-  if (typeof window === "undefined") return;
-  try {
-    ensureAccountsCoreDemoData();
-    const sectionDone = localStorage.getItem(COA_SECTION_KEY) === ACCOUNTS_DEMO_SEED_VERSION;
-    if (!sectionDone) {
-      assignDemoOpeningBalances();
-      seedInventoryLedgersFromBatchRegister();
-      localStorage.setItem(COA_SECTION_KEY, ACCOUNTS_DEMO_SEED_VERSION);
-    }
-    ensureCoaPostingLedgerTransactionsOnPageLoad();
-  } catch (err) {
-    console.error("[accounts] COA section seed failed:", err);
-  }
+  // Intentionally empty. COA tree, balances, and statements come from the backend.
 }
 
 function seedTransactionsDemoRecords(): InvoiceRecord[] {

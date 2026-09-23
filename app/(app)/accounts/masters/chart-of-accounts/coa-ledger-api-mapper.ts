@@ -4,7 +4,7 @@ import type {
   LedgerOpeningBalanceDto,
 } from "@/services/ledger.service";
 import { roundMoney } from "@/lib/accounts/money-format";
-import type { CoaLedgerDetailRow } from "./coa-demo-accounting";
+import type { CoaLedgerDetailRow } from "./coa-ledger-detail-types";
 
 const ACCOUNTING_VOUCHER_TYPE_LABELS: Record<string, string> = {
   SALES: "Sales",
@@ -83,16 +83,22 @@ function mapApiTransactions(
   }));
 }
 
-/** Sum debit/credit columns on statement rows (includes opening balance row). */
-function statementColumnTotals(rows: CoaLedgerDetailRow[]): {
+/**
+ * Period debit/credit totals only — exclude Opening Balance rows.
+ * Opening is carried forward separately; it is not period movement.
+ */
+function periodMovementTotals(rows: CoaLedgerDetailRow[]): {
   totalDebit: number;
   totalCredit: number;
 } {
   return rows.reduce(
-    (acc, row) => ({
-      totalDebit: acc.totalDebit + (Number(row.debit) || 0),
-      totalCredit: acc.totalCredit + (Number(row.credit) || 0),
-    }),
+    (acc, row) => {
+      if (row.isOpeningRow) return acc;
+      return {
+        totalDebit: acc.totalDebit + (Number(row.debit) || 0),
+        totalCredit: acc.totalCredit + (Number(row.credit) || 0),
+      };
+    },
     { totalDebit: 0, totalCredit: 0 },
   );
 }
@@ -126,7 +132,18 @@ export function buildApiLedgerDetailSummary(
       ? [buildOpeningBalanceRow(openingAmount, openingSide, periodStart)]
       : [];
   const transactions = [...openingRow, ...transactionRows];
-  const columnTotals = statementColumnTotals(transactions);
+  // Prefer API period totals (already exclude opening); else sum non-opening rows.
+  const fromApiDebit =
+    detail?.totalDebit != null ? Number(detail.totalDebit) : NaN;
+  const fromApiCredit =
+    detail?.totalCredit != null ? Number(detail.totalCredit) : NaN;
+  const movementTotals = periodMovementTotals(transactions);
+  const totalDebit = Number.isFinite(fromApiDebit)
+    ? fromApiDebit
+    : movementTotals.totalDebit;
+  const totalCredit = Number.isFinite(fromApiCredit)
+    ? fromApiCredit
+    : movementTotals.totalCredit;
   const lastRow = transactions.length > 0 ? transactions[transactions.length - 1] : null;
   // Prefer last running balance so footer closing always matches the statement grid.
   const currentBalance = lastRow
@@ -140,9 +157,9 @@ export function buildApiLedgerDetailSummary(
     openingBalanceType: openingSide,
     currentBalance,
     balanceType,
-    // Footer totals = sum of Debit/Credit columns (opening + period movements).
-    totalDebit: roundMoney(columnTotals.totalDebit),
-    totalCredit: roundMoney(columnTotals.totalCredit),
+    // Period movements only — Opening Balance is not included.
+    totalDebit: roundMoney(totalDebit),
+    totalCredit: roundMoney(totalCredit),
     transactions,
   };
 }

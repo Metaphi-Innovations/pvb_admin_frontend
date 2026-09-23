@@ -11,9 +11,7 @@ import {
   ReportFilterSummary,
   REPORT_BRANCH_OPTIONS,
 } from "@/components/accounts/ReportFilters";
-import {
-  buildBranchFilterSummary,
-} from "@/lib/accounts/report-multi-filter-utils";
+import { buildBranchFilterSummary } from "@/lib/accounts/report-multi-filter-utils";
 import type { ReportFilterSummaryItem } from "@/lib/accounts/report-multi-filter-utils";
 import {
   GST_REGISTRATION_OPTIONS,
@@ -24,8 +22,11 @@ import { getGstReportBranchOptions } from "@/lib/accounts/gst-report-filters";
 import { normalizeMultiFilter } from "@/lib/accounts/report-multi-filter-utils";
 import { useMemo, type ReactNode } from "react";
 import type { useGstReportFilters } from "../useGstReportFilters";
+import type { useGstSummaryApiFilters } from "../useGstSummaryApiFilters";
 
-type FilterState = ReturnType<typeof useGstReportFilters>;
+type FilterState =
+  | ReturnType<typeof useGstReportFilters>
+  | ReturnType<typeof useGstSummaryApiFilters>;
 
 export function GstReportFilterBar({
   filterState,
@@ -56,35 +57,77 @@ export function GstReportFilterBar({
     resetFilters,
   } = filterState;
 
-  const branchOptions = mounted ? getGstReportBranchOptions() : [...REPORT_BRANCH_OPTIONS];
+  const apiBranchOptions =
+    "branchLabeledOptions" in filterState
+      ? filterState.branchLabeledOptions
+      : undefined;
+  const apiGstRegistrationOptions =
+    "gstRegistrationOptions" in filterState
+      ? filterState.gstRegistrationOptions
+      : undefined;
+
+  const branchOptions = mounted
+    ? getGstReportBranchOptions()
+    : [...REPORT_BRANCH_OPTIONS];
+  const gstRegistrationOptions =
+    apiGstRegistrationOptions ?? GST_REGISTRATION_OPTIONS;
 
   const filterSummaryItems = useMemo((): ReportFilterSummaryItem[] => {
+    const branchSummary = apiBranchOptions?.length
+      ? (() => {
+          const values = normalizeMultiFilter(branch);
+          if (values.length === 0) return null;
+          const labels = values.map(
+            (id) =>
+              apiBranchOptions.find((o) => o.value === id)?.label ?? id,
+          );
+          return {
+            id: "branch",
+            label: "Branch",
+            value:
+              labels.length === 1
+                ? labels[0]
+                : `${labels.length} branches`,
+            onRemove: () => setBranch([]),
+          } satisfies ReportFilterSummaryItem;
+        })()
+      : buildBranchFilterSummary(normalizeMultiFilter(branch), () =>
+          setBranch([]),
+        );
+
     return [
       gstPeriod !== "all"
         ? {
-            key: "gst-period",
+            id: "gst-period",
             label: "GST Period",
-            value: resolveGstPeriodLabel(gstPeriod),
+            value:
+              gstPeriodOptions.find((o) => o.value === gstPeriod)?.label ??
+              resolveGstPeriodLabel(gstPeriod),
             onRemove: () => handleGstPeriodChange("all"),
           }
         : null,
-      buildBranchFilterSummary(normalizeMultiFilter(branch), () => setBranch([])),
+      branchSummary,
       gstRegistration !== "all"
         ? {
-            key: "gstin",
+            id: "gstin",
             label: "GST Registration",
-            value: resolveGstRegistrationLabel(gstRegistration),
+            value:
+              gstRegistrationOptions.find((o) => o.value === gstRegistration)
+                ?.label ?? resolveGstRegistrationLabel(gstRegistration),
             onRemove: () => setGstRegistration("all"),
           }
         : null,
     ].filter((item): item is ReportFilterSummaryItem => item != null);
   }, [
     gstPeriod,
+    gstPeriodOptions,
     handleGstPeriodChange,
     branch,
     setBranch,
     gstRegistration,
     setGstRegistration,
+    apiBranchOptions,
+    gstRegistrationOptions,
   ]);
 
   return (
@@ -111,11 +154,16 @@ export function GstReportFilterBar({
           values={branch}
           onChange={setBranch}
           options={branchOptions}
+          labeledOptions={
+            apiBranchOptions && apiBranchOptions.length > 0
+              ? apiBranchOptions
+              : undefined
+          }
         />
         <ReportGstRegistrationFilter
           value={gstRegistration}
           onChange={setGstRegistration}
-          options={GST_REGISTRATION_OPTIONS}
+          options={gstRegistrationOptions}
         />
         {hasFilters && (
           <Button

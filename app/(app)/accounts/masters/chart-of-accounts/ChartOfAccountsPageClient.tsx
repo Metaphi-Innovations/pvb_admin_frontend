@@ -34,7 +34,6 @@ import {
   buildCoaLedgerListingRows,
   buildCoaListingRows,
   computeCoaLedgerListingSummary,
-  computeCoaListingSummary,
   computeCoaListingSummaryFromRows,
   computeCoaGroupDetailSummary,
   overlayApiBalancesOnGroupSummary,
@@ -74,7 +73,7 @@ import { CoaListingSummaryBar, CoaLedgerListingSummaryBar } from "./components/C
 import { CoaLedgerDetailTable } from "./components/CoaLedgerDetailTable";
 import { CoaLedgerDetailHeader } from "./components/CoaLedgerDetailHeader";
 import { useTransactionDetailsDrawer } from "@/components/accounts/TransactionDetailsDrawer";
-import type { CoaLedgerDetailRow } from "./coa-demo-accounting";
+import type { CoaLedgerDetailRow } from "./coa-ledger-detail-types";
 import { CoaGroupDetailHeader } from "./components/CoaGroupDetailHeader";
 import { CoaTdsLedgerDetailHeader } from "./components/CoaTdsLedgerDetailHeader";
 import { CoaDrillDownEmptyState } from "./components/CoaDrillDownEmptyState";
@@ -85,8 +84,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   chartOfAccountsKeys,
 } from "@/hooks/accounts/use-chart-of-accounts";
-import { useLedgerDetail } from "@/hooks/accounts/use-ledger-detail";
-import { useLedgerBalances } from "@/hooks/accounts/use-ledger-balances";
+import { useLedgerDetail, invalidateLedgerDetailQueries } from "@/hooks/accounts/use-ledger-detail";
+import { useLedgerBalances, invalidateLedgerBalanceQueries } from "@/hooks/accounts/use-ledger-balances";
 import { collectDescendantLedgers } from "@/lib/accounts/coa-accounting-view";
 import { LedgerService } from "@/services/ledger.service";
 import { isStockInHandLedger } from "@/lib/accounts/coa-stock-in-hand";
@@ -95,6 +94,7 @@ import { MANDATORY_SYSTEM_LEDGERS } from "./coa-statutory-ledgers";
 import { ChartOfAccountsService } from "@/services/chart-of-accounts.service";
 import { mapCoaApiTreeToRecords } from "@/lib/accounts/coa-api-mapper";
 import { dispatchCoaChanged } from "@/lib/accounts/coa-events";
+import { dispatchAccountsDataChanged } from "@/lib/accounts/accounts-data-events";
 import { useDebouncedValue } from "@/app/(app)/accounts/reports/pl/pl-hooks";
 import {
   Dialog,
@@ -557,15 +557,8 @@ export default function ChartOfAccountsPageClient() {
       return computeCoaListingSummaryFromRows(listingRows);
     }
 
-    return computeCoaListingSummary(
-      effectiveRecords,
-      listingRows,
-      selectedNode,
-      showRoot,
-      dateFrom,
-      dateTo,
-      Boolean(debouncedSearch.trim()),
-    );
+    // No API balances yet — summarize tree openings only (no local voucher demo math).
+    return computeCoaListingSummaryFromRows(listingRows);
   }, [
     effectiveRecords,
     listingRows,
@@ -636,6 +629,12 @@ export default function ChartOfAccountsPageClient() {
     try {
       await LedgerService.delete(ledgerId);
       await queryClient.invalidateQueries({ queryKey: chartOfAccountsKeys.all });
+      invalidateLedgerBalanceQueries(queryClient);
+      invalidateLedgerDetailQueries(queryClient);
+      dispatchAccountsDataChanged("ledgers", {
+        operation: "delete",
+        recordId: ledgerDeleteTarget.id,
+      });
       dispatchCoaChanged();
       setLedgerDeleteTarget(null);
     } catch (err: any) {
@@ -644,6 +643,31 @@ export default function ChartOfAccountsPageClient() {
       setLedgerDeleting(false);
     }
   }, [ledgerDeleteTarget, ledgerDeleting, queryClient]);
+
+  const handlePartyLedgerSaved = useCallback(
+    (ledgerId: CoaNodeId, parentId: CoaNodeId | null, clearForm: () => void) => {
+      // Refresh API tree + balances so newly created ledgers show correct totals.
+      refreshRecords();
+      invalidateLedgerBalanceQueries(queryClient);
+      invalidateLedgerDetailQueries(queryClient);
+      dispatchAccountsDataChanged("ledgers", {
+        operation: "create",
+        recordId: ledgerId,
+      });
+      dispatchCoaChanged();
+      if (parentId != null) {
+        const parent = records.find((r) => r.id === parentId);
+        if (parent) {
+          const ancestorIds = getAncestorPath(records, parent.id).map((a) => a.id);
+          ensureExpanded([...ancestorIds, parent.id]);
+          selectNode(parent);
+        }
+      }
+      setHighlightedLedgerId(ledgerId);
+      clearForm();
+    },
+    [refreshRecords, queryClient, records, ensureExpanded, selectNode, setHighlightedLedgerId],
+  );
 
   const handleExcelExport = async () => {
     if (!mounted) return;
@@ -713,24 +737,6 @@ export default function ChartOfAccountsPageClient() {
     if (parentId == null) return;
     requestCoaGlobalAddLedger(parentId);
   }, [selectedNode, showRoot, records]);
-
-  const handlePartyLedgerSaved = useCallback(
-    (ledgerId: CoaNodeId, parentId: CoaNodeId | null, clearForm: () => void) => {
-      // Refresh API tree so new ledgers appear; avoid reloading localStorage demo COA.
-      refreshRecords();
-      if (parentId != null) {
-        const parent = records.find((r) => r.id === parentId);
-        if (parent) {
-          const ancestorIds = getAncestorPath(records, parent.id).map((a) => a.id);
-          ensureExpanded([...ancestorIds, parent.id]);
-          selectNode(parent);
-        }
-      }
-      setHighlightedLedgerId(ledgerId);
-      clearForm();
-    },
-    [refreshRecords, records, ensureExpanded, selectNode, setHighlightedLedgerId],
-  );
 
   const handleSundryDebtorSaved = useCallback(
     (ledgerId: CoaNodeId, parentId: CoaNodeId | null) => {

@@ -61,7 +61,6 @@ import {
   type BillWiseReferenceRow,
   type BillWiseOutstandingView,
 } from "@/lib/accounts/bill-wise-outstanding";
-import { isBillWiseDemoDocumentId } from "@/lib/accounts/bill-wise-demo-data";
 import { BillWiseOutstandingPanel } from "@/components/accounts/outstanding/BillWiseOutstandingPanel";
 import { PayablesBillWiseOutstandingPanel } from "@/components/accounts/outstanding/PayablesBillWiseOutstandingPanel";
 import {
@@ -889,7 +888,6 @@ function BillWiseOutstandingBody({
                 />
               ) : (
                 paginated.map((row) => {
-                  const isDemo = isBillWiseDemoDocumentId(row.documentId);
                   return (
                     <AccountsTableRow key={row.documentId} className="group">
                       <AccountsTableCell>
@@ -928,21 +926,10 @@ function BillWiseOutstandingBody({
                         className={accountsActionColClass("single")}
                       >
                         <AccountsTableActionCell variant="single">
-                          {isDemo ? (
-                            <button
-                              type="button"
-                              title={`View ${docLabel.toLowerCase()}`}
-                              className="inline-flex items-center justify-center h-7 w-7 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-                              onClick={() => setViewRow(row)}
-                            >
-                              <Eye className="w-3.5 h-3.5" />
-                            </button>
-                          ) : (
-                            <AccountsViewAction
-                              title={`View ${docLabel.toLowerCase()}`}
-                              href={billWiseDocumentViewHref(view.partyKind, row.documentId)}
-                            />
-                          )}
+                          <AccountsViewAction
+                            title={`View ${docLabel.toLowerCase()}`}
+                            href={billWiseDocumentViewHref(view.partyKind, row.documentId)}
+                          />
                         </AccountsTableActionCell>
                       </AccountsTableCell>
                     </AccountsTableRow>

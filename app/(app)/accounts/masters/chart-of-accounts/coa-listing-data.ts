@@ -10,26 +10,15 @@ import {
   getAncestorPath,
 } from "./chart-of-accounts-data";
 
-import { ledgerHasChildLedgers } from "@/lib/accounts/coa-hierarchy";
-import { collectDescendantLedgers, collectLedgerRawCoaTransactions } from "@/lib/accounts/coa-accounting-view";
+import { collectDescendantLedgers } from "@/lib/accounts/coa-accounting-view";
 import { isGstCoaLedger } from "@/lib/accounts/gst-coa-sync";
 import { isTdsCoaLedger, tdsLedgerKindAlias } from "@/lib/accounts/tds-coa-sync";
 import { parseTdsSectionCode } from "@/lib/accounts/tds-coa-utils";
 import { loadTDSMasters, formatTdsRateDisplay, formatApplicableToLabels, getTdsSectionCode } from "@/app/(app)/masters/tds/tds-data";
 
-import {
-  computeClosingFromPeriodOpening,
-  computePeriodOpeningBalance,
-  ledgerMovementMapForRange,
-} from "@/lib/accounts/ledger-transaction-date-filter";
-
 import { fromSignedBalance, toSignedBalance } from "@/lib/accounts/running-balance";
-import { computeLedgerCurrentBalance, resolveOpeningSide } from "../ledgers/ledgers-utils";
+import { resolveOpeningSide } from "../ledgers/ledgers-utils";
 import { roundMoney } from "@/lib/accounts/money-format";
-import {
-  isStockInHandLedger,
-  resolveStockInHandDisplayBalance,
-} from "@/lib/accounts/coa-stock-in-hand";
 
 export type CoaLedgerSourceLabel =
   | "Manual"
@@ -149,22 +138,20 @@ export function buildCoaLedgerListingRows(
     .sort((a, b) => a.accountName.localeCompare(b.accountName));
 
   let rows = ledgers.map((ledger) => {
-    const current = isStockInHandLedger(ledger)
-      ? resolveStockInHandDisplayBalance()
-      : computeLedgerCurrentBalance(ledger);
-    const tds = resolveTdsLedgerUsageInfo(ledger);
-    // Use the accounting-nature-aware side so opening/current always agree
     const openingSide = resolveOpeningSide(ledger);
+    const openingAmount = roundMoney(ledger.openingBalance);
+    const tds = resolveTdsLedgerUsageInfo(ledger);
+    // Placeholder until API overlay — opening from tree; period/current from balances API.
     return {
       ledger,
       parentGroupName: ledger.parentAccountId
         ? resolveParentName(records, ledger.parentAccountId)
         : "",
       source: resolveCoaLedgerSource(ledger, records),
-      openingAmount: ledger.openingBalance,
+      openingAmount,
       openingSide,
-      currentAmount: current.amount,
-      currentSide: current.balanceType,
+      currentAmount: openingAmount,
+      currentSide: openingSide,
       ...(tds
         ? {
             tdsSection: tds.section,
@@ -221,131 +208,66 @@ export function computeCoaLedgerListingSummary(
   };
 }
 
-function coaListingMovementMapForRange(
-  from: string,
-  to: string,
-): Map<import("../../data").CoaNodeId, { totalDebit: number; totalCredit: number }> {
-  return ledgerMovementMapForRange(from, to);
-}
-
 export interface CoaListingRow {
   node: ChartOfAccount;
   parentGroupName: string;
   hierarchyPath: string;
   openingAmount: number;
-
   openingSide: "Debit" | "Credit";
-
   periodDebit: number;
-
   periodCredit: number;
-
   closingAmount: number;
-
   closingSide: "Debit" | "Credit";
-
   hasChildren: boolean;
-
   /** True when opening/closing came from posted voucher API balances. */
   balanceFromApi?: boolean;
-
 }
-
-
 
 function collectDescendantPostingLedgers(
-
   records: ChartOfAccount[],
-
   nodeId: import("../../data").CoaNodeId,
-
 ): ChartOfAccount[] {
-
   const ids = new Set<import("../../data").CoaNodeId>();
-
   const queue = [nodeId];
-
   while (queue.length) {
-
     const id = queue.shift()!;
-
-    for (const c of records.filter((r) => r.parentAccountId === id)) {
-
+    const children = records.filter((r) => r.parentAccountId === id);
+    for (const c of children) {
       if (c.nodeLevel === "ledger") {
-
         if (!c.bankGroupFlag) ids.add(c.id);
-
-        if (ledgerHasChildLedgers(c.id, records)) queue.push(c.id);
-
       } else {
-
         queue.push(c.id);
-
       }
-
     }
-
   }
-
   return records.filter((r) => ids.has(r.id));
-
 }
 
-
-
-function ledgerPeriodBalances(
-  ledger: ChartOfAccount,
-  movement: { totalDebit: number; totalCredit: number },
-  dateFrom: string,
-) {
-  /** Stock in Hand current/closing balance = ERP total inventory value (COA display). */
-  if (isStockInHandLedger(ledger)) {
-    const display = resolveStockInHandDisplayBalance();
-    const openingSide = resolveOpeningSide(ledger);
-    const openingSigned = toSignedBalance(roundMoney(ledger.openingBalance), openingSide);
-    const opening = fromSignedBalance(openingSigned);
-    return {
-      openingAmount: opening.amount,
-      openingSide: opening.balanceType,
-      periodDebit: movement.totalDebit,
-      periodCredit: movement.totalCredit,
-      closingAmount: display.amount,
-      closingSide: display.balanceType,
-    };
-  }
-
-  const raw = collectLedgerRawCoaTransactions(ledger);
-  const periodOpening = computePeriodOpeningBalance(ledger, raw, dateFrom);
-  const closing = computeClosingFromPeriodOpening(
-    periodOpening,
-    movement.totalDebit,
-    movement.totalCredit,
-  );
+/**
+ * Placeholder balances from the API tree opening only.
+ * Period debit/credit/closing are filled by overlayApiBalances* from the backend.
+ */
+function ledgerPeriodBalances(ledger: ChartOfAccount) {
+  const openingSide = resolveOpeningSide(ledger);
+  const openingAmount = roundMoney(ledger.openingBalance);
   return {
-    openingAmount: periodOpening.amount,
-    openingSide: periodOpening.balanceType,
-    periodDebit: movement.totalDebit,
-    periodCredit: movement.totalCredit,
-    closingAmount: closing.amount,
-    closingSide: closing.balanceType,
+    openingAmount,
+    openingSide,
+    periodDebit: 0,
+    periodCredit: 0,
+    closingAmount: openingAmount,
+    closingSide: openingSide,
   };
 }
 
-
-
-function aggregateSigned(
-  ledgers: ChartOfAccount[],
-  movementMap: Map<import("../../data").CoaNodeId, { totalDebit: number; totalCredit: number }>,
-  dateFrom: string,
-) {
+function aggregateSigned(ledgers: ChartOfAccount[]) {
   let openingSigned = 0;
   let debit = 0;
   let credit = 0;
   let closingSigned = 0;
 
   for (const ledger of ledgers) {
-    const movement = movementMap.get(ledger.id) ?? { totalDebit: 0, totalCredit: 0 };
-    const bal = ledgerPeriodBalances(ledger, movement, dateFrom);
+    const bal = ledgerPeriodBalances(ledger);
     openingSigned += toSignedBalance(bal.openingAmount, bal.openingSide);
     debit += bal.periodDebit;
     credit += bal.periodCredit;
@@ -364,20 +286,13 @@ function aggregateSigned(
   };
 }
 
-
-
-function balancesForNode(
-  records: ChartOfAccount[],
-  node: ChartOfAccount,
-  movementMap: Map<import("../../data").CoaNodeId, { totalDebit: number; totalCredit: number }>,
-  dateFrom: string,
-) {
+function balancesForNode(records: ChartOfAccount[], node: ChartOfAccount) {
   const ledgers =
     node.nodeLevel === "ledger" && !node.bankGroupFlag
       ? [node]
       : collectDescendantPostingLedgers(records, node.id);
 
-  return aggregateSigned(ledgers, movementMap, dateFrom);
+  return aggregateSigned(ledgers);
 }
 
 function sumRowBalances(rows: CoaListingRow[]) {
@@ -422,15 +337,14 @@ export function computeCoaListingSummary(
   rows: CoaListingRow[],
   selectedNode: ChartOfAccount | null,
   showRoot: boolean,
-  dateFrom: string,
-  dateTo: string,
+  _dateFrom: string,
+  _dateTo: string,
   hasSearch: boolean,
 ): CoaListingSummary {
-  const movementMap = coaListingMovementMapForRange(dateFrom, dateTo);
   const balances =
     hasSearch || showRoot || !selectedNode
       ? sumRowBalances(rows)
-      : balancesForNode(records, selectedNode, movementMap, dateFrom);
+      : balancesForNode(records, selectedNode);
 
   return {
     totalAccounts: rows.length,
@@ -453,16 +367,15 @@ export interface CoaGroupDetailSummary {
 export function computeCoaGroupDetailSummary(
   records: ChartOfAccount[],
   groupId: import("../../data").CoaNodeId,
-  dateFrom: string,
-  dateTo: string,
+  _dateFrom: string,
+  _dateTo: string,
 ): CoaGroupDetailSummary | null {
   const group = records.find((r) => r.id === groupId);
   if (!group || group.nodeLevel !== "account_group") return null;
 
   const path = getAncestorPath(records, groupId);
   const parent = path.length >= 2 ? path[path.length - 2] : null;
-  const movementMap = coaListingMovementMapForRange(dateFrom, dateTo);
-  const balances = balancesForNode(records, group, movementMap, dateFrom);
+  const balances = balancesForNode(records, group);
 
   return {
     group,
@@ -553,24 +466,6 @@ function matchedApiBalancesForNode(
   for (const ledger of descendantLedgersForNode(records, node)) {
     const id = ledger.apiNodeId ? String(ledger.apiNodeId) : "";
     if (!id) continue;
-
-    // Stock in Hand uses inventory valuation for current/closing, not voucher balances.
-    if (isStockInHandLedger(ledger)) {
-      const display = resolveStockInHandDisplayBalance();
-      const openingSide = resolveOpeningSide(ledger);
-      const apiPeriod = balances.get(id);
-      matched.push({
-        ledgerId: id,
-        openingAmount: apiPeriod?.openingAmount ?? roundMoney(ledger.openingBalance),
-        openingSide: apiPeriod?.openingSide ?? openingSide,
-        currentAmount: display.amount,
-        currentSide: display.balanceType,
-        periodDebit: apiPeriod?.periodDebit ?? 0,
-        periodCredit: apiPeriod?.periodCredit ?? 0,
-      });
-      continue;
-    }
-
     const balance = balances.get(id);
     if (balance) matched.push(balance);
   }
@@ -584,7 +479,6 @@ export function overlayApiBalancesOnLedgerRows(
 ): CoaLedgerListingRow[] {
   if (balances.size === 0) return rows;
   return rows.map((row) => {
-    if (isStockInHandLedger(row.ledger)) return row;
     const id = row.ledger.apiNodeId ? String(row.ledger.apiNodeId) : "";
     const balance = id ? balances.get(id) : undefined;
     if (!balance) return row;
@@ -673,12 +567,11 @@ function listingMetaForNode(
 export function buildCoaListingRows(
   records: ChartOfAccount[],
   parentNodeId: import("../../data").CoaNodeId | null,
-  dateFrom: string,
-  dateTo: string,
+  _dateFrom: string,
+  _dateTo: string,
   options: { search?: string } = {},
 ): CoaListingRow[] {
   const search = options.search?.trim() ?? "";
-  const movementMap = coaListingMovementMapForRange(dateFrom, dateTo);
 
   if (search) {
     return getSearchMatchingNodes(records, search).map((node) => {
@@ -686,7 +579,7 @@ export function buildCoaListingRows(
       return {
         node,
         ...listingMetaForNode(records, node),
-        ...balancesForNode(records, node, movementMap, dateFrom),
+        ...balancesForNode(records, node),
         hasChildren: childCount > 0,
       };
     });
@@ -704,7 +597,7 @@ export function buildCoaListingRows(
     return {
       node,
       ...listingMetaForNode(records, node),
-      ...balancesForNode(records, node, movementMap, dateFrom),
+      ...balancesForNode(records, node),
       hasChildren: childCount > 0,
     };
   });
