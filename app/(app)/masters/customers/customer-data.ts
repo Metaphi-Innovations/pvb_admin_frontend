@@ -2217,14 +2217,14 @@ export function validateBankName(v: string): boolean {
 	if (!v || v.length < 2 || v.length > 100) return false;
 	if (v.startsWith(" ") || v.endsWith(" ")) return false;
 	if (!/[a-zA-Z0-9]/.test(v)) return false;
-	return /^[a-zA-Z0-9 .&'\-/]+$/.test(v);
+	return /^[a-zA-Z0-9 .,&'\-/]+$/.test(v);
 }
 
 export function validateBranchName(v: string): boolean {
 	if (!v || v.length < 2 || v.length > 100) return false;
 	if (v.startsWith(" ") || v.endsWith(" ")) return false;
 	if (!/[a-zA-Z0-9]/.test(v)) return false;
-	return /^[a-zA-Z0-9 .&'\-/]+$/.test(v);
+	return /^[a-zA-Z0-9 .,&'\-/]+$/.test(v);
 }
 
 export function validateAccountNumber(v: string): boolean {
