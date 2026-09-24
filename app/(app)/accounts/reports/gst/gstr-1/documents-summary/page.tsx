@@ -1,9 +1,6 @@
-import { lazyAccountsPage } from "@/lib/accounts/lazy-accounts-page";
+import { redirect } from "next/navigation";
 
-const DocumentsSummaryPageClient = lazyAccountsPage(
-  () => import("./DocumentsSummaryPageClient"),
-);
-
-export default function DocumentsSummaryPage() {
-  return <DocumentsSummaryPageClient />;
+/** Legacy localStorage GSTR-1 documents → API-backed GST Summary. */
+export default function LegacyGstr1DocumentsRedirectPage() {
+  redirect("/accounts/reports/gst-summary/gstr1/documents-summary");
 }

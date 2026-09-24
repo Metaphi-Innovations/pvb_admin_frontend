@@ -575,70 +575,12 @@ function dispatchVouchersUpdated(): void {
   }
 }
 
-/** Seed 3–4 realistic demo transactions per posting ledger. */
-export function seedCoaPostingLedgerTransactions(force = false): void {
-  if (typeof window === "undefined") return;
-
-  const stored = localStorage.getItem(VERSION_KEY);
-  if (!force && stored === COA_LEDGER_TXN_SEED_VERSION && !coaLedgerTransactionsNeedRepair()) {
-    return;
-  }
-
-  purgeCoaDemoVouchers();
-
-  const records = loadChartOfAccounts();
-  const postable = getPostableCoaAccounts(records).sort((a, b) => a.id - b.id);
-  if (postable.length === 0) return;
-
-  const counters: Record<VoucherPrefix, number> = {
-    SI: 1,
-    RV: 1,
-    PV: 1,
-    JV: 1,
-    PI: 1,
-    CN: 1,
-    DN: 1,
-    CV: 1,
-  };
-
-  const existingNos = new Set(loadVouchers().map((v) => v.voucherNumber));
-
-  const nextNo = (prefix: VoucherPrefix): string => {
-    let n = counters[prefix]++;
-    let candidate = `${prefix}-${String(n).padStart(4, "0")}`;
-    while (existingNos.has(candidate)) {
-      n = counters[prefix]++;
-      candidate = `${prefix}-${String(n).padStart(4, "0")}`;
-    }
-    existingNos.add(candidate);
-    return candidate;
-  };
-
-  for (const primary of postable) {
-    const templates = resolveTxnTemplates(primary, records);
-    templates.forEach((template, idx) => {
-      const contra = findContra(primary, records, template.voucherType);
-      const voucherNo = nextNo(template.prefix);
-      const amount = hashAmount(`${primary.id}-${template.prefix}-${idx}`, 12000, 48000);
-      postMockVoucher({
-        primary,
-        contra,
-        template,
-        voucherNo,
-        date: demoDateAt(2 + idx * 3),
-        amount,
-      });
-    });
-  }
-
-  localStorage.setItem(VERSION_KEY, COA_LEDGER_TXN_SEED_VERSION);
-  dispatchVouchersUpdated();
+/** Seed demo COA ledger vouchers — disabled (COA is API-backed). */
+export function seedCoaPostingLedgerTransactions(_force = false): void {
+  // No-op: do not write localStorage demo vouchers for Chart of Accounts.
 }
 
-/** Repair missing COA demo transactions on page load without wiping other vouchers. */
+/** Repair missing COA demo transactions — disabled. */
 export function ensureCoaPostingLedgerTransactionsOnPageLoad(): void {
-  const needed = coaLedgerTransactionsNeedRepair();
-  if (needed) {
-    seedCoaPostingLedgerTransactions(true);
-  }
+  // No-op.
 }

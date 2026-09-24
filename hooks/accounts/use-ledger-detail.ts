@@ -29,6 +29,13 @@ export const ledgerDetailKeys = {
     ] as const,
 };
 
+/** Invalidate ledger statement caches (call after ledger create/update/opening change). */
+export function invalidateLedgerDetailQueries(
+  queryClient: { invalidateQueries: (opts: { queryKey: readonly unknown[] }) => unknown },
+): void {
+  void queryClient.invalidateQueries({ queryKey: ledgerDetailKeys.all });
+}
+
 function resolveLedgerOpeningBalance(
   detail: LedgerDetailWithTransactionsDto,
   financialYearId?: string,

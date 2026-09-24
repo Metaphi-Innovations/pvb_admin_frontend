@@ -41,12 +41,15 @@ export function Gstr1SummaryTable({
   filters,
   basePath = GST_SUMMARY_GSTR1_BASE,
   drillRoutes = GSTR1_DRILL_ROUTES as Partial<Record<string, string>>,
+  backendTotalRow = null,
 }: {
   sections: Gstr1SummaryRow[] | GstSummaryTableRow[];
   filters: GstReportFilters;
   /** Drill-down base path — defaults to GSTR-1; GSTR-3B passes its own. */
   basePath?: string;
   drillRoutes?: Partial<Record<string, string>>;
+  /** Prefer backend grand-total over client re-sum when present. */
+  backendTotalRow?: GstSummaryTableRow | null;
 }) {
   const dataRows = useMemo(
     () => sections.filter((r) => r.rowType !== "total") as GstSummaryTableRow[],
@@ -66,6 +69,7 @@ export function Gstr1SummaryTable({
         basePath={basePath}
         drillRoutes={drillRoutes}
         dataRowCount={dataRows.length}
+        backendTotalRow={backendTotalRow}
       />
     </AccountsColumnFilterProvider>
   );
@@ -76,18 +80,22 @@ function Gstr1SummaryTableInner({
   basePath,
   drillRoutes,
   dataRowCount,
+  backendTotalRow,
 }: {
   filters: GstReportFilters;
   basePath: string;
   drillRoutes: Partial<Record<string, string>>;
   dataRowCount: number;
+  backendTotalRow: GstSummaryTableRow | null;
 }) {
   const ctx = useAccountsColumnFilterContext();
   const filteredRows = useAccountsFilteredRows<GstSummaryTableRow>([]);
-  const totalRow = useMemo(
-    () => (filteredRows.length > 0 ? sumGstSummarySectionRows(filteredRows) : null),
-    [filteredRows],
-  );
+  const totalRow = useMemo(() => {
+    if (backendTotalRow) return backendTotalRow;
+    return filteredRows.length > 0
+      ? sumGstSummarySectionRows(filteredRows)
+      : null;
+  }, [filteredRows, backendTotalRow]);
 
   return (
     <AccountsListingTableCard className="flex-1 min-h-0 flex flex-col">
@@ -200,6 +208,7 @@ function Gstr1SummaryTableInner({
               <>
                 {filteredRows.map((row) => {
                   const drillSlug = drillRoutes[row.sectionId];
+                  const unsupported = row.supported === false;
                   const href =
                     drillSlug && row.rowType !== "total"
                       ? buildGstReportHref(`${basePath}/${drillSlug}`, filters)
@@ -209,55 +218,70 @@ function Gstr1SummaryTableInner({
                   return (
                     <AccountsTableRow
                       key={row.sectionId}
-                      className={cn(isSupporting && "bg-muted/10")}
+                      className={cn(
+                        isSupporting && "bg-muted/10",
+                        unsupported && "bg-muted/20 opacity-90",
+                      )}
                     >
                       <AccountsTableCell className="text-xs font-medium text-foreground">
-                        {row.particulars}
+                        <div className="space-y-0.5">
+                          <div>{row.particulars}</div>
+                          {unsupported && (
+                            <p className="text-[10px] font-normal text-muted-foreground">
+                              {row.notes ||
+                                "Not supported by current PVB transaction model"}
+                            </p>
+                          )}
+                        </div>
                       </AccountsTableCell>
                       <AccountsTableCell align="right" className="text-xs tabular-nums">
-                        {row.voucherCount}
+                        {unsupported ? "—" : row.voucherCount}
                       </AccountsTableCell>
                       <AccountsTableCell
                         align="right"
                         money
                         className={cn("text-xs", MONEY_AMOUNT_CLASS)}
                       >
-                        {formatMoney(row.taxableAmount)}
+                        {unsupported ? "—" : formatMoney(row.taxableAmount)}
                       </AccountsTableCell>
                       <AccountsTableCell
                         align="right"
                         money
                         className={cn("text-xs", MONEY_AMOUNT_CLASS)}
                       >
-                        {formatMoney(row.igst)}
+                        {unsupported ? "—" : formatMoney(row.igst)}
                       </AccountsTableCell>
                       <AccountsTableCell
                         align="right"
                         money
                         className={cn("text-xs", MONEY_AMOUNT_CLASS)}
                       >
-                        {formatMoney(row.cgst)}
+                        {unsupported ? "—" : formatMoney(row.cgst)}
                       </AccountsTableCell>
                       <AccountsTableCell
                         align="right"
                         money
                         className={cn("text-xs", MONEY_AMOUNT_CLASS)}
                       >
-                        {formatMoney(row.sgst)}
+                        {unsupported ? "—" : formatMoney(row.sgst)}
                       </AccountsTableCell>
                       <AccountsTableCell
                         align="right"
                         money
                         className={cn("text-xs", MONEY_AMOUNT_CLASS)}
                       >
-                        {formatMoney(row.taxAmount)}
+                        {unsupported ? "—" : formatMoney(row.taxAmount)}
                       </AccountsTableCell>
                       <AccountsTableCell
                         align="right"
                         money
                         className={cn("text-xs", MONEY_AMOUNT_CLASS)}
                       >
-                        {row.invoiceAmount !== 0 ? formatMoney(row.invoiceAmount) : "—"}
+                        {unsupported
+                          ? "—"
+                          : row.invoiceAmount !== 0
+                            ? formatMoney(row.invoiceAmount)
+                            : "—"}
                       </AccountsTableCell>
                       <AccountsTableCell>
                         {href ? (
@@ -265,7 +289,7 @@ function Gstr1SummaryTableInner({
                             href={href}
                             className="text-xs text-brand-600 hover:text-brand-700 hover:underline font-medium"
                           >
-                            View
+                            {unsupported ? "Details" : "View"}
                           </Link>
                         ) : (
                           <span className="text-xs text-muted-foreground">—</span>

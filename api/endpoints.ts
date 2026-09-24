@@ -839,6 +839,11 @@ export const API_ENDPOINTS = {
         FILTERS: "/accounts/reports/day-book/filters",
         EXPORT: "/accounts/reports/day-book/export",
       },
+      AUDIT_TRAIL: {
+        LIST: "/accounts/reports/audit-trail",
+        FILTERS: "/accounts/reports/audit-trail/filters",
+        EXPORT: "/accounts/reports/audit-trail/export",
+      },
       PROFIT_LOSS: {
         LIST: "/accounts/reports/profit-loss",
         FILTERS: "/accounts/reports/profit-loss/filters",
@@ -859,10 +864,108 @@ export const API_ENDPOINTS = {
         FILTERS: "/accounts/reports/sales-register/filters",
         EXPORT: "/accounts/reports/sales-register/export",
       },
+      STOCK_VALUATION: {
+        LIST: "/accounts/reports/stock-valuation",
+        DETAILS: "/accounts/reports/stock-valuation/accounting-details",
+        FILTERS: "/accounts/reports/stock-valuation/filters",
+        FILTER_DROPDOWN: "/accounts/reports/stock-valuation/filter-dropdown",
+        EXPORT: "/accounts/reports/stock-valuation/export",
+        MARKET_RATE: "/accounts/reports/stock-valuation/market-rate",
+      },
+      STOCK_REGISTER: {
+        LIST: "/accounts/reports/stock-register",
+        DETAILED: "/accounts/reports/stock-register/detailed",
+        BATCH_WISE: "/accounts/reports/stock-register/batch-wise",
+        REJECTED: "/accounts/reports/stock-register/rejected",
+        REJECTED_DETAILED: "/accounts/reports/stock-register/rejected/detailed",
+        FILTERS: "/accounts/reports/stock-register/filters",
+        FILTER_DROPDOWN: "/accounts/reports/stock-register/filter-dropdown",
+        EXPORT: "/accounts/reports/stock-register/export",
+      },
+      PURCHASE_REGISTER: {
+        LIST: "/accounts/reports/purchase-register",
+        FILTERS: "/accounts/reports/purchase-register/filters",
+        EXPORT: "/accounts/reports/purchase-register/export",
+      },
       TDS_SUMMARY: {
         LIST: "/accounts/reports/tds-summary",
         FILTERS: "/accounts/reports/tds-summary/filters",
         EXPORT: "/accounts/reports/tds-summary/export",
+      },
+      GST_SUMMARY: {
+        FILTERS: "/accounts/reports/gst-summary/filters",
+        OVERVIEW: "/accounts/reports/gst-summary/overview",
+        GSTR1: "/accounts/reports/gst-summary/gstr1",
+        GSTR1_SECTION: (sectionId: string) =>
+          `/accounts/reports/gst-summary/gstr1/sections/${sectionId}`,
+        GSTR2A: {
+          IMPORTS: "/accounts/reports/gst-summary/gstr2a/imports",
+          IMPORT_DETAIL: (id: string) =>
+            `/accounts/reports/gst-summary/gstr2a/imports/${id}`,
+          IMPORT_FILE: (id: string) =>
+            `/accounts/reports/gst-summary/gstr2a/imports/${id}/file`,
+          RECORDS: "/accounts/reports/gst-summary/gstr2a/records",
+          RECONCILIATION: "/accounts/reports/gst-summary/gstr2a/reconciliation",
+          RECONCILIATION_RUN:
+            "/accounts/reports/gst-summary/gstr2a/reconciliation/run",
+          RECONCILIATION_DETAIL: (id: string) =>
+            `/accounts/reports/gst-summary/gstr2a/reconciliation/${id}`,
+          RECONCILIATION_CANDIDATES: (id: string) =>
+            `/accounts/reports/gst-summary/gstr2a/reconciliation/${id}/candidates`,
+          RECONCILIATION_AUDIT: (id: string) =>
+            `/accounts/reports/gst-summary/gstr2a/reconciliation/${id}/audit`,
+          RECONCILIATION_MATCH: (id: string) =>
+            `/accounts/reports/gst-summary/gstr2a/reconciliation/${id}/match`,
+          RECONCILIATION_ACCEPT_MATCH: (id: string) =>
+            `/accounts/reports/gst-summary/gstr2a/reconciliation/${id}/accept-match`,
+          RECONCILIATION_UNMATCH: (id: string) =>
+            `/accounts/reports/gst-summary/gstr2a/reconciliation/${id}/unmatch`,
+          RECONCILIATION_REVIEW: (id: string) =>
+            `/accounts/reports/gst-summary/gstr2a/reconciliation/${id}/review`,
+          RECONCILIATION_RESOLVE: (id: string) =>
+            `/accounts/reports/gst-summary/gstr2a/reconciliation/${id}/resolve`,
+          RECONCILIATION_REMARKS: (id: string) =>
+            `/accounts/reports/gst-summary/gstr2a/reconciliation/${id}/remarks`,
+        },
+        GSTR2B: {
+          IMPORTS: "/accounts/reports/gst-summary/gstr2b/imports",
+          IMPORT_DETAIL: (id: string) =>
+            `/accounts/reports/gst-summary/gstr2b/imports/${id}`,
+          IMPORT_FILE: (id: string) =>
+            `/accounts/reports/gst-summary/gstr2b/imports/${id}/file`,
+          RECORDS: "/accounts/reports/gst-summary/gstr2b/records",
+          RECONCILIATION: "/accounts/reports/gst-summary/gstr2b/reconciliation",
+          RECONCILIATION_RUN:
+            "/accounts/reports/gst-summary/gstr2b/reconciliation/run",
+          RECONCILIATION_DETAIL: (id: string) =>
+            `/accounts/reports/gst-summary/gstr2b/reconciliation/${id}`,
+          RECONCILIATION_CANDIDATES: (id: string) =>
+            `/accounts/reports/gst-summary/gstr2b/reconciliation/${id}/candidates`,
+          RECONCILIATION_AUDIT: (id: string) =>
+            `/accounts/reports/gst-summary/gstr2b/reconciliation/${id}/audit`,
+          RECONCILIATION_MATCH: (id: string) =>
+            `/accounts/reports/gst-summary/gstr2b/reconciliation/${id}/match`,
+          RECONCILIATION_ACCEPT_MATCH: (id: string) =>
+            `/accounts/reports/gst-summary/gstr2b/reconciliation/${id}/accept-match`,
+          RECONCILIATION_UNMATCH: (id: string) =>
+            `/accounts/reports/gst-summary/gstr2b/reconciliation/${id}/unmatch`,
+          RECONCILIATION_REVIEW: (id: string) =>
+            `/accounts/reports/gst-summary/gstr2b/reconciliation/${id}/review`,
+          RECONCILIATION_RESOLVE: (id: string) =>
+            `/accounts/reports/gst-summary/gstr2b/reconciliation/${id}/resolve`,
+          RECONCILIATION_REMARKS: (id: string) =>
+            `/accounts/reports/gst-summary/gstr2b/reconciliation/${id}/remarks`,
+          RECONCILIATION_ITC_TREATMENT: (id: string) =>
+            `/accounts/reports/gst-summary/gstr2b/reconciliation/${id}/itc-treatment`,
+        },
+        GSTR3B: "/accounts/reports/gst-summary/gstr3b",
+        GSTR3B_EXPORT: "/accounts/reports/gst-summary/gstr3b/export",
+        ANNUAL: "/accounts/reports/gst-summary/annual",
+        ANNUAL_EXPORT: "/accounts/reports/gst-summary/annual/export",
+        OVERVIEW_EXPORT: "/accounts/reports/gst-summary/overview/export",
+        GSTR1_EXPORT: "/accounts/reports/gst-summary/gstr1/export",
+        GSTR2A_EXPORT: "/accounts/reports/gst-summary/gstr2a/export",
+        GSTR2B_EXPORT: "/accounts/reports/gst-summary/gstr2b/export",
       },
     },
     DEBIT_NOTE: {

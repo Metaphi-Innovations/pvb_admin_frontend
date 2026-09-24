@@ -10,7 +10,6 @@ const files = [
   "app/(app)/accounts/reports/inventory-register/inventory-register-data.ts",
   "app/(app)/accounts/reports/stock-valuation/stock-valuation-data.ts",
   "app/(app)/accounts/reports/sales-register/sales-register-data.ts",
-  "app/(app)/accounts/reports/purchase-register/purchase-register-data.ts",
   "lib/accounts/day-book-demo-data.ts",
   "app/(app)/accounts/purchase-invoices/purchase-invoice-seed.ts",
   "app/(app)/accounts/masters/chart-of-accounts/coa-demo-transactions.ts",

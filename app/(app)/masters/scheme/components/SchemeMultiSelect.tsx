@@ -25,6 +25,11 @@ interface SchemeMultiSelectProps {
   /** Compact ERP density (Scheme Master unified form). */
   dense?: boolean;
   required?: boolean;
+  /**
+   * When scheme is already applied, these option ids cannot be deselected
+   * (add-only). Clear / Select-all-toggle keeps them.
+   */
+  lockedIds?: string[];
 }
 
 function handleScrollableWheel(event: React.WheelEvent<HTMLElement>) {
@@ -56,9 +61,11 @@ export function SchemeMultiSelect({
   maxSelection,
   dense = false,
   required = false,
+  lockedIds = [],
 }: SchemeMultiSelectProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const lockedSet = useMemo(() => new Set(lockedIds), [lockedIds]);
 
   const selected = useMemo(
     () => options.filter((o) => selectedIds.includes(o.id)),
@@ -91,6 +98,7 @@ export function SchemeMultiSelect({
 
   const toggle = (id: string) => {
     if (selectedIds.includes(id)) {
+      if (lockedSet.has(id)) return;
       onChange(selectedIds.filter((x) => x !== id));
       return;
     }
@@ -107,13 +115,20 @@ export function SchemeMultiSelect({
   const selectAllFiltered = () => {
     if (maxSelection === 1 || filteredIds.length === 0) return;
     if (allFilteredSelected) {
-      onChange(selectedIds.filter((id) => !filteredIds.includes(id)));
+      onChange(
+        selectedIds.filter(
+          (id) => lockedSet.has(id) || !filteredIds.includes(id),
+        ),
+      );
       return;
     }
     const merged = [...new Set([...selectedIds, ...filteredIds])];
-    onChange(
-      maxSelection ? merged.slice(0, maxSelection) : merged,
-    );
+    onChange(maxSelection ? merged.slice(0, maxSelection) : merged);
+  };
+
+  const clearSelection = () => {
+    const kept = selectedIds.filter((id) => lockedSet.has(id));
+    onChange(kept);
   };
 
   const showSelectAll = maxSelection !== 1 && options.length > 0;
@@ -202,10 +217,10 @@ export function SchemeMultiSelect({
             {selected.length > 0 ? (
               <button
                 type="button"
-                onClick={() => onChange([])}
+                onClick={clearSelection}
                 className="text-[11px] font-medium text-brand-600 hover:text-brand-700"
               >
-                Clear
+                {lockedIds.length > 0 ? "Clear unlocked" : "Clear"}
               </button>
             ) : null}
           </div>
@@ -253,12 +268,22 @@ export function SchemeMultiSelect({
             ) : (
               filtered.map((option) => {
                 const checked = selectedIds.includes(option.id);
+                const isLocked = lockedSet.has(option.id);
                 return (
                   <button
                     key={option.id}
                     type="button"
                     onClick={() => toggle(option.id)}
-                    className="flex w-full items-start gap-2 rounded px-1.5 py-1.5 text-left hover:bg-muted"
+                    disabled={isLocked && checked}
+                    title={
+                      isLocked && checked
+                        ? "Cannot remove — scheme already applied with this value"
+                        : undefined
+                    }
+                    className={cn(
+                      "flex w-full items-start gap-2 rounded px-1.5 py-1.5 text-left hover:bg-muted",
+                      isLocked && checked && "cursor-not-allowed opacity-80",
+                    )}
                   >
                     <span
                       className={cn(
@@ -271,7 +296,14 @@ export function SchemeMultiSelect({
                       {checked && <Check className="h-2.5 w-2.5" />}
                     </span>
                     <span className="min-w-0">
-                      <span className="block text-xs font-medium">{option.name}</span>
+                      <span className="block text-xs font-medium">
+                        {option.name}
+                        {isLocked && checked ? (
+                          <span className="ml-1 text-[10px] font-normal text-muted-foreground">
+                            (locked)
+                          </span>
+                        ) : null}
+                      </span>
                       {option.helper ? (
                         <span className="block text-[10px] text-muted-foreground">
                           {option.helper}

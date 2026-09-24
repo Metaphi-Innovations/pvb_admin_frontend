@@ -1,12 +1,10 @@
 /**
- * Chart of Accounts — Stock in Hand (Inventory) helpers.
- * Warehouse remains the operational source of truth; COA only shows financial inventory value.
+ * Chart of Accounts — Stock in Hand / Inventory classification helpers.
+ * Balances come from the ledger balances API (same as every other ledger).
  */
 
 import type { ChartOfAccount } from "@/app/(app)/accounts/data";
 import { MANDATORY_SYSTEM_LEDGERS } from "@/app/(app)/accounts/masters/chart-of-accounts/coa-statutory-ledgers";
-import { getInventoryDashboardMetrics } from "@/lib/accounts/inventory-accounting-data";
-import type { LedgerBalance } from "@/app/(app)/accounts/masters/ledgers/ledgers-utils";
 
 const STOCK_IN_HAND_NAME = MANDATORY_SYSTEM_LEDGERS.stockInHand.name.toLowerCase();
 
@@ -25,14 +23,4 @@ export function isInventoryCoaGroup(
   if (node.specializedGroupType === "inventory") return true;
   const name = (node.accountName ?? "").trim().toLowerCase();
   return name === "inventory" || name === "inventory / stock-in-hand";
-}
-
-/**
- * Display balance for Stock in Hand in COA — ERP total inventory value (Debit).
- * Does not alter voucher posting or Trial Balance / Balance Sheet engines.
- */
-export function resolveStockInHandDisplayBalance(asOnDate?: string): LedgerBalance {
-  const value = getInventoryDashboardMetrics(asOnDate).totalInventoryValue;
-  const amount = Number.isFinite(value) ? Math.max(0, Math.round(value * 100) / 100) : 0;
-  return { amount, balanceType: "Debit" };
 }

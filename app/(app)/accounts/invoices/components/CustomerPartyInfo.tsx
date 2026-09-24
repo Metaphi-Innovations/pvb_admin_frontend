@@ -2,7 +2,7 @@
 
 /**
  * Compact customer detail for Pending Invoices / Sales Invoice listings.
- * Page-scoped to invoice workflows — not used outside Accounts Sales Invoice flows.
+ * Loads live Customer master data only — no localStorage / seed fallbacks.
  */
 
 import { Info } from "lucide-react";
@@ -15,10 +15,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { formatMoney } from "@/lib/accounts/money-format";
-import { loadCustomers, type Customer } from "@/app/(app)/masters/customers/customer-data";
 import { useMemo, useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
-import { SalesOrderService } from "@/services/sales-order.service";
+import { CustomerListService } from "@/services/customer-list.service";
 
 export interface CustomerPartyInfo {
   customerId?: string;
@@ -36,59 +35,147 @@ export interface CustomerPartyInfo {
   linkedLedger?: string;
 }
 
-function formatBranchAddress(addr: {
-  address?: string;
-  addressLine1?: string;
-  addressLine2?: string;
-  city?: string;
-  state?: string;
-  pincode?: string;
-} | null | undefined): string {
-  if (!addr) return "—";
-  const parts = [
-    addr.address || addr.addressLine1,
-    addr.addressLine2,
-    [addr.city, addr.state].filter(Boolean).join(", "),
-    addr.pincode,
-  ].filter((p) => p && String(p).trim());
-  return parts.length ? parts.join(", ") : "—";
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function isCustomerUuid(id?: string | null): id is string {
+  return Boolean(id && UUID_RE.test(id));
 }
 
+function formatJoinAddress(parts: Array<string | null | undefined>): string {
+  return parts.filter((p) => p && String(p).trim()).join(", ");
+}
+
+/** Format payment_type + credit_days + advance from Customer master. */
+export function formatCustomerMasterPaymentTerms(params: {
+  paymentType?: string | null;
+  creditDays?: number | string | null;
+  advance?: number | string | null;
+}): string {
+  const type = params.paymentType?.trim().toLowerCase();
+  if (!type) return "";
+  if (type === "immediate") return "Immediate";
+  if (type === "advance") {
+    const pct =
+      params.advance != null && params.advance !== ""
+        ? Number(params.advance)
+        : NaN;
+    return Number.isFinite(pct) && pct > 0 ? `Advance ${pct}%` : "Advance";
+  }
+  if (type === "credit") {
+    const days =
+      params.creditDays != null && params.creditDays !== ""
+        ? Number(params.creditDays)
+        : NaN;
+    return Number.isFinite(days) ? `Credit ${days} Days` : "Credit";
+  }
+  return params.paymentType!.trim();
+}
+
+/**
+ * Resolve a backend customer UUID for live fetch.
+ * Uses UUID prop when present, otherwise Customer list search (includes inactive).
+ */
+async function resolveCustomerFetchId(
+  info: CustomerPartyInfo,
+): Promise<string | null> {
+  if (isCustomerUuid(info.customerId)) return info.customerId;
+
+  const search =
+    (info.customerCode && info.customerCode !== "—"
+      ? info.customerCode.trim()
+      : "") ||
+    (info.customerName && info.customerName !== "—"
+      ? info.customerName.trim()
+      : "");
+  if (!search) return null;
+
+  try {
+    const { items } = await CustomerListService.list({
+      page: 1,
+      pageSize: 20,
+      search,
+      status: "all",
+    });
+    const code = info.customerCode?.trim().toLowerCase();
+    const name = info.customerName?.trim().toLowerCase();
+    const byCode =
+      code && code !== "—"
+        ? items.find((c) => c.customerCode.trim().toLowerCase() === code)
+        : undefined;
+    const byName =
+      !byCode && name && name !== "—"
+        ? items.find((c) => c.customerName.trim().toLowerCase() === name)
+        : undefined;
+    const hit = byCode || byName || items[0];
+    return isCustomerUuid(hit?.customerUuid) ? hit!.customerUuid : null;
+  } catch {
+    return null;
+  }
+}
+
+function formatBranchRows(branches: unknown[] | undefined): {
+  billingAddress: string;
+  shippingAddress: string;
+  placeOfSupply: string;
+  branchName: string;
+} {
+  const list = Array.isArray(branches) ? branches : [];
+  const main =
+    list.find(
+      (b) =>
+        b &&
+        typeof b === "object" &&
+        Boolean((b as { is_main_branch?: boolean }).is_main_branch),
+    ) || list[0];
+  if (!main || typeof main !== "object") {
+    return {
+      billingAddress: "",
+      shippingAddress: "",
+      placeOfSupply: "",
+      branchName: "",
+    };
+  }
+  const b = main as Record<string, unknown>;
+  return {
+    billingAddress: formatJoinAddress([
+      b.billing_address_line_1 as string,
+      b.billing_address_line_2 as string,
+      b.billing_city as string,
+      b.billing_state as string,
+      b.billing_pincode as string,
+    ]),
+    shippingAddress: formatJoinAddress([
+      b.shipping_address_line_1 as string,
+      b.shipping_address_line_2 as string,
+      b.shipping_city as string,
+      b.shipping_state as string,
+      b.shipping_pincode as string,
+    ]),
+    placeOfSupply: String(b.billing_state ?? "").trim(),
+    branchName: String(b.branch_name ?? "").trim(),
+  };
+}
+
+/** Skeleton from props only — never reads localStorage / seed customers. */
 export function resolveCustomerPartyInfo(
   customerName: string,
   extras?: Partial<CustomerPartyInfo>,
 ): CustomerPartyInfo {
   const name = customerName?.trim() || "";
-  const customers = typeof window !== "undefined" ? loadCustomers() : [];
-  const match =
-    customers.find((c) => c.customerName.trim().toLowerCase() === name.toLowerCase()) ??
-    customers.find((c) => c.customerCode && extras?.customerCode && c.customerCode === extras.customerCode);
-
-  const branch = match?.branches?.[0];
   return {
-    customerId: extras?.customerId || match?.customerUuid || undefined,
+    customerId: extras?.customerId || undefined,
     customerName: name || "—",
-    customerCode: extras?.customerCode || match?.customerCode || "—",
-    gstin: extras?.gstin || match?.gstin || branch?.billingAddress?.gstin || "—",
-    billingAddress:
-      extras?.billingAddress ||
-      formatBranchAddress(branch?.billingAddress) ||
-      match?.address ||
-      "—",
-    shippingAddress:
-      extras?.shippingAddress || formatBranchAddress(branch?.shippingAddress) || "—",
-    placeOfSupply:
-      extras?.placeOfSupply || match?.stateName || branch?.billingAddress?.state || "—",
-    paymentTerms: extras?.paymentTerms || match?.paymentTerms || "—",
-    branch: extras?.branch || match?.branch || branch?.branchName || "—",
-    creditLimit:
-      extras?.creditLimit !== undefined
-        ? extras.creditLimit
-        : match?.creditLimit != null
-          ? match.creditLimit
-          : null,
-    customerType: extras?.customerType || match?.customerType || undefined,
-    salesperson: extras?.salesperson || match?.salesManName || undefined,
+    customerCode: extras?.customerCode || "—",
+    gstin: extras?.gstin || "—",
+    billingAddress: extras?.billingAddress || "—",
+    shippingAddress: extras?.shippingAddress || "—",
+    placeOfSupply: extras?.placeOfSupply || "—",
+    paymentTerms: extras?.paymentTerms || "—",
+    branch: extras?.branch || "—",
+    creditLimit: extras?.creditLimit !== undefined ? extras.creditLimit : null,
+    customerType: extras?.customerType || undefined,
+    salesperson: extras?.salesperson || undefined,
     linkedLedger: extras?.linkedLedger || undefined,
   };
 }
@@ -100,17 +187,6 @@ function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
       <span className="so-info-row-value text-xs font-medium text-foreground break-words">{value ?? "—"}</span>
     </div>
   );
-}
-
-function formatPaymentTerms(paymentType?: string, creditDays?: number | string): string {
-  if (!paymentType) return "—";
-  const type = paymentType.toLowerCase();
-  if (type === "advance") return "Advance";
-  if (type === "credit") {
-    const days = creditDays ? Number(creditDays) : 30;
-    return `Net ${days}`;
-  }
-  return paymentType;
 }
 
 export function CustomerPartyInfoDialog({
@@ -125,67 +201,65 @@ export function CustomerPartyInfoDialog({
   const [info, setInfo] = useState<CustomerPartyInfo | null>(initialInfo);
   const [loading, setLoading] = useState(false);
 
+  const fetchKey = [
+    initialInfo?.customerId ?? "",
+    initialInfo?.customerCode ?? "",
+    initialInfo?.customerName ?? "",
+  ].join("|");
+
   useEffect(() => {
     setInfo(initialInfo);
     if (!open || !initialInfo) return;
 
-    const { customerId } = initialInfo;
-    if (!customerId) return;
+    let cancelled = false;
 
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(customerId);
-    
-    if (isUuid) {
-      const fetchDetails = async () => {
-        setLoading(true);
-        try {
-          const res = await SalesOrderService.getCustomerDetails(customerId);
-          if (res) {
-            const mainBranch = res.branches?.find((b: any) => b.is_main_branch) || res.branches?.[0];
-            const billingAddress = mainBranch
-              ? [
-                  mainBranch.billing_address_line_1,
-                  mainBranch.billing_address_line_2,
-                  mainBranch.billing_city,
-                  mainBranch.billing_state,
-                  mainBranch.billing_pincode,
-                ].filter(Boolean).join(", ")
-              : "";
-              
-            const shippingAddress = mainBranch
-              ? [
-                  mainBranch.shipping_address_line_1,
-                  mainBranch.shipping_address_line_2,
-                  mainBranch.shipping_city,
-                  mainBranch.shipping_state,
-                  mainBranch.shipping_pincode,
-                ].filter(Boolean).join(", ")
-              : "";
-              
-            setInfo({
-              customerId: initialInfo.customerId,
-              customerName: res.customer_name || initialInfo.customerName,
-              customerCode: res.customer_code || initialInfo.customerCode,
-              gstin: res.gstin_no || initialInfo.gstin,
-              billingAddress: initialInfo.billingAddress && initialInfo.billingAddress !== "—" ? initialInfo.billingAddress : (billingAddress || "—"),
-              shippingAddress: initialInfo.shippingAddress && initialInfo.shippingAddress !== "—" ? initialInfo.shippingAddress : (shippingAddress || "—"),
-              placeOfSupply: initialInfo.placeOfSupply && initialInfo.placeOfSupply !== "—" ? initialInfo.placeOfSupply : (mainBranch?.billing_state || "—"),
-              paymentTerms: formatPaymentTerms(res.payment_type, res.credit_days) || initialInfo.paymentTerms || "—",
-              branch: initialInfo.branch,
-              creditLimit: res.credit_limit ? Number(res.credit_limit) : initialInfo.creditLimit,
-              customerType: res.customer_type?.customer_type_name || initialInfo.customerType,
-              salesperson: initialInfo.salesperson,
-              linkedLedger: initialInfo.linkedLedger,
-            });
-          }
-        } catch (err) {
-          console.error("Failed to fetch customer details from backend:", err);
-        } finally {
-          setLoading(false);
-        }
-      };
-      fetchDetails();
-    }
-  }, [open, initialInfo]);
+    const fetchDetails = async () => {
+      setLoading(true);
+      try {
+        const fetchId = await resolveCustomerFetchId(initialInfo);
+        if (cancelled || !fetchId) return;
+
+        const res = await CustomerListService.view(fetchId);
+        if (cancelled || !res) return;
+
+        const branchInfo = formatBranchRows(res.branches);
+        const livePaymentTerms = formatCustomerMasterPaymentTerms({
+          paymentType: res.paymentType,
+          creditDays: res.creditDays,
+          advance: res.advance,
+        });
+
+        setInfo({
+          customerId: fetchId,
+          customerName: res.customerName || initialInfo.customerName,
+          customerCode: res.customerCode || initialInfo.customerCode,
+          gstin: res.gstinNo || initialInfo.gstin || "—",
+          billingAddress:
+            branchInfo.billingAddress || initialInfo.billingAddress || "—",
+          shippingAddress:
+            branchInfo.shippingAddress || initialInfo.shippingAddress || "—",
+          placeOfSupply:
+            branchInfo.placeOfSupply || initialInfo.placeOfSupply || "—",
+          paymentTerms: livePaymentTerms || "—",
+          branch: branchInfo.branchName || initialInfo.branch || "—",
+          creditLimit: res.creditLimit != null ? res.creditLimit : null,
+          customerType: res.customerType || undefined,
+          salesperson: initialInfo.salesperson,
+          linkedLedger: initialInfo.linkedLedger,
+        });
+      } catch (err) {
+        console.error("Failed to fetch customer details from backend:", err);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    void fetchDetails();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchKey captures identity fields
+  }, [open, fetchKey]);
 
   if (!info) return null;
   return (
@@ -364,6 +438,3 @@ export function CustomerPartyNameCell({
     </>
   );
 }
-
-/** Resolve display helpers without unused Customer import warnings. */
-export type { Customer };

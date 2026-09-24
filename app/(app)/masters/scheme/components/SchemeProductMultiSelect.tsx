@@ -41,6 +41,8 @@ interface SchemeProductMultiSelectProps {
    */
   emptyAsSummary?: boolean;
   className?: string;
+  /** Product ids that cannot be deselected when scheme is already applied. */
+  lockedValues?: string[];
 }
 
 function handleScrollableWheel(event: React.WheelEvent<HTMLElement>) {
@@ -115,12 +117,14 @@ export function SchemeProductMultiSelect({
   preferIdentityLabel = false,
   emptyAsSummary = false,
   className,
+  lockedValues = [],
 }: SchemeProductMultiSelectProps) {
   void showChips;
   void _maxVisibleChips;
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const clearAllEnabled = showClearAll ?? false;
+  const lockedSet = useMemo(() => new Set(lockedValues), [lockedValues]);
 
   const filtered = options.filter((opt) => {
     const haystack = `${opt.label} ${opt.productName ?? ""} ${opt.scientificName ?? ""} ${opt.sublabel ?? ""} ${opt.searchText ?? ""}`.toLowerCase();
@@ -141,6 +145,7 @@ export function SchemeProductMultiSelect({
 
   const toggleValue = (id: string) => {
     if (value.includes(id)) {
+      if (lockedSet.has(id)) return;
       onChange(value.filter((item) => item !== id));
     } else {
       onChange([...value, id]);
@@ -149,7 +154,9 @@ export function SchemeProductMultiSelect({
 
   const toggleAllFiltered = () => {
     if (allFilteredSelected) {
-      onChange(value.filter((id) => !filteredValues.includes(id)));
+      onChange(
+        value.filter((id) => lockedSet.has(id) || !filteredValues.includes(id)),
+      );
       return;
     }
     onChange([...new Set([...value, ...filteredValues])]);
@@ -293,29 +300,43 @@ export function SchemeProductMultiSelect({
                 </div>
               ) : (
                 <>
-                  {filtered.map((opt) => (
+                  {filtered.map((opt) => {
+                    const checked = value.includes(opt.value);
+                    const isLocked = lockedSet.has(opt.value) && checked;
+                    return (
                     <button
                       key={opt.value}
                       type="button"
-                      disabled={opt.disabled}
+                      disabled={opt.disabled || isLocked}
                       onClick={() => toggleValue(opt.value)}
+                      title={
+                        isLocked
+                          ? "Cannot remove — scheme already applied with this product"
+                          : undefined
+                      }
                       className={cn(
                         "flex w-full items-start gap-2 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-brand-50 disabled:cursor-not-allowed disabled:opacity-40",
-                        value.includes(opt.value) && "bg-brand-50",
+                        checked && "bg-brand-50",
                       )}
                     >
                       <Checkbox
-                        checked={value.includes(opt.value)}
+                        checked={checked}
                         className="mt-0.5 h-3.5 w-3.5 flex-shrink-0"
                       />
                       <span className="min-w-0 flex-1">
                         <span className="block text-xs font-semibold leading-snug text-foreground">
                           {optionIdentityLabel(opt, preferIdentityLabel)}
+                          {isLocked ? (
+                            <span className="ml-1 text-[10px] font-normal text-muted-foreground">
+                              (locked)
+                            </span>
+                          ) : null}
                         </span>
                         {!preferIdentityLabel ? <ProductMetaLine opt={opt} /> : null}
                       </span>
                     </button>
-                  ))}
+                    );
+                  })}
                 </>
               )}
             </div>
@@ -329,10 +350,12 @@ export function SchemeProductMultiSelect({
               {clearAllEnabled && value.length > 0 ? (
                 <button
                   type="button"
-                  onClick={() => onChange([])}
+                  onClick={() =>
+                    onChange(value.filter((id) => lockedSet.has(id)))
+                  }
                   className="text-[11px] font-medium text-muted-foreground hover:text-foreground"
                 >
-                  Clear All
+                  {lockedValues.length > 0 ? "Clear unlocked" : "Clear All"}
                 </button>
               ) : null}
               <button

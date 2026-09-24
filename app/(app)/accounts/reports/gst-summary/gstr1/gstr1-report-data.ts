@@ -1,10 +1,9 @@
 /**
- * GSTR-1 report data layer — demo seed with filter-ready structure for future API wiring.
+ * GSTR-1 report helpers — demo seed retired. Production uses GstSummaryApiService.
  */
 
 import { COMPANY_BILLING } from "@/lib/procurement/config";
 import {
-  matchesGstReportFilters,
   resolveFinancialYearLabel,
   resolveGstPeriodLabel,
   resolveGstRegistrationLabel,
@@ -12,7 +11,6 @@ import {
   type GstReportFilters,
 } from "@/lib/accounts/gst-report-filters";
 import { ACCOUNTS_COMPANY_NAME } from "@/lib/accounts/report-export-presentation";
-import { GSTR1_DEMO_DOCUMENTS } from "./gstr1-demo-seed";
 import {
   GSTR1_SECTION_LABELS,
   GSTR1_TRANSACTIONAL_SECTIONS,
@@ -57,18 +55,9 @@ function aggregateSection(
 }
 
 export function filterGstr1Documents(filters: GstReportFilters): Gstr1Document[] {
-  const filtered = GSTR1_DEMO_DOCUMENTS.filter((doc) =>
-    matchesGstReportFilters(
-      {
-        documentDate: doc.documentDate,
-        branch: doc.branch,
-        companyGstin: doc.companyGstin,
-      },
-      filters,
-    ),
-  );
-  // Demo guarantee — never return an empty report.
-  return filtered.length > 0 ? filtered : GSTR1_DEMO_DOCUMENTS;
+  // Demo seed retired — production GSTR-1 uses GstSummaryApiService.
+  void filters;
+  return [];
 }
 
 export function buildGstr1ReportHeader(filters: GstReportFilters): Gstr1ReportHeader {

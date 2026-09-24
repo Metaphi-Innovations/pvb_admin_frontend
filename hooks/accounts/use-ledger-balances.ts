@@ -28,6 +28,13 @@ export const ledgerBalanceKeys = {
     ] as const,
 };
 
+/** Invalidate every COA period-balance query (call after ledger create/update/delete). */
+export function invalidateLedgerBalanceQueries(
+  queryClient: { invalidateQueries: (opts: { queryKey: readonly unknown[] }) => unknown },
+): void {
+  void queryClient.invalidateQueries({ queryKey: ledgerBalanceKeys.all });
+}
+
 export function useLedgerBalances(options: {
   ledgerIds: string[];
   dateFrom: string;
