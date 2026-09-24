@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Search, X } from "lucide-react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, startTransition } from "react";
+import { ChevronDown, Search, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
@@ -23,7 +23,13 @@ interface CheckOption {
   groupLabel?: string;
 }
 
-function MultiCheckList({
+const ROW_HEIGHT_PX = 32;
+const LIST_VIEWPORT_PX = 192; // ~max-h-48
+const VIRTUALIZE_THRESHOLD = 60;
+const COLLAPSE_THRESHOLD = 120;
+const OVERSCAN = 10;
+
+const MultiCheckList = memo(function MultiCheckList({
   label,
   options,
   selected,
@@ -45,6 +51,20 @@ function MultiCheckList({
   listMaxHeightClass?: string;
 }) {
   const [search, setSearch] = useState("");
+  const [scrollTop, setScrollTop] = useState(0);
+  const [listOpen, setListOpen] = useState(
+    () => options.length <= COLLAPSE_THRESHOLD,
+  );
+  const [userToggledList, setUserToggledList] = useState(false);
+  const listRef = useRef<HTMLDivElement>(null);
+
+  // Collapse large lists once options load (async) unless the user already toggled
+  useEffect(() => {
+    if (userToggledList) return;
+    setListOpen(options.length <= COLLAPSE_THRESHOLD);
+  }, [options.length, userToggledList]);
+
+  const selectedSet = useMemo(() => new Set(selected), [selected]);
 
   const filteredOptions = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -67,45 +87,127 @@ function MultiCheckList({
     [options],
   );
 
-  const selectedInListCount = useMemo(
-    () => selected.filter((v) => optionValues.has(v)).length,
-    [selected, optionValues],
-  );
+  const selectedInListCount = useMemo(() => {
+    let count = 0;
+    for (const v of selectedSet) {
+      if (optionValues.has(v)) count += 1;
+    }
+    return count;
+  }, [selectedSet, optionValues]);
 
   const isAllFilteredSelected =
     enabledFilteredOptions.length > 0 &&
-    enabledFilteredOptions.every((opt) => selected.includes(opt.value));
+    enabledFilteredOptions.every((opt) => selectedSet.has(opt.value));
 
-  const toggle = (opt: CheckOption) => {
-    if (opt.disabled) return;
-    onChange(
-      selected.includes(opt.value)
-        ? selected.filter((v) => v !== opt.value)
-        : [...selected, opt.value],
-    );
-  };
+  const commitChange = useCallback(
+    (next: string[]) => {
+      startTransition(() => onChange(next));
+    },
+    [onChange],
+  );
 
-  const toggleSelectAllFiltered = () => {
+  const toggle = useCallback(
+    (opt: CheckOption) => {
+      if (opt.disabled) return;
+      if (selectedSet.has(opt.value)) {
+        commitChange(selected.filter((v) => v !== opt.value));
+      } else {
+        commitChange([...selected, opt.value]);
+      }
+    },
+    [commitChange, selected, selectedSet],
+  );
+
+  const toggleSelectAllFiltered = useCallback(() => {
     if (isAllFilteredSelected) {
       const enabledValues = new Set(enabledFilteredOptions.map((o) => o.value));
-      onChange(selected.filter((v) => !enabledValues.has(v)));
+      commitChange(selected.filter((v) => !enabledValues.has(v)));
     } else {
-      const newSelected = new Set(selected);
-      enabledFilteredOptions.forEach((o) => newSelected.add(o.value));
-      onChange(Array.from(newSelected));
+      const next = new Set(selected);
+      for (const o of enabledFilteredOptions) next.add(o.value);
+      commitChange(Array.from(next));
     }
-  };
+  }, [
+    commitChange,
+    enabledFilteredOptions,
+    isAllFilteredSelected,
+    selected,
+  ]);
 
-  const clearListSelection = () => {
-    onChange(selected.filter((v) => !optionValues.has(v)));
-  };
+  const clearListSelection = useCallback(() => {
+    commitChange(selected.filter((v) => !optionValues.has(v)));
+  }, [commitChange, optionValues, selected]);
+
+  const useVirtual = filteredOptions.length > VIRTUALIZE_THRESHOLD && listOpen;
+  const viewportPx =
+    listMaxHeightClass.includes("max-h-72") ? 288 : LIST_VIEWPORT_PX;
+
+  const { startIndex, endIndex, padTop, padBottom } = useMemo(() => {
+    if (!useVirtual) {
+      return {
+        startIndex: 0,
+        endIndex: filteredOptions.length,
+        padTop: 0,
+        padBottom: 0,
+      };
+    }
+    const start = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT_PX) - OVERSCAN);
+    const visibleCount = Math.ceil(viewportPx / ROW_HEIGHT_PX) + OVERSCAN * 2;
+    const end = Math.min(filteredOptions.length, start + visibleCount);
+    return {
+      startIndex: start,
+      endIndex: end,
+      padTop: start * ROW_HEIGHT_PX,
+      padBottom: Math.max(0, (filteredOptions.length - end) * ROW_HEIGHT_PX),
+    };
+  }, [filteredOptions.length, scrollTop, useVirtual, viewportPx]);
+
+  const visibleOptions = useVirtual
+    ? filteredOptions.slice(startIndex, endIndex)
+    : filteredOptions;
+
+  const showCollapseToggle = options.length > COLLAPSE_THRESHOLD;
 
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between gap-2">
-        <Label className="text-xs font-medium">{label}</Label>
+        <button
+          type="button"
+          className={cn(
+            "flex items-center gap-1 min-w-0 text-left",
+            showCollapseToggle && "hover:opacity-80",
+          )}
+          onClick={() => {
+            if (showCollapseToggle) {
+              setUserToggledList(true);
+              setListOpen((v) => !v);
+            }
+          }}
+          disabled={!showCollapseToggle}
+        >
+          {showCollapseToggle && (
+            <ChevronDown
+              className={cn(
+                "h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform",
+                !listOpen && "-rotate-90",
+              )}
+            />
+          )}
+          <Label className="text-xs font-medium cursor-inherit pointer-events-none">
+            {label}
+            {showCollapseToggle && (
+              <span className="ml-1.5 font-normal text-muted-foreground tabular-nums">
+                ({options.length.toLocaleString()}
+                {selectedInListCount > 0
+                  ? ` · ${selectedInListCount.toLocaleString()} selected`
+                  : ""}
+                )
+              </span>
+            )}
+          </Label>
+        </button>
         {options.length > 0 && (
-          <div className="flex items-center gap-2 text-[11px]">
+          <div className="flex items-center gap-2 text-[11px] shrink-0">
             <button
               type="button"
               className="text-brand-600 hover:text-brand-700 font-medium hover:underline disabled:opacity-50"
@@ -122,7 +224,7 @@ function MultiCheckList({
                   className="text-muted-foreground hover:text-foreground hover:underline"
                   onClick={clearListSelection}
                 >
-                  Clear ({selectedInListCount})
+                  Clear ({selectedInListCount.toLocaleString()})
                 </button>
               </>
             )}
@@ -130,13 +232,20 @@ function MultiCheckList({
         )}
       </div>
 
-      {options.length > 5 && (
+      {listOpen && options.length > 5 && (
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
           <Input
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder={searchPlaceholder ?? `Search ${label.replace(/\*|\(.*?\)/g, "").trim()}…`}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setScrollTop(0);
+              if (listRef.current) listRef.current.scrollTop = 0;
+            }}
+            placeholder={
+              searchPlaceholder ??
+              `Search ${label.replace(/\*|\(.*?\)/g, "").trim()}…`
+            }
             className="h-8 pl-8 pr-7 text-xs bg-muted/20 focus-visible:bg-white"
           />
           {search && (
@@ -151,85 +260,135 @@ function MultiCheckList({
         </div>
       )}
 
-      <div
-        className={cn(
-          "rounded-lg border overflow-y-auto p-2 space-y-1 bg-white",
-          listMaxHeightClass,
-          error && "border-red-500",
-        )}
-      >
-        {loading ? (
-          <p className="text-[11px] text-muted-foreground px-1 py-2">Loading…</p>
-        ) : options.length === 0 ? (
-          <p className="text-[11px] text-muted-foreground px-1 py-2">
-            {emptyMessage ?? "No options available."}
-          </p>
-        ) : filteredOptions.length === 0 ? (
-          <p className="text-[11px] text-muted-foreground px-1 py-2">
-            No matching results for &ldquo;{search}&rdquo;.
-          </p>
-        ) : (
-          filteredOptions.map((opt, index) => {
-            const isChecked = selected.includes(opt.value);
-            const prevGroup = filteredOptions[index - 1]?.groupLabel;
-            const showGroupHeader =
-              Boolean(opt.groupLabel) && opt.groupLabel !== prevGroup;
-            return (
-              <div key={`${opt.groupLabel ?? ""}:${opt.value}`}>
-                {showGroupHeader && (
-                  <p className="sticky top-0 z-[1] bg-white/95 backdrop-blur-sm text-[10px] font-semibold uppercase tracking-wide text-muted-foreground px-1.5 pt-2 pb-1 border-b border-border/40 mb-0.5">
-                    {opt.groupLabel}
-                  </p>
-                )}
-                <label
-                  className={cn(
-                    "flex items-center justify-between gap-2 text-xs rounded px-1.5 py-1 transition-colors",
-                    opt.disabled
-                      ? "bg-muted/40 cursor-not-allowed opacity-80"
-                      : "cursor-pointer hover:bg-muted/30",
-                  )}
-                >
-                  <div className="flex items-center gap-2 min-w-0 flex-1">
-                    <input
-                      type="checkbox"
-                      className="shrink-0 accent-brand-600 rounded disabled:opacity-75"
-                      checked={isChecked}
-                      disabled={opt.disabled}
-                      onChange={() => toggle(opt)}
-                    />
-                    <span
+      {listOpen ? (
+        <div
+          ref={listRef}
+          className={cn(
+            "rounded-lg border overflow-y-auto p-2 bg-white",
+            listMaxHeightClass,
+            error && "border-red-500",
+          )}
+          onScroll={(e) => {
+            if (useVirtual) setScrollTop(e.currentTarget.scrollTop);
+          }}
+        >
+          {loading ? (
+            <p className="text-[11px] text-muted-foreground px-1 py-2">
+              Loading…
+            </p>
+          ) : options.length === 0 ? (
+            <p className="text-[11px] text-muted-foreground px-1 py-2">
+              {emptyMessage ?? "No options available."}
+            </p>
+          ) : filteredOptions.length === 0 ? (
+            <p className="text-[11px] text-muted-foreground px-1 py-2">
+              No matching results for &ldquo;{search}&rdquo;.
+            </p>
+          ) : (
+            <div
+              style={
+                useVirtual
+                  ? {
+                      paddingTop: padTop,
+                      paddingBottom: padBottom,
+                    }
+                  : undefined
+              }
+              className="space-y-0"
+            >
+              {visibleOptions.map((opt, i) => {
+                const index = useVirtual ? startIndex + i : i;
+                const isChecked = selectedSet.has(opt.value);
+                const prevGroup = filteredOptions[index - 1]?.groupLabel;
+                const showGroupHeader =
+                  Boolean(opt.groupLabel) && opt.groupLabel !== prevGroup;
+                return (
+                  <div
+                    key={`${opt.groupLabel ?? ""}:${opt.value}`}
+                    style={
+                      useVirtual
+                        ? { height: ROW_HEIGHT_PX, boxSizing: "border-box" }
+                        : undefined
+                    }
+                    className={cn(!useVirtual && "mb-1")}
+                  >
+                    {showGroupHeader && (
+                      <p className="sticky top-0 z-[1] bg-white/95 backdrop-blur-sm text-[10px] font-semibold uppercase tracking-wide text-muted-foreground px-1.5 pt-1 pb-0.5 border-b border-border/40">
+                        {opt.groupLabel}
+                      </p>
+                    )}
+                    <label
                       className={cn(
-                        "truncate",
-                        opt.disabled && "text-muted-foreground font-medium",
+                        "flex items-center justify-between gap-2 text-xs rounded px-1.5 py-1 transition-colors h-full",
+                        opt.disabled
+                          ? "bg-muted/40 cursor-not-allowed opacity-80"
+                          : "cursor-pointer hover:bg-muted/30",
                       )}
                     >
-                      {opt.label}
-                    </span>
-                  </div>
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <input
+                          type="checkbox"
+                          className="shrink-0 accent-brand-600 rounded disabled:opacity-75"
+                          checked={isChecked}
+                          disabled={opt.disabled}
+                          onChange={() => toggle(opt)}
+                        />
+                        <span
+                          className={cn(
+                            "truncate",
+                            opt.disabled && "text-muted-foreground font-medium",
+                          )}
+                        >
+                          {opt.label}
+                        </span>
+                      </div>
 
-                  {opt.assignedBadge && (
-                    <span
-                      className="shrink-0 inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-800 border border-amber-200/80"
-                      title={`Assigned to ${opt.assignedBadge}`}
-                    >
-                      Assigned: {opt.assignedBadge}
-                    </span>
-                  )}
-                  {!opt.assignedBadge && opt.disabled && opt.disabledReason && (
-                    <span className="shrink-0 text-[10px] text-muted-foreground">
-                      {opt.disabledReason}
-                    </span>
-                  )}
-                </label>
-              </div>
-            );
-          })
-        )}
-      </div>
+                      {opt.assignedBadge && (
+                        <span
+                          className="shrink-0 inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-800 border border-amber-200/80"
+                          title={`Assigned to ${opt.assignedBadge}`}
+                        >
+                          Assigned: {opt.assignedBadge}
+                        </span>
+                      )}
+                      {!opt.assignedBadge &&
+                        opt.disabled &&
+                        opt.disabledReason && (
+                          <span className="shrink-0 text-[10px] text-muted-foreground">
+                            {opt.disabledReason}
+                          </span>
+                        )}
+                    </label>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => {
+            setUserToggledList(true);
+            setListOpen(true);
+          }}
+          className={cn(
+            "w-full rounded-lg border border-dashed px-3 py-2 text-left text-[11px] text-muted-foreground hover:bg-muted/20 hover:text-foreground",
+            error && "border-red-500",
+          )}
+        >
+          List collapsed for performance — click to browse / search{" "}
+          {options.length.toLocaleString()} items
+          {selectedInListCount > 0
+            ? ` (${selectedInListCount.toLocaleString()} selected)`
+            : ""}
+          . Select All still works above.
+        </button>
+      )}
       {error && <p className="text-[11px] text-red-600">{error}</p>}
     </div>
   );
-}
+});
 
 export function RegionStateSelector({
   selectedIds,
@@ -773,7 +932,14 @@ export function TerritoryCoverageSelector({
           onChange={onChangePincodes}
           error={errors?.pincodes}
           loading={false}
-          emptyMessage="Failed to load pincodes. Try again."
+          emptyMessage={
+            (pincodesQuery.error as { response?: { data?: { message?: string } } })
+              ?.response?.data?.message ||
+            (pincodesQuery.error instanceof Error
+              ? pincodesQuery.error.message
+              : null) ||
+            "Failed to load pincodes. Try again."
+          }
         />
       ) : (
         <div className="space-y-4">
