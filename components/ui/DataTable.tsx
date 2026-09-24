@@ -28,6 +28,7 @@ import { Badge } from "@/components/ui/badge";
 import { EmptySearch, EmptyModuleState } from "@/components/ui/EmptyState";
 import { SkeletonRow } from "@/components/ui/Loaders";
 import { ListingTruncateCell } from "@/components/listing/ListingTruncateCell";
+import { listingBodyCellStyle, listingShouldTruncate } from "@/components/listing/headerColumnStyle";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 export interface Column<T = Record<string, unknown>> {
@@ -37,6 +38,11 @@ export interface Column<T = Record<string, unknown>> {
   hideable?: boolean;
   width?:   string;
   align?:   "left" | "center" | "right";
+  /**
+   * When true, overflow is truncated with tooltip. Defaults to true for
+   * left/center text; false for right-aligned (amounts) and status/actions.
+   */
+  truncate?: boolean;
   render?:  (value: unknown, row: T, idx: number) => React.ReactNode;
 }
 
@@ -327,7 +333,11 @@ export function DataTable<T = Record<string, unknown>>({
                     )}
                     {visibleColumns.map(col => {
                       const val = (row as Record<string, unknown>)[col.key];
-                      const shouldTruncate = !["status", "actions"].includes(col.key);
+                      const shouldTruncate = listingShouldTruncate({
+                        truncate: col.truncate,
+                        align: col.align,
+                        key: col.key,
+                      });
                       const rawContent = col.render
                         ? col.render(val, row, idx)
                         : String(val ?? "—");
@@ -342,11 +352,10 @@ export function DataTable<T = Record<string, unknown>>({
                       return (
                         <td
                           key={col.key}
-                          style={
-                            col.width
-                              ? { width: col.width, maxWidth: col.width, minWidth: 0 }
-                              : { minWidth: 0 }
-                          }
+                          style={listingBodyCellStyle({
+                            width: col.width,
+                            truncate: shouldTruncate,
+                          })}
                           className={cn(
                             "px-4 py-3 text-table text-foreground whitespace-nowrap",
                             shouldTruncate && "overflow-hidden",

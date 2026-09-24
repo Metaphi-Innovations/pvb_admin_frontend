@@ -426,7 +426,8 @@ export default function SchemeMasterPage() {
       {
         key: "validity",
         header: "Validity",
-        width: "150px",
+        width: "200px",
+        truncate: false,
         render: (_v, row) => (
           <span className="text-[10px] text-muted-foreground whitespace-nowrap">
             {row.validityLabel}

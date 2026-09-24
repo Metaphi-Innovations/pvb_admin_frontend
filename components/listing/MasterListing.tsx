@@ -14,7 +14,7 @@ import { Pagination } from "./Pagination";
 import { EmptyState } from "./EmptyState";
 import { LoadingState } from "./LoadingState";
 import { ListingTruncateCell } from "./ListingTruncateCell";
-import { listingHeaderCellStyle } from "./headerColumnStyle";
+import { listingBodyCellStyle, listingHeaderCellStyle, listingShouldTruncate } from "./headerColumnStyle";
 
 export function MasterListing<T = any>({
   columns,
@@ -307,12 +307,13 @@ export function MasterListing<T = any>({
                       {columns.map((col) => {
                         const cellVal = (row as any)[col.key];
                         const isSticky = col.sticky;
-                        const shouldTruncate =
-                          col.truncate ??
-                          (
-                            col.filterType !== "audit" &&
-                            !["status", "actions"].includes(col.key)
-                          );
+                        // Truncate long text by default; keep amounts/dates/status fully visible.
+                        const shouldTruncate = listingShouldTruncate({
+                          truncate: col.truncate,
+                          align: col.align,
+                          filterType: col.filterType,
+                          key: col.key,
+                        });
 
                         const rawContent = col.render ? (
                           col.render(cellVal, row, index)
@@ -334,11 +335,10 @@ export function MasterListing<T = any>({
                         return (
                           <td
                             key={col.key}
-                            style={
-                              col.width
-                                ? { width: col.width, maxWidth: col.width, minWidth: 0 }
-                                : { minWidth: 0 }
-                            }
+                            style={listingBodyCellStyle({
+                              width: col.width,
+                              truncate: shouldTruncate,
+                            })}
                             className={cn(
                               "px-4 py-2.5 text-xs text-foreground whitespace-nowrap",
                               shouldTruncate && "overflow-hidden",

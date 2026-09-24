@@ -48,15 +48,12 @@ import {
   emptyTurnoverSlab,
   formShowsProductApplicability,
   getProductDiscountRowError,
-  normalizeSchemeQuantityUom,
   productIdsWithDiscountData,
   resolveAutomaticBenefit,
-  SCHEME_QUANTITY_UOM_OPTIONS,
   schemeTypeDisplayLabel,
   syncProductDiscountRules,
   type ProductDiscountRuleForm,
   type ProductDiscountSetupMode,
-  type SchemeQuantityUom,
   type SchemeUnifiedForm,
   type SpecialDiscountBasedOnUI,
   type SpecialEvaluationScopeUI,
@@ -105,9 +102,6 @@ const SPECIAL_SETTLEMENT_RUN_MODE_SELECT_OPTIONS = toSchemeSelectOptions(
 );
 const SPECIAL_DISCOUNT_BASED_ON_SELECT_OPTIONS = toSchemeSelectOptions(
   SPECIAL_DISCOUNT_BASED_ON_OPTIONS,
-);
-const SCHEME_QUANTITY_UOM_SELECT_OPTIONS = toSchemeSelectOptions(
-  SCHEME_QUANTITY_UOM_OPTIONS,
 );
 const PAYMENT_CONDITION_SELECT_OPTIONS = toSchemeSelectOptions(
   PAYMENT_CONDITION_OPTIONS,
@@ -493,18 +487,7 @@ function SpecialDiscountConditionFields({
   ) => onChange({ ...form, [key]: value });
 
   const isQty = form.specialDiscountBasedOn === "Sales Quantity";
-  const uom = normalizeSchemeQuantityUom(form.specialDiscountUom || "Case");
   const hasSlabs = form.specialHasSlabs;
-
-  const setQuantityUom = (next: SchemeQuantityUom) => {
-    onChange({
-      ...form,
-      specialDiscountUom: next,
-      specialDiscountQuantitySlabs: form.specialDiscountQuantitySlabs.map(
-        (s) => ({ ...s, uom: next }),
-      ),
-    });
-  };
 
   const helpText = (() => {
     const scopeBit =
@@ -515,13 +498,10 @@ function SpecialDiscountConditionFields({
       form.specialSettlementRunMode === "Automatic"
         ? "Entitlement is created automatically"
         : "Entitlement requires manual settlement via Credit Note";
-    const combineBit = form.specialCombineProducts
-      ? "combined across selected products"
-      : "per product";
     if (isQty) {
-      return `Net sold quantity (invoice qty − returned qty) ${scopeBit} determines qualification (${combineBit}). ${runBit}.`;
+      return `Net sold quantity of selected products combined (invoice qty − returned qty) ${scopeBit} determines qualification. Discount applies once on the combined eligible value. ${runBit}.`;
     }
-    return `Eligible Net Taxable Sales (Taxable Sales − Sales Returns, excluding GST) ${scopeBit} determines qualification (${combineBit}). ${runBit}.`;
+    return `Eligible Net Taxable Sales of selected products combined (Taxable Sales − Sales Returns, excluding GST) ${scopeBit} determines qualification. Discount applies once on the combined eligible value. ${runBit}.`;
   })();
 
   return (
@@ -561,19 +541,6 @@ function SpecialDiscountConditionFields({
             Use Achievement Slabs
           </Label>
         </div>
-        <div className="flex items-center gap-2 min-h-[28px]">
-          <Switch
-            checked={form.specialCombineProducts}
-            onCheckedChange={(v) => set("specialCombineProducts", v)}
-            id="special-combine-products"
-          />
-          <Label
-            htmlFor="special-combine-products"
-            className="text-[11px] font-medium cursor-pointer"
-          >
-            Combine selected products
-          </Label>
-        </div>
       </div>
 
       <div className="scheme-row">
@@ -595,15 +562,6 @@ function SpecialDiscountConditionFields({
             options={SPECIAL_DISCOUNT_BASED_ON_SELECT_OPTIONS}
           />
         </Field>
-        {isQty ? (
-          <Field className="scheme-w-select-sm" label="UOM" required>
-            <SchemeSearchableSelect
-              value={uom}
-              onChange={(v) => setQuantityUom(v as SchemeQuantityUom)}
-              options={SCHEME_QUANTITY_UOM_SELECT_OPTIONS}
-            />
-          </Field>
-        ) : null}
       </div>
 
       <p className="text-[10px] text-muted-foreground leading-snug max-w-xl">
@@ -776,7 +734,6 @@ function SpecialDiscountConditionFields({
                 <tr>
                   <th className="scheme-w-num-cell">Quantity From</th>
                   <th className="scheme-w-num-cell">Quantity To</th>
-                  <th className="scheme-w-num-cell">UOM</th>
                   <th className="scheme-w-select-sm">Discount Type</th>
                   <th className="scheme-w-num-cell">Discount Value</th>
                   <th className="w-8" />
@@ -816,27 +773,6 @@ function SpecialDiscountConditionFields({
                           placeholder={isLast ? "Above" : ""}
                           min={0}
                           className="scheme-ctrl"
-                        />
-                      </td>
-                      <td className="scheme-w-num-cell">
-                        <SchemeSearchableSelect
-                          value={normalizeSchemeQuantityUom(slab.uom || uom)}
-                          onChange={(v) => {
-                            const next = v as SchemeQuantityUom;
-                            const slabs = [
-                              ...form.specialDiscountQuantitySlabs,
-                            ];
-                            slabs[idx] = { ...slab, uom: next };
-                            onChange({
-                              ...form,
-                              specialDiscountUom: next,
-                              specialDiscountQuantitySlabs: slabs.map((s) => ({
-                                ...s,
-                                uom: next,
-                              })),
-                            });
-                          }}
-                          options={SCHEME_QUANTITY_UOM_SELECT_OPTIONS}
                         />
                       </td>
                       <td>
@@ -910,7 +846,7 @@ function SpecialDiscountConditionFields({
               onClick={() =>
                 set("specialDiscountQuantitySlabs", [
                   ...form.specialDiscountQuantitySlabs,
-                  emptySpecialDiscountQuantitySlab(uom),
+                  emptySpecialDiscountQuantitySlab(),
                 ])
               }
             >
@@ -1980,9 +1916,7 @@ export function SchemeUnifiedConfigForm({
                 </p>
                 <p>
                   <span className="font-semibold text-foreground">Products: </span>
-                  {form.specialCombineProducts
-                    ? "Combined threshold"
-                    : "Individual threshold"}
+                  Combined across selected products (discount on total eligible value)
                 </p>
                 <p>
                   <span className="font-semibold text-foreground">Scheme Period: </span>
@@ -1994,7 +1928,7 @@ export function SchemeUnifiedConfigForm({
                       Flat threshold:{" "}
                     </span>
                     {form.specialDiscountBasedOn === "Sales Quantity"
-                      ? `${form.specialThresholdValue || "—"} ${form.specialDiscountUom || "qty"}`
+                      ? `${form.specialThresholdValue || "—"} units`
                       : `₹${form.specialThresholdValue || "—"}`}
                     {" → "}
                     {formatSlabDiscountLabel(
@@ -2010,9 +1944,6 @@ export function SchemeUnifiedConfigForm({
                     {form.productIds.length
                       ? `${form.productIds.length} Selected Product${form.productIds.length === 1 ? "" : "s"}`
                       : "No products selected"}
-                    {form.specialDiscountUom
-                      ? ` · UOM ${form.specialDiscountUom}`
-                      : ""}
                   </p>
                 ) : null}
                 {form.specialHasSlabs &&
@@ -2081,19 +2012,16 @@ export function SchemeUnifiedConfigForm({
                             s.discountType,
                             s.discountValue,
                           );
-                          const uomLabel =
-                            form.specialDiscountUom || s.uom || "UOM";
                           if (!s.quantityTo.trim()) {
                             return (
                               <li key={s.id}>
-                                {s.quantityFrom}+ {uomLabel} → {disc}
+                                {s.quantityFrom}+ units → {disc}
                               </li>
                             );
                           }
                           return (
                             <li key={s.id}>
-                              {s.quantityFrom}–{s.quantityTo} {uomLabel} →{" "}
-                              {disc}
+                              {s.quantityFrom}–{s.quantityTo} units → {disc}
                             </li>
                           );
                         })}

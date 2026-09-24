@@ -14,8 +14,9 @@ export interface ColumnConfig<T = any> {
   width?: string;
   align?: "left" | "center" | "right";
   /**
-   * When true (default), overflowing cell text is truncated and the full value
-   * is shown in a tooltip. Set false for interactive widgets (status toggles, menus).
+   * When true, overflowing cell text is truncated and the full value is shown
+   * in a tooltip. Defaults to true for left/center text columns; defaults to
+   * false for right-aligned columns (amounts/qty) and status/actions/audit.
    */
   truncate?: boolean;
   /** Optional explicit tooltip text; defaults to the cell's text content. */
