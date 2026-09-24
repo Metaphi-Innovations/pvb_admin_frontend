@@ -23,6 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import { ListingStatusToggle, isActiveStatus } from "@/components/listing";
 import {
   useBgLookupAreas,
@@ -60,6 +61,9 @@ interface FormState {
   name: string;
   level: BusinessGeoLevel;
   parentId: string | null;
+  /** Ancestors used to cascade parent pickers (not sent to API). */
+  pathZoneId: string | null;
+  pathRegionId: string | null;
   effectiveFrom: string;
   status: "active" | "inactive";
   stateIds: string[];
@@ -74,6 +78,8 @@ function emptyForm(level: BusinessGeoLevel = "Zone"): FormState {
     name: "",
     level,
     parentId: null,
+    pathZoneId: null,
+    pathRegionId: null,
     effectiveFrom: new Date().toISOString().slice(0, 10),
     status: "active",
     stateIds: [],
@@ -84,11 +90,46 @@ function emptyForm(level: BusinessGeoLevel = "Zone"): FormState {
   };
 }
 
-function itemToForm(record: BusinessGeoListItem): FormState {
+function resolveParentPath(
+  level: BusinessGeoLevel,
+  parentId: string | null,
+  records: BusinessGeoListItem[],
+): Pick<FormState, "pathZoneId" | "pathRegionId" | "parentId"> {
+  if (!parentId || level === "Zone") {
+    return { parentId: null, pathZoneId: null, pathRegionId: null };
+  }
+
+  const byId = new Map(records.map((r) => [r.id, r]));
+  const parent = byId.get(parentId);
+
+  if (level === "Region") {
+    return { parentId, pathZoneId: parentId, pathRegionId: null };
+  }
+
+  if (level === "Area") {
+    const zoneId = parent?.zoneId ?? parent?.parentId ?? null;
+    return { parentId, pathZoneId: zoneId, pathRegionId: parentId };
+  }
+
+  // Territory — immediate parent is Area
+  const area = parent?.level === "Area" ? parent : parent;
+  const regionId = area?.regionId ?? area?.parentId ?? null;
+  const region = regionId ? byId.get(regionId) : undefined;
+  const zoneId = area?.zoneId ?? region?.zoneId ?? region?.parentId ?? null;
+  return { parentId, pathZoneId: zoneId, pathRegionId: regionId };
+}
+
+function itemToForm(
+  record: BusinessGeoListItem,
+  records: BusinessGeoListItem[],
+): FormState {
+  const path = resolveParentPath(record.level, record.parentId, records);
   return {
     name: record.name,
     level: record.level,
-    parentId: record.parentId,
+    parentId: path.parentId,
+    pathZoneId: path.pathZoneId,
+    pathRegionId: path.pathRegionId,
     effectiveFrom: record.effectiveDate || new Date().toISOString().slice(0, 10),
     status: record.status,
     stateIds: record.stateIds ?? [],
@@ -97,6 +138,17 @@ function itemToForm(record: BusinessGeoListItem): FormState {
     pincodeIds: record.pincodeIds ?? [],
     code: record.code ?? "",
   };
+}
+
+function toLookupOptions(
+  rows: Array<{ id: string; label: string; code?: string }> = [],
+) {
+  return rows.map((p) => ({
+    value: p.id,
+    label: p.label,
+    searchText: [p.label, p.code].filter(Boolean).join(" "),
+    sublabel: p.code || undefined,
+  }));
 }
 
 export function GeographyFormSheet({
@@ -120,12 +172,17 @@ export function GeographyFormSheet({
   useEffect(() => {
     if (!open) return;
     if (record) {
-      setForm(itemToForm(record));
+      setForm(itemToForm(record, allRecords));
     } else {
       const level = nextBusinessGeoLevel(defaultParentLevel);
+      const path = resolveParentPath(
+        level,
+        level === "Zone" ? null : defaultParentId,
+        allRecords,
+      );
       setForm({
         ...emptyForm(level),
-        parentId: level === "Zone" ? null : defaultParentId,
+        ...path,
         code: generateGeoCode(level, allRecords),
       });
     }
@@ -134,23 +191,43 @@ export function GeographyFormSheet({
   }, [open, record, defaultParentId, defaultParentLevel, allRecords]);
 
   const level = form.level;
+  const needsZone = level === "Region" || level === "Area" || level === "Territory";
+  const needsRegion = level === "Area" || level === "Territory";
+  const needsArea = level === "Territory";
+  const parentPathCount =
+    (needsZone ? 1 : 0) + (needsRegion ? 1 : 0) + (needsArea ? 1 : 0);
 
-  const zonesQuery = useBgLookupZones(open && level === "Region");
-  const regionsQuery = useBgLookupRegions(undefined, open && level === "Area");
-  const areasQuery = useBgLookupAreas(undefined, open && level === "Territory");
+  const zonesQuery = useBgLookupZones(open && needsZone);
+  const regionsQuery = useBgLookupRegions(
+    form.pathZoneId,
+    open && needsRegion && Boolean(form.pathZoneId),
+  );
+  const areasQuery = useBgLookupAreas(
+    form.pathRegionId,
+    open && needsArea && Boolean(form.pathRegionId),
+  );
   const statesQuery = useBgLookupStates(open && level === "Region");
 
-  const parentOptions = useMemo(() => {
-    if (level === "Region") return zonesQuery.data ?? [];
-    if (level === "Area") return regionsQuery.data ?? [];
-    if (level === "Territory") return areasQuery.data ?? [];
-    return [];
-  }, [level, zonesQuery.data, regionsQuery.data, areasQuery.data]);
+  const zoneOptions = useMemo(
+    () => toLookupOptions(zonesQuery.data ?? []),
+    [zonesQuery.data],
+  );
+  const regionOptions = useMemo(
+    () => toLookupOptions(regionsQuery.data ?? []),
+    [regionsQuery.data],
+  );
+  const areaOptions = useMemo(
+    () => toLookupOptions(areasQuery.data ?? []),
+    [areasQuery.data],
+  );
 
-  const parentLoading =
-    (level === "Region" && zonesQuery.isLoading) ||
-    (level === "Area" && regionsQuery.isLoading) ||
-    (level === "Territory" && areasQuery.isLoading);
+  const clearScopeFields = (prev: FormState): FormState => ({
+    ...prev,
+    stateIds: [],
+    districtIds: [],
+    locationIds: [],
+    pincodeIds: [],
+  });
 
   const setField = <K extends keyof FormState>(key: K, value: FormState[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -162,33 +239,73 @@ export function GeographyFormSheet({
   };
 
   const handleLevelChange = (nextLevel: BusinessGeoLevel) => {
-    setForm((prev) => ({
-      ...prev,
-      level: nextLevel,
-      parentId: nextLevel === "Zone" ? null : prev.parentId,
-      code: !isEdit ? generateGeoCode(nextLevel, allRecords) : prev.code,
-      stateIds: [],
-      districtIds: [],
-      locationIds: [],
-      pincodeIds: [],
-    }));
+    setForm((prev) =>
+      clearScopeFields({
+        ...prev,
+        level: nextLevel,
+        parentId: null,
+        pathZoneId: null,
+        pathRegionId: null,
+        code: !isEdit ? generateGeoCode(nextLevel, allRecords) : prev.code,
+      }),
+    );
     setErrors({});
   };
 
-  const handleParentChange = (parentId: string) => {
-    setForm((prev) => ({
-      ...prev,
-      parentId,
-      stateIds: [],
-      districtIds: [],
-      locationIds: [],
-      pincodeIds: [],
-    }));
+  const handleZoneChange = (zoneId: string) => {
+    setForm((prev) => {
+      const next = clearScopeFields({
+        ...prev,
+        pathZoneId: zoneId || null,
+        pathRegionId: null,
+        parentId: prev.level === "Region" ? zoneId || null : null,
+      });
+      return next;
+    });
     setErrors((prev) => {
       const next = { ...prev };
       delete next.parentId;
       delete next.stateIds;
       delete next.districtIds;
+      delete next.locationIds;
+      delete next.pincodeIds;
+      return next;
+    });
+  };
+
+  const handleRegionChange = (regionId: string) => {
+    setForm((prev) =>
+      clearScopeFields({
+        ...prev,
+        pathRegionId: regionId || null,
+        parentId:
+          prev.level === "Area"
+            ? regionId || null
+            : prev.level === "Territory"
+              ? null
+              : prev.parentId,
+      }),
+    );
+    setErrors((prev) => {
+      const next = { ...prev };
+      delete next.parentId;
+      delete next.districtIds;
+      delete next.locationIds;
+      delete next.pincodeIds;
+      return next;
+    });
+  };
+
+  const handleAreaChange = (areaId: string) => {
+    setForm((prev) =>
+      clearScopeFields({
+        ...prev,
+        parentId: areaId || null,
+      }),
+    );
+    setErrors((prev) => {
+      const next = { ...prev };
+      delete next.parentId;
       delete next.locationIds;
       delete next.pincodeIds;
       return next;
@@ -204,6 +321,12 @@ export function GeographyFormSheet({
       next.parentId = `${level} requires a parent ${
         level === "Region" ? "Zone" : level === "Area" ? "Region" : "Area"
       }.`;
+    }
+    if (level === "Area" && !form.pathZoneId) {
+      next.parentId = "Select a zone, then the parent region.";
+    }
+    if (level === "Territory" && (!form.pathZoneId || !form.pathRegionId)) {
+      next.parentId = "Select zone and region, then the parent area.";
     }
 
     if (level === "Region" && form.stateIds.length === 0) {
@@ -283,10 +406,10 @@ export function GeographyFormSheet({
             {level === "Zone"
               ? "Enter zone name only. Map states in child regions."
               : level === "Region"
-                ? "Select parent zone and one or more states."
+                ? "Select the parent zone, then map one or more states."
                 : level === "Area"
-                  ? "Select parent region and districts from its states."
-                  : "Select locations and pincodes from the parent area."}
+                  ? "Select zone → region, then districts from that region’s states."
+                  : "Select zone → region → area, then locations and pincodes."}
           </SheetDescription>
         </SheetHeader>
 
@@ -345,39 +468,97 @@ export function GeographyFormSheet({
             </div>
 
             {level !== "Zone" && (
-              <div className="space-y-1.5 sm:col-span-2">
-                <Label className="text-xs">
-                  Parent Geography <span className="text-red-500">*</span>
-                </Label>
-                <Select
-                  value={form.parentId ?? ""}
-                  onValueChange={handleParentChange}
+              <div className="sm:col-span-2 space-y-2">
+                <div>
+                  <Label className="text-xs">
+                    Parent Path <span className="text-red-500">*</span>
+                  </Label>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    {level === "Region"
+                      ? "Select the parent zone."
+                      : level === "Area"
+                        ? "Select zone, then the parent region."
+                        : "Select zone and region, then the parent area."}
+                  </p>
+                </div>
+                <div
+                  className={cn(
+                    "grid gap-3",
+                    parentPathCount === 1 && "grid-cols-1",
+                    parentPathCount === 2 && "grid-cols-1 sm:grid-cols-2",
+                    parentPathCount >= 3 && "grid-cols-1 sm:grid-cols-3",
+                  )}
                 >
-                  <SelectTrigger
-                    className={cn("h-9 text-sm", errors.parentId && "border-red-500")}
-                  >
-                    <SelectValue
-                      placeholder={
-                        parentLoading
-                          ? "Loading…"
-                          : `Select parent ${
-                              level === "Region"
-                                ? "Zone"
-                                : level === "Area"
-                                  ? "Region"
-                                  : "Area"
-                            }`
-                      }
-                    />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {parentOptions.map((p) => (
-                      <SelectItem key={p.id} value={p.id} className="text-xs">
-                        {p.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  {needsZone && (
+                    <div className="space-y-1">
+                      <Label className="text-[11px] text-muted-foreground">Zone *</Label>
+                      <AutocompleteSelect
+                        options={zoneOptions}
+                        value={form.pathZoneId ?? ""}
+                        onChange={handleZoneChange}
+                        disabled={zonesQuery.isLoading}
+                        error={level === "Region" && Boolean(errors.parentId)}
+                        placeholder={
+                          zonesQuery.isLoading ? "Loading…" : "Select zone"
+                        }
+                        searchPlaceholder="Search zone by name or code…"
+                        className="h-9 text-sm"
+                      />
+                    </div>
+                  )}
+
+                  {needsRegion && (
+                    <div className="space-y-1">
+                      <Label className="text-[11px] text-muted-foreground">
+                        Region *
+                      </Label>
+                      <AutocompleteSelect
+                        options={regionOptions}
+                        value={
+                          level === "Area"
+                            ? form.parentId ?? ""
+                            : form.pathRegionId ?? ""
+                        }
+                        onChange={handleRegionChange}
+                        disabled={!form.pathZoneId || regionsQuery.isLoading}
+                        error={level === "Area" && Boolean(errors.parentId)}
+                        placeholder={
+                          !form.pathZoneId
+                            ? "Select zone first"
+                            : regionsQuery.isLoading
+                              ? "Loading…"
+                              : "Select region"
+                        }
+                        searchPlaceholder="Search region by name or code…"
+                        className="h-9 text-sm"
+                      />
+                    </div>
+                  )}
+
+                  {needsArea && (
+                    <div className="space-y-1">
+                      <Label className="text-[11px] text-muted-foreground">
+                        Area *
+                      </Label>
+                      <AutocompleteSelect
+                        options={areaOptions}
+                        value={form.parentId ?? ""}
+                        onChange={handleAreaChange}
+                        disabled={!form.pathRegionId || areasQuery.isLoading}
+                        error={Boolean(errors.parentId)}
+                        placeholder={
+                          !form.pathRegionId
+                            ? "Select region first"
+                            : areasQuery.isLoading
+                              ? "Loading…"
+                              : "Select area"
+                        }
+                        searchPlaceholder="Search area by name or code…"
+                        className="h-9 text-sm"
+                      />
+                    </div>
+                  )}
+                </div>
                 {errors.parentId && (
                   <p className="text-[11px] text-red-600">{errors.parentId}</p>
                 )}
@@ -398,6 +579,7 @@ export function GeographyFormSheet({
               <div className="sm:col-span-2">
                 <AreaDistrictSelector
                   regionId={form.parentId}
+                  areaId={isEdit && record ? record.id : null}
                   selectedIds={form.districtIds}
                   onChange={(districtIds) => setField("districtIds", districtIds)}
                   error={errors.districtIds}

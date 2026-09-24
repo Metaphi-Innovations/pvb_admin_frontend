@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Search, X } from "lucide-react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, startTransition } from "react";
+import { ChevronDown, Search, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
@@ -19,9 +19,17 @@ interface CheckOption {
   disabled?: boolean;
   disabledReason?: string;
   assignedBadge?: string;
+  /** When set, options with the same group are shown under one header in a single list. */
+  groupLabel?: string;
 }
 
-function MultiCheckList({
+const ROW_HEIGHT_PX = 32;
+const LIST_VIEWPORT_PX = 192; // ~max-h-48
+const VIRTUALIZE_THRESHOLD = 60;
+const COLLAPSE_THRESHOLD = 120;
+const OVERSCAN = 10;
+
+const MultiCheckList = memo(function MultiCheckList({
   label,
   options,
   selected,
@@ -30,6 +38,7 @@ function MultiCheckList({
   emptyMessage,
   loading,
   searchPlaceholder,
+  listMaxHeightClass = "max-h-48",
 }: {
   label: string;
   options: CheckOption[];
@@ -39,28 +48,34 @@ function MultiCheckList({
   emptyMessage?: string;
   loading?: boolean;
   searchPlaceholder?: string;
+  listMaxHeightClass?: string;
 }) {
   const [search, setSearch] = useState("");
+  const [scrollTop, setScrollTop] = useState(0);
+  const [listOpen, setListOpen] = useState(
+    () => options.length <= COLLAPSE_THRESHOLD,
+  );
+  const [userToggledList, setUserToggledList] = useState(false);
+  const listRef = useRef<HTMLDivElement>(null);
+
+  // Collapse large lists once options load (async) unless the user already toggled
+  useEffect(() => {
+    if (userToggledList) return;
+    setListOpen(options.length <= COLLAPSE_THRESHOLD);
+  }, [options.length, userToggledList]);
+
+  const selectedSet = useMemo(() => new Set(selected), [selected]);
 
   const filteredOptions = useMemo(() => {
     const q = search.trim().toLowerCase();
-    const list = !q
-      ? options
-      : options.filter(
-          (opt) =>
-            opt.label.toLowerCase().includes(q) ||
-            (opt.assignedBadge && opt.assignedBadge.toLowerCase().includes(q)),
-        );
-
-    // Selected options shown first at top of list
-    return [...list].sort((a, b) => {
-      const aSel = selected.includes(a.value);
-      const bSel = selected.includes(b.value);
-      if (aSel && !bSel) return -1;
-      if (!aSel && bSel) return 1;
-      return 0;
-    });
-  }, [options, search, selected]);
+    if (!q) return options;
+    return options.filter(
+      (opt) =>
+        opt.label.toLowerCase().includes(q) ||
+        (opt.groupLabel && opt.groupLabel.toLowerCase().includes(q)) ||
+        (opt.assignedBadge && opt.assignedBadge.toLowerCase().includes(q)),
+    );
+  }, [options, search]);
 
   const enabledFilteredOptions = useMemo(
     () => filteredOptions.filter((opt) => !opt.disabled),
@@ -72,45 +87,127 @@ function MultiCheckList({
     [options],
   );
 
-  const selectedInListCount = useMemo(
-    () => selected.filter((v) => optionValues.has(v)).length,
-    [selected, optionValues],
-  );
+  const selectedInListCount = useMemo(() => {
+    let count = 0;
+    for (const v of selectedSet) {
+      if (optionValues.has(v)) count += 1;
+    }
+    return count;
+  }, [selectedSet, optionValues]);
 
   const isAllFilteredSelected =
     enabledFilteredOptions.length > 0 &&
-    enabledFilteredOptions.every((opt) => selected.includes(opt.value));
+    enabledFilteredOptions.every((opt) => selectedSet.has(opt.value));
 
-  const toggle = (opt: CheckOption) => {
-    if (opt.disabled) return;
-    onChange(
-      selected.includes(opt.value)
-        ? selected.filter((v) => v !== opt.value)
-        : [...selected, opt.value],
-    );
-  };
+  const commitChange = useCallback(
+    (next: string[]) => {
+      startTransition(() => onChange(next));
+    },
+    [onChange],
+  );
 
-  const toggleSelectAllFiltered = () => {
+  const toggle = useCallback(
+    (opt: CheckOption) => {
+      if (opt.disabled) return;
+      if (selectedSet.has(opt.value)) {
+        commitChange(selected.filter((v) => v !== opt.value));
+      } else {
+        commitChange([...selected, opt.value]);
+      }
+    },
+    [commitChange, selected, selectedSet],
+  );
+
+  const toggleSelectAllFiltered = useCallback(() => {
     if (isAllFilteredSelected) {
       const enabledValues = new Set(enabledFilteredOptions.map((o) => o.value));
-      onChange(selected.filter((v) => !enabledValues.has(v)));
+      commitChange(selected.filter((v) => !enabledValues.has(v)));
     } else {
-      const newSelected = new Set(selected);
-      enabledFilteredOptions.forEach((o) => newSelected.add(o.value));
-      onChange(Array.from(newSelected));
+      const next = new Set(selected);
+      for (const o of enabledFilteredOptions) next.add(o.value);
+      commitChange(Array.from(next));
     }
-  };
+  }, [
+    commitChange,
+    enabledFilteredOptions,
+    isAllFilteredSelected,
+    selected,
+  ]);
 
-  const clearListSelection = () => {
-    onChange(selected.filter((v) => !optionValues.has(v)));
-  };
+  const clearListSelection = useCallback(() => {
+    commitChange(selected.filter((v) => !optionValues.has(v)));
+  }, [commitChange, optionValues, selected]);
+
+  const useVirtual = filteredOptions.length > VIRTUALIZE_THRESHOLD && listOpen;
+  const viewportPx =
+    listMaxHeightClass.includes("max-h-72") ? 288 : LIST_VIEWPORT_PX;
+
+  const { startIndex, endIndex, padTop, padBottom } = useMemo(() => {
+    if (!useVirtual) {
+      return {
+        startIndex: 0,
+        endIndex: filteredOptions.length,
+        padTop: 0,
+        padBottom: 0,
+      };
+    }
+    const start = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT_PX) - OVERSCAN);
+    const visibleCount = Math.ceil(viewportPx / ROW_HEIGHT_PX) + OVERSCAN * 2;
+    const end = Math.min(filteredOptions.length, start + visibleCount);
+    return {
+      startIndex: start,
+      endIndex: end,
+      padTop: start * ROW_HEIGHT_PX,
+      padBottom: Math.max(0, (filteredOptions.length - end) * ROW_HEIGHT_PX),
+    };
+  }, [filteredOptions.length, scrollTop, useVirtual, viewportPx]);
+
+  const visibleOptions = useVirtual
+    ? filteredOptions.slice(startIndex, endIndex)
+    : filteredOptions;
+
+  const showCollapseToggle = options.length > COLLAPSE_THRESHOLD;
 
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between gap-2">
-        <Label className="text-xs font-medium">{label}</Label>
+        <button
+          type="button"
+          className={cn(
+            "flex items-center gap-1 min-w-0 text-left",
+            showCollapseToggle && "hover:opacity-80",
+          )}
+          onClick={() => {
+            if (showCollapseToggle) {
+              setUserToggledList(true);
+              setListOpen((v) => !v);
+            }
+          }}
+          disabled={!showCollapseToggle}
+        >
+          {showCollapseToggle && (
+            <ChevronDown
+              className={cn(
+                "h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform",
+                !listOpen && "-rotate-90",
+              )}
+            />
+          )}
+          <Label className="text-xs font-medium cursor-inherit pointer-events-none">
+            {label}
+            {showCollapseToggle && (
+              <span className="ml-1.5 font-normal text-muted-foreground tabular-nums">
+                ({options.length.toLocaleString()}
+                {selectedInListCount > 0
+                  ? ` · ${selectedInListCount.toLocaleString()} selected`
+                  : ""}
+                )
+              </span>
+            )}
+          </Label>
+        </button>
         {options.length > 0 && (
-          <div className="flex items-center gap-2 text-[11px]">
+          <div className="flex items-center gap-2 text-[11px] shrink-0">
             <button
               type="button"
               className="text-brand-600 hover:text-brand-700 font-medium hover:underline disabled:opacity-50"
@@ -127,7 +224,7 @@ function MultiCheckList({
                   className="text-muted-foreground hover:text-foreground hover:underline"
                   onClick={clearListSelection}
                 >
-                  Clear ({selectedInListCount})
+                  Clear ({selectedInListCount.toLocaleString()})
                 </button>
               </>
             )}
@@ -135,13 +232,20 @@ function MultiCheckList({
         )}
       </div>
 
-      {options.length > 5 && (
+      {listOpen && options.length > 5 && (
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
           <Input
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder={searchPlaceholder ?? `Search ${label.replace(/\*|\(.*?\)/g, "").trim()}…`}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setScrollTop(0);
+              if (listRef.current) listRef.current.scrollTop = 0;
+            }}
+            placeholder={
+              searchPlaceholder ??
+              `Search ${label.replace(/\*|\(.*?\)/g, "").trim()}…`
+            }
             className="h-8 pl-8 pr-7 text-xs bg-muted/20 focus-visible:bg-white"
           />
           {search && (
@@ -156,70 +260,135 @@ function MultiCheckList({
         </div>
       )}
 
-      <div
-        className={cn(
-          "rounded-lg border max-h-48 overflow-y-auto p-2 space-y-1 bg-white",
-          error && "border-red-500",
-        )}
-      >
-        {loading ? (
-          <p className="text-[11px] text-muted-foreground px-1 py-2">Loading…</p>
-        ) : options.length === 0 ? (
-          <p className="text-[11px] text-muted-foreground px-1 py-2">
-            {emptyMessage ?? "No options available."}
-          </p>
-        ) : filteredOptions.length === 0 ? (
-          <p className="text-[11px] text-muted-foreground px-1 py-2">
-            No matching results for &ldquo;{search}&rdquo;.
-          </p>
-        ) : (
-          filteredOptions.map((opt) => {
-            const isChecked = selected.includes(opt.value);
-            return (
-              <label
-                key={opt.value}
-                className={cn(
-                  "flex items-center justify-between gap-2 text-xs rounded px-1.5 py-1 transition-colors",
-                  opt.disabled
-                    ? "bg-muted/40 cursor-not-allowed opacity-80"
-                    : "cursor-pointer hover:bg-muted/30",
-                )}
-              >
-                <div className="flex items-center gap-2 min-w-0 flex-1">
-                  <input
-                    type="checkbox"
-                    className="shrink-0 accent-brand-600 rounded disabled:opacity-75"
-                    checked={isChecked}
-                    disabled={opt.disabled}
-                    onChange={() => toggle(opt)}
-                  />
-                  <span className={cn("truncate", opt.disabled && "text-muted-foreground font-medium")}>
-                    {opt.label}
-                  </span>
-                </div>
-
-                {opt.assignedBadge && (
-                  <span
-                    className="shrink-0 inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-800 border border-amber-200/80"
-                    title={`Assigned to ${opt.assignedBadge}`}
+      {listOpen ? (
+        <div
+          ref={listRef}
+          className={cn(
+            "rounded-lg border overflow-y-auto p-2 bg-white",
+            listMaxHeightClass,
+            error && "border-red-500",
+          )}
+          onScroll={(e) => {
+            if (useVirtual) setScrollTop(e.currentTarget.scrollTop);
+          }}
+        >
+          {loading ? (
+            <p className="text-[11px] text-muted-foreground px-1 py-2">
+              Loading…
+            </p>
+          ) : options.length === 0 ? (
+            <p className="text-[11px] text-muted-foreground px-1 py-2">
+              {emptyMessage ?? "No options available."}
+            </p>
+          ) : filteredOptions.length === 0 ? (
+            <p className="text-[11px] text-muted-foreground px-1 py-2">
+              No matching results for &ldquo;{search}&rdquo;.
+            </p>
+          ) : (
+            <div
+              style={
+                useVirtual
+                  ? {
+                      paddingTop: padTop,
+                      paddingBottom: padBottom,
+                    }
+                  : undefined
+              }
+              className="space-y-0"
+            >
+              {visibleOptions.map((opt, i) => {
+                const index = useVirtual ? startIndex + i : i;
+                const isChecked = selectedSet.has(opt.value);
+                const prevGroup = filteredOptions[index - 1]?.groupLabel;
+                const showGroupHeader =
+                  Boolean(opt.groupLabel) && opt.groupLabel !== prevGroup;
+                return (
+                  <div
+                    key={`${opt.groupLabel ?? ""}:${opt.value}`}
+                    style={
+                      useVirtual
+                        ? { height: ROW_HEIGHT_PX, boxSizing: "border-box" }
+                        : undefined
+                    }
+                    className={cn(!useVirtual && "mb-1")}
                   >
-                    Assigned: {opt.assignedBadge}
-                  </span>
-                )}
-                {!opt.assignedBadge && opt.disabled && opt.disabledReason && (
-                  <span className="shrink-0 text-[10px] text-muted-foreground">
-                    {opt.disabledReason}
-                  </span>
-                )}
-              </label>
-            );
-          })
-        )}
-      </div>
+                    {showGroupHeader && (
+                      <p className="sticky top-0 z-[1] bg-white/95 backdrop-blur-sm text-[10px] font-semibold uppercase tracking-wide text-muted-foreground px-1.5 pt-1 pb-0.5 border-b border-border/40">
+                        {opt.groupLabel}
+                      </p>
+                    )}
+                    <label
+                      className={cn(
+                        "flex items-center justify-between gap-2 text-xs rounded px-1.5 py-1 transition-colors h-full",
+                        opt.disabled
+                          ? "bg-muted/40 cursor-not-allowed opacity-80"
+                          : "cursor-pointer hover:bg-muted/30",
+                      )}
+                    >
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <input
+                          type="checkbox"
+                          className="shrink-0 accent-brand-600 rounded disabled:opacity-75"
+                          checked={isChecked}
+                          disabled={opt.disabled}
+                          onChange={() => toggle(opt)}
+                        />
+                        <span
+                          className={cn(
+                            "truncate",
+                            opt.disabled && "text-muted-foreground font-medium",
+                          )}
+                        >
+                          {opt.label}
+                        </span>
+                      </div>
+
+                      {opt.assignedBadge && (
+                        <span
+                          className="shrink-0 inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-800 border border-amber-200/80"
+                          title={`Assigned to ${opt.assignedBadge}`}
+                        >
+                          Assigned: {opt.assignedBadge}
+                        </span>
+                      )}
+                      {!opt.assignedBadge &&
+                        opt.disabled &&
+                        opt.disabledReason && (
+                          <span className="shrink-0 text-[10px] text-muted-foreground">
+                            {opt.disabledReason}
+                          </span>
+                        )}
+                    </label>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => {
+            setUserToggledList(true);
+            setListOpen(true);
+          }}
+          className={cn(
+            "w-full rounded-lg border border-dashed px-3 py-2 text-left text-[11px] text-muted-foreground hover:bg-muted/20 hover:text-foreground",
+            error && "border-red-500",
+          )}
+        >
+          List collapsed for performance — click to browse / search{" "}
+          {options.length.toLocaleString()} items
+          {selectedInListCount > 0
+            ? ` (${selectedInListCount.toLocaleString()} selected)`
+            : ""}
+          . Select All still works above.
+        </button>
+      )}
       {error && <p className="text-[11px] text-red-600">{error}</p>}
     </div>
   );
-}
+});
 
 export function RegionStateSelector({
   selectedIds,
@@ -252,11 +421,14 @@ export function RegionStateSelector({
 
 export function AreaDistrictSelector({
   regionId,
+  areaId,
   selectedIds,
   onChange,
   error,
 }: {
   regionId: string | null;
+  /** When editing, the current area keeps its own districts selectable. */
+  areaId?: string | null;
   selectedIds: string[];
   onChange: (ids: string[]) => void;
   error?: string;
@@ -273,6 +445,22 @@ export function AreaDistrictSelector({
     return region?.stateIds ?? [];
   }, [regionId, treeQuery.data]);
 
+  /** District → owning Area (excluding the area being edited). */
+  const districtOwnerById = useMemo(() => {
+    const map = new Map<string, { id: string; name: string }>();
+    for (const item of treeQuery.data ?? []) {
+      if (item.level !== "Area") continue;
+      if (areaId && item.id === areaId) continue;
+      // Prefer same-region siblings; also cover areas whose parent matches
+      if (regionId && item.parentId && item.parentId !== regionId) continue;
+      for (const districtId of item.districtIds ?? []) {
+        if (!districtId || map.has(districtId)) continue;
+        map.set(districtId, { id: item.id, name: item.name });
+      }
+    }
+    return map;
+  }, [treeQuery.data, areaId, regionId]);
+
   const districtSections = useMemo(() => {
     const stateNameById = new Map(
       (statesQuery.data ?? []).map((s) => [s.id, s.label] as const),
@@ -281,7 +469,13 @@ export function AreaDistrictSelector({
     const ungrouped: CheckOption[] = [];
 
     for (const district of districtsQuery.data ?? []) {
-      const option = { value: district.id, label: district.label };
+      const owner = districtOwnerById.get(district.id);
+      const option: CheckOption = {
+        value: district.id,
+        label: district.label,
+        disabled: Boolean(owner),
+        assignedBadge: owner?.name,
+      };
       const stateId = district.parentId?.trim() || "";
       if (!stateId) {
         ungrouped.push(option);
@@ -343,7 +537,12 @@ export function AreaDistrictSelector({
     }
 
     return sections;
-  }, [districtsQuery.data, regionStateIds, statesQuery.data]);
+  }, [
+    districtOwnerById,
+    districtsQuery.data,
+    regionStateIds,
+    statesQuery.data,
+  ]);
 
   const initialLoading =
     Boolean(regionId) &&
@@ -535,60 +734,103 @@ export function TerritoryCoverageSelector({
     return map;
   }, [locationsQuery.data]);
 
+  const locationDistrictById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const loc of locationsQuery.data ?? []) {
+      const districtId = loc.parentId?.trim() || "";
+      if (districtId) map.set(loc.id, districtId);
+    }
+    return map;
+  }, [locationsQuery.data]);
+
+  const districtNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const d of districtsQuery.data ?? []) {
+      map.set(d.id, d.label);
+    }
+    return map;
+  }, [districtsQuery.data]);
+
   const pincodeSections = useMemo(() => {
     if (selectedLocationIds.length === 0) return [];
 
-    const byLocation = new Map<string, CheckOption[]>();
-    const ungrouped: CheckOption[] = [];
+    const selectedSet = new Set(selectedLocationIds);
+    const byDistrict = new Map<string, CheckOption[]>();
+    const other: CheckOption[] = [];
 
     for (const pin of pincodesQuery.data ?? []) {
+      const locationId = pin.parentId?.trim() || "";
+      if (!locationId || !selectedSet.has(locationId)) continue;
+
+      const locationLabel =
+        locationLabelById.get(locationId) ?? pin.extra ?? "";
       const option: CheckOption = {
         value: pin.id,
-        label: pin.label,
+        // Include city/village so district sections stay readable
+        label: locationLabel ? `${pin.label} — ${locationLabel}` : pin.label,
         disabled: Boolean(pin.assignedGeography),
         assignedBadge: pin.assignedGeography?.name,
       };
-      const locationId = pin.parentId?.trim() || "";
-      if (!locationId) {
-        ungrouped.push(option);
+
+      const districtId = locationDistrictById.get(locationId) ?? "";
+      if (!districtId) {
+        other.push(option);
         continue;
       }
-      if (!byLocation.has(locationId)) byLocation.set(locationId, []);
-      byLocation.get(locationId)!.push(option);
+      if (!byDistrict.has(districtId)) byDistrict.set(districtId, []);
+      byDistrict.get(districtId)!.push(option);
     }
 
-    if (byLocation.size === 0 && ungrouped.length > 0) {
-      return [
-        {
-          groupId: "__all__",
-          groupLabel: "All",
-          label: "Select Pincode(s) *",
-          options: ungrouped,
-        },
-      ];
+    const nameOf = (districtId: string) =>
+      districtNameById.get(districtId) ?? "District";
+
+    const orderedDistrictIds: string[] = [];
+    const seen = new Set<string>();
+
+    // Prefer area district order, then any remaining districts that have selected locations
+    for (const districtId of areaDistrictIds) {
+      if (!districtId || seen.has(districtId) || !byDistrict.has(districtId)) {
+        continue;
+      }
+      seen.add(districtId);
+      orderedDistrictIds.push(districtId);
+    }
+    for (const districtId of Array.from(byDistrict.keys()).sort((a, b) =>
+      nameOf(a).localeCompare(nameOf(b)),
+    )) {
+      if (seen.has(districtId)) continue;
+      seen.add(districtId);
+      orderedDistrictIds.push(districtId);
     }
 
-    const sections = selectedLocationIds.map((locationId) => {
-      const groupLabel = locationLabelById.get(locationId) ?? "Location";
+    const sections = orderedDistrictIds.map((districtId) => {
+      const groupLabel = nameOf(districtId);
       return {
-        groupId: locationId,
+        groupId: districtId,
         groupLabel,
         label: `Select Pincode(s) * — ${groupLabel}`,
-        options: byLocation.get(locationId) ?? [],
+        options: byDistrict.get(districtId) ?? [],
       };
     });
 
-    if (ungrouped.length > 0) {
+    if (other.length > 0) {
       sections.push({
         groupId: "__other__",
         groupLabel: "Other",
         label: "Select Pincode(s) * — Other",
-        options: ungrouped,
+        options: other,
       });
     }
 
     return sections;
-  }, [locationLabelById, pincodesQuery.data, selectedLocationIds]);
+  }, [
+    areaDistrictIds,
+    districtNameById,
+    locationDistrictById,
+    locationLabelById,
+    pincodesQuery.data,
+    selectedLocationIds,
+  ]);
 
   const locationsLoading =
     Boolean(areaId) &&
@@ -598,7 +840,7 @@ export function TerritoryCoverageSelector({
 
   const pincodesLoading =
     selectedLocationIds.length > 0 &&
-    pincodesQuery.isLoading &&
+    (pincodesQuery.isLoading || pincodesQuery.isFetching) &&
     !pincodesQuery.data;
 
   const handleLocationsChange = (next: string[]) => {
@@ -671,7 +913,7 @@ export function TerritoryCoverageSelector({
           loading={false}
           emptyMessage="Select at least one location to view pincodes."
         />
-      ) : pincodesLoading && pincodeSections.length === 0 ? (
+      ) : pincodesLoading && pincodeSections.every((s) => s.options.length === 0) ? (
         <MultiCheckList
           label="Select Pincode(s) *"
           options={[]}
@@ -681,7 +923,8 @@ export function TerritoryCoverageSelector({
           loading
           emptyMessage="No pincodes found for the selected locations."
         />
-      ) : pincodeSections.length === 0 ? (
+      ) : pincodesQuery.isError &&
+        pincodeSections.every((s) => s.options.length === 0) ? (
         <MultiCheckList
           label="Select Pincode(s) *"
           options={[]}
@@ -690,9 +933,12 @@ export function TerritoryCoverageSelector({
           error={errors?.pincodes}
           loading={false}
           emptyMessage={
-            pincodesQuery.isError
-              ? "Failed to load pincodes. Try again."
-              : "No pincodes found for the selected locations."
+            (pincodesQuery.error as { response?: { data?: { message?: string } } })
+              ?.response?.data?.message ||
+            (pincodesQuery.error instanceof Error
+              ? pincodesQuery.error.message
+              : null) ||
+            "Failed to load pincodes. Try again."
           }
         />
       ) : (
@@ -705,6 +951,7 @@ export function TerritoryCoverageSelector({
               selected={selectedPincodeIds}
               onChange={onChangePincodes}
               loading={pincodesLoading && section.options.length === 0}
+              searchPlaceholder={`Search pincode in ${section.groupLabel}…`}
               emptyMessage={`No pincodes available for ${section.groupLabel}.`}
             />
           ))}

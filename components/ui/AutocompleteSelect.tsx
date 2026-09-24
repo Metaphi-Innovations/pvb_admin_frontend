@@ -175,6 +175,9 @@ export function AutocompleteSelect({
   };
 
   const isDense = Boolean(className?.includes("h-6") || className?.includes("h-7"));
+  const isFormSized = Boolean(
+    className?.includes("h-8") || className?.includes("h-9") || className?.includes("h-10"),
+  );
   const showDoneFooter = multiple || confirmOnDone;
   const draftCount = Array.isArray(activeValue)
     ? activeValue.length
@@ -192,13 +195,20 @@ export function AutocompleteSelect({
           aria-describedby={ariaDescribedBy}
           data-pr-field={dataPrField}
           className={cn(
-            "flex w-full min-w-0 cursor-pointer items-center justify-between border border-border bg-white text-left shadow-sm",
-            "transition-colors select-none text-left focus:outline-none",
+            "flex w-full min-w-0 cursor-pointer items-center justify-between text-left",
+            "transition-colors select-none focus:outline-none",
             "focus-visible:border-brand-500 focus-visible:ring-2 focus-visible:ring-brand-200",
-            isDense ? "px-1.5 py-0" : "px-3 py-2",
+            isFormSized
+              ? "border border-input bg-background"
+              : "border border-border bg-white",
+            isDense
+              ? "px-1.5 py-0"
+              : isFormSized
+                ? "px-3 py-0"
+                : "px-3 py-2 shadow-sm",
             !className?.includes("h-") && "h-9",
             !className?.includes("text-") && "text-xs",
-            !className?.includes("rounded-") && "rounded-lg",
+            !className?.includes("rounded-") && (isFormSized ? "rounded-input" : "rounded-lg"),
             open && !error ? "border-brand-500 ring-2 ring-brand-200" : "",
             error
               ? "border-red-400 ring-1 ring-red-200"
@@ -212,7 +222,12 @@ export function AutocompleteSelect({
           <span className={cn("truncate flex-1 min-w-0", (multiple ? (Array.isArray(value) && value.length > 0) : value) ? "text-foreground" : "text-muted-foreground")}>
             {getSelectedLabel()}
           </span>
-          <ChevronsUpDown className={cn("text-muted-foreground flex-shrink-0", isDense ? "w-3 h-3 ml-0.5" : "w-4 h-4 ml-2")} />
+          <ChevronsUpDown
+            className={cn(
+              "text-muted-foreground flex-shrink-0 opacity-50",
+              isDense ? "w-3 h-3 ml-0.5" : "w-4 h-4 ml-2",
+            )}
+          />
         </button>
       </PopoverTrigger>
       <PopoverContent
