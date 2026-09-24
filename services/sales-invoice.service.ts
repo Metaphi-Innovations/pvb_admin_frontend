@@ -14,7 +14,11 @@ const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export type SalesInvoiceBackendType = "SALES" | "DIRECT_SERVICE" | "STOCK_TRANSFER";
-export type SalesInvoiceBackendStatus = "POSTED" | "CANCELLED" | "REVERSED";
+export type SalesInvoiceBackendStatus =
+  | "DRAFT"
+  | "POSTED"
+  | "CANCELLED"
+  | "REVERSED";
 
 export type SiNumberParams = {
   warehouseId?: string | null;
@@ -115,6 +119,7 @@ export type CreateDirectServicePayload = {
   customer_id: string;
   narration?: string | null;
   remarks?: string | null;
+  save_as_draft?: boolean;
   items: DirectServiceItemInput[];
   additional_charges?: AdditionalChargeInput[];
   round_off_amount?: number | string | null;
@@ -791,6 +796,7 @@ function mapBackendStatusToFrontend(status: string | undefined): InvoiceStatus {
   const s = asString(status).toUpperCase();
   if (s === "CANCELLED" || s === "REVERSED") return "cancelled";
   if (s === "POSTED") return "sent";
+  if (s === "DRAFT") return "draft";
   return "draft";
 }
 
@@ -1322,6 +1328,21 @@ export const SalesInvoiceService = {
     } catch (error) {
       throw new Error(
         extractErrorMessage(error, "Failed to create service invoice."),
+      );
+    }
+  },
+
+  async postDraftDirectService(id: string): Promise<SalesInvoiceCreateResult> {
+    try {
+      const response = await axiosInstance.post(
+        API_ENDPOINTS.ACCOUNTS.SALES_INVOICE.POST_DRAFT(id),
+      );
+      const data = unwrapData(response);
+      if (!data) throw new Error("Failed to post service invoice draft.");
+      return data as SalesInvoiceCreateResult;
+    } catch (error) {
+      throw new Error(
+        extractErrorMessage(error, "Failed to post service invoice draft."),
       );
     }
   },

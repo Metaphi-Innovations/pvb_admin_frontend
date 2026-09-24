@@ -65,6 +65,8 @@ export function GstReportFilterBar({
     "gstRegistrationOptions" in filterState
       ? filterState.gstRegistrationOptions
       : undefined;
+  const filtersLoading =
+    "filtersLoading" in filterState ? Boolean(filterState.filtersLoading) : false;
 
   // When the API filter hook is active, never fall back to local/demo branch masters.
   const usesApiFilters = "branchLabeledOptions" in filterState;
@@ -75,7 +77,7 @@ export function GstReportFilterBar({
       : [...REPORT_BRANCH_OPTIONS];
   const gstRegistrationOptions = usesApiFilters
     ? (apiGstRegistrationOptions ?? [])
-    : (apiGstRegistrationOptions ?? GST_REGISTRATION_OPTIONS);
+    : GST_REGISTRATION_OPTIONS;
 
   const filterSummaryItems = useMemo((): ReportFilterSummaryItem[] => {
     const branchSummary = apiBranchOptions?.length
@@ -169,6 +171,7 @@ export function GstReportFilterBar({
           value={gstRegistration}
           onChange={setGstRegistration}
           options={gstRegistrationOptions}
+          loading={usesApiFilters && filtersLoading}
         />
         {hasFilters && (
           <Button

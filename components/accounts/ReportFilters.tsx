@@ -1552,32 +1552,53 @@ export function ReportGstPeriodFilter({
   );
 }
 
-/** Company GST registration (GSTIN) filter */
+/** Company GST registration (GSTIN) — Branch-style searchable checkbox dropdown.
+ * Single GSTIN is enforced (upload/recon require one registration). Select All = All registrations.
+ */
 export function ReportGstRegistrationFilter({
   value,
   onChange,
   options,
+  loading,
 }: {
   value: string;
   onChange: (value: string) => void;
   options: { value: string; label: string }[];
+  loading?: boolean;
 }) {
+  const selectOptions: ReportMultiSelectOption[] = options
+    .filter((o) => o.value && o.value !== "all")
+    .map((o) => ({
+      value: o.value,
+      label: o.label,
+      searchText: o.value,
+    }));
+
+  const selectedValues = value && value !== "all" ? [value] : [];
+
   return (
-    <div className="space-y-0.5 min-w-[200px]">
-      <span className={filterLabelClass}>GST Registration</span>
-      <Select value={value} onValueChange={onChange}>
-        <SelectTrigger className={cn(filterSelectClass, "mt-0 w-[200px]")}>
-          <SelectValue placeholder="All registrations" />
-        </SelectTrigger>
-        <SelectContent>
-          {options.map((o) => (
-            <SelectItem key={o.value} value={o.value} className="text-xs">
-              {o.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
+    <ReportMultiSelect
+      label="GST Registration"
+      values={selectedValues}
+      onChange={(next) => {
+        if (next.length === 0 || next.length === selectOptions.length) {
+          onChange("all");
+          return;
+        }
+        if (next.length === 1) {
+          onChange(next[0]!);
+          return;
+        }
+        // Keep one GSTIN only — prefer the newly added value.
+        const added = next.find((v) => !selectedValues.includes(v));
+        onChange(added ?? next[next.length - 1]!);
+      }}
+      options={selectOptions}
+      entityName="Registration"
+      allLabel="All registrations"
+      minWidthClass="min-w-[200px]"
+      loading={loading}
+    />
   );
 }
 
