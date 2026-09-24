@@ -651,24 +651,23 @@ export const BusinessGeographyService = {
     signal?: AbortSignal,
   ): Promise<BgLookupOption[]> {
     if (locationIds.length === 0) return [];
-    // POST body avoids GET URL length limits when selecting hundreds/thousands of locations
-    const response = await axiosInstance.post(
-      BG.LOOKUP.PINCODES,
-      {
-        location_ids: locationIds,
-        ...(excludeTerritoryId
-          ? { exclude_territory_id: excludeTerritoryId }
-          : {}),
-      },
-      { signal },
-    );
-    const data = unwrapData(response.data as Record<string, unknown>);
-    if (!Array.isArray(data)) return [];
-    return data.map((row) => {
+
+    // Backend caps location_ids at 2000 per request; chunk so Select All across districts works
+    const CHUNK_SIZE = 500;
+    const uniqueIds = Array.from(new Set(locationIds.filter(Boolean)));
+    const chunks: string[][] = [];
+    for (let i = 0; i < uniqueIds.length; i += CHUNK_SIZE) {
+      chunks.push(uniqueIds.slice(i, i + CHUNK_SIZE));
+    }
+
+    const mapRow = (row: unknown): BgLookupOption => {
       const item = (row ?? {}) as Record<string, unknown>;
       const pincode = asString(item.pincode);
       const locationName = asString(item.location_name);
-      const assigned = item.assigned_territory as { id: string; name: string } | null | undefined;
+      const assigned = item.assigned_territory as
+        | { id: string; name: string }
+        | null
+        | undefined;
       return {
         id: asString(item.id),
         label: pincode || asString(item.id),
@@ -679,7 +678,44 @@ export const BusinessGeographyService = {
           ? { id: asString(assigned.id), name: asString(assigned.name) }
           : null,
       };
-    });
+    };
+
+    const fetchChunk = async (ids: string[]): Promise<BgLookupOption[]> => {
+      const response = await axiosInstance.post(
+        BG.LOOKUP.PINCODES,
+        {
+          location_ids: ids,
+          ...(excludeTerritoryId
+            ? { exclude_territory_id: excludeTerritoryId }
+            : {}),
+        },
+        { signal },
+      );
+      const data = unwrapData(response.data as Record<string, unknown>);
+      if (!Array.isArray(data)) return [];
+      return data.map(mapRow);
+    };
+
+    // Limit concurrency so we don't flood the API on large Select All
+    const CONCURRENCY = 3;
+    const merged: BgLookupOption[] = [];
+    const seen = new Set<string>();
+
+    for (let i = 0; i < chunks.length; i += CONCURRENCY) {
+      if (signal?.aborted) break;
+      const batch = chunks.slice(i, i + CONCURRENCY);
+      const results = await Promise.all(batch.map(fetchChunk));
+      for (const rows of results) {
+        for (const row of rows) {
+          const key = `${row.id}:${row.parentId ?? ""}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          merged.push(row);
+        }
+      }
+    }
+
+    return merged;
   },
 
   async lookupSalesPersonByPincode(
