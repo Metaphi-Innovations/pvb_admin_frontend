@@ -11,6 +11,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { ChevronDown, Download, Mail } from "lucide-react";
 import { showToast } from "@/lib/toast";
+import { dispatchAccountsDataChanged } from "@/lib/accounts/accounts-data-events";
 import { SendSalesInvoiceEmailModal } from "@/app/(app)/accounts/transactions/invoices/SendSalesInvoiceEmailModal";
 import { loadProducts } from "@/app/(app)/masters/products/product-data";
 import {
@@ -435,6 +436,7 @@ export default function InvoiceViewPageClient({
   const [sendEmailOpen, setSendEmailOpen] = useState(false);
   const [eInvoiceBusy, setEInvoiceBusy] = useState(false);
   const [ewayBusy, setEwayBusy] = useState(false);
+  const [postingDraft, setPostingDraft] = useState(false);
   const [ewayPreviewOpen, setEwayPreviewOpen] = useState(false);
   const [ewayPreviewLoading, setEwayPreviewLoading] = useState(false);
   const [ewayPreview, setEwayPreview] = useState<PreviewEwayBillResult | null>(
@@ -718,6 +720,41 @@ export default function InvoiceViewPageClient({
           }
         >
           Edit
+        </Button>
+      ) : null}
+      {actions.includes("post") &&
+      record.sourceType === "service" &&
+      record.salesInvoiceId ? (
+        <Button
+          type="button"
+          size="sm"
+          className="h-8 text-xs font-medium bg-brand-600 hover:bg-brand-700 text-white"
+          disabled={postingDraft}
+          onClick={() => {
+            void (async () => {
+              if (!record.salesInvoiceId || postingDraft) return;
+              setPostingDraft(true);
+              try {
+                await SalesInvoiceService.postDraftDirectService(
+                  String(record.salesInvoiceId),
+                );
+                showToast("Service invoice posted successfully.", "success");
+                dispatchAccountsDataChanged("sales-invoices");
+                await refresh();
+              } catch (e) {
+                showToast(
+                  e instanceof Error
+                    ? e.message
+                    : "Failed to post service invoice draft.",
+                  "error",
+                );
+              } finally {
+                setPostingDraft(false);
+              }
+            })();
+          }}
+        >
+          {postingDraft ? "Posting…" : "Post Invoice"}
         </Button>
       ) : null}
       {downloadMenu}

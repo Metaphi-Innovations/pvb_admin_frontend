@@ -9,6 +9,7 @@ import type { CoaLedgerDetailRow } from "./coa-ledger-detail-types";
 const ACCOUNTING_VOUCHER_TYPE_LABELS: Record<string, string> = {
   SALES: "Sales",
   DIRECT_SALES: "Direct Sales",
+  DIRECT_SERVICE: "Direct Service",
   PURCHASE: "Purchase",
   DIRECT_PURCHASE: "Direct Purchase",
   SALES_RETURN: "Sales Return",

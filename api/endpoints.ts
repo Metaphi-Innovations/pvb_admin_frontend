@@ -696,6 +696,7 @@ export const API_ENDPOINTS = {
       CREATE_FROM_DISPATCH: (dispatchId: string) =>
         `/accounts/sales-invoice/from-dispatch/${dispatchId}`,
       CREATE_DIRECT_SERVICE: "/accounts/sales-invoice/direct-service",
+      POST_DRAFT: (id: string) => `/accounts/sales-invoice/${id}/post-draft`,
       PDF: "/accounts/sales-invoice/pdf",
       EXCEL: "/accounts/sales-invoice/excel",
       PROFORMA_PREVIEW: (id: string) =>
