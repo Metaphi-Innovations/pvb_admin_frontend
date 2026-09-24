@@ -41,7 +41,6 @@ import {
   buildGstReportHref,
   GST_REPORT_BASE_PATH,
 } from "@/lib/accounts/gst-report-filters";
-import { GSTR3B_DEMO_DOCUMENTS } from "./gstr3b-demo-seed";
 import type {
   Gstr3bAmountBlock,
   Gstr3bDocType,
@@ -313,17 +312,6 @@ function isOutwardTaxable(doc: Gstr3bDocument): boolean {
   return isOutwardDoc(doc) && doc.taxability === "taxable";
 }
 
-function reportHasMeaningfulData(docs: Gstr3bDocument[]): boolean {
-  if (docs.length === 0) return false;
-  return docs.some(
-    (d) =>
-      Math.abs(d.taxableValue) > 0 ||
-      Math.abs(d.cgst) > 0 ||
-      Math.abs(d.sgst) > 0 ||
-      Math.abs(d.igst) > 0,
-  );
-}
-
 export function buildGstr3bReportHeader(filters: GstReportFilters): {
   header: Gstr1ReportHeader;
   branchLabel: string;
@@ -349,11 +337,8 @@ export function buildGstr3bReportHeader(filters: GstReportFilters): {
 }
 
 export function resolveGstr3bDocuments(filters: GstReportFilters): Gstr3bDocument[] {
-  const live = filterDocs(collectLiveDocuments(), filters);
-  if (reportHasMeaningfulData(live)) return live;
-
-  const demo = filterDocs(GSTR3B_DEMO_DOCUMENTS, filters);
-  return demo.length > 0 ? demo : GSTR3B_DEMO_DOCUMENTS;
+  // Demo seed retired — never inject dummy GSTR-3B rows.
+  return filterDocs(collectLiveDocuments(), filters);
 }
 
 function summaryRow(

@@ -1,9 +1,6 @@
-import { lazyAccountsPage } from "@/lib/accounts/lazy-accounts-page";
+import { redirect } from "next/navigation";
 
-const CreditDebitNotesPageClient = lazyAccountsPage(
-  () => import("./CreditDebitNotesPageClient"),
-);
-
-export default function CreditDebitNotesPage() {
-  return <CreditDebitNotesPageClient />;
+/** Legacy localStorage GSTR-1 credit/debit notes → API-backed GST Summary. */
+export default function LegacyGstr1CreditDebitRedirectPage() {
+  redirect("/accounts/reports/gst-summary/gstr1/credit-debit-notes");
 }

@@ -71,6 +71,7 @@ import type {
   SalesRegisterApiRow,
   SalesRegisterFiltersConfig,
   SalesRegisterGstTypeFilter,
+  SalesRegisterInvoiceType,
   SalesRegisterQueryParams,
   SalesRegisterReportResult,
   SalesRegisterReportStatus,
@@ -146,6 +147,7 @@ export default function SalesRegisterApiPageClient() {
   const [customerTypeId, setCustomerTypeId] = useState("all");
   const [salespersonIds, setSalespersonIds] = useState<string[]>([]);
   const [statuses, setStatuses] = useState<string[]>([]);
+  const [invoiceTypes, setInvoiceTypes] = useState<string[]>([]);
   const [stateCode, setStateCode] = useState("all");
   const [invoiceNo, setInvoiceNo] = useState("");
   const [debouncedInvoiceNo, setDebouncedInvoiceNo] = useState("");
@@ -283,6 +285,12 @@ export default function SalesRegisterApiPageClient() {
 
   const customerTypeOptions = filtersConfig?.customer_types ?? [];
 
+  const invoiceTypeOptions = filtersConfig?.invoice_types ?? [
+    { value: "SALES" as const, label: "Sales" },
+    { value: "DIRECT_SERVICE" as const, label: "Direct Service" },
+    { value: "STOCK_TRANSFER" as const, label: "Stock Transfer" },
+  ];
+
   const queryParams = useMemo<SalesRegisterQueryParams | null>(() => {
     if (!financialYearId || financialYearId === "all" || !dateFrom || !dateTo) {
       return null;
@@ -290,6 +298,10 @@ export default function SalesRegisterApiPageClient() {
     const statusParams = statuses.filter(
       (s): s is SalesRegisterReportStatus =>
         s === "POSTED" || s === "CANCELLED",
+    );
+    const typeParams = invoiceTypes.filter(
+      (t): t is SalesRegisterInvoiceType =>
+        t === "SALES" || t === "DIRECT_SERVICE" || t === "STOCK_TRANSFER",
     );
     const allowedCustomerIds = new Set(customers.map((c) => c.id));
     const safeCustomerIds = customerIds.filter((id) => allowedCustomerIds.has(id));
@@ -306,6 +318,7 @@ export default function SalesRegisterApiPageClient() {
       invoice_number: debouncedInvoiceNo || undefined,
       state_code: stateCode !== "all" ? stateCode : undefined,
       statuses: statusParams.length > 0 ? statusParams : undefined,
+      invoice_types: typeParams.length > 0 ? typeParams : undefined,
       gst_type: mapGstType(gstType),
       page,
       page_size: pageSize,
@@ -322,6 +335,7 @@ export default function SalesRegisterApiPageClient() {
     debouncedInvoiceNo,
     financialYearId,
     gstType,
+    invoiceTypes,
     page,
     pageSize,
     salespersonIds,
@@ -346,9 +360,8 @@ export default function SalesRegisterApiPageClient() {
     debouncedInvoiceNo,
     stateCode,
     statuses,
+    invoiceTypes,
     gstType,
-    sortBy,
-    sortOrder,
     pageSize,
   ]);
 
@@ -391,6 +404,7 @@ export default function SalesRegisterApiPageClient() {
     setCustomerTypeId("all");
     setSalespersonIds([]);
     setStatuses([]);
+    setInvoiceTypes([]);
     setStateCode("all");
     setInvoiceNo("");
     setDebouncedInvoiceNo("");
@@ -425,18 +439,21 @@ export default function SalesRegisterApiPageClient() {
     [filtersConfig, setDateFrom, setDateTo, setPreset],
   );
 
-  const handleSort = useCallback((colKey: string) => {
-    const backendField = SORT_FIELD_MAP[colKey];
-    if (!backendField) return;
-    setSortBy((current) => {
-      if (current === backendField) {
+  const handleSort = useCallback(
+    (colKey: string) => {
+      const backendField = SORT_FIELD_MAP[colKey];
+      if (!backendField) return;
+      if (sortBy === backendField) {
         setSortOrder((order) => (order === "asc" ? "desc" : "asc"));
-        return current;
+      } else {
+        setSortBy(backendField);
+        // First click A→Z / low→high (matches AccountsColumnHeader tooltip).
+        setSortOrder("asc");
       }
-      setSortOrder("desc");
-      return backendField;
-    });
-  }, []);
+      setPage(1);
+    },
+    [sortBy],
+  );
 
   const handleExport = useCallback(
     async (format: "EXCEL" | "PDF") => {
@@ -472,6 +489,7 @@ export default function SalesRegisterApiPageClient() {
     customerTypeId !== "all" ||
     salespersonIds.length > 0 ||
     statuses.length > 0 ||
+    invoiceTypes.length > 0 ||
     stateCode !== "all" ||
     Boolean(invoiceNo.trim()) ||
     gstType !== "all";
@@ -535,6 +553,19 @@ export default function SalesRegisterApiPageClient() {
             onRemove: () => setStatuses([]),
           }
         : null,
+      invoiceTypes.length > 0
+        ? {
+            id: "invoice_types",
+            label: "Invoice Type",
+            value: invoiceTypes
+              .map(
+                (t) =>
+                  invoiceTypeOptions.find((o) => o.value === t)?.label ?? t,
+              )
+              .join(", "),
+            onRemove: () => setInvoiceTypes([]),
+          }
+        : null,
       stateCode !== "all"
         ? {
             id: "state",
@@ -574,6 +605,8 @@ export default function SalesRegisterApiPageClient() {
     customers,
     gstType,
     invoiceNo,
+    invoiceTypeOptions,
+    invoiceTypes,
     salespersonIds,
     salespersonOptions,
     stateCode,
@@ -692,6 +725,15 @@ export default function SalesRegisterApiPageClient() {
               values={statuses}
               onChange={setStatuses}
               options={STATUS_OPTIONS}
+            />
+            <ReportStatusMultiFilter
+              label="Invoice Type"
+              values={invoiceTypes}
+              onChange={setInvoiceTypes}
+              options={invoiceTypeOptions.map((o) => ({
+                value: o.value,
+                label: o.label,
+              }))}
             />
             <ReportFilterField label="GST Type" minWidthClass="min-w-[130px]">
               <Select value={gstType} onValueChange={setGstType}>

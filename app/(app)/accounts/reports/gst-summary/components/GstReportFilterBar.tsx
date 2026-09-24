@@ -66,11 +66,16 @@ export function GstReportFilterBar({
       ? filterState.gstRegistrationOptions
       : undefined;
 
-  const branchOptions = mounted
-    ? getGstReportBranchOptions()
-    : [...REPORT_BRANCH_OPTIONS];
-  const gstRegistrationOptions =
-    apiGstRegistrationOptions ?? GST_REGISTRATION_OPTIONS;
+  // When the API filter hook is active, never fall back to local/demo branch masters.
+  const usesApiFilters = "branchLabeledOptions" in filterState;
+  const branchOptions = usesApiFilters
+    ? (apiBranchOptions ?? []).map((o) => o.value)
+    : mounted
+      ? getGstReportBranchOptions()
+      : [...REPORT_BRANCH_OPTIONS];
+  const gstRegistrationOptions = usesApiFilters
+    ? (apiGstRegistrationOptions ?? [])
+    : (apiGstRegistrationOptions ?? GST_REGISTRATION_OPTIONS);
 
   const filterSummaryItems = useMemo((): ReportFilterSummaryItem[] => {
     const branchSummary = apiBranchOptions?.length

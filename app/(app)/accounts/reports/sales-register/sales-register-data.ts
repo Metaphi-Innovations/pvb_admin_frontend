@@ -1,3 +1,8 @@
+/**
+ * @deprecated Production Sales Register (`SalesRegisterPageClient`) uses backend APIs.
+ * Local demo builders intentionally return empty so dummy rows never mix with API data.
+ */
+
 import {
   buildRegisterPartyOptions,
   buildSalesRegisterRows,
@@ -8,10 +13,7 @@ import type { RegisterPartyOption, RegisterReportRow } from "../register-shared/
 
 export { isSalesRegisterSourceInvoice, buildSalesRegisterRows };
 
-/**
- * @deprecated Production Sales Register (`SalesRegisterPageClient`) uses backend APIs.
- * Kept for legacy helpers / tests that still read local invoice-shaped rows.
- */
+/** @deprecated Empty — seed pipeline removed. */
 export function buildSalesRegisterDemoRows(): RegisterReportRow[] {
   return buildSalesRegisterRows();
 }

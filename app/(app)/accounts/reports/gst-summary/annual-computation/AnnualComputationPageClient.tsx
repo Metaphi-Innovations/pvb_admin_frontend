@@ -1,32 +1,16 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
-  ArrowDownLeft,
   ArrowUpRight,
-  Eye,
-  FileMinus2,
-  FilePlus2,
   FileText,
-  MoreVertical,
   Receipt,
   Scale,
-  Truck,
   Wallet,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { AccountsListingTableCard } from "@/components/accounts/AccountsListingHeader";
-import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
 import { AccountsReportBody } from "@/components/accounts/AccountsReportLayout";
 import {
   AccountsTable,
@@ -39,267 +23,129 @@ import {
   AccountsTableScroll,
 } from "@/components/accounts/AccountsTable";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
-import type { AccountsColumnFilterConfig } from "@/lib/accounts/column-filter-types";
-import type { GstReportFilters } from "@/lib/accounts/gst-report-filters";
-import { formatMoney, MONEY_AMOUNT_CLASS } from "@/lib/accounts/money-format";
+import { ACCOUNTS_COMPANY_NAME } from "@/lib/accounts/report-export-presentation";
+import { formatMoneyString, MONEY_AMOUNT_CLASS } from "@/lib/accounts/money-format";
 import { cn } from "@/lib/utils";
 import {
-  AccountsClearAllColumnFiltersButton,
-  AccountsColumnFilterProvider,
-  AccountsColumnHeader,
-  SortTh,
-  useAccountsColumnFilterContext,
-  useAccountsFilteredRows,
-} from "@/app/(app)/accounts/components/AccountsUI";
-import { useGstReportFilters } from "../useGstReportFilters";
-import { GstReportNavTabs } from "../components/GstReportNavTabs";
-import { buildAnnualGstMonthLinks } from "./annual-gst-month-links";
-import { buildAnnualGstSummaryReport } from "./annual-gst-summary-data";
-import { exportAnnualGstSummaryReport } from "./annual-gst-summary-export";
-import { AnnualGstFilterBar } from "./components/AnnualGstFilterBar";
-import { AnnualGstMonthDrillSheet } from "./components/AnnualGstMonthDrillSheet";
+  GstSummaryApiError,
+  GstSummaryApiService,
+} from "@/services/gst-summary.service";
 import type {
-  AnnualGstMonthRow,
-  AnnualGstParticularRow,
-  AnnualGstReport,
-  AnnualGstSummaryCards,
-} from "./annual-gst-summary-types";
+  AnnualPeriodStatuses,
+  AnnualSupportStatus,
+  AnnualWorkingQueryParams,
+  AnnualWorkingResult,
+} from "@/types/gst-summary.types";
+import { useGstSummaryApiFilters } from "../useGstSummaryApiFilters";
+import { GstReportNavTabs } from "../components/GstReportNavTabs";
+import { GstSummaryExportMenu } from "../components/GstSummaryExportMenu";
+import { Gstr1ReportHeaderBlock } from "../gstr1/components/Gstr1ReportHeaderBlock";
+import { AnnualGstFilterBar } from "./components/AnnualGstFilterBar";
+import { buildAnnualGstMonthLinks } from "./annual-gst-month-links";
 
-const ANNUAL_GST_COLUMN_CONFIG: AccountsColumnFilterConfig = {
-  monthLabel: { type: "text" },
-  salesValue: { type: "amount" },
-  purchaseValue: { type: "amount" },
-  outputGst: { type: "amount" },
-  inputGst: { type: "amount" },
-  outputCgst: { type: "amount" },
-  outputSgst: { type: "amount" },
-  outputIgst: { type: "amount" },
-  inputCgst: { type: "amount" },
-  inputSgst: { type: "amount" },
-  inputIgst: { type: "amount" },
-  netGst: { type: "amount" },
-};
-
-function getAnnualGstCellValue(row: AnnualGstMonthRow, key: string): unknown {
-  switch (key) {
-    case "monthLabel":
-      return row.monthLabel;
-    case "salesValue":
-      return row.salesValue;
-    case "purchaseValue":
-      return row.purchaseValue;
-    case "outputGst":
-      return row.outputCgst + row.outputSgst + row.outputIgst;
-    case "inputGst":
-      return row.inputCgst + row.inputSgst + row.inputIgst;
-    case "outputCgst":
-      return row.outputCgst;
-    case "outputSgst":
-      return row.outputSgst;
-    case "outputIgst":
-      return row.outputIgst;
-    case "inputCgst":
-      return row.inputCgst;
-    case "inputSgst":
-      return row.inputSgst;
-    case "inputIgst":
-      return row.inputIgst;
-    case "netGst":
-      return row.netGst;
-    default:
-      return (row as unknown as Record<string, unknown>)[key];
+function moneyOrDash(
+  value: string | null | undefined,
+  support?: AnnualSupportStatus,
+): string {
+  if (
+    support === "MISSING" ||
+    support === "NOT_AVAILABLE" ||
+    support === "NOT_IMPLEMENTED_IN_V1"
+  ) {
+    return "—";
   }
+  if (value == null || value === "") return "—";
+  return formatMoneyString(value);
 }
-function MonthAmountLink({
-  href,
-  amount,
-  title,
-  className,
-}: {
-  href: string;
-  amount: number;
-  title: string;
-  className?: string;
-}) {
+
+function StatusPill({ status }: { status: AnnualSupportStatus }) {
+  const label =
+    status === "READY" || status === "SUPPORTED"
+      ? "Ready"
+      : status === "MISSING"
+        ? "Missing"
+        : status === "PARTIAL"
+          ? "Partial"
+          : status === "NOT_AVAILABLE"
+            ? "Not Available"
+            : status === "NOT_IMPLEMENTED_IN_V1"
+              ? "Not Implemented"
+              : status;
+
+  const tone =
+    status === "READY" || status === "SUPPORTED"
+      ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+      : status === "MISSING"
+        ? "bg-red-50 text-red-800 border-red-200"
+        : status === "PARTIAL"
+          ? "bg-amber-50 text-amber-900 border-amber-200"
+          : "bg-muted/40 text-muted-foreground border-border";
+
   return (
-    <Link
-      href={href}
-      title={title}
+    <span
       className={cn(
-        "inline-block tabular-nums hover:text-brand-700 hover:underline underline-offset-2 transition-colors",
-        className,
+        "inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-medium",
+        tone,
       )}
     >
-      {formatMoney(amount)}
-    </Link>
+      {label}
+    </span>
   );
 }
 
-function MonthRowActions({
-  row,
-  filters,
-  onView,
-}: {
-  row: AnnualGstMonthRow;
-  filters: GstReportFilters;
-  onView: () => void;
-}) {
-  const links = buildAnnualGstMonthLinks(row.monthKey, filters);
-  return (
-    <div className="flex items-center gap-1">
-      <Button
-        variant="outline"
-        size="sm"
-        className="h-7 px-2 text-[11px] gap-1"
-        onClick={onView}
-      >
-        <Eye className="w-3 h-3" />
-        View
-      </Button>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <button
-            type="button"
-            className="p-1.5 hover:bg-muted rounded-md transition-colors"
-            aria-label={`Open ${row.monthLabel} reports`}
-          >
-            <MoreVertical className="w-3.5 h-3.5 text-muted-foreground" />
-          </button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-52">
-          <DropdownMenuLabel className="text-[10px] text-muted-foreground uppercase tracking-widest py-1">
-            Drill to {row.monthLabel}
-          </DropdownMenuLabel>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem asChild className="text-xs gap-2 cursor-pointer">
-            <Link href={links.gstr1}>
-              <FileText className="w-3.5 h-3.5" /> GSTR-1
-            </Link>
-          </DropdownMenuItem>
-          <DropdownMenuItem asChild className="text-xs gap-2 cursor-pointer">
-            <Link href={links.gstr3b}>
-              <Scale className="w-3.5 h-3.5" /> GSTR-3B
-            </Link>
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem asChild className="text-xs gap-2 cursor-pointer">
-            <Link href={links.salesInvoices}>
-              <FileText className="w-3.5 h-3.5" /> Sales Invoices
-            </Link>
-          </DropdownMenuItem>
-          <DropdownMenuItem asChild className="text-xs gap-2 cursor-pointer">
-            <Link href={links.purchaseInvoices}>
-              <Truck className="w-3.5 h-3.5" /> Purchase Invoices
-            </Link>
-          </DropdownMenuItem>
-          <DropdownMenuItem asChild className="text-xs gap-2 cursor-pointer">
-            <Link href={links.creditNotes}>
-              <FileMinus2 className="w-3.5 h-3.5" /> Credit Notes
-            </Link>
-          </DropdownMenuItem>
-          <DropdownMenuItem asChild className="text-xs gap-2 cursor-pointer">
-            <Link href={links.debitNotes}>
-              <FilePlus2 className="w-3.5 h-3.5" /> Debit Notes
-            </Link>
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </div>
-  );
-}
-function SummaryCards({ summary }: { summary: AnnualGstSummaryCards }) {
+function HeadlineCards({ report }: { report: AnnualWorkingResult }) {
+  const h = report.headline.values;
   const cards = [
     {
-      label: "Total Taxable Outward",
-      value: summary.totalTaxableOutward,
+      label: "Annual Outward Taxable",
+      value: moneyOrDash(h?.annual_outward_taxable, report.headline.support),
       icon: ArrowUpRight,
-      border: "border-l-brand-600",
-      iconBg: "bg-brand-50",
-      iconColor: "text-brand-600",
     },
     {
-      label: "Total Taxable Inward",
-      value: summary.totalTaxableInward,
-      icon: ArrowDownLeft,
-      border: "border-l-navy-600",
-      iconBg: "bg-navy-50",
-      iconColor: "text-navy-600",
-    },
-    {
-      label: "Total Output GST",
-      value: summary.totalOutputGst,
+      label: "Annual Output GST",
+      value: moneyOrDash(h?.annual_output_gst, report.headline.support),
       icon: Receipt,
-      border: "border-l-amber-500",
-      iconBg: "bg-amber-50",
-      iconColor: "text-amber-600",
     },
     {
-      label: "Total Input GST",
-      value: summary.totalInputGst,
+      label: "Suggested Eligible ITC",
+      value: moneyOrDash(
+        h?.suggested_eligible_itc_total,
+        h?.suggested_eligible_itc_support,
+      ),
       icon: Wallet,
-      border: "border-l-leaf-600",
-      iconBg: "bg-leaf-50",
-      iconColor: "text-leaf-600",
     },
     {
-      label: summary.isRefundable ? "Net GST Refundable" : "Net GST Payable",
-      value: summary.netGstPayableOrRefundable,
+      label: "Final Claimed ITC",
+      value: moneyOrDash(
+        h?.final_claimed_itc_total,
+        h?.final_claimed_itc_support,
+      ),
+      icon: Wallet,
+    },
+    {
+      label: "Books GST Working Difference (control)",
+      value: moneyOrDash(h?.books_gst_working_difference),
       icon: Scale,
-      border: summary.isRefundable ? "border-l-emerald-500" : "border-l-brand-600",
-      iconBg: summary.isRefundable ? "bg-emerald-50" : "bg-brand-50",
-      iconColor: summary.isRefundable ? "text-emerald-600" : "text-brand-600",
-    },
-    {
-      label: "Total Credit Notes",
-      value: summary.totalCreditNotes,
-      icon: FileMinus2,
-      border: "border-l-sky-500",
-      iconBg: "bg-sky-50",
-      iconColor: "text-sky-600",
-    },
-    {
-      label: "Total Debit Notes",
-      value: summary.totalDebitNotes,
-      icon: FilePlus2,
-      border: "border-l-purple-500",
-      iconBg: "bg-purple-50",
-      iconColor: "text-purple-600",
-    },
-    {
-      label: "Total GST Liability",
-      value: summary.totalGstLiability,
-      icon: Scale,
-      border: "border-l-red-500",
-      iconBg: "bg-red-50",
-      iconColor: "text-red-600",
     },
   ];
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 gap-3">
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
       {cards.map((card) => {
         const Icon = card.icon;
         return (
           <div
             key={card.label}
-            className={cn(
-              "bg-white rounded-xl border border-border p-3 flex items-center gap-3 shadow-sm border-l-4",
-              card.border,
-            )}
+            className="bg-white rounded-xl border border-border p-3 flex items-center gap-3 shadow-sm border-l-4 border-l-brand-600"
           >
-            <div
-              className={cn(
-                "w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0",
-                card.iconBg,
-              )}
-            >
-              <Icon className={cn("w-4 h-4", card.iconColor)} />
+            <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 bg-brand-50">
+              <Icon className="w-4 h-4 text-brand-600" />
             </div>
             <div className="min-w-0">
-              <p className="text-sm font-bold text-foreground leading-none tabular-nums">
-                {formatMoney(card.value)}
+              <p className={cn("text-sm font-bold leading-none", MONEY_AMOUNT_CLASS)}>
+                {card.value}
               </p>
-              <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight truncate">
+              <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight">
                 {card.label}
               </p>
             </div>
@@ -310,60 +156,98 @@ function SummaryCards({ summary }: { summary: AnnualGstSummaryCards }) {
   );
 }
 
-function ParticularSummaryTable({
-  title,
+function PeriodMatrix({
   rows,
+  filters,
 }: {
-  title: string;
-  rows: AnnualGstParticularRow[];
+  rows: AnnualPeriodStatuses[];
+  filters: ReturnType<typeof useGstSummaryApiFilters>["filters"];
 }) {
   return (
     <AccountsListingTableCard>
       <div className="px-3 py-2 border-b border-border bg-muted/20">
         <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-          {title}
+          Monthly compliance completeness
         </p>
       </div>
       <AccountsTableScroll>
-        <AccountsTable minWidth={480}>
+        <AccountsTable minWidth={720}>
           <AccountsTableHead>
             <AccountsTableHeadRow>
               <AccountsTableHeadCell className="text-xs font-semibold">
-                Particular
+                Period
               </AccountsTableHeadCell>
-              <AccountsTableHeadCell align="right" className="text-xs font-semibold">
-                Taxable Value
+              <AccountsTableHeadCell className="text-xs font-semibold">
+                GSTR-1
               </AccountsTableHeadCell>
-              <AccountsTableHeadCell align="right" className="text-xs font-semibold">
-                GST Amount
+              <AccountsTableHeadCell className="text-xs font-semibold">
+                GSTR-2A
+              </AccountsTableHeadCell>
+              <AccountsTableHeadCell className="text-xs font-semibold">
+                GSTR-2B
+              </AccountsTableHeadCell>
+              <AccountsTableHeadCell className="text-xs font-semibold">
+                GSTR-3B Working
+              </AccountsTableHeadCell>
+              <AccountsTableHeadCell className="text-xs font-semibold">
+                Links
               </AccountsTableHeadCell>
             </AccountsTableHeadRow>
           </AccountsTableHead>
           <AccountsTableBody>
-            {rows.map((row) => (
-              <AccountsTableRow
-                key={row.particular}
-                className={cn(row.isTotal && "bg-brand-50/40 font-semibold")}
-              >
-                <AccountsTableCell className="text-xs font-medium">
-                  {row.particular}
-                </AccountsTableCell>
-                <AccountsTableCell
-                  align="right"
-                  money
-                  className={cn("text-xs", MONEY_AMOUNT_CLASS)}
-                >
-                  {formatMoney(row.taxableValue)}
-                </AccountsTableCell>
-                <AccountsTableCell
-                  align="right"
-                  money
-                  className={cn("text-xs", MONEY_AMOUNT_CLASS)}
-                >
-                  {formatMoney(row.gstAmount)}
-                </AccountsTableCell>
-              </AccountsTableRow>
-            ))}
+            {rows.map((row) => {
+              const links = buildAnnualGstMonthLinks(row.return_period, filters);
+              return (
+                <AccountsTableRow key={row.return_period}>
+                  <AccountsTableCell className="text-xs font-medium">
+                    {row.label}
+                    <span className="block text-[10px] text-muted-foreground font-normal">
+                      {row.return_period}
+                    </span>
+                  </AccountsTableCell>
+                  <AccountsTableCell>
+                    <StatusPill status={row.gstr1} />
+                  </AccountsTableCell>
+                  <AccountsTableCell>
+                    <StatusPill status={row.gstr2a} />
+                  </AccountsTableCell>
+                  <AccountsTableCell>
+                    <StatusPill status={row.gstr2b} />
+                  </AccountsTableCell>
+                  <AccountsTableCell>
+                    <StatusPill status={row.gstr3b} />
+                  </AccountsTableCell>
+                  <AccountsTableCell className="text-[11px]">
+                    <div className="flex flex-wrap gap-2">
+                      <Link
+                        href={links.gstr1}
+                        className="text-brand-700 hover:underline"
+                      >
+                        1
+                      </Link>
+                      <Link
+                        href={links.gstr2a}
+                        className="text-brand-700 hover:underline"
+                      >
+                        2A
+                      </Link>
+                      <Link
+                        href={links.gstr2b}
+                        className="text-brand-700 hover:underline"
+                      >
+                        2B
+                      </Link>
+                      <Link
+                        href={links.gstr3b}
+                        className="text-brand-700 hover:underline"
+                      >
+                        3B
+                      </Link>
+                    </div>
+                  </AccountsTableCell>
+                </AccountsTableRow>
+              );
+            })}
           </AccountsTableBody>
         </AccountsTable>
       </AccountsTableScroll>
@@ -371,199 +255,138 @@ function ParticularSummaryTable({
   );
 }
 
-function NetGstPositionCard({
-  outputGst,
-  inputGst,
-  netGst,
-  isRefundable,
+function SectionPanel({
+  title,
+  support,
+  reason,
+  children,
 }: {
-  outputGst: number;
-  inputGst: number;
-  netGst: number;
-  isRefundable: boolean;
+  title: string;
+  support?: AnnualSupportStatus;
+  reason?: string | null;
+  children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-xl border border-border bg-white shadow-sm overflow-hidden max-w-md">
-      <div className="px-4 py-2.5 border-b border-border bg-muted/20">
+    <AccountsListingTableCard>
+      <div className="px-3 py-2 border-b border-border bg-muted/20 flex items-center justify-between gap-2">
         <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-          Annual GST Position
+          {title}
         </p>
+        {support ? <StatusPill status={support} /> : null}
       </div>
-      <div className="px-4 py-3 space-y-2">
-        <div className="flex items-center justify-between text-xs">
-          <span className="text-muted-foreground">Output GST</span>
-          <span className={cn("font-semibold tabular-nums", MONEY_AMOUNT_CLASS)}>
-            {formatMoney(outputGst)}
-          </span>
-        </div>
-        <div className="flex items-center justify-between text-xs">
-          <span className="text-muted-foreground">Less: Input GST</span>
-          <span className={cn("font-semibold tabular-nums", MONEY_AMOUNT_CLASS)}>
-            {formatMoney(inputGst)}
-          </span>
-        </div>
-        <div className="border-t border-border pt-2 flex items-center justify-between">
-          <span className="text-xs font-bold text-foreground">
-            {isRefundable ? "Net GST Refundable" : "Net GST Payable"}
-          </span>
-          <span
-            className={cn(
-              "text-sm font-bold tabular-nums",
-              isRefundable ? "text-emerald-700" : "text-brand-700",
-            )}
-          >
-            {formatMoney(Math.abs(netGst))}
-          </span>
-        </div>
-      </div>
+      {reason && support && support !== "SUPPORTED" && support !== "READY" ? (
+        <p className="px-3 py-1.5 text-[11px] text-muted-foreground border-b border-border">
+          {reason}
+        </p>
+      ) : null}
+      <div className="p-3">{children}</div>
+    </AccountsListingTableCard>
+  );
+}
+
+function Kv({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3 text-xs py-0.5">
+      <span className="text-muted-foreground">{label}</span>
+      <span className={cn("font-medium tabular-nums", MONEY_AMOUNT_CLASS)}>
+        {value}
+      </span>
     </div>
   );
 }
 
-function monthTotals(months: AnnualGstMonthRow[]): AnnualGstMonthRow {
-  const t = months.reduce(
-    (acc, m) => {
-      acc.salesValue += m.salesValue;
-      acc.purchaseValue += m.purchaseValue;
-      acc.outputCgst += m.outputCgst;
-      acc.outputSgst += m.outputSgst;
-      acc.outputIgst += m.outputIgst;
-      acc.inputCgst += m.inputCgst;
-      acc.inputSgst += m.inputSgst;
-      acc.inputIgst += m.inputIgst;
-      acc.netGst += m.netGst;
-      return acc;
-    },
-    {
-      salesValue: 0,
-      purchaseValue: 0,
-      outputCgst: 0,
-      outputSgst: 0,
-      outputIgst: 0,
-      inputCgst: 0,
-      inputSgst: 0,
-      inputIgst: 0,
-      netGst: 0,
-    },
+function CountKv({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="flex items-center justify-between gap-3 text-xs py-0.5">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="font-medium tabular-nums">{value}</span>
+    </div>
   );
-  return {
-    id: "total",
-    monthKey: "total",
-    monthLabel: "Total",
-    salesValue: Math.round(t.salesValue * 100) / 100,
-    purchaseValue: Math.round(t.purchaseValue * 100) / 100,
-    outputCgst: Math.round(t.outputCgst * 100) / 100,
-    outputSgst: Math.round(t.outputSgst * 100) / 100,
-    outputIgst: Math.round(t.outputIgst * 100) / 100,
-    inputCgst: Math.round(t.inputCgst * 100) / 100,
-    inputSgst: Math.round(t.inputSgst * 100) / 100,
-    inputIgst: Math.round(t.inputIgst * 100) / 100,
-    netGst: Math.round(t.netGst * 100) / 100,
-    outward: [],
-    inward: [],
-  };
 }
 
 export default function AnnualComputationPageClient() {
-  const filterState = useGstReportFilters();
-  const { mounted, datesReady, filters } = filterState;
-  const [exporting, setExporting] = useState(false);
-  const [drillMonth, setDrillMonth] = useState<AnnualGstMonthRow | null>(null);
+  const filterState = useGstSummaryApiFilters();
+  const {
+    mounted,
+    datesReady,
+    filters,
+    filtersLoading,
+    filtersError,
+    financialYearId,
+    gstRegistration,
+    branch,
+  } = filterState;
 
-  const report = useMemo(() => {
-    if (!mounted || !datesReady) return null;
-    return buildAnnualGstSummaryReport(filters.financialYearId);
-  }, [mounted, datesReady, filters.financialYearId]);
+  const [report, setReport] = useState<AnnualWorkingResult | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  if (!mounted || !datesReady || !report) {
-    return (
-      <AccountsPageShell
-        breadcrumbs={accountsBreadcrumb("Reports", "GST Summary", "Annual GST Summary")}
-        title="Annual GST Summary"
-        description="Yearly consolidated GST review for management, audit, and GSTR-9 preparation."
-        hideDescription
-        layout="split"
-        className="h-full min-h-0"
-        filters={<AnnualGstFilterBar filterState={filterState} mounted={mounted} />}
-        subHeader={<GstReportNavTabs filters={filters} />}
-      >
-        <div className="flex-1 min-h-0 overflow-y-auto">
-          <AccountsReportBody className="space-y-4 pb-4">
-            <div className="flex items-center justify-center py-6 text-xs text-muted-foreground">
-              Loading annual GST summary…
-            </div>
-          </AccountsReportBody>
-        </div>
-      </AccountsPageShell>
-    );
-  }
+  const scopeReady =
+    !!financialYearId && gstRegistration !== "all" && !!gstRegistration;
 
-  return (
-    <AccountsColumnFilterProvider
-      rows={report.months}
-      getCellValue={getAnnualGstCellValue}
-      columnConfig={ANNUAL_GST_COLUMN_CONFIG}
-      defaultSortKey="monthLabel"
-      defaultSortDir="asc"
-    >
-      <AnnualGstSummaryWithFilters
-        filterState={filterState}
-        mounted={mounted}
-        filters={filters}
-        report={report}
-        exporting={exporting}
-        setExporting={setExporting}
-        drillMonth={drillMonth}
-        setDrillMonth={setDrillMonth}
-      />
-    </AccountsColumnFilterProvider>
-  );
-}
+  const annualParams = useMemo((): AnnualWorkingQueryParams | null => {
+    if (!scopeReady) return null;
+    return {
+      financial_year_id: financialYearId,
+      gstin: gstRegistration,
+      branch_ids: branch,
+      warehouse_ids: branch,
+    };
+  }, [scopeReady, financialYearId, gstRegistration, branch]);
 
-function AnnualGstSummaryWithFilters({
-  filterState,
-  mounted,
-  filters,
-  report,
-  exporting,
-  setExporting,
-  drillMonth,
-  setDrillMonth,
-}: {
-  filterState: ReturnType<typeof useGstReportFilters>;
-  mounted: boolean;
-  filters: GstReportFilters;
-  report: AnnualGstReport;
-  exporting: boolean;
-  setExporting: (v: boolean) => void;
-  drillMonth: AnnualGstMonthRow | null;
-  setDrillMonth: (m: AnnualGstMonthRow | null) => void;
-}) {
-  const ctx = useAccountsColumnFilterContext();
-  const filteredMonths = useAccountsFilteredRows(report.months);
-  const totalRow = useMemo(() => monthTotals(filteredMonths), [filteredMonths]);
-
-  const handleExport = (format: "excel" | "pdf") => {
-    setExporting(true);
-    try {
-      exportAnnualGstSummaryReport(
-        {
-          ...report,
-          months: filteredMonths,
-        },
-        filters,
-        format,
-      );
-    } finally {
-      setExporting(false);
+  useEffect(() => {
+    if (!annualParams) {
+      setReport(null);
+      setLoading(false);
+      setError(null);
+      return;
     }
-  };
+    const controller = new AbortController();
+    setLoading(true);
+    setError(null);
+    void GstSummaryApiService.getAnnual(annualParams, controller.signal)
+      .then((result) => {
+        setReport(result);
+        setLoading(false);
+      })
+      .catch((err) => {
+        if (controller.signal.aborted) return;
+        const message =
+          err instanceof GstSummaryApiError
+            ? err.message
+            : "Failed to load Annual GST Compliance Summary.";
+        setError(message);
+        setReport(null);
+        setLoading(false);
+      });
+    return () => controller.abort();
+  }, [annualParams]);
+
+  const showLoading =
+    !mounted || filtersLoading || !datesReady || (loading && !report);
+
+  const gstr1Sections = report?.gstr1.values?.sections ?? [];
+  const suggested = report?.gstr3b_working.suggested_eligible_itc;
+  const finalClaimed = report?.gstr3b_working.final_claimed_itc;
+  const books = report?.books_control;
+
+  const handleExport = useCallback(
+    async (format: "EXCEL" | "PDF") => {
+      if (!annualParams) return;
+      await GstSummaryApiService.exportAnnual({ ...annualParams, format });
+    },
+    [annualParams],
+  );
 
   return (
     <AccountsPageShell
-      breadcrumbs={accountsBreadcrumb("Reports", "GST Summary", "Annual GST Summary")}
-      title="Annual GST Summary"
-      description="Yearly consolidated GST review for management, audit, and GSTR-9 preparation."
+      breadcrumbs={accountsBreadcrumb(
+        "Reports",
+        "GST Summary",
+        "Annual GST Summary",
+      )}
+      title="Annual GST Compliance Summary"
+      description="Annual compliance working and reconciliation summary — not a GST return filing module."
       hideDescription
       layout="split"
       className="h-full min-h-0"
@@ -572,419 +395,491 @@ function AnnualGstSummaryWithFilters({
           filterState={filterState}
           mounted={mounted}
           end={
-            <>
-              <AccountsClearAllColumnFiltersButton />
-              <AccountsExportMenu
-                onExcel={() => handleExport("excel")}
-                onPdf={() => handleExport("pdf")}
-                disabled={exporting || filteredMonths.length === 0}
-              />
-            </>
+            <GstSummaryExportMenu
+              disabled={!annualParams || loading || !report}
+              onExport={handleExport}
+            />
           }
         />
       }
       subHeader={<GstReportNavTabs filters={filters} />}
     >
       <div className="flex-1 min-h-0 overflow-y-auto">
-        <AccountsReportBody className="space-y-4 pb-4">
-          <SummaryCards summary={report.summary} />
+        <AccountsReportBody className="space-y-3 pb-4">
+          <p className="text-[11px] text-muted-foreground leading-snug">
+            Annual GST compliance and reconciliation working for the selected
+            GSTIN. This is not a GST return filing module.
+          </p>
 
-          <AccountsListingTableCard className="flex-1 min-h-0 flex flex-col">
-            <div className="px-3 py-2 border-b border-border bg-muted/20 flex items-center justify-between gap-2">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                Monthly GST Summary · {report.financialYearLabel}
-                {(ctx?.activeFilterCount ?? 0) > 0 && (
-                  <span className="ml-2 font-medium normal-case tracking-normal text-brand-700">
-                    · Showing {filteredMonths.length} of {report.months.length} months
-                  </span>
-                )}
-              </p>
-              <AccountsClearAllColumnFiltersButton />
+          {filtersError || error ? (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-4 text-xs text-red-700">
+              {filtersError || error}
             </div>
-            <AccountsTableScroll className="flex-1 min-h-0">
-                  <AccountsTable minWidth={1380}>
-                <AccountsTableHead>
-                  <AccountsTableHeadRow>
-                    <SortTh
-                      label="Month"
-                      colKey="monthLabel"
-                      filterType="text"
-                      className="min-w-[7rem]"
-                    />
-                    <SortTh
-                      label="Sales Value"
-                      colKey="salesValue"
-                      filterType="amount"
-                      align="right"
-                    />
-                    <SortTh
-                      label="Purchase Value"
-                      colKey="purchaseValue"
-                      filterType="amount"
-                      align="right"
-                    />
-                    <SortTh
-                      label="Output GST"
-                      colKey="outputGst"
-                      filterType="amount"
-                      align="right"
-                    />
-                    <SortTh
-                      label="Output CGST"
-                      colKey="outputCgst"
-                      filterType="amount"
-                      align="right"
-                    />
-                    <SortTh
-                      label="Output SGST"
-                      colKey="outputSgst"
-                      filterType="amount"
-                      align="right"
-                    />
-                    <SortTh
-                      label="Output IGST"
-                      colKey="outputIgst"
-                      filterType="amount"
-                      align="right"
-                    />
-                    <SortTh
-                      label="Input GST"
-                      colKey="inputGst"
-                      filterType="amount"
-                      align="right"
-                    />
-                    <SortTh
-                      label="Input CGST"
-                      colKey="inputCgst"
-                      filterType="amount"
-                      align="right"
-                    />
-                    <SortTh
-                      label="Input SGST"
-                      colKey="inputSgst"
-                      filterType="amount"
-                      align="right"
-                    />
-                    <SortTh
-                      label="Input IGST"
-                      colKey="inputIgst"
-                      filterType="amount"
-                      align="right"
-                    />
-                    <SortTh
-                      label="Net GST"
-                      colKey="netGst"
-                      filterType="amount"
-                      align="right"
-                    />
-                    <AccountsColumnHeader
-                      label="Action"
-                      colKey="_actions"
-                      sortable={false}
-                      filterable={false}
-                      className="w-28"
-                    />
-                  </AccountsTableHeadRow>
-                </AccountsTableHead>
-                <AccountsTableBody>
-                  {filteredMonths.length === 0 ? (
-                    <AccountsTableRow>
-                      <AccountsTableCell colSpan={13} className="accounts-table-empty">
-                        <div className="flex flex-col items-center gap-1 py-4">
-                          <p className="text-sm text-muted-foreground">
-                            No months match the column filters.
-                          </p>
-                          {(ctx?.activeFilterCount ?? 0) > 0 && (
-                            <button
-                              type="button"
-                              onClick={() => ctx?.clearAllColumnFilters()}
-                              className="text-xs text-brand-600 hover:underline"
-                            >
-                              Clear All Filters
-                            </button>
-                          )}
-                        </div>
-                      </AccountsTableCell>
-                    </AccountsTableRow>
+          ) : !scopeReady && mounted && datesReady && !filtersLoading ? (
+            <div className="rounded-lg border border-amber-200 bg-amber-50/70 px-3 py-4 text-xs text-amber-900 space-y-1">
+              <p className="font-medium">Select Financial Year and GSTIN</p>
+              <p className="text-[11px] leading-snug">
+                Annual GST Compliance Summary requires one GSTIN. All GSTINs is
+                not supported in this step. Branch/warehouse remains optional
+                narrowing only.
+              </p>
+            </div>
+          ) : showLoading ? (
+            <div className="flex items-center justify-center py-6 text-xs text-muted-foreground">
+              Loading Annual GST Compliance Summary…
+            </div>
+          ) : report ? (
+            <>
+              <Gstr1ReportHeaderBlock
+                header={{
+                  companyName:
+                    report.scope.company_name || ACCOUNTS_COMPANY_NAME,
+                  reportName: "Annual GST Compliance Summary",
+                  gstin: report.scope.gstin,
+                  financialYear:
+                    report.scope.financial_year_code ||
+                    report.scope.financial_year_name ||
+                    "—",
+                  returnPeriod: `${report.scope.from_date} → ${report.scope.to_date}`,
+                  filingStatus: "Working only — not a filing module",
+                }}
+                items={[
+                  {
+                    label: "Company Name",
+                    value:
+                      report.scope.company_name || ACCOUNTS_COMPANY_NAME,
+                  },
+                  { label: "GSTIN", value: report.scope.gstin },
+                  {
+                    label: "Financial Year",
+                    value:
+                      report.scope.financial_year_code ||
+                      report.scope.financial_year_name ||
+                      "—",
+                  },
+                ]}
+              />
+
+              <HeadlineCards report={report} />
+
+              <PeriodMatrix rows={report.period_matrix} filters={filters} />
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                <SectionPanel
+                  title="Annual Outward GST"
+                  support={report.outward.support}
+                  reason={report.outward.reason}
+                >
+                  {report.outward.values ? (
+                    <div className="space-y-1">
+                      <Kv
+                        label="Taxable value"
+                        value={formatMoneyString(
+                          report.outward.values.taxable_value,
+                        )}
+                      />
+                      <Kv
+                        label="CGST"
+                        value={formatMoneyString(report.outward.values.cgst)}
+                      />
+                      <Kv
+                        label="SGST"
+                        value={formatMoneyString(report.outward.values.sgst)}
+                      />
+                      <Kv
+                        label="IGST"
+                        value={formatMoneyString(report.outward.values.igst)}
+                      />
+                      <Kv
+                        label="Cess"
+                        value="Not Available"
+                      />
+                      <Kv
+                        label="GST total"
+                        value={formatMoneyString(
+                          report.outward.values.gst_total,
+                        )}
+                      />
+                    </div>
                   ) : (
-                    filteredMonths.map((row) => {
-                      const links = buildAnnualGstMonthLinks(row.monthKey, filters);
-                      const outputGst = row.outputCgst + row.outputSgst + row.outputIgst;
-                      const inputGst = row.inputCgst + row.inputSgst + row.inputIgst;
-                      return (
-                        <AccountsTableRow key={row.id} className="group">
-                          <AccountsTableCell className="text-xs font-medium">
-                            <button
-                              type="button"
-                              onClick={() => setDrillMonth(row)}
-                              className="text-left font-medium text-brand-700 hover:underline underline-offset-2"
-                              title={`Open ${row.monthLabel} drill-down`}
-                            >
-                              {row.monthLabel}
-                            </button>
-                          </AccountsTableCell>
-                          <AccountsTableCell
-                            align="right"
-                            money
-                            className={cn("text-xs", MONEY_AMOUNT_CLASS)}
-                          >
-                            <MonthAmountLink
-                              href={links.gstr1}
-                              amount={row.salesValue}
-                              title={`Open GSTR-1 for ${row.monthLabel}`}
-                            />
-                          </AccountsTableCell>
-                          <AccountsTableCell
-                            align="right"
-                            money
-                            className={cn("text-xs", MONEY_AMOUNT_CLASS)}
-                          >
-                            <MonthAmountLink
-                              href={links.purchaseInvoices}
-                              amount={row.purchaseValue}
-                              title={`Open purchase invoices for ${row.monthLabel}`}
-                            />
-                          </AccountsTableCell>
-                          <AccountsTableCell
-                            align="right"
-                            money
-                            className={cn("text-xs font-medium", MONEY_AMOUNT_CLASS)}
-                          >
-                            <MonthAmountLink
-                              href={links.gstr1}
-                              amount={outputGst}
-                              title={`Open GSTR-1 for ${row.monthLabel}`}
-                            />
-                          </AccountsTableCell>
-                          <AccountsTableCell
-                            align="right"
-                            money
-                            className={cn("text-xs", MONEY_AMOUNT_CLASS)}
-                          >
-                            <MonthAmountLink
-                              href={links.gstr1}
-                              amount={row.outputCgst}
-                              title={`Open GSTR-1 for ${row.monthLabel}`}
-                            />
-                          </AccountsTableCell>
-                          <AccountsTableCell
-                            align="right"
-                            money
-                            className={cn("text-xs", MONEY_AMOUNT_CLASS)}
-                          >
-                            <MonthAmountLink
-                              href={links.gstr1}
-                              amount={row.outputSgst}
-                              title={`Open GSTR-1 for ${row.monthLabel}`}
-                            />
-                          </AccountsTableCell>
-                          <AccountsTableCell
-                            align="right"
-                            money
-                            className={cn("text-xs", MONEY_AMOUNT_CLASS)}
-                          >
-                            <MonthAmountLink
-                              href={links.gstr1}
-                              amount={row.outputIgst}
-                              title={`Open GSTR-1 for ${row.monthLabel}`}
-                            />
-                          </AccountsTableCell>
-                          <AccountsTableCell
-                            align="right"
-                            money
-                            className={cn("text-xs font-medium", MONEY_AMOUNT_CLASS)}
-                          >
-                            <MonthAmountLink
-                              href={links.gstr3b}
-                              amount={inputGst}
-                              title={`Open GSTR-3B for ${row.monthLabel}`}
-                            />
-                          </AccountsTableCell>
-                          <AccountsTableCell
-                            align="right"
-                            money
-                            className={cn("text-xs", MONEY_AMOUNT_CLASS)}
-                          >
-                            <MonthAmountLink
-                              href={links.gstr3b}
-                              amount={row.inputCgst}
-                              title={`Open GSTR-3B for ${row.monthLabel}`}
-                            />
-                          </AccountsTableCell>
-                          <AccountsTableCell
-                            align="right"
-                            money
-                            className={cn("text-xs", MONEY_AMOUNT_CLASS)}
-                          >
-                            <MonthAmountLink
-                              href={links.gstr3b}
-                              amount={row.inputSgst}
-                              title={`Open GSTR-3B for ${row.monthLabel}`}
-                            />
-                          </AccountsTableCell>
-                          <AccountsTableCell
-                            align="right"
-                            money
-                            className={cn("text-xs", MONEY_AMOUNT_CLASS)}
-                          >
-                            <MonthAmountLink
-                              href={links.gstr3b}
-                              amount={row.inputIgst}
-                              title={`Open GSTR-3B for ${row.monthLabel}`}
-                            />
-                          </AccountsTableCell>
-                          <AccountsTableCell
-                            align="right"
-                            money
-                            className={cn(
-                              "text-xs font-semibold",
-                              MONEY_AMOUNT_CLASS,
-                              row.netGst < 0 && "text-emerald-700",
-                            )}
-                          >
-                            <MonthAmountLink
-                              href={links.gstr3b}
-                              amount={row.netGst}
-                              title={`Open GSTR-3B liability for ${row.monthLabel}`}
-                              className={cn(
-                                "font-semibold",
-                                row.netGst < 0 && "text-emerald-700",
-                              )}
-                            />
+                    <p className="text-xs text-muted-foreground">Not available</p>
+                  )}
+                </SectionPanel>
+
+                <SectionPanel
+                  title="Books GST Control"
+                  support={books?.support}
+                  reason={books?.reason}
+                >
+                  <div className="mb-2">
+                    <span className="inline-flex items-center rounded border border-slate-300 bg-slate-50 px-1.5 py-0.5 text-[10px] font-medium text-slate-700">
+                      NON-STATUTORY CONTROL
+                    </span>
+                  </div>
+                  {books?.values ? (
+                    <div className="space-y-1">
+                      <Kv
+                        label="Output GST"
+                        value={formatMoneyString(books.values.output_gst)}
+                      />
+                      <Kv
+                        label="Input Books GST"
+                        value={formatMoneyString(books.values.input_gst)}
+                      />
+                      <Kv
+                        label="Working difference"
+                        value={formatMoneyString(
+                          books.values.books_gst_working_difference,
+                        )}
+                      />
+                      <p className="text-[11px] text-muted-foreground pt-1">
+                        {books.values.note}
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Not available</p>
+                  )}
+                </SectionPanel>
+              </div>
+
+              <SectionPanel
+                title="Annual GSTR-1"
+                support={report.gstr1.support}
+                reason={report.gstr1.reason}
+              >
+                <AccountsTableScroll>
+                  <AccountsTable minWidth={640}>
+                    <AccountsTableHead>
+                      <AccountsTableHeadRow>
+                        <AccountsTableHeadCell className="text-xs">
+                          Particular
+                        </AccountsTableHeadCell>
+                        <AccountsTableHeadCell className="text-xs">
+                          Support
+                        </AccountsTableHeadCell>
+                        <AccountsTableHeadCell align="right" className="text-xs">
+                          Docs
+                        </AccountsTableHeadCell>
+                        <AccountsTableHeadCell align="right" className="text-xs">
+                          Taxable
+                        </AccountsTableHeadCell>
+                        <AccountsTableHeadCell align="right" className="text-xs">
+                          GST
+                        </AccountsTableHeadCell>
+                      </AccountsTableHeadRow>
+                    </AccountsTableHead>
+                    <AccountsTableBody>
+                      {gstr1Sections.map((s) => (
+                        <AccountsTableRow key={s.section_id}>
+                          <AccountsTableCell className="text-xs">
+                            {s.particulars}
                           </AccountsTableCell>
                           <AccountsTableCell>
-                            <MonthRowActions
-                              row={row}
-                              filters={filters}
-                              onView={() => setDrillMonth(row)}
-                            />
+                            <StatusPill status={s.support} />
+                          </AccountsTableCell>
+                          <AccountsTableCell align="right" className="text-xs">
+                            {s.document_count ?? "—"}
+                          </AccountsTableCell>
+                          <AccountsTableCell
+                            align="right"
+                            className={cn("text-xs", MONEY_AMOUNT_CLASS)}
+                          >
+                            {moneyOrDash(s.taxable_amount, s.support)}
+                          </AccountsTableCell>
+                          <AccountsTableCell
+                            align="right"
+                            className={cn("text-xs", MONEY_AMOUNT_CLASS)}
+                          >
+                            {moneyOrDash(s.gst_amount, s.support)}
                           </AccountsTableCell>
                         </AccountsTableRow>
-                      );
-                    })
-                  )}
-                  {filteredMonths.length > 0 && (
-                    <AccountsTableRow className="bg-brand-50/40 font-semibold">
-                      <AccountsTableCell className="text-xs font-bold">
-                        {totalRow.monthLabel}
-                      </AccountsTableCell>
-                      <AccountsTableCell
-                        align="right"
-                        money
-                        className={cn("text-xs font-bold", MONEY_AMOUNT_CLASS)}
-                      >
-                        {formatMoney(totalRow.salesValue)}
-                      </AccountsTableCell>
-                      <AccountsTableCell
-                        align="right"
-                        money
-                        className={cn("text-xs font-bold", MONEY_AMOUNT_CLASS)}
-                      >
-                        {formatMoney(totalRow.purchaseValue)}
-                      </AccountsTableCell>
-                      <AccountsTableCell
-                        align="right"
-                        money
-                        className={cn("text-xs font-bold", MONEY_AMOUNT_CLASS)}
-                      >
-                        {formatMoney(
-                          totalRow.outputCgst + totalRow.outputSgst + totalRow.outputIgst,
-                        )}
-                      </AccountsTableCell>
-                      <AccountsTableCell
-                        align="right"
-                        money
-                        className={cn("text-xs font-bold", MONEY_AMOUNT_CLASS)}
-                      >
-                        {formatMoney(totalRow.outputCgst)}
-                      </AccountsTableCell>
-                      <AccountsTableCell
-                        align="right"
-                        money
-                        className={cn("text-xs font-bold", MONEY_AMOUNT_CLASS)}
-                      >
-                        {formatMoney(totalRow.outputSgst)}
-                      </AccountsTableCell>
-                      <AccountsTableCell
-                        align="right"
-                        money
-                        className={cn("text-xs font-bold", MONEY_AMOUNT_CLASS)}
-                      >
-                        {formatMoney(totalRow.outputIgst)}
-                      </AccountsTableCell>
-                      <AccountsTableCell
-                        align="right"
-                        money
-                        className={cn("text-xs font-bold", MONEY_AMOUNT_CLASS)}
-                      >
-                        {formatMoney(
-                          totalRow.inputCgst + totalRow.inputSgst + totalRow.inputIgst,
-                        )}
-                      </AccountsTableCell>
-                      <AccountsTableCell
-                        align="right"
-                        money
-                        className={cn("text-xs font-bold", MONEY_AMOUNT_CLASS)}
-                      >
-                        {formatMoney(totalRow.inputCgst)}
-                      </AccountsTableCell>
-                      <AccountsTableCell
-                        align="right"
-                        money
-                        className={cn("text-xs font-bold", MONEY_AMOUNT_CLASS)}
-                      >
-                        {formatMoney(totalRow.inputSgst)}
-                      </AccountsTableCell>
-                      <AccountsTableCell
-                        align="right"
-                        money
-                        className={cn("text-xs font-bold", MONEY_AMOUNT_CLASS)}
-                      >
-                        {formatMoney(totalRow.inputIgst)}
-                      </AccountsTableCell>
-                      <AccountsTableCell
-                        align="right"
-                        money
-                        className={cn("text-xs font-bold", MONEY_AMOUNT_CLASS)}
-                      >
-                        {formatMoney(totalRow.netGst)}
-                      </AccountsTableCell>
-                      <AccountsTableCell>
-                        <span className="text-xs text-muted-foreground">—</span>
-                      </AccountsTableCell>
-                    </AccountsTableRow>
-                  )}
-                </AccountsTableBody>
-              </AccountsTable>
-            </AccountsTableScroll>
-          </AccountsListingTableCard>
+                      ))}
+                    </AccountsTableBody>
+                  </AccountsTable>
+                </AccountsTableScroll>
+              </SectionPanel>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <ParticularSummaryTable
-              title="Annual Outward Supply Summary"
-              rows={report.outwardAnnual}
-            />
-            <ParticularSummaryTable
-              title="Annual Inward Supply Summary"
-              rows={report.inwardAnnual}
-            />
-          </div>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                <SectionPanel
+                  title="Annual GSTR-2A reconciliation"
+                  support={report.gstr2a.support}
+                  reason={report.gstr2a.reason}
+                >
+                  {report.gstr2a.values ? (
+                    <div className="space-y-1">
+                      <CountKv
+                        label="Imported periods"
+                        value={report.gstr2a.values.imported_period_count}
+                      />
+                      <CountKv
+                        label="Missing periods"
+                        value={report.gstr2a.values.missing_period_count}
+                      />
+                      <CountKv
+                        label="Matched"
+                        value={report.gstr2a.values.counts.matched}
+                      />
+                      <CountKv
+                        label="Partial match"
+                        value={report.gstr2a.values.counts.partial_match}
+                      />
+                      <CountKv
+                        label="Missing in books"
+                        value={report.gstr2a.values.counts.missing_in_books}
+                      />
+                      <CountKv
+                        label="Missing in GSTR"
+                        value={report.gstr2a.values.counts.missing_in_gstr}
+                      />
+                      <CountKv
+                        label="Needs review"
+                        value={report.gstr2a.values.counts.needs_review}
+                      />
+                      <CountKv
+                        label="Unresolved"
+                        value={report.gstr2a.values.counts.unresolved_review}
+                      />
+                      <Kv
+                        label="Portal GST"
+                        value={moneyOrDash(
+                          report.gstr2a.values.portal_gst_total,
+                        )}
+                      />
+                      <Kv
+                        label="Books GST"
+                        value={moneyOrDash(report.gstr2a.values.books_gst_total)}
+                      />
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      No current GSTR-2A imports for this FY — not treated as
+                      zero.
+                    </p>
+                  )}
+                </SectionPanel>
 
-          <NetGstPositionCard
-            outputGst={report.outputGst}
-            inputGst={report.inputGst}
-            netGst={report.netGst}
-            isRefundable={report.isRefundable}
-          />
+                <SectionPanel
+                  title="Annual GSTR-2B / ITC workflow"
+                  support={report.gstr2b.support}
+                  reason={report.gstr2b.reason}
+                >
+                  {report.gstr2b.values ? (
+                    <div className="space-y-1">
+                      <CountKv
+                        label="Imported periods"
+                        value={report.gstr2b.values.imported_period_count}
+                      />
+                      <CountKv
+                        label="Missing periods"
+                        value={report.gstr2b.values.missing_period_count}
+                      />
+                      <CountKv
+                        label="ITC Available (portal)"
+                        value={report.gstr2b.values.portal_itc_available_count}
+                      />
+                      <CountKv
+                        label="ITC Not Available"
+                        value={
+                          report.gstr2b.values.portal_itc_not_available_count
+                        }
+                      />
+                      <CountKv
+                        label="Unknown"
+                        value={report.gstr2b.values.portal_itc_unknown_count}
+                      />
+                      <CountKv
+                        label="To Review"
+                        value={report.gstr2b.values.to_review_count}
+                      />
+                      <CountKv
+                        label="Eligible to Claim"
+                        value={report.gstr2b.values.eligible_to_claim_count}
+                      />
+                      <CountKv
+                        label="Hold"
+                        value={report.gstr2b.values.hold_count}
+                      />
+                      <CountKv
+                        label="Ineligible"
+                        value={report.gstr2b.values.ineligible_count}
+                      />
+                      <CountKv
+                        label="Reversal Required (workflow)"
+                        value={report.gstr2b.values.reversal_required_count}
+                      />
+                      <CountKv
+                        label="Claimed"
+                        value={report.gstr2b.values.claimed_count}
+                      />
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      No current GSTR-2B imports for this FY — not treated as
+                      zero.
+                    </p>
+                  )}
+                </SectionPanel>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+                <SectionPanel
+                  title="GSTR-3B Working · 3.1(a)"
+                  support={report.gstr3b_working.section_3_1_a.support}
+                  reason={report.gstr3b_working.section_3_1_a.reason}
+                >
+                  {report.gstr3b_working.section_3_1_a.values ? (
+                    <div className="space-y-1">
+                      <Kv
+                        label="Taxable"
+                        value={formatMoneyString(
+                          report.gstr3b_working.section_3_1_a.values
+                            .taxable_value,
+                        )}
+                      />
+                      <Kv
+                        label="Output GST"
+                        value={formatMoneyString(
+                          report.gstr3b_working.section_3_1_a.values.gst_total,
+                        )}
+                      />
+                      <Kv label="Cess" value="Not Available" />
+                    </div>
+                  ) : null}
+                </SectionPanel>
+
+                <SectionPanel
+                  title="Suggested Eligible ITC"
+                  support={suggested?.support}
+                  reason={suggested?.reason}
+                >
+                  {suggested?.values ? (
+                    <div className="space-y-1">
+                      <Kv
+                        label="IGST"
+                        value={formatMoneyString(suggested.values.igst)}
+                      />
+                      <Kv
+                        label="CGST"
+                        value={formatMoneyString(suggested.values.cgst)}
+                      />
+                      <Kv
+                        label="SGST"
+                        value={formatMoneyString(suggested.values.sgst)}
+                      />
+                      <Kv
+                        label="Cess"
+                        value={formatMoneyString(suggested.values.cess)}
+                      />
+                      <Kv
+                        label="Total"
+                        value={formatMoneyString(suggested.values.total)}
+                      />
+                      <CountKv
+                        label="Rows"
+                        value={suggested.values.row_count}
+                      />
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      Unavailable — missing GSTR-2B periods are not zero.
+                    </p>
+                  )}
+                </SectionPanel>
+
+                <SectionPanel
+                  title="Final Claimed ITC"
+                  support={finalClaimed?.support}
+                  reason={finalClaimed?.reason}
+                >
+                  {finalClaimed?.values ? (
+                    <div className="space-y-1">
+                      <Kv
+                        label="IGST"
+                        value={formatMoneyString(finalClaimed.values.igst)}
+                      />
+                      <Kv
+                        label="CGST"
+                        value={formatMoneyString(finalClaimed.values.cgst)}
+                      />
+                      <Kv
+                        label="SGST"
+                        value={formatMoneyString(finalClaimed.values.sgst)}
+                      />
+                      <Kv
+                        label="Cess"
+                        value={formatMoneyString(finalClaimed.values.cess)}
+                      />
+                      <Kv
+                        label="Total"
+                        value={formatMoneyString(finalClaimed.values.total)}
+                      />
+                      <CountKv
+                        label="Rows"
+                        value={finalClaimed.values.row_count}
+                      />
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      No CLAIMED items with claim period in this FY.
+                    </p>
+                  )}
+                </SectionPanel>
+              </div>
+
+              <SectionPanel
+                title="Health / compliance indicators"
+              >
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+                  <CountKv
+                    label="Unresolved recon"
+                    value={report.health.unresolved_reconciliation_count}
+                  />
+                  <CountKv
+                    label="Missing in books"
+                    value={report.health.missing_in_books_count}
+                  />
+                  <CountKv
+                    label="Missing in GSTR"
+                    value={report.health.missing_in_gstr_count}
+                  />
+                  <CountKv
+                    label="ITC To Review"
+                    value={report.health.itc_to_review_count}
+                  />
+                  <CountKv
+                    label="ITC Hold"
+                    value={report.health.itc_hold_count}
+                  />
+                  <CountKv
+                    label="ITC Ineligible"
+                    value={report.health.itc_ineligible_count}
+                  />
+                  <CountKv
+                    label="Reversal Required (workflow)"
+                    value={report.health.reversal_required_workflow_count}
+                  />
+                  <CountKv
+                    label="Ambiguous 0%-tax"
+                    value={report.health.ambiguous_zero_tax_quarantine_count}
+                  />
+                </div>
+                {report.health.warnings.length > 0 ? (
+                  <ul className="mt-2 space-y-1 text-[11px] text-muted-foreground list-disc pl-4">
+                    {report.health.warnings.map((w) => (
+                      <li key={w}>{w}</li>
+                    ))}
+                  </ul>
+                ) : null}
+                <p className="mt-2 text-[11px] text-muted-foreground flex items-center gap-1">
+                  <FileText className="w-3 h-3" />
+                  Tax payment / filing / GSTR-9: Not Implemented. Parser
+                  confidence: {report.health.parser_confidence}.
+                </p>
+              </SectionPanel>
+            </>
+          ) : null}
         </AccountsReportBody>
       </div>
-
-      <AnnualGstMonthDrillSheet
-        open={drillMonth != null}
-        onClose={() => setDrillMonth(null)}
-        month={drillMonth}
-        filters={filters}
-      />
     </AccountsPageShell>
   );
 }

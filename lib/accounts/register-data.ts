@@ -230,98 +230,19 @@ function mapSalesLineItems(
 }
 
 export function buildSalesRegisterSourceRows(
-  dateFrom?: string,
-  dateTo?: string,
+  _dateFrom?: string,
+  _dateTo?: string,
 ): SalesRegisterSourceRow[] {
-  const productCache = new Map<string, string>();
-
-  return loadInvoices()
-    .filter((inv) => inv.invoiceStatus !== "cancelled")
-    .filter((inv) => {
-      if (dateFrom && inv.invoiceDate < dateFrom) return false;
-      if (dateTo && inv.invoiceDate > dateTo) return false;
-      return true;
-    })
-    .map((inv) => {
-      const { taxableValue, gstAmount, invoiceTotal } = getInvoiceAmountBreakup(inv);
-      const meta = resolveCustomerMeta(inv.customerId, inv.customerName);
-      return {
-        docNo: inv.invoiceNo,
-        date: inv.invoiceDate,
-        party: inv.customerName,
-        partyId: inv.customerId,
-        sourceId: inv.id,
-        gstin: inv.customerGst || meta.gstin,
-        pan: inv.pan || meta.pan,
-        state: inv.state || meta.state,
-        branch: inv.branch || "—",
-        taxable: taxableValue,
-        tax: gstAmount,
-        total: invoiceTotal,
-        outstanding: roundMoney(inv.balanceAmount ?? Math.max(0, inv.grandTotal - inv.amountReceived)),
-        status:
-          inv.paymentStatus === "paid"
-            ? "Paid"
-            : inv.paymentStatus === "partially_paid"
-              ? "Part Paid"
-              : "Posted",
-        lineItems: mapSalesLineItems(inv, productCache),
-      };
-    })
-    .sort((a, b) => b.date.localeCompare(a.date));
+  // Demo/local sales register retired — production uses SalesRegister API.
+  return [];
 }
 
 export function buildPurchaseRegisterSourceRows(
-  dateFrom?: string,
-  dateTo?: string,
+  _dateFrom?: string,
+  _dateTo?: string,
 ): PurchaseRegisterSourceRow[] {
-  const productCache = new Map<string, string>();
-
-  return loadPurchaseInvoices()
-    .filter((inv) => {
-      if (dateFrom && inv.invoiceDate < dateFrom) return false;
-      if (dateTo && inv.invoiceDate > dateTo) return false;
-      return true;
-    })
-    .map((inv) => {
-      const taxable = inv.productAmount ?? inv.subtotal;
-      const tax = inv.taxAmount;
-      const total = inv.grandTotal;
-      const meta = resolveVendorMeta(inv.vendorId);
-      let status = "Posted";
-      if (inv.amountPaid >= inv.grandTotal && inv.grandTotal > 0) status = "Paid";
-      else if (inv.amountPaid > 0) status = "Part Paid";
-
-      const lineItems: RegisterLineItemSnapshot[] = inv.lineItems.map((line) => ({
-        productId: line.productId,
-        productName: line.productName,
-        productCode: productCodeLookup(line.productId, line.productName, productCache),
-        hsn: "—",
-        qty: line.invoiceQty,
-        taxable: roundMoney(line.lineAmount),
-        tax: roundMoney(line.taxAmount),
-        total: roundMoney(line.lineAmount + line.taxAmount),
-        unitPrice: line.unitPrice,
-      }));
-
-      return {
-        docNo: inv.invoiceNo,
-        date: inv.invoiceDate,
-        party: inv.vendorName,
-        partyId: inv.vendorId,
-        sourceId: inv.id,
-        gstin: inv.vendorGst || meta.gstin,
-        pan: meta.pan,
-        state: meta.state,
-        taxable,
-        tax,
-        total,
-        payable: roundMoney(Math.max(0, inv.grandTotal - inv.amountPaid)),
-        status,
-        lineItems,
-      };
-    })
-    .sort((a, b) => b.date.localeCompare(a.date));
+  // Demo/local purchase register retired — production uses PurchaseRegisterApiService.
+  return [];
 }
 
 /** @deprecated Use buildSalesRegisterSourceRows */

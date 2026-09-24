@@ -1,9 +1,20 @@
-import { lazyAccountsPage } from "@/lib/accounts/lazy-accounts-page";
+import { redirect } from "next/navigation";
 
-const Gstr1SectionPageClient = lazyAccountsPage(
-  () => import("./Gstr1SectionPageClient"),
-);
+type PageProps = {
+  params: Promise<{ section: string }> | { section: string };
+};
 
-export default function Gstr1SectionPage() {
-  return <Gstr1SectionPageClient />;
+/** Legacy localStorage GSTR-1 section → API-backed GST Summary hub/section. */
+export default async function LegacyGstr1SectionRedirectPage({ params }: PageProps) {
+  const resolved = await Promise.resolve(params);
+  const section = String(resolved.section || "").trim();
+  const dedicated: Record<string, string> = {
+    b2b: "/accounts/reports/gst-summary/gstr1/b2b",
+    b2c: "/accounts/reports/gst-summary/gstr1/b2c",
+    "nil-rated-exempt": "/accounts/reports/gst-summary/gstr1/nil-rated-exempt",
+    "hsn-summary": "/accounts/reports/gst-summary/gstr1/hsn-summary",
+    "documents-summary": "/accounts/reports/gst-summary/gstr1/documents-summary",
+    "credit-debit-notes": "/accounts/reports/gst-summary/gstr1/credit-debit-notes",
+  };
+  redirect(dedicated[section] || "/accounts/reports/gst-summary/gstr1");
 }

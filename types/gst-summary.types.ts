@@ -827,3 +827,191 @@ export type Gstr3bQueryParams = GstSummaryQueryParams & {
   /** Required YYYY-MM — same as gst_period for GSTR-3B. */
   return_period: string;
 };
+
+/** Annual GST Compliance Summary — FY + GSTIN scoped. Not GSTR-9 / not filing. */
+export type AnnualSupportStatus =
+  | "SUPPORTED"
+  | "PARTIAL"
+  | "NOT_AVAILABLE"
+  | "NOT_IMPLEMENTED_IN_V1"
+  | "MISSING"
+  | "READY";
+
+export interface AnnualBucket<T = unknown> {
+  support: AnnualSupportStatus;
+  reason: string | null;
+  values: T | null;
+}
+
+export interface AnnualItcBreakup {
+  igst: string;
+  cgst: string;
+  sgst: string;
+  cess: string;
+  total: string;
+  row_count: number;
+  amount_basis: "explicit" | "provisional_portal_gst" | "mixed" | null;
+  notes: string | null;
+  imported_period_count: number;
+  missing_period_count: number;
+}
+
+export interface AnnualPeriodStatuses {
+  return_period: string;
+  label: string;
+  gstr1: AnnualSupportStatus;
+  gstr2a: AnnualSupportStatus;
+  gstr2b: AnnualSupportStatus;
+  gstr3b: AnnualSupportStatus;
+  notes: string | null;
+}
+
+export interface AnnualGstr1SectionRow {
+  section_id: string;
+  particulars: string;
+  support: AnnualSupportStatus;
+  reason: string | null;
+  document_count: number | null;
+  taxable_amount: string | null;
+  igst_amount: string | null;
+  cgst_amount: string | null;
+  sgst_amount: string | null;
+  gst_amount: string | null;
+}
+
+export interface AnnualReconCounts {
+  matched: number;
+  partial_match: number;
+  missing_in_books: number;
+  missing_in_gstr: number;
+  duplicate: number;
+  needs_review: number;
+  unresolved_review: number;
+  total_items: number;
+}
+
+export interface AnnualWorkingResult {
+  product: {
+    name: string;
+    subtitle: string;
+    is_filing_module: false;
+    is_gstr9: false;
+  };
+  scope: {
+    financial_year_id: string;
+    financial_year_code: string | null;
+    financial_year_name: string | null;
+    from_date: string;
+    to_date: string;
+    gstin: string;
+    company_name: string;
+    return_periods: string[];
+  };
+  applied_filters: {
+    gstin: string;
+    branch_ids: string[];
+    warehouse_ids: string[];
+  };
+  period_matrix: AnnualPeriodStatuses[];
+  headline: AnnualBucket<{
+    annual_outward_taxable: string;
+    annual_output_gst: string;
+    suggested_eligible_itc_total: string | null;
+    suggested_eligible_itc_support: AnnualSupportStatus;
+    final_claimed_itc_total: string | null;
+    final_claimed_itc_support: AnnualSupportStatus;
+    books_gst_working_difference: string;
+  }>;
+  outward: AnnualBucket<{
+    taxable_value: string;
+    igst: string;
+    cgst: string;
+    sgst: string;
+    cess: string | null;
+    gst_total: string;
+    document_count: number;
+    credit_note_count: number;
+    stock_transfer_sales_count: number;
+    ambiguous_zero_tax_excluded_count: number;
+  }>;
+  gstr1: AnnualBucket<{ sections: AnnualGstr1SectionRow[] }>;
+  gstr2a: AnnualBucket<{
+    imported_period_count: number;
+    missing_period_count: number;
+    counts: AnnualReconCounts;
+    portal_gst_total: string | null;
+    books_gst_total: string | null;
+    note: string;
+  }>;
+  gstr2b: AnnualBucket<{
+    imported_period_count: number;
+    missing_period_count: number;
+    portal_itc_available_count: number;
+    portal_itc_not_available_count: number;
+    portal_itc_unknown_count: number;
+    counts: AnnualReconCounts;
+    to_review_count: number;
+    eligible_to_claim_count: number;
+    hold_count: number;
+    ineligible_count: number;
+    reversal_required_count: number;
+    claimed_count: number;
+    note: string;
+  }>;
+  gstr3b_working: {
+    section_3_1_a: AnnualBucket<{
+      taxable_value: string;
+      igst: string;
+      cgst: string;
+      sgst: string;
+      cess: string | null;
+      gst_total: string;
+      document_count: number;
+    }>;
+    suggested_eligible_itc: AnnualBucket<AnnualItcBreakup>;
+    final_claimed_itc: AnnualBucket<AnnualItcBreakup>;
+    unsupported: AnnualBucket;
+  };
+  books_control: AnnualBucket<{
+    label: "NON_STATUTORY_CONTROL";
+    output_cgst: string;
+    output_sgst: string;
+    output_igst: string;
+    output_gst: string;
+    input_cgst: string;
+    input_sgst: string;
+    input_igst: string;
+    input_gst: string;
+    books_gst_working_difference: string;
+    note: string;
+  }>;
+  tax_payment_filing: AnnualBucket;
+  health: {
+    codes: string[];
+    warnings: string[];
+    missing_gstr2a_periods: string[];
+    missing_gstr2b_periods: string[];
+    unresolved_reconciliation_count: number;
+    missing_in_books_count: number;
+    missing_in_gstr_count: number;
+    itc_to_review_count: number;
+    itc_hold_count: number;
+    itc_ineligible_count: number;
+    reversal_required_workflow_count: number;
+    ambiguous_zero_tax_quarantine_count: number;
+    parser_confidence: "LOW";
+  };
+  support_matrix: Array<{
+    bucket: string;
+    support: AnnualSupportStatus;
+    reason: string | null;
+  }>;
+  notes: Record<string, string>;
+}
+
+export type AnnualWorkingQueryParams = {
+  financial_year_id: string;
+  gstin: string;
+  branch_ids?: string[];
+  warehouse_ids?: string[];
+};

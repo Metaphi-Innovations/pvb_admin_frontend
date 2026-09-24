@@ -22,6 +22,8 @@ import type {
   Gstr2bItcTreatmentBody,
   Gstr3bQueryParams,
   Gstr3bWorkingResult,
+  AnnualWorkingQueryParams,
+  AnnualWorkingResult,
 } from "@/types/gst-summary.types";
 
 const GSTR2A = API_ENDPOINTS.ACCOUNTS.REPORTS.GST_SUMMARY.GSTR2A;
@@ -1036,4 +1038,194 @@ export const GstSummaryApiService = {
       throw await toApiError(error, "Failed to load GSTR-3B working report.");
     }
   },
+
+  /**
+   * Annual GST Compliance Summary — FY + GSTIN scoped.
+   * Not GSTR-9 / not a filing module.
+   */
+  async getAnnual(
+    params: AnnualWorkingQueryParams,
+    signal?: AbortSignal,
+  ): Promise<AnnualWorkingResult> {
+    try {
+      const response = await axiosInstance.get(
+        API_ENDPOINTS.ACCOUNTS.REPORTS.GST_SUMMARY.ANNUAL,
+        {
+          params: compactParams({
+            financial_year_id: params.financial_year_id,
+            gstin: params.gstin,
+            branch_ids: joinIds(params.branch_ids),
+            warehouse_ids: joinIds(params.warehouse_ids),
+          }),
+          headers: authHeaders(params.financial_year_id),
+          signal,
+        },
+      );
+      return unwrapData<AnnualWorkingResult>(response);
+    } catch (error) {
+      throw await toApiError(
+        error,
+        "Failed to load Annual GST Compliance Summary.",
+      );
+    }
+  },
+
+  async exportOverview(
+    params: GstSummaryQueryParams & { format: "EXCEL" | "PDF" },
+  ): Promise<void> {
+    await postGstExport(
+      API_ENDPOINTS.ACCOUNTS.REPORTS.GST_SUMMARY.OVERVIEW_EXPORT,
+      {
+        ...buildGstSummaryQueryParams(params),
+        format: params.format,
+      },
+      params.financial_year_id,
+      "Failed to export GST Overview.",
+    );
+  },
+
+  async exportGstr1(
+    params: GstSummaryQueryParams & { format: "EXCEL" | "PDF" },
+  ): Promise<void> {
+    await postGstExport(
+      API_ENDPOINTS.ACCOUNTS.REPORTS.GST_SUMMARY.GSTR1_EXPORT,
+      {
+        ...buildGstSummaryQueryParams(params),
+        format: params.format,
+      },
+      params.financial_year_id,
+      "Failed to export GSTR-1.",
+    );
+  },
+
+  async exportGstr2a(
+    params: {
+      financial_year_id?: string;
+      gstin?: string;
+      return_period?: string;
+      import_id?: string;
+      match_status?: string;
+      review_status?: string;
+      supplier_gstin?: string;
+      document_number?: string;
+      format: "EXCEL" | "PDF";
+    },
+  ): Promise<void> {
+    await postGstExport(
+      API_ENDPOINTS.ACCOUNTS.REPORTS.GST_SUMMARY.GSTR2A_EXPORT,
+      compactParams({
+        financial_year_id: params.financial_year_id,
+        gstin: params.gstin,
+        return_period: params.return_period,
+        import_id: params.import_id,
+        match_status: params.match_status,
+        review_status: params.review_status,
+        supplier_gstin: params.supplier_gstin,
+        document_number: params.document_number,
+        format: params.format,
+      }),
+      params.financial_year_id ?? "",
+      "Failed to export GSTR-2A.",
+    );
+  },
+
+  async exportGstr2b(
+    params: {
+      financial_year_id?: string;
+      gstin?: string;
+      return_period?: string;
+      import_id?: string;
+      match_status?: string;
+      review_status?: string;
+      supplier_gstin?: string;
+      document_number?: string;
+      format: "EXCEL" | "PDF";
+    },
+  ): Promise<void> {
+    await postGstExport(
+      API_ENDPOINTS.ACCOUNTS.REPORTS.GST_SUMMARY.GSTR2B_EXPORT,
+      compactParams({
+        financial_year_id: params.financial_year_id,
+        gstin: params.gstin,
+        return_period: params.return_period,
+        import_id: params.import_id,
+        match_status: params.match_status,
+        review_status: params.review_status,
+        supplier_gstin: params.supplier_gstin,
+        document_number: params.document_number,
+        format: params.format,
+      }),
+      params.financial_year_id ?? "",
+      "Failed to export GSTR-2B.",
+    );
+  },
+
+  async exportGstr3b(
+    params: Gstr3bQueryParams & { format: "EXCEL" | "PDF" },
+  ): Promise<void> {
+    const base = buildGstSummaryQueryParams(params);
+    await postGstExport(
+      API_ENDPOINTS.ACCOUNTS.REPORTS.GST_SUMMARY.GSTR3B_EXPORT,
+      {
+        ...base,
+        return_period: params.return_period,
+        gst_period: params.return_period,
+        format: params.format,
+      },
+      params.financial_year_id,
+      "Failed to export GSTR-3B.",
+    );
+  },
+
+  async exportAnnual(
+    params: AnnualWorkingQueryParams & { format: "EXCEL" | "PDF" },
+  ): Promise<void> {
+    await postGstExport(
+      API_ENDPOINTS.ACCOUNTS.REPORTS.GST_SUMMARY.ANNUAL_EXPORT,
+      compactParams({
+        financial_year_id: params.financial_year_id,
+        gstin: params.gstin,
+        branch_ids: joinIds(params.branch_ids),
+        warehouse_ids: joinIds(params.warehouse_ids),
+        format: params.format,
+      }),
+      params.financial_year_id,
+      "Failed to export Annual GST Compliance Summary.",
+    );
+  },
 };
+
+async function postGstExport(
+  url: string,
+  body: Record<string, string | number>,
+  financialYearId: string,
+  fallback: string,
+): Promise<void> {
+  try {
+    const response = await axiosInstance.post(url, body, {
+      headers: authHeaders(financialYearId),
+      responseType: "blob",
+      validateStatus: (status) => status >= 200 && status < 300,
+    });
+    const contentType = String(response.headers?.["content-type"] ?? "");
+    const blob = response.data as Blob;
+    if (
+      contentType.includes("application/json") ||
+      contentType.includes("text/html")
+    ) {
+      const message =
+        (await messageFromBlob(blob)) || fallback;
+      throw new GstSummaryApiError(message, response.status);
+    }
+    if (!blob || blob.size === 0) {
+      throw new GstSummaryApiError("Export returned an empty file.");
+    }
+    const filename = filenameFromDisposition(
+      response.headers?.["content-disposition"] as string | undefined,
+      `gst-export.${body.format === "PDF" ? "pdf" : "xlsx"}`,
+    );
+    downloadBlob(blob, filename);
+  } catch (error) {
+    throw await toApiError(error, fallback);
+  }
+}

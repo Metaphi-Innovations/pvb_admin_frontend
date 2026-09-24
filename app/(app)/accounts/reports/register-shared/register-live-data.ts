@@ -215,26 +215,13 @@ export function purchaseInvoiceToRegisterRow(rec: PurchaseInvoiceRecord): Regist
 }
 
 export function buildSalesRegisterRows(): RegisterReportRow[] {
-  const seenNos = new Set<string>();
-  const rows: RegisterReportRow[] = [];
-
-  for (const inv of loadInvoices()) {
-    if (!isSalesRegisterSourceInvoice(inv)) continue;
-    const key = inv.invoiceNo.trim().toUpperCase();
-    if (key && seenNos.has(key)) continue;
-    if (key) seenNos.add(key);
-    rows.push(salesInvoiceToRegisterRow(inv));
-  }
-
-  return rows.sort(
-    (a, b) => b.invoiceDate.localeCompare(a.invoiceDate) || b.id - a.id,
-  );
+  // Demo/local sales register retired — production uses SalesRegister API.
+  return [];
 }
 
 export function buildPurchaseRegisterRows(): RegisterReportRow[] {
-  return loadPurchaseInvoices()
-    .map(purchaseInvoiceToRegisterRow)
-    .sort((a, b) => b.invoiceDate.localeCompare(a.invoiceDate) || b.id - a.id);
+  // Demo/local purchase register retired — production uses PurchaseRegisterApiService.
+  return [];
 }
 
 export function buildRegisterPartyOptions(rows: RegisterReportRow[]): RegisterPartyOption[] {

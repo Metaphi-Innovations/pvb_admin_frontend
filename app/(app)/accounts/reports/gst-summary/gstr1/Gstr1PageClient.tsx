@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { AccountsReportBody } from "@/components/accounts/AccountsReportLayout";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
@@ -12,6 +12,7 @@ import type { Gstr1HubResult } from "@/types/gst-summary.types";
 import { useGstSummaryApiFilters } from "../useGstSummaryApiFilters";
 import { GstReportFilterBar } from "../components/GstReportFilterBar";
 import { GstReportNavTabs } from "../components/GstReportNavTabs";
+import { GstSummaryExportMenu } from "../components/GstSummaryExportMenu";
 import { Gstr1ReportHeaderBlock } from "./components/Gstr1ReportHeaderBlock";
 import { Gstr1VoucherSummaryTable } from "./components/Gstr1VoucherSummaryTable";
 import { Gstr1SummaryTable } from "./components/Gstr1SummaryTable";
@@ -113,6 +114,14 @@ export default function Gstr1PageClient() {
   const showLoading =
     !mounted || filtersLoading || !datesReady || (loading && !hub);
 
+  const handleExport = useCallback(
+    async (format: "EXCEL" | "PDF") => {
+      if (!queryParams) return;
+      await GstSummaryApiService.exportGstr1({ ...queryParams, format });
+    },
+    [queryParams],
+  );
+
   return (
     <AccountsPageShell
       breadcrumbs={accountsBreadcrumb("Reports", "GST Summary", "GSTR-1")}
@@ -126,12 +135,10 @@ export default function Gstr1PageClient() {
           filterState={filterState}
           mounted={mounted}
           end={
-            <span
-              className="text-[11px] text-muted-foreground max-w-[14rem] leading-snug"
-              title="Backend GSTR-1 export is not available yet."
-            >
-              Export unavailable
-            </span>
+            <GstSummaryExportMenu
+              disabled={!queryParams || loading || !hub}
+              onExport={handleExport}
+            />
           }
         />
       }
