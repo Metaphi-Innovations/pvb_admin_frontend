@@ -41,7 +41,7 @@ export type GstReportNavId = (typeof GST_REPORT_NAV_ITEMS)[number]["id"];
 
 export const GST_REPORT_NAV_CARDS = GST_REPORT_NAV_ITEMS.filter((item) => item.id !== "overview");
 
-/** Demo company GST registrations — replace with branch GST master when wired to API. */
+/** Legacy demo company GST registrations — used only when API filters are unavailable. */
 export const GST_REGISTRATION_OPTIONS: { value: string; label: string }[] = [
   { value: "all", label: "All registrations" },
   { value: COMPANY_BILLING.gstNumber, label: `${COMPANY_BILLING.gstNumber} — Head Office` },

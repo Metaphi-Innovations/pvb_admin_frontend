@@ -1,6 +1,5 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
 import {
   ReportFilterRow,
   ReportFinancialYearFilter,
@@ -8,6 +7,7 @@ import {
   ReportGstPeriodFilter,
   ReportGstRegistrationFilter,
   ReportFilterSummary,
+  ReportFilterResetButton,
   REPORT_BRANCH_OPTIONS,
 } from "@/components/accounts/ReportFilters";
 import {
@@ -61,6 +61,8 @@ export function Gstr2bFilterBar({
     "gstRegistrationOptions" in filterState
       ? filterState.gstRegistrationOptions
       : undefined;
+  const filtersLoading =
+    "filtersLoading" in filterState ? Boolean(filterState.filtersLoading) : false;
 
   // Prefer live GST Summary filter options; never silently use demo masters
   // when the API filter hook is active.
@@ -156,17 +158,14 @@ export function Gstr2bFilterBar({
           value={gstRegistration}
           onChange={setGstRegistration}
           options={gstRegistrationOptions}
+          loading={usesApiFilters && filtersLoading}
         />
-        {hasFilters && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 text-sm px-2"
-            onClick={resetFilters}
-          >
-            Reset
-          </Button>
-        )}
+        <ReportFilterResetButton
+          onClick={resetFilters}
+          showOnlyWhenActive
+          active={hasFilters}
+          className="flex-shrink-0"
+        />
       </ReportFilterRow>
       <ReportFilterSummary items={filterSummaryItems} />
     </>
