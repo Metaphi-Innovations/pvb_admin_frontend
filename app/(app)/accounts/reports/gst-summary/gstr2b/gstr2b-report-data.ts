@@ -390,43 +390,21 @@ export function buildGstr2bReport(filters: Gstr2bFilters): Gstr2bReport {
     filters.gstRegistration !== "all"
       ? filters.gstRegistration
       : COMPANY_BILLING.gstNumber;
-  const period = filters.gstPeriod !== "all" ? filters.gstPeriod : GSTR2B_DEMO_PERIOD;
-  const hasUpload = !!getActiveGstr2bUpload(gstin, period);
+  const period = filters.gstPeriod !== "all" ? filters.gstPeriod : "";
+  const hasUpload = period ? !!getActiveGstr2bUpload(gstin, period) : false;
 
   if (!hasUpload) {
-    const demoBooks = filterBooks(GSTR2B_DEMO_BOOKS_DOCS, {
-      ...filters,
-      gstPeriod: GSTR2B_DEMO_PERIOD,
-      dateFrom: "2026-06-01",
-      dateTo: "2026-06-30",
-    });
-    const demoPortal = filterPortal(GSTR2B_DEMO_PORTAL_DOCS, {
-      ...filters,
-      gstPeriod: GSTR2B_DEMO_PERIOD,
-      dateFrom: "2026-06-01",
-      dateTo: "2026-06-30",
-    });
-    const rows = applyOverrides(buildRows(demoBooks, demoPortal));
     return {
-      rows,
-      summary: summarizeGstr2bRows(rows),
-      uploads: resolveUploadHistory(filters, false),
-      activeUpload: GSTR2B_DEMO_UPLOAD_HISTORY.find((u) => u.isActive) ?? null,
-      hasData: rows.length > 0,
+      rows: [],
+      summary: summarizeGstr2bRows([]),
+      uploads: [],
+      activeUpload: null,
+      hasData: false,
     };
   }
 
-  let books = collectLiveBooks(filters);
+  const books = collectLiveBooks(filters);
   const { portal } = resolvePortalDocs(filters);
-  if (books.length === 0) {
-    books = filterBooks(GSTR2B_DEMO_BOOKS_DOCS, {
-      ...filters,
-      gstPeriod: period,
-      dateFrom: periodDateRange(filters).from,
-      dateTo: periodDateRange(filters).to,
-    });
-  }
-
   const rows = applyOverrides(buildRows(books, portal));
   return {
     rows,

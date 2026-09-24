@@ -7,24 +7,19 @@ import {
   ReportBranchMultiFilter,
   ReportGstRegistrationFilter,
   ReportFilterSummary,
-  REPORT_BRANCH_OPTIONS,
 } from "@/components/accounts/ReportFilters";
 import {
   buildBranchFilterSummary,
   normalizeMultiFilter,
   type ReportFilterSummaryItem,
 } from "@/lib/accounts/report-multi-filter-utils";
-import {
-  GST_REGISTRATION_OPTIONS,
-  getGstReportBranchOptions,
-  resolveGstRegistrationLabel,
-} from "@/lib/accounts/gst-report-filters";
+import { resolveGstRegistrationLabel } from "@/lib/accounts/gst-report-filters";
 import { useMemo, type ReactNode } from "react";
-import type { useGstReportFilters } from "../../useGstReportFilters";
+import type { useGstSummaryApiFilters } from "../../useGstSummaryApiFilters";
 
-type FilterState = ReturnType<typeof useGstReportFilters>;
+type FilterState = ReturnType<typeof useGstSummaryApiFilters>;
 
-/** Annual GST Summary — FY, Branch, GST Registration only (no date range / GST period). */
+/** Annual GST Compliance Summary — FY + GSTIN required; branch optional. No All GSTINs. */
 export function AnnualGstFilterBar({
   filterState,
   mounted,
@@ -42,12 +37,19 @@ export function AnnualGstFilterBar({
     gstRegistration,
     setGstRegistration,
     resetFilters,
+    branchLabeledOptions,
+    gstRegistrationOptions,
   } = filterState;
 
-  const branchOptions = mounted ? getGstReportBranchOptions() : [...REPORT_BRANCH_OPTIONS];
+  const branchOptions =
+    branchLabeledOptions && branchLabeledOptions.length > 0
+      ? branchLabeledOptions.map((o) => o.value)
+      : [];
+
+  const gstOptions = gstRegistrationOptions ?? [];
 
   const hasAnnualFilters =
-    financialYearId !== "all" ||
+    !!financialYearId ||
     normalizeMultiFilter(branch).length > 0 ||
     gstRegistration !== "all";
 
@@ -56,14 +58,21 @@ export function AnnualGstFilterBar({
       buildBranchFilterSummary(normalizeMultiFilter(branch), () => setBranch([])),
       gstRegistration !== "all"
         ? {
-            key: "gstin",
+            id: "gstin",
             label: "GST Registration",
-            value: resolveGstRegistrationLabel(gstRegistration),
+            value:
+              gstOptions.find((o) => o.value === gstRegistration)?.label ??
+              resolveGstRegistrationLabel(gstRegistration),
             onRemove: () => setGstRegistration("all"),
           }
         : null,
     ].filter((item): item is ReportFilterSummaryItem => item != null);
-  }, [branch, setBranch, gstRegistration, setGstRegistration]);
+  }, [branch, setBranch, gstRegistration, setGstRegistration, gstOptions]);
+
+  const gstSelectOptions = useMemo(() => {
+    const regs = gstOptions.filter((o) => o.value !== "all");
+    return [{ value: "all", label: "Select GSTIN…" }, ...regs];
+  }, [gstOptions]);
 
   return (
     <>
@@ -76,22 +85,28 @@ export function AnnualGstFilterBar({
           values={branch}
           onChange={setBranch}
           options={branchOptions}
+          labeledOptions={
+            branchLabeledOptions && branchLabeledOptions.length > 0
+              ? branchLabeledOptions
+              : undefined
+          }
         />
         <ReportGstRegistrationFilter
           value={gstRegistration}
           onChange={setGstRegistration}
-          options={GST_REGISTRATION_OPTIONS}
+          options={gstSelectOptions}
         />
-        {hasAnnualFilters && (
+        {hasAnnualFilters ? (
           <Button
-            variant="outline"
+            type="button"
+            variant="ghost"
             size="sm"
-            className="h-8 text-sm px-2"
+            className="h-8 text-xs"
             onClick={resetFilters}
           >
             Reset
           </Button>
-        )}
+        ) : null}
       </ReportFilterRow>
       <ReportFilterSummary items={filterSummaryItems} />
     </>

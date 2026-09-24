@@ -486,8 +486,6 @@ export default function TdsSummaryApiPageClient() {
     tdsNature,
     applicationMode,
     debouncedSearch,
-    sortBy,
-    sortOrder,
     pageSize,
   ]);
 
@@ -563,18 +561,21 @@ export default function TdsSummaryApiPageClient() {
     [filtersConfig, setDateFrom, setDateTo, setPreset],
   );
 
-  const handleSort = useCallback((colKey: string) => {
-    const backendField = SORT_FIELD_MAP[colKey];
-    if (!backendField) return;
-    setSortBy((current) => {
-      if (current === backendField) {
+  const handleSort = useCallback(
+    (colKey: string) => {
+      const backendField = SORT_FIELD_MAP[colKey];
+      if (!backendField) return;
+      if (sortBy === backendField) {
         setSortOrder((order) => (order === "asc" ? "desc" : "asc"));
-        return current;
+      } else {
+        setSortBy(backendField);
+        // First click A→Z / low→high (matches AccountsColumnHeader tooltip).
+        setSortOrder("asc");
       }
-      setSortOrder("desc");
-      return backendField;
-    });
-  }, []);
+      setPage(1);
+    },
+    [sortBy],
+  );
 
   const handleExport = useCallback(
     async (format: "EXCEL" | "PDF") => {

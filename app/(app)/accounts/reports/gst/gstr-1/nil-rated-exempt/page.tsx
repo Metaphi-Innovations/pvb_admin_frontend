@@ -1,9 +1,6 @@
-import { lazyAccountsPage } from "@/lib/accounts/lazy-accounts-page";
+import { redirect } from "next/navigation";
 
-const NilRatedExemptPageClient = lazyAccountsPage(
-  () => import("./NilRatedExemptPageClient"),
-);
-
-export default function NilRatedExemptPage() {
-  return <NilRatedExemptPageClient />;
+/** Legacy localStorage GSTR-1 nil-rated → API-backed GST Summary. */
+export default function LegacyGstr1NilRatedRedirectPage() {
+  redirect("/accounts/reports/gst-summary/gstr1/nil-rated-exempt");
 }

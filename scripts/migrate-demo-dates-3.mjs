@@ -5,7 +5,6 @@ const root = path.resolve(".");
 const files = [
   "lib/accounts/day-book-demo-data.ts",
   "app/(app)/accounts/reports/sales-register/sales-register-data.ts",
-  "app/(app)/accounts/reports/purchase-register/purchase-register-data.ts",
   "app/(app)/accounts/reports/inventory-register/inventory-register-data.ts",
   "app/(app)/accounts/reports/stock-valuation/stock-valuation-data.ts",
   "app/(app)/accounts/expenses/expense-data.ts",

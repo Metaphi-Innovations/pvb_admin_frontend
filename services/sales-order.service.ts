@@ -234,11 +234,12 @@ function mapBackendLineItem(raw: Record<string, unknown>, idx: number): SalesOrd
     lineTotal: asNumber(raw.item_total ?? raw.lineTotal),
   };
 
-  // Apply manual on top of scheme (or DP) so finalRate / display are correct.
+  // Keep scheme post-rate; manual discount is applied on line total only.
   const synced = syncManualLineDiscount(mappedBase);
   return {
     ...mappedBase,
     ...synced,
+    finalRate: rateAfterScheme,
     finalRateAfterScheme: hasScheme ? rateAfterScheme : undefined,
   };
 }

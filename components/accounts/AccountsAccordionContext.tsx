@@ -15,7 +15,7 @@ type AccountsSectionContextValue = {
 
 const AccountsSectionContext = createContext<AccountsSectionContextValue | null>(null);
 
-/** API-backed registers. Do not inject section demo vouchers while these pages are open. */
+/** API-backed registers/reports. Do not inject section demo vouchers while these pages are open. */
 function skipsAccountsSectionDemoSeed(pathname: string): boolean {
   const path = pathname.split("?")[0]?.replace(/\/$/, "") || "/";
   return (
@@ -24,7 +24,15 @@ function skipsAccountsSectionDemoSeed(pathname: string): boolean {
     path === "/accounts/reports/general-ledger" ||
     path.startsWith("/accounts/reports/general-ledger/") ||
     path === "/accounts/reports/ledger" ||
-    path.startsWith("/accounts/reports/ledger/")
+    path.startsWith("/accounts/reports/ledger/") ||
+    path === "/accounts/reports/purchase-register" ||
+    path.startsWith("/accounts/reports/purchase-register/") ||
+    path === "/accounts/reports/sales-register" ||
+    path.startsWith("/accounts/reports/sales-register/") ||
+    path === "/accounts/reports/gst-summary" ||
+    path.startsWith("/accounts/reports/gst-summary/") ||
+    path === "/accounts/reports/gst" ||
+    path.startsWith("/accounts/reports/gst/")
   );
 }
 

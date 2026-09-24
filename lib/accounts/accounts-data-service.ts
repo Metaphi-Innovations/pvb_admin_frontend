@@ -45,7 +45,6 @@ import {
   type PaymentRunRecord,
   type InventoryAdjustmentRecord,
 } from "@/lib/accounts/accounts-mock-data";
-import { loadAuditTrailRecords, type AuditTrailRecord } from "@/lib/accounts/audit-trail-data";
 
 export type AccountsDataScope =
   | "invoices"
@@ -163,7 +162,6 @@ export const accountsDataService = {
   getPaymentRuns: (): PaymentRunRecord[] => getCached("paymentRuns", loadPaymentRuns),
   getInventoryAdjustments: (): InventoryAdjustmentRecord[] =>
     getCached("inventoryAdjustments", loadInventoryAdjustments),
-  getAuditTrail: (): AuditTrailRecord[] => getCached("auditTrail", loadAuditTrailRecords),
   invalidate: invalidateAccountsDataCache,
 };
 

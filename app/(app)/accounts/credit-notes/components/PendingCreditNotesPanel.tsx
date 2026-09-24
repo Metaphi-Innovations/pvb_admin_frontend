@@ -64,6 +64,7 @@ import { CreditNoteListApi, creditNoteListApiError } from "../credit-note-list-a
 import { AccountsToast, useAccountsToast } from "@/components/accounts/AccountsToast";
 import { Calculator } from "lucide-react";
 import { TurnoverSchemeCalculationModal } from "./TurnoverSchemeCalculationModal";
+import { isTurnoverSchemeEnabled } from "../turnover-scheme-flag";
 
 /* Toolbar Source options — restore with ReportMoreFilters when needed.
 const SOURCE_FILTER_OPTIONS: { value: Exclude<PendingSourceFilter, "all">; label: string }[] = [
@@ -72,12 +73,14 @@ const SOURCE_FILTER_OPTIONS: { value: Exclude<PendingSourceFilter, "all">; label
 ];
 */
 
+const TURNOVER_SCHEME_ENABLED = isTurnoverSchemeEnabled();
+
 const SOURCE_COLUMN_OPTIONS = [
   "SALES_RETURN",
   "SPECIAL_SCHEME",
   "NEAR_EXPIRY",
   "CASH_DISCOUNT",
-  "TURNOVER_DISCOUNT",
+  ...(TURNOVER_SCHEME_ENABLED ? (["TURNOVER_DISCOUNT"] as const) : []),
 ];
 
 function statusBadgeClass(status: string): string {
@@ -353,9 +356,18 @@ export function PendingCreditNotesPanel({
     setLoading(true);
     try {
       const result = await CreditNoteListApi.listPending({ page: 1, page_size: 100 });
-      const next = (result.items ?? []).map(mapPendingListRow);
+      const next = (result.items ?? [])
+        .map(mapPendingListRow)
+        .filter(
+          (row) =>
+            TURNOVER_SCHEME_ENABLED || row.sourceType !== "TURNOVER_DISCOUNT",
+        );
       setRows(next);
-      onCountChange?.(result.pagination?.total ?? next.length);
+      onCountChange?.(
+        TURNOVER_SCHEME_ENABLED
+          ? (result.pagination?.total ?? next.length)
+          : next.length,
+      );
     } catch (e) {
       setRows([]);
       onCountChange?.(0);
@@ -446,14 +458,16 @@ export function PendingCreditNotesPanel({
               className="min-w-[180px] flex-1 max-w-sm"
             />
             <div className="ml-auto flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setTurnoverModalOpen(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-brand-50 border border-brand-200 text-brand-700 hover:bg-brand-100 dark:bg-brand-950/50 dark:border-brand-800 dark:text-brand-300 transition-colors shadow-sm"
-              >
-                <Calculator className="w-3.5 h-3.5" />
-                Calculate Turnover Scheme
-              </button>
+              {TURNOVER_SCHEME_ENABLED ? (
+                <button
+                  type="button"
+                  onClick={() => setTurnoverModalOpen(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-brand-50 border border-brand-200 text-brand-700 hover:bg-brand-100 dark:bg-brand-950/50 dark:border-brand-800 dark:text-brand-300 transition-colors shadow-sm"
+                >
+                  <Calculator className="w-3.5 h-3.5" />
+                  Calculate Turnover Scheme
+                </button>
+              ) : null}
             </div>
             {/* Toolbar Source / More Filters — same filter lives on the Source column.
             <ReportMoreFilters activeCount={activeSourceCount}>
@@ -504,15 +518,17 @@ export function PendingCreditNotesPanel({
           />
         </AccountsColumnFilterProvider>
       </AccountsTableListing>
-      <TurnoverSchemeCalculationModal
-        open={turnoverModalOpen}
-        onClose={() => setTurnoverModalOpen(false)}
-        onSuccess={(msg) => {
-          showToast(msg, "success");
-          void refresh();
-        }}
-        onError={(err) => showToast(err, "error")}
-      />
+      {TURNOVER_SCHEME_ENABLED ? (
+        <TurnoverSchemeCalculationModal
+          open={turnoverModalOpen}
+          onClose={() => setTurnoverModalOpen(false)}
+          onSuccess={(msg) => {
+            showToast(msg, "success");
+            void refresh();
+          }}
+          onError={(err) => showToast(err, "error")}
+        />
+      ) : null}
       <AccountsToast toast={toast} onDismiss={dismissToast} />
     </>
   );

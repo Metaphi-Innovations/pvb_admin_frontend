@@ -139,6 +139,9 @@ export function buildSalesRegisterQueryParams(
   const statuses = joinIds(params.statuses);
   if (statuses) query.statuses = statuses;
 
+  const invoiceTypes = joinIds(params.invoice_types);
+  if (invoiceTypes) query.invoice_types = invoiceTypes;
+
   return query;
 }
 

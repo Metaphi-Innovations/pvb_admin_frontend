@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   ArrowDownLeft,
@@ -10,77 +11,127 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
-import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
 import {
   AccountsReportBody,
   AccountsReportKpiCard,
   AccountsReportKpiGrid,
 } from "@/components/accounts/AccountsReportLayout";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
-import { formatMoney } from "@/lib/accounts/money-format";
-import { buildGstOverviewDashboard } from "@/lib/accounts/gst-report-service";
-import { useGstReportFilters } from "./useGstReportFilters";
+import { formatMoneyString } from "@/lib/accounts/money-format";
+import {
+  GstSummaryApiError,
+  GstSummaryApiService,
+} from "@/services/gst-summary.service";
+import type { GstSummaryOverviewResult } from "@/types/gst-summary.types";
+import { useGstSummaryApiFilters } from "./useGstSummaryApiFilters";
 import { GstReportFilterBar } from "./components/GstReportFilterBar";
 import { GstReportNavTabs } from "./components/GstReportNavTabs";
 import { GstOverviewMonthlyTable } from "./components/GstOverviewMonthlyTable";
-import { exportGstTabularReport } from "./gst-report-export";
-import { useMemo, useState } from "react";
+import { GstSummaryExportMenu } from "./components/GstSummaryExportMenu";
+
+const UNAVAILABLE = "—";
 
 export default function GstSummaryOverviewPageClient() {
-  const filterState = useGstReportFilters();
-  const { mounted, datesReady, filters } = filterState;
-  const [exporting, setExporting] = useState(false);
+  const filterState = useGstSummaryApiFilters();
+  const {
+    mounted,
+    datesReady,
+    filters,
+    queryParams,
+    filtersLoading,
+    filtersError,
+  } = filterState;
 
-  const dashboard = useMemo(() => {
-    if (!mounted || !datesReady) return null;
-    return buildGstOverviewDashboard(filters);
-  }, [mounted, datesReady, filters]);
+  const [overview, setOverview] = useState<GstSummaryOverviewResult | null>(
+    null,
+  );
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const overview = dashboard?.overview;
+  useEffect(() => {
+    if (!queryParams) return;
+    const controller = new AbortController();
+    setLoading(true);
+    setError(null);
+    void GstSummaryApiService.getOverview(queryParams, controller.signal)
+      .then((result) => {
+        setOverview(result);
+        setLoading(false);
+      })
+      .catch((err) => {
+        if (controller.signal.aborted) return;
+        const message =
+          err instanceof GstSummaryApiError
+            ? err.message
+            : "Failed to load GST Summary overview.";
+        setError(message);
+        setOverview(null);
+        setLoading(false);
+      });
+    return () => controller.abort();
+  }, [queryParams]);
 
-  const kpiCards = overview
-    ? [
-        { label: "Taxable Sales", value: formatMoney(overview.taxableSales), icon: ArrowUpRight, accent: true },
-        { label: "Taxable Purchases", value: formatMoney(overview.taxablePurchases), icon: ArrowDownLeft },
-        { label: "Output GST", value: formatMoney(overview.outputGst), icon: Scale },
-        { label: "Input GST", value: formatMoney(overview.inputGst), icon: IndianRupee },
-        { label: "Eligible ITC", value: formatMoney(overview.eligibleItc), icon: ShieldCheck },
-        { label: "Net GST Payable", value: formatMoney(overview.netGstPayable), icon: Calculator, accent: true },
-        {
-          label: "Pending Reconciliation",
-          value: overview.pendingReconciliation,
-          icon: AlertTriangle,
-          warning: overview.pendingReconciliation > 0,
-          isCount: true,
-        },
-      ]
-    : [];
+  const kpiCards = useMemo(() => {
+    if (!overview) return [];
+    const s = overview.summary;
+    return [
+      {
+        label: "Taxable Sales",
+        value: formatMoneyString(s.taxable_sales),
+        icon: ArrowUpRight,
+        accent: true,
+      },
+      {
+        label: "Taxable Purchases",
+        value: formatMoneyString(s.taxable_purchases),
+        icon: ArrowDownLeft,
+      },
+      {
+        label: "Output GST",
+        value: formatMoneyString(s.output_gst),
+        icon: Scale,
+      },
+      {
+        label: "Input GST",
+        value: formatMoneyString(s.input_gst),
+        icon: IndianRupee,
+      },
+      {
+        label: "Eligible ITC",
+        value: s.eligible_itc_available
+          ? formatMoneyString(s.eligible_itc)
+          : UNAVAILABLE,
+        icon: ShieldCheck,
+      },
+      {
+        label: "Books GST Working Difference",
+        value: formatMoneyString(s.books_gst_working_difference),
+        icon: Calculator,
+        accent: true,
+      },
+      {
+        label: "Pending Reconciliation",
+        value: s.pending_reconciliation_available
+          ? String(s.pending_reconciliation ?? 0)
+          : UNAVAILABLE,
+        icon: AlertTriangle,
+        warning: false,
+        isCount: true,
+      },
+    ];
+  }, [overview]);
 
-  const handleExport = async (format: "excel" | "pdf") => {
-    if (!dashboard) return;
-    setExporting(true);
-    try {
-      exportGstTabularReport(
-        { reportTitle: "GST Summary — Overview", filters },
-        [
-          { label: "Metric" },
-          { label: "Value", align: "right", className: "num" },
-        ],
-        [
-          ...kpiCards.map((c) => ({ metric: c.label, value: c.value })),
-          { metric: "—", value: "—" },
-          { metric: "Monthly GST Summary", value: "" },
-          ...dashboard.monthlySummary.map((row) => ({
-            metric: row.month,
-            value: `${formatMoney(row.sales)} | ${formatMoney(row.purchase)} | ${formatMoney(row.netGst)}`,
-          })),
-        ],
-        format,
-      );
-    } finally {
-      setExporting(false);
-    }
-  };
+  const showLoading =
+    !mounted || filtersLoading || !datesReady || (loading && !overview);
+  const healthWarnings = overview?.health?.warnings ?? [];
+
+  const handleExport = useCallback(
+    async (format: "EXCEL" | "PDF") => {
+      if (!queryParams) return;
+      await GstSummaryApiService.exportOverview({ ...queryParams, format });
+    },
+    [queryParams],
+  );
 
   return (
     <AccountsPageShell
@@ -95,10 +146,9 @@ export default function GstSummaryOverviewPageClient() {
           filterState={filterState}
           mounted={mounted}
           end={
-            <AccountsExportMenu
-              onExcel={() => handleExport("excel")}
-              onPdf={() => handleExport("pdf")}
-              disabled={exporting || !dashboard}
+            <GstSummaryExportMenu
+              disabled={!queryParams || loading || !overview}
+              onExport={handleExport}
             />
           }
         />
@@ -107,20 +157,59 @@ export default function GstSummaryOverviewPageClient() {
     >
       <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
         <AccountsReportBody>
-          {!mounted || !datesReady || !dashboard ? (
+          {filtersError || error ? (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-4 text-xs text-red-700">
+              {filtersError || error}
+            </div>
+          ) : showLoading ? (
             <div className="flex items-center justify-center py-6 text-xs text-muted-foreground">
               Loading GST Summary…
             </div>
-          ) : (
+          ) : overview ? (
             <>
+              {(healthWarnings.length > 0 ||
+                overview.notes?.eligible_itc ||
+                overview.notes?.net_payable) && (
+                <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2 space-y-1">
+                  {healthWarnings.map((w) => (
+                    <p key={w} className="text-[11px] text-amber-800">
+                      {w}
+                    </p>
+                  ))}
+                  {!overview.summary.eligible_itc_available && (
+                    <p className="text-[11px] text-amber-800">
+                      Eligible ITC:{" "}
+                      {overview.notes.eligible_itc || "Not available yet."}
+                    </p>
+                  )}
+                  {!overview.summary.net_gst_payable_available && (
+                    <p className="text-[11px] text-amber-800">
+                      Statutory Net GST Payable is not computed in GST Summary.{" "}
+                      {overview.notes.net_payable ||
+                        "Showing Books GST Working Difference (non-statutory control) only."}
+                    </p>
+                  )}
+                  {!overview.summary.pending_reconciliation_available && (
+                    <p className="text-[11px] text-amber-800">
+                      Pending Reconciliation:{" "}
+                      {overview.notes.reconciliation || "Not available yet."}
+                    </p>
+                  )}
+                </div>
+              )}
+
               <AccountsReportKpiGrid>
                 {kpiCards.map((card) => (
                   <AccountsReportKpiCard key={card.label} {...card} />
                 ))}
               </AccountsReportKpiGrid>
 
-              <GstOverviewMonthlyTable rows={dashboard.monthlySummary} />
+              <GstOverviewMonthlyTable rows={overview.monthly_summary} />
             </>
+          ) : (
+            <div className="flex items-center justify-center py-6 text-xs text-muted-foreground">
+              No GST overview data for the selected filters.
+            </div>
           )}
         </AccountsReportBody>
       </div>

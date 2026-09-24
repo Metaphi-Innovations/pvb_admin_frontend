@@ -16,6 +16,8 @@ export interface AccountsExportMenuProps {
   onPdf?: () => void;
   onCsv?: () => void;
   disabled?: boolean;
+  /** Shown on hover when the trigger is disabled (wraps trigger for browser tooltip support). */
+  disabledTitle?: string;
   label?: string;
 }
 
@@ -24,6 +26,7 @@ export function AccountsExportMenu({
   onPdf,
   onCsv,
   disabled,
+  disabledTitle,
   label = "Export",
 }: AccountsExportMenuProps) {
   const handleExcel = onExcel ?? onCsv;
@@ -31,7 +34,7 @@ export function AccountsExportMenu({
 
   if (!handleExcel && !handlePdf) return null;
 
-  return (
+  const menu = (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button
@@ -62,4 +65,14 @@ export function AccountsExportMenu({
       </DropdownMenuContent>
     </DropdownMenu>
   );
+
+  if (disabled && disabledTitle) {
+    return (
+      <span className="inline-flex" title={disabledTitle}>
+        {menu}
+      </span>
+    );
+  }
+
+  return menu;
 }

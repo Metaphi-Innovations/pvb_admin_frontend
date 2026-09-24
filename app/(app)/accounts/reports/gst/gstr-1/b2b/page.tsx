@@ -1,9 +1,6 @@
-import { lazyAccountsPage } from "@/lib/accounts/lazy-accounts-page";
+import { redirect } from "next/navigation";
 
-const B2bInvoicesPageClient = lazyAccountsPage(
-  () => import("./B2bInvoicesPageClient"),
-);
-
-export default function B2bInvoicesPage() {
-  return <B2bInvoicesPageClient />;
+/** Legacy localStorage GSTR-1 B2B → API-backed GST Summary. */
+export default function LegacyGstr1B2bRedirectPage() {
+  redirect("/accounts/reports/gst-summary/gstr1/b2b");
 }

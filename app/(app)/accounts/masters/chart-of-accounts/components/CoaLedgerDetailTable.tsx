@@ -7,7 +7,7 @@ import { formatMoney } from "@/lib/accounts/money-format";
 import { drCrSideFilterValue } from "@/lib/accounts/column-filter-display";
 import { DrCrSideBadge } from "@/components/accounts/DrCrSideBadge";
 import { isoToDisplayDate } from "@/lib/accounts/date-display";
-import type { CoaLedgerDetailRow } from "../coa-demo-accounting";
+import type { CoaLedgerDetailRow } from "../coa-ledger-detail-types";
 import {
   AccountsTable,
   AccountsTableBody,

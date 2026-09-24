@@ -286,8 +286,7 @@ export default function ProductLinesEditor({
 	const [schemeDialog, setSchemeDialog] = useState<{
 		lineId: string;
 		mode: ProductSchemeOfferDialogMode;
-		offers: EligibleProductDiscountSchemeOffer[];
-		selectedOffer: EligibleProductDiscountSchemeOffer | null;
+		offer: EligibleProductDiscountSchemeOffer | null;
 	} | null>(null);
 
 	const schemeCustomerTypeLabel = pricingContext?.customerMasterType
@@ -385,10 +384,10 @@ export default function ProductLinesEditor({
 			});
 			if (dp > 0) return dp;
 		}
-		return product.sellingPrice || 0;
+		return product.sellingPrice > 0 ? product.sellingPrice : 0;
 	};
 
-	/** Apply highest eligible Product Discount from API (falls back to clear scheme). */
+	/** Apply highest eligible Product Discount from API (falls back to DP / final rate with no scheme). */
 	const applyBestSchemeFromApi = async (
 		line: SalesOrderLineItem,
 		product: ProductCatalogItem,
@@ -402,6 +401,20 @@ export default function ProductLinesEditor({
 			availableStock: product.stock,
 			dealerPrice,
 			unitPrice: dealerPrice,
+			finalRate: dealerPrice,
+			originalDealerPrice: undefined,
+			schemeApplied: "No",
+			schemeCode: undefined,
+			schemeName: undefined,
+			appliedSchemeId: undefined,
+			appliedSchemeCode: undefined,
+			appliedSchemeName: undefined,
+			schemeSnapshot: undefined,
+			schemeDiscountPercent: 0,
+			schemeDiscountAmount: 0,
+			schemeDiscountType: undefined,
+			schemeDiscountValue: undefined,
+			finalRateAfterScheme: undefined,
 		};
 		next = removeAppliedSchemeFromLine(next, product, taxOptions);
 
@@ -418,7 +431,19 @@ export default function ProductLinesEditor({
 		if (recommended) {
 			return applyManualSchemeToLine(next, recommended, product, taxOptions);
 		}
-		return applyLineTaxFields(next, product.gstRate, taxSupplyType, zeroGst);
+		// No scheme: keep dealer price as final rate.
+		return applyLineTaxFields(
+			{
+				...next,
+				dealerPrice,
+				unitPrice: dealerPrice,
+				finalRate: dealerPrice,
+				schemeApplied: "No",
+			},
+			product.gstRate,
+			taxSupplyType,
+			zeroGst,
+		);
 	};
 
 	const lineFromProduct = (
@@ -464,48 +489,32 @@ export default function ProductLinesEditor({
 
 	const openSchemeDialog = async (line: SalesOrderLineItem) => {
 		const eligible = await getLineEligibleSchemes(line);
-		if (eligible.length > 0) {
-			const activeCode = line.appliedSchemeCode ?? line.schemeCode;
-			const matched = activeCode
-				? eligible.find((o) => o.schemeCode === activeCode)
-				: undefined;
+		const activeCode = line.appliedSchemeCode ?? line.schemeCode;
+		const matched = activeCode
+			? eligible.find((o) => o.schemeCode === activeCode)
+			: undefined;
+		const offer = matched ?? eligible[0] ?? null;
+		if (offer) {
 			setSchemeDialog({
 				lineId: line.id,
-				mode: "apply",
-				offers: eligible,
-				selectedOffer: matched ?? eligible[0],
+				mode: "view",
+				offer,
 			});
 			return;
 		}
 		setSchemeDialog({
 			lineId: line.id,
 			mode: "no-scheme",
-			offers: [],
-			selectedOffer: null,
+			offer: null,
 		});
 	};
 
-	const handleApplyScheme = () => {
-		if (!schemeDialog?.selectedOffer) return;
-		const line = lines.find((entry) => entry.id === schemeDialog.lineId);
-		if (!line?.productId) return;
-		const product = getProductById(line.productId);
-		if (!product) return;
-
-		const updated = applyManualSchemeToLine(
-			line,
-			schemeDialog.selectedOffer,
-			product,
-			taxOptions,
-		);
-		onChange(lines.map((entry) => (entry.id === line.id ? updated : entry)));
-	};
-
-	const handleRemoveScheme = (line: SalesOrderLineItem) => {
+	/** If a line has eligible schemes but none applied yet, auto-apply the highest. */
+	const ensureBestSchemeApplied = async (line: SalesOrderLineItem) => {
 		if (!line.productId) return;
 		const product = getProductById(line.productId);
 		if (!product) return;
-		const updated = removeAppliedSchemeFromLine(line, product, taxOptions);
+		const updated = await applyBestSchemeFromApi(line, product);
 		onChange(lines.map((entry) => (entry.id === line.id ? updated : entry)));
 	};
 
@@ -777,17 +786,10 @@ export default function ProductLinesEditor({
 			<ProductSchemeOfferDialog
 				open={schemeDialog != null}
 				mode={schemeDialog?.mode ?? "no-scheme"}
-				offers={schemeDialog?.offers ?? []}
-				selectedOffer={schemeDialog?.selectedOffer ?? null}
+				offer={schemeDialog?.offer ?? null}
 				customerType={schemeCustomerTypeLabel}
 				stateName={pricingContext?.stateName}
-				onSelectOffer={(offer) =>
-					setSchemeDialog((prev) =>
-						prev ? { ...prev, selectedOffer: offer } : prev,
-					)
-				}
 				onClose={() => setSchemeDialog(null)}
-				onApply={handleApplyScheme}
 			/>
 
 			<ProductItemDetailsSection
@@ -1040,8 +1042,10 @@ export default function ProductLinesEditor({
 								</td>
 								<td className='px-2 py-1.5'>
 									<span className='text-xs tabular-nums whitespace-nowrap'>
-										{line.productId
-											? formatSchemeRupee(line.dealerPrice)
+										{draftLine.productId
+											? formatSchemeRupee(
+													draftLine.dealerPrice || draftLine.unitPrice || 0,
+												)
 											: "₹0"}
 									</span>
 								</td>
@@ -1052,10 +1056,10 @@ export default function ProductLinesEditor({
 												type='button'
 												onClick={() => openSchemeDialog(line)}
 												className='flex flex-col gap-0.5 max-w-[140px] text-left group hover:opacity-90 transition-opacity'
-												title='View scheme details'
+												title='View auto-applied scheme details'
 											>
 												<Badge className='w-fit px-1.5 py-0 text-[10px] font-semibold bg-emerald-600 hover:bg-emerald-600 cursor-pointer'>
-													Applied
+													Auto Applied
 												</Badge>
 												<span className='text-[10px] font-mono text-brand-700 truncate group-hover:underline'>
 													{line.appliedSchemeCode ?? line.schemeCode}
@@ -1065,25 +1069,17 @@ export default function ProductLinesEditor({
 												</span>
 											</button>
 										) : hasEligibleScheme ? (
-											<div className='flex flex-col gap-0.5 max-w-[140px]'>
-												<button
-													type='button'
-													onClick={() => openSchemeDialog(line)}
-													className='inline-flex items-center gap-1 w-fit max-w-full rounded-full border border-dashed border-brand-400 bg-brand-50 px-2 py-0.5 text-[10px] font-semibold text-brand-700 hover:bg-brand-100 transition-colors truncate'
-													title={formatSchemeOfferLabel(eligibleSchemes[0])}
-												>
-													<Tag className='w-3 h-3 shrink-0' />
-													<span className='truncate'>
-														{formatSchemeOfferLabel(eligibleSchemes[0])}
-													</span>
-												</button>
-												{eligibleSchemes.length > 1 && (
-													<span className='text-[9px] text-muted-foreground pl-0.5'>
-														+{eligibleSchemes.length - 1} more scheme
-														{eligibleSchemes.length > 2 ? "s" : ""}
-													</span>
-												)}
-											</div>
+											<button
+												type='button'
+												onClick={() => void ensureBestSchemeApplied(line)}
+												className='inline-flex items-center gap-1 w-fit max-w-full rounded-full border border-dashed border-brand-400 bg-brand-50 px-2 py-0.5 text-[10px] font-semibold text-brand-700 hover:bg-brand-100 transition-colors truncate'
+												title={`Apply highest discount: ${formatSchemeOfferLabel(eligibleSchemes[0])}`}
+											>
+												<Tag className='w-3 h-3 shrink-0' />
+												<span className='truncate'>
+													Apply {formatSchemeOfferLabel(eligibleSchemes[0])}
+												</span>
+											</button>
 										) : (
 											<button
 												type='button'
@@ -1102,9 +1098,13 @@ export default function ProductLinesEditor({
 											<div className="flex flex-col items-stretch gap-1 min-w-[160px]">
 												{hasScheme ? (
 													<p className="text-[9px] text-muted-foreground leading-snug">
-														Manual discount (after scheme)
+														Manual discount on line total (after scheme)
 													</p>
-												) : null}
+												) : (
+													<p className="text-[9px] text-muted-foreground leading-snug">
+														Manual discount on line total
+													</p>
+												)}
 												<Select
 													value={normalizeLineDiscountType(draftLine.discountType)}
 													onValueChange={(value) => {
@@ -1189,7 +1189,14 @@ export default function ProductLinesEditor({
 								</td>
 								<td className='px-2 py-1.5'>
 									<span className='text-xs font-medium tabular-nums whitespace-nowrap'>
-										{draftLine.productId ? formatSchemeRupee(draftLine.finalRate) : "₹0"}
+										{draftLine.productId
+											? formatSchemeRupee(
+													draftLine.finalRate ||
+														draftLine.dealerPrice ||
+														draftLine.unitPrice ||
+														0,
+												)
+											: "₹0"}
 									</span>
 								</td>
 								{draftLine.productId && product && taxBreakdown ? (

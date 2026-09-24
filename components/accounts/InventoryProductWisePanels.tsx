@@ -33,7 +33,7 @@ import { useAccountsColumnFilters } from "@/components/accounts/useAccountsColum
 import { AccountsColumnFilterContext } from "@/components/accounts/AccountsColumnFilterContext";
 import type { AccountsColumnFilterState } from "@/lib/accounts/column-filter-types";
 import { CoaLedgerDetailTable } from "@/app/(app)/accounts/masters/chart-of-accounts/components/CoaLedgerDetailTable";
-import type { CoaLedgerDetailRow } from "@/app/(app)/accounts/masters/chart-of-accounts/coa-demo-accounting";
+import type { CoaLedgerDetailRow } from "@/app/(app)/accounts/masters/chart-of-accounts/coa-ledger-detail-types";
 import { useWarehousesDropdown } from "@/hooks/masters/use-warehouse-master";
 
 // ─── helpers: translate filter context → backend params ──────────────────────

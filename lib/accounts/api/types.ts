@@ -119,6 +119,7 @@ export const ACCOUNTS_ENDPOINTS = {
     payables: `${ACCOUNTS_API_BASE}/reports/payables`,
     gst: `${ACCOUNTS_API_BASE}/reports/gst`,
     stockValuation: `${ACCOUNTS_API_BASE}/reports/stock-valuation`,
+    stockRegister: `${ACCOUNTS_API_BASE}/reports/stock-register`,
   },
   masters: {
     financialYears: `${ACCOUNTS_API_BASE}/masters/financial-years`,

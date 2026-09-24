@@ -125,7 +125,7 @@ export interface SalesOrderLineItem {
   schemeDiscountType?: "Percentage" | "Rupees";
   /** Raw scheme discount value (% or ₹) from Product Discount Scheme */
   schemeDiscountValue?: number;
-  /** Final rate per unit after scheme discount (DP − scheme discount) */
+  /** Final rate per unit after scheme discount only (DP − scheme). Manual discount does not change this. */
   finalRate: number;
   schemeCode?: string;
   schemeName?: string;
@@ -505,6 +505,15 @@ export function calculateDiscountPercentFromValue(quantity: number, unitPrice: n
   return Math.round(Math.min(100, Math.max(0, pct)) * 100) / 100;
 }
 
+/** First positive price in the list; otherwise 0. */
+export function firstPositivePrice(...values: Array<number | null | undefined>): number {
+  for (const value of values) {
+    const n = Number(value);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  return 0;
+}
+
 /** Rate after scheme (before manual discount). Falls back to unit/dealer price. */
 export function resolveRateAfterScheme(
   line: Pick<
@@ -523,39 +532,61 @@ export function resolveRateAfterScheme(
     if (line.finalRateAfterScheme != null && line.finalRateAfterScheme >= 0) {
       return line.finalRateAfterScheme;
     }
-    const base = line.unitPrice || line.dealerPrice || 0;
+    const base = firstPositivePrice(line.unitPrice, line.dealerPrice);
     return Math.max(0, base - (line.schemeDiscountAmount || 0));
   }
-  return line.unitPrice || line.dealerPrice || 0;
+  return firstPositivePrice(line.unitPrice, line.dealerPrice);
 }
 
-/** Sync manual discount % ↔ ₹ and final rate (scheme rate is the base when a scheme is applied). */
+/**
+ * Sync manual discount % ↔ ₹ on the **line total** after scheme.
+ * Final rate stays per-unit after scheme only (DP − scheme); manual does not change it.
+ */
 export function syncManualLineDiscount(
   line: SalesOrderLineItem,
 ): Pick<SalesOrderLineItem, "discountType" | "discount" | "discountValue" | "finalRate"> {
   const discountType = normalizeLineDiscountType(line.discountType);
-  const baseRate = resolveRateAfterScheme(line);
-  const gross = Math.max(0, (line.quantity || 0) * baseRate);
+  const finalRate = Math.round(resolveRateAfterScheme(line) * 100) / 100;
+  const gross = Math.max(0, (line.quantity || 0) * finalRate);
   let discount = Math.max(0, Number(line.discount) || 0);
   let discountValue = Math.max(0, Number(line.discountValue) || 0);
 
   if (discountType === "Flat") {
     discountValue = Math.min(discountValue, gross);
     discount =
-      line.quantity > 0
-        ? calculateDiscountPercentFromValue(line.quantity, baseRate, discountValue)
+      gross > 0
+        ? Math.round((discountValue / gross) * 10000) / 100
         : 0;
   } else {
     discount = Math.min(100, discount);
-    discountValue = calculateLineDiscountValue(line.quantity, baseRate, discount);
+    discountValue = Math.round(gross * (discount / 100) * 100) / 100;
   }
 
-  const finalRate =
-    line.quantity > 0
-      ? Math.round(((gross - discountValue) / line.quantity) * 100) / 100
-      : Math.round(baseRate * (1 - discount / 100) * 100) / 100;
-
   return { discountType, discount, discountValue, finalRate };
+}
+
+/** Taxable amount for a line: (qty × final rate after scheme) − manual line discount. */
+export function getLineAmountAfterManualDiscount(
+  line: Pick<
+    SalesOrderLineItem,
+    | "quantity"
+    | "unitPrice"
+    | "dealerPrice"
+    | "discount"
+    | "discountValue"
+    | "discountType"
+    | "finalRate"
+    | "finalRateAfterScheme"
+    | "schemeDiscountAmount"
+    | "schemeApplied"
+    | "schemeCode"
+    | "appliedSchemeId"
+    | "appliedSchemeCode"
+  >,
+): number {
+  const synced = syncManualLineDiscount(line as SalesOrderLineItem);
+  const gross = Math.max(0, (line.quantity || 0) * synced.finalRate);
+  return Math.max(0, Math.round((gross - synced.discountValue) * 100) / 100);
 }
 
 export function calculateLineSubtotal(quantity: number, unitPrice: number, discountPercent: number): number {
@@ -644,8 +675,7 @@ function getLineTaxableAmount(
     | "appliedSchemeCode"
   >,
 ): number {
-  const synced = syncManualLineDiscount(line as SalesOrderLineItem);
-  return calculateLineSubtotalFromFinalRate(line.quantity, synced.finalRate);
+  return getLineAmountAfterManualDiscount(line);
 }
 
 export function computeLineTaxBreakdown(
@@ -809,15 +839,12 @@ export function applyLineTaxFields(
 
 export function recalculateLineItem(line: SalesOrderLineItem): SalesOrderLineItem {
   const synced = syncManualLineDiscount(line);
-  const lineTotal = calculateLineTotalFromFinalRate(
-    line.quantity,
-    synced.finalRate,
-    line.gstAmount,
-  );
+  const taxable = getLineAmountAfterManualDiscount({ ...line, ...synced });
+  const lineTotal = Math.round((taxable + Math.max(0, line.gstAmount || 0)) * 100) / 100;
   return {
     ...line,
     ...synced,
-    // Keep scheme post-rate stable; finalRate is after scheme + manual.
+    // Final rate is always after scheme only; manual is on line total.
     finalRateAfterScheme: isProductDiscountSchemeApplied(line)
       ? (line.finalRateAfterScheme ?? resolveRateAfterScheme(line))
       : undefined,
@@ -943,7 +970,7 @@ export function calculateOrderTotalsSummary(
       ? Math.round((line.schemeDiscountAmount || 0) * (line.quantity || 0) * 100) / 100
       : 0;
     const manualLineDiscount = Math.max(0, synced.discountValue || 0);
-    const lineNet = calculateLineSubtotalFromFinalRate(line.quantity, synced.finalRate);
+    const lineNet = getLineAmountAfterManualDiscount({ ...line, ...synced });
     const lineGst =
       Math.round(
         (Number(line.gstAmount || 0) ||
@@ -1368,7 +1395,12 @@ export function removeAppliedSchemeFromLine(
   options?: LineTaxOptions,
 ): SalesOrderLineItem {
   const quantity = line.quantity > 0 ? line.quantity : 1;
-  const dealerPrice = line.originalDealerPrice ?? line.dealerPrice ?? line.unitPrice ?? product.sellingPrice;
+  const dealerPrice = firstPositivePrice(
+    line.originalDealerPrice,
+    line.dealerPrice,
+    line.unitPrice,
+    product.sellingPrice,
+  );
   const cleared = clearLineSchemeFields(dealerPrice);
   const supplyType = options?.supplyType ?? "intra";
 
@@ -1403,6 +1435,7 @@ export function applySchemePricingToLine(
         customerMasterType: context.customerMasterType,
       })
       : product.sellingPrice;
+  const resolvedDealerPrice = firstPositivePrice(dealerPrice, product.sellingPrice);
 
   if (
     !isProductChange &&
@@ -1423,7 +1456,7 @@ export function applySchemePricingToLine(
     }
   }
 
-  const cleared = clearLineSchemeFields(dealerPrice > 0 ? dealerPrice : product.sellingPrice);
+  const cleared = clearLineSchemeFields(resolvedDealerPrice);
   const supplyType = options?.supplyType ?? "intra";
 
   const updated: SalesOrderLineItem = {

@@ -687,7 +687,7 @@ const NAV_ITEM_SHORT_DESCRIPTIONS: Record<string, string> = {
 
   "Purchase Invoices": "Supplier bills and GST input",
 
-  "Purchase Register": "GST purchase register with RCM, ITC & GSTR-2B",
+  "Purchase Register": "Posted purchases & debit notes with GST and GSTR-2B overlay",
 
   "Supplier Outstanding": "Open supplier balances",
 
