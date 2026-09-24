@@ -19,6 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import {
   type GeographyFormInput,
   type GeographyRecord,
@@ -83,6 +84,19 @@ export function GeographyFormDialog({
     const all = loadGeographies();
     return all.filter((g) => g.id !== record?.id);
   }, [open, record]);
+
+  const parentSelectOptions = useMemo(
+    () => [
+      { value: "__root__", label: "None (Root geography)", searchText: "none root" },
+      ...parentOptions.map((p) => ({
+        value: String(p.id),
+        label: `${p.name} (${p.geographyType})`,
+        searchText: `${p.name} ${p.geographyType}`,
+        sublabel: p.geographyType,
+      })),
+    ],
+    [parentOptions],
+  );
 
   const setField = <K extends keyof GeographyFormInput>(key: K, value: GeographyFormInput[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -185,24 +199,15 @@ export function GeographyFormDialog({
 
           <div className="space-y-1 sm:col-span-2">
             <Label className="text-xs">Parent Geography</Label>
-            <Select
+            <AutocompleteSelect
+              options={parentSelectOptions}
               value={form.parentId != null ? String(form.parentId) : "__root__"}
-              onValueChange={(v) => setField("parentId", v === "__root__" ? null : Number(v))}
-            >
-              <SelectTrigger className={cn("h-9 text-sm", errors.parentId && "border-red-500")}>
-                <SelectValue placeholder="Select parent" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__root__" className="text-xs">
-                  None (Root geography)
-                </SelectItem>
-                {parentOptions.map((p) => (
-                  <SelectItem key={p.id} value={String(p.id)} className="text-xs">
-                    {p.name} ({p.geographyType})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              onChange={(v) => setField("parentId", v === "__root__" ? null : Number(v))}
+              error={Boolean(errors.parentId)}
+              placeholder="Select parent"
+              searchPlaceholder="Search parent by name…"
+              className="h-9 text-sm"
+            />
             {!isEdit && defaultParentId != null && (
               <p className="text-[11px] text-muted-foreground">Default parent: {parentLabel}</p>
             )}
