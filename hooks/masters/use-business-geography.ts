@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   BusinessGeographyService,
@@ -124,20 +125,61 @@ export function useBgLookupPincodes(
   locationIds: string[],
   excludeTerritoryId?: string,
 ) {
-  const key = [...locationIds].sort().join(",");
-  return useQuery({
+  const locationIdsKey = useMemo(
+    () => [...locationIds].sort().join(","),
+    [locationIds],
+  );
+
+  // Debounce large Select All bursts so we don't fire a POST on every checkbox tick.
+  // Clear immediately when selection is empty so stale pincodes never linger.
+  const [debouncedKey, setDebouncedKey] = useState(locationIdsKey);
+  useEffect(() => {
+    if (!locationIdsKey) {
+      setDebouncedKey("");
+      return;
+    }
+    const delayMs =
+      locationIdsKey.split(",").filter(Boolean).length > 50 ? 400 : 150;
+    const timer = window.setTimeout(
+      () => setDebouncedKey(locationIdsKey),
+      delayMs,
+    );
+    return () => window.clearTimeout(timer);
+  }, [locationIdsKey]);
+
+  const debouncedLocationIds = useMemo(
+    () => (debouncedKey ? debouncedKey.split(",").filter(Boolean) : []),
+    [debouncedKey],
+  );
+
+  const isDebouncing = locationIdsKey !== debouncedKey;
+
+  const query = useQuery({
     queryKey: masterKeys.businessGeography.lookupPincodes(
-      key,
+      debouncedKey,
       excludeTerritoryId ?? "",
     ),
     queryFn: ({ signal }) =>
       BusinessGeographyService.lookupPincodes(
-        locationIds,
+        debouncedLocationIds,
         excludeTerritoryId,
         signal,
       ),
-    enabled: locationIds.length > 0,
+    enabled: debouncedLocationIds.length > 0,
     staleTime: 30_000,
     refetchOnMount: "always",
   });
+
+  // When nothing is selected, never surface cached rows from a prior lookup
+  const data =
+    locationIds.length === 0 || debouncedLocationIds.length === 0
+      ? undefined
+      : query.data;
+
+  return {
+    ...query,
+    data,
+    isLoading: query.isLoading || (locationIds.length > 0 && isDebouncing),
+    isFetching: query.isFetching || isDebouncing,
+  };
 }

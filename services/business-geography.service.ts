@@ -229,6 +229,9 @@ function mapTerritory(raw: Record<string, unknown>): BusinessGeoListItem {
     pincodeCount: pincodeIds.length,
     areaId: asString(raw.area_id) || undefined,
     regionId: asString(area.region_id) || undefined,
+    zoneId: asString(
+      (area.region as Record<string, unknown> | undefined)?.zone_id ?? area.zone_id,
+    ) || undefined,
     locationIds,
     pincodeIds,
     code: asString(raw.territory_code) || undefined,
@@ -648,13 +651,17 @@ export const BusinessGeographyService = {
     signal?: AbortSignal,
   ): Promise<BgLookupOption[]> {
     if (locationIds.length === 0) return [];
-    const response = await axiosInstance.get(BG.LOOKUP.PINCODES, {
-      params: {
-        location_ids: locationIds.join(","),
-        ...(excludeTerritoryId ? { exclude_territory_id: excludeTerritoryId } : {}),
+    // POST body avoids GET URL length limits when selecting hundreds/thousands of locations
+    const response = await axiosInstance.post(
+      BG.LOOKUP.PINCODES,
+      {
+        location_ids: locationIds,
+        ...(excludeTerritoryId
+          ? { exclude_territory_id: excludeTerritoryId }
+          : {}),
       },
-      signal,
-    });
+      { signal },
+    );
     const data = unwrapData(response.data as Record<string, unknown>);
     if (!Array.isArray(data)) return [];
     return data.map((row) => {
