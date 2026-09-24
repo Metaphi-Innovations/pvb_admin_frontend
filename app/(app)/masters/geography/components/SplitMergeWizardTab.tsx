@@ -20,6 +20,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import { showToast } from "@/lib/toast";
 import { getErrorMessage } from "@/lib/masters/master-query-errors";
 import { masterKeys } from "@/lib/masters/master-query-keys";
@@ -1358,89 +1359,79 @@ export function SplitMergeWizardTab() {
                   {needsMergeZone && (
                     <div className="space-y-1">
                       <Label className="text-[11px] text-muted-foreground">Zone *</Label>
-                      <Select
+                      <AutocompleteSelect
+                        options={(zonesQuery.data ?? []).map((z) => ({
+                          value: z.id,
+                          label: z.label,
+                          searchText: [z.label, z.code].filter(Boolean).join(" "),
+                          sublabel: z.code || undefined,
+                        }))}
                         value={filterZoneId ?? ""}
                         disabled={published}
-                        onValueChange={(v) => {
+                        onChange={(v) => {
                           setFilterZoneId(v || null);
                           setFilterRegionId(null);
                           setFilterAreaId(null);
                           setSourceSearch("");
                           clearMergeSelection();
                         }}
-                      >
-                        <SelectTrigger className="h-9 text-sm">
-                          <SelectValue placeholder="Select zone" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {(zonesQuery.data ?? []).map((z) => (
-                            <SelectItem key={z.id} value={z.id} className="text-xs">
-                              {z.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                        placeholder="Select zone"
+                        searchPlaceholder="Search zone by name or code…"
+                        className="h-9 text-sm"
+                      />
                     </div>
                   )}
 
                   {needsMergeRegion && (
                     <div className="space-y-1">
                       <Label className="text-[11px] text-muted-foreground">Region *</Label>
-                      <Select
+                      <AutocompleteSelect
+                        options={(regionsQuery.data ?? []).map((r) => ({
+                          value: r.id,
+                          label: r.label,
+                          searchText: [r.label, r.code].filter(Boolean).join(" "),
+                          sublabel: r.code || undefined,
+                        }))}
                         value={filterRegionId ?? ""}
                         disabled={published || !filterZoneId}
-                        onValueChange={(v) => {
+                        onChange={(v) => {
                           setFilterRegionId(v || null);
                           setFilterAreaId(null);
                           setSourceSearch("");
                           clearMergeSelection();
                         }}
-                      >
-                        <SelectTrigger className="h-9 text-sm">
-                          <SelectValue
-                            placeholder={
-                              filterZoneId ? "Select region" : "Select zone first"
-                            }
-                          />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {(regionsQuery.data ?? []).map((r) => (
-                            <SelectItem key={r.id} value={r.id} className="text-xs">
-                              {r.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                        placeholder={
+                          filterZoneId ? "Select region" : "Select zone first"
+                        }
+                        searchPlaceholder="Search region by name or code…"
+                        className="h-9 text-sm"
+                      />
                     </div>
                   )}
 
                   {needsMergeArea && (
                     <div className="space-y-1">
                       <Label className="text-[11px] text-muted-foreground">Area *</Label>
-                      <Select
+                      <AutocompleteSelect
+                        options={(areasQuery.data ?? []).map((a) => ({
+                          value: a.id,
+                          label: a.label,
+                          searchText: [a.label, a.code].filter(Boolean).join(" "),
+                          sublabel: a.code || undefined,
+                        }))}
                         value={filterAreaId ?? ""}
                         disabled={published || !filterRegionId}
-                        onValueChange={(v) => {
+                        onChange={(v) => {
                           setFilterAreaId(v || null);
                           setSourceSearch("");
                           clearMergeSelection();
                         }}
-                      >
-                        <SelectTrigger className="h-9 text-sm">
-                          <SelectValue
-                            placeholder={
-                              filterRegionId ? "Select area" : "Select region first"
-                            }
-                          />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {(areasQuery.data ?? []).map((a) => (
-                            <SelectItem key={a.id} value={a.id} className="text-xs">
-                              {a.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                        placeholder={
+                          filterRegionId ? "Select area" : "Select region first"
+                        }
+                        searchPlaceholder="Search area by name or code…"
+                        className="h-9 text-sm"
+                      />
                     </div>
                   )}
                 </div>
