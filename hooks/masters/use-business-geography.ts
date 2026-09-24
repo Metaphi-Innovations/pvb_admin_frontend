@@ -138,8 +138,8 @@ export function useBgLookupPincodes(
       setDebouncedKey("");
       return;
     }
-    const delayMs =
-      locationIdsKey.split(",").filter(Boolean).length > 50 ? 400 : 150;
+    const idCount = locationIdsKey.split(",").filter(Boolean).length;
+    const delayMs = idCount > 500 ? 600 : idCount > 50 ? 400 : 150;
     const timer = window.setTimeout(
       () => setDebouncedKey(locationIdsKey),
       delayMs,
@@ -168,6 +168,8 @@ export function useBgLookupPincodes(
     enabled: debouncedLocationIds.length > 0,
     staleTime: 30_000,
     refetchOnMount: "always",
+    // Avoid stacking failed POSTs (devtools showed many identical 400s)
+    retry: false,
   });
 
   // When nothing is selected, never surface cached rows from a prior lookup
