@@ -45,8 +45,6 @@ import {
   type ChartOfAccount,
 } from "@/app/(app)/accounts/data";
 import {
-  maybePostSalesInvoice,
-  maybePostPurchaseInvoice,
   maybePostCreditNote,
 } from "@/lib/accounts/document-posting-bridge";
 import {
@@ -88,7 +86,7 @@ import {
   demoTimestamp,
 } from "@/lib/accounts/demo-date-utils";
 
-export const ACCOUNTS_DEMO_SEED_VERSION = "clean-coa-v7";
+export const ACCOUNTS_DEMO_SEED_VERSION = "clean-coa-v8-no-demo-si";
 const VERSION_KEY = "ds_accounts_demo_seed_version";
 
 // ── Demo master specs (5 each) ───────────────────────────────────────────────
@@ -213,7 +211,7 @@ const DEMO_BANKS = DEMO_BANK_SPECS.map((spec) => ({
   defaultPayments: spec.defaultForPayments,
 }));
 
-/** 12 posted sales invoices — mixed payment status for receivables demo */
+/** Demo sales invoice specs retired — Sales Invoice module is API-backed. */
 type DemoSalesInvoiceSpec = {
   id: number;
   invoiceNo: string;
@@ -227,151 +225,12 @@ type DemoSalesInvoiceSpec = {
   amountCredited?: number;
 };
 
-const DEMO_SALES_INVOICES_RAW: DemoSalesInvoiceSpec[] = [
-  {
-    id: 1,
-    invoiceNo: "INV-2026-001",
-    customerId: 1,
-    invoiceDate: "2026-03-05",
-    dueDate: "2026-04-04",
-    subtotal: 127119,
-    taxAmount: 22881,
-    grandTotal: 150000,
-    amountReceived: 80000,
-    amountCredited: 20000,
-  },
-  {
-    id: 2,
-    invoiceNo: "INV-2026-002",
-    customerId: 1,
-    invoiceDate: "2026-05-10",
-    dueDate: "2026-07-09",
-    subtotal: 76271,
-    taxAmount: 13729,
-    grandTotal: 90000,
-    amountReceived: 45000,
-    amountCredited: 0,
-  },
-  {
-    id: 3,
-    invoiceNo: "INV-2026-003",
-    customerId: 1,
-    invoiceDate: "2026-05-28",
-    dueDate: "2026-07-27",
-    subtotal: 67797,
-    taxAmount: 12203,
-    grandTotal: 80000,
-    amountReceived: 0,
-    amountCredited: 0,
-  },
-  {
-    id: 4,
-    invoiceNo: "INV-2026-004",
-    customerId: 2,
-    invoiceDate: "2026-03-15",
-    dueDate: "2026-04-14",
-    subtotal: 84746,
-    taxAmount: 15254,
-    grandTotal: 100000,
-    amountReceived: 80000,
-    amountCredited: 0,
-  },
-  {
-    id: 5,
-    invoiceNo: "INV-2026-005",
-    customerId: 2,
-    invoiceDate: "2026-05-08",
-    dueDate: "2026-07-07",
-    subtotal: 67797,
-    taxAmount: 12203,
-    grandTotal: 80000,
-    amountReceived: 10000,
-    amountCredited: 0,
-  },
-  {
-    id: 6,
-    invoiceNo: "INV-2026-006",
-    customerId: 2,
-    invoiceDate: "2026-04-22",
-    dueDate: "2026-05-22",
-    subtotal: 100000,
-    taxAmount: 18000,
-    grandTotal: 118000,
-    amountReceived: 118000,
-    amountCredited: 0,
-  },
-  {
-    id: 7,
-    invoiceNo: "INV-2026-007",
-    customerId: 1,
-    invoiceDate: "2026-04-18",
-    dueDate: "2026-06-02",
-    subtotal: 122881,
-    taxAmount: 22119,
-    grandTotal: 145000,
-    amountReceived: 0,
-    amountCredited: 0,
-  },
-  {
-    id: 8,
-    invoiceNo: "INV-2026-008",
-    customerId: 1,
-    invoiceDate: "2026-05-12",
-    dueDate: "2026-06-26",
-    subtotal: 80508,
-    taxAmount: 14492,
-    grandTotal: 95000,
-    amountReceived: 50000,
-    amountCredited: 0,
-  },
-  {
-    id: 9,
-    invoiceNo: "INV-2026-009",
-    customerId: 1,
-    invoiceDate: "2026-05-25",
-    dueDate: "2026-06-09",
-    subtotal: 4271,
-    taxAmount: 769,
-    grandTotal: 5040,
-    amountReceived: 0,
-    amountCredited: 0,
-  },
-  {
-    id: 10,
-    invoiceNo: "INV-2026-010",
-    customerId: 2,
-    invoiceDate: "2026-05-20",
-    dueDate: "2026-06-19",
-    subtotal: 60000,
-    taxAmount: 10800,
-    grandTotal: 70800,
-    amountReceived: 70800,
-    amountCredited: 0,
-  },
-  {
-    id: 11,
-    invoiceNo: "INV-2026-011",
-    customerId: 2,
-    invoiceDate: "2026-05-15",
-    dueDate: "2026-06-14",
-    subtotal: 72034,
-    taxAmount: 12966,
-    grandTotal: 85000,
-    amountReceived: 42500,
-    amountCredited: 0,
-  },
-  {
-    id: 12,
-    invoiceNo: "INV-2026-012",
-    customerId: 1,
-    invoiceDate: "2026-05-28",
-    dueDate: "2026-07-27",
-    subtotal: 52542,
-    taxAmount: 9458,
-    grandTotal: 62000,
-    amountReceived: 0,
-    amountCredited: 0,
-  },
+/** Kept empty so transactions seed no longer writes fake INV-* rows. */
+const DEMO_SALES_INVOICES_RAW: DemoSalesInvoiceSpec[] = [];
+
+/** Ids previously written by DEMO_SALES_INVOICES_RAW — strip on reseed. */
+const RETIRED_DEMO_SALES_INVOICE_IDS = [
+  1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
 ] as const;
 
 function getDemoSalesInvoices(): DemoSalesInvoiceSpec[] {
@@ -1013,7 +872,10 @@ function seedTransactionsDemoRecords(): InvoiceRecord[] {
     ...getDemoSalesInvoices(),
     ...CREDIT_LIMIT_DEMO_INVOICE_SPECS,
   ];
-  const demoInvoiceIds = new Set<number>(allDemoInvoiceSpecs.map((spec) => spec.id));
+  const demoInvoiceIds = new Set<number>([
+    ...RETIRED_DEMO_SALES_INVOICE_IDS,
+    ...allDemoInvoiceSpecs.map((spec) => spec.id),
+  ]);
   const preservedInvoices = loadInvoices().filter((inv) => !demoInvoiceIds.has(inv.id));
 
   const invoices = allDemoInvoiceSpecs.map((spec) => {
