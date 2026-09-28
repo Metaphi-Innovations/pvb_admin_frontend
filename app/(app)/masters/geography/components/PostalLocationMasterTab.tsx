@@ -86,15 +86,6 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
   );
 }
 
-function useDebouncedValue<T>(value: T, delayMs = 300): T {
-  const [debounced, setDebounced] = useState(value);
-  useEffect(() => {
-    const t = setTimeout(() => setDebounced(value), delayMs);
-    return () => clearTimeout(t);
-  }, [value, delayMs]);
-  return debounced;
-}
-
 function firstFilterValue(value: unknown): unknown {
   return Array.isArray(value) ? value[0] : value;
 }
@@ -107,8 +98,8 @@ export function PostalLocationMasterTab(props: {
   const [sort, setSort] = useState<SortState>({ key: "", direction: "none" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  const [search, setSearch] = useState("");
-  const debouncedSearch = useDebouncedValue(search);
+  const [draftSearch, setDraftSearch] = useState("");
+  const [appliedSearch, setAppliedSearch] = useState("");
   const [stateFilter, setStateFilter] = useState("");
   const [districtFilter, setDistrictFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
@@ -173,12 +164,12 @@ export function PostalLocationMasterTab(props: {
     () => ({
       page,
       pageSize,
-      search: debouncedSearch.trim(),
+      search: appliedSearch.trim(),
       status: effectiveStatus,
       apiFilters,
       ordering,
     }),
-    [page, pageSize, debouncedSearch, effectiveStatus, apiFilters, ordering],
+    [page, pageSize, appliedSearch, effectiveStatus, apiFilters, ordering],
   );
 
   const listQuery = usePostalMasterList(listParams);
@@ -187,12 +178,18 @@ export function PostalLocationMasterTab(props: {
   const deleteMappingMutation = useDeletePostalMapping();
   const exportMutation = useExportPostalMaster();
 
+  const applySearch = useCallback(() => {
+    setAppliedSearch(draftSearch.trim());
+    setPage(1);
+  }, [draftSearch]);
+
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, stateFilter, districtFilter, statusFilter, filters, sort, pageSize]);
+  }, [appliedSearch, stateFilter, districtFilter, statusFilter, filters, sort, pageSize]);
 
   const hasActiveFilters = Boolean(
-    search.trim() ||
+    draftSearch.trim() ||
+      appliedSearch.trim() ||
       stateFilter ||
       districtFilter ||
       statusFilter !== "all" ||
@@ -200,11 +197,13 @@ export function PostalLocationMasterTab(props: {
   );
 
   const clearFilters = () => {
-    setSearch("");
+    setDraftSearch("");
+    setAppliedSearch("");
     setStateFilter("");
     setDistrictFilter("");
     setStatusFilter("all");
     setFilters({});
+    setPage(1);
   };
 
   const confirmStatusToggle = useCallback(async () => {
@@ -236,7 +235,7 @@ export function PostalLocationMasterTab(props: {
   const handleExport = useCallback(async () => {
     try {
       await exportMutation.mutateAsync({
-        search: debouncedSearch.trim(),
+        search: appliedSearch.trim(),
         status: statusFilter,
         ordering,
         apiFilters,
@@ -247,7 +246,7 @@ export function PostalLocationMasterTab(props: {
     }
   }, [
     exportMutation,
-    debouncedSearch,
+    appliedSearch,
     statusFilter,
     ordering,
     apiFilters,
@@ -400,10 +399,25 @@ export function PostalLocationMasterTab(props: {
           <Input
             className="pl-8 h-8 text-xs rounded-lg"
             placeholder="Search pincode, state, district, city…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            value={draftSearch}
+            onChange={(e) => setDraftSearch(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                applySearch();
+              }
+            }}
           />
         </div>
+        <Button
+          type="button"
+          size="sm"
+          className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white shrink-0"
+          onClick={applySearch}
+        >
+          <Search className="w-3.5 h-3.5" />
+          Search
+        </Button>
         <Select
           value={stateFilter || "__all__"}
           onValueChange={(v) => {

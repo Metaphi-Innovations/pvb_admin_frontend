@@ -117,7 +117,7 @@ export default function EmployeeListingPage() {
     appliedSearch,
   } = useAppliedListFilters();
   const { handleOpenFilter, isFilterOpen } = useLazyFilterColumns();
-  const [sort, setSort] = useState<SortState>({ key: "employeeId", direction: "asc" });
+  const [sort, setSort] = useState<SortState>({ key: "", direction: "none" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [toast, setToast] = useState<ToastState | null>(null);

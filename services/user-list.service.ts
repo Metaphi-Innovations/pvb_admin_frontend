@@ -30,6 +30,7 @@ export interface UserListRecord {
   departmentId: string;
   role: string;
   roleId: string;
+  roleGeoLevel?: string;
   status: "active" | "inactive";
   createdAt: string;
   updatedAt: string;
@@ -263,6 +264,7 @@ function mapListItem(raw: Record<string, unknown>, fallbackIndex: number): UserL
     departmentId: asString(department?.department_id),
     role: asString(role?.role_name),
     roleId: asString(role?.role_id),
+    roleGeoLevel: asString(role?.geography_level),
     status: toStatus(raw.is_active ?? raw.status),
     createdAt: formatDate(raw.created_at),
     updatedAt: formatDate(raw.updated_at),

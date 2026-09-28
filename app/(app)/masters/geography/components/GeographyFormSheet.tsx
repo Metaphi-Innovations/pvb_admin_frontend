@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -35,12 +36,14 @@ import {
   useUpdateBusinessGeo,
 } from "@/hooks/masters";
 import {
+  BusinessGeographyService,
   generateGeoCode,
   nextBusinessGeoLevel,
   type BusinessGeoLevel,
   type BusinessGeoListItem,
   type BusinessGeoSaveInput,
 } from "@/services/business-geography.service";
+import { masterKeys } from "@/lib/masters/master-query-keys";
 import { GEOGRAPHY_TYPES, type GeographyType } from "../geography-master-data";
 import {
   AreaDistrictSelector,
@@ -166,29 +169,90 @@ export function GeographyFormSheet({
 
   const createMutation = useCreateBusinessGeo();
   const updateMutation = useUpdateBusinessGeo();
+  const queryClient = useQueryClient();
   const treeQuery = useBusinessGeographyTree();
   const allRecords = treeQuery.data ?? [];
+  const allRecordsRef = useRef(allRecords);
+  allRecordsRef.current = allRecords;
+  const hydrateTokenRef = useRef(0);
 
   useEffect(() => {
     if (!open) return;
-    if (record) {
-      setForm(itemToForm(record, allRecords));
-    } else {
+    setErrors({});
+    setSaving(false);
+
+    const records = allRecordsRef.current;
+
+    if (!record) {
       const level = nextBusinessGeoLevel(defaultParentLevel);
       const path = resolveParentPath(
         level,
         level === "Zone" ? null : defaultParentId,
-        allRecords,
+        records,
       );
       setForm({
         ...emptyForm(level),
         ...path,
-        code: generateGeoCode(level, allRecords),
+        code: generateGeoCode(level, records),
       });
+      return;
     }
-    setErrors({});
-    setSaving(false);
-  }, [open, record, defaultParentId, defaultParentLevel, allRecords]);
+
+    const next = itemToForm(record, records);
+    // Split-created rows may lack a persisted code — fill like Create so Edit shows one
+    if (!next.code?.trim()) {
+      next.code = generateGeoCode(record.level, records);
+    }
+    setForm(next);
+
+    // Territory: always load detail (repairs location mappings after split).
+    // Do not depend on allRecords — tree refetch must not wipe hydrated cities.
+    if (record.level !== "Territory") return;
+
+    const token = ++hydrateTokenRef.current;
+    const treeHadNoLocations = next.locationIds.length === 0;
+    void BusinessGeographyService.getById("Territory", record.id)
+      .then((fresh) => {
+        if (token !== hydrateTokenRef.current) return;
+        const tree = allRecordsRef.current;
+        const hydrated = itemToForm(fresh, tree);
+        if (!hydrated.code?.trim()) {
+          hydrated.code = next.code || generateGeoCode("Territory", tree);
+        }
+        setForm((prev) => ({
+          ...hydrated,
+          pathZoneId: hydrated.pathZoneId || prev.pathZoneId,
+          pathRegionId: hydrated.pathRegionId || prev.pathRegionId,
+          parentId: hydrated.parentId || prev.parentId,
+          code: hydrated.code || prev.code,
+          // Prefer detail coverage; keep previous if API oddly empty
+          locationIds:
+            hydrated.locationIds.length > 0
+              ? hydrated.locationIds
+              : prev.locationIds,
+          pincodeIds:
+            hydrated.pincodeIds.length > 0
+              ? hydrated.pincodeIds
+              : prev.pincodeIds,
+        }));
+        // Only refresh tree when repair filled cities (avoids wiping form on refetch)
+        if (treeHadNoLocations && hydrated.locationIds.length > 0) {
+          void queryClient.invalidateQueries({
+            queryKey: masterKeys.businessGeography.all(),
+          });
+        }
+      })
+      .catch(() => {
+        /* keep tree-hydrated form */
+      });
+  }, [
+    open,
+    record?.id,
+    record?.level,
+    defaultParentId,
+    defaultParentLevel,
+    queryClient,
+  ]);
 
   const level = form.level;
   const needsZone = level === "Region" || level === "Area" || level === "Territory";
@@ -619,17 +683,19 @@ export function GeographyFormSheet({
               )}
             </div>
 
-            <div className="space-y-1.5">
-              <Label className="text-xs">Status</Label>
-              <div className="h-9 flex items-center">
-                <ListingStatusToggle
-                  active={isActiveStatus(form.status)}
-                  onChange={() =>
-                    setField("status", form.status === "active" ? "inactive" : "active")
-                  }
-                />
+            {isEdit && (
+              <div className="space-y-1.5">
+                <Label className="text-xs">Status</Label>
+                <div className="h-9 flex items-center">
+                  <ListingStatusToggle
+                    active={isActiveStatus(form.status)}
+                    onChange={() =>
+                      setField("status", form.status === "active" ? "inactive" : "active")
+                    }
+                  />
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
           {level === "Zone" && (
