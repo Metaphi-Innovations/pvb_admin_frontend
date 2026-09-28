@@ -6,7 +6,10 @@ import type {
   InvoiceRecord,
   InvoiceStatus,
 } from "@/app/(app)/accounts/invoices/invoices-data";
-import { recalculateLineItem } from "@/app/(app)/accounts/invoices/invoices-data";
+import {
+  calcLineAmounts,
+  recalculateLineItem,
+} from "@/app/(app)/accounts/invoices/invoices-data";
 import type { InvoiceAdditionalExpense } from "@/app/(app)/accounts/invoices/invoice-additional-expenses";
 import { resolveProductSkuDisplay } from "@/lib/accounts/product-sku";
 
@@ -65,8 +68,31 @@ export type DispatchLineItemOverride = {
   product_id?: string;
   discount_percentage?: number | string | null;
   discount_amount?: number | string | null;
+  /** Manual discount on the line total after scheme (scheme itself is never sent). */
+  manual_discount_type?: "Percentage" | "Flat" | null;
+  manual_discount_value?: number | string | null;
   rate?: number | string | null;
 };
+
+export function toDispatchLineItemOverride(l: InvoiceLineItem): DispatchLineItemOverride {
+  const common = {
+    dispatch_item_id: l.dispatchItemId || undefined,
+    product_id: l.productId ? String(l.productId) : undefined,
+    rate: l.unitPrice != null ? Number(l.unitPrice) : undefined,
+  };
+  if (l.discountMode === "split") {
+    return {
+      ...common,
+      manual_discount_type: l.manualDiscountType ?? "Percentage",
+      manual_discount_value: Number(l.manualDiscountValue || 0),
+    };
+  }
+  return {
+    ...common,
+    discount_percentage: l.discountPct != null ? Number(l.discountPct) : undefined,
+    discount_amount: calcLineAmounts(l).discountAmt,
+  };
+}
 
 export type CreateFromDispatchPayload = {
   invoice_date: string;
@@ -479,6 +505,13 @@ export type PrepareDispatchInvoiceDto = {
     unit_price?: string | null;
     discount_amount?: string | null;
     discount_percentage?: string | null;
+    /** "split" = Sales Order line: scheme (read-only) + manual discount. */
+    discount_mode?: "split" | null;
+    /** Product Discount ₹ for the whole dispatched line. */
+    scheme_discount_line_amount?: string | null;
+    manual_discount_type?: "Percentage" | "Flat" | null;
+    manual_discount_value?: string | null;
+    manual_discount_amount?: string | null;
     scheme_id?: string | null;
     scheme_code?: string | null;
     scheme_name?: string | null;
@@ -641,19 +674,38 @@ export function mapPrepareDispatchItemsToLineItems(
     const schemeValue = Number(item.scheme_discount_value || 0);
     const schemeAmtPerUnit = Number(item.scheme_discount_amount || 0);
     const hasScheme = Boolean(item.scheme_id || schemeValue > 0 || schemeAmtPerUnit > 0);
-    const schemeDiscountType =
-      schemeType === "flat" || schemeType === "rupees" || schemeType === "fixed amount"
-        ? ("Rupees" as const)
-        : hasScheme
-          ? ("Percentage" as const)
-          : undefined;
+    const isSplit = item.discount_mode === "split";
+    const schemeIsFlat =
+      schemeType === "flat" || schemeType === "rupees" || schemeType === "fixed amount";
+    // Mirrors backend resolveSchemeDiscountAmount: % only when a % value exists, else ₹/unit.
+    const schemeDiscountType = !hasScheme
+      ? undefined
+      : !schemeIsFlat && schemeValue > 0
+        ? ("Percentage" as const)
+        : schemeAmtPerUnit > 0
+          ? ("Rupees" as const)
+          : schemeIsFlat
+            ? ("Rupees" as const)
+            : ("Percentage" as const);
     const schemeDiscountPercent =
       schemeDiscountType === "Percentage"
         ? schemeValue > 0
           ? schemeValue
-          : discountPct
+          : isSplit
+            ? 0
+            : discountPct
         : 0;
+    const manualType = item.manual_discount_type ?? "Percentage";
     return recalculateLineItem({
+      ...(isSplit
+        ? {
+            discountMode: "split" as const,
+            schemeLineAmount: Number(item.scheme_discount_line_amount || 0),
+            manualDiscountType: manualType,
+            manualDiscountValue: Number(item.manual_discount_value || 0),
+            manualDiscountAmount: Number(item.manual_discount_amount || 0),
+          }
+        : {}),
       id: item.dispatch_item_id || `line-${index}`,
       productId: null,
       productUuid: item.product_id || null,
@@ -876,6 +928,19 @@ function mapBackendLineItem(
     asString(productSnap.productName) ||
     `Line ${idx + 1}`;
 
+  const schemeSnap = (raw.scheme_snapshot || {}) as Record<string, unknown>;
+  const rawManualType = asString(raw.manual_discount_type);
+  const manualType =
+    rawManualType === "Flat" || rawManualType === "Percentage"
+      ? rawManualType
+      : undefined;
+  const hasSplitDiscount =
+    raw.scheme_discount_amount != null || manualType != null;
+  const schemeLineAmount = asNumber(raw.scheme_discount_amount);
+  const hasSchemeOnLine = Boolean(raw.scheme_id) || schemeLineAmount > 0;
+  const snapSchemeType = asString(schemeSnap.discount_type).toLowerCase();
+  const snapSchemeValue = asNumber(schemeSnap.discount_value);
+
   return {
     id: asString(raw.sales_invoice_item_id || raw.id || `line-${idx}`),
     productId: null,
@@ -912,9 +977,37 @@ function mapBackendLineItem(
     expiryDate: asDateOnly(batchSnap.expiry_date || batchSnap.expiryDate),
     qtyInCase: qtyInCase > 0 ? qtyInCase : null,
     salesperson: salesperson || undefined,
-    schemeDiscountPercent: discountPct,
-    schemeDiscountAmount: asNumber(raw.discount_amount),
-    schemeApplied: asNumber(raw.discount_amount) > 0 ? "Yes" : "No",
+    ...(hasSplitDiscount
+      ? {
+          schemeCode: asString(schemeSnap.scheme_code) || undefined,
+          schemeName: asString(schemeSnap.scheme_name) || undefined,
+          schemeApplied: hasSchemeOnLine ? ("Yes" as const) : ("No" as const),
+          ...(snapSchemeType === "flat" || snapSchemeType === "rupees"
+            ? {
+                schemeDiscountType: "Rupees" as const,
+                schemeDiscountAmount: snapSchemeValue,
+              }
+            : snapSchemeValue > 0
+              ? {
+                  schemeDiscountType: "Percentage" as const,
+                  schemeDiscountPercent: snapSchemeValue,
+                }
+              : {}),
+          schemeLineAmount: schemeLineAmount,
+          manualDiscountType: manualType,
+          manualDiscountValue: asNumber(raw.manual_discount_value),
+          manualDiscountAmount: asNumber(raw.manual_discount_amount),
+          finalRate:
+            qty > 0
+              ? Math.round(((qty * rate - schemeLineAmount) / qty) * 100) / 100
+              : rate,
+        }
+      : {
+          schemeDiscountPercent: discountPct,
+          schemeDiscountAmount: asNumber(raw.discount_amount),
+          schemeApplied:
+            asNumber(raw.discount_amount) > 0 ? ("Yes" as const) : ("No" as const),
+        }),
   };
 }
 

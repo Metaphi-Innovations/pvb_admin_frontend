@@ -156,6 +156,18 @@ export interface InvoiceLineItem {
 	schemeDiscountType?: "Percentage" | "Rupees";
 	dealerPrice?: number;
 	finalRate?: number;
+	/**
+	 * "split": discount = Product Discount scheme (read-only) + manual discount on the
+	 * post-scheme line total. discountPct/discountAmt are kept in sync as the combined total.
+	 */
+	discountMode?: "split";
+	/** Product Discount ₹ for the whole line (stored on saved invoices). */
+	schemeLineAmount?: number;
+	/** Manual discount on the whole line after scheme — % or ₹ as entered. */
+	manualDiscountType?: "Percentage" | "Flat";
+	manualDiscountValue?: number;
+	/** Manual discount ₹ for the whole line. */
+	manualDiscountAmount?: number;
 }
 
 export interface InvoiceAttachment {
@@ -378,11 +390,68 @@ export function parseTaxPct(value: string | number): number {
 	return Number.isFinite(n) ? n : 0;
 }
 
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+type SplitDiscountLine = Pick<
+	InvoiceLineItem,
+	| "qty"
+	| "unitPrice"
+	| "schemeApplied"
+	| "schemeDiscountType"
+	| "schemeDiscountPercent"
+	| "schemeDiscountAmount"
+	| "schemeLineAmount"
+	| "manualDiscountType"
+	| "manualDiscountValue"
+>;
+
+/** Product Discount ₹ for the whole line (per-unit ₹ × qty, or % of gross). */
+export function calcSchemeLineAmount(line: SplitDiscountLine): number {
+	const base = Math.max(0, (line.qty || 0) * (line.unitPrice || 0));
+	if (line.schemeDiscountType === "Rupees" && (line.schemeDiscountAmount ?? 0) > 0) {
+		return Math.min(base, round2((line.schemeDiscountAmount ?? 0) * (line.qty || 0)));
+	}
+	if (line.schemeDiscountType === "Percentage" && (line.schemeDiscountPercent ?? 0) > 0) {
+		return round2(base * ((line.schemeDiscountPercent ?? 0) / 100));
+	}
+	return Math.min(base, Math.max(0, line.schemeLineAmount ?? 0));
+}
+
+/** Manual discount ₹ on the post-scheme line total (never per unit). */
+export function calcManualDiscountAmount(
+	type: InvoiceLineItem["manualDiscountType"],
+	value: number | undefined,
+	postSchemeAmount: number,
+): number {
+	const v = Math.max(0, Number(value) || 0);
+	if (!type || v <= 0 || postSchemeAmount <= 0) return 0;
+	if (type === "Percentage") return round2(postSchemeAmount * (Math.min(100, v) / 100));
+	return round2(Math.min(v, postSchemeAmount));
+}
+
+/** Scheme → final rate → manual → taxable breakdown for a split-discount line. */
+export function calcSplitDiscountParts(line: SplitDiscountLine) {
+	const base = Math.max(0, (line.qty || 0) * (line.unitPrice || 0));
+	const schemeAmt = calcSchemeLineAmount(line);
+	const postScheme = Math.max(0, round2(base - schemeAmt));
+	const manualAmt = calcManualDiscountAmount(
+		line.manualDiscountType,
+		line.manualDiscountValue,
+		postScheme,
+	);
+	const finalRate = line.qty > 0 ? round2(postScheme / line.qty) : line.unitPrice || 0;
+	return { base, schemeAmt, postScheme, finalRate, manualAmt, discountAmt: round2(schemeAmt + manualAmt) };
+}
+
 export function calcLineAmounts(
-	line: Pick<InvoiceLineItem, "qty" | "unitPrice" | "discountPct" | "taxPct">,
+	line: Pick<InvoiceLineItem, "qty" | "unitPrice" | "discountPct" | "taxPct"> &
+		Partial<SplitDiscountLine> & { discountMode?: InvoiceLineItem["discountMode"] },
 ) {
 	const base = Math.max(0, line.qty * line.unitPrice);
-	const discountAmt = Math.round(base * (line.discountPct / 100) * 100) / 100;
+	const discountAmt =
+		line.discountMode === "split"
+			? calcSplitDiscountParts(line as SplitDiscountLine).discountAmt
+			: Math.round(base * (line.discountPct / 100) * 100) / 100;
 	const taxable = Math.max(0, base - discountAmt);
 	const taxAmt = Math.round(taxable * (line.taxPct / 100) * 100) / 100;
 	const amount = Math.round((taxable + taxAmt) * 100) / 100;
@@ -404,6 +473,20 @@ export function calcGstLineSplit(
 }
 
 export function recalculateLineItem(line: InvoiceLineItem): InvoiceLineItem {
+	if (line.discountMode === "split") {
+		const parts = calcSplitDiscountParts(line);
+		const discountPct =
+			parts.base > 0 ? Math.round((parts.discountAmt / parts.base) * 1_000_000) / 10_000 : 0;
+		const synced: InvoiceLineItem = {
+			...line,
+			schemeLineAmount: parts.schemeAmt,
+			manualDiscountAmount: parts.manualAmt,
+			finalRate: parts.finalRate,
+			discountPct,
+			discountAmt: parts.discountAmt,
+		};
+		return { ...synced, amount: calcLineAmounts(synced).amount };
+	}
 	const { amount } = calcLineAmounts(line);
 	return { ...line, amount };
 }

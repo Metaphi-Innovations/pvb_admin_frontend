@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { cn } from "@/lib/utils";
 import { calcGstLineSplit, type InvoiceLineItem } from "../invoices-data";
 import { formatINR } from "../invoice-utils";
+import { resolveLineDiscountParts } from "../invoice-view-display";
 import {
   INVOICE_FORM_TABLE_TD_CLASS,
   INVOICE_FORM_TABLE_TH_CLASS,
@@ -22,6 +23,20 @@ function formatSchemeDiscount(line: InvoiceLineItem): string {
   return parts.length ? parts.join(" · ") : "Applied";
 }
 
+const RIGHT_ALIGN = new Set([
+  "Qty",
+  "DP (₹)",
+  "Rate (₹)",
+  "Final Rate (₹)",
+  "Manual Discount",
+  "Taxable (₹)",
+  "GST %",
+  "CGST (₹)",
+  "SGST (₹)",
+  "IGST (₹)",
+  "Line Total (₹)",
+]);
+
 export function InvoiceProductLinesReadOnly({
   lines,
   interstate = false,
@@ -34,36 +49,21 @@ export function InvoiceProductLinesReadOnly({
     [lines],
   );
 
-  const headers = interstate
-    ? [
-        "Item Details",
-        "HSN/SAC",
-        "Qty",
-        "Unit",
-        "DP (₹)",
-        "Rate (₹)",
-        "Disc %",
-        "Product Discount Scheme",
-        "Taxable (₹)",
-        "GST %",
-        "IGST (₹)",
-        "Line Total (₹)",
-      ]
-    : [
-        "Item Details",
-        "HSN/SAC",
-        "Qty",
-        "Unit",
-        "DP (₹)",
-        "Rate (₹)",
-        "Disc %",
-        "Product Discount Scheme",
-        "Taxable (₹)",
-        "GST %",
-        "CGST (₹)",
-        "SGST (₹)",
-        "Line Total (₹)",
-      ];
+  const headers = [
+    "Item Details",
+    "HSN/SAC",
+    "Qty",
+    "Unit",
+    "DP (₹)",
+    "Rate (₹)",
+    "Scheme Applied",
+    "Final Rate (₹)",
+    "Manual Discount",
+    "Taxable (₹)",
+    "GST %",
+    ...(interstate ? ["IGST (₹)"] : ["CGST (₹)", "SGST (₹)"]),
+    "Line Total (₹)",
+  ];
 
   return (
     <div className="space-y-2">
@@ -80,18 +80,7 @@ export function InvoiceProductLinesReadOnly({
                   className={cn(
                     INVOICE_FORM_TABLE_TH_CLASS,
                     "px-3 py-2.5",
-                    [
-                      "Qty",
-                      "DP (₹)",
-                      "Rate (₹)",
-                      "Disc %",
-                      "Taxable (₹)",
-                      "GST %",
-                      "CGST (₹)",
-                      "SGST (₹)",
-                      "IGST (₹)",
-                      "Line Total (₹)",
-                    ].includes(h) && "text-right",
+                    RIGHT_ALIGN.has(h) && "text-right",
                   )}
                 >
                   {h}
@@ -109,6 +98,7 @@ export function InvoiceProductLinesReadOnly({
             ) : (
               visibleLines.map((line) => {
                 const split = calcGstLineSplit(line, interstate);
+                const disc = resolveLineDiscountParts(line);
                 return (
                   <tr
                     key={line.id}
@@ -140,16 +130,31 @@ export function InvoiceProductLinesReadOnly({
                     <td className={cn(INVOICE_FORM_TABLE_TD_CLASS, "text-right tabular-nums font-medium")}>
                       {formatINR(line.unitPrice)}
                     </td>
-                    <td className={cn(INVOICE_FORM_TABLE_TD_CLASS, "text-right tabular-nums")}>
-                      {line.discountPct > 0 ? `${line.discountPct}%` : "—"}
-                    </td>
                     <td className={cn(INVOICE_FORM_TABLE_TD_CLASS, "min-w-[140px]")}>
                       {line.schemeApplied === "Yes" || line.schemeCode ? (
-                        <span className="inline-flex items-center text-xs px-2 py-0.5 rounded-md bg-brand-50 border border-brand-200 text-brand-700 font-medium">
+                        <span className="inline-flex flex-col text-xs px-2 py-0.5 rounded-md bg-brand-50 border border-brand-200 text-brand-700 font-medium">
                           {formatSchemeDiscount(line)}
+                          {disc.schemeAmt > 0 ? (
+                            <span className="text-[10px] font-normal">−{formatINR(disc.schemeAmt)}</span>
+                          ) : null}
                         </span>
                       ) : (
                         <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </td>
+                    <td className={cn(INVOICE_FORM_TABLE_TD_CLASS, "text-right tabular-nums")}>
+                      {formatINR(disc.finalRate)}
+                    </td>
+                    <td className={cn(INVOICE_FORM_TABLE_TD_CLASS, "text-right tabular-nums")}>
+                      {disc.manualAmt > 0 ? (
+                        <>
+                          <p>{formatINR(disc.manualAmt)}</p>
+                          {disc.manualLabel ? (
+                            <p className="text-[10px] text-muted-foreground">{disc.manualLabel}</p>
+                          ) : null}
+                        </>
+                      ) : (
+                        "—"
                       )}
                     </td>
                     <td className={cn(INVOICE_FORM_TABLE_TD_CLASS, "text-right tabular-nums")}>

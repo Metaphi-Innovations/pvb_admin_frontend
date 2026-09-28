@@ -86,8 +86,19 @@ import {
   lineHasProductDiscount,
   resolveDisplayDiscountAmount,
   resolveDisplayDiscountPct,
+  resolveLineDiscountParts,
   resolveLineSku,
 } from "./invoice-view-display";
+
+function schemeRateLabel(line: InvoiceLineItem): string {
+  if (line.schemeDiscountType === "Rupees" && (line.schemeDiscountAmount ?? 0) > 0) {
+    return `₹${line.schemeDiscountAmount}/unit`;
+  }
+  if (line.schemeDiscountType === "Percentage" && (line.schemeDiscountPercent ?? 0) > 0) {
+    return `${line.schemeDiscountPercent}%`;
+  }
+  return "";
+}
 import { formatDisplayDate } from "@/lib/accounts/date-display";
 import "./sales-order-invoice-form-compact.css";
 import "@/components/accounts/voucher-form/transaction-view.css";
@@ -170,9 +181,9 @@ function ProductTable({
         "UOM",
         "Rate",
         "Gross Amount",
-        "Discount %",
-        "Discount Amount",
-        "Scheme",
+        "Scheme Applied",
+        "Final Rate",
+        "Manual Discount",
         "Taxable",
         "GST %",
         "IGST",
@@ -189,9 +200,9 @@ function ProductTable({
         "UOM",
         "Rate",
         "Gross Amount",
-        "Discount %",
-        "Discount Amount",
-        "Scheme",
+        "Scheme Applied",
+        "Final Rate",
+        "Manual Discount",
         "Taxable",
         "GST %",
         "CGST",
@@ -199,7 +210,7 @@ function ProductTable({
         "Line Total",
         "Sales Person",
       ] as const);
-  const discountHeaders = new Set(["Discount %", "Discount Amount", "Scheme"]);
+  const discountHeaders = new Set(["Scheme Applied", "Final Rate", "Manual Discount"]);
   const headers = hideDiscount
     ? baseHeaders.filter((h) => !discountHeaders.has(h))
     : [...baseHeaders];
@@ -209,8 +220,8 @@ function ProductTable({
     "Qty",
     "Rate",
     "Gross Amount",
-    "Discount %",
-    "Discount Amount",
+    "Final Rate",
+    "Manual Discount",
     "Taxable",
     "GST %",
     "CGST",
@@ -229,8 +240,8 @@ function ProductTable({
     UOM: "so-col-uom",
     Rate: "so-col-rate",
     "Gross Amount": "so-col-gross",
-    "Discount %": "so-col-disc-pct",
-    "Discount Amount": "so-col-disc-amt",
+    "Final Rate": "so-col-final-rate",
+    "Manual Discount": "so-col-manual-disc",
     Taxable: "so-col-taxable",
     "GST %": "so-col-gst-pct",
     CGST: "so-col-gst-amt",
@@ -269,8 +280,7 @@ function ProductTable({
           ) : (
             lines.map((line) => {
               const { base } = calcLineAmounts(line);
-              const discPct = resolveDisplayDiscountPct(line);
-              const discAmt = resolveDisplayDiscountAmount(line);
+              const disc = resolveLineDiscountParts(line);
               /** GST / taxable / line total from stored line amounts — do not re-apply scheme % into totals. */
               const split = getLineGstSplit(line, interstate);
               const sku = resolveLineSku(line, productCodeById, productSkuByUuid);
@@ -317,12 +327,6 @@ function ProductTable({
                   </td>
                   {!hideDiscount ? (
                     <>
-                      <td className="px-2 py-1.5 align-middle so-col-disc-pct so-cell-num tabular-nums">
-                        {discPct > 0 ? `${discPct}%` : "—"}
-                      </td>
-                      <td className="px-2 py-1.5 align-middle so-col-disc-amt so-cell-num">
-                        {discAmt > 0 ? formatINR(discAmt) : "—"}
-                      </td>
                       <td className="px-2 py-1.5 align-middle">
                         {hasScheme ? (
                           <div className="min-w-[110px] max-w-[150px]">
@@ -333,11 +337,27 @@ function ProductTable({
                               {line.schemeCode || "—"}
                             </p>
                             <p className="text-[10px] text-muted-foreground leading-tight">
-                              Product Discount
+                              {schemeRateLabel(line) || "Product Discount"}
+                              {disc.schemeAmt > 0 ? ` · −${formatINR(disc.schemeAmt)}` : ""}
                             </p>
                           </div>
                         ) : (
                           <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </td>
+                      <td className="px-2 py-1.5 align-middle so-col-final-rate so-cell-num">
+                        {formatINR(disc.finalRate)}
+                      </td>
+                      <td className="px-2 py-1.5 align-middle so-col-manual-disc so-cell-num">
+                        {disc.manualAmt > 0 ? (
+                          <>
+                            <p className="leading-tight">{formatINR(disc.manualAmt)}</p>
+                            {disc.manualLabel ? (
+                              <p className="so-product-meta leading-tight">{disc.manualLabel}</p>
+                            ) : null}
+                          </>
+                        ) : (
+                          "—"
                         )}
                       </td>
                     </>
@@ -382,11 +402,18 @@ function CompactSchemeInformation({ record }: { record: InvoiceRecord }) {
   if (!invoiceHasProductDiscount(record)) return null;
   const schemeLines = record.lineItems.filter(lineHasProductDiscount);
   const primary = schemeLines[0];
+  const isSplit = (l: InvoiceLineItem) =>
+    l.manualDiscountType != null || l.schemeLineAmount != null;
   const discountAmount = schemeLines.reduce(
-    (sum, l) => sum + resolveDisplayDiscountAmount(l),
+    (sum, l) =>
+      sum + (isSplit(l) ? resolveLineDiscountParts(l).schemeAmt : resolveDisplayDiscountAmount(l)),
     0,
   );
-  const discountPct = resolveDisplayDiscountPct(primary);
+  const discountPct = isSplit(primary)
+    ? primary.schemeDiscountType === "Percentage"
+      ? primary.schemeDiscountPercent ?? 0
+      : 0
+    : resolveDisplayDiscountPct(primary);
   const discountType =
     primary.schemeDiscountType ?? (discountPct > 0 ? "Percentage" : "Rupees");
   const turnoverEligible =

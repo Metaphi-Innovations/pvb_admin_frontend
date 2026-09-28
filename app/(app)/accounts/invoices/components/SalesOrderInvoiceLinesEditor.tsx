@@ -8,11 +8,11 @@
 
 import { memo, useCallback, useState, type Dispatch, type SetStateAction } from "react";
 import { Input } from "@/components/ui/input";
-import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
 import { cn } from "@/lib/utils";
 import {
   calcGstLineSplit,
   calcLineAmounts,
+  calcSplitDiscountParts,
   recalculateLineItem,
   type InvoiceLineItem,
 } from "../invoices-data";
@@ -63,9 +63,9 @@ const COL = {
   uom: "so-col-uom",
   rate: "so-col-rate",
   gross: "so-col-gross",
-  discPct: "so-col-disc-pct",
-  discAmt: "so-col-disc-amt",
   scheme: "so-col-scheme",
+  finalRate: "so-col-final-rate",
+  manualDisc: "so-col-manual-disc",
   taxable: "so-col-taxable",
   gstPct: "so-col-gst-pct",
   gstAmt: "so-col-gst-amt",
@@ -73,24 +73,89 @@ const COL = {
   salesperson: "so-col-salesperson",
 } as const;
 
+type ManualType = NonNullable<InvoiceLineItem["manualDiscountType"]>;
+
+/** One compact field: value + %/₹ toggle. Applies to the whole line after scheme. */
+function ManualDiscountField({
+  type,
+  value,
+  amount,
+  postSchemeAmount,
+  onValue,
+  onType,
+}: {
+  type: ManualType;
+  value: number;
+  amount: number;
+  postSchemeAmount: number;
+  onValue: (value: number) => void;
+  onType: (type: ManualType) => void;
+}) {
+  const pctOfLine =
+    postSchemeAmount > 0 ? Math.round((amount / postSchemeAmount) * 10000) / 100 : 0;
+  return (
+    <div className="ml-auto w-full max-w-[130px]">
+      <div className="flex h-8 items-stretch overflow-hidden rounded-md border border-input bg-white focus-within:ring-1 focus-within:ring-brand-500">
+        <input
+          type="number"
+          min={0}
+          max={type === "Percentage" ? 100 : undefined}
+          step={0.01}
+          aria-label="Manual discount"
+          className="w-full min-w-0 bg-transparent px-2 text-right text-xs tabular-nums outline-none"
+          value={value || ""}
+          placeholder="0"
+          onChange={(e) => onValue(parseFloat(e.target.value) || 0)}
+        />
+        <div className="flex shrink-0 border-l border-input">
+          {(["Percentage", "Flat"] as const).map((t) => (
+            <button
+              key={t}
+              type="button"
+              aria-pressed={type === t}
+              title={t === "Percentage" ? "Percentage of line" : "Fixed ₹ on line"}
+              className={cn(
+                "w-6 text-[11px] font-semibold transition-colors",
+                type === t
+                  ? "bg-brand-600 text-white"
+                  : "text-muted-foreground hover:bg-muted",
+              )}
+              onClick={() => type !== t && onType(t)}
+            >
+              {t === "Percentage" ? "%" : "₹"}
+            </button>
+          ))}
+        </div>
+      </div>
+      {amount > 0 ? (
+        <p className="so-product-meta mt-0.5 text-right leading-tight">
+          {type === "Percentage" ? `= ${formatINR(amount)}` : `= ${pctOfLine}%`}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 const SalesOrderInvoiceLineRow = memo(function SalesOrderInvoiceLineRow({
   line,
   interstate,
-  onDiscountPct,
-  onDiscountAmt,
+  onManualValue,
+  onManualType,
   onQty,
   qtyError,
 }: {
   line: InvoiceLineItem;
   interstate: boolean;
-  onDiscountPct: (id: string, discountPct: number) => void;
-  onDiscountAmt: (id: string, discountAmt: number) => void;
+  onManualValue: (id: string, value: number) => void;
+  onManualType: (id: string, type: ManualType) => void;
   onQty: (id: string, qty: number) => void;
   qtyError?: string;
 }) {
-  const { base, discountAmt, taxable } = calcLineAmounts(line);
+  const { base, taxable } = calcLineAmounts(line);
+  const parts = calcSplitDiscountParts(line);
   const split = calcGstLineSplit(line, interstate);
   const spName = line.salesperson?.trim();
+  const hasScheme = line.schemeApplied === "Yes" || Boolean(line.schemeCode);
 
   return (
     <tr className="border-b border-border/40 last:border-0">
@@ -142,26 +207,8 @@ const SalesOrderInvoiceLineRow = memo(function SalesOrderInvoiceLineRow({
       <td className={cn("px-2 py-1.5 align-middle so-cell-num", COL.gross)}>
         {formatINR(base)}
       </td>
-      <td className={cn("px-2 py-1.5 align-middle so-cell-num", COL.discPct)}>
-        <Input
-          type="number"
-          min={0}
-          max={100}
-          step={0.01}
-          className="h-8 w-full max-w-[72px] text-xs text-right ml-auto tabular-nums"
-          value={line.discountPct || ""}
-          onChange={(e) => onDiscountPct(line.id, parseFloat(e.target.value) || 0)}
-        />
-      </td>
-      <td className={cn("px-2 py-1.5 align-middle so-cell-num", COL.discAmt)}>
-        <AccountsMoneyInput
-          className="h-8 w-full max-w-[110px] text-xs text-right ml-auto"
-          value={discountAmt || ""}
-          onChange={(v) => onDiscountAmt(line.id, v)}
-        />
-      </td>
       <td className={cn("px-2 py-1.5 align-middle", COL.scheme)}>
-        {line.schemeApplied === "Yes" || line.schemeCode ? (
+        {hasScheme ? (
           <div className="min-w-[120px] max-w-[160px]">
             <p
               className="text-[11px] font-medium text-foreground leading-tight truncate"
@@ -173,13 +220,26 @@ const SalesOrderInvoiceLineRow = memo(function SalesOrderInvoiceLineRow({
               {line.schemeCode || "—"}
             </p>
             <p className="text-[10px] text-muted-foreground leading-tight">
-              Product Discount
-              {schemeDiscountLabel(line) ? ` · ${schemeDiscountLabel(line)}` : ""}
+              {schemeDiscountLabel(line) || "Product Discount"}
+              {parts.schemeAmt > 0 ? ` · −${formatINR(parts.schemeAmt)}` : ""}
             </p>
           </div>
         ) : (
           <span className="text-xs text-muted-foreground">—</span>
         )}
+      </td>
+      <td className={cn("px-2 py-1.5 align-middle so-cell-num", COL.finalRate)}>
+        {formatINR(parts.finalRate)}
+      </td>
+      <td className={cn("px-2 py-1.5 align-middle so-cell-num", COL.manualDisc)}>
+        <ManualDiscountField
+          type={line.manualDiscountType ?? "Percentage"}
+          value={line.manualDiscountValue ?? 0}
+          amount={parts.manualAmt}
+          postSchemeAmount={parts.postScheme}
+          onValue={(v) => onManualValue(line.id, v)}
+          onType={(t) => onManualType(line.id, t)}
+        />
       </td>
       <td className={cn("px-2 py-1.5 align-middle so-cell-num", COL.taxable)}>
         {formatINR(taxable)}
@@ -227,9 +287,9 @@ const HEADER_COL: Record<string, string> = {
   UOM: COL.uom,
   Rate: COL.rate,
   "Gross Amount": COL.gross,
-  "Discount %": COL.discPct,
-  "Discount Amount": COL.discAmt,
-  Scheme: COL.scheme,
+  "Scheme Applied": COL.scheme,
+  "Final Rate": COL.finalRate,
+  "Manual Discount": COL.manualDisc,
   Taxable: COL.taxable,
   "GST %": COL.gstPct,
   CGST: COL.gstAmt,
@@ -250,28 +310,48 @@ function SalesOrderInvoiceLinesEditorInner({
 }) {
   const [qtyErrors, setQtyErrors] = useState<Record<string, string>>({});
 
-  const updateDiscountPct = useCallback(
-    (id: string, discountPct: number) => {
-      const pct = Math.max(0, Math.min(100, discountPct));
+  const updateManualValue = useCallback(
+    (id: string, rawValue: number) => {
       onChange((prev) =>
         prev.map((line) => {
           if (line.id !== id) return line;
-          return recalculateLineItem({ ...line, discountPct: pct });
+          const type = line.manualDiscountType ?? "Percentage";
+          const { postScheme } = calcSplitDiscountParts(line);
+          const value = Math.max(
+            0,
+            type === "Percentage" ? Math.min(100, rawValue) : Math.min(postScheme, rawValue),
+          );
+          return recalculateLineItem({
+            ...line,
+            discountMode: "split",
+            manualDiscountType: type,
+            manualDiscountValue: value,
+          });
         }),
       );
     },
     [onChange],
   );
 
-  const updateDiscountAmt = useCallback(
-    (id: string, discountAmt: number) => {
+  /** Switching % ↔ ₹ keeps the same ₹ discount on the line. */
+  const updateManualType = useCallback(
+    (id: string, type: ManualType) => {
       onChange((prev) =>
         prev.map((line) => {
           if (line.id !== id) return line;
-          const base = Math.max(0, line.qty * line.unitPrice);
-          const amt = Math.max(0, Math.min(base, discountAmt));
-          const discountPct = base > 0 ? Math.round((amt / base) * 10000) / 100 : 0;
-          return recalculateLineItem({ ...line, discountPct });
+          const { postScheme, manualAmt } = calcSplitDiscountParts(line);
+          const value =
+            type === "Flat"
+              ? manualAmt
+              : postScheme > 0
+                ? Math.round((manualAmt / postScheme) * 10000) / 100
+                : 0;
+          return recalculateLineItem({
+            ...line,
+            discountMode: "split",
+            manualDiscountType: type,
+            manualDiscountValue: value,
+          });
         }),
       );
     },
@@ -308,9 +388,9 @@ function SalesOrderInvoiceLinesEditorInner({
         "UOM",
         "Rate",
         "Gross Amount",
-        "Discount %",
-        "Discount Amount",
-        "Scheme",
+        "Scheme Applied",
+        "Final Rate",
+        "Manual Discount",
         "Taxable",
         "GST %",
         "IGST",
@@ -327,9 +407,9 @@ function SalesOrderInvoiceLinesEditorInner({
         "UOM",
         "Rate",
         "Gross Amount",
-        "Discount %",
-        "Discount Amount",
-        "Scheme",
+        "Scheme Applied",
+        "Final Rate",
+        "Manual Discount",
         "Taxable",
         "GST %",
         "CGST",
@@ -343,8 +423,8 @@ function SalesOrderInvoiceLinesEditorInner({
     "Qty",
     "Rate",
     "Gross Amount",
-    "Discount %",
-    "Discount Amount",
+    "Final Rate",
+    "Manual Discount",
     "Taxable",
     "GST %",
     "CGST",
@@ -385,8 +465,8 @@ function SalesOrderInvoiceLinesEditorInner({
                 key={line.id}
                 line={line}
                 interstate={interstate}
-                onDiscountPct={updateDiscountPct}
-                onDiscountAmt={updateDiscountAmt}
+                onManualValue={updateManualValue}
+                onManualType={updateManualType}
                 onQty={updateQty}
                 qtyError={qtyErrors[line.id]}
               />

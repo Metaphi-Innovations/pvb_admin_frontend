@@ -488,6 +488,7 @@ function SpecialDiscountConditionFields({
 
   const isQty = form.specialDiscountBasedOn === "Sales Quantity";
   const hasSlabs = form.specialHasSlabs;
+  const isMultiInvoice = form.specialEvaluationScope === "Multiple Invoices";
 
   const helpText = (() => {
     const scopeBit =
@@ -495,7 +496,7 @@ function SpecialDiscountConditionFields({
         ? "on a single invoice"
         : "across invoices during Valid From–Valid To";
     const runBit =
-      form.specialSettlementRunMode === "Automatic"
+      isMultiInvoice || form.specialSettlementRunMode === "Automatic"
         ? "Entitlement is created automatically"
         : "Entitlement requires manual settlement via Credit Note";
     if (isQty) {
@@ -510,20 +511,36 @@ function SpecialDiscountConditionFields({
         <Field className="scheme-w-select-md" label="Evaluate On" required>
           <SchemeSearchableSelect
             value={form.specialEvaluationScope}
-            onChange={(v) =>
-              set("specialEvaluationScope", v as SpecialEvaluationScopeUI)
-            }
+            onChange={(v) => {
+              const scope = v as SpecialEvaluationScopeUI;
+              onChange({
+                ...form,
+                specialEvaluationScope: scope,
+                ...(scope === "Multiple Invoices"
+                  ? { specialSettlementRunMode: "Automatic" as const }
+                  : {}),
+              });
+            }}
             options={SPECIAL_EVALUATION_SCOPE_SELECT_OPTIONS}
           />
         </Field>
         <Field className="scheme-w-select-md" label="Entitlement Mode" required>
-          <SchemeSearchableSelect
-            value={form.specialSettlementRunMode}
-            onChange={(v) =>
-              set("specialSettlementRunMode", v as SpecialSettlementRunModeUI)
+          <div
+            title={
+              isMultiInvoice ? "Always Automatic for multiple invoices" : undefined
             }
-            options={SPECIAL_SETTLEMENT_RUN_MODE_SELECT_OPTIONS}
-          />
+          >
+            <SchemeSearchableSelect
+              value={
+                isMultiInvoice ? "Automatic" : form.specialSettlementRunMode
+              }
+              onChange={(v) =>
+                set("specialSettlementRunMode", v as SpecialSettlementRunModeUI)
+              }
+              options={SPECIAL_SETTLEMENT_RUN_MODE_SELECT_OPTIONS}
+              disabled={isMultiInvoice}
+            />
+          </div>
         </Field>
       </div>
 
@@ -927,7 +944,11 @@ interface SchemeUnifiedConfigFormProps {
   /** API-backed options (preferred). Falls back to local lists if omitted. */
   productSelectOptions?: SchemeProductSelectOption[];
   stateSelectOptions?: { id: string; name: string }[];
-  customerSelectOptions?: { id: string; name: string }[];
+  customerSelectOptions?: {
+    id: string;
+    name: string;
+    customerTypeId?: string | null;
+  }[];
   customerTypeSelectOptions?: { id: string; name: string }[];
   schemeCategoryOptions?: SchemeCategory[];
 }
@@ -979,6 +1000,36 @@ export function SchemeUnifiedConfigForm({
       CUSTOMER_TYPE_MULTI_OPTIONS.map((t) => ({ id: t, name: t })),
     [customerTypeSelectOptions],
   );
+  const customerTypeById = useMemo(() => {
+    if (!customerSelectOptions) return null;
+    return new Map(
+      customerSelectOptions.map((c) => [c.id, c.customerTypeId ?? null]),
+    );
+  }, [customerSelectOptions]);
+  const customerIdsAllowedForTypes = (typeIds: string[], ids: string[]) => {
+    if (!customerTypeById) return ids;
+    const allowed = new Set(typeIds);
+    return ids.filter((id) => {
+      const typeId = customerTypeById.get(id);
+      return Boolean(typeId && allowed.has(typeId));
+    });
+  };
+  /** Only customers of the selected customer type(s); already-locked picks stay visible. */
+  const typeFilteredCustomerOptions = useMemo(() => {
+    if (!customerTypeById) return customerOptions;
+    const allowed = new Set(form.customerTypes);
+    const locked = new Set(usageConstraints?.lockedCustomerIds ?? []);
+    return customerOptions.filter((c) => {
+      if (locked.has(c.id)) return true;
+      const typeId = customerTypeById.get(c.id);
+      return Boolean(typeId && allowed.has(typeId));
+    });
+  }, [
+    customerOptions,
+    customerTypeById,
+    form.customerTypes,
+    usageConstraints?.lockedCustomerIds,
+  ]);
   const usesProducts = formShowsProductApplicability(form);
   const showImpact = categoryShowsImpactFlags(form.schemeCategory);
   const autoBenefit = resolveAutomaticBenefit(form.schemeCategory, {
@@ -1299,6 +1350,25 @@ export function SchemeUnifiedConfigForm({
           onToggle={() => toggleStep("applicable")}
         >
           <div className="scheme-row">
+            <Field className="scheme-w-state">
+              <SchemeMultiSelect
+                label="State"
+                placeholder="Select states"
+                searchPlaceholder="Search states…"
+                required
+                options={stateOptions}
+                selectedIds={form.stateNames}
+                lockedIds={usageConstraints?.lockedStateNames}
+                onChange={(ids) => set("stateNames", ids)}
+                error={
+                  error && /state/i.test(error)
+                    ? "Please select at least one state (or Select All)."
+                    : undefined
+                }
+                className="w-full"
+                dense
+              />
+            </Field>
             <Field className="scheme-w-customer-type">
               <SchemeMultiSelect
                 label="Customer Type"
@@ -1316,7 +1386,7 @@ export function SchemeUnifiedConfigForm({
                     // Keep existing customers when scheme is in use (add-only).
                     customerIds: usageConstraints?.isUsed
                       ? form.customerIds
-                      : [],
+                      : customerIdsAllowedForTypes(ids, form.customerIds),
                   })
                 }
                 error={
@@ -1331,35 +1401,20 @@ export function SchemeUnifiedConfigForm({
             <Field className="scheme-w-customer">
               <SchemeMultiSelect
                 label="Customers"
-                placeholder="Select customers"
+                placeholder={
+                  form.customerTypes.length === 0
+                    ? "Select customer type first"
+                    : "Select customers"
+                }
                 searchPlaceholder="Search customers…"
                 required
-                options={customerOptions}
+                options={typeFilteredCustomerOptions}
                 selectedIds={form.customerIds}
                 lockedIds={usageConstraints?.lockedCustomerIds}
                 onChange={(ids) => set("customerIds", ids)}
                 error={
                   error && /select at least one customer(?! type)/i.test(error)
                     ? "Please select at least one customer (or Select All)."
-                    : undefined
-                }
-                className="w-full"
-                dense
-              />
-            </Field>
-            <Field className="scheme-w-state">
-              <SchemeMultiSelect
-                label="State"
-                placeholder="Select states"
-                searchPlaceholder="Search states…"
-                required
-                options={stateOptions}
-                selectedIds={form.stateNames}
-                lockedIds={usageConstraints?.lockedStateNames}
-                onChange={(ids) => set("stateNames", ids)}
-                error={
-                  error && /state/i.test(error)
-                    ? "Please select at least one state (or Select All)."
                     : undefined
                 }
                 className="w-full"
@@ -1733,6 +1788,14 @@ export function SchemeUnifiedConfigForm({
                 <dd>{schemeTypeDisplayLabel(form.schemeCategory)}</dd>
               </div>
               <div className="scheme-review-item">
+                <dt>State</dt>
+                <dd>
+                  {form.stateNames.length
+                    ? form.stateNames.join(", ")
+                    : "Not selected"}
+                </dd>
+              </div>
+              <div className="scheme-review-item">
                 <dt>Applicable To</dt>
                 <dd>
                   {form.customerTypes.length === 0
@@ -1757,14 +1820,6 @@ export function SchemeUnifiedConfigForm({
                             customerOptions.find((c) => c.id === id)?.name ?? id,
                         )
                         .join(", ")}
-                </dd>
-              </div>
-              <div className="scheme-review-item">
-                <dt>State</dt>
-                <dd>
-                  {form.stateNames.length
-                    ? form.stateNames.join(", ")
-                    : "Not selected"}
                 </dd>
               </div>
               {usesProducts ? (
