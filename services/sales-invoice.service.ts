@@ -172,6 +172,18 @@ export type EligibleInvoiceCnSchemeOffer = {
     remaining_expiry_days?: number | null;
     line_benefit_amount: number;
   }>;
+  /** Special only — products counted toward the combined threshold (display). */
+  contributing_products?: Array<{
+    product_id: string;
+    product_code: string;
+    product_name: string;
+    quantity: number;
+    taxable_amount: number;
+  }>;
+  /** Special only — combined qty or ₹ achieved on this invoice. */
+  achievement_value?: number | null;
+  /** Special only — minimum qty or ₹ for the matched threshold / slab. */
+  min_required_value?: number | null;
 };
 
 export type EligibleInvoiceCnSchemesResult = {

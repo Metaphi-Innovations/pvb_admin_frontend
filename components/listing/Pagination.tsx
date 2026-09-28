@@ -13,7 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-const PAGE_SIZE_OPTIONS = [25, 50, 100] as const;
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
 
 interface PaginationProps {
   page: number;
@@ -42,6 +42,9 @@ export function Pagination({
   const startItem = totalRecords === 0 ? 0 : (page - 1) * pageSize + 1;
   const endItem = Math.min(page * pageSize, totalRecords);
   const [pageInput, setPageInput] = useState(String(page));
+  const pageSizeOptions = (PAGE_SIZE_OPTIONS as readonly number[]).includes(pageSize)
+    ? PAGE_SIZE_OPTIONS
+    : [...PAGE_SIZE_OPTIONS, pageSize].sort((a, b) => a - b);
 
   useEffect(() => {
     setPageInput(String(page));
@@ -114,7 +117,7 @@ export function Pagination({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="!min-w-[75px] !w-[75px]">
-                {PAGE_SIZE_OPTIONS.map((n) => (
+                {pageSizeOptions.map((n) => (
                   <SelectItem key={n} value={String(n)} className="text-xs">
                     {n}
                   </SelectItem>
