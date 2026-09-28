@@ -15,6 +15,7 @@ import {
   User, Briefcase, Shield, FileText, Sparkles,
 } from "lucide-react";
 import { loadGeoNodes, type GeoNode } from "@/app/(app)/masters/geography/geo-data";
+import { isUserAutofillEnabled } from "../user-autofill-flag";
 import {
   type Employee, type RoleType, type SalesType, type UserPermissions,
   type WebAction, type MobileAction, type PermModule, type MobileGroupDef,
@@ -1672,7 +1673,17 @@ export default function EmployeeForm({
     return ROLE_GEO_FIELDS[form.role] || [];
   }, [apiRoles, form.roleId, form.roleType, form.role]);
 
-  const getGeoOptionsMap = (mapping: GeoMappingRow): Record<string, ACOption[]> => {
+  const assignmentGeoKey: Record<string, keyof GeoMappingRow> = {
+    Zone: "geoZone",
+    Region: "geoRegion",
+    Area: "geoArea",
+    Territory: "territory",
+  };
+
+  const getGeoOptionsMap = (
+    mapping: GeoMappingRow,
+    mappingIndex: number,
+  ): Record<string, ACOption[]> => {
     const zones = businessGeography.filter((item) => item.level === "Zone");
     const selectedZone = zones.find((item) => item.name === mapping.geoZone);
     const regions = businessGeography.filter(
@@ -1701,6 +1712,17 @@ export default function EmployeeForm({
       | "Area"
       | "Territory"
       | "";
+    const leafKey = assignmentLevel
+      ? assignmentGeoKey[assignmentLevel]
+      : null;
+
+    // Same leaf geography cannot appear in two mappings for this user
+    const selectedInOtherMappings = new Set(
+      geoMappings
+        .filter((_, i) => i !== mappingIndex && leafKey)
+        .map((m) => (leafKey ? String(m[leafKey] || "").trim().toLowerCase() : ""))
+        .filter(Boolean),
+    );
 
     const occupancyByLevel = {
       Zone: new Map<string, { userId: string; fullName: string }>(),
@@ -1730,15 +1752,20 @@ export default function EmployeeForm({
         const assignee = occupancyByLevel[level].get(item.geography_id);
         const isOwn = Boolean(assignee && currentUserIds.has(String(assignee.userId)));
         const takenByOther = Boolean(assignee && !isOwn);
+        const duplicateInForm = selectedInOtherMappings.has(
+          item.name.trim().toLowerCase(),
+        );
         return {
           label: item.name,
           value: item.name,
-          sub: takenByOther
-            ? `Already assigned to ${assignee!.fullName}`
-            : isOwn
-              ? "Currently assigned to this user"
-              : undefined,
-          disabled: takenByOther,
+          sub: duplicateInForm
+            ? "Already selected in another mapping"
+            : takenByOther
+              ? `Already assigned to ${assignee!.fullName}`
+              : isOwn
+                ? "Currently assigned to this user"
+                : undefined,
+          disabled: takenByOther || duplicateInForm,
         };
       });
 
@@ -1797,12 +1824,7 @@ export default function EmployeeForm({
   };
 
   // ── Geo value map ────────────────────────────────────────────────────────────
-  const geoKey: Record<string, keyof GeoMappingRow> = {
-    Zone: "geoZone",
-    Region: "geoRegion",
-    Area: "geoArea",
-    Territory: "territory",
-  };
+  const geoKey: Record<string, keyof GeoMappingRow> = assignmentGeoKey;
 
   const getGeoMappingErrorKey = (index: number, field: string) => `geoMapping_${index}_${field}`;
 
@@ -1813,9 +1835,29 @@ export default function EmployeeForm({
     });
 
   const setGeoMappingValue = (index: number, key: keyof GeoMappingRow, value: string | number) => {
+    const leafField = geoFields[geoFields.length - 1] || "";
+    const leafKey = leafField ? geoKey[leafField] : null;
+    const nextValue = String(value);
+    if (
+      leafKey &&
+      key === leafKey &&
+      nextValue.trim() &&
+      geoMappings.some(
+        (m, i) =>
+          i !== index &&
+          String(m[leafKey] || "").trim().toLowerCase() === nextValue.trim().toLowerCase(),
+      )
+    ) {
+      setErrors((prev) => ({
+        ...prev,
+        [getGeoMappingErrorKey(index, key)]: `This ${leafField} is already used in another mapping`,
+      }));
+      return;
+    }
+
     setGeoMappings((prev) => {
       const next = [...prev];
-      const mapping = { ...next[index], [key]: String(value) };
+      const mapping = { ...next[index], [key]: nextValue };
 
       if (key === "geoZone") {
         mapping.geoRegion = "";
@@ -1909,7 +1951,7 @@ export default function EmployeeForm({
       });
     }
     // Geography module paused — mapping is optional for Field users.
-    // Re-enable this block when geography master goes live again.
+    // Re-enable required checks when geography master goes live again.
     const GEOGRAPHY_MAPPING_REQUIRED = false;
     if (GEOGRAPHY_MAPPING_REQUIRED && form.roleType === "Field User") {
       geoMappings.forEach((mapping, index) => {
@@ -1919,6 +1961,25 @@ export default function EmployeeForm({
             e[getGeoMappingErrorKey(index, key)] = `${field} is required`;
           }
         });
+      });
+    }
+    // Same assignment-level geography cannot appear in more than one mapping
+    if (form.roleType === "Field User" && geoFields.length > 0) {
+      const leafField = geoFields[geoFields.length - 1];
+      const leafKey = geoKey[leafField] as keyof GeoMappingRow;
+      const firstIndexByValue = new Map<string, number>();
+      geoMappings.forEach((mapping, index) => {
+        const val = String(mapping[leafKey] || "").trim().toLowerCase();
+        if (!val) return;
+        const firstIndex = firstIndexByValue.get(val);
+        if (firstIndex == null) {
+          firstIndexByValue.set(val, index);
+          return;
+        }
+        e[getGeoMappingErrorKey(index, leafKey)] =
+          `This ${leafField} is already used in Mapping ${firstIndex + 1}`;
+        e[getGeoMappingErrorKey(firstIndex, leafKey)] =
+          `This ${leafField} cannot be mapped more than once`;
       });
     }
     const hasWeb = activeWebPerms.size > 0;
@@ -2110,7 +2171,7 @@ export default function EmployeeForm({
             <div>
               <div className="flex items-center justify-between mb-2">
                 <SectionHead label="Basic Information" />
-                {mode === "add" && (
+                {mode === "add" && isUserAutofillEnabled() && (
                   <Button
                     type="button"
                     variant="outline"
@@ -2398,7 +2459,7 @@ export default function EmployeeForm({
                     </div>
                     <div className="space-y-3">
                       {geoMappings.map((mapping, index) => {
-                        const optionsMap = getGeoOptionsMap(mapping);
+                        const optionsMap = getGeoOptionsMap(mapping, index);
                         return (
                           <div key={index} className="p-3 border rounded-lg border-border bg-muted/10">
                             <div className="flex items-center justify-between gap-3 mb-3">
@@ -2444,7 +2505,8 @@ export default function EmployeeForm({
                       <div className="flex items-center justify-between gap-3">
                         <p className="text-[11px] text-muted-foreground flex items-center gap-1">
                           <Info className="flex-shrink-0 w-3 h-3" />
-                          Selections are loaded from Business Geography Master. Choosing a higher level filters the options below it automatically.
+                          Selections are loaded from Business Geography Master. The same{" "}
+                          {geoFields[geoFields.length - 1] || "geography"} cannot be used in more than one mapping.
                         </p>
                         <Button
                           type="button"

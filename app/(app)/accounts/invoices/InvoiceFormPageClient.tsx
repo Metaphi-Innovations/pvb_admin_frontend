@@ -2799,7 +2799,6 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
 
         {!isStockTransferInvoice && !smGen ? (
           <InvoiceApplicableSchemesPanel
-            lines={lines}
             cnSchemes={eligibleCnSchemes}
             selectedCnSchemeId={selectedCnSchemeId}
             onSelectCnScheme={isEdit ? undefined : setSelectedCnSchemeId}

@@ -144,6 +144,7 @@ export function detailToEmployee(detail: UserDetailRecord): Employee {
     salesType: detail.salesType as Employee["salesType"],
     roleId: detail.roleId || null,
     role: detail.role,
+    roleGeoLevel: detail.roleGeoLevel || "",
     reportingManagerId: detail.reportingManagerId || null,
     reportingManager: detail.reportingManager || "",
     status: detail.status,
@@ -249,13 +250,50 @@ export function buildGeographyMapping(
 }
 
 export function geoFieldsForRole(roleGeoLevel: string, roleName?: string): string[] {
-  if (roleGeoLevel && GEO_LEVEL_FIELDS[roleGeoLevel]) {
-    return GEO_LEVEL_FIELDS[roleGeoLevel];
+  const normalizedLevel = roleGeoLevel?.trim() || "";
+  if (normalizedLevel && GEO_LEVEL_FIELDS[normalizedLevel]) {
+    return GEO_LEVEL_FIELDS[normalizedLevel];
   }
   if (roleName && ROLE_GEO_FIELDS[roleName]) {
     return ROLE_GEO_FIELDS[roleName];
   }
   return [];
+}
+
+export type GeoMappingDisplayRow = {
+  geoZone?: string;
+  geoRegion?: string;
+  geoArea?: string;
+  territory?: string;
+};
+
+const GEO_FIELD_DISPLAY: Record<
+  string,
+  { key: keyof GeoMappingDisplayRow; header: string }
+> = {
+  Zone: { key: "geoZone", header: "Zone" },
+  Region: { key: "geoRegion", header: "Region" },
+  Area: { key: "geoArea", header: "Area" },
+  Territory: { key: "territory", header: "Territory" },
+};
+
+/** Geography columns for user view tables — matches create/edit mapping fields by role. */
+export function geoMappingColumnsForRole(
+  roleGeoLevel: string,
+  roleName?: string,
+): Array<{
+  key: string;
+  header: string;
+  getValue: (row: GeoMappingDisplayRow) => string;
+}> {
+  return geoFieldsForRole(roleGeoLevel, roleName)
+    .map((field) => GEO_FIELD_DISPLAY[field])
+    .filter(Boolean)
+    .map(({ key, header }) => ({
+      key,
+      header,
+      getValue: (row: GeoMappingDisplayRow) => row[key]?.trim() || "—",
+    }));
 }
 
 function buildApprovalChain(employee: Employee): unknown[] | null {

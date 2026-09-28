@@ -172,6 +172,18 @@ export type EligibleInvoiceCnSchemeOffer = {
     remaining_expiry_days?: number | null;
     line_benefit_amount: number;
   }>;
+  /** Special only — products counted toward the combined threshold (display). */
+  contributing_products?: Array<{
+    product_id: string;
+    product_code: string;
+    product_name: string;
+    quantity: number;
+    taxable_amount: number;
+  }>;
+  /** Special only — combined qty or ₹ achieved on this invoice. */
+  achievement_value?: number | null;
+  /** Special only — minimum qty or ₹ for the matched threshold / slab. */
+  min_required_value?: number | null;
 };
 
 export type EligibleInvoiceCnSchemesResult = {
@@ -308,6 +320,7 @@ export type SalesInvoiceListDto = {
   stock_transfer?: {
     stock_transfer_id?: string | null;
     transfer_no?: string | null;
+    salesperson_name?: string | null;
   } | null;
   sample_order?: {
     sample_order_id?: string | null;
@@ -372,6 +385,7 @@ export type SalesInvoiceDetailDto = SalesInvoiceListDto & {
   stock_transfer?: {
     stock_transfer_id?: string;
     transfer_no?: string | null;
+    salesperson_name?: string | null;
   } | null;
   /** Nested statutory blocks from Sales Invoice View API. */
   einvoice?: {
@@ -1002,7 +1016,10 @@ export function mapSalesInvoiceDetailToRecord(
     snapshotStr(warehouseSnap, "warehouse_name", "warehouseName", "name") ||
     "";
   const salespersonName =
-    dto.sales_order?.salesperson_name || dto.salesperson_name || "";
+    asString(dto.salesperson_name) ||
+    asString(dto.sales_order?.salesperson_name) ||
+    asString(dto.stock_transfer?.salesperson_name) ||
+    "";
   const posSnap = (dto.place_of_supply_snapshot || {}) as Record<string, unknown>;
   const placeOfSupply =
     snapshotStr(posSnap, "state_name", "stateName") ||
@@ -1163,8 +1180,7 @@ export function mapSalesInvoiceDetailToRecord(
       dto.accounting_voucher?.party_ledger_id ||
       undefined,
     salesperson:
-      dto.sales_order?.salesperson_name ||
-      dto.salesperson_name ||
+      salespersonName ||
       lineItems.find((line) => line.salesperson)?.salesperson ||
       undefined,
     createdAt: new Date().toISOString(),

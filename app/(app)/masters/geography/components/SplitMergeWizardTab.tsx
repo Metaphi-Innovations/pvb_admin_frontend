@@ -109,10 +109,44 @@ function compareByName(a: string, b: string) {
   return a.localeCompare(b, undefined, { sensitivity: "base", numeric: true });
 }
 
-function actionToApi(action: RoleUserAssignment["action"]): "KEEP" | "ASSIGN" | "UNASSIGN" {
-  if (action === "keep") return "KEEP";
-  if (action === "assign") return "ASSIGN";
-  return "UNASSIGN";
+/** Map UI assignment → API row. Assign with no user must not become ASSIGN (400). */
+function toUserAssignmentRow(
+  nodeKey: string,
+  role: string,
+  ua: RoleUserAssignment,
+): {
+  node_key: string;
+  role_code: string;
+  action: "KEEP" | "ASSIGN" | "UNASSIGN";
+  user_id: string | null;
+} {
+  const userId = ua.userId?.trim() || "";
+
+  if (ua.action === "keep") {
+    return {
+      node_key: nodeKey,
+      role_code: role,
+      action: "KEEP",
+      user_id: null,
+    };
+  }
+
+  if (ua.action === "assign" && userId) {
+    return {
+      node_key: nodeKey,
+      role_code: role,
+      action: "ASSIGN",
+      user_id: userId,
+    };
+  }
+
+  // "assign" with no user selected, or explicit leave unassigned
+  return {
+    node_key: nodeKey,
+    role_code: role,
+    action: "UNASSIGN",
+    user_id: null,
+  };
 }
 
 function buildPreviews(params: {
@@ -926,16 +960,11 @@ export function SplitMergeWizardTab() {
     for (const [nodeKey, byRole] of Object.entries(userAssignmentsByCard)) {
       for (const [role, ua] of Object.entries(byRole)) {
         if (isInheritedSplitMergeRole(geoLevel, role)) continue;
-        rows.push({
-          node_key: nodeKey,
-          role_code: role,
-          action: actionToApi(ua.action),
-          user_id: ua.action === "assign" ? ua.userId || null : null,
-        });
+        rows.push(toUserAssignmentRow(nodeKey, role, ua));
       }
     }
 
-    // Default KEEP for any primary role/node not touched
+    // Default for untouched roles: KEEP only on existing source; UNASSIGN on new/merge nodes
     const nodeKeys =
       mode === "merge"
         ? ["merge_target"]
@@ -947,7 +976,7 @@ export function SplitMergeWizardTab() {
           rows.push({
             node_key: nodeKey,
             role_code: role,
-            action: "KEEP",
+            action: nodeKey === "source" ? "KEEP" : "UNASSIGN",
             user_id: null,
           });
         }
