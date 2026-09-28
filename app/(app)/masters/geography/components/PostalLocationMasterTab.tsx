@@ -21,7 +21,6 @@ import {
 import {
   AlertTriangle,
   CheckCircle2,
-  Download,
   Eye,
   Plus,
   Search,
@@ -45,7 +44,6 @@ import {
 import {
   useCreatePostalMapping,
   useDeletePostalMapping,
-  useExportPostalMaster,
   usePostalLookupDistricts,
   usePostalLookupStates,
   usePostalMasterList,
@@ -176,7 +174,6 @@ export function PostalLocationMasterTab(props: {
   const toggleStatusMutation = useTogglePostalMappingStatus();
   const createMappingMutation = useCreatePostalMapping();
   const deleteMappingMutation = useDeletePostalMapping();
-  const exportMutation = useExportPostalMaster();
 
   const applySearch = useCallback(() => {
     setAppliedSearch(draftSearch.trim());
@@ -231,27 +228,6 @@ export function PostalLocationMasterTab(props: {
       showToast(getErrorMessage(error, "Failed to delete mapping."), "error");
     }
   }, [deleteTarget, deleteMappingMutation, onWorkflowChange, showToast]);
-
-  const handleExport = useCallback(async () => {
-    try {
-      await exportMutation.mutateAsync({
-        search: appliedSearch.trim(),
-        status: statusFilter,
-        ordering,
-        apiFilters,
-      });
-      showToast("Export started.");
-    } catch (error) {
-      showToast(getErrorMessage(error, "Failed to export."), "error");
-    }
-  }, [
-    exportMutation,
-    appliedSearch,
-    statusFilter,
-    ordering,
-    apiFilters,
-    showToast,
-  ]);
 
   const actions = useMemo<ActionItemConfig<PostalListRecord>[]>(() => {
     const items: ActionItemConfig<PostalListRecord>[] = [
@@ -381,15 +357,6 @@ export function PostalLocationMasterTab(props: {
               <Plus className="w-3.5 h-3.5" /> Add Mapping
             </Button>
           )}
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 text-xs gap-1.5"
-            disabled={exportMutation.isPending}
-            onClick={() => void handleExport()}
-          >
-            <Download className="w-3.5 h-3.5" /> Export
-          </Button>
         </div>
       </div>
 
