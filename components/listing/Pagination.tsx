@@ -82,21 +82,25 @@ export function Pagination({
   return (
     <div
       className={cn(
-        "accounts-pagination-footer flex-shrink-0 border-t border-border bg-muted/20 flex items-center flex-wrap gap-x-2 gap-y-1",
-        isCompact ? "px-2 py-1 justify-between" : "px-4 py-2.5 justify-between",
+        "accounts-pagination-footer flex-shrink-0 border-t border-border bg-muted/20 flex items-center flex-wrap gap-x-3 gap-y-2",
+        isCompact ? "px-2 py-1.5 justify-between" : "px-4 py-2.5 justify-between",
       )}
     >
       <div className={cn("flex items-center flex-wrap", isCompact ? "gap-2" : "gap-3")}>
-        <p className="text-xs text-muted-foreground whitespace-nowrap">
+        <p className="text-xs text-muted-foreground whitespace-nowrap tabular-nums">
           {totalRecords === 0 ? (
             <>Showing <span className="font-medium text-foreground">0</span> {recordLabel}</>
           ) : (
             <>
               Showing{" "}
               <span className="font-medium text-foreground">
-                {startItem}–{endItem}
+                {startItem.toLocaleString()}–{endItem.toLocaleString()}
               </span>{" "}
-              of <span className="font-medium text-foreground">{totalRecords}</span> {recordLabel}
+              of{" "}
+              <span className="font-medium text-foreground">
+                {totalRecords.toLocaleString()}
+              </span>{" "}
+              {recordLabel}
             </>
           )}
         </p>
@@ -125,21 +129,21 @@ export function Pagination({
         )}
       </div>
 
-      <div className={cn("flex items-center flex-wrap", isCompact ? "gap-0.5 ml-auto" : "gap-1")}>
+      <div className={cn("flex items-center flex-wrap", isCompact ? "gap-1 ml-auto" : "gap-1.5")}>
         <Button
           variant="outline"
           size="icon"
-          className={cn("rounded border-border", isCompact ? "h-6 w-6" : "h-6 w-6")}
+          className={cn("rounded border-border shrink-0", isCompact ? "h-7 w-7" : "h-7 w-7")}
           disabled={page <= 1 || totalRecords === 0}
           onClick={() => onPageChange(page - 1)}
           aria-label="Previous page"
         >
-          <ChevronLeft className={isCompact ? "w-3 h-3" : "w-3.5 h-3.5"} />
+          <ChevronLeft className={isCompact ? "w-3.5 h-3.5" : "w-3.5 h-3.5"} />
         </Button>
 
         {isCompact ? (
           totalRecords > 0 && (
-            <span className="h-6 min-w-[1.5rem] px-1.5 inline-flex items-center justify-center text-[10px] font-semibold rounded bg-brand-600 text-white">
+            <span className="h-7 min-w-[1.75rem] px-2 inline-flex items-center justify-center text-[11px] font-semibold rounded bg-brand-600 text-white tabular-nums">
               {page}
             </span>
           )
@@ -149,14 +153,16 @@ export function Pagination({
               <>
                 <Button
                   variant="outline"
-                  size="icon"
-                  className="h-6 w-6 text-[10px] rounded border-border"
+                  size="sm"
+                  className="h-7 min-w-7 px-2 text-[11px] rounded border-border tabular-nums shrink-0"
                   onClick={() => onPageChange(1)}
                 >
                   1
                 </Button>
                 {pageNumbers[0] > 2 && (
-                  <span className="text-xs text-muted-foreground px-0.5 select-none">…</span>
+                  <span className="text-xs text-muted-foreground px-0.5 select-none shrink-0">
+                    …
+                  </span>
                 )}
               </>
             )}
@@ -168,10 +174,11 @@ export function Pagination({
                   <Button
                     key={p}
                     variant={isCurrent ? "default" : "outline"}
-                    size="icon"
+                    size="sm"
                     className={cn(
-                      "h-6 w-6 text-[10px] rounded border-border",
-                      isCurrent && "bg-brand-600 hover:bg-brand-700 text-white border-brand-600 font-semibold",
+                      "h-7 min-w-7 px-2 text-[11px] rounded border-border tabular-nums shrink-0",
+                      isCurrent &&
+                        "bg-brand-600 hover:bg-brand-700 text-white border-brand-600 font-semibold",
                     )}
                     onClick={() => onPageChange(p)}
                   >
@@ -183,12 +190,14 @@ export function Pagination({
             {totalRecords > 0 && pageNumbers[pageNumbers.length - 1] < totalPages && (
               <>
                 {pageNumbers[pageNumbers.length - 1] < totalPages - 1 && (
-                  <span className="text-xs text-muted-foreground px-0.5 select-none">…</span>
+                  <span className="text-xs text-muted-foreground px-0.5 select-none shrink-0">
+                    …
+                  </span>
                 )}
                 <Button
                   variant="outline"
-                  size="icon"
-                  className="h-6 w-6 text-[10px] rounded border-border"
+                  size="sm"
+                  className="h-7 min-w-7 px-2 text-[11px] rounded border-border tabular-nums shrink-0"
                   onClick={() => onPageChange(totalPages)}
                 >
                   {totalPages}
@@ -201,16 +210,16 @@ export function Pagination({
         <Button
           variant="outline"
           size="icon"
-          className={cn("rounded border-border", isCompact ? "h-6 w-6" : "h-6 w-6")}
+          className={cn("rounded border-border shrink-0", isCompact ? "h-7 w-7" : "h-7 w-7")}
           disabled={page >= totalPages || totalRecords === 0}
           onClick={() => onPageChange(page + 1)}
           aria-label="Next page"
         >
-          <ChevronRight className={isCompact ? "w-3 h-3" : "w-3.5 h-3.5"} />
+          <ChevronRight className={isCompact ? "w-3.5 h-3.5" : "w-3.5 h-3.5"} />
         </Button>
 
         {!isCompact && (
-          <div className="flex items-center gap-1 ml-1 pl-1 border-l border-border/60">
+          <div className="flex items-center gap-1.5 ml-1.5 pl-1.5 border-l border-border/60 shrink-0">
             <span className="text-[10px] text-muted-foreground whitespace-nowrap">Go to</span>
             <input
               type="text"
@@ -223,13 +232,13 @@ export function Pagination({
                   handlePageJump();
                 }
               }}
-              className="h-6 w-9 px-1 text-[10px] text-center border border-border rounded bg-white focus:outline-none focus:ring-2 focus:ring-brand-300"
+              className="h-7 w-10 px-1 text-[11px] text-center border border-border rounded bg-white tabular-nums focus:outline-none focus:ring-2 focus:ring-brand-300"
               aria-label="Page number"
             />
             <Button
               variant="outline"
               size="sm"
-              className="h-6 px-1.5 text-[10px] rounded border-border"
+              className="h-7 px-2 text-[11px] rounded border-border"
               disabled={totalRecords === 0}
               onClick={handlePageJump}
             >

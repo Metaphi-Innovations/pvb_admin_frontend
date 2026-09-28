@@ -71,6 +71,7 @@ export interface Employee {
   salesType?: SalesType;
   roleId: number | string | null;
   role: string;
+  roleGeoLevel?: string;
   reportingManagerId: number | string | null;
   reportingManager: string;
   status: "active" | "inactive" | "draft" | "archived";
