@@ -39,6 +39,7 @@ export function AnnualGstFilterBar({
     resetFilters,
     branchLabeledOptions,
     gstRegistrationOptions,
+    filtersLoading,
   } = filterState;
 
   const branchOptions =
@@ -70,8 +71,7 @@ export function AnnualGstFilterBar({
   }, [branch, setBranch, gstRegistration, setGstRegistration, gstOptions]);
 
   const gstSelectOptions = useMemo(() => {
-    const regs = gstOptions.filter((o) => o.value !== "all");
-    return [{ value: "all", label: "Select GSTIN…" }, ...regs];
+    return gstOptions.filter((o) => o.value !== "all");
   }, [gstOptions]);
 
   return (
@@ -95,6 +95,7 @@ export function AnnualGstFilterBar({
           value={gstRegistration}
           onChange={setGstRegistration}
           options={gstSelectOptions}
+          loading={filtersLoading}
         />
         {hasAnnualFilters ? (
           <Button

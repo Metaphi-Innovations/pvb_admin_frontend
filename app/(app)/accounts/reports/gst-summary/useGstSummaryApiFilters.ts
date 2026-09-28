@@ -101,6 +101,18 @@ export function useGstSummaryApiFilters() {
     setDefaultsApplied(true);
   }, [filtersConfig, defaultsApplied, searchParams]);
 
+  // Drop a selected GSTIN that is not in the live API registration list.
+  useEffect(() => {
+    if (!filtersConfig || !defaultsApplied) return;
+    if (gstRegistration === "all") return;
+    const valid = new Set(
+      (filtersConfig.gst_registrations ?? []).map((r) => r.gstin),
+    );
+    if (!valid.has(gstRegistration)) {
+      setGstRegistration("all");
+    }
+  }, [filtersConfig, defaultsApplied, gstRegistration]);
+
   useEffect(() => {
     if (!mounted || !datesReady || !defaultsApplied) return;
     const filters: GstReportFilters = {

@@ -14,7 +14,11 @@ const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export type SalesInvoiceBackendType = "SALES" | "DIRECT_SERVICE" | "STOCK_TRANSFER";
-export type SalesInvoiceBackendStatus = "POSTED" | "CANCELLED" | "REVERSED";
+export type SalesInvoiceBackendStatus =
+  | "DRAFT"
+  | "POSTED"
+  | "CANCELLED"
+  | "REVERSED";
 
 export type SiNumberParams = {
   warehouseId?: string | null;
@@ -115,6 +119,7 @@ export type CreateDirectServicePayload = {
   customer_id: string;
   narration?: string | null;
   remarks?: string | null;
+  save_as_draft?: boolean;
   items: DirectServiceItemInput[];
   additional_charges?: AdditionalChargeInput[];
   round_off_amount?: number | string | null;
@@ -167,6 +172,18 @@ export type EligibleInvoiceCnSchemeOffer = {
     remaining_expiry_days?: number | null;
     line_benefit_amount: number;
   }>;
+  /** Special only — products counted toward the combined threshold (display). */
+  contributing_products?: Array<{
+    product_id: string;
+    product_code: string;
+    product_name: string;
+    quantity: number;
+    taxable_amount: number;
+  }>;
+  /** Special only — combined qty or ₹ achieved on this invoice. */
+  achievement_value?: number | null;
+  /** Special only — minimum qty or ₹ for the matched threshold / slab. */
+  min_required_value?: number | null;
 };
 
 export type EligibleInvoiceCnSchemesResult = {
@@ -303,6 +320,7 @@ export type SalesInvoiceListDto = {
   stock_transfer?: {
     stock_transfer_id?: string | null;
     transfer_no?: string | null;
+    salesperson_name?: string | null;
   } | null;
   sample_order?: {
     sample_order_id?: string | null;
@@ -367,6 +385,7 @@ export type SalesInvoiceDetailDto = SalesInvoiceListDto & {
   stock_transfer?: {
     stock_transfer_id?: string;
     transfer_no?: string | null;
+    salesperson_name?: string | null;
   } | null;
   /** Nested statutory blocks from Sales Invoice View API. */
   einvoice?: {
@@ -791,6 +810,7 @@ function mapBackendStatusToFrontend(status: string | undefined): InvoiceStatus {
   const s = asString(status).toUpperCase();
   if (s === "CANCELLED" || s === "REVERSED") return "cancelled";
   if (s === "POSTED") return "sent";
+  if (s === "DRAFT") return "draft";
   return "draft";
 }
 
@@ -996,7 +1016,10 @@ export function mapSalesInvoiceDetailToRecord(
     snapshotStr(warehouseSnap, "warehouse_name", "warehouseName", "name") ||
     "";
   const salespersonName =
-    dto.sales_order?.salesperson_name || dto.salesperson_name || "";
+    asString(dto.salesperson_name) ||
+    asString(dto.sales_order?.salesperson_name) ||
+    asString(dto.stock_transfer?.salesperson_name) ||
+    "";
   const posSnap = (dto.place_of_supply_snapshot || {}) as Record<string, unknown>;
   const placeOfSupply =
     snapshotStr(posSnap, "state_name", "stateName") ||
@@ -1157,8 +1180,7 @@ export function mapSalesInvoiceDetailToRecord(
       dto.accounting_voucher?.party_ledger_id ||
       undefined,
     salesperson:
-      dto.sales_order?.salesperson_name ||
-      dto.salesperson_name ||
+      salespersonName ||
       lineItems.find((line) => line.salesperson)?.salesperson ||
       undefined,
     createdAt: new Date().toISOString(),
@@ -1322,6 +1344,21 @@ export const SalesInvoiceService = {
     } catch (error) {
       throw new Error(
         extractErrorMessage(error, "Failed to create service invoice."),
+      );
+    }
+  },
+
+  async postDraftDirectService(id: string): Promise<SalesInvoiceCreateResult> {
+    try {
+      const response = await axiosInstance.post(
+        API_ENDPOINTS.ACCOUNTS.SALES_INVOICE.POST_DRAFT(id),
+      );
+      const data = unwrapData(response);
+      if (!data) throw new Error("Failed to post service invoice draft.");
+      return data as SalesInvoiceCreateResult;
+    } catch (error) {
+      throw new Error(
+        extractErrorMessage(error, "Failed to post service invoice draft."),
       );
     }
   },

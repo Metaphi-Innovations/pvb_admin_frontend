@@ -319,10 +319,10 @@ export const DEMO_COLLECTION_FOLLOWUPS: CollectionFollowUp[] = [
     followUpNo: "FU-0003",
     customerId: 3,
     customerName: "Yavatmal Cotton FPO",
-    invoiceId: 7,
-    invoiceNo: "INV-2026-007",
-    outstandingAmount: 145000,
-    dueDate: "2026-06-02",
+    invoiceId: 18,
+    invoiceNo: "INV-2026-018",
+    outstandingAmount: 40000,
+    dueDate: "2026-06-16",
     followUpDate: "2026-06-05",
     assignedTo: "Amit Verma",
     contactPerson: "FPO Secretary",
@@ -357,10 +357,10 @@ export const DEMO_COLLECTION_FOLLOWUPS: CollectionFollowUp[] = [
     followUpNo: "FU-0005",
     customerId: 3,
     customerName: "Yavatmal Cotton FPO",
-    invoiceId: 8,
-    invoiceNo: "INV-2026-008",
-    outstandingAmount: 45000,
-    dueDate: "2026-06-26",
+    invoiceId: 17,
+    invoiceNo: "INV-2026-017",
+    outstandingAmount: 0,
+    dueDate: "2026-04-19",
     followUpDate: "2026-06-08",
     assignedTo: "Amit Verma",
     contactPerson: "Accounts",
@@ -433,10 +433,10 @@ export const DEMO_COLLECTION_FOLLOWUPS: CollectionFollowUp[] = [
     followUpNo: "FU-0009",
     customerId: 4,
     customerName: "Green Harvest Agro",
-    invoiceId: 5,
-    invoiceNo: "INV-2026-005",
-    outstandingAmount: 70000,
-    dueDate: "2026-07-07",
+    invoiceId: 19,
+    invoiceNo: "INV-2026-019",
+    outstandingAmount: 0,
+    dueDate: "2026-03-27",
     followUpDate: "2026-06-18",
     assignedTo: "Neha Patel",
     contactPerson: "Finance",
@@ -503,52 +503,28 @@ const DEMO_COLLECTION_HISTORY: CollectionFollowUpHistoryEntry[] = [
   },
 ];
 
-/** Maps voucher numbers to invoice allocation lines (voucherId resolved at runtime). */
+/** Maps voucher numbers to invoice allocation lines (voucherId resolved at runtime).
+ * Core INV-001..012 demo sales invoices were retired; keep empty lines so seed stays safe. */
 export const DEMO_RECEIPT_ALLOCATION_SPECS: Array<{
   voucherNumber: string;
   lines: Array<{ invoiceNo: string; amount: number }>;
 }> = [
-  {
-    voucherNumber: "RV-2026-001",
-    lines: [{ invoiceNo: "INV-2026-001", amount: 80000 }],
-  },
-  {
-    voucherNumber: "RV-2026-002",
-    lines: [{ invoiceNo: "INV-2026-002", amount: 45000 }],
-  },
-  {
-    voucherNumber: "RV-2026-003",
-    lines: [{ invoiceNo: "INV-2026-006", amount: 118000 }],
-  },
-  {
-    voucherNumber: "RV-2026-004",
-    lines: [
-      { invoiceNo: "INV-2026-004", amount: 80000 },
-      { invoiceNo: "INV-2026-005", amount: 10000 },
-    ],
-  },
-  {
-    voucherNumber: "RV-2026-005",
-    lines: [{ invoiceNo: "INV-2026-008", amount: 25000 }],
-  },
+  { voucherNumber: "RV-2026-001", lines: [] },
+  { voucherNumber: "RV-2026-002", lines: [] },
+  { voucherNumber: "RV-2026-003", lines: [] },
+  { voucherNumber: "RV-2026-004", lines: [] },
+  { voucherNumber: "RV-2026-005", lines: [] },
   { voucherNumber: "RV-2026-006", lines: [] },
 ];
 
 function buildDemoReceiptAllocationSpecs(ref = new Date()) {
-  const invNo = (id: number) => demoDocNo("INV", id, ref, 3);
   const rvNo = (seq: number) => demoDocNo("RV", seq, ref, 3);
   return [
-    { voucherNumber: rvNo(1), lines: [{ invoiceNo: invNo(1), amount: 80000 }] },
-    { voucherNumber: rvNo(2), lines: [{ invoiceNo: invNo(2), amount: 45000 }] },
-    { voucherNumber: rvNo(3), lines: [{ invoiceNo: invNo(6), amount: 118000 }] },
-    {
-      voucherNumber: rvNo(4),
-      lines: [
-        { invoiceNo: invNo(4), amount: 80000 },
-        { invoiceNo: invNo(5), amount: 10000 },
-      ],
-    },
-    { voucherNumber: rvNo(5), lines: [{ invoiceNo: invNo(8), amount: 25000 }] },
+    { voucherNumber: rvNo(1), lines: [] as Array<{ invoiceNo: string; amount: number }> },
+    { voucherNumber: rvNo(2), lines: [] as Array<{ invoiceNo: string; amount: number }> },
+    { voucherNumber: rvNo(3), lines: [] as Array<{ invoiceNo: string; amount: number }> },
+    { voucherNumber: rvNo(4), lines: [] as Array<{ invoiceNo: string; amount: number }> },
+    { voucherNumber: rvNo(5), lines: [] as Array<{ invoiceNo: string; amount: number }> },
     { voucherNumber: rvNo(6), lines: [] as Array<{ invoiceNo: string; amount: number }> },
   ];
 }
@@ -653,7 +629,7 @@ export function seedReceivablesSupplementalData(): void {
 }
 
 const RECEIVABLES_SEED_KEY = "ds_receivables_demo_seed_v3";
-export const RECEIVABLES_SEED_VERSION = "relative-dates-v3";
+export const RECEIVABLES_SEED_VERSION = "relative-dates-v4-no-core-si";
 
 /** Idempotent client-side seed for supplemental receivables demo data. */
 export function ensureReceivablesDemoData(): void {

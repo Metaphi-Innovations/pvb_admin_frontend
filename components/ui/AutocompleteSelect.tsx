@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
@@ -57,6 +57,11 @@ interface AutocompleteSelectProps {
   "data-pr-field"?: string;
 }
 
+const ROW_HEIGHT_PX = 40;
+const LIST_VIEWPORT_PX = 288; // ~max-h 18rem
+const VIRTUALIZE_THRESHOLD = 40;
+const OVERSCAN = 8;
+
 export function AutocompleteSelect({
   options,
   value,
@@ -78,18 +83,67 @@ export function AutocompleteSelect({
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const [draft, setDraft] = useState<string | string[]>(value);
+  const [scrollTop, setScrollTop] = useState(0);
+  const listRef = useRef<HTMLDivElement>(null);
 
   const activeValue = confirmOnDone && open ? draft : value;
 
-  const filtered = options.filter((opt) => {
-    const haystack = `${opt.label} ${opt.sublabel ?? ""} ${opt.searchText ?? ""}`.toLowerCase();
-    return haystack.includes(q.toLowerCase());
-  });
+  const filtered = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    if (!needle) return options;
+    return options.filter((opt) => {
+      const haystack =
+        `${opt.label} ${opt.sublabel ?? ""} ${opt.searchText ?? ""}`.toLowerCase();
+      return haystack.includes(needle);
+    });
+  }, [options, q]);
+
+  const selectedSet = useMemo(() => {
+    if (multiple) {
+      return new Set(Array.isArray(activeValue) ? activeValue : []);
+    }
+    return new Set(
+      typeof activeValue === "string" && activeValue ? [activeValue] : [],
+    );
+  }, [activeValue, multiple]);
+
+  const useVirtual = filtered.length > VIRTUALIZE_THRESHOLD;
+
+  const { startIndex, endIndex, padTop, padBottom } = useMemo(() => {
+    if (!useVirtual) {
+      return {
+        startIndex: 0,
+        endIndex: filtered.length,
+        padTop: 0,
+        padBottom: 0,
+      };
+    }
+    const start = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT_PX) - OVERSCAN);
+    const visibleCount = Math.ceil(LIST_VIEWPORT_PX / ROW_HEIGHT_PX) + OVERSCAN * 2;
+    const end = Math.min(filtered.length, start + visibleCount);
+    return {
+      startIndex: start,
+      endIndex: end,
+      padTop: start * ROW_HEIGHT_PX,
+      padBottom: Math.max(0, (filtered.length - end) * ROW_HEIGHT_PX),
+    };
+  }, [filtered.length, scrollTop, useVirtual]);
+
+  const visibleOptions = useVirtual
+    ? filtered.slice(startIndex, endIndex)
+    : filtered;
+
+  useEffect(() => {
+    if (!open) return;
+    setScrollTop(0);
+    if (listRef.current) listRef.current.scrollTop = 0;
+  }, [open, q]);
 
   const handleOpenChange = (next: boolean) => {
     if (disabled) return;
     if (next) {
       setDraft(value);
+      setScrollTop(0);
       setOpen(true);
       return;
     }
@@ -132,12 +186,7 @@ export function AutocompleteSelect({
     onBlur?.();
   };
 
-  const isSelected = (val: string) => {
-    if (multiple) {
-      return Array.isArray(activeValue) && activeValue.includes(val);
-    }
-    return activeValue === val;
-  };
+  const isSelected = (val: string) => selectedSet.has(val);
 
   // Get selected labels for display (always from committed value)
   const getSelectedLabel = () => {
@@ -261,10 +310,14 @@ export function AutocompleteSelect({
           </div>
         </div>
 
-        {/* Options List */}
+        {/* Options List — virtualized for large location/district lists */}
         <div
+          ref={listRef}
           className="max-h-[min(18rem,var(--radix-popover-content-available-height))] overflow-y-auto overscroll-contain p-1.5"
           onWheelCapture={handleScrollableWheel}
+          onScroll={(e) => {
+            if (useVirtual) setScrollTop(e.currentTarget.scrollTop);
+          }}
         >
           {filtered.length === 0 ? (
             <div className="flex flex-col items-center py-4 gap-1">
@@ -275,6 +328,11 @@ export function AutocompleteSelect({
             </div>
           ) : (
             <>
+              {!q.trim() && filtered.length > VIRTUALIZE_THRESHOLD && (
+                <p className="px-2 py-1 text-[10px] text-muted-foreground">
+                  {filtered.length.toLocaleString()} options — type to filter, or scroll
+                </p>
+              )}
               {multiple && filtered.length > 0 && (
                 <>
                   <button
@@ -311,45 +369,59 @@ export function AutocompleteSelect({
                   <div className="border-t border-border my-1" />
                 </>
               )}
-              {filtered.map((opt) => (
-                <button
-                  key={opt.value}
-                  type="button"
-                  disabled={opt.disabled}
-                  onClick={() => handleSelect(opt.value)}
-                  className={cn(
-                    "flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium transition-colors",
-                    "hover:bg-brand-50 disabled:cursor-not-allowed disabled:opacity-40",
-                    isSelected(opt.value) && "bg-brand-50"
-                  )}
-                >
-                  {multiple && (
-                    <Checkbox
-                      checked={isSelected(opt.value)}
-                      className="w-3.5 h-3.5 flex-shrink-0"
-                    />
-                  )}
-                  {opt.icon && (
-                    <span className="flex-shrink-0 text-muted-foreground">
-                      {opt.icon}
-                    </span>
-                  )}
-                  <span className="flex-1 text-foreground min-w-0">
-                    <span className="block truncate">{opt.label}</span>
-                    {opt.sublabel && (
-                      <span className="block text-[10px] text-muted-foreground truncate mt-0.5">
-                        {opt.sublabel}
+              <div
+                style={
+                  useVirtual
+                    ? { paddingTop: padTop, paddingBottom: padBottom }
+                    : undefined
+                }
+              >
+                {visibleOptions.map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    disabled={opt.disabled}
+                    onClick={() => handleSelect(opt.value)}
+                    style={
+                      useVirtual
+                        ? { height: ROW_HEIGHT_PX, boxSizing: "border-box" }
+                        : undefined
+                    }
+                    className={cn(
+                      "flex w-full items-center gap-2 rounded-lg px-2.5 text-left text-xs font-medium transition-colors",
+                      useVirtual ? "py-0" : "py-2",
+                      "hover:bg-brand-50 disabled:cursor-not-allowed disabled:opacity-40",
+                      isSelected(opt.value) && "bg-brand-50",
+                    )}
+                  >
+                    {multiple && (
+                      <Checkbox
+                        checked={isSelected(opt.value)}
+                        className="w-3.5 h-3.5 flex-shrink-0"
+                      />
+                    )}
+                    {opt.icon && (
+                      <span className="flex-shrink-0 text-muted-foreground">
+                        {opt.icon}
                       </span>
                     )}
-                  </span>
-                  {opt.trailing && (
-                    <span className="flex-shrink-0">{opt.trailing}</span>
-                  )}
-                  {!multiple && isSelected(opt.value) && (
-                    <Check className="w-3 h-3 text-brand-600 flex-shrink-0" />
-                  )}
-                </button>
-              ))}
+                    <span className="flex-1 text-foreground min-w-0">
+                      <span className="block truncate">{opt.label}</span>
+                      {opt.sublabel && (
+                        <span className="block text-[10px] text-muted-foreground truncate">
+                          {opt.sublabel}
+                        </span>
+                      )}
+                    </span>
+                    {opt.trailing && (
+                      <span className="flex-shrink-0">{opt.trailing}</span>
+                    )}
+                    {!multiple && isSelected(opt.value) && (
+                      <Check className="w-3 h-3 text-brand-600 flex-shrink-0" />
+                    )}
+                  </button>
+                ))}
+              </div>
             </>
           )}
         </div>

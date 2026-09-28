@@ -2,6 +2,7 @@
 
 /**
  * Manual Service Invoice create — posts via backend POST /accounts/sales-invoice/direct-service.
+ * Save Draft persists status DRAFT (no accounting); Post Invoice posts immediately.
  * Appears only in Sales Invoice → All Invoices (type Service).
  */
 
@@ -392,7 +393,7 @@ export default function ServiceInvoiceFormPageClient() {
     });
   };
 
-  const saveAndPost = async () => {
+  const submit = async (asDraft: boolean) => {
     setError(null);
     if (!customerId) {
       setError("Select a customer.");
@@ -407,7 +408,11 @@ export default function ServiceInvoiceFormPageClient() {
       return;
     }
     if (!sacOptions.length) {
-      setError("No active SAC codes found in HSN Master. Create SAC records before posting.");
+      setError(
+        asDraft
+          ? "No active SAC codes found in HSN Master. Create SAC records before saving."
+          : "No active SAC codes found in HSN Master. Create SAC records before posting.",
+      );
       return;
     }
 
@@ -455,13 +460,14 @@ export default function ServiceInvoiceFormPageClient() {
 
     setSaving(true);
     try {
-      const created = await SalesInvoiceService.createDirectService({
+      await SalesInvoiceService.createDirectService({
         invoice_date: invoiceDate,
         due_date: dueDate || computeDueDate(invoiceDate, creditDays),
         warehouse_id: warehouseId,
         customer_id: customerId,
         narration: narration.trim() || undefined,
         remarks: referenceNo.trim() || undefined,
+        save_as_draft: asDraft,
         items: serviceLines.map((line) => {
           const discountAmt =
             line.discountPct && line.discountPct > 0
@@ -483,10 +489,21 @@ export default function ServiceInvoiceFormPageClient() {
       });
 
       dispatchAccountsDataChanged("sales-invoices");
-      showToast("Service invoice posted successfully.", "success");
+      showToast(
+        asDraft
+          ? "Service invoice saved as draft."
+          : "Service invoice posted successfully.",
+        "success",
+      );
       router.replace(listHref);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to create service invoice.");
+      setError(
+        e instanceof Error
+          ? e.message
+          : asDraft
+            ? "Failed to save service invoice draft."
+            : "Failed to create service invoice.",
+      );
       setSaving(false);
     }
   };
@@ -501,11 +518,11 @@ export default function ServiceInvoiceFormPageClient() {
         stickyFooter={
           <VoucherFormActionBar
             onDiscard={() => router.push(listHref)}
-            onSaveDraft={() => showToast("Draft is not supported for service invoices. Use Post Invoice.", "info")}
-            onSaveAndPost={saveAndPost}
+            onSaveDraft={() => submit(true)}
+            onSaveAndPost={() => submit(false)}
             saveAndPostLabel="Post Invoice"
             discardDisabled={saving}
-            saveDraftDisabled
+            saveDraftDisabled={saving}
             saveAndPostDisabled={saving}
           />
         }

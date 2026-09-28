@@ -26,6 +26,8 @@ export function ReportMultiSelect({
   disabled,
   loading,
   grouped = false,
+  /** When true, only one option can be selected (checkbox UI, no Select All). */
+  singleSelect = false,
 }: {
   label: string;
   values: string[];
@@ -39,6 +41,7 @@ export function ReportMultiSelect({
   disabled?: boolean;
   loading?: boolean;
   grouped?: boolean;
+  singleSelect?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -72,11 +75,17 @@ export function ReportMultiSelect({
 
   const toggle = useCallback(
     (value: string) => {
+      if (singleSelect) {
+        onChange(values.includes(value) ? [] : [value]);
+        setOpen(false);
+        setSearch("");
+        return;
+      }
       onChange(
         values.includes(value) ? values.filter((v) => v !== value) : [...values, value],
       );
     },
-    [onChange, values],
+    [onChange, values, singleSelect],
   );
 
   const selectAll = useCallback(() => {
@@ -135,7 +144,7 @@ export function ReportMultiSelect({
             </span>
           </button>
         </PopoverTrigger>
-        <PopoverContent align="start" className="w-[var(--radix-popover-trigger-width)] min-w-[220px] p-0">
+        <PopoverContent align="start" className="w-[var(--radix-popover-trigger-width)] min-w-[260px] p-0">
           <div className="p-2 border-b border-border">
             <div className="relative">
               <Search className="w-3.5 h-3.5 absolute left-2.5 top-[7px] text-muted-foreground pointer-events-none" />
@@ -147,18 +156,20 @@ export function ReportMultiSelect({
               />
             </div>
           </div>
-          <div className="flex items-center justify-between px-2.5 py-1.5 border-b border-border bg-muted/20">
-            <button
-              type="button"
-              onClick={allFilteredSelected ? clearAll : selectAll}
-              className="text-[11px] font-medium text-brand-600 hover:underline"
-            >
-              {allFilteredSelected ? "Clear All" : "Select All"}
-            </button>
-            {values.length > 0 && (
-              <span className="text-[10px] text-muted-foreground">{values.length} selected</span>
-            )}
-          </div>
+          {!singleSelect ? (
+            <div className="flex items-center justify-between px-2.5 py-1.5 border-b border-border bg-muted/20">
+              <button
+                type="button"
+                onClick={allFilteredSelected ? clearAll : selectAll}
+                className="text-[11px] font-medium text-brand-600 hover:underline"
+              >
+                {allFilteredSelected ? "Clear All" : "Select All"}
+              </button>
+              {values.length > 0 && (
+                <span className="text-[10px] text-muted-foreground">{values.length} selected</span>
+              )}
+            </div>
+          ) : null}
           <div className="max-h-[240px] overflow-y-auto py-1">
             {filtered.length === 0 ? (
               <p className="px-3 py-4 text-xs text-muted-foreground text-center">No options found</p>

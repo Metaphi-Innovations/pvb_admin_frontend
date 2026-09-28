@@ -31,6 +31,7 @@ export interface BgLookupOption {
   code?: string;
   parentId?: string | null;
   extra?: string;
+  officeName?: string;
   assignedGeography?: { id: string; name: string } | null;
 }
 
@@ -664,6 +665,7 @@ export const BusinessGeographyService = {
       const item = (row ?? {}) as Record<string, unknown>;
       const pincode = asString(item.pincode);
       const locationName = asString(item.location_name);
+      const officeName = asString(item.officename);
       const assigned = item.assigned_territory as
         | { id: string; name: string }
         | null
@@ -673,6 +675,7 @@ export const BusinessGeographyService = {
         label: pincode || asString(item.id),
         code: pincode || undefined,
         extra: locationName || undefined,
+        officeName: officeName || undefined,
         parentId: asString(item.location_id) || null,
         assignedGeography: assigned
           ? { id: asString(assigned.id), name: asString(assigned.name) }

@@ -64,9 +64,12 @@ export const APPLY_DISCOUNT_ON_PRODUCT: SchemeApplyDiscountOn[] = [
   "Product Line Amount",
 ];
 
-/** Special quantity slabs — hardcoded UOM (no Unit master). */
-export const SCHEME_QUANTITY_UOM_OPTIONS = ["Case", "Piece"] as const;
-export type SchemeQuantityUom = (typeof SCHEME_QUANTITY_UOM_OPTIONS)[number];
+/** Special quantity schemes always use unit qty (Piece). UOM is not user-selectable. */
+export const FIXED_SCHEME_QUANTITY_UOM = "Piece" as const;
+export type SchemeQuantityUom = typeof FIXED_SCHEME_QUANTITY_UOM;
+
+/** @deprecated Use FIXED_SCHEME_QUANTITY_UOM — Case/Piece picker removed. */
+export const SCHEME_QUANTITY_UOM_OPTIONS = [FIXED_SCHEME_QUANTITY_UOM] as const;
 
 export const APPLY_DISCOUNT_ON_SPECIAL: SchemeApplyDiscountOn[] = [
   "Product Rate",
@@ -489,23 +492,21 @@ export function emptySpecialDiscountAmountSlab(): SpecialDiscountAmountSlabForm 
 }
 
 export function emptySpecialDiscountQuantitySlab(
-  uom: string = "Case",
+  _uom: string = FIXED_SCHEME_QUANTITY_UOM,
 ): SpecialDiscountQuantitySlabForm {
   return {
     id: newId("sdq"),
     quantityFrom: "",
     quantityTo: "",
-    uom: uom === "Piece" ? "Piece" : "Case",
+    uom: FIXED_SCHEME_QUANTITY_UOM,
     discountType: "Percentage",
     discountValue: "",
   };
 }
 
-/** Normalize scheme quantity UOM to Case | Piece. */
-export function normalizeSchemeQuantityUom(value: string): SchemeQuantityUom {
-  const trimmed = value.trim();
-  if (trimmed === "Piece") return "Piece";
-  return "Case";
+/** Quantity schemes always persist unit UOM (Piece) in DB. */
+export function normalizeSchemeQuantityUom(_value?: string): SchemeQuantityUom {
+  return FIXED_SCHEME_QUANTITY_UOM;
 }
 
 /** Special Discount always has product applicability (All or Selected). */
@@ -525,21 +526,18 @@ export function applySpecialDiscountBasedOn(
 ): SchemeUnifiedForm {
   if (form.schemeCategory !== "Special Discount") return form;
   if (basedOn === "Sales Quantity") {
-    const uom = normalizeSchemeQuantityUom(
-      form.specialDiscountUom || form.specialDiscountQuantitySlabs[0]?.uom || "Case",
-    );
     const quantitySlabs = (
       form.specialDiscountQuantitySlabs.length
         ? form.specialDiscountQuantitySlabs
-        : [emptySpecialDiscountQuantitySlab(uom)]
-    ).map((s) => ({ ...s, uom: normalizeSchemeQuantityUom(s.uom || uom) }));
+        : [emptySpecialDiscountQuantitySlab()]
+    ).map((s) => ({ ...s, uom: FIXED_SCHEME_QUANTITY_UOM }));
     return {
       ...form,
       specialDiscountBasedOn: basedOn,
       productScope: "Selected Products",
       // Preserve already selected products where possible.
       productIds: form.productIds,
-      specialDiscountUom: uom,
+      specialDiscountUom: FIXED_SCHEME_QUANTITY_UOM,
       specialDiscountQuantitySlabs: quantitySlabs,
     };
   }
@@ -556,23 +554,22 @@ export function applySpecialDiscountBasedOn(
   };
 }
 
-/** Keep Special Discount product selection in sync (UOM is user-selected Case/Piece). */
+/** Keep Special Discount product selection in sync. */
 export function applySpecialDiscountProductIds(
   form: SchemeUnifiedForm,
   productIds: string[],
 ): SchemeUnifiedForm {
   const isQty = form.specialDiscountBasedOn === "Sales Quantity";
-  const uom = normalizeSchemeQuantityUom(form.specialDiscountUom || "Case");
   return {
     ...form,
     productIds,
     // Blank = all products (Sales Amount); Sales Quantity always requires selection.
     productScope:
       isQty || productIds.length > 0 ? "Selected Products" : "All Products",
-    specialDiscountUom: isQty ? uom : form.specialDiscountUom,
+    specialDiscountUom: isQty ? FIXED_SCHEME_QUANTITY_UOM : form.specialDiscountUom,
     specialDiscountQuantitySlabs: form.specialDiscountQuantitySlabs.map((s) => ({
       ...s,
-      uom: isQty ? normalizeSchemeQuantityUom(s.uom || uom) : s.uom,
+      uom: isQty ? FIXED_SCHEME_QUANTITY_UOM : s.uom,
     })),
   };
 }
@@ -806,8 +803,8 @@ export function createDefaultUnifiedForm(
     specialSettlementRunMode: "Manual",
     specialCombineProducts: true,
     specialDiscountAmountSlabs: [emptySpecialDiscountAmountSlab()],
-    specialDiscountQuantitySlabs: [emptySpecialDiscountQuantitySlab("Case")],
-    specialDiscountUom: "Case",
+    specialDiscountQuantitySlabs: [emptySpecialDiscountQuantitySlab()],
+    specialDiscountUom: FIXED_SCHEME_QUANTITY_UOM,
     benefitThrough: benefit.benefitThrough,
     benefitWhen: benefit.benefitWhen,
     excludeFromTurnoverDiscount: false,
@@ -1168,11 +1165,6 @@ function resolveConditionConfig(record: SchemeRecord): SchemeConditionConfig {
         const productIdsForUom = productIds.length
           ? productIds
           : existing.productIds ?? [];
-        const uom = normalizeSchemeQuantityUom(
-          existing.specialDiscountUom ||
-            existing.specialDiscountQuantitySlabs?.[0]?.uom ||
-            "Case",
-        );
         return {
           ...base,
           productScope: "SELECTED",
@@ -1180,7 +1172,7 @@ function resolveConditionConfig(record: SchemeRecord): SchemeConditionConfig {
           specialDiscountBasedOn: "SALES_QUANTITY",
           specialDiscountQuantitySlabs:
             existing.specialDiscountQuantitySlabs ?? undefined,
-          specialDiscountUom: uom,
+          specialDiscountUom: FIXED_SCHEME_QUANTITY_UOM,
           specialDiscountAmountSlabs: undefined,
           applyDiscountOn: undefined,
         };
@@ -1378,36 +1370,19 @@ export function schemeRecordToUnifiedForm(record: SchemeRecord): SchemeUnifiedFo
     specialSettlementRunMode: specialSettlementRunModeToUI(
       condition.specialSettlementRunMode,
     ),
-    specialCombineProducts:
-      condition.specialProductEvaluationMode !== "INDIVIDUAL",
+    specialCombineProducts: true,
     specialDiscountAmountSlabs: specialAmountSlabsToForm(
       condition.specialDiscountAmountSlabs,
     ),
-    specialDiscountQuantitySlabs: (() => {
-      const basedOn = specialDiscountBasedOnToUI(condition.specialDiscountBasedOn);
-      const uom = normalizeSchemeQuantityUom(
-        condition.specialDiscountUom ||
-          condition.specialDiscountQuantitySlabs?.[0]?.uom ||
-          "Case",
-      );
-      return specialQuantitySlabsToForm(
-        condition.specialDiscountQuantitySlabs,
-        uom,
-      );
-    })(),
-    specialDiscountUom: (() => {
-      if (
-        specialDiscountBasedOnToUI(condition.specialDiscountBasedOn) !==
-        "Sales Quantity"
-      ) {
-        return "";
-      }
-      return normalizeSchemeQuantityUom(
-        condition.specialDiscountUom ||
-          condition.specialDiscountQuantitySlabs?.[0]?.uom ||
-          "Case",
-      );
-    })(),
+    specialDiscountQuantitySlabs: specialQuantitySlabsToForm(
+      condition.specialDiscountQuantitySlabs,
+      FIXED_SCHEME_QUANTITY_UOM,
+    ),
+    specialDiscountUom:
+      specialDiscountBasedOnToUI(condition.specialDiscountBasedOn) ===
+      "Sales Quantity"
+        ? FIXED_SCHEME_QUANTITY_UOM
+        : "",
     benefitThrough: benefit.benefitThrough ?? defaults.benefitThrough,
     benefitWhen: benefit.benefitWhen ?? defaults.benefitWhen,
     excludeFromTurnoverDiscount: enriched.deductFromTurnoverBase ?? false,
@@ -1720,22 +1695,6 @@ export function validateUnifiedSchemeForm(form: SchemeUnifiedForm): string | nul
     if (!form.productIds.length) {
       return "Please select at least one Product (or Select All).";
     }
-    if (form.schemeCategory === "Special Discount") {
-      if (form.specialDiscountBasedOn === "Sales Quantity") {
-        const uom = form.specialDiscountUom.trim();
-        if (!uom || (uom !== "Case" && uom !== "Piece")) {
-          return "Select UOM (Case or Piece) for quantity-based Special Discount.";
-        }
-        if (form.specialHasSlabs) {
-          for (let i = 0; i < form.specialDiscountQuantitySlabs.length; i++) {
-            const slabUom = form.specialDiscountQuantitySlabs[i].uom.trim();
-            if (!slabUom || (slabUom !== "Case" && slabUom !== "Piece")) {
-              return `Achievement Slab ${i + 1}: Select UOM (Case or Piece).`;
-            }
-          }
-        }
-      }
-    }
   }
 
   switch (category) {
@@ -2034,32 +1993,29 @@ export function buildSchemeWorkingSummary(form: SchemeUnifiedForm): string {
         form.specialSettlementRunMode === "Automatic"
           ? "automatic entitlement"
           : "manual settlement";
-      const combineLabel = form.specialCombineProducts
-        ? "combined across selected products"
-        : "per product individually";
+      const combineLabel = "combined across selected products";
 
       if (!form.specialHasSlabs) {
         const threshold = parseNum(form.specialThresholdValue);
         const disc = formatDiscount(form.discountType, form.discountValue);
         const basis =
           form.specialDiscountBasedOn === "Sales Quantity"
-            ? `${threshold} ${form.specialDiscountUom || "qty"}`
+            ? `${threshold} units`
             : formatMoney(threshold);
-        return `Special Discount (no slabs) — qualify at ${basis} ${combineLabel} for ${disc}. ${scopeLabel}; ${runLabel}. ${period}`;
+        return `Special Discount (no slabs) — qualify at ${basis} ${combineLabel}; ${disc} once on combined eligible value. ${scopeLabel}; ${runLabel}. ${period}`;
       }
 
       if (form.specialDiscountBasedOn === "Sales Quantity") {
-        const uom = form.specialDiscountUom || "UOM";
         const slabs = formSpecialQuantitySlabsToConfig(
           form.specialDiscountQuantitySlabs,
-          uom,
+          FIXED_SCHEME_QUANTITY_UOM,
         );
         const slabLines = slabs
           .map((s) => {
             const disc = formatDiscount(s.discountType, String(s.discountValue));
             return s.quantityTo == null
-              ? `${s.quantityFrom}+ ${s.uom || uom} → ${disc}`
-              : `${s.quantityFrom}–${s.quantityTo} ${s.uom || uom} → ${disc}`;
+              ? `${s.quantityFrom}+ units → ${disc}`
+              : `${s.quantityFrom}–${s.quantityTo} units → ${disc}`;
           })
           .join(". ");
         const count = form.productIds.length;
@@ -2185,8 +2141,6 @@ function buildConditionConfig(form: SchemeUnifiedForm): SchemeConditionConfig {
         paymentCalculationOn: form.paymentCalculationOn,
       };
     case "Special Discount": {
-      const productEvaluationMode: SchemeSpecialProductEvaluationMode =
-        form.specialCombineProducts ? "COMBINED" : "INDIVIDUAL";
       const commonSpecial = {
         specialHasSlabs: form.specialHasSlabs,
         specialThresholdValue: form.specialHasSlabs
@@ -2198,7 +2152,8 @@ function buildConditionConfig(form: SchemeUnifiedForm): SchemeConditionConfig {
         specialSettlementRunMode: specialSettlementRunModeToStorage(
           form.specialSettlementRunMode,
         ),
-        specialProductEvaluationMode: productEvaluationMode,
+        // Always COMBINED — selected products share one threshold; discount on total.
+        specialProductEvaluationMode: "COMBINED" as SchemeSpecialProductEvaluationMode,
         discountType: form.discountType,
         discountValue: form.specialHasSlabs
           ? undefined
@@ -2206,15 +2161,10 @@ function buildConditionConfig(form: SchemeUnifiedForm): SchemeConditionConfig {
       };
 
       if (form.specialDiscountBasedOn === "Sales Quantity") {
-        const resolvedUom = normalizeSchemeQuantityUom(
-          form.specialDiscountUom ||
-            form.specialDiscountQuantitySlabs[0]?.uom ||
-            "Case",
-        );
         const quantitySlabs = form.specialHasSlabs
           ? formSpecialQuantitySlabsToConfig(
               form.specialDiscountQuantitySlabs,
-              resolvedUom,
+              FIXED_SCHEME_QUANTITY_UOM,
             )
           : undefined;
         return {
@@ -2222,7 +2172,7 @@ function buildConditionConfig(form: SchemeUnifiedForm): SchemeConditionConfig {
           productIds: form.productIds.length ? form.productIds : undefined,
           specialDiscountBasedOn: "SALES_QUANTITY",
           specialDiscountQuantitySlabs: quantitySlabs,
-          specialDiscountUom: resolvedUom,
+          specialDiscountUom: FIXED_SCHEME_QUANTITY_UOM,
           ...commonSpecial,
           discountType: form.specialHasSlabs
             ? quantitySlabs?.[0]?.discountType

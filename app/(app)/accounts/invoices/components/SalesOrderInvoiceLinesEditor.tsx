@@ -27,6 +27,16 @@ function formatMonthYear(iso?: string): string {
   return months[mi] ? `${months[mi]}-${y}` : iso;
 }
 
+function schemeDiscountLabel(line: InvoiceLineItem): string {
+  if (line.schemeDiscountType === "Rupees" && line.schemeDiscountAmount != null) {
+    return `₹${line.schemeDiscountAmount}/unit`;
+  }
+  if (line.schemeDiscountPercent != null && line.schemeDiscountPercent > 0) {
+    return `${line.schemeDiscountPercent}%`;
+  }
+  return "";
+}
+
 function clampQty(line: InvoiceLineItem, nextQty: number): { qty: number; error?: string } {
   if (!Number.isFinite(nextQty) || nextQty <= 0) {
     return { qty: line.qty, error: "Qty must be greater than 0" };
@@ -162,7 +172,10 @@ const SalesOrderInvoiceLineRow = memo(function SalesOrderInvoiceLineRow({
             <p className="font-mono text-[10px] text-brand-700 leading-tight truncate">
               {line.schemeCode || "—"}
             </p>
-            <p className="text-[10px] text-muted-foreground leading-tight">Product Discount</p>
+            <p className="text-[10px] text-muted-foreground leading-tight">
+              Product Discount
+              {schemeDiscountLabel(line) ? ` · ${schemeDiscountLabel(line)}` : ""}
+            </p>
           </div>
         ) : (
           <span className="text-xs text-muted-foreground">—</span>

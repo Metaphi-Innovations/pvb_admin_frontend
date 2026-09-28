@@ -16,8 +16,6 @@ import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { DEBIT_NOTES_LIST_PATH } from "@/app/(app)/accounts/debit-notes/note-utils";
 import { formatSignedRoundOff } from "@/components/accounts/voucher-form/VoucherSignedRoundOffInput";
 import { formatMoney, formatMoneyOrDash } from "@/lib/accounts/money-format";
-import { purchaseInvoiceImpactResolved } from "@/lib/accounts/resolved-impact-previews";
-import { LedgerImpactPreview } from "@/components/accounts/LedgerImpactPreview";
 import { cn } from "@/lib/utils";
 import {
   calcPurchaseLineGstSplit,
@@ -256,17 +254,6 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: st
     isGrn &&
     detectQuantityMismatch(qtyComparisonRows.map((r) => r.comparison)) &&
     matchStatus !== "matched";
-
-  const impactLines = purchaseInvoiceImpactResolved({
-    vendorName: invoice.vendorName,
-    taxable: invoice.subtotal,
-    taxAmount: invoice.taxAmount,
-    grandTotal: invoice.grandTotal,
-    cgst: invoice.cgstTotal,
-    sgst: invoice.sgstTotal,
-    igst: invoice.igstTotal,
-    roundOff: invoice.roundingAdjustment ?? 0,
-  });
 
   const sourceChip = isStockTransfer
     ? PURCHASE_SOURCE_TYPE_LABELS.stock_transfer
@@ -890,15 +877,6 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: st
             </table>
           </div>
         </VoucherFormSectionCard>
-
-        {/* COA Posting Impact */}
-        {!isStockTransfer ? (
-          <LedgerImpactPreview
-            title="COA Posting Impact"
-            lines={impactLines}
-            className="border border-border rounded-xl shadow-sm"
-          />
-        ) : null}
 
         {/* Remarks / Narration */}
         {(invoice.narration || invoice.remarks) && (

@@ -199,7 +199,7 @@ function mapSpecialSlabs(form: SchemeUnifiedForm) {
     return form.specialDiscountQuantitySlabs.map((slab, index) => ({
       from_value: parseNum(slab.quantityFrom),
       to_value: openEndedTo(slab.quantityTo),
-      uom: slab.uom.trim() || form.specialDiscountUom.trim() || null,
+      uom: "Piece",
       discount_type: toApiDiscountType(slab.discountType),
       discount_value: parseNum(slab.discountValue),
       sort_order: index,
@@ -319,10 +319,8 @@ export function unifiedFormToCreatePayload(
             form.specialHasSlabs ||
             form.specialDiscountBasedOn !== "Sales Quantity"
               ? null
-              : form.specialDiscountUom.trim() || "Case",
-          product_evaluation_mode: form.specialCombineProducts
-            ? "COMBINED"
-            : "INDIVIDUAL",
+              : "Piece",
+          product_evaluation_mode: "COMBINED",
           evaluation_scope:
             form.specialEvaluationScope === "One Invoice"
               ? "PER_INVOICE"
@@ -555,19 +553,15 @@ export function detailToUnifiedForm(
     form.specialSettlementRunMode =
       runMode === "AUTOMATIC" ? "Automatic" : "Manual";
 
-    form.specialCombineProducts =
-      asString(specialConfig?.product_evaluation_mode) !== "INDIVIDUAL";
+    form.specialCombineProducts = true;
 
     if (form.specialDiscountBasedOn === "Sales Quantity") {
-      const configUom = asString(specialConfig?.uom);
-      if (configUom) form.specialDiscountUom = configUom;
+      form.specialDiscountUom = "Piece";
 
       form.specialDiscountQuantitySlabs =
         slabs.length > 0
           ? slabs.map((item) => {
               const row = item as Record<string, unknown>;
-              const uom = asString(row.uom) || form.specialDiscountUom || "Case";
-              if (uom) form.specialDiscountUom = uom;
               return {
                 id: asString(row.scheme_slab_id) || `slab-${Math.random()}`,
                 quantityFrom: asString(row.from_value),
@@ -575,12 +569,12 @@ export function detailToUnifiedForm(
                   row.to_value == null || row.to_value === ""
                     ? ""
                     : asString(row.to_value),
-                uom,
+                uom: "Piece",
                 discountType: fromApiDiscountType(row.discount_type),
                 discountValue: asString(row.discount_value),
               };
             })
-          : [emptySpecialDiscountQuantitySlab("Case")];
+          : [emptySpecialDiscountQuantitySlab()];
     } else {
       form.specialDiscountAmountSlabs =
         slabs.length > 0
