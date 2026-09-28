@@ -119,8 +119,8 @@ function buildSalesReturnSeed(): SalesReturnRecord[] {
       returnDate: new Date().toISOString().slice(0, 10),
       warehouse: "Main Warehouse",
       status: "approved",
-      sourceInvoiceId: 1,
-      sourceInvoiceNo: "INV-2026-0001",
+      sourceInvoiceId: null,
+      sourceInvoiceNo: "",
       creditNoteId: 1,
       creditNoteNo: "CN-2026-0001",
       products: [
@@ -148,8 +148,8 @@ function buildSalesReturnSeed(): SalesReturnRecord[] {
       returnDate: new Date().toISOString().slice(0, 10),
       warehouse: "Main Warehouse",
       status: "approved",
-      sourceInvoiceId: 2,
-      sourceInvoiceNo: "INV-2026-0002",
+      sourceInvoiceId: null,
+      sourceInvoiceNo: "",
       creditNoteId: 2,
       creditNoteNo: "CN-2026-0002",
       products: [

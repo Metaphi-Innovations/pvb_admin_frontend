@@ -26,6 +26,8 @@ import {
   mapSalesInvoiceDetailToRecord,
   type PreviewEwayBillResult,
 } from "@/services/sales-invoice.service";
+import { useBankAccountOptions } from "@/hooks/accounts/use-bank-accounts-list";
+import { bankAccountOptionToPrintDetails } from "@/components/accounts/WarehouseMappedBankAccountSelect";
 import {
   calcAdditionalExpensesTotals,
   resolveInvoiceAdditionalExpenses,
@@ -149,13 +151,15 @@ function ProductTable({
   interstate,
   productCodeById,
   productSkuByUuid,
+  hideDiscount = false,
 }: {
   lines: InvoiceLineItem[];
   interstate: boolean;
   productCodeById: Map<number, string>;
   productSkuByUuid: Map<string, string>;
+  hideDiscount?: boolean;
 }) {
-  const headers = interstate
+  const baseHeaders = interstate
     ? ([
         "Product",
         "SKU",
@@ -195,6 +199,10 @@ function ProductTable({
         "Line Total",
         "Sales Person",
       ] as const);
+  const discountHeaders = new Set(["Discount %", "Discount Amount", "Scheme"]);
+  const headers = hideDiscount
+    ? baseHeaders.filter((h) => !discountHeaders.has(h))
+    : [...baseHeaders];
 
   const rightAlign = new Set([
     "Qty of Case",
@@ -307,29 +315,33 @@ function ProductTable({
                   <td className="px-2 py-1.5 align-middle so-col-gross so-cell-num">
                     {formatINR(base)}
                   </td>
-                  <td className="px-2 py-1.5 align-middle so-col-disc-pct so-cell-num tabular-nums">
-                    {discPct > 0 ? `${discPct}%` : "—"}
-                  </td>
-                  <td className="px-2 py-1.5 align-middle so-col-disc-amt so-cell-num">
-                    {discAmt > 0 ? formatINR(discAmt) : "—"}
-                  </td>
-                  <td className="px-2 py-1.5 align-middle">
-                    {hasScheme ? (
-                      <div className="min-w-[110px] max-w-[150px]">
-                        <p className="text-[11px] font-medium leading-tight truncate">
-                          {line.schemeName || "Product Discount"}
-                        </p>
-                        <p className="font-mono text-[10px] text-brand-700 leading-tight truncate">
-                          {line.schemeCode || "—"}
-                        </p>
-                        <p className="text-[10px] text-muted-foreground leading-tight">
-                          Product Discount
-                        </p>
-                      </div>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">—</span>
-                    )}
-                  </td>
+                  {!hideDiscount ? (
+                    <>
+                      <td className="px-2 py-1.5 align-middle so-col-disc-pct so-cell-num tabular-nums">
+                        {discPct > 0 ? `${discPct}%` : "—"}
+                      </td>
+                      <td className="px-2 py-1.5 align-middle so-col-disc-amt so-cell-num">
+                        {discAmt > 0 ? formatINR(discAmt) : "—"}
+                      </td>
+                      <td className="px-2 py-1.5 align-middle">
+                        {hasScheme ? (
+                          <div className="min-w-[110px] max-w-[150px]">
+                            <p className="text-[11px] font-medium leading-tight truncate">
+                              {line.schemeName || "Product Discount"}
+                            </p>
+                            <p className="font-mono text-[10px] text-brand-700 leading-tight truncate">
+                              {line.schemeCode || "—"}
+                            </p>
+                            <p className="text-[10px] text-muted-foreground leading-tight">
+                              Product Discount
+                            </p>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </td>
+                    </>
+                  ) : null}
                   <td className="px-2 py-1.5 align-middle so-col-taxable so-cell-num">
                     {formatINR(split.taxable)}
                   </td>
@@ -452,6 +464,13 @@ export default function InvoiceViewPageClient({
     [searchParams, record?.sourceType],
   );
 
+  const warehouseIdForBank = record?.warehouseUuid?.trim() || "";
+  const bankOptionsQuery = useBankAccountOptions({
+    warehouseId: warehouseIdForBank || undefined,
+    usage: "RECEIPT",
+    enabled: Boolean(warehouseIdForBank),
+  });
+
   const refresh = async () => {
     setLoadError(null);
     const idStr = String(invoiceId);
@@ -520,12 +539,30 @@ export default function InvoiceViewPageClient({
   const invoiceType = resolveInvoiceDocumentType(record);
   const gst = getInvoiceGstBreakup(record);
   const interstate = gst.interstate;
-  const bankDetails = record.bankAccountPrint ?? null;
   const isSalesOrderView =
     record.sourceType === "sales_order" ||
     (invoiceType === "sales" && Boolean(record.salesOrderNo || record.dispatchNo));
   const isStockTransferView =
     invoiceType === "stock_transfer" || record.sourceType === "stock_transfer";
+  const canEditDraftOnly = record.invoiceStatus === "draft";
+  const salespersonDisplay =
+    record.salesperson?.trim() ||
+    record.lineItems.find((l) => l.salesperson?.trim())?.salesperson?.trim() ||
+    "";
+
+  const bankDetails = (() => {
+    if (record.bankAccountPrint) return record.bankAccountPrint;
+    const options = bankOptionsQuery.data ?? [];
+    if (!options.length) return null;
+    const selectedId =
+      typeof record.bankAccountId === "string" ? record.bankAccountId.trim() : "";
+    const matched = selectedId
+      ? options.find((o) => o.bankAccountId === selectedId)
+      : undefined;
+    const preferred =
+      matched || options.find((o) => o.default) || options[0] || null;
+    return bankAccountOptionToPrintDetails(preferred);
+  })();
 
   const expenses = resolveInvoiceAdditionalExpenses(
     record.additionalExpenses,
@@ -707,7 +744,7 @@ export default function InvoiceViewPageClient({
 
   const stickyFooter = (
     <div className="flex flex-wrap items-center justify-end gap-2">
-      {actions.includes("edit") ? (
+      {canEditDraftOnly ? (
         <Button
           type="button"
           variant="outline"
@@ -715,7 +752,10 @@ export default function InvoiceViewPageClient({
           className="h-8 text-xs"
           onClick={() =>
             router.push(
-              withReturnTo(`${INVOICES_LIST_PATH}/${record.id}/edit`, listHref),
+              withReturnTo(
+                `${INVOICES_LIST_PATH}/${record.salesInvoiceId || record.id}/edit`,
+                listHref,
+              ),
             )
           }
         >
@@ -775,9 +815,17 @@ export default function InvoiceViewPageClient({
   return (
     <div className="sales-order-invoice-form-compact h-full min-h-0 flex flex-col w-full">
       <InvoiceFormLayout
-        title="View Sales Invoice"
+        title={
+          isStockTransferView
+            ? "View Stock Transfer Invoice"
+            : "View Sales Invoice"
+        }
         subtitle={`${record.invoiceNo} · ${WORKFLOW_STATUS_LABELS[workflowStatus]}`}
-        breadcrumb={accountsBreadcrumb("Transactions", "Sales Invoice", listHref)}
+        breadcrumb={accountsBreadcrumb(
+          "Transactions",
+          isStockTransferView ? "Stock Transfer Invoice" : "Sales Invoice",
+          listHref,
+        )}
         backHref={listHref}
         stickyFooter={stickyFooter}
       >
@@ -866,9 +914,10 @@ export default function InvoiceViewPageClient({
                 value={
                   bankDetails
                     ? `${bankDetails.bankName} · ${bankDetails.accountNumber}`
-                    : record.receivableLedger || ""
+                    : ""
                 }
               />
+              <Field label="Sales Person" value={salespersonDisplay} />
               {!isStockTransferView ? (
                 <Field label="Warehouse" value={record.warehouse} />
               ) : null}
@@ -961,10 +1010,13 @@ export default function InvoiceViewPageClient({
               interstate={interstate}
               productCodeById={productCodeById}
               productSkuByUuid={productSkuByUuid}
+              hideDiscount={isStockTransferView}
             />
-            <div className="px-3 pb-3">
-              <CompactSchemeInformation record={record} />
-            </div>
+            {!isStockTransferView ? (
+              <div className="px-3 pb-3">
+                <CompactSchemeInformation record={record} />
+              </div>
+            ) : null}
           </VoucherFormSectionCard>
 
           {expenses.length > 0 ? (
@@ -989,7 +1041,9 @@ export default function InvoiceViewPageClient({
             <VoucherFormSectionCard title="Invoice Summary" highlight>
               <div className="space-y-1 so-invoice-summary">
                 <SummaryRow label="Gross Amount" value={formatINR(productGross || record.subtotal)} />
-                <SummaryRow label="Discount" value={formatINR(displayDiscount)} />
+                {!isStockTransferView ? (
+                  <SummaryRow label="Discount" value={formatINR(displayDiscount)} />
+                ) : null}
                 <SummaryRow label="Taxable Amount" value={formatINR(gst.taxableValue)} />
                 {interstate ? (
                   <SummaryRow label="Output IGST" value={formatMoneyOrDash(gst.igst)} />
