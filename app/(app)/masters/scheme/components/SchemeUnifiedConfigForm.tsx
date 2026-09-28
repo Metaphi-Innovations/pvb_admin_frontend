@@ -440,10 +440,17 @@ function ProductDiscountConditionFields({
 function DiscountTypeValueFields({
   form,
   onChange,
+  fixedAmountLabel,
 }: {
   form: SchemeUnifiedForm;
   onChange: (form: SchemeUnifiedForm) => void;
+  /** Value label when Fixed Amount is selected, e.g. "Value (₹/unit)". */
+  fixedAmountLabel?: string;
 }) {
+  const valueLabel =
+    fixedAmountLabel && form.discountType === "Fixed Amount"
+      ? fixedAmountLabel
+      : "Discount Value";
   return (
     <>
       <Field className="scheme-w-select-sm" label="Discount Type" required>
@@ -455,7 +462,7 @@ function DiscountTypeValueFields({
           options={DISCOUNT_TYPE_SELECT_OPTIONS}
         />
       </Field>
-      <Field className="scheme-w-num" label="Discount Value" required>
+      <Field className="scheme-w-num" label={valueLabel} required>
         <SchemeNumberField
           value={form.discountValue}
           onChange={(v) => onChange({ ...form, discountValue: v })}
@@ -607,7 +614,15 @@ function SpecialDiscountConditionFields({
               options={DISCOUNT_TYPE_SELECT_OPTIONS}
             />
           </Field>
-          <Field className="scheme-w-num-cell" label="Discount Value" required>
+          <Field
+            className="scheme-w-num-cell"
+            label={
+              form.discountType === "Fixed Amount"
+                ? "Value (₹ overall)"
+                : "Discount Value"
+            }
+            required
+          >
             <SchemeNumberField
               value={form.discountValue}
               onChange={(v) => set("discountValue", v)}
@@ -634,7 +649,12 @@ function SpecialDiscountConditionFields({
                   <th className="scheme-w-turnover-cell">Eligible Sales From</th>
                   <th className="scheme-w-turnover-cell">Eligible Sales To</th>
                   <th className="scheme-w-select-sm">Discount Type</th>
-                  <th className="scheme-w-num-cell">Discount Value</th>
+                  <th
+                    className="scheme-w-num-cell"
+                    title="Percentage or fixed ₹ — both apply once on the overall eligible amount"
+                  >
+                    Discount Value
+                  </th>
                   <th className="w-8" />
                 </tr>
               </thead>
@@ -752,7 +772,12 @@ function SpecialDiscountConditionFields({
                   <th className="scheme-w-num-cell">Quantity From</th>
                   <th className="scheme-w-num-cell">Quantity To</th>
                   <th className="scheme-w-select-sm">Discount Type</th>
-                  <th className="scheme-w-num-cell">Discount Value</th>
+                  <th
+                    className="scheme-w-num-cell"
+                    title="Percentage or fixed ₹ — both apply once on the overall eligible amount"
+                  >
+                    Discount Value
+                  </th>
                   <th className="w-8" />
                 </tr>
               </thead>
@@ -1468,7 +1493,11 @@ export function SchemeUnifiedConfigForm({
                   className="scheme-ctrl"
                 />
               </Field>
-              <DiscountTypeValueFields form={form} onChange={onChange} />
+              <DiscountTypeValueFields
+                form={form}
+                onChange={onChange}
+                fixedAmountLabel="Value (₹/unit)"
+              />
             </div>
           ) : null}
 
