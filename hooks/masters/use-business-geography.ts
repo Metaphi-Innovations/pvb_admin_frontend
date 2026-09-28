@@ -18,13 +18,17 @@ async function invalidateBusinessGeography(
   });
 }
 
-export function useBusinessGeographyTree(search = "") {
+export function useBusinessGeographyTree(search = "", includeInactive = false) {
   const normalized = search.trim();
   return useQuery({
-    queryKey: masterKeys.businessGeography.tree(normalized),
+    queryKey: [
+      ...masterKeys.businessGeography.tree(normalized),
+      includeInactive ? "all" : "active",
+    ],
     queryFn: ({ signal }) =>
       BusinessGeographyService.listAllForTree(signal, {
         search: normalized || undefined,
+        includeInactive,
       }),
   });
 }
