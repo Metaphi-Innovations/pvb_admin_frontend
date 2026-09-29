@@ -43,17 +43,56 @@ function resolveOpeningSide(
   return value === "CREDIT" || value === "CR" ? "Credit" : "Debit";
 }
 
+function isSyntheticPeriodOpening(
+  row: LedgerOpeningBalanceDto | null | undefined,
+): boolean {
+  if (!row) return true;
+  if (row.openingBalanceId === "period-opening") return true;
+  return String(row.narration ?? "").trim().toLowerCase() === "period opening balance";
+}
+
+function toIsoDate(value: unknown): string | undefined {
+  if (value == null) return undefined;
+  const raw = String(value).slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : undefined;
+}
+
+/**
+ * Real master OB / FY effective date — never the period filter start.
+ * Backend period opening overwrites effectiveDate with dateFrom.
+ */
+function resolveOpeningBalanceDisplayDate(
+  detail: LedgerDetailWithTransactionsDto | undefined,
+  masterOpening: LedgerOpeningBalanceDto | null | undefined,
+  dateFrom?: string,
+): string {
+  const masters = (detail?.openingBalances ?? []).filter(
+    (row) => !isSyntheticPeriodOpening(row),
+  );
+  const preferred =
+    (!isSyntheticPeriodOpening(masterOpening) ? masterOpening : null) ??
+    masters[0] ??
+    null;
+  const fromMaster = toIsoDate(preferred?.effectiveDate);
+  if (fromMaster) return fromMaster;
+  // No stored master OB date — fall back to Indian FY start for the selected range.
+  if (dateFrom && /^\d{4}-\d{2}-\d{2}/.test(dateFrom.slice(0, 10))) {
+    const y = parseInt(dateFrom.slice(0, 4), 10);
+    const m = parseInt(dateFrom.slice(5, 7), 10);
+    if (Number.isFinite(y) && y > 1900 && Number.isFinite(m)) {
+      return `${m >= 4 ? y : y - 1}-04-01`;
+    }
+  }
+  return "—";
+}
+
 function buildOpeningBalanceRow(
   amount: number,
   side: "Debit" | "Credit",
-  periodStart?: string,
+  openingDate: string,
 ): CoaLedgerDetailRow {
-  const date =
-    periodStart && /^\d{4}-\d{2}-\d{2}/.test(periodStart)
-      ? periodStart.slice(0, 10)
-      : "—";
   return {
-    date,
+    date: openingDate,
     voucherNo: "—",
     voucherType: "Opening Balance",
     referenceNo: "—",
@@ -109,7 +148,7 @@ export function buildApiLedgerDetailSummary(
   ledger: ChartOfAccount,
   detail?: LedgerDetailWithTransactionsDto,
   openingBalance?: LedgerOpeningBalanceDto | null,
-  dateFrom?: string,
+  _dateFrom?: string,
 ) {
   const periodOpening = detail?.openingBalance ?? openingBalance;
   const parsedOpeningAmount =
@@ -123,14 +162,16 @@ export function buildApiLedgerDetailSummary(
   );
   const closingSide = resolveOpeningSide(detail?.balanceType, openingSide);
   const transactionRows = mapApiTransactions(detail?.transactions);
-  const periodStart =
-    dateFrom ||
-    (periodOpening?.effectiveDate
-      ? String(periodOpening.effectiveDate).slice(0, 10)
-      : "");
+  // Only show synthetic Opening Balance when the period has real movements.
+  // Otherwise "Today" (and any empty range) wrongly looks like a same-day entry.
+  const openingDate = resolveOpeningBalanceDisplayDate(
+    detail,
+    openingBalance,
+    _dateFrom,
+  );
   const openingRow =
-    openingAmount > 0
-      ? [buildOpeningBalanceRow(openingAmount, openingSide, periodStart)]
+    openingAmount > 0 && transactionRows.length > 0
+      ? [buildOpeningBalanceRow(openingAmount, openingSide, openingDate)]
       : [];
   const transactions = [...openingRow, ...transactionRows];
   // Prefer API period totals (already exclude opening); else sum non-opening rows.
@@ -147,6 +188,7 @@ export function buildApiLedgerDetailSummary(
     : movementTotals.totalCredit;
   const lastRow = transactions.length > 0 ? transactions[transactions.length - 1] : null;
   // Prefer last running balance so footer closing always matches the statement grid.
+  // With no movement rows, closing equals period opening (header still shows both).
   const currentBalance = lastRow
     ? lastRow.runningBalance
     : (detail?.currentBalance ?? openingAmount);

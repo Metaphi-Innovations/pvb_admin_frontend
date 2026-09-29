@@ -1698,12 +1698,26 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     [additionalExpenses, interstateGst],
   );
 
-  // Preview SI number from DocumentSequence (create only)
+  // Preview SI number from DocumentSequence (create only).
+  // Stock Transfer: number follows source warehouse (issuer), not Place of Supply (destination).
   useEffect(() => {
     if (isEdit) return;
     let cancelled = false;
-    const state = stateName.trim() || placeOfSupply.trim() || "Maharashtra";
-    SalesInvoiceNumberService.getPreviewNumber({ state })
+    const stMode =
+      isStockTransferGeneration || invoiceType === "stock_transfer";
+    const params = stMode
+      ? sourceWarehouseId
+        ? { warehouseId: sourceWarehouseId }
+        : {
+            state:
+              sourceWarehouseState.trim() ||
+              stateName.trim() ||
+              "Maharashtra",
+          }
+      : {
+          state: stateName.trim() || placeOfSupply.trim() || "Maharashtra",
+        };
+    SalesInvoiceNumberService.getPreviewNumber(params)
       .then((num) => {
         if (!cancelled) setPreviewInvoiceNo(num);
       })
@@ -1713,7 +1727,15 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     return () => {
       cancelled = true;
     };
-  }, [isEdit, stateName, placeOfSupply]);
+  }, [
+    isEdit,
+    isStockTransferGeneration,
+    invoiceType,
+    sourceWarehouseId,
+    sourceWarehouseState,
+    stateName,
+    placeOfSupply,
+  ]);
 
   const sezLutResolution = useMemo(
     () =>

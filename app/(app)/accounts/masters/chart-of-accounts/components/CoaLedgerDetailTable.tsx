@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback } from "react";
+import React, { useCallback, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { MoneyAmount, MoneyCell } from "@/components/accounts/MoneyAmount";
 import { formatMoney } from "@/lib/accounts/money-format";
@@ -22,6 +22,7 @@ import {
   SortTh,
   AccountsColumnHeader,
   useAccountsFilteredRows,
+  AccountsVisibleRowsReporter,
 } from "../../../components/AccountsUI";
 
 export interface CoaLedgerDetailFooter {
@@ -29,6 +30,17 @@ export interface CoaLedgerDetailFooter {
   totalCredit: number;
   closingBalance: number;
   closingBalanceType: "Debit" | "Credit";
+}
+
+function ReportEmptyVisibleRows({
+  onVisibleRowsChange,
+}: {
+  onVisibleRowsChange?: (rows: CoaLedgerDetailRow[]) => void;
+}) {
+  useEffect(() => {
+    onVisibleRowsChange?.([]);
+  }, [onVisibleRowsChange]);
+  return null;
 }
 
 function particularsLabel(row: CoaLedgerDetailRow): string {
@@ -43,12 +55,14 @@ function CoaLedgerDetailTableBody({
   emptyLabel,
   onVoucherClick,
   showWarehouseColumns = false,
+  onVisibleRowsChange,
 }: {
   rows: CoaLedgerDetailRow[];
   footer?: CoaLedgerDetailFooter;
   emptyLabel: string;
   onVoucherClick?: (row: CoaLedgerDetailRow) => void;
   showWarehouseColumns?: boolean;
+  onVisibleRowsChange?: (rows: CoaLedgerDetailRow[]) => void;
 }) {
   const visible = useAccountsFilteredRows(rows);
   const colSpan = showWarehouseColumns ? 11 : 9;
@@ -56,6 +70,7 @@ function CoaLedgerDetailTableBody({
   if (rows.length === 0) {
     return (
       <div className="px-4 py-8 flex-1">
+        <ReportEmptyVisibleRows onVisibleRowsChange={onVisibleRowsChange} />
         <p className="text-sm text-muted-foreground text-center">{emptyLabel}</p>
       </div>
     );
@@ -63,6 +78,9 @@ function CoaLedgerDetailTableBody({
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
+      <AccountsVisibleRowsReporter<CoaLedgerDetailRow>
+        onVisibleRowsChange={onVisibleRowsChange}
+      />
       <AccountsTableScroll>
         <AccountsTable minWidth={showWarehouseColumns ? 1400 : 1100}>
           <AccountsTableHead>
@@ -203,6 +221,7 @@ export function CoaLedgerDetailTable({
   emptyLabel = "No transactions found for this ledger.",
   onVoucherClick,
   showWarehouseColumns = false,
+  onVisibleRowsChange,
 }: {
   rows: CoaLedgerDetailRow[];
   footer?: CoaLedgerDetailFooter;
@@ -210,6 +229,8 @@ export function CoaLedgerDetailTable({
   onVoucherClick?: (row: CoaLedgerDetailRow) => void;
   /** Show Warehouse + Transfer (from → to) columns — used by Stock in Hand product drill-down. */
   showWarehouseColumns?: boolean;
+  /** Column-filtered rows currently shown — used for Excel/PDF export. */
+  onVisibleRowsChange?: (rows: CoaLedgerDetailRow[]) => void;
 }) {
   const getCellValue = useCallback((row: CoaLedgerDetailRow, key: string) => {
     switch (key) {
@@ -260,6 +281,7 @@ export function CoaLedgerDetailTable({
         emptyLabel={emptyLabel}
         onVoucherClick={onVoucherClick}
         showWarehouseColumns={showWarehouseColumns}
+        onVisibleRowsChange={onVisibleRowsChange}
       />
     </AccountsColumnFilterProvider>
   );

@@ -366,7 +366,7 @@ export default function CustomerOutstandingDetailClient() {
             ) : null}
           </div>
           <AccountsTableScroll className="!flex-none max-h-none overflow-visible">
-            <AccountsTable minWidth={800}>
+            <AccountsTable minWidth={960}>
               <AccountsTableHead>
                 <AccountsTableHeadRow>
                   <AccountsTableHeadCell>Receipt No.</AccountsTableHeadCell>
@@ -375,6 +375,7 @@ export default function CustomerOutstandingDetailClient() {
                   <AccountsTableHeadCell align="right">
                     Allocated
                   </AccountsTableHeadCell>
+                  <AccountsTableHeadCell>Invoice No.</AccountsTableHeadCell>
                   <AccountsTableHeadCell>Bank Account</AccountsTableHeadCell>
                   <AccountsTableHeadCell>Reference</AccountsTableHeadCell>
                   <AccountsTableHeadCell>Status</AccountsTableHeadCell>
@@ -383,13 +384,13 @@ export default function CustomerOutstandingDetailClient() {
               <AccountsTableBody>
                 {historyLoading && receiptHistory.length === 0 ? (
                   <AccountsTableRow>
-                    <AccountsTableCell colSpan={7} className="accounts-table-empty">
+                    <AccountsTableCell colSpan={8} className="accounts-table-empty">
                       Loading receipt history…
                     </AccountsTableCell>
                   </AccountsTableRow>
                 ) : receiptHistory.length === 0 ? (
                   <AccountsTableRow>
-                    <AccountsTableCell colSpan={7} className="accounts-table-empty">
+                    <AccountsTableCell colSpan={8} className="accounts-table-empty">
                       No receipt vouchers recorded for this customer.
                     </AccountsTableCell>
                   </AccountsTableRow>
@@ -415,6 +416,9 @@ export default function CustomerOutstandingDetailClient() {
                       </AccountsTableCell>
                       <AccountsTableCell align="right" money>
                         {formatMoney(receipt.allocatedAmount)}
+                      </AccountsTableCell>
+                      <AccountsTableCell mono title={receipt.invoiceNos}>
+                        {receipt.invoiceNos || "—"}
                       </AccountsTableCell>
                       <AccountsTableCell>{receipt.bankAccount}</AccountsTableCell>
                       <AccountsTableCell mono>{receipt.referenceNo}</AccountsTableCell>

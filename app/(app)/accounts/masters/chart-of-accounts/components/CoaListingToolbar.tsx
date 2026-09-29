@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Plus } from "lucide-react";
+import { Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
 import { AccountsListingFilterCard } from "@/components/accounts/AccountsListingHeader";
@@ -23,6 +23,8 @@ interface CoaListingToolbarProps {
   onPresetChange: (preset: DateRangePresetId) => void;
   onDateFromChange: (value: string) => void;
   onDateToChange: (value: string) => void;
+  hasActiveFilters?: boolean;
+  onClearFilters?: () => void;
   onExcel?: () => void;
   onPdf?: () => void;
   exportDisabled?: boolean;
@@ -45,6 +47,8 @@ export function CoaListingToolbar({
   onPresetChange,
   onDateFromChange,
   onDateToChange,
+  hasActiveFilters = false,
+  onClearFilters,
   onExcel,
   onPdf,
   exportDisabled,
@@ -55,10 +59,25 @@ export function CoaListingToolbar({
   showNewLedger = true,
   newLedgerLabel = "New Ledger",
 }: CoaListingToolbarProps) {
-  const hasRowActions = Boolean(showNewLedger && canCreate && onNewLedger);
+  const hasRowActions = Boolean(
+    (showNewLedger && canCreate && onNewLedger) ||
+      (hasActiveFilters && onClearFilters),
+  );
 
   const rowEnd = hasRowActions ? (
       <>
+        {hasActiveFilters && onClearFilters ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs gap-1 px-2.5 shrink-0"
+            onClick={onClearFilters}
+          >
+            <X className="w-3.5 h-3.5" />
+            Clear filter
+          </Button>
+        ) : null}
         {showNewLedger && canCreate && onNewLedger ? (
           <Button
             type="button"

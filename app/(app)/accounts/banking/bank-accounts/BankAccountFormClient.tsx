@@ -326,7 +326,7 @@ export default function BankAccountFormClient({
               onSaved(result.data.ledgerId);
               return;
             }
-            router.push(bankingListHref);
+            router.push(leaveHref);
           },
           onError: (error) => {
             const msg = extractBankAccountErrorMessage(
@@ -349,7 +349,7 @@ export default function BankAccountFormClient({
         financialYearId,
       },
       {
-        onSuccess: (result) => {
+          onSuccess: (result) => {
           const successMsg =
             mode === "complete"
               ? result.message || "Bank account details saved successfully"
@@ -359,7 +359,7 @@ export default function BankAccountFormClient({
             onSaved(result.data.ledgerId);
             return;
           }
-          router.push(bankingListHref);
+          router.push(leaveHref);
         },
         onError: (error) => {
           const msg = extractBankAccountErrorMessage(

@@ -318,6 +318,10 @@ export type SalesInvoiceListDto = {
   can_cancel?: boolean;
   cancel_blocked_reason?: string | null;
   cancel_blockers?: string[];
+  /** From AccountingOpenItem — receipt/CN settlements against this invoice. */
+  payment_status?: "PAID" | "UNPAID" | "PARTIAL" | string;
+  amount_received?: string | number;
+  outstanding_amount?: string | number;
 };
 
 export type SalesInvoiceDetailDto = SalesInvoiceListDto & {
@@ -710,6 +714,22 @@ function asNumber(value: unknown): number {
   return 0;
 }
 
+function mapBackendPaymentStatus(
+  value: string | null | undefined,
+  amountReceived: number,
+  grandTotal: number,
+  invoiceStatus: InvoiceStatus,
+): InvoiceRecord["paymentStatus"] {
+  if (invoiceStatus === "cancelled") return "paid";
+  const key = String(value ?? "").toUpperCase();
+  if (key === "PAID") return "paid";
+  if (key === "PARTIAL" || key === "PARTIALLY_PAID") return "partially_paid";
+  if (key === "UNPAID") return "unpaid";
+  if (amountReceived <= 0) return "unpaid";
+  if (amountReceived >= grandTotal - 0.0001) return "paid";
+  return "partially_paid";
+}
+
 function asDateOnly(value: unknown): string {
   const raw = asString(value);
   if (!raw) return "";
@@ -864,6 +884,21 @@ function mapBackendLineItem(
     asString(productSnap.productName) ||
     `Line ${idx + 1}`;
 
+  const serviceLedger = raw.service_ledger as
+    | { ledger_id?: string; ledger_code?: string; ledger_name?: string }
+    | null
+    | undefined;
+  const incomeLedgerCode =
+    asString(serviceLedger?.ledger_code) ||
+    asString((raw as { service_ledger_code?: string }).service_ledger_code);
+  const incomeLedgerName =
+    asString(serviceLedger?.ledger_name) ||
+    asString((raw as { service_ledger_name?: string }).service_ledger_name);
+  const sacId =
+    asString(raw.sac_id) ||
+    asString(sacSnap.id || sacSnap.sac_id) ||
+    null;
+
   return {
     id: asString(raw.sales_invoice_item_id || raw.id || `line-${idx}`),
     productId: null,
@@ -884,6 +919,9 @@ function mapBackendLineItem(
       asString(hsnSnap.hsnCode || hsnSnap.hsn_code) ||
       asString(sacSnap.hsnCode || sacSnap.hsn_code || sacSnap.code) ||
       "",
+    sacId,
+    incomeLedgerCode: incomeLedgerCode || undefined,
+    incomeLedgerName: incomeLedgerName || undefined,
     qty,
     unit: asString(uomSnap.label || uomSnap.uom || uomSnap.unit || raw.quantity_type) || "NOS",
     unitPrice: rate,
@@ -972,6 +1010,21 @@ export function mapSalesInvoiceDetailToRecord(
   const taxAmount = asNumber(dto.gst_amount);
   const discountTotal = asNumber(dto.product_discount_amount);
   const subtotal = asNumber(dto.gross_amount) || asNumber(dto.taxable_amount);
+  const amountReceived = Math.max(0, asNumber(dto.amount_received));
+  const outstandingFromApi =
+    dto.outstanding_amount != null ? asNumber(dto.outstanding_amount) : null;
+  const balanceAmount =
+    status === "cancelled"
+      ? 0
+      : outstandingFromApi != null
+        ? Math.max(0, outstandingFromApi)
+        : Math.max(0, Math.round((grandTotal - amountReceived) * 100) / 100);
+  const paymentStatus = mapBackendPaymentStatus(
+    dto.payment_status,
+    amountReceived,
+    grandTotal,
+    status,
+  );
   const customerName =
     dto.customer?.customer_name ||
     snapshotStr(customerSnap, "customer_name", "customerName", "name") ||
@@ -1027,7 +1080,12 @@ export function mapSalesInvoiceDetailToRecord(
     id: srNo || 0,
     salesInvoiceId: dto.sales_invoice_id,
     invoiceNo: dto.invoice_number,
-    invoiceType: kind === "stock_transfer" ? "stock_transfer" : "sales",
+    invoiceType:
+      kind === "stock_transfer"
+        ? "stock_transfer"
+        : kind === "sample_order"
+          ? "sample_order"
+          : "sales",
     invoiceDate: asDateOnly(dto.invoice_date),
     dueDate: asDateOnly(dto.due_date) || asDateOnly(dto.invoice_date),
     referenceNo: dto.dispatch?.dispatch_number || "",
@@ -1049,10 +1107,10 @@ export function mapSalesInvoiceDetailToRecord(
     discountTotal,
     taxAmount,
     grandTotal,
-    amountReceived: 0,
-    balanceAmount: status === "cancelled" ? 0 : grandTotal,
+    amountReceived: Math.round(amountReceived * 100) / 100,
+    balanceAmount: Math.round(balanceAmount * 100) / 100,
     invoiceStatus: status,
-    paymentStatus: status === "cancelled" ? "paid" : "unpaid",
+    paymentStatus,
     collections: [],
     attachments: [],
     activity: [],

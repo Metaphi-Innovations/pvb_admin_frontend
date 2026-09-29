@@ -148,12 +148,20 @@ export default function AccountsGenericLedgerFormClient({
         const masterLink = resolveCoaMasterLink(row, records);
         if (masterLink?.category === "bank") {
           const parentId = row.parentAccountId;
+          const ledgerKey = row.apiNodeId ?? String(masterLink.sourceId);
+          // Prefer reopening inside COA so create/edit stay on the bank ledger form embed.
+          if (parentId != null && ledgerKey) {
+            router.replace(
+              `${CHART_OF_ACCOUNTS_HREF}?node=${parentId}&bankLedger=${encodeURIComponent(ledgerKey)}`,
+            );
+            return;
+          }
           const returnTo =
             parentId != null
               ? `${CHART_OF_ACCOUNTS_HREF}?node=${parentId}`
               : CHART_OF_ACCOUNTS_HREF;
           router.replace(
-            `/accounts/banking/bank-accounts/${masterLink.sourceId}/edit?source=chart-of-accounts&returnTo=${encodeURIComponent(returnTo)}`,
+            `/accounts/banking/bank-accounts/${ledgerKey}/edit?source=chart-of-accounts&returnTo=${encodeURIComponent(returnTo)}`,
           );
           return;
         }

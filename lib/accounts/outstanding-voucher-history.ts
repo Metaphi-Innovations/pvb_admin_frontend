@@ -1,6 +1,6 @@
 import { formatSrNo as formatPaymentSrNo } from "@/app/(app)/accounts/vouchers/payment/payment-voucher-utils";
 import { formatSrNo as formatReceiptSrNo } from "@/app/(app)/accounts/vouchers/receipt/receipt-voucher-utils";
-import { roundMoney } from "@/lib/accounts/money-format";
+import { formatMoney, roundMoney } from "@/lib/accounts/money-format";
 import { PaymentVoucherService } from "@/services/payment-voucher.service";
 import { ReceiptVoucherService } from "@/services/receipt-voucher.service";
 import type { CustomerReceiptHistoryRow } from "@/types/receivables.types";
@@ -152,6 +152,53 @@ export function mapPaymentVoucherToHistoryRow(
   };
 }
 
+function snapshotDocumentNumber(
+  snapshot: Record<string, unknown> | null | undefined,
+): string {
+  if (!snapshot) return "";
+  const value =
+    snapshot.document_number ??
+    snapshot.documentNumber ??
+    snapshot.invoice_number ??
+    snapshot.invoiceNumber;
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function formatInvoiceAllocationLabel(
+  documentNumber: string,
+  allocatedAmount: number,
+): string {
+  const doc = documentNumber.trim();
+  if (!doc) return "";
+  if (allocatedAmount > 0) {
+    return `${doc} (${formatMoney(allocatedAmount)})`;
+  }
+  return doc;
+}
+
+/** Collect allocated sales invoice / open-item document numbers from a receipt list row. */
+export function resolveReceiptInvoiceNos(row: ReceiptVoucherListItem): string {
+  const allocations = row.allocations ?? [];
+  if (!allocations.length) {
+    const allocated = toMoney(row.allocated_amount);
+    if (allocated <= 0) return "Advance / Unallocated";
+    return "—";
+  }
+
+  const labels: string[] = [];
+  const seen = new Set<string>();
+  for (const alloc of allocations) {
+    const doc =
+      alloc.open_item?.document_number?.trim() ||
+      snapshotDocumentNumber(alloc.open_item_snapshot) ||
+      "";
+    if (!doc || seen.has(doc)) continue;
+    seen.add(doc);
+    labels.push(formatInvoiceAllocationLabel(doc, toMoney(alloc.allocated_amount)));
+  }
+  return labels.length > 0 ? labels.join(", ") : "—";
+}
+
 export function mapReceiptVoucherToHistoryRow(
   row: ReceiptVoucherListItem,
 ): CustomerReceiptHistoryRow {
@@ -164,6 +211,7 @@ export function mapReceiptVoucherToHistoryRow(
     allocatedAmount: toMoney(row.allocated_amount),
     bankAccount: resolveBankAccount(row),
     referenceNo: resolveReference(row),
+    invoiceNos: resolveReceiptInvoiceNos(row),
     status,
     statusLabel: RECEIPT_STATUS_LABELS[row.status] ?? status,
   };

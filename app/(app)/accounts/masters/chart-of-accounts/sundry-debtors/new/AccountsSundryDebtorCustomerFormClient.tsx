@@ -208,7 +208,10 @@ export default function AccountsSundryDebtorCustomerFormClient({
     setErrors(e);
     if (Object.keys(e).length > 0) {
       setToast({
-        msg: e.requiredDocuments || "Please fix the errors before saving.",
+        msg:
+          e.creditLimit ||
+          e.requiredDocuments ||
+          "Please fix the errors before saving.",
         type: "error",
       });
       setTimeout(() => setToast(null), 3200);

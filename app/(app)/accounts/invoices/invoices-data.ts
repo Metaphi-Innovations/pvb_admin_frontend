@@ -111,6 +111,9 @@ export interface InvoiceLineItem {
 	hsn?: string;
 	/** Backend SAC master UUID (service invoices). */
 	sacId?: string | null;
+	/** Service invoice — income ledger display (code · name). */
+	incomeLedgerName?: string;
+	incomeLedgerCode?: string;
 	qty: number;
 	unit: string;
 	unitPrice: number;

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext } from "react";
+import React, { createContext, useContext, useEffect } from "react";
 import { useAccountsColumnFilters, type UseAccountsColumnFiltersOptions } from "./useAccountsColumnFilters";
 
 type ColumnFilterContextValue = ReturnType<typeof useAccountsColumnFilters> | null;
@@ -31,4 +31,17 @@ export function useAccountsFilteredRows<T>(fallbackRows: T[]): T[] {
   const ctx = useAccountsColumnFilterContext();
   if (ctx) return ctx.filteredRows as T[];
   return fallbackRows;
+}
+
+/** Reports the provider's filtered/sorted rows to a parent (e.g. Excel/PDF export). */
+export function AccountsVisibleRowsReporter<T>({
+  onVisibleRowsChange,
+}: {
+  onVisibleRowsChange?: (rows: T[]) => void;
+}) {
+  const visible = useAccountsFilteredRows<T>([]);
+  useEffect(() => {
+    onVisibleRowsChange?.(visible);
+  }, [visible, onVisibleRowsChange]);
+  return null;
 }

@@ -452,7 +452,9 @@ function PurchaseInvoicesTabTable({
                     canCancel={
                       PurchaseInvoiceService.isUuid(inv.id) &&
                       inv.status === "POSTED" &&
-                      !inv.isPendingGrn
+                      !inv.isPendingGrn &&
+                      inv.paymentStatus === "unpaid" &&
+                      inv.amountPaid <= 0.0001
                     }
                     downloading={downloadingId === inv.id}
                     actionBusy={actionBusy}
