@@ -43,3 +43,52 @@ export function listingHeaderCellStyle(opts: {
     minWidth,
   };
 }
+
+/**
+ * Body cell width: never shrink below the configured column width.
+ * Only cap with maxWidth when truncating (long text + tooltip).
+ * Non-truncating cells (e.g. amounts) can grow so the last digits are not clipped.
+ */
+export function listingBodyCellStyle(opts: {
+  width?: string;
+  truncate: boolean;
+}): CSSProperties {
+  if (!opts.width) {
+    return opts.truncate ? { minWidth: 0 } : {};
+  }
+
+  if (opts.truncate) {
+    return {
+      width: opts.width,
+      minWidth: opts.width,
+      maxWidth: opts.width,
+    };
+  }
+
+  return {
+    width: opts.width,
+    minWidth: opts.width,
+  };
+}
+
+/** Keys that hold short structured values (dates/ranges) — never clip by default. */
+const NO_TRUNCATE_KEY =
+  /(^|_)(validity|validFrom|validTo|startDate|endDate|fromDate|toDate|date)(_|$)/i;
+
+/**
+ * Default truncate behavior for listing columns.
+ * Long free-text truncates with tooltip; amounts, dates, status widgets stay full.
+ */
+export function listingShouldTruncate(opts: {
+  truncate?: boolean;
+  align?: "left" | "center" | "right";
+  filterType?: string;
+  key: string;
+}): boolean {
+  if (opts.truncate !== undefined) return opts.truncate;
+  if (opts.align === "right") return false;
+  if (opts.filterType === "audit" || opts.filterType === "date") return false;
+  if (["status", "actions"].includes(opts.key)) return false;
+  if (NO_TRUNCATE_KEY.test(opts.key)) return false;
+  return true;
+}

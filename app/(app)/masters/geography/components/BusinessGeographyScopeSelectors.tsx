@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState, startTransition } from "react";
-import { ChevronDown, Search, X } from "lucide-react";
+import { ChevronDown, Hash, MapPin, Search, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
@@ -16,6 +16,10 @@ import {
 interface CheckOption {
   value: string;
   label: string;
+  /** Stable unique key when the same value appears on more than one row. */
+  rowKey?: string;
+  /** Extra text matched by the search box (pincode, office, city) without changing the label. */
+  searchText?: string;
   disabled?: boolean;
   disabledReason?: string;
   assignedBadge?: string;
@@ -29,6 +33,23 @@ const VIRTUALIZE_THRESHOLD = 60;
 const COLLAPSE_THRESHOLD = 120;
 const OVERSCAN = 10;
 
+const LIST_TONES = {
+  location: {
+    badge: "bg-[#eef3f0] text-[#4d6558] border-[#dce6e0]",
+    badgeLabel: "Location",
+    list: "border-[#e3ebe6]",
+    collapsed: "border-[#d5e0d9] bg-[#f7faf8]",
+    action: "text-[#5d7368] hover:text-[#3d5248]",
+  },
+  pincode: {
+    badge: "bg-[#f6f1ea] text-[#6d6256] border-[#ebe3d8]",
+    badgeLabel: "Pincode",
+    list: "border-[#ebe4da]",
+    collapsed: "border-[#e4dcd2] bg-[#fbf9f6]",
+    action: "text-[#6d6256] hover:text-[#4e463e]",
+  },
+} as const;
+
 const MultiCheckList = memo(function MultiCheckList({
   label,
   options,
@@ -39,6 +60,7 @@ const MultiCheckList = memo(function MultiCheckList({
   loading,
   searchPlaceholder,
   listMaxHeightClass = "max-h-48",
+  tone,
 }: {
   label: string;
   options: CheckOption[];
@@ -49,6 +71,7 @@ const MultiCheckList = memo(function MultiCheckList({
   loading?: boolean;
   searchPlaceholder?: string;
   listMaxHeightClass?: string;
+  tone?: keyof typeof LIST_TONES;
 }) {
   const [search, setSearch] = useState("");
   const [scrollTop, setScrollTop] = useState(0);
@@ -66,16 +89,17 @@ const MultiCheckList = memo(function MultiCheckList({
 
   const selectedSet = useMemo(() => new Set(selected), [selected]);
 
+  const query = search.trim().toLowerCase();
   const filteredOptions = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return options;
-    return options.filter(
-      (opt) =>
-        opt.label.toLowerCase().includes(q) ||
-        (opt.groupLabel && opt.groupLabel.toLowerCase().includes(q)) ||
-        (opt.assignedBadge && opt.assignedBadge.toLowerCase().includes(q)),
-    );
-  }, [options, search]);
+    if (!query) return options;
+    return options.filter((opt) => {
+      const haystack = [opt.label, opt.searchText, opt.groupLabel, opt.assignedBadge]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(query);
+    });
+  }, [options, query]);
 
   const enabledFilteredOptions = useMemo(
     () => filteredOptions.filter((opt) => !opt.disabled),
@@ -138,10 +162,16 @@ const MultiCheckList = memo(function MultiCheckList({
     commitChange(selected.filter((v) => !optionValues.has(v)));
   }, [commitChange, optionValues, selected]);
 
-  const useVirtual = filteredOptions.length > VIRTUALIZE_THRESHOLD && listOpen;
+  // Searching renders the matches directly. Virtualizing a filtered window kept
+  // stale rows on screen when several locations share one pincode id.
+  const useVirtual =
+    !query && filteredOptions.length > VIRTUALIZE_THRESHOLD && listOpen;
   const viewportPx =
     listMaxHeightClass.includes("max-h-72") ? 288 : LIST_VIEWPORT_PX;
 
+  // Keep the window inside the filtered list. A stale scroll offset (user had
+  // scrolled the full list, then typed a search) otherwise slices past the end
+  // and the box looks empty even though matches exist.
   const { startIndex, endIndex, padTop, padBottom } = useMemo(() => {
     if (!useVirtual) {
       return {
@@ -151,22 +181,33 @@ const MultiCheckList = memo(function MultiCheckList({
         padBottom: 0,
       };
     }
-    const start = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT_PX) - OVERSCAN);
-    const visibleCount = Math.ceil(viewportPx / ROW_HEIGHT_PX) + OVERSCAN * 2;
+    const pageRows = Math.max(1, Math.ceil(viewportPx / ROW_HEIGHT_PX));
+    const maxStart = Math.max(0, filteredOptions.length - pageRows);
+    const start = Math.min(
+      maxStart,
+      Math.max(0, Math.floor(scrollTop / ROW_HEIGHT_PX) - OVERSCAN),
+    );
+    const visibleCount = pageRows + OVERSCAN * 2;
     const end = Math.min(filteredOptions.length, start + visibleCount);
     return {
       startIndex: start,
-      endIndex: end,
+      endIndex: Math.max(start, end),
       padTop: start * ROW_HEIGHT_PX,
       padBottom: Math.max(0, (filteredOptions.length - end) * ROW_HEIGHT_PX),
     };
   }, [filteredOptions.length, scrollTop, useVirtual, viewportPx]);
+
+  useEffect(() => {
+    setScrollTop(0);
+    if (listRef.current) listRef.current.scrollTop = 0;
+  }, [search]);
 
   const visibleOptions = useVirtual
     ? filteredOptions.slice(startIndex, endIndex)
     : filteredOptions;
 
   const showCollapseToggle = options.length > COLLAPSE_THRESHOLD;
+  const toneStyle = tone ? LIST_TONES[tone] : null;
 
   return (
     <div className="space-y-1.5">
@@ -174,7 +215,7 @@ const MultiCheckList = memo(function MultiCheckList({
         <button
           type="button"
           className={cn(
-            "flex items-center gap-1 min-w-0 text-left",
+            "flex items-center gap-1.5 min-w-0 text-left",
             showCollapseToggle && "hover:opacity-80",
           )}
           onClick={() => {
@@ -193,6 +234,16 @@ const MultiCheckList = memo(function MultiCheckList({
               )}
             />
           )}
+          {toneStyle && (
+            <span
+              className={cn(
+                "shrink-0 inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-medium",
+                toneStyle.badge,
+              )}
+            >
+              {toneStyle.badgeLabel}
+            </span>
+          )}
           <Label className="text-xs font-medium cursor-inherit pointer-events-none">
             {label}
             {showCollapseToggle && (
@@ -210,7 +261,10 @@ const MultiCheckList = memo(function MultiCheckList({
           <div className="flex items-center gap-2 text-[11px] shrink-0">
             <button
               type="button"
-              className="text-brand-600 hover:text-brand-700 font-medium hover:underline disabled:opacity-50"
+              className={cn(
+                "font-medium hover:underline disabled:opacity-50",
+                toneStyle ? toneStyle.action : "text-brand-600 hover:text-brand-700",
+              )}
               onClick={toggleSelectAllFiltered}
               disabled={enabledFilteredOptions.length === 0}
             >
@@ -232,15 +286,20 @@ const MultiCheckList = memo(function MultiCheckList({
         )}
       </div>
 
-      {listOpen && options.length > 5 && (
+      {options.length > 5 && (
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
           <Input
             value={search}
             onChange={(e) => {
-              setSearch(e.target.value);
+              const next = e.target.value;
+              setSearch(next);
               setScrollTop(0);
               if (listRef.current) listRef.current.scrollTop = 0;
+              if (next.trim() && !listOpen) {
+                setUserToggledList(true);
+                setListOpen(true);
+              }
             }}
             placeholder={
               searchPlaceholder ??
@@ -251,7 +310,11 @@ const MultiCheckList = memo(function MultiCheckList({
           {search && (
             <button
               type="button"
-              onClick={() => setSearch("")}
+              onClick={() => {
+                setSearch("");
+                setScrollTop(0);
+                if (listRef.current) listRef.current.scrollTop = 0;
+              }}
               className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-muted-foreground hover:text-foreground"
             >
               <X className="h-3 w-3" />
@@ -266,10 +329,22 @@ const MultiCheckList = memo(function MultiCheckList({
           className={cn(
             "rounded-lg border overflow-y-auto p-2 bg-white",
             listMaxHeightClass,
+            toneStyle?.list,
             error && "border-red-500",
           )}
           onScroll={(e) => {
-            if (useVirtual) setScrollTop(e.currentTarget.scrollTop);
+            if (!useVirtual) return;
+            const top = e.currentTarget.scrollTop;
+            const maxScroll = Math.max(
+              0,
+              filteredOptions.length * ROW_HEIGHT_PX - viewportPx,
+            );
+            if (top > maxScroll + ROW_HEIGHT_PX) {
+              e.currentTarget.scrollTop = 0;
+              setScrollTop(0);
+              return;
+            }
+            setScrollTop(top);
           }}
         >
           {loading ? (
@@ -304,7 +379,7 @@ const MultiCheckList = memo(function MultiCheckList({
                   Boolean(opt.groupLabel) && opt.groupLabel !== prevGroup;
                 return (
                   <div
-                    key={`${opt.groupLabel ?? ""}:${opt.value}`}
+                    key={opt.rowKey ?? `${opt.value}:${opt.label}:${index}`}
                     style={
                       useVirtual
                         ? { height: ROW_HEIGHT_PX, boxSizing: "border-box" }
@@ -373,7 +448,8 @@ const MultiCheckList = memo(function MultiCheckList({
             setListOpen(true);
           }}
           className={cn(
-            "w-full rounded-lg border border-dashed px-3 py-2 text-left text-[11px] text-muted-foreground hover:bg-muted/20 hover:text-foreground",
+            "w-full rounded-lg border border-dashed px-3 py-2 text-left text-[11px] text-muted-foreground hover:text-foreground",
+            toneStyle ? toneStyle.collapsed : "hover:bg-muted/20",
             error && "border-red-500",
           )}
         >
@@ -766,8 +842,12 @@ export function TerritoryCoverageSelector({
         locationLabelById.get(locationId) ?? pin.extra ?? "";
       const option: CheckOption = {
         value: pin.id,
+        rowKey: `${pin.id}:${locationId}:${locationLabel}`,
         // Include city/village so district sections stay readable
         label: locationLabel ? `${pin.label} — ${locationLabel}` : pin.label,
+        searchText: [pin.label, pin.code, pin.officeName, locationLabel]
+          .filter(Boolean)
+          .join(" "),
         disabled: Boolean(pin.assignedGeography),
         assignedBadge: pin.assignedGeography?.name,
       };
@@ -850,8 +930,20 @@ export function TerritoryCoverageSelector({
 
   return (
     <div className="space-y-4">
+      <section className="space-y-3 rounded-xl border border-[#e3ebe6] bg-[#f7faf8] p-3">
+        <div className="flex items-center gap-2.5">
+          <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-white text-[#5d7368] shadow-sm">
+            <MapPin className="h-3.5 w-3.5" />
+          </span>
+          <div>
+            <p className="text-xs font-medium text-[#3d5248]">Locations</p>
+            <p className="text-[11px] text-[#6d7f76]">Cities and villages in the selected area</p>
+          </div>
+        </div>
+
       {!areaId ? (
         <MultiCheckList
+          tone="location"
           label="Select Location(s) *"
           options={[]}
           selected={selectedLocationIds}
@@ -862,6 +954,7 @@ export function TerritoryCoverageSelector({
         />
       ) : locationsLoading && locationSections.length === 0 ? (
         <MultiCheckList
+          tone="location"
           label="Select Location(s) *"
           options={[]}
           selected={selectedLocationIds}
@@ -872,6 +965,7 @@ export function TerritoryCoverageSelector({
         />
       ) : locationSections.length === 0 ? (
         <MultiCheckList
+          tone="location"
           label="Select Location(s) *"
           options={[]}
           selected={selectedLocationIds}
@@ -885,10 +979,11 @@ export function TerritoryCoverageSelector({
           }
         />
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-3">
           {locationSections.map((section) => (
             <MultiCheckList
               key={section.groupId}
+              tone="location"
               label={section.label}
               options={section.options}
               selected={selectedLocationIds}
@@ -902,9 +997,22 @@ export function TerritoryCoverageSelector({
           )}
         </div>
       )}
+      </section>
+
+      <section className="space-y-3 rounded-xl border border-[#ebe4da] bg-[#fbf9f6] p-3">
+        <div className="flex items-center gap-2.5">
+          <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-white text-[#6d6256] shadow-sm">
+            <Hash className="h-3.5 w-3.5" />
+          </span>
+          <div>
+            <p className="text-xs font-medium text-[#4e463e]">Pincodes</p>
+            <p className="text-[11px] text-[#8a7d72]">Postal codes for the locations selected above</p>
+          </div>
+        </div>
 
       {selectedLocationIds.length === 0 ? (
         <MultiCheckList
+          tone="pincode"
           label="Select Pincode(s) *"
           options={[]}
           selected={selectedPincodeIds}
@@ -915,6 +1023,7 @@ export function TerritoryCoverageSelector({
         />
       ) : pincodesLoading && pincodeSections.every((s) => s.options.length === 0) ? (
         <MultiCheckList
+          tone="pincode"
           label="Select Pincode(s) *"
           options={[]}
           selected={selectedPincodeIds}
@@ -926,6 +1035,7 @@ export function TerritoryCoverageSelector({
       ) : pincodesQuery.isError &&
         pincodeSections.every((s) => s.options.length === 0) ? (
         <MultiCheckList
+          tone="pincode"
           label="Select Pincode(s) *"
           options={[]}
           selected={selectedPincodeIds}
@@ -942,10 +1052,11 @@ export function TerritoryCoverageSelector({
           }
         />
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-3">
           {pincodeSections.map((section) => (
             <MultiCheckList
               key={section.groupId}
+              tone="pincode"
               label={section.label}
               options={section.options}
               selected={selectedPincodeIds}
@@ -960,16 +1071,19 @@ export function TerritoryCoverageSelector({
           )}
         </div>
       )}
+      </section>
 
-      <div className="rounded-lg border border-border/60 bg-white p-3 space-y-1">
+      <div className="rounded-lg border border-border/60 bg-white p-3 space-y-1.5">
         <p className="text-[10px] font-medium text-muted-foreground uppercase">
           Coverage Summary
         </p>
-        <p className="text-xs">
+        <p className="text-xs flex items-center gap-1.5">
+          <span className="inline-block h-2 w-2 rounded-full bg-[#8aa394]" />
           <span className="text-muted-foreground">Locations selected:</span>{" "}
           <span className="font-medium tabular-nums">{selectedLocationIds.length}</span>
         </p>
-        <p className="text-xs">
+        <p className="text-xs flex items-center gap-1.5">
+          <span className="inline-block h-2 w-2 rounded-full bg-[#c4b5a4]" />
           <span className="text-muted-foreground">Pincodes selected:</span>{" "}
           <span className="font-medium tabular-nums">{selectedPincodeIds.length}</span>
         </p>

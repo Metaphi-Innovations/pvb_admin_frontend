@@ -14,6 +14,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { FY_STATUS_CONFIG, setStoredFYId, mapApiFinancialYear, type FinancialYear } from "@/lib/fy-store";
 import { FinancialYearApiService } from "@/services/financial-year.service";
 import { useAuth } from "@/lib/auth/auth-context";
+import { AuthService } from "@/services/auth.service";
 import { LoginRequest } from "@/types/api.types";
 import { FY_PENDING_KEY } from "@/components/auth/GuestGate";
 
@@ -28,20 +29,40 @@ function detectType(val: string): IdentifierType {
   return "unknown";
 }
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const OTP_RESEND_SECONDS = 60;
+const EMPTY_OTP = ["", "", "", "", "", ""];
+
+function maskEmail(email: string): string {
+  const [local, domain] = email.split("@");
+  if (!local || !domain) return email;
+  const visible = local.slice(0, Math.min(2, local.length));
+  return `${visible}${"*".repeat(Math.max(local.length - visible.length, 3))}@${domain}`;
+}
+
+function getErrorMessage(err: unknown): string {
+  const e = err as { error?: string; message?: string } | undefined;
+  return e?.error || e?.message || "Something went wrong. Please try again.";
+}
+
 // ── Steps ─────────────────────────────────────────────────────────────────────
 type Step =
   | "credentials"
   | "forgot"
-  | "forgot-sent"
+  | "forgot-otp"
+  | "forgot-new-password"
+  | "forgot-done"
   | "fy-select";
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 function OtpInput({
   value,
   onChange,
+  onComplete,
 }: {
   value: string[];
   onChange: (v: string[]) => void;
+  onComplete?: () => void;
 }) {
   const refs = useRef<(HTMLInputElement | null)[]>([]);
 
@@ -53,12 +74,22 @@ function OtpInput({
     if (raw && idx < 5) refs.current[idx + 1]?.focus();
   };
 
+  const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    const digits = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
+    if (!digits) return;
+    e.preventDefault();
+    const next = Array.from({ length: 6 }, (_, i) => digits[i] ?? "");
+    onChange(next);
+    refs.current[Math.min(digits.length, 5)]?.focus();
+  };
+
   const handleKeyDown = (idx: number, e: React.KeyboardEvent) => {
     if (e.key === "Backspace" && !value[idx] && idx > 0) {
       refs.current[idx - 1]?.focus();
     }
     if (e.key === "ArrowLeft" && idx > 0) refs.current[idx - 1]?.focus();
     if (e.key === "ArrowRight" && idx < 5) refs.current[idx + 1]?.focus();
+    if (e.key === "Enter") onComplete?.();
   };
 
   return (
@@ -73,7 +104,10 @@ function OtpInput({
           value={value[idx]}
           onChange={(e) => handleChange(idx, e.target.value)}
           onKeyDown={(e) => handleKeyDown(idx, e)}
+          onPaste={handlePaste}
           onFocus={(e) => e.target.select()}
+          autoFocus={idx === 0}
+          autoComplete={idx === 0 ? "one-time-code" : "off"}
           className={cn(
             "w-11 h-11 text-center text-lg font-bold rounded-lg border transition-all bg-white",
             "focus:outline-none focus:ring-2 focus:ring-brand-400 focus:border-brand-400",
@@ -105,7 +139,7 @@ function FYStatusBadge({ status }: { status: string }) {
 function StepProgress({ step }: { step: Step }) {
   const isFy = step === "fy-select";
 
-  if (step === "forgot" || step === "forgot-sent") return null;
+  if (step.startsWith("forgot")) return null;
 
   return (
     <div className="flex items-center gap-2 mb-2">
@@ -195,12 +229,19 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [pwError, setPwError] = useState("");
   const [showPass, setShowPass] = useState(false);
-  const [otp, setOtp] = useState(["", "", "", "", "", ""]);
+  const [otp, setOtp] = useState(EMPTY_OTP);
   const [otpError, setOtpError] = useState("");
+  const [otpInfo, setOtpInfo] = useState("");
   const [remember, setRemember] = useState(false);
   const [loading, setLoading] = useState(false);
   const [forgotVal, setForgotVal] = useState("");
+  const [forgotError, setForgotError] = useState("");
   const [resendSecs, setResendSecs] = useState(0);
+  const [resetToken, setResetToken] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [newPwError, setNewPwError] = useState("");
+  const [showNewPass, setShowNewPass] = useState(false);
   const [selectedFY, setSelectedFY] = useState<FinancialYear | null>(null);
   const [fyOptions, setFyOptions] = useState<FinancialYear[]>([]);
   const [fyLoadError, setFyLoadError] = useState<string | null>(null);
@@ -234,20 +275,23 @@ export default function LoginPage() {
     };
   }, [step]);
 
-  // ── Helpers ────────────────────────────────────────────────────────────────
-  const simulate = (fn: () => void, ms = 1400) => {
-    setLoading(true);
-    setTimeout(() => { setLoading(false); fn(); }, ms);
-  };
+  useEffect(() => {
+    if (resendSecs <= 0) return;
+    const t = setTimeout(() => setResendSecs((s) => s - 1), 1000);
+    return () => clearTimeout(t);
+  }, [resendSecs]);
 
-  const startResendTimer = () => {
-    setResendSecs(30);
-    const iv = setInterval(() => {
-      setResendSecs((t) => {
-        if (t <= 1) { clearInterval(iv); return 0; }
-        return t - 1;
-      });
-    }, 1000);
+  // ── Helpers ────────────────────────────────────────────────────────────────
+  const resetForgotFlow = () => {
+    setForgotError("");
+    setOtp(EMPTY_OTP);
+    setOtpError("");
+    setOtpInfo("");
+    setResetToken("");
+    setNewPassword("");
+    setConfirmPassword("");
+    setNewPwError("");
+    setShowNewPass(false);
   };
 
   // ── Actions ────────────────────────────────────────────────────────────────
@@ -301,9 +345,107 @@ export default function LoginPage() {
     }
   };
 
-  const handleForgotSubmit = () => {
-    if (!forgotVal.trim()) return;
-    simulate(() => setStep("forgot-sent"), 1200);
+  const handleForgotSubmit = async () => {
+    const email = forgotVal.trim();
+    if (!EMAIL_RE.test(email)) {
+      setForgotError("Enter a valid email address");
+      return;
+    }
+
+    setLoading(true);
+    setForgotError("");
+    try {
+      await AuthService.requestPasswordReset(email);
+      setForgotVal(email);
+      setOtp(EMPTY_OTP);
+      setOtpError("");
+      setOtpInfo("");
+      setResendSecs(OTP_RESEND_SECONDS);
+      setStep("forgot-otp");
+    } catch (err) {
+      setForgotError(getErrorMessage(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    if (resendSecs > 0 || loading) return;
+    setLoading(true);
+    setOtpError("");
+    setOtpInfo("");
+    try {
+      await AuthService.requestPasswordReset(forgotVal.trim());
+      setOtp(EMPTY_OTP);
+      setOtpInfo("A new OTP has been sent to your email.");
+      setResendSecs(OTP_RESEND_SECONDS);
+    } catch (err) {
+      setOtpError(getErrorMessage(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    const code = otp.join("");
+    if (code.length !== 6) {
+      setOtpError("Enter the 6-digit OTP");
+      return;
+    }
+
+    setLoading(true);
+    setOtpError("");
+    setOtpInfo("");
+    try {
+      const res = await AuthService.verifyPasswordResetOtp(forgotVal.trim(), code);
+      const token = res.data?.reset_token;
+      if (!token) throw new Error("Verification failed. Please try again.");
+      setResetToken(token);
+      setNewPassword("");
+      setConfirmPassword("");
+      setNewPwError("");
+      setStep("forgot-new-password");
+    } catch (err) {
+      setOtp(EMPTY_OTP);
+      setOtpError(getErrorMessage(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResetPassword = async () => {
+    if (newPassword.length < 8) {
+      setNewPwError("Password must be at least 8 characters");
+      return;
+    }
+    if (newPassword.length > 72) {
+      setNewPwError("Password must not exceed 72 characters");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setNewPwError("Passwords do not match");
+      return;
+    }
+
+    setLoading(true);
+    setNewPwError("");
+    try {
+      await AuthService.resetPassword(resetToken, newPassword);
+      resetForgotFlow();
+      setStep("forgot-done");
+    } catch (err) {
+      setNewPwError(getErrorMessage(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleBackToSignIn = () => {
+    resetForgotFlow();
+    if (EMAIL_RE.test(forgotVal.trim())) setIdentifier(forgotVal.trim());
+    setPassword("");
+    setPwError("");
+    setStep("credentials");
   };
 
   const handleFYContinue = () => {
@@ -354,7 +496,11 @@ export default function LoginPage() {
             <Label className="text-sm font-medium">Password</Label>
             <button
               type="button"
-              onClick={() => { setForgotVal(identifier); setStep("forgot"); }}
+              onClick={() => {
+                resetForgotFlow();
+                setForgotVal(idType === "email" ? identifier.trim() : "");
+                setStep("forgot");
+              }}
               className="text-xs text-brand-600 hover:underline font-medium"
             >
               Forgot password?
@@ -418,20 +564,29 @@ export default function LoginPage() {
           </button>
           <h2 className="text-2xl font-bold text-foreground tracking-tight">Reset password</h2>
           <p className="text-sm text-muted-foreground mt-1">
-            Enter your registered email or mobile to receive reset instructions
+            Enter your registered email and we&apos;ll send you a 6-digit OTP
           </p>
         </div>
 
         <div className="space-y-1.5">
-          <Label className="text-sm font-medium">Email or Mobile</Label>
-          <Input
-            type="text"
-            value={forgotVal}
-            onChange={(e) => setForgotVal(e.target.value)}
-            placeholder="you@company.com or 9876543210"
-            className="h-10 rounded-input"
-            autoFocus
-          />
+          <Label className="text-sm font-medium">Registered Email</Label>
+          <div className="relative">
+            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+            <Input
+              type="email"
+              value={forgotVal}
+              onChange={(e) => { setForgotVal(e.target.value); setForgotError(""); }}
+              onKeyDown={(e) => e.key === "Enter" && handleForgotSubmit()}
+              placeholder="you@company.com"
+              className={cn("h-10 pl-10 rounded-input", forgotError && "border-red-400 focus-visible:ring-red-400")}
+              autoFocus
+            />
+          </div>
+          {forgotError && (
+            <p className="flex items-center gap-1.5 text-xs text-red-500">
+              <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" /> {forgotError}
+            </p>
+          )}
         </div>
 
         <Button
@@ -442,33 +597,174 @@ export default function LoginPage() {
           {loading ? (
             <span className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
           ) : (
-            <> Send Reset Link <ArrowRight className="w-4 h-4" /> </>
+            <> Send OTP <ArrowRight className="w-4 h-4" /> </>
           )}
         </Button>
       </div>
     );
 
-    /* ────── FORGOT SENT ────── */
-    if (step === "forgot-sent") return (
+    /* ────── FORGOT: ENTER OTP ────── */
+    if (step === "forgot-otp") return (
+      <div className="space-y-5">
+        <div>
+          <button
+            onClick={() => { resetForgotFlow(); setStep("forgot"); }}
+            className="text-xs text-brand-600 hover:underline mb-3 flex items-center gap-1 font-medium"
+          >
+            ← Change email
+          </button>
+          <div className="w-12 h-12 rounded-2xl bg-brand-50 border border-brand-100 flex items-center justify-center mb-4">
+            <Shield className="w-6 h-6 text-brand-500" />
+          </div>
+          <h2 className="text-2xl font-bold text-foreground tracking-tight">Enter OTP</h2>
+          <p className="text-sm text-muted-foreground mt-1">
+            If an account exists for{" "}
+            <span className="font-semibold text-foreground">{maskEmail(forgotVal.trim())}</span>,
+            we&apos;ve sent a 6-digit code. It expires in 10 minutes.
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <OtpInput
+            value={otp}
+            onChange={(v) => { setOtp(v); setOtpError(""); }}
+            onComplete={handleVerifyOtp}
+          />
+          {otpError && (
+            <p className="flex items-center justify-center gap-1.5 text-xs text-red-500">
+              <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" /> {otpError}
+            </p>
+          )}
+          {otpInfo && !otpError && (
+            <p className="flex items-center justify-center gap-1.5 text-xs text-green-600">
+              <Check className="w-3.5 h-3.5 flex-shrink-0" /> {otpInfo}
+            </p>
+          )}
+        </div>
+
+        <Button
+          className="w-full h-10 bg-brand-500 hover:bg-brand-600 text-white font-semibold rounded-btn gap-2"
+          onClick={handleVerifyOtp}
+          disabled={loading || otp.join("").length !== 6}
+        >
+          {loading ? (
+            <span className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+          ) : (
+            <> Verify OTP <ArrowRight className="w-4 h-4" /> </>
+          )}
+        </Button>
+
+        <div className="text-center text-sm text-muted-foreground">
+          Didn&apos;t get the code?{" "}
+          {resendSecs > 0 ? (
+            <span>Resend in {resendSecs}s</span>
+          ) : (
+            <button
+              type="button"
+              onClick={handleResendOtp}
+              disabled={loading}
+              className="inline-flex items-center gap-1 text-brand-600 hover:underline font-medium disabled:opacity-50"
+            >
+              <RefreshCw className="w-3.5 h-3.5" /> Resend OTP
+            </button>
+          )}
+        </div>
+      </div>
+    );
+
+    /* ────── FORGOT: NEW PASSWORD ────── */
+    if (step === "forgot-new-password") return (
+      <div className="space-y-5">
+        <div>
+          <button
+            onClick={() => { resetForgotFlow(); setStep("forgot"); }}
+            className="text-xs text-brand-600 hover:underline mb-3 flex items-center gap-1 font-medium"
+          >
+            ← Start over
+          </button>
+          <h2 className="text-2xl font-bold text-foreground tracking-tight">Set new password</h2>
+          <p className="text-sm text-muted-foreground mt-1">
+            Choose a new password for{" "}
+            <span className="font-semibold text-foreground">{maskEmail(forgotVal.trim())}</span>
+          </p>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label className="text-sm font-medium">New Password</Label>
+          <div className="relative">
+            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+            <Input
+              type={showNewPass ? "text" : "password"}
+              value={newPassword}
+              onChange={(e) => { setNewPassword(e.target.value); setNewPwError(""); }}
+              placeholder="At least 8 characters"
+              className={cn("h-10 pl-10 pr-10 rounded-input", newPwError && "border-red-400")}
+              autoComplete="new-password"
+              autoFocus
+            />
+            <button
+              type="button"
+              onClick={() => setShowNewPass((v) => !v)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            >
+              {showNewPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
+          </div>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label className="text-sm font-medium">Confirm New Password</Label>
+          <div className="relative">
+            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+            <Input
+              type={showNewPass ? "text" : "password"}
+              value={confirmPassword}
+              onChange={(e) => { setConfirmPassword(e.target.value); setNewPwError(""); }}
+              onKeyDown={(e) => e.key === "Enter" && handleResetPassword()}
+              placeholder="Re-enter new password"
+              className={cn("h-10 pl-10 rounded-input", newPwError && "border-red-400")}
+              autoComplete="new-password"
+            />
+          </div>
+          {newPwError && (
+            <p className="flex items-center gap-1.5 text-xs text-red-500">
+              <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" /> {newPwError}
+            </p>
+          )}
+        </div>
+
+        <Button
+          className="w-full h-10 bg-brand-500 hover:bg-brand-600 text-white font-semibold rounded-btn gap-2"
+          onClick={handleResetPassword}
+          disabled={loading || !newPassword || !confirmPassword}
+        >
+          {loading ? (
+            <span className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+          ) : (
+            <> Update Password <ArrowRight className="w-4 h-4" /> </>
+          )}
+        </Button>
+      </div>
+    );
+
+    /* ────── FORGOT: DONE ────── */
+    if (step === "forgot-done") return (
       <div className="space-y-4 text-center">
         <div className="w-14 h-14 rounded-2xl bg-green-50 border border-green-100 flex items-center justify-center mx-auto mb-4">
           <Check className="w-7 h-7 text-green-500" />
         </div>
-        <h2 className="text-2xl font-bold text-foreground tracking-tight">Check your inbox</h2>
+        <h2 className="text-2xl font-bold text-foreground tracking-tight">Password updated</h2>
         <p className="text-sm text-muted-foreground">
-          Reset instructions sent to{" "}
-          <span className="font-semibold text-foreground">{forgotVal}</span>.
+          Your password has been changed and you&apos;ve been signed out of all devices.
           <br />
-          Check your email or SMS.
+          Sign in with your new password to continue.
         </p>
-        <div className="pt-2">
-          <button
-            onClick={() => setStep("credentials")}
-            className="text-sm text-brand-600 hover:underline font-medium"
-          >
-            ← Back to sign in
-          </button>
-        </div>
+        <Button
+          className="w-full h-10 bg-brand-500 hover:bg-brand-600 text-white font-semibold rounded-btn gap-2"
+          onClick={handleBackToSignIn}
+        >
+          Back to Sign In <ArrowRight className="w-4 h-4" />
+        </Button>
       </div>
     );
 

@@ -86,9 +86,26 @@ function openEndedTo(raw: string): number | null {
 export type SchemeScopeOptionLists = {
   customerTypeIds?: string[];
   customerIds?: string[];
+  /** customer_id → customer_type_id; limits customers to the selected types. */
+  customerTypeByCustomerId?: Record<string, string | null | undefined>;
   stateNames?: string[];
   productIds?: string[];
 };
+
+/** Customers whose type is among `typeIds` (all customers when no type map is known). */
+export function customerIdsForTypes(
+  lists: SchemeScopeOptionLists,
+  typeIds: string[],
+): string[] {
+  const all = lists.customerIds ?? [];
+  const typeMap = lists.customerTypeByCustomerId;
+  if (!typeMap) return all;
+  const allowed = new Set(typeIds);
+  return all.filter((id) => {
+    const typeId = typeMap[id];
+    return Boolean(typeId && allowed.has(typeId));
+  });
+}
 
 function setsEqual(selected: string[], available: string[]): boolean {
   if (!available.length || selected.length !== available.length) return false;
@@ -122,7 +139,19 @@ function buildScopes(
     form.customerTypes,
     optionLists?.customerTypeIds,
   );
-  const customers = resolveScope(form.customerIds, optionLists?.customerIds);
+  // "Select All" customers = every customer of the selected types → scope ALL.
+  const availableCustomers = optionLists
+    ? customerIdsForTypes(optionLists, form.customerTypes)
+    : undefined;
+  const availableCustomerSet = availableCustomers
+    ? new Set(availableCustomers)
+    : null;
+  const customers = resolveScope(
+    availableCustomerSet && optionLists?.customerTypeByCustomerId
+      ? form.customerIds.filter((id) => availableCustomerSet.has(id))
+      : form.customerIds,
+    availableCustomers,
+  );
   const states = resolveScope(form.stateNames, optionLists?.stateNames);
 
   const forceProductSpecific =
@@ -199,7 +228,7 @@ function mapSpecialSlabs(form: SchemeUnifiedForm) {
     return form.specialDiscountQuantitySlabs.map((slab, index) => ({
       from_value: parseNum(slab.quantityFrom),
       to_value: openEndedTo(slab.quantityTo),
-      uom: slab.uom.trim() || form.specialDiscountUom.trim() || null,
+      uom: "Piece",
       discount_type: toApiDiscountType(slab.discountType),
       discount_value: parseNum(slab.discountValue),
       sort_order: index,
@@ -319,15 +348,14 @@ export function unifiedFormToCreatePayload(
             form.specialHasSlabs ||
             form.specialDiscountBasedOn !== "Sales Quantity"
               ? null
-              : form.specialDiscountUom.trim() || "Case",
-          product_evaluation_mode: form.specialCombineProducts
-            ? "COMBINED"
-            : "INDIVIDUAL",
+              : "Piece",
+          product_evaluation_mode: "COMBINED",
           evaluation_scope:
             form.specialEvaluationScope === "One Invoice"
               ? "PER_INVOICE"
               : "SCHEME_PERIOD",
           settlement_run_mode:
+            form.specialEvaluationScope !== "One Invoice" ||
             form.specialSettlementRunMode === "Automatic"
               ? "AUTOMATIC"
               : "MANUAL",
@@ -369,7 +397,7 @@ export function expandAllScopesForUi(
     asString(detail.customer_scope) === "ALL" &&
     optionLists.customerIds?.length
   ) {
-    next.customerIds = [...optionLists.customerIds];
+    next.customerIds = customerIdsForTypes(optionLists, next.customerTypes);
   }
 
   if (
@@ -553,21 +581,19 @@ export function detailToUnifiedForm(
 
     const runMode = asString(specialConfig?.settlement_run_mode);
     form.specialSettlementRunMode =
-      runMode === "AUTOMATIC" ? "Automatic" : "Manual";
+      runMode === "AUTOMATIC" || evalScope !== "PER_INVOICE"
+        ? "Automatic"
+        : "Manual";
 
-    form.specialCombineProducts =
-      asString(specialConfig?.product_evaluation_mode) !== "INDIVIDUAL";
+    form.specialCombineProducts = true;
 
     if (form.specialDiscountBasedOn === "Sales Quantity") {
-      const configUom = asString(specialConfig?.uom);
-      if (configUom) form.specialDiscountUom = configUom;
+      form.specialDiscountUom = "Piece";
 
       form.specialDiscountQuantitySlabs =
         slabs.length > 0
           ? slabs.map((item) => {
               const row = item as Record<string, unknown>;
-              const uom = asString(row.uom) || form.specialDiscountUom || "Case";
-              if (uom) form.specialDiscountUom = uom;
               return {
                 id: asString(row.scheme_slab_id) || `slab-${Math.random()}`,
                 quantityFrom: asString(row.from_value),
@@ -575,12 +601,12 @@ export function detailToUnifiedForm(
                   row.to_value == null || row.to_value === ""
                     ? ""
                     : asString(row.to_value),
-                uom,
+                uom: "Piece",
                 discountType: fromApiDiscountType(row.discount_type),
                 discountValue: asString(row.discount_value),
               };
             })
-          : [emptySpecialDiscountQuantitySlab("Case")];
+          : [emptySpecialDiscountQuantitySlab()];
     } else {
       form.specialDiscountAmountSlabs =
         slabs.length > 0

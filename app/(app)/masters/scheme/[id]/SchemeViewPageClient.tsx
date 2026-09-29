@@ -421,7 +421,6 @@ export default function SchemeViewPageClient() {
                     <th className="px-3 py-2 font-medium">To</th>
                     <th className="px-3 py-2 font-medium">Type</th>
                     <th className="px-3 py-2 font-medium">Value</th>
-                    <th className="px-3 py-2 font-medium">UOM</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -444,9 +443,6 @@ export default function SchemeViewPageClient() {
                                     row.discount_value,
                                   )}
                                 </td>
-                        <td className="px-3 py-2">
-                          {asString(row.uom) || "—"}
-                        </td>
                       </tr>
                     );
                   })}

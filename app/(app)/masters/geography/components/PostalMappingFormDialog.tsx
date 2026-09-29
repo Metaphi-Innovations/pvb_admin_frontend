@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,13 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import {
   usePostalLookupDistricts,
   usePostalLookupLocations,
@@ -51,6 +45,45 @@ export function PostalMappingFormDialog({
   const districtsQuery = usePostalLookupDistricts(stateId || undefined);
   const locationsQuery = usePostalLookupLocations(districtId || undefined);
 
+  const stateOptions = useMemo(
+    () =>
+      (statesQuery.data ?? []).map((s) => ({
+        value: s.id,
+        label: s.label,
+        searchText: s.label,
+      })),
+    [statesQuery.data],
+  );
+
+  const districtOptions = useMemo(
+    () =>
+      (districtsQuery.data ?? []).map((d) => ({
+        value: d.id,
+        label: d.label,
+        searchText: d.label,
+      })),
+    [districtsQuery.data],
+  );
+
+  const locationOptions = useMemo(
+    () =>
+      (locationsQuery.data ?? []).map((loc) => {
+        const typeSuffix =
+          loc.locationType === "VILLAGE"
+            ? "Village"
+            : loc.locationType === "CITY"
+              ? "City"
+              : loc.locationType || "";
+        return {
+          value: loc.id,
+          label: loc.label,
+          sublabel: typeSuffix || undefined,
+          searchText: `${loc.label} ${typeSuffix}`.trim(),
+        };
+      }),
+    [locationsQuery.data],
+  );
+
   useEffect(() => {
     if (!open) return;
     setStateId("");
@@ -59,6 +92,15 @@ export function PostalMappingFormDialog({
     setPincode("");
     setErrors({});
   }, [open]);
+
+  const clearError = (key: string) => {
+    setErrors((prev) => {
+      if (!prev[key]) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  };
 
   const validate = () => {
     const next: Record<string, string> = {};
@@ -97,30 +139,23 @@ export function PostalMappingFormDialog({
         <div className="space-y-3 pt-1">
           <div className="space-y-1.5">
             <Label className="text-xs">State</Label>
-            <Select
-              value={stateId || undefined}
-              onValueChange={(v) => {
-                setStateId(v);
+            <AutocompleteSelect
+              options={stateOptions}
+              value={stateId}
+              onChange={(v) => {
+                setStateId(String(v ?? ""));
                 setDistrictId("");
                 setLocationId("");
-                setErrors((prev) => {
-                  const next = { ...prev };
-                  delete next.stateId;
-                  return next;
-                });
+                clearError("stateId");
               }}
-            >
-              <SelectTrigger className="h-9 text-xs">
-                <SelectValue placeholder="Select state" />
-              </SelectTrigger>
-              <SelectContent>
-                {(statesQuery.data ?? []).map((s) => (
-                  <SelectItem key={s.id} value={s.id} className="text-xs">
-                    {s.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              disabled={statesQuery.isLoading}
+              error={Boolean(errors.stateId)}
+              placeholder={
+                statesQuery.isLoading ? "Loading states…" : "Select state"
+              }
+              searchPlaceholder="Search state…"
+              className="h-9 text-xs"
+            />
             {errors.stateId && (
               <p className="text-[11px] text-red-600">{errors.stateId}</p>
             )}
@@ -128,30 +163,26 @@ export function PostalMappingFormDialog({
 
           <div className="space-y-1.5">
             <Label className="text-xs">District</Label>
-            <Select
-              value={districtId || undefined}
-              onValueChange={(v) => {
-                setDistrictId(v);
+            <AutocompleteSelect
+              options={districtOptions}
+              value={districtId}
+              onChange={(v) => {
+                setDistrictId(String(v ?? ""));
                 setLocationId("");
-                setErrors((prev) => {
-                  const next = { ...prev };
-                  delete next.districtId;
-                  return next;
-                });
+                clearError("districtId");
               }}
-              disabled={!stateId}
-            >
-              <SelectTrigger className="h-9 text-xs">
-                <SelectValue placeholder="Select district" />
-              </SelectTrigger>
-              <SelectContent>
-                {(districtsQuery.data ?? []).map((d) => (
-                  <SelectItem key={d.id} value={d.id} className="text-xs">
-                    {d.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              disabled={!stateId || districtsQuery.isLoading}
+              error={Boolean(errors.districtId)}
+              placeholder={
+                !stateId
+                  ? "Select state first"
+                  : districtsQuery.isLoading
+                    ? "Loading districts…"
+                    : "Select district"
+              }
+              searchPlaceholder="Search district…"
+              className="h-9 text-xs"
+            />
             {errors.districtId && (
               <p className="text-[11px] text-red-600">{errors.districtId}</p>
             )}
@@ -159,30 +190,25 @@ export function PostalMappingFormDialog({
 
           <div className="space-y-1.5">
             <Label className="text-xs">Location</Label>
-            <Select
-              value={locationId || undefined}
-              onValueChange={(v) => {
-                setLocationId(v);
-                setErrors((prev) => {
-                  const next = { ...prev };
-                  delete next.locationId;
-                  return next;
-                });
+            <AutocompleteSelect
+              options={locationOptions}
+              value={locationId}
+              onChange={(v) => {
+                setLocationId(String(v ?? ""));
+                clearError("locationId");
               }}
-              disabled={!districtId}
-            >
-              <SelectTrigger className="h-9 text-xs">
-                <SelectValue placeholder="Select location" />
-              </SelectTrigger>
-              <SelectContent>
-                {(locationsQuery.data ?? []).map((loc) => (
-                  <SelectItem key={loc.id} value={loc.id} className="text-xs">
-                    {loc.label}
-                    {loc.locationType === "VILLAGE" ? " (Village)" : ""}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              disabled={!districtId || locationsQuery.isLoading}
+              error={Boolean(errors.locationId)}
+              placeholder={
+                !districtId
+                  ? "Select district first"
+                  : locationsQuery.isLoading
+                    ? "Loading locations…"
+                    : "Select location"
+              }
+              searchPlaceholder="Search city or village…"
+              className="h-9 text-xs"
+            />
             {errors.locationId && (
               <p className="text-[11px] text-red-600">{errors.locationId}</p>
             )}
@@ -197,11 +223,7 @@ export function PostalMappingFormDialog({
               value={pincode}
               onChange={(e) => {
                 setPincode(e.target.value.replace(/\D/g, "").slice(0, 6));
-                setErrors((prev) => {
-                  const next = { ...prev };
-                  delete next.pincode;
-                  return next;
-                });
+                clearError("pincode");
               }}
             />
             {errors.pincode && (

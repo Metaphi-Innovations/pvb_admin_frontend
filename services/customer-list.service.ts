@@ -218,6 +218,7 @@ export interface CustomerDropdownItem {
     customer_code: string;
     customer_name: string;
 
+    customer_type_id?: string | null;
     customer_type?: {
         customer_type_id: string;
         customer_type_name: string;

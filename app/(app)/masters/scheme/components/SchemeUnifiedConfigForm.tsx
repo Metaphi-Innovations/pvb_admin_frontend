@@ -48,15 +48,12 @@ import {
   emptyTurnoverSlab,
   formShowsProductApplicability,
   getProductDiscountRowError,
-  normalizeSchemeQuantityUom,
   productIdsWithDiscountData,
   resolveAutomaticBenefit,
-  SCHEME_QUANTITY_UOM_OPTIONS,
   schemeTypeDisplayLabel,
   syncProductDiscountRules,
   type ProductDiscountRuleForm,
   type ProductDiscountSetupMode,
-  type SchemeQuantityUom,
   type SchemeUnifiedForm,
   type SpecialDiscountBasedOnUI,
   type SpecialEvaluationScopeUI,
@@ -105,9 +102,6 @@ const SPECIAL_SETTLEMENT_RUN_MODE_SELECT_OPTIONS = toSchemeSelectOptions(
 );
 const SPECIAL_DISCOUNT_BASED_ON_SELECT_OPTIONS = toSchemeSelectOptions(
   SPECIAL_DISCOUNT_BASED_ON_OPTIONS,
-);
-const SCHEME_QUANTITY_UOM_SELECT_OPTIONS = toSchemeSelectOptions(
-  SCHEME_QUANTITY_UOM_OPTIONS,
 );
 const PAYMENT_CONDITION_SELECT_OPTIONS = toSchemeSelectOptions(
   PAYMENT_CONDITION_OPTIONS,
@@ -446,10 +440,17 @@ function ProductDiscountConditionFields({
 function DiscountTypeValueFields({
   form,
   onChange,
+  fixedAmountLabel,
 }: {
   form: SchemeUnifiedForm;
   onChange: (form: SchemeUnifiedForm) => void;
+  /** Value label when Fixed Amount is selected, e.g. "Value (₹/unit)". */
+  fixedAmountLabel?: string;
 }) {
+  const valueLabel =
+    fixedAmountLabel && form.discountType === "Fixed Amount"
+      ? fixedAmountLabel
+      : "Discount Value";
   return (
     <>
       <Field className="scheme-w-select-sm" label="Discount Type" required>
@@ -461,7 +462,7 @@ function DiscountTypeValueFields({
           options={DISCOUNT_TYPE_SELECT_OPTIONS}
         />
       </Field>
-      <Field className="scheme-w-num" label="Discount Value" required>
+      <Field className="scheme-w-num" label={valueLabel} required>
         <SchemeNumberField
           value={form.discountValue}
           onChange={(v) => onChange({ ...form, discountValue: v })}
@@ -493,18 +494,8 @@ function SpecialDiscountConditionFields({
   ) => onChange({ ...form, [key]: value });
 
   const isQty = form.specialDiscountBasedOn === "Sales Quantity";
-  const uom = normalizeSchemeQuantityUom(form.specialDiscountUom || "Case");
   const hasSlabs = form.specialHasSlabs;
-
-  const setQuantityUom = (next: SchemeQuantityUom) => {
-    onChange({
-      ...form,
-      specialDiscountUom: next,
-      specialDiscountQuantitySlabs: form.specialDiscountQuantitySlabs.map(
-        (s) => ({ ...s, uom: next }),
-      ),
-    });
-  };
+  const isMultiInvoice = form.specialEvaluationScope === "Multiple Invoices";
 
   const helpText = (() => {
     const scopeBit =
@@ -512,16 +503,13 @@ function SpecialDiscountConditionFields({
         ? "on a single invoice"
         : "across invoices during Valid From–Valid To";
     const runBit =
-      form.specialSettlementRunMode === "Automatic"
+      isMultiInvoice || form.specialSettlementRunMode === "Automatic"
         ? "Entitlement is created automatically"
         : "Entitlement requires manual settlement via Credit Note";
-    const combineBit = form.specialCombineProducts
-      ? "combined across selected products"
-      : "per product";
     if (isQty) {
-      return `Net sold quantity (invoice qty − returned qty) ${scopeBit} determines qualification (${combineBit}). ${runBit}.`;
+      return `Net sold quantity of selected products combined (invoice qty − returned qty) ${scopeBit} determines qualification. Discount applies once on the combined eligible value. ${runBit}.`;
     }
-    return `Eligible Net Taxable Sales (Taxable Sales − Sales Returns, excluding GST) ${scopeBit} determines qualification (${combineBit}). ${runBit}.`;
+    return `Eligible Net Taxable Sales of selected products combined (Taxable Sales − Sales Returns, excluding GST) ${scopeBit} determines qualification. Discount applies once on the combined eligible value. ${runBit}.`;
   })();
 
   return (
@@ -530,20 +518,36 @@ function SpecialDiscountConditionFields({
         <Field className="scheme-w-select-md" label="Evaluate On" required>
           <SchemeSearchableSelect
             value={form.specialEvaluationScope}
-            onChange={(v) =>
-              set("specialEvaluationScope", v as SpecialEvaluationScopeUI)
-            }
+            onChange={(v) => {
+              const scope = v as SpecialEvaluationScopeUI;
+              onChange({
+                ...form,
+                specialEvaluationScope: scope,
+                ...(scope === "Multiple Invoices"
+                  ? { specialSettlementRunMode: "Automatic" as const }
+                  : {}),
+              });
+            }}
             options={SPECIAL_EVALUATION_SCOPE_SELECT_OPTIONS}
           />
         </Field>
         <Field className="scheme-w-select-md" label="Entitlement Mode" required>
-          <SchemeSearchableSelect
-            value={form.specialSettlementRunMode}
-            onChange={(v) =>
-              set("specialSettlementRunMode", v as SpecialSettlementRunModeUI)
+          <div
+            title={
+              isMultiInvoice ? "Always Automatic for multiple invoices" : undefined
             }
-            options={SPECIAL_SETTLEMENT_RUN_MODE_SELECT_OPTIONS}
-          />
+          >
+            <SchemeSearchableSelect
+              value={
+                isMultiInvoice ? "Automatic" : form.specialSettlementRunMode
+              }
+              onChange={(v) =>
+                set("specialSettlementRunMode", v as SpecialSettlementRunModeUI)
+              }
+              options={SPECIAL_SETTLEMENT_RUN_MODE_SELECT_OPTIONS}
+              disabled={isMultiInvoice}
+            />
+          </div>
         </Field>
       </div>
 
@@ -559,19 +563,6 @@ function SpecialDiscountConditionFields({
             className="text-[11px] font-medium cursor-pointer"
           >
             Use Achievement Slabs
-          </Label>
-        </div>
-        <div className="flex items-center gap-2 min-h-[28px]">
-          <Switch
-            checked={form.specialCombineProducts}
-            onCheckedChange={(v) => set("specialCombineProducts", v)}
-            id="special-combine-products"
-          />
-          <Label
-            htmlFor="special-combine-products"
-            className="text-[11px] font-medium cursor-pointer"
-          >
-            Combine selected products
           </Label>
         </div>
       </div>
@@ -595,15 +586,6 @@ function SpecialDiscountConditionFields({
             options={SPECIAL_DISCOUNT_BASED_ON_SELECT_OPTIONS}
           />
         </Field>
-        {isQty ? (
-          <Field className="scheme-w-select-sm" label="UOM" required>
-            <SchemeSearchableSelect
-              value={uom}
-              onChange={(v) => setQuantityUom(v as SchemeQuantityUom)}
-              options={SCHEME_QUANTITY_UOM_SELECT_OPTIONS}
-            />
-          </Field>
-        ) : null}
       </div>
 
       <p className="text-[10px] text-muted-foreground leading-snug max-w-xl">
@@ -632,7 +614,15 @@ function SpecialDiscountConditionFields({
               options={DISCOUNT_TYPE_SELECT_OPTIONS}
             />
           </Field>
-          <Field className="scheme-w-num-cell" label="Discount Value" required>
+          <Field
+            className="scheme-w-num-cell"
+            label={
+              form.discountType === "Fixed Amount"
+                ? "Value (₹ overall)"
+                : "Discount Value"
+            }
+            required
+          >
             <SchemeNumberField
               value={form.discountValue}
               onChange={(v) => set("discountValue", v)}
@@ -659,7 +649,12 @@ function SpecialDiscountConditionFields({
                   <th className="scheme-w-turnover-cell">Eligible Sales From</th>
                   <th className="scheme-w-turnover-cell">Eligible Sales To</th>
                   <th className="scheme-w-select-sm">Discount Type</th>
-                  <th className="scheme-w-num-cell">Discount Value</th>
+                  <th
+                    className="scheme-w-num-cell"
+                    title="Percentage or fixed ₹ — both apply once on the overall eligible amount"
+                  >
+                    Discount Value
+                  </th>
                   <th className="w-8" />
                 </tr>
               </thead>
@@ -776,9 +771,13 @@ function SpecialDiscountConditionFields({
                 <tr>
                   <th className="scheme-w-num-cell">Quantity From</th>
                   <th className="scheme-w-num-cell">Quantity To</th>
-                  <th className="scheme-w-num-cell">UOM</th>
                   <th className="scheme-w-select-sm">Discount Type</th>
-                  <th className="scheme-w-num-cell">Discount Value</th>
+                  <th
+                    className="scheme-w-num-cell"
+                    title="Percentage or fixed ₹ — both apply once on the overall eligible amount"
+                  >
+                    Discount Value
+                  </th>
                   <th className="w-8" />
                 </tr>
               </thead>
@@ -816,27 +815,6 @@ function SpecialDiscountConditionFields({
                           placeholder={isLast ? "Above" : ""}
                           min={0}
                           className="scheme-ctrl"
-                        />
-                      </td>
-                      <td className="scheme-w-num-cell">
-                        <SchemeSearchableSelect
-                          value={normalizeSchemeQuantityUom(slab.uom || uom)}
-                          onChange={(v) => {
-                            const next = v as SchemeQuantityUom;
-                            const slabs = [
-                              ...form.specialDiscountQuantitySlabs,
-                            ];
-                            slabs[idx] = { ...slab, uom: next };
-                            onChange({
-                              ...form,
-                              specialDiscountUom: next,
-                              specialDiscountQuantitySlabs: slabs.map((s) => ({
-                                ...s,
-                                uom: next,
-                              })),
-                            });
-                          }}
-                          options={SCHEME_QUANTITY_UOM_SELECT_OPTIONS}
                         />
                       </td>
                       <td>
@@ -910,7 +888,7 @@ function SpecialDiscountConditionFields({
               onClick={() =>
                 set("specialDiscountQuantitySlabs", [
                   ...form.specialDiscountQuantitySlabs,
-                  emptySpecialDiscountQuantitySlab(uom),
+                  emptySpecialDiscountQuantitySlab(),
                 ])
               }
             >
@@ -991,7 +969,11 @@ interface SchemeUnifiedConfigFormProps {
   /** API-backed options (preferred). Falls back to local lists if omitted. */
   productSelectOptions?: SchemeProductSelectOption[];
   stateSelectOptions?: { id: string; name: string }[];
-  customerSelectOptions?: { id: string; name: string }[];
+  customerSelectOptions?: {
+    id: string;
+    name: string;
+    customerTypeId?: string | null;
+  }[];
   customerTypeSelectOptions?: { id: string; name: string }[];
   schemeCategoryOptions?: SchemeCategory[];
 }
@@ -1043,6 +1025,36 @@ export function SchemeUnifiedConfigForm({
       CUSTOMER_TYPE_MULTI_OPTIONS.map((t) => ({ id: t, name: t })),
     [customerTypeSelectOptions],
   );
+  const customerTypeById = useMemo(() => {
+    if (!customerSelectOptions) return null;
+    return new Map(
+      customerSelectOptions.map((c) => [c.id, c.customerTypeId ?? null]),
+    );
+  }, [customerSelectOptions]);
+  const customerIdsAllowedForTypes = (typeIds: string[], ids: string[]) => {
+    if (!customerTypeById) return ids;
+    const allowed = new Set(typeIds);
+    return ids.filter((id) => {
+      const typeId = customerTypeById.get(id);
+      return Boolean(typeId && allowed.has(typeId));
+    });
+  };
+  /** Only customers of the selected customer type(s); already-locked picks stay visible. */
+  const typeFilteredCustomerOptions = useMemo(() => {
+    if (!customerTypeById) return customerOptions;
+    const allowed = new Set(form.customerTypes);
+    const locked = new Set(usageConstraints?.lockedCustomerIds ?? []);
+    return customerOptions.filter((c) => {
+      if (locked.has(c.id)) return true;
+      const typeId = customerTypeById.get(c.id);
+      return Boolean(typeId && allowed.has(typeId));
+    });
+  }, [
+    customerOptions,
+    customerTypeById,
+    form.customerTypes,
+    usageConstraints?.lockedCustomerIds,
+  ]);
   const usesProducts = formShowsProductApplicability(form);
   const showImpact = categoryShowsImpactFlags(form.schemeCategory);
   const autoBenefit = resolveAutomaticBenefit(form.schemeCategory, {
@@ -1363,6 +1375,25 @@ export function SchemeUnifiedConfigForm({
           onToggle={() => toggleStep("applicable")}
         >
           <div className="scheme-row">
+            <Field className="scheme-w-state">
+              <SchemeMultiSelect
+                label="State"
+                placeholder="Select states"
+                searchPlaceholder="Search states…"
+                required
+                options={stateOptions}
+                selectedIds={form.stateNames}
+                lockedIds={usageConstraints?.lockedStateNames}
+                onChange={(ids) => set("stateNames", ids)}
+                error={
+                  error && /state/i.test(error)
+                    ? "Please select at least one state (or Select All)."
+                    : undefined
+                }
+                className="w-full"
+                dense
+              />
+            </Field>
             <Field className="scheme-w-customer-type">
               <SchemeMultiSelect
                 label="Customer Type"
@@ -1380,7 +1411,7 @@ export function SchemeUnifiedConfigForm({
                     // Keep existing customers when scheme is in use (add-only).
                     customerIds: usageConstraints?.isUsed
                       ? form.customerIds
-                      : [],
+                      : customerIdsAllowedForTypes(ids, form.customerIds),
                   })
                 }
                 error={
@@ -1395,35 +1426,20 @@ export function SchemeUnifiedConfigForm({
             <Field className="scheme-w-customer">
               <SchemeMultiSelect
                 label="Customers"
-                placeholder="Select customers"
+                placeholder={
+                  form.customerTypes.length === 0
+                    ? "Select customer type first"
+                    : "Select customers"
+                }
                 searchPlaceholder="Search customers…"
                 required
-                options={customerOptions}
+                options={typeFilteredCustomerOptions}
                 selectedIds={form.customerIds}
                 lockedIds={usageConstraints?.lockedCustomerIds}
                 onChange={(ids) => set("customerIds", ids)}
                 error={
                   error && /select at least one customer(?! type)/i.test(error)
                     ? "Please select at least one customer (or Select All)."
-                    : undefined
-                }
-                className="w-full"
-                dense
-              />
-            </Field>
-            <Field className="scheme-w-state">
-              <SchemeMultiSelect
-                label="State"
-                placeholder="Select states"
-                searchPlaceholder="Search states…"
-                required
-                options={stateOptions}
-                selectedIds={form.stateNames}
-                lockedIds={usageConstraints?.lockedStateNames}
-                onChange={(ids) => set("stateNames", ids)}
-                error={
-                  error && /state/i.test(error)
-                    ? "Please select at least one state (or Select All)."
                     : undefined
                 }
                 className="w-full"
@@ -1477,7 +1493,11 @@ export function SchemeUnifiedConfigForm({
                   className="scheme-ctrl"
                 />
               </Field>
-              <DiscountTypeValueFields form={form} onChange={onChange} />
+              <DiscountTypeValueFields
+                form={form}
+                onChange={onChange}
+                fixedAmountLabel="Value (₹/unit)"
+              />
             </div>
           ) : null}
 
@@ -1797,6 +1817,14 @@ export function SchemeUnifiedConfigForm({
                 <dd>{schemeTypeDisplayLabel(form.schemeCategory)}</dd>
               </div>
               <div className="scheme-review-item">
+                <dt>State</dt>
+                <dd>
+                  {form.stateNames.length
+                    ? form.stateNames.join(", ")
+                    : "Not selected"}
+                </dd>
+              </div>
+              <div className="scheme-review-item">
                 <dt>Applicable To</dt>
                 <dd>
                   {form.customerTypes.length === 0
@@ -1821,14 +1849,6 @@ export function SchemeUnifiedConfigForm({
                             customerOptions.find((c) => c.id === id)?.name ?? id,
                         )
                         .join(", ")}
-                </dd>
-              </div>
-              <div className="scheme-review-item">
-                <dt>State</dt>
-                <dd>
-                  {form.stateNames.length
-                    ? form.stateNames.join(", ")
-                    : "Not selected"}
                 </dd>
               </div>
               {usesProducts ? (
@@ -1980,9 +2000,7 @@ export function SchemeUnifiedConfigForm({
                 </p>
                 <p>
                   <span className="font-semibold text-foreground">Products: </span>
-                  {form.specialCombineProducts
-                    ? "Combined threshold"
-                    : "Individual threshold"}
+                  Combined across selected products (discount on total eligible value)
                 </p>
                 <p>
                   <span className="font-semibold text-foreground">Scheme Period: </span>
@@ -1994,7 +2012,7 @@ export function SchemeUnifiedConfigForm({
                       Flat threshold:{" "}
                     </span>
                     {form.specialDiscountBasedOn === "Sales Quantity"
-                      ? `${form.specialThresholdValue || "—"} ${form.specialDiscountUom || "qty"}`
+                      ? `${form.specialThresholdValue || "—"} units`
                       : `₹${form.specialThresholdValue || "—"}`}
                     {" → "}
                     {formatSlabDiscountLabel(
@@ -2010,9 +2028,6 @@ export function SchemeUnifiedConfigForm({
                     {form.productIds.length
                       ? `${form.productIds.length} Selected Product${form.productIds.length === 1 ? "" : "s"}`
                       : "No products selected"}
-                    {form.specialDiscountUom
-                      ? ` · UOM ${form.specialDiscountUom}`
-                      : ""}
                   </p>
                 ) : null}
                 {form.specialHasSlabs &&
@@ -2081,19 +2096,16 @@ export function SchemeUnifiedConfigForm({
                             s.discountType,
                             s.discountValue,
                           );
-                          const uomLabel =
-                            form.specialDiscountUom || s.uom || "UOM";
                           if (!s.quantityTo.trim()) {
                             return (
                               <li key={s.id}>
-                                {s.quantityFrom}+ {uomLabel} → {disc}
+                                {s.quantityFrom}+ units → {disc}
                               </li>
                             );
                           }
                           return (
                             <li key={s.id}>
-                              {s.quantityFrom}–{s.quantityTo} {uomLabel} →{" "}
-                              {disc}
+                              {s.quantityFrom}–{s.quantityTo} units → {disc}
                             </li>
                           );
                         })}

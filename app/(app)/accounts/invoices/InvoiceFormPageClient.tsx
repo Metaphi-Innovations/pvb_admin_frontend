@@ -86,6 +86,7 @@ import {
   readTransportDistanceKm,
   readWarehouseGstin,
   resolvePreparePlaceOfSupply,
+  toDispatchLineItemOverride,
   type DispatchInvoiceTotalsPreview,
   type PrepareDispatchInvoiceDto,
 } from "@/services/sales-invoice.service";
@@ -1592,13 +1593,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
         Number(c.amount) > 0,
     );
 
-    const lineOverrides = lines.map((l) => ({
-      dispatch_item_id: l.dispatchItemId || undefined,
-      product_id: l.productId ? String(l.productId) : undefined,
-      discount_percentage: l.discountPct != null ? Number(l.discountPct) : undefined,
-      discount_amount: l.discountAmt != null ? Number(l.discountAmt) : undefined,
-      rate: l.unitPrice != null ? Number(l.unitPrice) : undefined,
-    }));
+    const lineOverrides = lines.map(toDispatchLineItemOverride);
 
     let cancelled = false;
     const timer = window.setTimeout(() => {
@@ -2313,13 +2308,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
       if ((isSalesOrderGeneration || isStockTransferGeneration) && !asDraft) {
         const charges = toAdditionalChargePayloadList(additionalExpenses, "INVOICE");
 
-        const lineItemOverrides = lines.map((l) => ({
-          dispatch_item_id: l.dispatchItemId || undefined,
-          product_id: l.productId ? String(l.productId) : undefined,
-          discount_percentage: l.discountPct != null ? Number(l.discountPct) : undefined,
-          discount_amount: l.discountAmt != null ? Number(l.discountAmt) : undefined,
-          rate: l.unitPrice != null ? Number(l.unitPrice) : undefined,
-        }));
+        const lineItemOverrides = lines.map(toDispatchLineItemOverride);
 
         const created = await SalesInvoiceService.createFromDispatch(sourceDispatchId, {
           invoice_date: invoiceDate,
@@ -2821,7 +2810,6 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
 
         {!isStockTransferInvoice && !smGen ? (
           <InvoiceApplicableSchemesPanel
-            lines={lines}
             cnSchemes={eligibleCnSchemes}
             selectedCnSchemeId={selectedCnSchemeId}
             onSelectCnScheme={isEdit ? undefined : setSelectedCnSchemeId}

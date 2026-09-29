@@ -1,47 +1,10 @@
 "use client";
 
+import { useState } from "react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatSchemeRupee } from "@/app/(app)/masters/scheme/product-near-expiry-scheme";
 import type { EligibleInvoiceCnSchemeOffer } from "@/services/sales-invoice.service";
-import type { InvoiceLineItem } from "../invoices-data";
-
-interface ProductDiscountSchemeRow {
-  schemeCode: string;
-  schemeName: string;
-  productCode?: string;
-  productName: string;
-  discountLabel: string;
-  qty: number;
-}
-
-function buildProductDiscountRows(lines: InvoiceLineItem[]): ProductDiscountSchemeRow[] {
-  const rows: ProductDiscountSchemeRow[] = [];
-  const seen = new Set<string>();
-
-  for (const line of lines) {
-    if (line.schemeApplied !== "Yes" && !line.schemeCode) continue;
-    const key = `${line.schemeCode ?? "scheme"}-${line.productId ?? line.productName}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-
-    let discountLabel = "Applied";
-    if (line.schemeDiscountType === "Rupees" && line.schemeDiscountAmount != null) {
-      discountLabel = `₹${line.schemeDiscountAmount}/unit`;
-    } else if (line.schemeDiscountPercent != null && line.schemeDiscountPercent > 0) {
-      discountLabel = `${line.schemeDiscountPercent}%`;
-    }
-
-    rows.push({
-      schemeCode: line.schemeCode ?? "—",
-      schemeName: line.schemeName ?? "Product Discount Scheme",
-      productCode: line.productCode,
-      productName: line.productName,
-      discountLabel,
-      qty: line.qty,
-    });
-  }
-  return rows;
-}
 
 function schemeTypeLabel(type: EligibleInvoiceCnSchemeOffer["scheme_type"]) {
   return type === "NEAR_EXPIRY" ? "Near Expiry" : "Special Discount";
@@ -51,27 +14,140 @@ function discountLabel(scheme: EligibleInvoiceCnSchemeOffer) {
   if (scheme.discount_type === "Percentage") {
     return `${scheme.discount_value ?? 0}%`;
   }
-  if (scheme.discount_value != null) return `₹${scheme.discount_value}`;
+  if (scheme.discount_value != null) {
+    return scheme.scheme_type === "NEAR_EXPIRY"
+      ? `₹${scheme.discount_value}/unit`
+      : `₹${scheme.discount_value} overall`;
+  }
   return "—";
 }
 
+function formatQty(n: number): string {
+  return Number.isInteger(n) ? String(n) : n.toFixed(2);
+}
+
+function formatShortDate(iso?: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function productCount(scheme: EligibleInvoiceCnSchemeOffer): number {
+  if (scheme.scheme_type === "SPECIAL_SCHEME") {
+    return scheme.contributing_products?.length ?? 0;
+  }
+  return scheme.qualifying_lines.length;
+}
+
+function specialAchievementLine(scheme: EligibleInvoiceCnSchemeOffer): string | null {
+  if (scheme.scheme_type !== "SPECIAL_SCHEME") return null;
+  const achieved = scheme.achievement_value;
+  if (achieved == null) return null;
+  const isQty = scheme.based_on === "SALES_QUANTITY";
+  const base = (scheme.contributing_products ?? []).reduce(
+    (s, p) => s + p.taxable_amount,
+    0,
+  );
+  const achievedLabel = isQty ? `${formatQty(achieved)} qty` : formatSchemeRupee(achieved);
+  const minLabel =
+    scheme.min_required_value != null
+      ? ` (min ${isQty ? formatQty(scheme.min_required_value) : formatSchemeRupee(scheme.min_required_value)})`
+      : "";
+  return `Combined ${achievedLabel}${minLabel} → ${discountLabel(scheme)} on ${formatSchemeRupee(base)}`;
+}
+
+function NearExpiryProducts({ scheme }: { scheme: EligibleInvoiceCnSchemeOffer }) {
+  return (
+    <table className="w-full text-[11px]">
+      <thead>
+        <tr className="text-left text-[10px] uppercase tracking-wide text-muted-foreground">
+          <th className="py-1 pr-2 font-medium">Product</th>
+          <th className="py-1 pr-2 font-medium">Batch</th>
+          <th className="py-1 pr-2 font-medium">Expiry</th>
+          <th className="py-1 pr-2 font-medium text-right">Days left</th>
+          <th className="py-1 pr-2 font-medium text-right">Qty</th>
+          <th className="py-1 font-medium text-right">Benefit</th>
+        </tr>
+      </thead>
+      <tbody>
+        {scheme.qualifying_lines.map((line, i) => (
+          <tr
+            key={`${line.product_id}-${line.batch_number ?? ""}-${i}`}
+            className="border-t border-slate-100"
+          >
+            <td className="py-1 pr-2">
+              <span className="font-mono text-brand-700">{line.product_code}</span>{" "}
+              <span className="text-foreground">{line.product_name}</span>
+            </td>
+            <td className="py-1 pr-2 font-mono">{line.batch_number || "—"}</td>
+            <td className="py-1 pr-2">{formatShortDate(line.batch_expiry_date)}</td>
+            <td className="py-1 pr-2 text-right tabular-nums">
+              {line.remaining_expiry_days ?? "—"}
+            </td>
+            <td className="py-1 pr-2 text-right tabular-nums">{formatQty(line.quantity)}</td>
+            <td className="py-1 text-right tabular-nums font-medium text-foreground">
+              {formatSchemeRupee(line.line_benefit_amount)}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+function SpecialProducts({ scheme }: { scheme: EligibleInvoiceCnSchemeOffer }) {
+  const products = scheme.contributing_products ?? [];
+  return (
+    <table className="w-full text-[11px]">
+      <thead>
+        <tr className="text-left text-[10px] uppercase tracking-wide text-muted-foreground">
+          <th className="py-1 pr-2 font-medium">Product</th>
+          <th className="py-1 pr-2 font-medium text-right">Qty</th>
+          <th className="py-1 font-medium text-right">Taxable value</th>
+        </tr>
+      </thead>
+      <tbody>
+        {products.map((p) => (
+          <tr key={p.product_id} className="border-t border-slate-100">
+            <td className="py-1 pr-2">
+              <span className="font-mono text-brand-700">{p.product_code}</span>{" "}
+              <span className="text-foreground">{p.product_name}</span>
+            </td>
+            <td className="py-1 pr-2 text-right tabular-nums">{formatQty(p.quantity)}</td>
+            <td className="py-1 text-right tabular-nums">
+              {formatSchemeRupee(p.taxable_amount)}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+/**
+ * Invoice-level Credit Note schemes (Near Expiry / Special per-invoice).
+ * Product Discount is shown per item line in the product table, not here.
+ */
 export function InvoiceApplicableSchemesPanel({
-  lines,
   cnSchemes = [],
   selectedCnSchemeId = null,
   onSelectCnScheme,
   loadingCnSchemes = false,
   forceShowCnSection = false,
 }: {
-  lines: InvoiceLineItem[];
   cnSchemes?: EligibleInvoiceCnSchemeOffer[];
   selectedCnSchemeId?: string | null;
   onSelectCnScheme?: (schemeId: string | null) => void;
   loadingCnSchemes?: boolean;
   forceShowCnSection?: boolean;
 }) {
-  const productDiscountRows = buildProductDiscountRows(lines);
-  const hasProductDiscount = productDiscountRows.length > 0;
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+
   // Multi-invoice Special is background-only — never show here.
   const schemes = cnSchemes.filter(
     (s) => s.evaluation_scope !== "SCHEME_PERIOD",
@@ -81,7 +157,7 @@ export function InvoiceApplicableSchemesPanel({
   const showCnSection =
     forceShowCnSection || loadingCnSchemes || hasCnSchemes;
 
-  if (!hasProductDiscount && !showCnSection) return null;
+  if (!showCnSection) return null;
 
   const autoScheme = schemes.find((s) => s.will_auto_apply);
   const effectiveSelection = selectedCnSchemeId;
@@ -102,66 +178,48 @@ export function InvoiceApplicableSchemesPanel({
       </div>
 
       <div className="px-4 py-3 space-y-3">
-        {hasProductDiscount ? (
-          <div className="space-y-1.5">
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
             <p className="text-[11px] font-medium text-muted-foreground">
-              Product Discount
+              Credit Note Scheme
+              <span className="font-normal"> (pick one)</span>
             </p>
-            <ul className="space-y-1">
-              {productDiscountRows.map((row, i) => (
-                <li
-                  key={`${row.schemeCode}-${row.productName}-${i}`}
-                  className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 text-xs"
-                >
-                  <span className="min-w-0">
-                    <span className="font-mono font-medium text-brand-700">
-                      {row.schemeCode}
-                    </span>
-                    <span className="text-muted-foreground"> · </span>
-                    <span className="text-foreground">
-                      {row.productCode ? `${row.productCode} — ` : ""}
-                      {row.productName}
-                    </span>
-                  </span>
-                  <span className="shrink-0 tabular-nums text-muted-foreground">
-                    {row.discountLabel} · Qty {row.qty}
-                  </span>
-                </li>
-              ))}
-            </ul>
+            {!effectiveSelection && autoScheme ? (
+              <p className="text-[11px] text-amber-800">
+                Auto on save: {autoScheme.scheme_code}
+              </p>
+            ) : null}
           </div>
-        ) : null}
 
-        {showCnSection ? (
-          <div className="space-y-2">
-            <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <p className="text-[11px] font-medium text-muted-foreground">
-                Credit Note Scheme
-                <span className="font-normal"> (pick one)</span>
-              </p>
-              {!effectiveSelection && autoScheme ? (
-                <p className="text-[11px] text-amber-800">
-                  Auto on save: {autoScheme.scheme_code}
-                </p>
-              ) : null}
-            </div>
+          {loadingCnSchemes ? (
+            <p className="text-xs text-muted-foreground">Loading…</p>
+          ) : !hasCnSchemes ? (
+            <p className="text-xs text-muted-foreground">
+              No eligible Near Expiry or Special (one invoice) schemes.
+            </p>
+          ) : (
+            <div className="space-y-1.5">
+              {schemes.map((scheme) => {
+                const selected = effectiveSelection === scheme.scheme_id;
+                const isAutoHint =
+                  !effectiveSelection && scheme.will_auto_apply;
+                const count = productCount(scheme);
+                const isOpen = Boolean(expanded[scheme.scheme_id]);
+                const achievementLine = specialAchievementLine(scheme);
 
-            {loadingCnSchemes ? (
-              <p className="text-xs text-muted-foreground">Loading…</p>
-            ) : !hasCnSchemes ? (
-              <p className="text-xs text-muted-foreground">
-                No eligible Near Expiry or Special (one invoice) schemes.
-              </p>
-            ) : (
-              <div className="space-y-1.5">
-                {schemes.map((scheme) => {
-                  const selected = effectiveSelection === scheme.scheme_id;
-                  const isAutoHint =
-                    !effectiveSelection && scheme.will_auto_apply;
-
-                  return (
+                return (
+                  <div
+                    key={scheme.scheme_id}
+                    className={cn(
+                      "rounded-md border transition-colors",
+                      selected
+                        ? "border-brand-500 bg-brand-50"
+                        : isAutoHint
+                          ? "border-amber-400 bg-amber-50/60"
+                          : "border-slate-200 bg-white hover:border-slate-300",
+                    )}
+                  >
                     <button
-                      key={scheme.scheme_id}
                       type="button"
                       disabled={!selectable}
                       onClick={() => {
@@ -169,12 +227,7 @@ export function InvoiceApplicableSchemesPanel({
                         onSelectCnScheme?.(selected ? null : scheme.scheme_id);
                       }}
                       className={cn(
-                        "flex w-full items-center gap-3 rounded-md border px-3 py-2 text-left transition-colors",
-                        selected
-                          ? "border-brand-500 bg-brand-50"
-                          : isAutoHint
-                            ? "border-amber-400 bg-amber-50/60"
-                            : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/80",
+                        "flex w-full items-center gap-3 px-3 py-2 text-left",
                         !selectable && "cursor-default",
                       )}
                     >
@@ -214,14 +267,52 @@ export function InvoiceApplicableSchemesPanel({
                             </span>
                           ) : null}
                         </span>
+                        {achievementLine ? (
+                          <span className="mt-0.5 block text-[11px] text-muted-foreground">
+                            {achievementLine}
+                          </span>
+                        ) : null}
                       </span>
                     </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        ) : null}
+
+                    {count > 0 ? (
+                      <div className="border-t border-slate-100 px-3 pb-2">
+                        <button
+                          type="button"
+                          className="flex items-center gap-1 pt-1.5 text-[11px] font-medium text-muted-foreground hover:text-foreground"
+                          onClick={() =>
+                            setExpanded((prev) => ({
+                              ...prev,
+                              [scheme.scheme_id]: !prev[scheme.scheme_id],
+                            }))
+                          }
+                        >
+                          {isOpen ? (
+                            <ChevronDown className="h-3.5 w-3.5" />
+                          ) : (
+                            <ChevronRight className="h-3.5 w-3.5" />
+                          )}
+                          {scheme.scheme_type === "NEAR_EXPIRY"
+                            ? `Products (${count})`
+                            : `Products counted (${count})`}
+                        </button>
+                        {isOpen ? (
+                          <div className="mt-1 overflow-x-auto">
+                            {scheme.scheme_type === "NEAR_EXPIRY" ? (
+                              <NearExpiryProducts scheme={scheme} />
+                            ) : (
+                              <SpecialProducts scheme={scheme} />
+                            )}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

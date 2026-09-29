@@ -64,7 +64,7 @@ import {
   type SubmodulePermission,
   type MobileFeaturePermission,
 } from "../employee-data";
-import { detailToEmployee } from "../user-api-data";
+import { detailToEmployee, geoMappingColumnsForRole, type GeoMappingDisplayRow } from "../user-api-data";
 import { useUser, useToggleUserStatus } from "@/hooks/user-management";
 import { getErrorMessage } from "@/lib/masters/master-query-errors";
 
@@ -580,6 +580,14 @@ export default function EmployeeDetailPage() {
     [userQuery.data],
   );
 
+  const geoMappingColumns = useMemo(
+    () =>
+      employee
+        ? geoMappingColumnsForRole(employee.roleGeoLevel || "", employee.role)
+        : [],
+    [employee],
+  );
+
   const [toast, setToast] = useState<ToastState | null>(null);
   const [activeTab, setActiveTab] = useState("overview");
   const [confirmTarget, setConfirmTarget] = useState<{
@@ -710,7 +718,7 @@ export default function EmployeeDetailPage() {
   const geoRows =
     employee.geoMappings && employee.geoMappings.length > 0
       ? employee.geoMappings
-      : employee.geoZone || employee.geoRegion || employee.territory
+      : employee.geoZone || employee.geoRegion || employee.geoArea || employee.territory
         ? [
             {
               geoZone: employee.geoZone,
@@ -812,15 +820,21 @@ export default function EmployeeDetailPage() {
               )}
             </ProfileCardGrid>
 
-            {geoRows.length > 0 && (
-              <CompactInfoCard title="Geography & Territory" icon={MapPin}>
-                <RecordMiniTable
-                  columns={[
-                    { key: "zone", header: "Zone", render: (r) => r.geoZone || "—" },
-                    { key: "region", header: "Region", render: (r) => r.geoRegion || "—" },
-                    { key: "area", header: "Area", render: (r) => r.geoArea || "—" },
-                    { key: "territory", header: "Territory", render: (r) => r.territory || "—" },
-                  ]}
+            {geoRows.length > 0 && geoMappingColumns.length > 0 && (
+              <CompactInfoCard
+                title={
+                  geoMappingColumns.some((col) => col.key === "territory")
+                    ? "Geography & Territory"
+                    : "Geography Mapping"
+                }
+                icon={MapPin}
+              >
+                <RecordMiniTable<GeoMappingDisplayRow>
+                  columns={geoMappingColumns.map((col) => ({
+                    key: col.key,
+                    header: col.header,
+                    render: (r) => col.getValue(r),
+                  }))}
                   rows={geoRows}
                 />
               </CompactInfoCard>
