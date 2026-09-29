@@ -10,6 +10,7 @@ import {
   buildCoaTransactionsForDateRange,
   computeClosingFromPeriodOpening,
   computePeriodOpeningBalance,
+  indianFyStartContaining,
   ledgerMovementTotalsForRange,
 } from "@/lib/accounts/ledger-transaction-date-filter";
 import { roundMoney } from "@/lib/accounts/money-format";
@@ -318,6 +319,8 @@ export function buildLedgerAccountingSummary(
     dateFrom,
     dateTo,
     periodOpening,
+    // Local ledgers have no stored OB date — use FY start, not the filter from.
+    indianFyStartContaining(dateFrom),
   );
   // Footer totals match Debit/Credit columns (opening row + period movements).
   const totalDebit = roundMoney(

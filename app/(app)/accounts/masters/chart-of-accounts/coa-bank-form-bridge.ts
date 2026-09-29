@@ -4,8 +4,11 @@ import type { CoaNodeId } from "../../data";
 
 export type CoaBankFormOpenArgs = {
   parentGroupId: CoaNodeId;
-  /** When set, edit the existing Bank Account master (same form / save path). */
-  accountId?: number;
+  /**
+   * Ledger UUID (`apiNodeId`) for edit / complete.
+   * Create mode when omitted.
+   */
+  ledgerId?: string;
 };
 
 type OpenHandler = ((args: CoaBankFormOpenArgs) => void) | null;
@@ -18,10 +21,10 @@ export function registerCoaBankFormHandler(handler: OpenHandler): void {
 
 export function requestCoaBankForm(
   parentGroupId: CoaNodeId,
-  accountId?: number,
+  ledgerId?: string,
 ): boolean {
   if (openHandler) {
-    openHandler({ parentGroupId, accountId });
+    openHandler({ parentGroupId, ledgerId });
     return true;
   }
   return false;

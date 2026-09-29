@@ -1751,10 +1751,12 @@ export function canSplitOrder(order: SalesOrder): boolean {
   return !["Fully Dispatched", "DELIVERED", "delivered", "dispatched"].includes(fulfillment);
 }
 
+/** Cancellation is only allowed before any packing list is generated (packing lists deduct stock). */
 export function canCancelOrder(order: SalesOrder): boolean {
   if (isOrderCancelled(order)) return false;
-  const fulfillment = order.fulfillmentStatus || "";
-  return !["Fully Dispatched", "DELIVERED", "delivered"].includes(fulfillment);
+  const fulfillment = (order.fulfillmentStatus || "PENDING").toString();
+  if (fulfillment.toUpperCase() !== "PENDING") return false;
+  return !(order.packingListId || order.packingListNumber || (order.packingLists?.length ?? 0) > 0);
 }
 
 export function canDownloadPI(order: SalesOrder): boolean {

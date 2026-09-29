@@ -9,6 +9,10 @@ import type {
   PurchaseNature,
   PurchaseSourceType,
 } from "@/app/(app)/accounts/purchase-invoices/purchase-invoices-data";
+import type {
+  DirectPurchaseLineItem,
+  ItcClassification,
+} from "@/app/(app)/accounts/purchase-invoices/purchase-invoice-types";
 import {
   resolveProductSkuDisplay,
   resolveSkuFromProductSnapshot,
@@ -292,6 +296,11 @@ export type PurchaseInvoiceListDto = {
     supplier_id: string;
     supplier_code?: string | null;
     supplier_name?: string | null;
+    gstin_number?: string | null;
+    bank_accounts?: Array<{
+      payment_type?: string | null;
+      credit_days?: number | string | null;
+    }> | null;
   } | null;
   supplier_snapshot?: Record<string, unknown> | null;
   warehouse?: {
@@ -304,9 +313,12 @@ export type PurchaseInvoiceListDto = {
 export type PurchaseInvoiceDetailDto = PurchaseInvoiceListDto & {
   items?: Array<Record<string, unknown>>;
   additional_charges?: Array<Record<string, unknown>>;
+  is_reverse_charge?: boolean;
   purchase_order?: {
     purchase_order_id?: string | null;
     po_no?: string | null;
+    payment_type?: string | null;
+    credit_days?: number | string | null;
   } | null;
   grn?: {
     id?: string | null;
@@ -357,11 +369,13 @@ export type PrepareGrnInvoiceDto = {
     supplier_code?: string | null;
     supplier_name?: string | null;
     state?: string | null;
+    gstin_number?: string | null;
   };
   warehouse: {
     warehouse_id: string;
     warehouse_name?: string | null;
     state?: string | null;
+    gst_number?: string | null;
   };
   place_of_supply?: Record<string, unknown> | null;
   supplier_invoice: {
@@ -381,6 +395,9 @@ export type PrepareGrnInvoiceDto = {
     rate: string;
     taxable_amount: string;
     gst_rate: string;
+    cgst_amount?: string | number | null;
+    sgst_amount?: string | number | null;
+    igst_amount?: string | number | null;
     gst_amount: string;
     line_total: string;
     hsn_id?: string | null;
@@ -486,6 +503,167 @@ function asDateOnly(value: unknown): string {
   const parsed = new Date(raw);
   if (Number.isNaN(parsed.getTime())) return "";
   return parsed.toISOString().slice(0, 10);
+}
+
+function daysBetweenIso(fromIso: string, toIso: string): number | null {
+  if (!fromIso || !toIso) return null;
+  const from = new Date(`${fromIso.slice(0, 10)}T00:00:00`);
+  const to = new Date(`${toIso.slice(0, 10)}T00:00:00`);
+  if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) return null;
+  return Math.round((to.getTime() - from.getTime()) / 86_400_000);
+}
+
+function formatPiPaymentTerms(paymentType?: string | null, creditDays?: number | null): string {
+  const type = (paymentType || "").trim().toLowerCase();
+  const days = creditDays != null && Number.isFinite(creditDays) ? Math.max(0, Math.trunc(creditDays)) : null;
+  if (type === "immediate" || type === "cod" || type === "net-0") return "Immediate";
+  if (type === "advance" || type.startsWith("advance")) return "Advance";
+  if (type.startsWith("net-")) {
+    const m = type.match(/^net-(\d+)$/);
+    if (m) return `Net ${m[1]} Days`;
+  }
+  if (type === "credit" || type === "net") {
+    return days != null && days > 0 ? `Net ${days} Days` : "Credit";
+  }
+  if (paymentType?.trim()) {
+    if (days != null && days > 0 && !/\d/.test(paymentType)) {
+      return `${paymentType.trim()} (${days} Days)`;
+    }
+    return paymentType.trim();
+  }
+  if (days != null) {
+    return days <= 0 ? "Immediate" : `Net ${days} Days`;
+  }
+  return "";
+}
+
+function derivePiPaymentTerms(dto: PurchaseInvoiceDetailDto): {
+  paymentTerms: string;
+  creditDays: number;
+} {
+  const poDays =
+    dto.purchase_order?.credit_days != null && dto.purchase_order.credit_days !== ""
+      ? asNumber(dto.purchase_order.credit_days)
+      : null;
+  const poTerms = formatPiPaymentTerms(dto.purchase_order?.payment_type, poDays);
+  if (poTerms) {
+    return {
+      paymentTerms: poTerms,
+      creditDays: poDays != null && poDays > 0 ? poDays : 0,
+    };
+  }
+
+  const bank = dto.supplier?.bank_accounts?.[0];
+  const bankDays =
+    bank?.credit_days != null && bank.credit_days !== ""
+      ? asNumber(bank.credit_days)
+      : null;
+  const bankTerms = formatPiPaymentTerms(bank?.payment_type, bankDays);
+  if (bankTerms) {
+    return {
+      paymentTerms: bankTerms,
+      creditDays: bankDays != null && bankDays > 0 ? bankDays : 0,
+    };
+  }
+
+  const invoiceDate = asDateOnly(dto.purchase_invoice_date);
+  const dueDate = asDateOnly(dto.due_date);
+  const delta = daysBetweenIso(invoiceDate, dueDate);
+  if (delta != null) {
+    return {
+      paymentTerms: delta <= 0 ? "Immediate" : `Net ${delta} Days`,
+      creditDays: Math.max(0, delta),
+    };
+  }
+
+  return { paymentTerms: "Immediate", creditDays: 0 };
+}
+
+function deriveDefaultItcClassification(
+  items: Array<Record<string, unknown>> | undefined,
+): ItcClassification {
+  if (!items?.length) return "eligible";
+  const flags = items.map((item) => item.is_input_credit_eligible !== false);
+  if (flags.every((ok) => ok)) return "eligible";
+  if (flags.every((ok) => !ok)) return "ineligible";
+  return "eligible";
+}
+
+function derivePurchaseNatureFromItems(
+  items: Array<Record<string, unknown>> | undefined,
+): PurchaseNature {
+  const types = (items || []).map((item) =>
+    asString(item.item_type).toUpperCase(),
+  );
+  if (types.some((t) => t === "SERVICE")) return "service";
+  if (types.some((t) => t === "EXPENSE")) return "expense";
+  return "expense";
+}
+
+function mapDirectLinesFromDetail(
+  items: Array<Record<string, unknown>> | undefined,
+  purchaseNature: PurchaseNature,
+): DirectPurchaseLineItem[] {
+  return (items || []).map((item, index) => {
+    const ledger =
+      (item.expense_ledger as Record<string, unknown> | null | undefined) ||
+      (item.ledger_snapshot as Record<string, unknown> | null | undefined) ||
+      null;
+    const hsnSnap = (item.hsn_snapshot || null) as Record<string, unknown> | null;
+    const sacSnap = (item.sac_snapshot || null) as Record<string, unknown> | null;
+    const hsnCode =
+      snapshotStr(hsnSnap, "hsn_code", "hsnCode", "code") ||
+      snapshotStr(sacSnap, "hsn_code", "hsnCode", "code");
+    const qty = asNumber(item.quantity) || 1;
+    const rate = asNumber(item.rate);
+    const gross = asNumber(item.gross_amount) || qty * rate;
+    const taxable = asNumber(item.taxable_amount) || gross;
+    const cgst = asNumber(item.cgst_amount);
+    const sgst = asNumber(item.sgst_amount);
+    const igst = asNumber(item.igst_amount);
+    const itemType = asString(item.item_type).toUpperCase();
+    const lineNature: PurchaseNature =
+      itemType === "SERVICE" ? "service" : purchaseNature;
+    return {
+      id: asString(item.purchase_invoice_item_id) || `direct-line-${index}`,
+      description:
+        asString(item.expense_description) ||
+        asString(item.narration) ||
+        `Line ${index + 1}`,
+      purchaseNature: lineNature,
+      expenseLedgerId:
+        asString(item.expense_ledger_id) ||
+        asString(ledger?.ledger_id) ||
+        null,
+      expenseLedgerName:
+        asString(ledger?.ledger_name) ||
+        asString(ledger?.name) ||
+        "—",
+      hsnSac: hsnCode,
+      hsnId: asString(item.hsn_id) || null,
+      sacId: asString(item.sac_id) || null,
+      quantity: qty,
+      uqc: asString(item.quantity_type) || "NOS",
+      rate,
+      grossAmount: gross,
+      discount: 0,
+      taxableAmount: taxable,
+      gstRate: asNumber(item.gst_rate),
+      cgst,
+      sgst,
+      igst,
+      itcClassification:
+        item.is_input_credit_eligible === false ? "ineligible" : "eligible",
+      tdsApplicable: false,
+      tdsSection: "",
+      tdsRate: 0,
+      tdsAmount: 0,
+      tdsOverride: false,
+      tdsOverrideReason: "",
+      lineTotal: asNumber(item.line_total) || taxable + cgst + sgst + igst,
+      remarks: asString(item.narration),
+    };
+  });
 }
 
 function unwrapData<T>(response: { data?: ApiResponse<T> | T }): T {
@@ -843,6 +1021,29 @@ export function mapPurchaseInvoiceDetailToRecord(
         snapshotStr(snapshot, "supplier_name", "name") ||
         "—";
 
+  const purchaseNature =
+    sourceType === "direct_purchase"
+      ? derivePurchaseNatureFromItems(dto.items)
+      : undefined;
+  const payment = derivePiPaymentTerms(dto);
+  const defaultItcClassification = deriveDefaultItcClassification(dto.items);
+  const directLines =
+    sourceType === "direct_purchase"
+      ? mapDirectLinesFromDetail(dto.items, purchaseNature || "expense")
+      : undefined;
+  const vendorInvoiceNo =
+    sourceType === "stock_transfer"
+      ? snapshotStr(snapshot, "source_invoice_number") || asString(dto.supplier_invoice_number)
+      : asString(dto.supplier_invoice_number);
+  const remarks = dto.remarks || "";
+  const narration = dto.narration || "";
+  // Prefer free-text remarks when it differs from narration; else supplier invoice
+  // (same reference used on the accounting voucher).
+  const referenceNumber =
+    remarks.trim() && remarks.trim() !== narration.trim()
+      ? remarks.trim()
+      : vendorInvoiceNo;
+
   const lineItems: PurchaseInvoiceLine[] = (dto.items || []).map((raw, index) => {
     const item = raw as Record<string, unknown>;
     const productSnap = (item.product_snapshot || {}) as Record<string, unknown>;
@@ -858,6 +1059,7 @@ export function mapPurchaseInvoiceDetailToRecord(
     const grnReceivedQty = asNumber(qtyComparisonRaw?.grn_received_qty);
     const qcAcceptedQty = asNumber(qtyComparisonRaw?.qc_accepted_qty);
     const qcRejectedQty = asNumber(qtyComparisonRaw?.qc_rejected_qty);
+    const directLine = directLines?.[index];
     return {
       id: asString(item.purchase_invoice_item_id) || `line-${index}`,
       productId: null,
@@ -890,6 +1092,7 @@ export function mapPurchaseInvoiceDetailToRecord(
       taxAmount: lineGst,
       debitedQty: 0,
       debitedAmount: 0,
+      directLine,
       qtyComparison: qtyComparisonRaw
         ? {
             supplierInvoiceQty,
@@ -908,16 +1111,14 @@ export function mapPurchaseInvoiceDetailToRecord(
     id: 0,
     invoiceNo: dto.purchase_invoice_number,
     invoiceDate: asDateOnly(dto.purchase_invoice_date),
-    vendorInvoiceNo:
-      sourceType === "stock_transfer"
-        ? snapshotStr(snapshot, "source_invoice_number") || asString(dto.supplier_invoice_number)
-        : asString(dto.supplier_invoice_number),
+    vendorInvoiceNo,
     vendorId: 0,
     vendorName,
     vendorGst:
       sourceType === "stock_transfer"
         ? snapshotStr(snapshot, "from_gstin")
-        : snapshotStr(snapshot, "gstin_number", "gstin", "gst_number"),
+        : snapshotStr(snapshot, "gstin_number", "gstin", "gst_number") ||
+          asString(dto.supplier?.gstin_number),
     sourceSalesInvoiceId:
       dto.source_sales_invoice_id || snapshotStr(snapshot, "source_sales_invoice_id") || null,
     sourceSalesInvoiceNo: snapshotStr(snapshot, "source_invoice_number") || undefined,
@@ -939,7 +1140,7 @@ export function mapPurchaseInvoiceDetailToRecord(
     warehouse: dto.warehouse?.warehouse_name || "",
     source: sourceType === "from_grn" ? "po_invoice" : "manual_entry",
     sourceType,
-    purchaseNature: sourceType === "direct_purchase" ? "expense" : undefined,
+    purchaseNature,
     postingDate: asDateOnly(dto.purchase_invoice_date),
     placeOfSupply: snapshotStr(
       dto.place_of_supply_snapshot,
@@ -951,17 +1152,32 @@ export function mapPurchaseInvoiceDetailToRecord(
       snapshotStr(dto.warehouse_snapshot, "gst_number", "gstin") ||
       asString(dto.warehouse?.gst_number) ||
       undefined,
+    isInterstate:
+      typeof dto.is_interstate === "boolean"
+        ? dto.is_interstate
+        : typeof (dto.place_of_supply_snapshot as { is_interstate?: boolean } | null | undefined)
+              ?.is_interstate === "boolean"
+          ? (dto.place_of_supply_snapshot as { is_interstate: boolean }).is_interstate
+          : undefined,
+    reverseChargeApplicable: Boolean(dto.is_reverse_charge),
+    defaultItcClassification,
+    paymentTerms: payment.paymentTerms,
+    creditDays: payment.creditDays,
     dueDate: asDateOnly(dto.due_date),
-    narration: dto.narration || "",
-    remarks: dto.remarks || "",
+    currency: "INR",
+    referenceNumber,
+    narration,
+    remarks,
+    gstApplicable: gstAmount > 0 || taxable > 0,
     grossAmount: asNumber(dto.gross_amount),
-    discountTotal: asNumber(dto.discount_amount),
+    discountTotal: 0,
     taxableAmount: taxable,
     cgstTotal: asNumber(dto.cgst_amount),
     sgstTotal: asNumber(dto.sgst_amount),
     igstTotal: asNumber(dto.igst_amount),
     roundingAdjustment: asNumber(dto.round_off_amount),
     netPayable: grandTotal,
+    directLines,
     lineItems,
     additionalCharges: (dto.additional_charges || []).map((raw, idx) => {
       const c = raw as Record<string, unknown>;

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useMemo } from "react";
+import React, { useCallback, useEffect, useMemo } from "react";
 import { Eye, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MoneyAmount } from "@/components/accounts/MoneyAmount";
@@ -28,6 +28,7 @@ import {
   canAddLedgerUnder,
   canAddSubGroupUnder,
   canDeleteGroup,
+  canDeleteLedger,
   canEditGroup,
 } from "../chart-of-accounts-data";
 import type { CoaLedgerListingRow, CoaListingRow } from "../coa-listing-data";
@@ -43,6 +44,7 @@ import {
   AccountsColumnHeader,
   SortTh,
   useAccountsFilteredRows,
+  AccountsVisibleRowsReporter,
 } from "../../../components/AccountsUI";
 
 interface CoaHierarchyListingTableProps {
@@ -58,6 +60,8 @@ interface CoaHierarchyListingTableProps {
   onAddSubGroup?: (parentGroupId: import("../../../data").CoaNodeId) => void;
   canEdit?: boolean;
   emptyMessage?: string;
+  /** Column-filtered rows currently shown — used for Excel/PDF export. */
+  onVisibleRowsChange?: (rows: CoaListingRow[]) => void;
 }
 
 interface CoaLedgerListingTableProps {
@@ -72,9 +76,23 @@ interface CoaLedgerListingTableProps {
   onAddLedger?: (parentGroupId: import("../../../data").CoaNodeId) => void;
   onDeleteLedger?: (ledger: ChartOfAccount) => void;
   emptyMessage?: string;
+  /** Column-filtered rows currently shown — used for Excel/PDF export. */
+  onVisibleRowsChange?: (rows: CoaLedgerListingRow[]) => void;
 }
 
 type CoaListingTableProps = CoaHierarchyListingTableProps | CoaLedgerListingTableProps;
+
+/** When the table has no source rows, clear parent export state. */
+function ReportEmptyVisibleRows<T>({
+  onVisibleRowsChange,
+}: {
+  onVisibleRowsChange?: (rows: T[]) => void;
+}) {
+  useEffect(() => {
+    onVisibleRowsChange?.([]);
+  }, [onVisibleRowsChange]);
+  return null;
+}
 
 export function CoaListingTable(props: CoaListingTableProps) {
   const {
@@ -93,6 +111,7 @@ export function CoaListingTable(props: CoaListingTableProps) {
         onSelectLedger={onDrillInto}
         onDeleteLedger={props.onDeleteLedger}
         emptyMessage={emptyMessage}
+        onVisibleRowsChange={props.onVisibleRowsChange}
       />
     );
   }
@@ -102,6 +121,7 @@ export function CoaListingTable(props: CoaListingTableProps) {
   if (rows.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-6 px-4">
+        <ReportEmptyVisibleRows onVisibleRowsChange={props.onVisibleRowsChange} />
         <p className="text-xs font-medium text-foreground">{emptyMessage}</p>
         {!isSearchMode && (
           <p className="text-sm text-muted-foreground mt-1">
@@ -123,6 +143,7 @@ export function CoaListingTable(props: CoaListingTableProps) {
       onAddLedger={onAddLedger}
       onAddSubGroup={onAddSubGroup}
       canEdit={canEdit}
+      onVisibleRowsChange={props.onVisibleRowsChange}
     />
   );
 }
@@ -137,6 +158,7 @@ function CoaHierarchyListingTable({
   onDrillInto,
   onAddLedger,
   onAddSubGroup,
+  onVisibleRowsChange,
 }: {
   rows: CoaListingRow[];
   records: ChartOfAccount[];
@@ -147,6 +169,7 @@ function CoaHierarchyListingTable({
   onDrillInto: (node: ChartOfAccount) => void;
   onAddLedger?: (parentGroupId: import("../../../data").CoaNodeId) => void;
   onAddSubGroup?: (parentGroupId: import("../../../data").CoaNodeId) => void;
+  onVisibleRowsChange?: (rows: CoaListingRow[]) => void;
 }) {
   const getCellValue = useCallback((row: CoaListingRow, key: string) => {
     switch (key) {
@@ -195,6 +218,7 @@ function CoaHierarchyListingTable({
       defaultSortKey="accountCode"
       defaultSortDir="asc"
     >
+      <AccountsVisibleRowsReporter<CoaListingRow> onVisibleRowsChange={onVisibleRowsChange} />
       <CoaHierarchyTableContent
         records={records}
         canCreate={canCreate}
@@ -367,6 +391,7 @@ function CoaLedgerListingTableBody({
   onSelectLedger,
   onDeleteLedger,
   emptyMessage,
+  onVisibleRowsChange,
 }: {
   ledgerRows: CoaLedgerListingRow[];
   highlightedLedgerId: import("../../../data").CoaNodeId | null;
@@ -374,10 +399,12 @@ function CoaLedgerListingTableBody({
   onSelectLedger: (ledger: ChartOfAccount) => void;
   onDeleteLedger?: (ledger: ChartOfAccount) => void;
   emptyMessage: string;
+  onVisibleRowsChange?: (rows: CoaLedgerListingRow[]) => void;
 }) {
   if (ledgerRows.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-6 px-4">
+        <ReportEmptyVisibleRows onVisibleRowsChange={onVisibleRowsChange} />
         <p className="text-xs font-medium text-foreground">{emptyMessage}</p>
         {!isSearchMode && (
           <p className="text-sm text-muted-foreground mt-1">
@@ -394,6 +421,7 @@ function CoaLedgerListingTableBody({
       highlightedLedgerId={highlightedLedgerId}
       onSelectLedger={onSelectLedger}
       onDeleteLedger={onDeleteLedger}
+      onVisibleRowsChange={onVisibleRowsChange}
     />
   );
 }
@@ -403,11 +431,13 @@ function CoaLedgerListingTableInner({
   highlightedLedgerId,
   onSelectLedger,
   onDeleteLedger,
+  onVisibleRowsChange,
 }: {
   ledgerRows: CoaLedgerListingRow[];
   highlightedLedgerId: import("../../../data").CoaNodeId | null;
   onSelectLedger: (ledger: ChartOfAccount) => void;
   onDeleteLedger?: (ledger: ChartOfAccount) => void;
+  onVisibleRowsChange?: (rows: CoaLedgerListingRow[]) => void;
 }) {
   const getCellValue = useCallback((row: CoaLedgerListingRow, key: string) => {
     switch (key) {
@@ -445,6 +475,9 @@ function CoaLedgerListingTableInner({
       defaultSortKey="accountName"
       defaultSortDir="asc"
     >
+      <AccountsVisibleRowsReporter<CoaLedgerListingRow>
+        onVisibleRowsChange={onVisibleRowsChange}
+      />
       <CoaLedgerTableContent
         highlightedLedgerId={highlightedLedgerId}
         onSelectLedger={onSelectLedger}
@@ -482,6 +515,7 @@ function CoaLedgerTableContent({
             {visible.map((row) => {
               const { ledger } = row;
               const isHighlighted = highlightedLedgerId === ledger.id;
+              const allowDelete = Boolean(onDeleteLedger && canDeleteLedger(ledger));
 
               return (
                 <AccountsTableRow
@@ -537,13 +571,13 @@ function CoaLedgerTableContent({
                         </TooltipTrigger>
                         <TooltipContent side="top">View Ledger Transactions</TooltipContent>
                       </Tooltip>
-                      {onDeleteLedger && (
+                      {allowDelete ? (
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <span
                               aria-label="Delete Ledger"
                               role="button"
-                              onClick={(e) => { e.stopPropagation(); onDeleteLedger(ledger); }}
+                              onClick={(e) => { e.stopPropagation(); onDeleteLedger?.(ledger); }}
                               className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-red-50 hover:text-red-600"
                             >
                               <Trash2 className="h-3.5 w-3.5" />
@@ -551,7 +585,7 @@ function CoaLedgerTableContent({
                           </TooltipTrigger>
                           <TooltipContent side="top">Delete Ledger</TooltipContent>
                         </Tooltip>
-                      )}
+                      ) : null}
                     </div>
                   </AccountsTableCell>
                 </AccountsTableRow>

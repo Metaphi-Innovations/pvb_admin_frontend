@@ -117,7 +117,7 @@ export function Pagination({
               value={String(pageSize)}
               onValueChange={(val) => onPageSizeChange(Number(val))}
             >
-              <SelectTrigger className="h-6 w-[64px] min-w-[64px] text-[10px] rounded border-border bg-white px-2 gap-1">
+              <SelectTrigger className="h-6 w-auto min-w-0 text-[10px] rounded border-border bg-white px-2 gap-1 [&>svg]:h-3 [&>svg]:w-3">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="!min-w-[75px] !w-[75px]">

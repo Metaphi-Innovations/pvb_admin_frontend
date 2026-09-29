@@ -36,6 +36,15 @@ export function invalidateLedgerDetailQueries(
   void queryClient.invalidateQueries({ queryKey: ledgerDetailKeys.all });
 }
 
+function isSyntheticPeriodOpening(
+  row: LedgerOpeningBalanceDto | null | undefined,
+): boolean {
+  if (!row) return true;
+  if (row.openingBalanceId === "period-opening") return true;
+  return String(row.narration ?? "").trim().toLowerCase() === "period opening balance";
+}
+
+/** Master FY opening — never the computed period B/F (effectiveDate = filter from). */
 function resolveLedgerOpeningBalance(
   detail: LedgerDetailWithTransactionsDto,
   financialYearId?: string,
@@ -46,7 +55,11 @@ function resolveLedgerOpeningBalance(
     );
     if (match) return match;
   }
-  return detail.openingBalance ?? detail.openingBalances?.[0] ?? null;
+  if (detail.openingBalances?.[0]) return detail.openingBalances[0];
+  if (!isSyntheticPeriodOpening(detail.openingBalance)) {
+    return detail.openingBalance ?? null;
+  }
+  return null;
 }
 
 export function useLedgerDetail(options: {

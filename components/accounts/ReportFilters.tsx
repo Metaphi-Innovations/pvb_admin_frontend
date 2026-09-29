@@ -266,9 +266,14 @@ export function ReportDateRangeFilter({
               min={fyMin}
               max={dateTo || fyMax}
               onChange={(val) => {
+                if (!val) {
+                  onDateFromChange("");
+                  return;
+                }
                 let clamped = val;
-                if (clamped && clamped < fyMin) clamped = fyMin;
-                if (clamped && clamped > fyMax) clamped = fyMax;
+                if (clamped < fyMin) clamped = fyMin;
+                if (clamped > fyMax) clamped = fyMax;
+                if (dateTo && clamped > dateTo) clamped = dateTo;
                 onDateFromChange(clamped);
               }}
               aria-label="From date"
@@ -282,9 +287,14 @@ export function ReportDateRangeFilter({
               min={dateFrom || fyMin}
               max={fyMax}
               onChange={(val) => {
+                if (!val) {
+                  onDateToChange("");
+                  return;
+                }
                 let clamped = val;
-                if (clamped && clamped < fyMin) clamped = fyMin;
-                if (clamped && clamped > fyMax) clamped = fyMax;
+                if (clamped < fyMin) clamped = fyMin;
+                if (clamped > fyMax) clamped = fyMax;
+                if (dateFrom && clamped < dateFrom) clamped = dateFrom;
                 onDateToChange(clamped);
               }}
               aria-label="To date"

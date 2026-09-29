@@ -51,7 +51,7 @@ function openPartyLedgerCreateInCoa(
   return false;
 }
 
-/** Bank Accounts group → existing Bank Account master form (never Generic Ledger).
+/** Bank Accounts group → full Banking bank-account form (embedded in COA when possible).
  * Cash-in-Hand (kind "cash") is intentionally excluded — it uses Generic Ledger. */
 function openBankAccountCreate(
   parentGroupId: import("@/app/(app)/accounts/data").CoaNodeId,
@@ -60,12 +60,11 @@ function openBankAccountCreate(
 ): boolean {
   if (resolveCoaLedgerBehaviorById(parentGroupId, list).kind !== "bank") return false;
   if (requestCoaBankForm(parentGroupId)) return true;
-  // Fallback when COA page embed is not mounted — still never use Generic Ledger.
   const returnTo = encodeURIComponent(
     `${CHART_OF_ACCOUNTS_HREF}?node=${parentGroupId}`,
   );
   router.push(
-    `/accounts/banking/bank-accounts/new?bankGroupId=${parentGroupId}&source=chart-of-accounts&returnTo=${returnTo}`,
+    `/accounts/banking/bank-accounts/new?source=chart-of-accounts&returnTo=${returnTo}`,
   );
   return true;
 }
@@ -226,9 +225,10 @@ export function CoaAddLedgerHost() {
       }
       if (link?.category === "bank") {
         const parentId = row.parentAccountId;
-        const bankId =
-          typeof link.sourceId === "number" ? link.sourceId : Number(link.sourceId);
-        if (parentId != null && Number.isFinite(bankId) && requestCoaBankForm(parentId, bankId)) {
+        const ledgerKey =
+          row.apiNodeId ??
+          (typeof link.sourceId === "string" ? link.sourceId : String(link.sourceId));
+        if (parentId != null && ledgerKey && requestCoaBankForm(parentId, ledgerKey)) {
           return;
         }
         const returnTo =
@@ -236,7 +236,7 @@ export function CoaAddLedgerHost() {
             ? `${CHART_OF_ACCOUNTS_HREF}?node=${parentId}`
             : CHART_OF_ACCOUNTS_HREF;
         router.push(
-          `/accounts/banking/bank-accounts/${link.sourceId}/edit?source=chart-of-accounts&returnTo=${encodeURIComponent(returnTo)}`,
+          `/accounts/banking/bank-accounts/${ledgerKey}/edit?source=chart-of-accounts&returnTo=${encodeURIComponent(returnTo)}`,
         );
         return;
       }
@@ -294,8 +294,32 @@ export function CoaAddLedgerHost() {
       window.history.replaceState(null, "", next);
       const id = Number(editId);
       if (Number.isFinite(id)) openEdit(id);
+      return;
     }
-  }, [coaReady, openAddUnderParent, openGlobalAdd, openEdit]);
+
+    const bankLedgerId = params.get("bankLedger");
+    if (bankLedgerId) {
+      const nodeParam = params.get("node");
+      params.delete("bankLedger");
+      const qs = params.toString();
+      const next = `${window.location.pathname}${qs ? `?${qs}` : ""}`;
+      window.history.replaceState(null, "", next);
+      const list = records;
+      const ledgerRow = list.find(
+        (r) =>
+          r.apiNodeId === bankLedgerId ||
+          String(r.id) === bankLedgerId ||
+          String(r.erpSourceId) === bankLedgerId,
+      );
+      const parentFromNode =
+        nodeParam && Number.isFinite(Number(nodeParam)) ? Number(nodeParam) : null;
+      const parentGroupId =
+        parentFromNode ?? ledgerRow?.parentAccountId ?? selectedId ?? null;
+      if (parentGroupId != null) {
+        requestCoaBankForm(parentGroupId, bankLedgerId);
+      }
+    }
+  }, [coaReady, openAddUnderParent, openGlobalAdd, openEdit, records, selectedId]);
 
   return (
     <>

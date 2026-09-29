@@ -228,7 +228,8 @@ export function CoaNavigationProvider({
         }
         return next;
       });
-      const href = `${CHART_OF_ACCOUNTS_HREF}?node=${encodeURIComponent(String(resolved.id))}`;
+      const nodeKey = encodeURIComponent(String(resolved.apiNodeId ?? resolved.id));
+      const href = `${CHART_OF_ACCOUNTS_HREF}?node=${nodeKey}`;
       if (pathname.startsWith(CHART_OF_ACCOUNTS_HREF)) {
         router.replace(href, { scroll: false });
       } else {
@@ -254,9 +255,11 @@ export function CoaNavigationProvider({
             const resolved = resolveCoaTreeSelectionNode(currentRecords, node);
             setSelectedId((prev) => (prev === resolved.id ? prev : resolved.id));
             setExpandedIds((prev) => expandAncestorsOf(currentRecords, resolved.id, prev));
-            if (String(resolved.id) !== nodeParam) {
+            const canonical =
+              resolved.apiNodeId != null ? String(resolved.apiNodeId) : String(resolved.id);
+            if (nodeParam !== canonical) {
               router.replace(
-                `${CHART_OF_ACCOUNTS_HREF}?node=${encodeURIComponent(String(resolved.id))}`,
+                `${CHART_OF_ACCOUNTS_HREF}?node=${encodeURIComponent(canonical)}`,
                 { scroll: false },
               );
             }
@@ -285,7 +288,31 @@ export function CoaNavigationProvider({
 
     syncFromUrl();
     window.addEventListener("popstate", syncFromUrl);
-    return () => window.removeEventListener("popstate", syncFromUrl);
+
+    // Next.js <Link> / router.replace change search params via history.pushState /
+    // replaceState without firing popstate — patch so breadcrumb & deep links sync.
+    const historyObj = window.history;
+    const originalPushState = historyObj.pushState.bind(historyObj);
+    const originalReplaceState = historyObj.replaceState.bind(historyObj);
+    const notifyUrlChange = () => {
+      window.dispatchEvent(new Event("coa-url-sync"));
+    };
+    historyObj.pushState = (...args: Parameters<History["pushState"]>) => {
+      originalPushState(...args);
+      notifyUrlChange();
+    };
+    historyObj.replaceState = (...args: Parameters<History["replaceState"]>) => {
+      originalReplaceState(...args);
+      notifyUrlChange();
+    };
+    window.addEventListener("coa-url-sync", syncFromUrl);
+
+    return () => {
+      window.removeEventListener("popstate", syncFromUrl);
+      window.removeEventListener("coa-url-sync", syncFromUrl);
+      historyObj.pushState = originalPushState;
+      historyObj.replaceState = originalReplaceState;
+    };
   }, [isCoaRoute, pathname, router, needsCoaData, coaReady, apiRecords]);
 
   /** Backend search returns a pruned tree — expand all returned branches so matches are visible. */

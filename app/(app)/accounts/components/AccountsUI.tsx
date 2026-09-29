@@ -22,6 +22,7 @@ export {
   AccountsColumnFilterProvider,
   useAccountsColumnFilterContext,
   useAccountsFilteredRows,
+  AccountsVisibleRowsReporter,
 } from "@/components/accounts/AccountsColumnFilterContext";
 
 export function SortTh({

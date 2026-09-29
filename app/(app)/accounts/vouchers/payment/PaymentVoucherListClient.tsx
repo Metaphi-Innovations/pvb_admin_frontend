@@ -3,13 +3,18 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { XCircle } from "lucide-react";
 import {
   AccountsEditAction,
+  AccountsMoreActions,
   AccountsTableActionCell,
   AccountsViewAction,
   accountsActionColClass,
 } from "@/components/accounts/AccountsTableActions";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { MoneyAmount } from "@/components/accounts/MoneyAmount";
+import { showToast } from "@/lib/toast";
+import { PaymentReasonDialog } from "./components/PaymentReasonDialog";
 import {
   AccountsTable,
   AccountsTableBody,
@@ -72,6 +77,7 @@ import {
   type PaymentVoucherStatus,
 } from "@/types/payment-voucher.types";
 import {
+  canCancelStatus,
   formatSrNo,
   isDraftEditable,
   partyDisplayName,
@@ -171,6 +177,8 @@ function PaymentListTable({
   branchOptions,
   partyOptions,
   cashBankOptions,
+  onCancelOrReverse,
+  actionBusy,
 }: {
   rows: PaymentVoucherListItem[];
   loading: boolean;
@@ -178,6 +186,8 @@ function PaymentListTable({
   branchOptions: { value: string; count: number }[];
   partyOptions: { value: string; count: number }[];
   cashBankOptions: { value: string; count: number }[];
+  onCancelOrReverse: (row: PaymentVoucherListItem) => void;
+  actionBusy: boolean;
 }) {
   const router = useRouter();
 
@@ -264,6 +274,9 @@ function PaymentListTable({
           rows.map((row) => {
             const id = row.payment_voucher_id;
             const canEdit = isDraftEditable(row.status);
+            const isPosted = row.status === "POSTED";
+            const canCancelOrReverse =
+              canCancelStatus(row.status) || isPosted;
             return (
               <AccountsTableRow key={id} className="group">
                 <AccountsTableCell mono>
@@ -322,6 +335,17 @@ function PaymentListTable({
                         onClick={() => router.push(paymentEditPath(id))}
                       />
                     ) : null}
+                    {canCancelOrReverse ? (
+                      <AccountsMoreActions contentClassName="w-44">
+                        <DropdownMenuItem
+                          className="text-xs gap-2 text-red-600"
+                          disabled={actionBusy}
+                          onClick={() => onCancelOrReverse(row)}
+                        >
+                          <XCircle className="w-4 h-4" /> Cancel
+                        </DropdownMenuItem>
+                      </AccountsMoreActions>
+                    ) : null}
                   </AccountsTableActionCell>
                 </AccountsTableCell>
               </AccountsTableRow>
@@ -360,6 +384,13 @@ export function PaymentVoucherListClient() {
   const [branchOptions, setBranchOptions] = useState<{ value: string; count: number }[]>([]);
   const [partyOptions, setPartyOptions] = useState<{ value: string; count: number }[]>([]);
   const [cashBankOptions, setCashBankOptions] = useState<{ value: string; count: number }[]>([]);
+  const [cancelTarget, setCancelTarget] = useState<PaymentVoucherListItem | null>(
+    null,
+  );
+  const [cancelReason, setCancelReason] = useState("");
+  const [reverseDate, setReverseDate] = useState("");
+  const [actionBusy, setActionBusy] = useState(false);
+  const [listRefreshKey, setListRefreshKey] = useState(0);
   const refreshTick = useAccountsSectionRefresh("payment-vouchers", { apiListing: true });
 
   useEffect(() => {
@@ -508,7 +539,63 @@ export function PaymentVoucherListClient() {
       }
     })();
     return () => ac.abort();
-  }, [listQuery]);
+  }, [listQuery, listRefreshKey]);
+
+  const closeCancelDialog = useCallback(() => {
+    if (actionBusy) return;
+    setCancelTarget(null);
+    setCancelReason("");
+    setReverseDate("");
+  }, [actionBusy]);
+
+  const openCancelDialog = useCallback((row: PaymentVoucherListItem) => {
+    setCancelReason("");
+    setReverseDate(toIsoDateOnly(row.voucher_date));
+    setCancelTarget(row);
+  }, []);
+
+  const confirmCancelOrReverse = useCallback(async () => {
+    if (!cancelTarget || actionBusy) return;
+    const id = cancelTarget.payment_voucher_id;
+    const isPosted = cancelTarget.status === "POSTED";
+    const reason = cancelReason.trim();
+    if (!reason) return;
+
+    setActionBusy(true);
+    try {
+      if (isPosted) {
+        const resolvedDate =
+          reverseDate.trim() ||
+          toIsoDateOnly(cancelTarget.voucher_date) ||
+          null;
+        await PaymentVoucherService.reverse(id, {
+          reason,
+          reversal_date: resolvedDate,
+        });
+        showToast("Payment reversed.", "success");
+      } else {
+        await PaymentVoucherService.cancel(id, { reason });
+        showToast("Payment cancelled.", "success");
+      }
+      setCancelTarget(null);
+      setCancelReason("");
+      setReverseDate("");
+      setListRefreshKey((k) => k + 1);
+    } catch (e) {
+      showToast(
+        e instanceof Error
+          ? e.message
+          : isPosted
+            ? "Failed to reverse Payment Voucher."
+            : "Failed to cancel Payment Voucher.",
+        "error",
+      );
+    } finally {
+      setActionBusy(false);
+    }
+  }, [cancelTarget, cancelReason, reverseDate, actionBusy]);
+
+  const isPostedCancelTarget = cancelTarget?.status === "POSTED";
 
   const getCellValue = useCallback((row: PaymentVoucherListItem, key: string) => {
     switch (key) {
@@ -538,6 +625,7 @@ export function PaymentVoucherListClient() {
   }, []);
 
   return (
+    <>
     <AccountsTableListing
       toolbar={
         <AccountsTableToolbar
@@ -651,8 +739,37 @@ export function PaymentVoucherListClient() {
           branchOptions={branchOptions}
           partyOptions={partyOptions}
           cashBankOptions={cashBankOptions}
+          onCancelOrReverse={openCancelDialog}
+          actionBusy={actionBusy}
         />
       </AccountsColumnFilterProvider>
     </AccountsTableListing>
+
+    <PaymentReasonDialog
+      open={!!cancelTarget}
+      onOpenChange={(open) => {
+        if (!open) closeCancelDialog();
+      }}
+      title={isPostedCancelTarget ? "Reverse Payment" : "Cancel Payment"}
+      description={
+        isPostedCancelTarget
+          ? "Reversal is owned by the backend. If Supplier Advance was already consumed by a downstream settlement, reversal will be blocked."
+          : "Cancellation keeps the record — it does not delete it."
+      }
+      reason={cancelReason}
+      onReasonChange={setCancelReason}
+      showDate={isPostedCancelTarget}
+      dateValue={reverseDate}
+      onDateChange={setReverseDate}
+      confirmLabel={
+        isPostedCancelTarget ? "Reverse" : "Cancel Payment"
+      }
+      destructive
+      busy={actionBusy}
+      onConfirm={() => {
+        void confirmCancelOrReverse();
+      }}
+    />
+    </>
   );
 }

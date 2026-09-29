@@ -163,23 +163,42 @@ export function computePeriodOpeningBalance(
   return fromSignedBalance(signed);
 }
 
+/** Indian FY start (Apr 1) that contains an ISO date — used when no master OB date exists. */
+export function indianFyStartContaining(isoDate: string): string {
+  const y = parseInt(isoDate.slice(0, 4), 10);
+  const m = parseInt(isoDate.slice(5, 7), 10);
+  if (!Number.isFinite(y) || y < 1900 || !Number.isFinite(m)) {
+    return financialYearIsoRange(null).from;
+  }
+  const startYear = m >= 4 ? y : y - 1;
+  return `${startYear}-04-01`;
+}
+
 export function buildCoaTransactionsForDateRange(
   ledger: ChartOfAccount,
   allTransactions: CoaMovementRow[],
   from: string,
   to: string,
   periodOpening?: BalanceAmount,
+  /** Master OB / FY opening date — never the selected filter `from`. */
+  openingEffectiveDate?: string,
 ): CoaTransactionRow[] {
   const opening = periodOpening ?? computePeriodOpeningBalance(ledger, allTransactions, from);
   const inRange = sortChronological(
     allTransactions.filter((r) => r.date >= from && r.date <= to),
   );
   const withBalances = computeRunningBalances(opening, inRange);
+  const openingDate =
+    (openingEffectiveDate && /^\d{4}-\d{2}-\d{2}$/.test(openingEffectiveDate.slice(0, 10))
+      ? openingEffectiveDate.slice(0, 10)
+      : null) ?? indianFyStartContaining(from);
 
   const rows: CoaTransactionRow[] = [];
-  if (opening.amount > 0) {
+  // Only show synthetic Opening Balance when the period has real movements.
+  // Empty ranges (e.g. Today with no vouchers) should not fake a same-day entry.
+  if (opening.amount > 0 && inRange.length > 0) {
     rows.push({
-      date: from && /^\d{4}-\d{2}-\d{2}/.test(from) ? from.slice(0, 10) : "—",
+      date: openingDate,
       voucherNo: "—",
       voucherType: "Opening Balance",
       referenceNo: "—",

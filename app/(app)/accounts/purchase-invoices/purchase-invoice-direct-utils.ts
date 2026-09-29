@@ -68,18 +68,61 @@ export function gstinStateCode(gstin?: string): string | null {
   return normalized.slice(0, 2);
 }
 
+const STATE_NAME_TO_CODE: Record<string, string> = {
+  "jammu & kashmir": "01",
+  "jammu and kashmir": "01",
+  "himachal pradesh": "02",
+  punjab: "03",
+  chandigarh: "04",
+  uttarakhand: "05",
+  haryana: "06",
+  delhi: "07",
+  rajasthan: "08",
+  "uttar pradesh": "09",
+  bihar: "10",
+  sikkim: "11",
+  "arunachal pradesh": "12",
+  nagaland: "13",
+  manipur: "14",
+  mizoram: "15",
+  tripura: "16",
+  meghalaya: "17",
+  assam: "18",
+  "west bengal": "19",
+  jharkhand: "20",
+  odisha: "21",
+  chhattisgarh: "22",
+  "madhya pradesh": "23",
+  gujarat: "24",
+  maharashtra: "27",
+  karnataka: "29",
+  goa: "30",
+  kerala: "32",
+  "tamil nadu": "33",
+  puducherry: "34",
+  telangana: "36",
+  "andhra pradesh": "37",
+  ladakh: "38",
+};
+
+export function stateCodeFromNameOrGstin(value?: string): string | null {
+  const raw = value?.trim() || "";
+  if (!raw) return null;
+  if (/^\d{1,2}$/.test(raw)) return raw.padStart(2, "0");
+  if (raw.length >= 15 && /^\d{2}/.test(raw)) return raw.slice(0, 2).toUpperCase();
+  const key = raw.toLowerCase().replace(/&/g, " and ").replace(/\s+/g, " ").trim();
+  return STATE_NAME_TO_CODE[key] || gstinStateCode(raw);
+}
+
 export function stateFromGstin(gstin?: string): string {
   const code = gstinStateCode(gstin);
-  const map: Record<string, string> = {
-    "27": "Maharashtra",
-    "29": "Karnataka",
-    "07": "Delhi",
-    "33": "Tamil Nadu",
-    "24": "Gujarat",
-    "09": "Uttar Pradesh",
-    "19": "West Bengal",
-  };
-  return code ? map[code] ?? "Maharashtra" : "Maharashtra";
+  const entry = Object.entries(STATE_NAME_TO_CODE).find(([, c]) => c === code);
+  if (entry) {
+    // Prefer canonical casing from INDIAN_STATE_OPTIONS when present.
+    const opt = INDIAN_STATE_OPTIONS.find((s) => s.toLowerCase() === entry[0]);
+    return opt || entry[0].replace(/\b\w/g, (ch) => ch.toUpperCase());
+  }
+  return COMPANY_BILLING.state;
 }
 
 export function isInterstatePurchase(
@@ -87,6 +130,10 @@ export function isInterstatePurchase(
   placeOfSupply: string,
   companyState = COMPANY_BILLING.state,
 ): boolean {
+  const branchCode =
+    stateCodeFromNameOrGstin(branchGstin) || stateCodeFromNameOrGstin(companyState);
+  const placeCode = stateCodeFromNameOrGstin(placeOfSupply);
+  if (branchCode && placeCode) return branchCode !== placeCode;
   const branchState = stateFromGstin(branchGstin) || companyState;
   return placeOfSupply.trim().toLowerCase() !== branchState.trim().toLowerCase();
 }
@@ -221,8 +268,9 @@ export function roundMoney(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
-export function calcTaxableFromGrossDiscount(gross: number, discount: number): number {
-  return roundMoney(Math.max(0, gross - discount));
+/** Purchases do not apply line/header discount — taxable equals gross. */
+export function calcTaxableFromGrossDiscount(gross: number, _discount?: number): number {
+  return roundMoney(Math.max(0, gross));
 }
 
 export function calcTotalGst(cgst: number, sgst: number, igst: number): number {
@@ -254,7 +302,7 @@ export function validateGstBreakup(input: {
 
 export function calcDirectPurchaseHeaderTotals(input: {
   grossAmount: number;
-  discount: number;
+  discount?: number;
   taxableAmount: number;
   cgst: number;
   sgst: number;
@@ -263,12 +311,14 @@ export function calcDirectPurchaseHeaderTotals(input: {
   roundingAdjustment: number;
 }): DirectPurchaseTotals {
   const totalGst = calcTotalGst(input.cgst, input.sgst, input.igst);
-  const invoiceTotal = roundMoney(input.taxableAmount + totalGst);
+  const taxableAmount = roundMoney(input.taxableAmount);
+  const invoiceTotal = roundMoney(taxableAmount + totalGst);
   const netPayable = roundMoney(invoiceTotal - input.tdsAmount + input.roundingAdjustment);
   return {
     grossAmount: roundMoney(input.grossAmount),
-    discountTotal: roundMoney(input.discount),
-    taxableAmount: roundMoney(input.taxableAmount),
+    // Purchases: discount is not applicable
+    discountTotal: 0,
+    taxableAmount,
     cgst: roundMoney(input.cgst),
     sgst: roundMoney(input.sgst),
     igst: roundMoney(input.igst),
@@ -286,7 +336,7 @@ export function buildSingleDirectLine(input: {
   expenseLedgerId: number | string;
   expenseLedgerName: string;
   grossAmount: number;
-  discount: number;
+  discount?: number;
   taxableAmount: number;
   gstApplicable: boolean;
   gstRate: number;
@@ -311,7 +361,7 @@ export function buildSingleDirectLine(input: {
     uqc: "NOS",
     rate: input.grossAmount,
     grossAmount: roundMoney(input.grossAmount),
-    discount: roundMoney(input.discount),
+    discount: 0,
     taxableAmount: roundMoney(input.taxableAmount),
     gstRate: input.gstApplicable ? input.gstRate : 0,
     cgst: input.gstApplicable ? roundMoney(input.cgst) : 0,
@@ -338,6 +388,7 @@ export function calcDirectLineAmounts(
 ): Pick<
   DirectPurchaseLineItem,
   | "grossAmount"
+  | "discount"
   | "taxableAmount"
   | "cgst"
   | "sgst"
@@ -346,8 +397,8 @@ export function calcDirectLineAmounts(
   | "lineTotal"
 > {
   const grossAmount = Math.round(line.quantity * line.rate * 100) / 100;
-  const discount = Math.round((line.discount ?? 0) * 100) / 100;
-  const taxableAmount = Math.round((grossAmount - discount) * 100) / 100;
+  // Purchases: discount is not applicable — taxable = gross
+  const taxableAmount = grossAmount;
   const gstTotal = Math.round(taxableAmount * line.gstRate) / 100;
   const { cgst, sgst, igst } = splitInvoiceGst(gstTotal, interstate);
   let tdsAmount = 0;
@@ -356,7 +407,16 @@ export function calcDirectLineAmounts(
     tdsAmount = line.tdsOverride ? line.tdsAmount : calculated;
   }
   const lineTotal = Math.round((taxableAmount + gstTotal) * 100) / 100;
-  return { grossAmount, taxableAmount, cgst, sgst, igst, tdsAmount, lineTotal };
+  return {
+    grossAmount,
+    discount: 0,
+    taxableAmount,
+    cgst,
+    sgst,
+    igst,
+    tdsAmount,
+    lineTotal,
+  };
 }
 
 export interface DirectPurchaseTotals {
@@ -377,7 +437,6 @@ export function calcDirectPurchaseTotals(
   roundingAdjustment = 0,
 ): DirectPurchaseTotals {
   const grossAmount = lines.reduce((s, l) => s + l.grossAmount, 0);
-  const discountTotal = lines.reduce((s, l) => s + l.discount, 0);
   const taxableAmount = lines.reduce((s, l) => s + l.taxableAmount, 0);
   const cgst = lines.reduce((s, l) => s + l.cgst, 0);
   const sgst = lines.reduce((s, l) => s + l.sgst, 0);
@@ -388,7 +447,8 @@ export function calcDirectPurchaseTotals(
   const netPayable = Math.round((invoiceTotal - tdsDeduction + roundingAdjustment) * 100) / 100;
   return {
     grossAmount: Math.round(grossAmount * 100) / 100,
-    discountTotal: Math.round(discountTotal * 100) / 100,
+    // Purchases: discount is not applicable
+    discountTotal: 0,
     taxableAmount: Math.round(taxableAmount * 100) / 100,
     cgst: Math.round(cgst * 100) / 100,
     sgst: Math.round(sgst * 100) / 100,

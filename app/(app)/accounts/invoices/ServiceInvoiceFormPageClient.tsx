@@ -16,7 +16,6 @@ import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
 import { AutoRoundOffDisplay } from "@/components/accounts/voucher-form/AutoRoundOffDisplay";
 import { computeAutomaticRoundOff } from "@/lib/accounts/money-format";
 import { AccountsDateInput } from "@/components/accounts/AccountsDateInput";
-import { isoToDisplayDate } from "@/lib/accounts/date-display";
 import { InvoiceFormLayout } from "@/app/(app)/accounts/components/InvoiceFormLayout";
 import { VoucherFormActionBar } from "@/components/accounts/voucher-form/VoucherFormActionBar";
 import { VoucherFormSectionCard } from "@/components/accounts/voucher-form/VoucherFormSectionCard";
@@ -46,6 +45,12 @@ import {
   ServiceInvoiceWarehouseInfoButton,
 } from "@/app/(app)/accounts/invoices/components/ServiceInvoiceEntityInfo";
 import { SearchableSelect } from "@/app/(app)/accounts/credit-notes/components/SearchableSelect";
+import {
+  WarehouseMappedBankAccountSelect,
+  bankAccountOptionToPrintDetails,
+  type BankAccountPrintDetails,
+  type WarehouseMappedBankAccountSelectOption,
+} from "@/components/accounts/WarehouseMappedBankAccountSelect";
 import { inferInterstateFromPlaceOfSupply } from "@/lib/accounts/gst-accounting";
 import { splitInvoiceGst } from "@/lib/accounts/invoice-gst-breakup";
 import { formatINR } from "@/app/(app)/accounts/invoices/invoice-utils";
@@ -166,8 +171,13 @@ export default function ServiceInvoiceFormPageClient() {
   const [creditDays, setCreditDays] = useState(30);
   const [branch, setBranch] = useState("");
   const [warehouseId, setWarehouseId] = useState<string | null>(null);
+  const [bankAccountId, setBankAccountId] = useState<string | null>(null);
+  const [bankAccountPrint, setBankAccountPrint] =
+    useState<BankAccountPrintDetails | null>(null);
   const [invoiceDate, setInvoiceDate] = useState(todayStr);
   const [dueDate, setDueDate] = useState("");
+  /** Once the user edits Due Date, stop overwriting it from invoice date / credit days. */
+  const dueDateManualRef = useRef(false);
   const [referenceNo, setReferenceNo] = useState("");
   const [narration, setNarration] = useState("");
   const [lines, setLines] = useState<ServiceLineItem[]>([createEmptyServiceLine()]);
@@ -208,6 +218,7 @@ export default function ServiceInvoiceFormPageClient() {
   );
 
   useEffect(() => {
+    if (dueDateManualRef.current) return;
     if (invoiceDate && creditDays >= 0) {
       setDueDate(computeDueDate(invoiceDate, creditDays));
     }
@@ -310,6 +321,8 @@ export default function ServiceInvoiceFormPageClient() {
   const applyCustomer = useCallback(
     (id: string | null) => {
       setCustomerId(id);
+      // New customer → re-apply credit-day default unless user edits again.
+      dueDateManualRef.current = false;
       if (!id) {
         setCustomerName("");
         setCustomerCode("");
@@ -328,6 +341,20 @@ export default function ServiceInvoiceFormPageClient() {
       setCreditDays(c.creditDays);
     },
     [customers],
+  );
+
+  const handleWarehouseChange = useCallback((id: string | null) => {
+    setWarehouseId(id);
+    setBankAccountId(null);
+    setBankAccountPrint(null);
+  }, []);
+
+  const handleBankAccountChange = useCallback(
+    (id: string | null, option?: WarehouseMappedBankAccountSelectOption) => {
+      setBankAccountId(id);
+      setBankAccountPrint(bankAccountOptionToPrintDetails(option) ?? null);
+    },
+    [],
   );
 
   useEffect(() => {
@@ -401,6 +428,10 @@ export default function ServiceInvoiceFormPageClient() {
     }
     if (!warehouseId) {
       setError("Select a warehouse.");
+      return;
+    }
+    if (bankAccountId == null) {
+      setError("Select a Bank Account for the invoice PDF.");
       return;
     }
     if (!invoiceDate.trim()) {
@@ -545,7 +576,15 @@ export default function ServiceInvoiceFormPageClient() {
                   />
                 </InvoiceDetailField>
                 <InvoiceDetailField label="Due Date">
-                  <div className="so-goods-ro w-full">{isoToDisplayDate(dueDate) || "—"}</div>
+                  <AccountsDateInput
+                    className={INVOICE_DETAIL_INPUT_CLASS}
+                    value={dueDate}
+                    onChange={(value) => {
+                      dueDateManualRef.current = true;
+                      setDueDate(value);
+                    }}
+                    aria-label="Due Date"
+                  />
                 </InvoiceDetailField>
                 <InvoiceDetailField
                   label="Customer"
@@ -587,11 +626,27 @@ export default function ServiceInvoiceFormPageClient() {
                 >
                   <SearchableSelect
                     value={warehouseId ?? ""}
-                    onChange={(id) => setWarehouseId(id || null)}
+                    onChange={(id) => handleWarehouseChange(id || null)}
                     options={warehouseOptions}
                     placeholder="Select warehouse…"
                     triggerClassName={INVOICE_DETAIL_SELECT_CLASS}
                   />
+                </InvoiceDetailField>
+                <InvoiceDetailField label="Bank Account" required>
+                  <WarehouseMappedBankAccountSelect
+                    warehouseId={warehouseId}
+                    value={bankAccountId}
+                    onChange={handleBankAccountChange}
+                    label=""
+                    required
+                    hideHint
+                    className="w-full"
+                  />
+                  {bankAccountPrint ? (
+                    <p className="text-[10px] text-muted-foreground mt-0.5 truncate" title={`${bankAccountPrint.bankName} · ${bankAccountPrint.accountNumber}`}>
+                      {bankAccountPrint.bankName} · {bankAccountPrint.accountNumber}
+                    </p>
+                  ) : null}
                 </InvoiceDetailField>
                 <InvoiceDetailField label="Manual Reference No.">
                   <Input

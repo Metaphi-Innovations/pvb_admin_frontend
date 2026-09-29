@@ -1880,11 +1880,32 @@ export function CustomerForm({
 									<div className={ERP.field}>
 										<Label className={ERP.label}>Credit Limit</Label>
 										<Input
-											type='number'
-											min={0}
-											step='0.01'
+											type='text'
+											inputMode='decimal'
 											value={form.creditLimit}
-											onChange={(e) => set('creditLimit', e.target.value)}
+											onChange={(e) => {
+												// Digits + optional single decimal only — blocks -, +, e, and other symbols.
+												let v = e.target.value.replace(/[^\d.]/g, "");
+												const firstDot = v.indexOf(".");
+												if (firstDot !== -1) {
+													v =
+														v.slice(0, firstDot + 1) +
+														v.slice(firstDot + 1).replace(/\./g, "");
+												}
+												set("creditLimit", v);
+											}}
+											onPaste={(e) => {
+												e.preventDefault();
+												const pasted = e.clipboardData.getData("text");
+												let v = pasted.replace(/[^\d.]/g, "");
+												const firstDot = v.indexOf(".");
+												if (firstDot !== -1) {
+													v =
+														v.slice(0, firstDot + 1) +
+														v.slice(firstDot + 1).replace(/\./g, "");
+												}
+												set("creditLimit", v);
+											}}
 											placeholder='0.00'
 											className={inputCls('creditLimit')}
 											disabled={readOnly}
@@ -3109,8 +3130,14 @@ export function validateCustomerForm(
 		});
 	});
 
-	if (form.creditLimit.trim() && isNaN(parseFloat(form.creditLimit)))
-		e.creditLimit = "Invalid amount";
+	if (form.creditLimit.trim()) {
+		const creditLimitVal = Number(form.creditLimit);
+		if (!Number.isFinite(creditLimitVal)) {
+			e.creditLimit = "Enter a valid credit limit amount";
+		} else if (creditLimitVal < 0) {
+			e.creditLimit = "Credit limit cannot be negative";
+		}
+	}
 	Object.assign(e, validateDistributorCreditOverride(form));
 	Object.assign(
 		e,

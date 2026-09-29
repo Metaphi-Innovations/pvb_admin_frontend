@@ -14,7 +14,11 @@ function discountLabel(scheme: EligibleInvoiceCnSchemeOffer) {
   if (scheme.discount_type === "Percentage") {
     return `${scheme.discount_value ?? 0}%`;
   }
-  if (scheme.discount_value != null) return `₹${scheme.discount_value}/unit`;
+  if (scheme.discount_value != null) {
+    return scheme.scheme_type === "NEAR_EXPIRY"
+      ? `₹${scheme.discount_value}/unit`
+      : `₹${scheme.discount_value} overall`;
+  }
   return "—";
 }
 

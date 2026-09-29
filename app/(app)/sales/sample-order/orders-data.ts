@@ -453,8 +453,12 @@ export function canEditOrder(order: SalesOrder): boolean {
   return order.status === "draft" || order.status === "pending_approval";
 }
 
+/** Cancellation is only allowed before any packing list is generated (packing lists deduct stock). */
 export function canCancelOrder(order: SalesOrder): boolean {
-  return !["cancelled", "delivered", "dispatched"].includes(order.status);
+  if (["cancelled", "delivered", "dispatched"].includes(order.status)) return false;
+  const fulfillment = (order.fulfillmentStatus || "PENDING").toString();
+  if (fulfillment.toUpperCase() !== "PENDING") return false;
+  return !(order.packingListId || order.packingListNumber || (order.packingLists?.length ?? 0) > 0);
 }
 
 export function canGeneratePackingList(order: SalesOrder): boolean {

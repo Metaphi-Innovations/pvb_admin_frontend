@@ -176,6 +176,32 @@ export const AuthService = {
     return normalizeWebPermissions(response.data?.data?.web_permission);
   },
 
+  async requestPasswordReset(email: string): Promise<ApiResponse> {
+    const response = await axiosInstance.post<ApiResponse>(
+      API_ENDPOINTS.AUTH.FORGOT_PASSWORD,
+      { email },
+    );
+    return response.data;
+  },
+
+  async verifyPasswordResetOtp(
+    email: string,
+    otp: string,
+  ): Promise<ApiResponse<{ reset_token: string; expires_in_minutes: number }>> {
+    const response = await axiosInstance.post<
+      ApiResponse<{ reset_token: string; expires_in_minutes: number }>
+    >(API_ENDPOINTS.AUTH.VERIFY_OTP, { email, otp });
+    return response.data;
+  },
+
+  async resetPassword(resetToken: string, newPassword: string): Promise<ApiResponse> {
+    const response = await axiosInstance.post<ApiResponse>(
+      API_ENDPOINTS.AUTH.RESET_PASSWORD,
+      { reset_token: resetToken, new_password: newPassword },
+    );
+    return response.data;
+  },
+
   async register(userData: unknown): Promise<ApiResponse> {
     const response = await axiosInstance.post<ApiResponse>(
       API_ENDPOINTS.AUTH.REGISTER,

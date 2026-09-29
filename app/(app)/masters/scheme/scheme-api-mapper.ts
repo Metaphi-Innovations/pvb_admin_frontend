@@ -86,9 +86,26 @@ function openEndedTo(raw: string): number | null {
 export type SchemeScopeOptionLists = {
   customerTypeIds?: string[];
   customerIds?: string[];
+  /** customer_id → customer_type_id; limits customers to the selected types. */
+  customerTypeByCustomerId?: Record<string, string | null | undefined>;
   stateNames?: string[];
   productIds?: string[];
 };
+
+/** Customers whose type is among `typeIds` (all customers when no type map is known). */
+export function customerIdsForTypes(
+  lists: SchemeScopeOptionLists,
+  typeIds: string[],
+): string[] {
+  const all = lists.customerIds ?? [];
+  const typeMap = lists.customerTypeByCustomerId;
+  if (!typeMap) return all;
+  const allowed = new Set(typeIds);
+  return all.filter((id) => {
+    const typeId = typeMap[id];
+    return Boolean(typeId && allowed.has(typeId));
+  });
+}
 
 function setsEqual(selected: string[], available: string[]): boolean {
   if (!available.length || selected.length !== available.length) return false;
@@ -122,7 +139,19 @@ function buildScopes(
     form.customerTypes,
     optionLists?.customerTypeIds,
   );
-  const customers = resolveScope(form.customerIds, optionLists?.customerIds);
+  // "Select All" customers = every customer of the selected types → scope ALL.
+  const availableCustomers = optionLists
+    ? customerIdsForTypes(optionLists, form.customerTypes)
+    : undefined;
+  const availableCustomerSet = availableCustomers
+    ? new Set(availableCustomers)
+    : null;
+  const customers = resolveScope(
+    availableCustomerSet && optionLists?.customerTypeByCustomerId
+      ? form.customerIds.filter((id) => availableCustomerSet.has(id))
+      : form.customerIds,
+    availableCustomers,
+  );
   const states = resolveScope(form.stateNames, optionLists?.stateNames);
 
   const forceProductSpecific =
@@ -326,6 +355,7 @@ export function unifiedFormToCreatePayload(
               ? "PER_INVOICE"
               : "SCHEME_PERIOD",
           settlement_run_mode:
+            form.specialEvaluationScope !== "One Invoice" ||
             form.specialSettlementRunMode === "Automatic"
               ? "AUTOMATIC"
               : "MANUAL",
@@ -367,7 +397,7 @@ export function expandAllScopesForUi(
     asString(detail.customer_scope) === "ALL" &&
     optionLists.customerIds?.length
   ) {
-    next.customerIds = [...optionLists.customerIds];
+    next.customerIds = customerIdsForTypes(optionLists, next.customerTypes);
   }
 
   if (
@@ -551,7 +581,9 @@ export function detailToUnifiedForm(
 
     const runMode = asString(specialConfig?.settlement_run_mode);
     form.specialSettlementRunMode =
-      runMode === "AUTOMATIC" ? "Automatic" : "Manual";
+      runMode === "AUTOMATIC" || evalScope !== "PER_INVOICE"
+        ? "Automatic"
+        : "Manual";
 
     form.specialCombineProducts = true;
 

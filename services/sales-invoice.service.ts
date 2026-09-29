@@ -6,7 +6,10 @@ import type {
   InvoiceRecord,
   InvoiceStatus,
 } from "@/app/(app)/accounts/invoices/invoices-data";
-import { recalculateLineItem } from "@/app/(app)/accounts/invoices/invoices-data";
+import {
+  calcLineAmounts,
+  recalculateLineItem,
+} from "@/app/(app)/accounts/invoices/invoices-data";
 import type { InvoiceAdditionalExpense } from "@/app/(app)/accounts/invoices/invoice-additional-expenses";
 import { resolveProductSkuDisplay } from "@/lib/accounts/product-sku";
 
@@ -65,8 +68,31 @@ export type DispatchLineItemOverride = {
   product_id?: string;
   discount_percentage?: number | string | null;
   discount_amount?: number | string | null;
+  /** Manual discount on the line total after scheme (scheme itself is never sent). */
+  manual_discount_type?: "Percentage" | "Flat" | null;
+  manual_discount_value?: number | string | null;
   rate?: number | string | null;
 };
+
+export function toDispatchLineItemOverride(l: InvoiceLineItem): DispatchLineItemOverride {
+  const common = {
+    dispatch_item_id: l.dispatchItemId || undefined,
+    product_id: l.productId ? String(l.productId) : undefined,
+    rate: l.unitPrice != null ? Number(l.unitPrice) : undefined,
+  };
+  if (l.discountMode === "split") {
+    return {
+      ...common,
+      manual_discount_type: l.manualDiscountType ?? "Percentage",
+      manual_discount_value: Number(l.manualDiscountValue || 0),
+    };
+  }
+  return {
+    ...common,
+    discount_percentage: l.discountPct != null ? Number(l.discountPct) : undefined,
+    discount_amount: calcLineAmounts(l).discountAmt,
+  };
+}
 
 export type CreateFromDispatchPayload = {
   invoice_date: string;
@@ -330,6 +356,10 @@ export type SalesInvoiceListDto = {
   can_cancel?: boolean;
   cancel_blocked_reason?: string | null;
   cancel_blockers?: string[];
+  /** From AccountingOpenItem — receipt/CN settlements against this invoice. */
+  payment_status?: "PAID" | "UNPAID" | "PARTIAL" | string;
+  amount_received?: string | number;
+  outstanding_amount?: string | number;
 };
 
 export type SalesInvoiceDetailDto = SalesInvoiceListDto & {
@@ -479,6 +509,13 @@ export type PrepareDispatchInvoiceDto = {
     unit_price?: string | null;
     discount_amount?: string | null;
     discount_percentage?: string | null;
+    /** "split" = Sales Order line: scheme (read-only) + manual discount. */
+    discount_mode?: "split" | null;
+    /** Product Discount ₹ for the whole dispatched line. */
+    scheme_discount_line_amount?: string | null;
+    manual_discount_type?: "Percentage" | "Flat" | null;
+    manual_discount_value?: string | null;
+    manual_discount_amount?: string | null;
     scheme_id?: string | null;
     scheme_code?: string | null;
     scheme_name?: string | null;
@@ -641,19 +678,38 @@ export function mapPrepareDispatchItemsToLineItems(
     const schemeValue = Number(item.scheme_discount_value || 0);
     const schemeAmtPerUnit = Number(item.scheme_discount_amount || 0);
     const hasScheme = Boolean(item.scheme_id || schemeValue > 0 || schemeAmtPerUnit > 0);
-    const schemeDiscountType =
-      schemeType === "flat" || schemeType === "rupees" || schemeType === "fixed amount"
-        ? ("Rupees" as const)
-        : hasScheme
-          ? ("Percentage" as const)
-          : undefined;
+    const isSplit = item.discount_mode === "split";
+    const schemeIsFlat =
+      schemeType === "flat" || schemeType === "rupees" || schemeType === "fixed amount";
+    // Mirrors backend resolveSchemeDiscountAmount: % only when a % value exists, else ₹/unit.
+    const schemeDiscountType = !hasScheme
+      ? undefined
+      : !schemeIsFlat && schemeValue > 0
+        ? ("Percentage" as const)
+        : schemeAmtPerUnit > 0
+          ? ("Rupees" as const)
+          : schemeIsFlat
+            ? ("Rupees" as const)
+            : ("Percentage" as const);
     const schemeDiscountPercent =
       schemeDiscountType === "Percentage"
         ? schemeValue > 0
           ? schemeValue
-          : discountPct
+          : isSplit
+            ? 0
+            : discountPct
         : 0;
+    const manualType = item.manual_discount_type ?? "Percentage";
     return recalculateLineItem({
+      ...(isSplit
+        ? {
+            discountMode: "split" as const,
+            schemeLineAmount: Number(item.scheme_discount_line_amount || 0),
+            manualDiscountType: manualType,
+            manualDiscountValue: Number(item.manual_discount_value || 0),
+            manualDiscountAmount: Number(item.manual_discount_amount || 0),
+          }
+        : {}),
       id: item.dispatch_item_id || `line-${index}`,
       productId: null,
       productUuid: item.product_id || null,
@@ -720,6 +776,22 @@ function asNumber(value: unknown): number {
     return Number.isFinite(n) ? n : 0;
   }
   return 0;
+}
+
+function mapBackendPaymentStatus(
+  value: string | null | undefined,
+  amountReceived: number,
+  grandTotal: number,
+  invoiceStatus: InvoiceStatus,
+): InvoiceRecord["paymentStatus"] {
+  if (invoiceStatus === "cancelled") return "paid";
+  const key = String(value ?? "").toUpperCase();
+  if (key === "PAID") return "paid";
+  if (key === "PARTIAL" || key === "PARTIALLY_PAID") return "partially_paid";
+  if (key === "UNPAID") return "unpaid";
+  if (amountReceived <= 0) return "unpaid";
+  if (amountReceived >= grandTotal - 0.0001) return "paid";
+  return "partially_paid";
 }
 
 function asDateOnly(value: unknown): string {
@@ -876,6 +948,34 @@ function mapBackendLineItem(
     asString(productSnap.productName) ||
     `Line ${idx + 1}`;
 
+  const schemeSnap = (raw.scheme_snapshot || {}) as Record<string, unknown>;
+  const rawManualType = asString(raw.manual_discount_type);
+  const manualType =
+    rawManualType === "Flat" || rawManualType === "Percentage"
+      ? rawManualType
+      : undefined;
+  const hasSplitDiscount =
+    raw.scheme_discount_amount != null || manualType != null;
+  const schemeLineAmount = asNumber(raw.scheme_discount_amount);
+  const hasSchemeOnLine = Boolean(raw.scheme_id) || schemeLineAmount > 0;
+  const snapSchemeType = asString(schemeSnap.discount_type).toLowerCase();
+  const snapSchemeValue = asNumber(schemeSnap.discount_value);
+
+  const serviceLedger = raw.service_ledger as
+    | { ledger_id?: string; ledger_code?: string; ledger_name?: string }
+    | null
+    | undefined;
+  const incomeLedgerCode =
+    asString(serviceLedger?.ledger_code) ||
+    asString((raw as { service_ledger_code?: string }).service_ledger_code);
+  const incomeLedgerName =
+    asString(serviceLedger?.ledger_name) ||
+    asString((raw as { service_ledger_name?: string }).service_ledger_name);
+  const sacId =
+    asString(raw.sac_id) ||
+    asString(sacSnap.id || sacSnap.sac_id) ||
+    null;
+
   return {
     id: asString(raw.sales_invoice_item_id || raw.id || `line-${idx}`),
     productId: null,
@@ -896,6 +996,9 @@ function mapBackendLineItem(
       asString(hsnSnap.hsnCode || hsnSnap.hsn_code) ||
       asString(sacSnap.hsnCode || sacSnap.hsn_code || sacSnap.code) ||
       "",
+    sacId,
+    incomeLedgerCode: incomeLedgerCode || undefined,
+    incomeLedgerName: incomeLedgerName || undefined,
     qty,
     unit: asString(uomSnap.label || uomSnap.uom || uomSnap.unit || raw.quantity_type) || "NOS",
     unitPrice: rate,
@@ -912,9 +1015,37 @@ function mapBackendLineItem(
     expiryDate: asDateOnly(batchSnap.expiry_date || batchSnap.expiryDate),
     qtyInCase: qtyInCase > 0 ? qtyInCase : null,
     salesperson: salesperson || undefined,
-    schemeDiscountPercent: discountPct,
-    schemeDiscountAmount: asNumber(raw.discount_amount),
-    schemeApplied: asNumber(raw.discount_amount) > 0 ? "Yes" : "No",
+    ...(hasSplitDiscount
+      ? {
+          schemeCode: asString(schemeSnap.scheme_code) || undefined,
+          schemeName: asString(schemeSnap.scheme_name) || undefined,
+          schemeApplied: hasSchemeOnLine ? ("Yes" as const) : ("No" as const),
+          ...(snapSchemeType === "flat" || snapSchemeType === "rupees"
+            ? {
+                schemeDiscountType: "Rupees" as const,
+                schemeDiscountAmount: snapSchemeValue,
+              }
+            : snapSchemeValue > 0
+              ? {
+                  schemeDiscountType: "Percentage" as const,
+                  schemeDiscountPercent: snapSchemeValue,
+                }
+              : {}),
+          schemeLineAmount: schemeLineAmount,
+          manualDiscountType: manualType,
+          manualDiscountValue: asNumber(raw.manual_discount_value),
+          manualDiscountAmount: asNumber(raw.manual_discount_amount),
+          finalRate:
+            qty > 0
+              ? Math.round(((qty * rate - schemeLineAmount) / qty) * 100) / 100
+              : rate,
+        }
+      : {
+          schemeDiscountPercent: discountPct,
+          schemeDiscountAmount: asNumber(raw.discount_amount),
+          schemeApplied:
+            asNumber(raw.discount_amount) > 0 ? ("Yes" as const) : ("No" as const),
+        }),
   };
 }
 
@@ -984,6 +1115,21 @@ export function mapSalesInvoiceDetailToRecord(
   const taxAmount = asNumber(dto.gst_amount);
   const discountTotal = asNumber(dto.product_discount_amount);
   const subtotal = asNumber(dto.gross_amount) || asNumber(dto.taxable_amount);
+  const amountReceived = Math.max(0, asNumber(dto.amount_received));
+  const outstandingFromApi =
+    dto.outstanding_amount != null ? asNumber(dto.outstanding_amount) : null;
+  const balanceAmount =
+    status === "cancelled"
+      ? 0
+      : outstandingFromApi != null
+        ? Math.max(0, outstandingFromApi)
+        : Math.max(0, Math.round((grandTotal - amountReceived) * 100) / 100);
+  const paymentStatus = mapBackendPaymentStatus(
+    dto.payment_status,
+    amountReceived,
+    grandTotal,
+    status,
+  );
   const customerName =
     dto.customer?.customer_name ||
     snapshotStr(customerSnap, "customer_name", "customerName", "name") ||
@@ -1039,7 +1185,12 @@ export function mapSalesInvoiceDetailToRecord(
     id: srNo || 0,
     salesInvoiceId: dto.sales_invoice_id,
     invoiceNo: dto.invoice_number,
-    invoiceType: kind === "stock_transfer" ? "stock_transfer" : "sales",
+    invoiceType:
+      kind === "stock_transfer"
+        ? "stock_transfer"
+        : kind === "sample_order"
+          ? "sample_order"
+          : "sales",
     invoiceDate: asDateOnly(dto.invoice_date),
     dueDate: asDateOnly(dto.due_date) || asDateOnly(dto.invoice_date),
     referenceNo: dto.dispatch?.dispatch_number || "",
@@ -1061,10 +1212,10 @@ export function mapSalesInvoiceDetailToRecord(
     discountTotal,
     taxAmount,
     grandTotal,
-    amountReceived: 0,
-    balanceAmount: status === "cancelled" ? 0 : grandTotal,
+    amountReceived: Math.round(amountReceived * 100) / 100,
+    balanceAmount: Math.round(balanceAmount * 100) / 100,
     invoiceStatus: status,
-    paymentStatus: status === "cancelled" ? "paid" : "unpaid",
+    paymentStatus,
     collections: [],
     attachments: [],
     activity: [],
