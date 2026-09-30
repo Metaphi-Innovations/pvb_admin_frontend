@@ -1565,7 +1565,7 @@ export function CustomerForm({
 				<div className="flex flex-wrap items-end gap-3">
 					<div className={cn(ERP.field, "min-w-[200px] flex-1")}>
 						<Label className={ERP.label}>
-							TDS Section <span className="text-red-500">*</span>
+							TDS Section
 						</Label>
 						<SearchableSelect
 							value={form.tdsMasterId}
@@ -1880,11 +1880,32 @@ export function CustomerForm({
 									<div className={ERP.field}>
 										<Label className={ERP.label}>Credit Limit</Label>
 										<Input
-											type='number'
-											min={0}
-											step='0.01'
+											type='text'
+											inputMode='decimal'
 											value={form.creditLimit}
-											onChange={(e) => set('creditLimit', e.target.value)}
+											onChange={(e) => {
+												// Digits + optional single decimal only — blocks -, +, e, and other symbols.
+												let v = e.target.value.replace(/[^\d.]/g, "");
+												const firstDot = v.indexOf(".");
+												if (firstDot !== -1) {
+													v =
+														v.slice(0, firstDot + 1) +
+														v.slice(firstDot + 1).replace(/\./g, "");
+												}
+												set("creditLimit", v);
+											}}
+											onPaste={(e) => {
+												e.preventDefault();
+												const pasted = e.clipboardData.getData("text");
+												let v = pasted.replace(/[^\d.]/g, "");
+												const firstDot = v.indexOf(".");
+												if (firstDot !== -1) {
+													v =
+														v.slice(0, firstDot + 1) +
+														v.slice(firstDot + 1).replace(/\./g, "");
+												}
+												set("creditLimit", v);
+											}}
 											placeholder='0.00'
 											className={inputCls('creditLimit')}
 											disabled={readOnly}
@@ -2974,8 +2995,6 @@ export function validateCustomerForm(
 			e.msmeNumber = MSME_NUMBER_ERROR;
 		}
 	}
-	if (!form.tdsMasterId)
-		e.tdsMasterId = "Select TDS section from master";
 	Object.assign(e, validateComplianceRegistration(form));
 
 	if (options?.requireComplianceValidityDates) {
@@ -3109,8 +3128,14 @@ export function validateCustomerForm(
 		});
 	});
 
-	if (form.creditLimit.trim() && isNaN(parseFloat(form.creditLimit)))
-		e.creditLimit = "Invalid amount";
+	if (form.creditLimit.trim()) {
+		const creditLimitVal = Number(form.creditLimit);
+		if (!Number.isFinite(creditLimitVal)) {
+			e.creditLimit = "Enter a valid credit limit amount";
+		} else if (creditLimitVal < 0) {
+			e.creditLimit = "Credit limit cannot be negative";
+		}
+	}
 	Object.assign(e, validateDistributorCreditOverride(form));
 	Object.assign(
 		e,
@@ -3386,7 +3411,7 @@ export function formValuesToUpdatePayload(
 		registered_gst_address: form.gstRegistered ? form.registeredAddress : "",
 		pan_no: form.pan.trim().toUpperCase(),
 
-		tds_applicable: form.tdsApplicable,
+		tds_applicable: Boolean(form.tdsMasterId),
 		tds_section_id: form.tdsMasterId,
 
 		credit_limit: form.creditLimit ? parseFloat(form.creditLimit) : 0,
@@ -3440,7 +3465,7 @@ export function formValuesToCreatePayload(
 		registered_gst_address: form.gstRegistered ? form.registeredAddress : "",
 		pan_no: form.pan.trim().toUpperCase(),
 
-		tds_applicable: true,
+		tds_applicable: Boolean(form.tdsMasterId),
 		tds_section_id: form.tdsMasterId,
 
 		credit_limit: form.creditLimit ? parseFloat(form.creditLimit) : 0,
@@ -3532,7 +3557,7 @@ export function formValuesToCustomer(
 			form.gstRegistered && form.gstMasterId
 				? Number(form.gstMasterId)
 				: null,
-		tdsApplicable: true,
+		tdsApplicable: Boolean(form.tdsMasterId),
 		tdsMasterId: form.tdsMasterId ? Number(form.tdsMasterId) : null,
 		pan: form.pan.trim().toUpperCase(),
 		tan: "",

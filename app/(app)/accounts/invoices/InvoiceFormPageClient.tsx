@@ -86,6 +86,7 @@ import {
   readTransportDistanceKm,
   readWarehouseGstin,
   resolvePreparePlaceOfSupply,
+  toDispatchLineItemOverride,
   type DispatchInvoiceTotalsPreview,
   type PrepareDispatchInvoiceDto,
 } from "@/services/sales-invoice.service";
@@ -1592,13 +1593,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
         Number(c.amount) > 0,
     );
 
-    const lineOverrides = lines.map((l) => ({
-      dispatch_item_id: l.dispatchItemId || undefined,
-      product_id: l.productId ? String(l.productId) : undefined,
-      discount_percentage: l.discountPct != null ? Number(l.discountPct) : undefined,
-      discount_amount: l.discountAmt != null ? Number(l.discountAmt) : undefined,
-      rate: l.unitPrice != null ? Number(l.unitPrice) : undefined,
-    }));
+    const lineOverrides = lines.map(toDispatchLineItemOverride);
 
     let cancelled = false;
     const timer = window.setTimeout(() => {
@@ -1698,12 +1693,26 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     [additionalExpenses, interstateGst],
   );
 
-  // Preview SI number from DocumentSequence (create only)
+  // Preview SI number from DocumentSequence (create only).
+  // Stock Transfer: number follows source warehouse (issuer), not Place of Supply (destination).
   useEffect(() => {
     if (isEdit) return;
     let cancelled = false;
-    const state = stateName.trim() || placeOfSupply.trim() || "Maharashtra";
-    SalesInvoiceNumberService.getPreviewNumber({ state })
+    const stMode =
+      isStockTransferGeneration || invoiceType === "stock_transfer";
+    const params = stMode
+      ? sourceWarehouseId
+        ? { warehouseId: sourceWarehouseId }
+        : {
+            state:
+              sourceWarehouseState.trim() ||
+              stateName.trim() ||
+              "Maharashtra",
+          }
+      : {
+          state: stateName.trim() || placeOfSupply.trim() || "Maharashtra",
+        };
+    SalesInvoiceNumberService.getPreviewNumber(params)
       .then((num) => {
         if (!cancelled) setPreviewInvoiceNo(num);
       })
@@ -1713,7 +1722,15 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     return () => {
       cancelled = true;
     };
-  }, [isEdit, stateName, placeOfSupply]);
+  }, [
+    isEdit,
+    isStockTransferGeneration,
+    invoiceType,
+    sourceWarehouseId,
+    sourceWarehouseState,
+    stateName,
+    placeOfSupply,
+  ]);
 
   const sezLutResolution = useMemo(
     () =>
@@ -2291,13 +2308,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
       if ((isSalesOrderGeneration || isStockTransferGeneration) && !asDraft) {
         const charges = toAdditionalChargePayloadList(additionalExpenses, "INVOICE");
 
-        const lineItemOverrides = lines.map((l) => ({
-          dispatch_item_id: l.dispatchItemId || undefined,
-          product_id: l.productId ? String(l.productId) : undefined,
-          discount_percentage: l.discountPct != null ? Number(l.discountPct) : undefined,
-          discount_amount: l.discountAmt != null ? Number(l.discountAmt) : undefined,
-          rate: l.unitPrice != null ? Number(l.unitPrice) : undefined,
-        }));
+        const lineItemOverrides = lines.map(toDispatchLineItemOverride);
 
         const created = await SalesInvoiceService.createFromDispatch(sourceDispatchId, {
           invoice_date: invoiceDate,

@@ -138,7 +138,10 @@ export interface CustomerReceiptHistoryRow {
   amount: number;
   allocatedAmount: number;
   bankAccount: string;
+  /** Bank UTR / cheque / transaction reference. */
   referenceNo: string;
+  /** Invoice number(s) this receipt was allocated against. */
+  invoiceNos: string;
   status: string;
   statusLabel: string;
 }

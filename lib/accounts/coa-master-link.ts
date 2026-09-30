@@ -217,22 +217,45 @@ export function resolveCoaMasterLink(
     );
   }
 
+  // API BANK ledgers: banking form is keyed by ledger UUID (apiNodeId).
+  if (ledger.masterType === "bank" || ledger.bankAccountFlag) {
+    const ledgerKey = ledger.apiNodeId ?? String(ledger.id);
+    return buildLink(
+      "bank",
+      "bank_master",
+      ledgerKey,
+      ledger.accountName,
+      ledger.accountCode ?? "",
+      `/accounts/banking/bank-accounts/${ledgerKey}`,
+    );
+  }
+
   const category = inferCategory(ledger, coa);
   if (!category) return null;
 
   if (category === "bank") {
     const bank = loadBankAccountMasters().find((b) => b.coaLedgerId === ledger.id);
     if (bank) {
+      // Prefer ledger UUID when present so Banking edit/complete APIs resolve correctly.
+      const ledgerKey = ledger.apiNodeId ?? String(bank.coaLedgerId);
       return buildLink(
         "bank",
         "bank_master",
-        bank.id,
+        ledgerKey,
         formatBankAccountMaster(bank),
         bank.accountNumber,
-        `/accounts/banking/bank-accounts/${bank.id}`,
+        `/accounts/banking/bank-accounts/${ledgerKey}`,
       );
     }
-    return null;
+    const ledgerKey = ledger.apiNodeId ?? String(ledger.id);
+    return buildLink(
+      "bank",
+      "bank_master",
+      ledgerKey,
+      ledger.accountName,
+      ledger.accountCode ?? "",
+      `/accounts/banking/bank-accounts/${ledgerKey}`,
+    );
   }
 
   if (category === "customer") {

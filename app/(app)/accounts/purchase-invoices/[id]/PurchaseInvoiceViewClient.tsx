@@ -174,7 +174,8 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: st
   const isStockTransfer = invoice?.sourceType === "stock_transfer";
   const recordHref = invoice?.backendId || invoiceId;
   const postingStatus = invoice?.backendStatus || "POSTED";
-  const canCancel = postingStatus === "POSTED";
+  const canCancel =
+    postingStatus === "POSTED" && (invoice?.amountPaid ?? 0) <= 0.0001;
 
   const handleCancel = async () => {
     if (!canCancel) return;
@@ -537,6 +538,12 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: st
                             : `${formatMoney(dl.cgst)} / ${formatMoney(dl.sgst)}`}
                       </p>
                     </div>
+                    <div>
+                      <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">ITC</p>
+                      <p className="mt-0.5">
+                        {ITC_CLASSIFICATION_LABELS[dl.itcClassification] || "—"}
+                      </p>
+                    </div>
                   </div>
                 ))}
                 {invoice.reverseChargeApplicable && (
@@ -744,10 +751,7 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: st
           <VoucherFormSectionCard title="Invoice Amounts" highlight>
             <div className="space-y-2 text-xs">
               {isDirect && (
-                <>
-                  <AmountRow label="Gross Amount" value={formatMoney(invoice.grossAmount ?? 0)} muted />
-                  <AmountRow label="Discount" value={formatMoney(invoice.discountTotal ?? 0)} muted />
-                </>
+                <AmountRow label="Gross Amount" value={formatMoney(invoice.grossAmount ?? 0)} muted />
               )}
               <AmountRow label="Taxable Amount" value={formatMoney(gst.taxableValue)} />
               {invoice.additionalCharges.length > 0 && (

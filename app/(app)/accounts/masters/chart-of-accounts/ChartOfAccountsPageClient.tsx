@@ -20,7 +20,6 @@ import {
 } from "@/lib/accounts/coa-tree-children";
 import { useFY } from "@/lib/fy-store";
 import { useClientMounted } from "@/lib/use-client-mounted";
-import { ACCOUNTS_HOME_HREF } from "@/lib/accounts/accounts-nav";
 import { resolveCoaAddActionLabel, isAddLedgerBlocked } from "@/lib/accounts/coa-add-ledger-policy";
 import type { ChartOfAccount, CoaNodeId } from "../../data";
 import {
@@ -41,6 +40,8 @@ import {
   overlayApiBalancesOnListingRows,
   toCoaApiLedgerBalance,
   type CoaApiLedgerBalance,
+  type CoaListingRow,
+  type CoaLedgerListingRow,
 } from "./coa-listing-data";
 import {
   exportCoaLedgerListingToExcel,
@@ -67,8 +68,8 @@ import {
 } from "./coa-master-linked-form-bridge";
 import { AccountsMasterLinkedLedgerForm } from "./components/AccountsMasterLinkedLedgerForm";
 import { registerCoaBankFormHandler } from "./coa-bank-form-bridge";
-import { registerCoaEditLedgerHandler } from "./coa-edit-ledger-bridge";
 import { CoaListingTable } from "./components/CoaListingTable";
+import { canDeleteLedger } from "./chart-of-accounts-data";
 import { CoaListingSummaryBar, CoaLedgerListingSummaryBar } from "./components/CoaListingSummaryBar";
 import { CoaLedgerDetailTable } from "./components/CoaLedgerDetailTable";
 import { CoaLedgerDetailHeader } from "./components/CoaLedgerDetailHeader";
@@ -127,7 +128,7 @@ const AccountsTdsLedgerFormClient = dynamic(
 );
 
 const BankAccountFormClient = dynamic(
-  () => import("../../banking/bank-accounts/BankAccountFormClientLocal"),
+  () => import("../../banking/bank-accounts/BankAccountFormClient"),
   { ssr: false },
 );
 
@@ -184,6 +185,15 @@ export default function ChartOfAccountsPageClient() {
       ),
   );
 
+  const defaultDateFilter = useMemo(
+    () => (selectedFY ? defaultLedgerDateRangeState(selectedFY) : null),
+    [selectedFY],
+  );
+
+  /** Coalesce cleared custom date fields so API queries keep a valid range. */
+  const effectiveDateFrom = dateFrom || defaultDateFilter?.from || "";
+  const effectiveDateTo = dateTo || defaultDateFilter?.to || "";
+
   const groupLedgerApiIds = useMemo(() => {
     if (selectedNode && isCoaLedgerDetailView(selectedNode, records)) {
       return [];
@@ -212,25 +222,31 @@ export default function ChartOfAccountsPageClient() {
     isError: ledgerDetailError,
   } = useLedgerDetail({
     ledgerId: selectedLedgerApiId,
-    dateFrom,
-    dateTo,
+    dateFrom: effectiveDateFrom,
+    dateTo: effectiveDateTo,
     financialYearId: selectedFY?.id,
     refreshTick: ledgerDataTick,
     enabled: Boolean(
       selectedNode &&
         isCoaLedgerDetailView(selectedNode, records) &&
         datesReady &&
-        fyIdReady,
+        fyIdReady &&
+        Boolean(effectiveDateFrom && effectiveDateTo),
     ),
   });
 
   const { data: groupLedgerBalanceRows } = useLedgerBalances({
     ledgerIds: groupLedgerApiIds,
-    dateFrom,
-    dateTo,
+    dateFrom: effectiveDateFrom,
+    dateTo: effectiveDateTo,
     financialYearId: selectedFY?.id,
     refreshTick: ledgerDataTick,
-    enabled: Boolean(datesReady && fyIdReady && groupLedgerApiIds.length > 0),
+    enabled: Boolean(
+      datesReady &&
+        fyIdReady &&
+        groupLedgerApiIds.length > 0 &&
+        Boolean(effectiveDateFrom && effectiveDateTo),
+    ),
   });
 
   const groupLedgerBalanceMap = useMemo(() => {
@@ -244,6 +260,16 @@ export default function ChartOfAccountsPageClient() {
   const [contentSearch, setContentSearch] = useState("");
   const debouncedSearch = useDebouncedValue(contentSearch, 300);
   const [exporting, setExporting] = useState(false);
+  /** Column-filtered rows from the active table (for Excel/PDF). null until table reports. */
+  const [visibleHierarchyRows, setVisibleHierarchyRows] = useState<CoaListingRow[] | null>(
+    null,
+  );
+  const [visibleLedgerListingRows, setVisibleLedgerListingRows] = useState<
+    CoaLedgerListingRow[] | null
+  >(null);
+  const [visibleStatementRows, setVisibleStatementRows] = useState<
+    CoaLedgerDetailRow[] | null
+  >(null);
   const [sundryDebtorFormParentId, setSundryDebtorFormParentId] = useState<CoaNodeId | null>(null);
   const [sundryDebtorEditCustomerId, setSundryDebtorEditCustomerId] = useState<
     string | number | undefined
@@ -259,7 +285,7 @@ export default function ChartOfAccountsPageClient() {
     parentGroupId: CoaNodeId;
   } | null>(null);
   const [bankFormParentId, setBankFormParentId] = useState<CoaNodeId | null>(null);
-  const [bankFormEditAccountId, setBankFormEditAccountId] = useState<number | undefined>(
+  const [bankFormEditLedgerId, setBankFormEditLedgerId] = useState<string | undefined>(
     undefined,
   );
 
@@ -316,11 +342,11 @@ export default function ChartOfAccountsPageClient() {
     registerCoaMasterLinkedFormHandler((kind, parentGroupId) => {
       setMasterLinkedForm({ kind, parentGroupId });
     });
-    registerCoaBankFormHandler(({ parentGroupId, accountId }) => {
+    registerCoaBankFormHandler(({ parentGroupId, ledgerId }) => {
       const list = records.length > 0 ? records : [];
       const parent = list.find((r) => r.id === parentGroupId);
       // Open form first so the selection-dismiss effect keeps it when parent is selected.
-      setBankFormEditAccountId(accountId);
+      setBankFormEditLedgerId(ledgerId);
       setBankFormParentId(parentGroupId);
       if (parent) {
         const ancestorIds = getAncestorPath(list, parent.id).map((a) => a.id);
@@ -328,23 +354,8 @@ export default function ChartOfAccountsPageClient() {
         selectNode(parent);
       }
     });
-    registerCoaEditLedgerHandler((ledgerId) => {
-      const list = records.length > 0 ? records : [];
-      const ledger = list.find((r) => r.id === ledgerId);
-      if (ledger && (ledger.masterType === "bank" || ledger.masterType === "BANK")) {
-        const bankGroupId = ledger.parentAccountId;
-        if (bankGroupId != null) {
-          const parent = list.find((r) => r.id === bankGroupId);
-          setBankFormEditAccountId(Number(ledger.masterId) || undefined);
-          setBankFormParentId(bankGroupId);
-          if (parent) {
-            const ancestorIds = getAncestorPath(list, parent.id).map((a) => a.id);
-            ensureExpanded([...ancestorIds, parent.id]);
-            selectNode(parent);
-          }
-        }
-      }
-    });
+    // Edit ledger routing lives solely in CoaAddLedgerHost — do not register a
+    // competing handler here (it previously swallowed Edit for non-bank ledgers).
     return () => {
       registerSundryDebtorCustomerFormHandler(null);
       registerSundryCreditorVendorFormHandler(null);
@@ -352,7 +363,6 @@ export default function ChartOfAccountsPageClient() {
       registerTdsLedgerFormHandler(null);
       registerCoaMasterLinkedFormHandler(null);
       registerCoaBankFormHandler(null);
-      registerCoaEditLedgerHandler(null);
     };
   }, [records, ensureExpanded, selectNode]);
 
@@ -391,10 +401,24 @@ export default function ChartOfAccountsPageClient() {
 
   const groupDetailSummary = useMemo(() => {
     if (!isGroupView || !selectedNode || !datesReady) return null;
-    const summary = computeCoaGroupDetailSummary(deferredRecords, selectedNode.id, dateFrom, dateTo);
+    const summary = computeCoaGroupDetailSummary(
+      deferredRecords,
+      selectedNode.id,
+      effectiveDateFrom,
+      effectiveDateTo,
+    );
     if (!summary) return null;
     return overlayApiBalancesOnGroupSummary(summary, deferredRecords, groupLedgerBalanceMap);
-  }, [isGroupView, selectedNode, deferredRecords, dateFrom, dateTo, datesReady, ledgerDataTick, groupLedgerBalanceMap]);
+  }, [
+    isGroupView,
+    selectedNode,
+    deferredRecords,
+    effectiveDateFrom,
+    effectiveDateTo,
+    datesReady,
+    ledgerDataTick,
+    groupLedgerBalanceMap,
+  ]);
   /** Parent whose immediate children are shown in the hierarchy listing table */
   const tableParentId =
     showEmptyState || isLedgerStatementView || isAccountingGroupLedgerListing
@@ -439,7 +463,7 @@ export default function ChartOfAccountsPageClient() {
   }, [selectedNode?.id]);
 
   useEffect(() => {
-    if (bankFormParentId == null) setBankFormEditAccountId(undefined);
+    if (bankFormParentId == null) setBankFormEditLedgerId(undefined);
   }, [bankFormParentId]);
 
   useEffect(() => {
@@ -460,14 +484,14 @@ export default function ChartOfAccountsPageClient() {
       selectedNode,
       selectedLedgerDetail.detail,
       selectedLedgerDetail.openingBalance,
-      dateFrom,
+      effectiveDateFrom,
     );
   }, [
     isLedgerStatementView,
     selectedNode,
     datesReady,
     selectedLedgerDetail,
-    dateFrom,
+    effectiveDateFrom,
   ]);
 
   const ledgerDataReady =
@@ -515,15 +539,21 @@ export default function ChartOfAccountsPageClient() {
 
   const listingRows = useMemo(() => {
     if (!datesReady || isLedgerStatementView || isAccountingGroupLedgerListing) return [];
-    const rows = buildCoaListingRows(effectiveRecords, tableParentId, dateFrom, dateTo, {
-      search: debouncedSearch,
-    });
+    const rows = buildCoaListingRows(
+      effectiveRecords,
+      tableParentId,
+      effectiveDateFrom,
+      effectiveDateTo,
+      {
+        search: debouncedSearch,
+      },
+    );
     return overlayApiBalancesOnListingRows(effectiveRecords, rows, groupLedgerBalanceMap);
   }, [
     effectiveRecords,
     tableParentId,
-    dateFrom,
-    dateTo,
+    effectiveDateFrom,
+    effectiveDateTo,
     debouncedSearch,
     datesReady,
     isLedgerStatementView,
@@ -564,8 +594,8 @@ export default function ChartOfAccountsPageClient() {
     listingRows,
     selectedNode,
     showRoot,
-    dateFrom,
-    dateTo,
+    effectiveDateFrom,
+    effectiveDateTo,
     debouncedSearch,
     datesReady,
     ledgerAccounting,
@@ -577,10 +607,8 @@ export default function ChartOfAccountsPageClient() {
   ]);
 
   const pageBreadcrumbs = useMemo(() => {
-    const base = [
-      { label: "Accounts", href: ACCOUNTS_HOME_HREF },
-      { label: "Chart of Accounts", href: CHART_OF_ACCOUNTS_LIST_PATH },
-    ];
+    // Top two levels are contextual labels only — not navigable.
+    const base = [{ label: "Accounts" }, { label: "Chart of Accounts" }];
     if (showRoot || !selectedNode) return base;
     const path = getCoaDisplayPath(records, selectedNode.id);
     return [
@@ -588,8 +616,8 @@ export default function ChartOfAccountsPageClient() {
       ...path.map((node, index) => ({
         label: node.accountName,
         href:
-          index < path.length - 1 && node.nodeLevel !== "primary_head"
-            ? `${CHART_OF_ACCOUNTS_LIST_PATH}?node=${node.id}`
+          index < path.length - 1
+            ? `${CHART_OF_ACCOUNTS_LIST_PATH}?node=${encodeURIComponent(String(node.apiNodeId ?? node.id))}`
             : undefined,
       })),
     ];
@@ -605,7 +633,42 @@ export default function ChartOfAccountsPageClient() {
     );
   }, [selectedNode, records, isLedgerStatementView]);
 
-  const exportMeta = useMemo(() => ({ dateFrom, dateTo }), [dateFrom, dateTo]);
+  const handleVisibleHierarchyRowsChange = useCallback((rows: CoaListingRow[]) => {
+    setVisibleHierarchyRows(rows);
+  }, []);
+
+  const handleVisibleLedgerListingRowsChange = useCallback(
+    (rows: CoaLedgerListingRow[]) => {
+      setVisibleLedgerListingRows(rows);
+    },
+    [],
+  );
+
+  const handleVisibleStatementRowsChange = useCallback((rows: CoaLedgerDetailRow[]) => {
+    setVisibleStatementRows(rows);
+  }, []);
+
+  useEffect(() => {
+    setVisibleHierarchyRows(null);
+    setVisibleLedgerListingRows(null);
+    setVisibleStatementRows(null);
+  }, [
+    selectedNode?.id,
+    showRoot,
+    isLedgerStatementView,
+    isAccountingGroupLedgerListing,
+    debouncedSearch,
+    effectiveDateFrom,
+    effectiveDateTo,
+  ]);
+
+  const hierarchyRowsForExport = visibleHierarchyRows ?? listingRows;
+  const ledgerListingRowsForExport = visibleLedgerListingRows ?? ledgerListingRows;
+  const statementRowsForExport = visibleStatementRows ?? filteredTransactions;
+  const exportMeta = useMemo(
+    () => ({ dateFrom: effectiveDateFrom, dateTo: effectiveDateTo }),
+    [effectiveDateFrom, effectiveDateTo],
+  );
 
   const handleDrillInto = useCallback(
     (node: ChartOfAccount) => {
@@ -617,9 +680,28 @@ export default function ChartOfAccountsPageClient() {
   );
 
   const handleDeleteLedger = useCallback((ledger: ChartOfAccount) => {
+    if (!canDeleteLedger(ledger, records)) return;
     setLedgerDeleteError(null);
     setLedgerDeleteTarget(ledger);
-  }, []);
+  }, [records]);
+
+  const hasActiveFilters = useMemo(() => {
+    if (contentSearch.trim()) return true;
+    if (!defaultDateFilter || !datesReady) return false;
+    return (
+      preset !== defaultDateFilter.preset ||
+      dateFrom !== defaultDateFilter.from ||
+      dateTo !== defaultDateFilter.to
+    );
+  }, [contentSearch, preset, dateFrom, dateTo, defaultDateFilter, datesReady]);
+
+  const clearFilters = useCallback(() => {
+    setContentSearch("");
+    if (!defaultDateFilter) return;
+    setPreset(defaultDateFilter.preset);
+    setDateFrom(defaultDateFilter.from);
+    setDateTo(defaultDateFilter.to);
+  }, [defaultDateFilter]);
 
   const confirmDeleteLedger = useCallback(async () => {
     if (!ledgerDeleteTarget || ledgerDeleting) return;
@@ -674,22 +756,22 @@ export default function ChartOfAccountsPageClient() {
     setExporting(true);
     try {
       if (isLedgerStatementView && selectedNode && ledgerAccounting) {
-        await exportCoaLedgerStatementToExcel(filteredTransactions, {
+        await exportCoaLedgerStatementToExcel(statementRowsForExport, {
           ledger: selectedNode,
           parentGroup: ledgerParentGroup,
-          dateFrom,
-          dateTo,
+          dateFrom: effectiveDateFrom,
+          dateTo: effectiveDateTo,
           openingAmount: ledgerAccounting.openingBalance,
           openingSide: ledgerAccounting.openingBalanceType,
           closingAmount: ledgerAccounting.currentBalance,
           closingSide: ledgerAccounting.balanceType,
         });
-      } else if (isAccountingGroupLedgerListing && ledgerListingRows.length > 0) {
-        await exportCoaLedgerListingToExcel(ledgerListingRows, {
+      } else if (isAccountingGroupLedgerListing && ledgerListingRowsForExport.length > 0) {
+        await exportCoaLedgerListingToExcel(ledgerListingRowsForExport, {
           groupName: selectedNode?.accountName ?? "",
         });
-      } else if (listingRows.length > 0) {
-        await exportCoaListingToExcel(listingRows, exportMeta);
+      } else if (hierarchyRowsForExport.length > 0) {
+        await exportCoaListingToExcel(hierarchyRowsForExport, exportMeta);
       }
     } finally {
       setExporting(false);
@@ -699,32 +781,32 @@ export default function ChartOfAccountsPageClient() {
   const handlePdfExport = async () => {
     if (!mounted) return;
     if (isLedgerStatementView && selectedNode && ledgerAccounting) {
-      await exportCoaLedgerStatementToPdf(filteredTransactions, {
+      await exportCoaLedgerStatementToPdf(statementRowsForExport, {
         ledger: selectedNode,
         parentGroup: ledgerParentGroup,
-        dateFrom,
-        dateTo,
+        dateFrom: effectiveDateFrom,
+        dateTo: effectiveDateTo,
         openingAmount: ledgerAccounting.openingBalance,
         openingSide: ledgerAccounting.openingBalanceType,
         closingAmount: ledgerAccounting.currentBalance,
         closingSide: ledgerAccounting.balanceType,
       });
-    } else if (isAccountingGroupLedgerListing && ledgerListingRows.length > 0) {
-      await exportCoaLedgerListingToPdf(ledgerListingRows, {
+    } else if (isAccountingGroupLedgerListing && ledgerListingRowsForExport.length > 0) {
+      await exportCoaLedgerListingToPdf(ledgerListingRowsForExport, {
         groupName: selectedNode?.accountName ?? "",
       });
-    } else if (listingRows.length > 0) {
-      await exportCoaListingToPdf(listingRows, exportMeta);
+    } else if (hierarchyRowsForExport.length > 0) {
+      await exportCoaListingToPdf(hierarchyRowsForExport, exportMeta);
     }
   };
 
   const exportDisabled =
     exporting ||
     (isLedgerStatementView
-      ? filteredTransactions.length === 0
+      ? statementRowsForExport.length === 0
       : isAccountingGroupLedgerListing
-        ? ledgerListingRows.length === 0
-        : listingRows.length === 0);
+        ? ledgerListingRowsForExport.length === 0
+        : hierarchyRowsForExport.length === 0);
 
   const handleNewLedger = useCallback(() => {
     const parentId =
@@ -869,18 +951,18 @@ export default function ChartOfAccountsPageClient() {
     return (
       <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">
         <BankAccountFormClient
-          accountId={bankFormEditAccountId}
-          presetGroupId={bankFormParentId}
+          mode={bankFormEditLedgerId ? "edit" : "create"}
+          ledgerId={bankFormEditLedgerId}
           onClose={() => {
             setBankFormParentId(null);
-            setBankFormEditAccountId(undefined);
+            setBankFormEditLedgerId(undefined);
           }}
-          onSaved={(ledgerId, parentId) =>
-            handlePartyLedgerSaved(ledgerId, parentId, () => {
+          onSaved={() => {
+            handlePartyLedgerSaved(bankFormParentId, bankFormParentId, () => {
               setBankFormParentId(null);
-              setBankFormEditAccountId(undefined);
-            })
-          }
+              setBankFormEditLedgerId(undefined);
+            });
+          }}
         />
       </div>
     );
@@ -914,6 +996,8 @@ export default function ChartOfAccountsPageClient() {
             onPresetChange={setPreset}
             onDateFromChange={setDateFrom}
             onDateToChange={setDateTo}
+            hasActiveFilters={hasActiveFilters}
+            onClearFilters={clearFilters}
             onExcel={handleExcelExport}
             onPdf={handlePdfExport}
             exportDisabled={exportDisabled}
@@ -972,22 +1056,32 @@ export default function ChartOfAccountsPageClient() {
                 </div>
               ) : datesReady && ledgerDataReady ? (
                 isStockInHandLedger(selectedNode!) ? (
-                  <InventoryProductWisePanel dateFrom={dateFrom} dateTo={dateTo} />
+                  <InventoryProductWisePanel
+                    dateFrom={effectiveDateFrom}
+                    dateTo={effectiveDateTo}
+                  />
                 ) : selectedNode && ["cost of goods sold", "cogs"].includes((selectedNode.accountName ?? "").trim().toLowerCase()) ? (
-                  <CogsProductWisePanel dateFrom={dateFrom} dateTo={dateTo} />
+                  <CogsProductWisePanel
+                    dateFrom={effectiveDateFrom}
+                    dateTo={effectiveDateTo}
+                  />
                 ) : selectedNode && (selectedNode.accountName ?? "").trim().toLowerCase() === MANDATORY_SYSTEM_LEDGERS.productSales.name.toLowerCase() ? (
-                  <SalesProductWisePanel dateFrom={dateFrom} dateTo={dateTo} />
+                  <SalesProductWisePanel
+                    dateFrom={effectiveDateFrom}
+                    dateTo={effectiveDateTo}
+                  />
                 ) : (
                 <CoaLedgerDetailTable
                   rows={filteredTransactions}
                   onVoucherClick={handleLedgerStatementVoucherClick}
+                  onVisibleRowsChange={handleVisibleStatementRowsChange}
                   footer={{
                     totalDebit: ledgerAccounting!.totalDebit,
                     totalCredit: ledgerAccounting!.totalCredit,
                     closingBalance: ledgerAccounting!.currentBalance,
                     closingBalanceType: ledgerAccounting!.balanceType,
                   }}
-                  emptyLabel="No transactions found for this ledger."
+                  emptyLabel="No transactions found for the selected date range."
                 />
                 )
               ) : (
@@ -1003,6 +1097,7 @@ export default function ChartOfAccountsPageClient() {
                 isSearchMode={Boolean(contentSearch.trim())}
                 onDrillInto={handleDrillInto}
                 onDeleteLedger={canEdit ? handleDeleteLedger : undefined}
+                onVisibleRowsChange={handleVisibleLedgerListingRowsChange}
                 emptyMessage={
                   contentSearch.trim()
                     ? "No ledgers match your search."
@@ -1020,6 +1115,7 @@ export default function ChartOfAccountsPageClient() {
                 onAddLedger={requestCoaAddLedger}
                 onAddSubGroup={requestCoaAddSubGroup}
                 canEdit={canEdit}
+                onVisibleRowsChange={handleVisibleHierarchyRowsChange}
                 emptyMessage={
                   contentSearch.trim()
                     ? "No accounts match your search."
@@ -1039,7 +1135,7 @@ export default function ChartOfAccountsPageClient() {
                 <>
                   Showing{" "}
                   <span className="font-medium text-foreground">
-                    {filteredTransactions.filter((row) => !row.isOpeningRow).length}
+                    {statementRowsForExport.filter((row) => !row.isOpeningRow).length}
                   </span>{" "}
                   transactions for{" "}
                   <span className="font-medium text-foreground">{selectedNode.accountName}</span>
@@ -1053,7 +1149,9 @@ export default function ChartOfAccountsPageClient() {
               ) : isAccountingGroupLedgerListing ? (
                 <>
                   Showing{" "}
-                  <span className="font-medium text-foreground">{ledgerListingRows.length}</span>{" "}
+                  <span className="font-medium text-foreground">
+                    {ledgerListingRowsForExport.length}
+                  </span>{" "}
                   {contentSearch.trim() ? (
                     <>ledgers matching &ldquo;{contentSearch.trim()}&rdquo;</>
                   ) : (
@@ -1067,7 +1165,10 @@ export default function ChartOfAccountsPageClient() {
                 </>
               ) : (
                 <>
-                  Showing <span className="font-medium text-foreground">{listingRows.length}</span>{" "}
+                  Showing{" "}
+                  <span className="font-medium text-foreground">
+                    {hierarchyRowsForExport.length}
+                  </span>{" "}
                   {contentSearch.trim() ? (
                     <>matching accounts for &ldquo;{contentSearch.trim()}&rdquo;</>
                   ) : (

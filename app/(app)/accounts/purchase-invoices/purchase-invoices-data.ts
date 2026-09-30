@@ -170,6 +170,8 @@ export interface PurchaseInvoiceRecord {
   postingDate?: string;
   placeOfSupply?: string;
   branchGstin?: string;
+  /** Backend is_interstate when available — preferred for CGST/SGST vs IGST. */
+  isInterstate?: boolean | null;
   reverseChargeApplicable?: boolean;
   defaultItcClassification?: ItcClassification;
   paymentTerms?: string;
@@ -310,7 +312,7 @@ function normalizePI(rec: PurchaseInvoiceRecord): PurchaseInvoiceRecord {
     narration: rec.narration ?? rec.remarks ?? "",
     tdsApplicable: rec.tdsApplicable ?? false,
     grossAmount: totalsFromDirect?.grossAmount ?? rec.grossAmount ?? subtotal,
-    discountTotal: totalsFromDirect?.discountTotal ?? rec.discountTotal ?? 0,
+    discountTotal: 0,
     taxableAmount: totalsFromDirect?.taxableAmount ?? rec.taxableAmount ?? subtotal,
     cgstTotal: totalsFromDirect?.cgst ?? rec.cgstTotal,
     sgstTotal: totalsFromDirect?.sgst ?? rec.sgstTotal,
@@ -388,12 +390,20 @@ function gstinStateCode(gstin?: string): string | null {
 }
 
 export function isPurchaseInvoiceInterstate(
-  rec: Pick<PurchaseInvoiceRecord, "vendorGst">,
+  rec: Pick<PurchaseInvoiceRecord, "vendorGst" | "branchGstin" | "placeOfSupply"> & {
+    isInterstate?: boolean | null;
+  },
 ): boolean {
+  if (typeof rec.isInterstate === "boolean") return rec.isInterstate;
+
   const vendorState = gstinStateCode(rec.vendorGst);
-  const companyState = gstinStateCode(COMPANY_BILLING.gstNumber);
-  if (!vendorState || !companyState) return false;
-  return vendorState !== companyState;
+  const branchState = gstinStateCode(rec.branchGstin ?? COMPANY_BILLING.gstNumber);
+  if (vendorState && branchState) return vendorState !== branchState;
+
+  const place = (rec.placeOfSupply || "").trim().toLowerCase();
+  const companyState = (COMPANY_BILLING.state || "").trim().toLowerCase();
+  if (place && companyState) return place !== companyState;
+  return false;
 }
 
 export function calcPurchaseLineGstSplit(
@@ -410,13 +420,17 @@ export function calcPurchaseLineGstSplit(
   };
 }
 
-export function getPurchaseInvoiceGstBreakup(rec: PurchaseInvoiceRecord) {
+export function getPurchaseInvoiceGstBreakup(rec: PurchaseInvoiceRecord & { isInterstate?: boolean | null }) {
   const taxableValue = rec.taxableAmount ?? rec.subtotal ?? rec.productAmount ?? 0;
-  if (rec.cgstTotal != null || rec.sgstTotal != null || rec.igstTotal != null) {
-    const cgst = rec.cgstTotal ?? 0;
-    const sgst = rec.sgstTotal ?? 0;
-    const igst = rec.igstTotal ?? 0;
-    const interstate = igst > 0 && cgst === 0 && sgst === 0;
+  const cgst = Number(rec.cgstTotal ?? 0);
+  const sgst = Number(rec.sgstTotal ?? 0);
+  const igst = Number(rec.igstTotal ?? 0);
+  const hasStoredSplit = cgst > 0 || sgst > 0 || igst > 0;
+  if (hasStoredSplit) {
+    const interstate =
+      typeof rec.isInterstate === "boolean"
+        ? rec.isInterstate
+        : igst > 0 && cgst === 0 && sgst === 0;
     return {
       taxableValue,
       cgst,
@@ -427,8 +441,15 @@ export function getPurchaseInvoiceGstBreakup(rec: PurchaseInvoiceRecord) {
     };
   }
   const interstate = isPurchaseInvoiceInterstate(rec);
-  const { cgst, sgst, igst } = splitInvoiceGst(rec.taxAmount ?? 0, interstate);
-  return { taxableValue, cgst, sgst, igst, interstate, invoiceTotal: rec.grandTotal };
+  const split = splitInvoiceGst(rec.taxAmount ?? 0, interstate);
+  return {
+    taxableValue,
+    cgst: split.cgst,
+    sgst: split.sgst,
+    igst: split.igst,
+    interstate,
+    invoiceTotal: rec.grandTotal,
+  };
 }
 
 export function getPurchaseInvoicePaymentStatus(
@@ -1057,7 +1078,7 @@ function buildDirectPurchaseRecord(
     productAmount: totals.taxableAmount,
     subtotal: totals.taxableAmount,
     grossAmount: totals.grossAmount,
-    discountTotal: totals.discountTotal,
+    discountTotal: 0,
     taxableAmount: totals.taxableAmount,
     taxAmount: totals.totalGst,
     cgstTotal: totals.cgst,

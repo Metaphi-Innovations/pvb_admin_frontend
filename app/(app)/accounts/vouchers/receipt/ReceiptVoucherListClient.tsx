@@ -3,13 +3,18 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { XCircle } from "lucide-react";
 import {
   AccountsEditAction,
+  AccountsMoreActions,
   AccountsTableActionCell,
   AccountsViewAction,
   accountsActionColClass,
 } from "@/components/accounts/AccountsTableActions";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { MoneyAmount } from "@/components/accounts/MoneyAmount";
+import { showToast } from "@/lib/toast";
+import { ReceiptReasonDialog } from "./components/ReceiptReasonDialog";
 import {
   AccountsTable,
   AccountsTableBody,
@@ -72,6 +77,7 @@ import {
   type ReceiptVoucherStatus,
 } from "@/types/receipt-voucher.types";
 import {
+  canCancelStatus,
   formatSrNo,
   isDraftEditable,
   partyDisplayName,
@@ -171,6 +177,8 @@ function ReceiptListTable({
   branchOptions,
   partyOptions,
   cashBankOptions,
+  onCancelOrReverse,
+  actionBusy,
 }: {
   rows: ReceiptVoucherListItem[];
   loading: boolean;
@@ -178,6 +186,8 @@ function ReceiptListTable({
   branchOptions: { value: string; count: number }[];
   partyOptions: { value: string; count: number }[];
   cashBankOptions: { value: string; count: number }[];
+  onCancelOrReverse: (row: ReceiptVoucherListItem) => void;
+  actionBusy: boolean;
 }) {
   const router = useRouter();
 
@@ -264,6 +274,9 @@ function ReceiptListTable({
           rows.map((row) => {
             const id = row.receipt_voucher_id;
             const canEdit = isDraftEditable(row.status);
+            const isPosted = row.status === "POSTED";
+            const canCancelOrReverse =
+              canCancelStatus(row.status) || isPosted;
             return (
               <AccountsTableRow key={id} className="group">
                 <AccountsTableCell mono>
@@ -322,6 +335,17 @@ function ReceiptListTable({
                         onClick={() => router.push(receiptEditPath(id))}
                       />
                     ) : null}
+                    {canCancelOrReverse ? (
+                      <AccountsMoreActions contentClassName="w-44">
+                        <DropdownMenuItem
+                          className="text-xs gap-2 text-red-600"
+                          disabled={actionBusy}
+                          onClick={() => onCancelOrReverse(row)}
+                        >
+                          <XCircle className="w-4 h-4" /> Cancel
+                        </DropdownMenuItem>
+                      </AccountsMoreActions>
+                    ) : null}
                   </AccountsTableActionCell>
                 </AccountsTableCell>
               </AccountsTableRow>
@@ -360,6 +384,13 @@ export function ReceiptVoucherListClient() {
   const [branchOptions, setBranchOptions] = useState<{ value: string; count: number }[]>([]);
   const [partyOptions, setPartyOptions] = useState<{ value: string; count: number }[]>([]);
   const [cashBankOptions, setCashBankOptions] = useState<{ value: string; count: number }[]>([]);
+  const [cancelTarget, setCancelTarget] = useState<ReceiptVoucherListItem | null>(
+    null,
+  );
+  const [cancelReason, setCancelReason] = useState("");
+  const [reverseDate, setReverseDate] = useState("");
+  const [actionBusy, setActionBusy] = useState(false);
+  const [listRefreshKey, setListRefreshKey] = useState(0);
   const refreshTick = useAccountsSectionRefresh("receipt-vouchers", { apiListing: true });
 
   useEffect(() => {
@@ -499,7 +530,63 @@ export function ReceiptVoucherListClient() {
       }
     })();
     return () => ac.abort();
-  }, [listQuery]);
+  }, [listQuery, listRefreshKey]);
+
+  const closeCancelDialog = useCallback(() => {
+    if (actionBusy) return;
+    setCancelTarget(null);
+    setCancelReason("");
+    setReverseDate("");
+  }, [actionBusy]);
+
+  const openCancelDialog = useCallback((row: ReceiptVoucherListItem) => {
+    setCancelReason("");
+    setReverseDate(toIsoDateOnly(row.voucher_date));
+    setCancelTarget(row);
+  }, []);
+
+  const confirmCancelOrReverse = useCallback(async () => {
+    if (!cancelTarget || actionBusy) return;
+    const id = cancelTarget.receipt_voucher_id;
+    const isPosted = cancelTarget.status === "POSTED";
+    const reason = cancelReason.trim();
+    if (!reason) return;
+
+    setActionBusy(true);
+    try {
+      if (isPosted) {
+        const resolvedDate =
+          reverseDate.trim() ||
+          toIsoDateOnly(cancelTarget.voucher_date) ||
+          null;
+        await ReceiptVoucherService.reverse(id, {
+          reason,
+          reversal_date: resolvedDate,
+        });
+        showToast("Receipt reversed.", "success");
+      } else {
+        await ReceiptVoucherService.cancel(id, { reason });
+        showToast("Receipt cancelled.", "success");
+      }
+      setCancelTarget(null);
+      setCancelReason("");
+      setReverseDate("");
+      setListRefreshKey((k) => k + 1);
+    } catch (e) {
+      showToast(
+        e instanceof Error
+          ? e.message
+          : isPosted
+            ? "Failed to reverse Receipt Voucher."
+            : "Failed to cancel Receipt Voucher.",
+        "error",
+      );
+    } finally {
+      setActionBusy(false);
+    }
+  }, [cancelTarget, cancelReason, reverseDate, actionBusy]);
+
+  const isPostedCancelTarget = cancelTarget?.status === "POSTED";
 
   const getCellValue = useCallback((row: ReceiptVoucherListItem, key: string) => {
     switch (key) {
@@ -529,6 +616,7 @@ export function ReceiptVoucherListClient() {
   }, []);
 
   return (
+    <>
     <AccountsTableListing
       toolbar={
         <AccountsTableToolbar
@@ -642,8 +730,37 @@ export function ReceiptVoucherListClient() {
           branchOptions={branchOptions}
           partyOptions={partyOptions}
           cashBankOptions={cashBankOptions}
+          onCancelOrReverse={openCancelDialog}
+          actionBusy={actionBusy}
         />
       </AccountsColumnFilterProvider>
     </AccountsTableListing>
+
+    <ReceiptReasonDialog
+      open={!!cancelTarget}
+      onOpenChange={(open) => {
+        if (!open) closeCancelDialog();
+      }}
+      title={isPostedCancelTarget ? "Reverse Receipt" : "Cancel Receipt"}
+      description={
+        isPostedCancelTarget
+          ? "Reversal will reverse accounting and Receipt-owned settlement effects. If Customer Advance was already consumed, the backend will block reversal."
+          : "Cancellation keeps the record — it does not delete it."
+      }
+      reason={cancelReason}
+      onReasonChange={setCancelReason}
+      showDate={isPostedCancelTarget}
+      dateValue={reverseDate}
+      onDateChange={setReverseDate}
+      confirmLabel={
+        isPostedCancelTarget ? "Reverse" : "Cancel Receipt"
+      }
+      destructive
+      busy={actionBusy}
+      onConfirm={() => {
+        void confirmCancelOrReverse();
+      }}
+    />
+    </>
   );
 }

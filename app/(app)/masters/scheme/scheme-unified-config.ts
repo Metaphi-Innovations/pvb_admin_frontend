@@ -800,7 +800,7 @@ export function createDefaultUnifiedForm(
     specialHasSlabs: true,
     specialThresholdValue: "",
     specialEvaluationScope: "Multiple Invoices",
-    specialSettlementRunMode: "Manual",
+    specialSettlementRunMode: "Automatic",
     specialCombineProducts: true,
     specialDiscountAmountSlabs: [emptySpecialDiscountAmountSlab()],
     specialDiscountQuantitySlabs: [emptySpecialDiscountQuantitySlab()],
@@ -1367,9 +1367,10 @@ export function schemeRecordToUnifiedForm(record: SchemeRecord): SchemeUnifiedFo
     specialEvaluationScope: specialEvaluationScopeToUI(
       condition.specialEvaluationScope,
     ),
-    specialSettlementRunMode: specialSettlementRunModeToUI(
-      condition.specialSettlementRunMode,
-    ),
+    specialSettlementRunMode:
+      condition.specialEvaluationScope === "PER_INVOICE"
+        ? specialSettlementRunModeToUI(condition.specialSettlementRunMode)
+        : "Automatic",
     specialCombineProducts: true,
     specialDiscountAmountSlabs: specialAmountSlabsToForm(
       condition.specialDiscountAmountSlabs,
@@ -1990,6 +1991,7 @@ export function buildSchemeWorkingSummary(form: SchemeUnifiedForm): string {
           ? "Evaluated per invoice"
           : "Evaluated across invoices in the scheme period";
       const runLabel =
+        form.specialEvaluationScope !== "One Invoice" ||
         form.specialSettlementRunMode === "Automatic"
           ? "automatic entitlement"
           : "manual settlement";
@@ -2150,7 +2152,9 @@ function buildConditionConfig(form: SchemeUnifiedForm): SchemeConditionConfig {
           form.specialEvaluationScope,
         ),
         specialSettlementRunMode: specialSettlementRunModeToStorage(
-          form.specialSettlementRunMode,
+          form.specialEvaluationScope === "One Invoice"
+            ? form.specialSettlementRunMode
+            : "Automatic",
         ),
         // Always COMBINED — selected products share one threshold; discount on total.
         specialProductEvaluationMode: "COMBINED" as SchemeSpecialProductEvaluationMode,

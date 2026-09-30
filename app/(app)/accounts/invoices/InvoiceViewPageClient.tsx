@@ -86,8 +86,19 @@ import {
   lineHasProductDiscount,
   resolveDisplayDiscountAmount,
   resolveDisplayDiscountPct,
+  resolveLineDiscountParts,
   resolveLineSku,
 } from "./invoice-view-display";
+
+function schemeRateLabel(line: InvoiceLineItem): string {
+  if (line.schemeDiscountType === "Rupees" && (line.schemeDiscountAmount ?? 0) > 0) {
+    return `₹${line.schemeDiscountAmount}/unit`;
+  }
+  if (line.schemeDiscountType === "Percentage" && (line.schemeDiscountPercent ?? 0) > 0) {
+    return `${line.schemeDiscountPercent}%`;
+  }
+  return "";
+}
 import { formatDisplayDate } from "@/lib/accounts/date-display";
 import "./sales-order-invoice-form-compact.css";
 import "@/components/accounts/voucher-form/transaction-view.css";
@@ -146,6 +157,150 @@ function SummaryRow({
   );
 }
 
+function ServiceLinesTable({
+  lines,
+  interstate,
+}: {
+  lines: InvoiceLineItem[];
+  interstate: boolean;
+}) {
+  const headers = interstate
+    ? ([
+        "Service Description",
+        "Income Ledger",
+        "SAC Code",
+        "Qty",
+        "UOM",
+        "Rate",
+        "Disc %",
+        "Disc Amt",
+        "Taxable",
+        "GST %",
+        "IGST",
+        "Line Total",
+      ] as const)
+    : ([
+        "Service Description",
+        "Income Ledger",
+        "SAC Code",
+        "Qty",
+        "UOM",
+        "Rate",
+        "Disc %",
+        "Disc Amt",
+        "Taxable",
+        "GST %",
+        "CGST",
+        "SGST",
+        "Line Total",
+      ] as const);
+
+  const rightAlign = new Set([
+    "Qty",
+    "Rate",
+    "Disc %",
+    "Disc Amt",
+    "Taxable",
+    "GST %",
+    "CGST",
+    "SGST",
+    "IGST",
+    "Line Total",
+  ]);
+
+  return (
+    <div className="so-goods-product-table-wrap overflow-x-auto">
+      <table className="w-full text-xs min-w-[980px] so-invoice-table">
+        <thead className="border-b border-border/60 bg-muted/20">
+          <tr>
+            {headers.map((h) => (
+              <th
+                key={h}
+                className={cn(
+                  "px-2 py-1.5 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap",
+                  rightAlign.has(h) && "text-right",
+                )}
+              >
+                {h}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {lines.length === 0 ? (
+            <tr>
+              <td colSpan={headers.length} className="py-8 text-center text-muted-foreground">
+                No service lines on this invoice.
+              </td>
+            </tr>
+          ) : (
+            lines.map((line) => {
+              const discPct = resolveDisplayDiscountPct(line);
+              const discAmt = resolveDisplayDiscountAmount(line);
+              const split = getLineGstSplit(line, interstate);
+              const ledgerLabel =
+                [line.incomeLedgerCode, line.incomeLedgerName].filter(Boolean).join(" · ") ||
+                "—";
+
+              return (
+                <tr key={line.id} className="border-b border-border/40 last:border-0">
+                  <td className="px-2 py-1.5 align-middle min-w-[160px]">
+                    <p className="leading-tight truncate" title={line.productName}>
+                      {line.productName || line.description || "—"}
+                    </p>
+                  </td>
+                  <td className="px-2 py-1.5 align-middle min-w-[180px]">
+                    <p className="leading-tight truncate" title={ledgerLabel}>
+                      {ledgerLabel}
+                    </p>
+                  </td>
+                  <td className="px-2 py-1.5 align-middle text-muted-foreground whitespace-nowrap">
+                    {line.hsn?.trim() || "—"}
+                  </td>
+                  <td className="px-2 py-1.5 align-middle text-right tabular-nums">{line.qty}</td>
+                  <td className="px-2 py-1.5 align-middle whitespace-nowrap">{line.unit || "—"}</td>
+                  <td className="px-2 py-1.5 align-middle text-right tabular-nums">
+                    {formatINR(line.unitPrice)}
+                  </td>
+                  <td className="px-2 py-1.5 align-middle text-right tabular-nums">
+                    {discPct > 0 ? `${discPct}%` : "—"}
+                  </td>
+                  <td className="px-2 py-1.5 align-middle text-right tabular-nums">
+                    {discAmt > 0 ? formatINR(discAmt) : "—"}
+                  </td>
+                  <td className="px-2 py-1.5 align-middle text-right tabular-nums">
+                    {formatINR(split.taxable)}
+                  </td>
+                  <td className="px-2 py-1.5 align-middle text-right tabular-nums">
+                    {line.taxPct > 0 ? `${line.taxPct}%` : "—"}
+                  </td>
+                  {interstate ? (
+                    <td className="px-2 py-1.5 align-middle text-right tabular-nums text-muted-foreground">
+                      {formatMoneyOrDash(split.igst)}
+                    </td>
+                  ) : (
+                    <>
+                      <td className="px-2 py-1.5 align-middle text-right tabular-nums text-muted-foreground">
+                        {formatMoneyOrDash(split.cgst)}
+                      </td>
+                      <td className="px-2 py-1.5 align-middle text-right tabular-nums text-muted-foreground">
+                        {formatMoneyOrDash(split.sgst)}
+                      </td>
+                    </>
+                  )}
+                  <td className="px-2 py-1.5 align-middle text-right tabular-nums font-medium">
+                    {formatINR(split.lineTotal)}
+                  </td>
+                </tr>
+              );
+            })
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function ProductTable({
   lines,
   interstate,
@@ -170,9 +325,9 @@ function ProductTable({
         "UOM",
         "Rate",
         "Gross Amount",
-        "Discount %",
-        "Discount Amount",
-        "Scheme",
+        "Scheme Applied",
+        "Final Rate",
+        "Manual Discount",
         "Taxable",
         "GST %",
         "IGST",
@@ -189,9 +344,9 @@ function ProductTable({
         "UOM",
         "Rate",
         "Gross Amount",
-        "Discount %",
-        "Discount Amount",
-        "Scheme",
+        "Scheme Applied",
+        "Final Rate",
+        "Manual Discount",
         "Taxable",
         "GST %",
         "CGST",
@@ -199,7 +354,7 @@ function ProductTable({
         "Line Total",
         "Sales Person",
       ] as const);
-  const discountHeaders = new Set(["Discount %", "Discount Amount", "Scheme"]);
+  const discountHeaders = new Set(["Scheme Applied", "Final Rate", "Manual Discount"]);
   const headers = hideDiscount
     ? baseHeaders.filter((h) => !discountHeaders.has(h))
     : [...baseHeaders];
@@ -209,8 +364,8 @@ function ProductTable({
     "Qty",
     "Rate",
     "Gross Amount",
-    "Discount %",
-    "Discount Amount",
+    "Final Rate",
+    "Manual Discount",
     "Taxable",
     "GST %",
     "CGST",
@@ -229,8 +384,8 @@ function ProductTable({
     UOM: "so-col-uom",
     Rate: "so-col-rate",
     "Gross Amount": "so-col-gross",
-    "Discount %": "so-col-disc-pct",
-    "Discount Amount": "so-col-disc-amt",
+    "Final Rate": "so-col-final-rate",
+    "Manual Discount": "so-col-manual-disc",
     Taxable: "so-col-taxable",
     "GST %": "so-col-gst-pct",
     CGST: "so-col-gst-amt",
@@ -269,8 +424,7 @@ function ProductTable({
           ) : (
             lines.map((line) => {
               const { base } = calcLineAmounts(line);
-              const discPct = resolveDisplayDiscountPct(line);
-              const discAmt = resolveDisplayDiscountAmount(line);
+              const disc = resolveLineDiscountParts(line);
               /** GST / taxable / line total from stored line amounts — do not re-apply scheme % into totals. */
               const split = getLineGstSplit(line, interstate);
               const sku = resolveLineSku(line, productCodeById, productSkuByUuid);
@@ -317,12 +471,6 @@ function ProductTable({
                   </td>
                   {!hideDiscount ? (
                     <>
-                      <td className="px-2 py-1.5 align-middle so-col-disc-pct so-cell-num tabular-nums">
-                        {discPct > 0 ? `${discPct}%` : "—"}
-                      </td>
-                      <td className="px-2 py-1.5 align-middle so-col-disc-amt so-cell-num">
-                        {discAmt > 0 ? formatINR(discAmt) : "—"}
-                      </td>
                       <td className="px-2 py-1.5 align-middle">
                         {hasScheme ? (
                           <div className="min-w-[110px] max-w-[150px]">
@@ -333,11 +481,27 @@ function ProductTable({
                               {line.schemeCode || "—"}
                             </p>
                             <p className="text-[10px] text-muted-foreground leading-tight">
-                              Product Discount
+                              {schemeRateLabel(line) || "Product Discount"}
+                              {disc.schemeAmt > 0 ? ` · −${formatINR(disc.schemeAmt)}` : ""}
                             </p>
                           </div>
                         ) : (
                           <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </td>
+                      <td className="px-2 py-1.5 align-middle so-col-final-rate so-cell-num">
+                        {formatINR(disc.finalRate)}
+                      </td>
+                      <td className="px-2 py-1.5 align-middle so-col-manual-disc so-cell-num">
+                        {disc.manualAmt > 0 ? (
+                          <>
+                            <p className="leading-tight">{formatINR(disc.manualAmt)}</p>
+                            {disc.manualLabel ? (
+                              <p className="so-product-meta leading-tight">{disc.manualLabel}</p>
+                            ) : null}
+                          </>
+                        ) : (
+                          "—"
                         )}
                       </td>
                     </>
@@ -382,11 +546,18 @@ function CompactSchemeInformation({ record }: { record: InvoiceRecord }) {
   if (!invoiceHasProductDiscount(record)) return null;
   const schemeLines = record.lineItems.filter(lineHasProductDiscount);
   const primary = schemeLines[0];
+  const isSplit = (l: InvoiceLineItem) =>
+    l.manualDiscountType != null || l.schemeLineAmount != null;
   const discountAmount = schemeLines.reduce(
-    (sum, l) => sum + resolveDisplayDiscountAmount(l),
+    (sum, l) =>
+      sum + (isSplit(l) ? resolveLineDiscountParts(l).schemeAmt : resolveDisplayDiscountAmount(l)),
     0,
   );
-  const discountPct = resolveDisplayDiscountPct(primary);
+  const discountPct = isSplit(primary)
+    ? primary.schemeDiscountType === "Percentage"
+      ? primary.schemeDiscountPercent ?? 0
+      : 0
+    : resolveDisplayDiscountPct(primary);
   const discountType =
     primary.schemeDiscountType ?? (discountPct > 0 ? "Percentage" : "Rupees");
   const turnoverEligible =
@@ -544,6 +715,7 @@ export default function InvoiceViewPageClient({
     (invoiceType === "sales" && Boolean(record.salesOrderNo || record.dispatchNo));
   const isStockTransferView =
     invoiceType === "stock_transfer" || record.sourceType === "stock_transfer";
+  const isServiceView = record.sourceType === "service";
   const canEditDraftOnly = record.invoiceStatus === "draft";
   const salespersonDisplay =
     record.salesperson?.trim() ||
@@ -818,12 +990,18 @@ export default function InvoiceViewPageClient({
         title={
           isStockTransferView
             ? "View Stock Transfer Invoice"
-            : "View Sales Invoice"
+            : isServiceView
+              ? "View Service Invoice"
+              : "View Sales Invoice"
         }
         subtitle={`${record.invoiceNo} · ${WORKFLOW_STATUS_LABELS[workflowStatus]}`}
         breadcrumb={accountsBreadcrumb(
           "Transactions",
-          isStockTransferView ? "Stock Transfer Invoice" : "Sales Invoice",
+          isStockTransferView
+            ? "Stock Transfer Invoice"
+            : isServiceView
+              ? "Service Invoice"
+              : "Sales Invoice",
           listHref,
         )}
         backHref={listHref}
@@ -1004,20 +1182,26 @@ export default function InvoiceViewPageClient({
             </VoucherFormSectionCard>
           ) : null}
 
-          <VoucherFormSectionCard title="Product Details" highlight flush>
-            <ProductTable
-              lines={record.lineItems}
-              interstate={interstate}
-              productCodeById={productCodeById}
-              productSkuByUuid={productSkuByUuid}
-              hideDiscount={isStockTransferView}
-            />
-            {!isStockTransferView ? (
-              <div className="px-3 pb-3">
-                <CompactSchemeInformation record={record} />
-              </div>
-            ) : null}
-          </VoucherFormSectionCard>
+          {isServiceView ? (
+            <VoucherFormSectionCard title="Service Lines" highlight flush>
+              <ServiceLinesTable lines={record.lineItems} interstate={interstate} />
+            </VoucherFormSectionCard>
+          ) : (
+            <VoucherFormSectionCard title="Product Details" highlight flush>
+              <ProductTable
+                lines={record.lineItems}
+                interstate={interstate}
+                productCodeById={productCodeById}
+                productSkuByUuid={productSkuByUuid}
+                hideDiscount={isStockTransferView}
+              />
+              {!isStockTransferView ? (
+                <div className="px-3 pb-3">
+                  <CompactSchemeInformation record={record} />
+                </div>
+              ) : null}
+            </VoucherFormSectionCard>
+          )}
 
           {expenses.length > 0 ? (
             <VoucherFormSectionCard title="Additional Charges" highlight flush>

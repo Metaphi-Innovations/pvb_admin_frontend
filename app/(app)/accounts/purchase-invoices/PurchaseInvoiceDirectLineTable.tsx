@@ -106,16 +106,15 @@ export function PurchaseInvoiceDirectLineTable({
 
   return (
     <div className="so-goods-product-table-wrap overflow-x-auto">
-      <table className="so-invoice-table text-xs w-max min-w-[1100px]">
+      <table className="so-invoice-table text-xs w-max min-w-[1000px]">
           <colgroup>
             <col className="w-[18%]" />
             <col className="w-[16%]" />
-            <col className="w-[6%]" />
-            <col className="w-[5%]" />
-            <col className="w-[5%]" />
             <col className="w-[7%]" />
-            <col className="w-[6%]" />
+            <col className="w-[5%]" />
+            <col className="w-[5%]" />
             <col className="w-[8%]" />
+            <col className="w-[9%]" />
             <col className="w-[6%]" />
             <col className="w-[6%]" />
             <col className="w-[6%]" />
@@ -131,7 +130,6 @@ export function PurchaseInvoiceDirectLineTable({
               <Th align="right">Qty</Th>
               <Th align="center">Unit</Th>
               <Th align="right">Rate</Th>
-              <Th align="right">Discount</Th>
               <Th align="right">Taxable Amt</Th>
               <Th align="center">GST Rate</Th>
               <Th align="right">CGST</Th>
@@ -221,14 +219,6 @@ export function PurchaseInvoiceDirectLineTable({
                     value={line.rate}
                     disabled={readOnly}
                     onChange={(v) => updateLine(idx, { rate: v })}
-                  />
-                </td>
-                <td className={TABLE_CELL}>
-                  <AccountsMoneyInput
-                    className={MONEY_CELL_CLASS}
-                    value={line.discount}
-                    disabled={readOnly}
-                    onChange={(v) => updateLine(idx, { discount: v })}
                   />
                 </td>
                 <td className={TABLE_CELL}>

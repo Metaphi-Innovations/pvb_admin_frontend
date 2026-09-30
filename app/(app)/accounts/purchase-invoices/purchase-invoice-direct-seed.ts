@@ -30,7 +30,6 @@ type DirectDemoLineSpec = {
   quantity: number;
   uqc: string;
   rate: number;
-  discount: number;
   taxableAmount: number;
   gstRate: number;
   cgst: number;
@@ -69,8 +68,8 @@ function buildDemoLine(
     quantity: lineSpec.quantity,
     uqc: lineSpec.uqc,
     rate: lineSpec.rate,
-    grossAmount: lineSpec.taxableAmount + lineSpec.discount,
-    discount: lineSpec.discount,
+    grossAmount: lineSpec.taxableAmount,
+    discount: 0,
     taxableAmount: lineSpec.taxableAmount,
     gstRate: lineSpec.gstRate,
     cgst: lineSpec.cgst,
@@ -118,7 +117,6 @@ const DIRECT_DEMO_SPECS: DirectDemoSpec[] = [
         quantity: 2,
         uqc: "NOS",
         rate: 40000,
-        discount: 0,
         taxableAmount: 80000,
         gstRate: 18,
         cgst: 7200,
@@ -148,7 +146,6 @@ const DIRECT_DEMO_SPECS: DirectDemoSpec[] = [
         quantity: 1,
         uqc: "SERVICE",
         rate: 5000,
-        discount: 0,
         taxableAmount: 5000,
         gstRate: 18,
         cgst: 450,

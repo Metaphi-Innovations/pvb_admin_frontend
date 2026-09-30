@@ -32,9 +32,28 @@ export function downloadInvoicePdf(invoice: InvoiceRecord): void {
     </tr>`,
         )
         .join("")
-    : rec.lineItems
-        .map(
-          (l) => `
+    : isServiceInvoice
+      ? rec.lineItems
+          .map((l) => {
+            const ledger =
+              [l.incomeLedgerCode, l.incomeLedgerName].filter(Boolean).join(" · ") || "—";
+            return `
+    <tr>
+      <td>${escapeHtml(l.productName || l.description || "—")}</td>
+      <td>${escapeHtml(ledger)}</td>
+      <td>${escapeHtml(l.hsn || "—")}</td>
+      <td align="right">${l.qty}</td>
+      <td>${escapeHtml(l.unit)}</td>
+      <td align="right">${formatINR(l.unitPrice)}</td>
+      <td align="right">${l.discountPct}%</td>
+      <td align="right">${l.taxPct}%</td>
+      <td align="right">${formatINR(l.amount)}</td>
+    </tr>`;
+          })
+          .join("")
+      : rec.lineItems
+          .map(
+            (l) => `
     <tr>
       <td>${escapeHtml(l.productName || "—")}</td>
       <td>${escapeHtml(l.description)}</td>
@@ -45,13 +64,16 @@ export function downloadInvoicePdf(invoice: InvoiceRecord): void {
       <td align="right">${l.taxPct}%</td>
       <td align="right">${formatINR(l.amount)}</td>
     </tr>`,
-        )
-        .join("");
+          )
+          .join("");
 
   const tableHead = isSalesOrderInvoice
     ? `<th>Code</th><th>Product</th><th>HSN</th><th>Batch</th><th>Qty</th><th>Unit</th>
       <th>Rate</th><th>Disc %</th><th>Tax %</th><th>Amount</th>`
-    : `<th>Product</th><th>Description</th><th>Qty</th><th>Unit</th>
+    : isServiceInvoice
+      ? `<th>Service Description</th><th>Income Ledger</th><th>SAC</th><th>Qty</th><th>Unit</th>
+      <th>Rate</th><th>Disc %</th><th>Tax %</th><th>Amount</th>`
+      : `<th>Product</th><th>Description</th><th>Qty</th><th>Unit</th>
       <th>Unit Price</th><th>Disc %</th><th>Tax %</th><th>Amount</th>`;
 
   const taxRows = gst.interstate

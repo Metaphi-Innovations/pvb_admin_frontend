@@ -36,19 +36,6 @@ export function AccountsDateInput({
   const inputRef = useRef<HTMLInputElement>(null);
   const display = value ? isoToDisplayDate(value) : "";
 
-  const openPicker = (e?: React.MouseEvent | React.KeyboardEvent) => {
-    e?.stopPropagation();
-    if (disabled) return;
-    const input = inputRef.current;
-    if (!input) return;
-    input.focus();
-    try {
-      input.showPicker?.();
-    } catch {
-      input.click();
-    }
-  };
-
   return (
     <div
       className={cn(
@@ -84,8 +71,10 @@ export function AccountsDateInput({
         onChange={(e) => onChange(e.target.value)}
         onClick={(e) => {
           try {
-            (e.target as any).showPicker?.();
-          } catch (err) {}
+            (e.target as HTMLInputElement).showPicker?.();
+          } catch {
+            /* ignore */
+          }
         }}
         disabled={disabled}
         aria-label={ariaLabel}

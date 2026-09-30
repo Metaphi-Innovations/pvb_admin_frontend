@@ -25,6 +25,7 @@ import {
   sortChronological,
   type BalanceAmount,
 } from "@/lib/accounts/running-balance";
+import { indianFyStartContaining } from "@/lib/accounts/ledger-transaction-date-filter";
 
 export { isDebitNatureLedger } from "@/lib/accounts/running-balance";
 
@@ -192,10 +193,10 @@ export interface StatementRow {
   sourceLabel?: string;
 }
 
-function openingStatementRow(opening: BalanceAmount): StatementRow {
+function openingStatementRow(opening: BalanceAmount, openingDate: string): StatementRow {
   return {
     id: "opening",
-    date: "—",
+    date: openingDate,
     voucherType: "Opening Balance",
     voucherNo: "—",
     sourceModule: "Opening Balance",
@@ -240,7 +241,7 @@ export function buildLedgerStatement(
   const withBalances = computeRunningBalances(opening, sorted);
 
   return [
-    openingStatementRow(opening),
+    openingStatementRow(opening, indianFyStartContaining(new Date().toISOString().slice(0, 10))),
     ...withBalances.map(({ row, runningBalance, runningBalanceType }) =>
       transactionToStatementRow(row, { amount: runningBalance, balanceType: runningBalanceType }),
     ),
@@ -262,7 +263,7 @@ export function buildLedgerStatementForDateRange(
   const withBalances = computeRunningBalances(periodOpening, inRange);
 
   return [
-    openingStatementRow(periodOpening),
+    openingStatementRow(periodOpening, indianFyStartContaining(from)),
     ...withBalances.map(({ row, runningBalance, runningBalanceType }) =>
       transactionToStatementRow(row, { amount: runningBalance, balanceType: runningBalanceType }),
     ),

@@ -20,8 +20,8 @@ import { VOUCHER_INPUT_CLASS } from "@/components/accounts/voucher-simple-form-u
 import { DirectPurchaseSupplierSection } from "./DirectPurchaseSupplierSection";
 import { dispatchAccountsDataChanged } from "@/lib/accounts/accounts-data-events";
 import { COMPANY_BILLING } from "@/lib/procurement/config";
-import { useSuppliersDropdown } from "@/hooks/masters/use-supplier";
-import { useWarehousesDropdown } from "@/hooks/masters/use-warehouse-master";
+import { useSuppliersDropdown, useSupplier } from "@/hooks/masters/use-supplier";
+import { useWarehousesDropdown, useWarehouse } from "@/hooks/masters/use-warehouse-master";
 import { useHsnDropdown } from "@/hooks/masters/use-hsn";
 import { cn } from "@/lib/utils";
 import { PurchaseInvoiceService } from "@/services/purchase-invoice.service";
@@ -43,6 +43,7 @@ import {
   emptyDirectLine,
   isInterstatePurchase,
   recalcDirectLine,
+  stateFromGstin,
 } from "./purchase-invoice-direct-utils";
 import { PurchaseInvoiceDirectTotals } from "./PurchaseInvoiceDirectTotals";
 import { PurchaseInvoiceDirectLineTable } from "./PurchaseInvoiceDirectLineTable";
@@ -98,7 +99,7 @@ export function PurchaseInvoiceDirectForm({
   const [dueDate, setDueDate] = useState("");
   const [purchaseNature, setPurchaseNature] = useState<PurchaseNature>("expense");
   const [placeOfSupply, setPlaceOfSupply] = useState(COMPANY_BILLING.state);
-  const [branchGstin] = useState(COMPANY_BILLING.gstNumber);
+  const [branchGstin, setBranchGstin] = useState(COMPANY_BILLING.gstNumber);
   const [narration, setNarration] = useState("");
   const [attachment, setAttachment] = useState<File | null>(null);
   const defaultItc: ItcClassification = "eligible";
@@ -108,6 +109,47 @@ export function PurchaseInvoiceDirectForm({
   const [saving, setSaving] = useState(false);
   const addLineRowRef = useRef<(() => void) | null>(null);
   const addChargeRowRef = useRef<(() => void) | null>(null);
+
+  const { data: supplierDetail } = useSupplier(supplierId || null);
+  const { data: warehouseDetail } = useWarehouse(warehouseId || null);
+
+  useEffect(() => {
+    const gstin = String(
+      (warehouseDetail as { gst_number?: string; gstNumber?: string } | undefined)?.gst_number ||
+        (warehouseDetail as { gstNumber?: string } | undefined)?.gstNumber ||
+        "",
+    ).trim();
+    if (gstin) {
+      setBranchGstin(gstin);
+      return;
+    }
+    const whState = String(
+      (warehouseDetail as { state?: string } | undefined)?.state || "",
+    ).trim();
+    if (whState) {
+      // Keep company GSTIN if warehouse has state but no GSTIN — interstate still uses placeOfSupply vs branch.
+      setBranchGstin(COMPANY_BILLING.gstNumber);
+    }
+  }, [warehouseDetail]);
+
+  useEffect(() => {
+    const supplierState = String(
+      (supplierDetail as { state?: string } | undefined)?.state || "",
+    ).trim();
+    const supplierGstin = String(
+      (supplierDetail as { gstin_number?: string; gstinNumber?: string } | undefined)
+        ?.gstin_number ||
+        (supplierDetail as { gstinNumber?: string } | undefined)?.gstinNumber ||
+        "",
+    ).trim();
+    if (supplierState) {
+      setPlaceOfSupply(supplierState);
+      return;
+    }
+    if (supplierGstin) {
+      setPlaceOfSupply(stateFromGstin(supplierGstin));
+    }
+  }, [supplierDetail]);
 
   const interstate = isInterstatePurchase(branchGstin, placeOfSupply);
 

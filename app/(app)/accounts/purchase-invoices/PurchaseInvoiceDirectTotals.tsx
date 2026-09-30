@@ -25,7 +25,6 @@ export function PurchaseInvoiceDirectTotals({
   return (
     <div className="w-full space-y-1.5 so-invoice-summary text-xs">
       <SummaryRow label="Gross Amount" value={formatMoney(totals.grossAmount)} />
-      <SummaryRow label="Discount" value={formatMoney(totals.discountTotal)} />
       <SummaryRow label="Taxable Amount" value={formatMoney(totals.taxableAmount)} />
       <SummaryRow label="CGST" value={formatMoney(totals.cgst)} />
       <SummaryRow label="SGST" value={formatMoney(totals.sgst)} />

@@ -373,7 +373,14 @@ export interface ReceiptVoucherListItem {
   supplier?: ReceiptPartyRef | null;
   warehouse?: ReceiptWarehouseRef | null;
   cash_bank_ledger?: ReceiptLedgerRef | null;
+  bank_account_snapshot?: Record<string, unknown> | null;
   narration?: string | null;
+  /** Present on list when returned for outstanding history. */
+  allocations?: Array<{
+    allocated_amount?: string | number;
+    open_item_snapshot?: Record<string, unknown> | null;
+    open_item?: { document_number?: string | null } | null;
+  }>;
 }
 
 export interface ReceiptVoucherListResponse {

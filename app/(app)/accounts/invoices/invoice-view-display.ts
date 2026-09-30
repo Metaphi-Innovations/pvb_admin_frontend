@@ -45,6 +45,44 @@ export function resolveDisplayDiscountAmount(line: InvoiceLineItem): number {
   return 0;
 }
 
+/**
+ * Scheme vs manual discount for a saved line. New invoices store both parts;
+ * older invoices only have the combined discount (treated as scheme when a scheme is linked).
+ */
+export function resolveLineDiscountParts(line: InvoiceLineItem): {
+  schemeAmt: number;
+  finalRate: number;
+  manualAmt: number;
+  manualLabel: string;
+} {
+  const { base, discountAmt } = calcLineAmounts(line);
+  const hasSplit = line.manualDiscountType != null || line.schemeLineAmount != null;
+  let schemeAmt = 0;
+  let manualAmt = 0;
+  let manualLabel = "";
+  if (hasSplit) {
+    schemeAmt = Math.max(0, line.schemeLineAmount ?? 0);
+    manualAmt = Math.max(
+      0,
+      line.manualDiscountAmount ?? Math.round((discountAmt - schemeAmt) * 100) / 100,
+    );
+    if (manualAmt > 0) {
+      manualLabel =
+        line.manualDiscountType === "Percentage"
+          ? `${line.manualDiscountValue ?? 0}%`
+          : "Fixed";
+    }
+  } else if (lineHasProductDiscount(line)) {
+    schemeAmt = discountAmt;
+  } else {
+    manualAmt = discountAmt;
+    if (manualAmt > 0 && line.discountPct > 0) manualLabel = `${line.discountPct}%`;
+  }
+  const finalRate =
+    line.qty > 0 ? Math.round(((base - schemeAmt) / line.qty) * 100) / 100 : line.unitPrice;
+  return { schemeAmt, finalRate, manualAmt, manualLabel };
+}
+
 export function lineHasProductDiscount(line: InvoiceLineItem): boolean {
   return (
     line.schemeApplied === "Yes" ||

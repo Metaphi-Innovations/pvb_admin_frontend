@@ -190,6 +190,8 @@ export default function SchemeEditPageClient() {
       (customerQuery.data ?? []).map((item) => ({
         id: item.customer_id,
         name: `${item.customer_code} — ${item.customer_name}`,
+        customerTypeId:
+          item.customer_type_id ?? item.customer_type?.customer_type_id ?? null,
       })),
     [customerQuery.data],
   );
@@ -224,6 +226,9 @@ export default function SchemeEditPageClient() {
     () => ({
       customerTypeIds: customerTypeSelectOptions.map((o) => o.id),
       customerIds: customerSelectOptions.map((o) => o.id),
+      customerTypeByCustomerId: Object.fromEntries(
+        customerSelectOptions.map((o) => [o.id, o.customerTypeId]),
+      ),
       stateNames: stateSelectOptions.map((o) => o.id),
       productIds: productSelectOptions.map((o) => o.value),
     }),

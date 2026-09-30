@@ -71,6 +71,27 @@ function snapshotStr(snapshot: Record<string, unknown> | null | undefined, ...ke
 }
 
 function isPreparedInterstate(prepared: PrepareGrnInvoiceDto): boolean {
+  const pos = prepared.place_of_supply as
+    | { is_interstate?: boolean; isInterstate?: boolean }
+    | null
+    | undefined;
+  if (typeof pos?.is_interstate === "boolean") return pos.is_interstate;
+  if (typeof pos?.isInterstate === "boolean") return pos.isInterstate;
+
+  const supplierGstin = String(
+    (prepared.supplier as { gstin_number?: string | null })?.gstin_number || "",
+  )
+    .trim()
+    .toUpperCase();
+  const warehouseGstin = String(
+    (prepared.warehouse as { gst_number?: string | null })?.gst_number || "",
+  )
+    .trim()
+    .toUpperCase();
+  if (supplierGstin.length >= 2 && warehouseGstin.length >= 2) {
+    return supplierGstin.slice(0, 2) !== warehouseGstin.slice(0, 2);
+  }
+
   const supplierState = (prepared.supplier.state || "").trim().toLowerCase();
   const warehouseState = (prepared.warehouse.state || "").trim().toLowerCase();
   if (supplierState && warehouseState) return supplierState !== warehouseState;
@@ -356,7 +377,6 @@ export function PurchaseInvoiceGrnForm({
     (s, l) => s + Number(l.quantity || 0) * Number(l.rate || 0),
     0,
   );
-  const discountTotal = Math.max(0, Math.round((grossAmount - subtotal) * 100) / 100);
   const gstSplit = items.reduce(
     (acc, item) => {
       const split = getItemGstSplit(item, interstate);
@@ -374,7 +394,8 @@ export function PurchaseInvoiceGrnForm({
   const finalTotal = roundMoney(unroundedTotal + roundOff);
   const amountSummaryTotals: DirectPurchaseTotals = {
     grossAmount: Math.round(grossAmount * 100) / 100,
-    discountTotal,
+    // Purchases: discount is not applicable
+    discountTotal: 0,
     taxableAmount: Math.round(subtotal * 100) / 100,
     cgst: roundMoney(gstSplit.cgst + chargeBreakdown.cgst),
     sgst: roundMoney(gstSplit.sgst + chargeBreakdown.sgst),
