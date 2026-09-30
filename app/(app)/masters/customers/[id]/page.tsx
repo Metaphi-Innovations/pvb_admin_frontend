@@ -245,8 +245,8 @@ export default function CustomerDetailPage() {
       : undefined;
   const mainBranchSalesMan = mainBranch?.sales_man as Record<string, unknown> | null | undefined;
   const mainBranchSalesManName =
-    (typeof mainBranchSalesMan?.username === "string" && mainBranchSalesMan.username) ||
     [mainBranchSalesMan?.first_name, mainBranchSalesMan?.last_name].filter(Boolean).join(" ") ||
+    (typeof mainBranchSalesMan?.username === "string" && mainBranchSalesMan.username) ||
     "—";
 
   const tabs = [
@@ -438,9 +438,9 @@ export default function CustomerDetailPage() {
                 const isMain = Boolean(branch.is_main_branch ?? branch.isMain ?? (idx === 0));
                 const salesManObj = branch.sales_man as Record<string, unknown> | null | undefined;
                 const salesman =
-                  (typeof salesManObj?.username === "string" && salesManObj.username) ||
                   [salesManObj?.first_name, salesManObj?.last_name].filter(Boolean).join(" ") ||
                   String(branch.salesManName ?? "") ||
+                  (typeof salesManObj?.username === "string" && salesManObj.username) ||
                   "—";
 
                 const billingAddressObj = branch.billingAddress as Record<string, unknown> | undefined;
