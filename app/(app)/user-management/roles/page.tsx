@@ -156,7 +156,7 @@ export default function RolesPage() {
     appliedSearch: roleAppliedSearch,
   } = useAppliedListFilters();
   const { handleOpenFilter, isFilterOpen } = useLazyFilterColumns();
-  const [roleSort, setRoleSort] = useState<SortState>({ key: "roleName", direction: "asc" });
+  const [roleSort, setRoleSort] = useState<SortState>({ key: "", direction: "none" });
   const [rolePage, setRolePage] = useState(1);
   const [rolePageSize, setRolePageSize] = useState(10);
   const [viewId, setViewId] = useState<string | null>(null);
@@ -171,8 +171,8 @@ export default function RolesPage() {
     appliedSearch: templateAppliedSearch,
   } = useAppliedListFilters();
   const [templateSort, setTemplateSort] = useState<SortState>({
-    key: "templateName",
-    direction: "asc",
+    key: "",
+    direction: "none",
   });
   const [templatePage, setTemplatePage] = useState(1);
   const [templatePageSize, setTemplatePageSize] = useState(10);

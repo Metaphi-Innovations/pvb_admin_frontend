@@ -25,7 +25,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
-import { ListingStatusToggle, isActiveStatus } from "@/components/listing";
 import {
   useBgLookupAreas,
   useBgLookupRegions,
@@ -154,6 +153,28 @@ function toLookupOptions(
   }));
 }
 
+function withCurrentOption(
+  options: ReturnType<typeof toLookupOptions>,
+  selectedId: string | null,
+  records: BusinessGeoListItem[],
+  level: BusinessGeoLevel,
+) {
+  if (!selectedId || options.some((option) => option.value === selectedId)) {
+    return options;
+  }
+  const current = records.find((row) => row.id === selectedId && row.level === level);
+  if (!current) return options;
+  return [
+    {
+      value: current.id,
+      label: current.name,
+      searchText: [current.name, current.code].filter(Boolean).join(" "),
+      sublabel: current.code || undefined,
+    },
+    ...options,
+  ];
+}
+
 export function GeographyFormSheet({
   open,
   onClose,
@@ -170,7 +191,7 @@ export function GeographyFormSheet({
   const createMutation = useCreateBusinessGeo();
   const updateMutation = useUpdateBusinessGeo();
   const queryClient = useQueryClient();
-  const treeQuery = useBusinessGeographyTree();
+  const treeQuery = useBusinessGeographyTree("", true);
   const allRecords = treeQuery.data ?? [];
   const allRecordsRef = useRef(allRecords);
   allRecordsRef.current = allRecords;
@@ -273,16 +294,34 @@ export function GeographyFormSheet({
   const statesQuery = useBgLookupStates(open && level === "Region");
 
   const zoneOptions = useMemo(
-    () => toLookupOptions(zonesQuery.data ?? []),
-    [zonesQuery.data],
+    () =>
+      withCurrentOption(
+        toLookupOptions(zonesQuery.data ?? []),
+        form.pathZoneId,
+        allRecords,
+        "Zone",
+      ),
+    [zonesQuery.data, form.pathZoneId, allRecords],
   );
   const regionOptions = useMemo(
-    () => toLookupOptions(regionsQuery.data ?? []),
-    [regionsQuery.data],
+    () =>
+      withCurrentOption(
+        toLookupOptions(regionsQuery.data ?? []),
+        form.pathRegionId,
+        allRecords,
+        "Region",
+      ),
+    [regionsQuery.data, form.pathRegionId, allRecords],
   );
   const areaOptions = useMemo(
-    () => toLookupOptions(areasQuery.data ?? []),
-    [areasQuery.data],
+    () =>
+      withCurrentOption(
+        toLookupOptions(areasQuery.data ?? []),
+        level === "Territory" ? form.parentId : null,
+        allRecords,
+        "Area",
+      ),
+    [areasQuery.data, form.parentId, level, allRecords],
   );
 
   const clearScopeFields = (prev: FormState): FormState => ({
@@ -682,20 +721,6 @@ export function GeographyFormSheet({
                 <p className="text-[11px] text-red-600">{errors.effectiveFrom}</p>
               )}
             </div>
-
-            {isEdit && (
-              <div className="space-y-1.5">
-                <Label className="text-xs">Status</Label>
-                <div className="h-9 flex items-center">
-                  <ListingStatusToggle
-                    active={isActiveStatus(form.status)}
-                    onChange={() =>
-                      setField("status", form.status === "active" ? "inactive" : "active")
-                    }
-                  />
-                </div>
-              </div>
-            )}
           </div>
 
           {level === "Zone" && (

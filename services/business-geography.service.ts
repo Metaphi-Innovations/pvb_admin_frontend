@@ -515,9 +515,11 @@ export const BusinessGeographyService = {
   },
 
   async update(id: string, input: BusinessGeoSaveInput): Promise<void> {
+    const payload = buildCreatePayload(input);
+    delete payload.status;
     const response = await axiosInstance.put(
       endpointsForLevel(input.level).UPDATE(id),
-      buildCreatePayload(input),
+      payload,
     );
     assertSuccess(response.data as Record<string, unknown>, `Failed to update ${input.level}.`);
   },
