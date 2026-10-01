@@ -1,26 +1,31 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
-import { ChevronDown, ChevronUp, Plus, Trash2 } from "lucide-react";
+import React, { useEffect, useMemo, useState } from "react";
+import { ChevronDown, ChevronUp, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { HrDateInput } from "@/app/(app)/hr/components/HrDateInput";
 import { HrOrgField, hrBtn, hrInput, HrIconActionButton } from "../../../organization/_components";
-import { loadDesignations } from "@/app/(app)/hr/settings/organization-data";
+import {
+  loadBranches,
+  loadCompanyProfile,
+  loadDepartments,
+  loadDesignations,
+  loadEmployeeTypes,
+} from "@/app/(app)/hr/settings/organization-data";
 import { getActiveMockStateNames, getCitiesForState } from "@/app/(app)/hr/sales-force-policy/stateCityMockData";
-import { loadHrEmployees } from "@/app/(app)/hr/employees/employee-master-data";
+import { loadHrEmployees, type HrEmployee } from "@/app/(app)/hr/employees/employee-master-data";
 import {
   APPROVER_OPTIONS,
-  airTriggerLabel,
   approverLabel,
   ensureMatrixCells,
   formatInr,
   newBandId,
   newClaimRuleId,
-  newClassId,
   newExceptionId,
   newExclusionId,
   newGroupId,
@@ -40,38 +45,39 @@ import {
   type OverLimitAction,
   type OvernightReimburseType,
   type PrivateTaxiType,
-  type TaxiReimburseType,
+  type RoleMapping,
   type TimeBandApplicability,
   type TimeBandCategory,
+  type TravelModeRow,
   type TravelPolicy,
 } from "../travel-policy-data";
 import {
-  getApplicableTravelPolicy,
-  getEmployeeEntitlementGroup,
   getTravelEntitlement,
-  resolveCityClassification,
-  validateTravelClaim,
 } from "../travel-policy-resolver";
 import { ChipMultiSelect, Combo, SectionCard, ToggleRow } from "./travel-policy-ui";
 
 export const POLICY_SECTIONS = [
+  { id: "general", label: "General" },
   { id: "applicability", label: "Applicability" },
   { id: "city", label: "City Classification" },
   { id: "exhq", label: "Ex-HQ Travel" },
   { id: "lodging", label: "Lodging & Boarding" },
-  { id: "relatives", label: "Stay with Relatives/Friends" },
+  { id: "relatives", label: "Relatives / Friends Stay" },
   { id: "overnight", label: "Overnight Journey" },
-  { id: "local", label: "Local & City Travel" },
+  { id: "local", label: "Local / City Travel" },
   { id: "field", label: "Field Conveyance" },
-  { id: "km", label: "KM Reimbursement" },
+  { id: "km", label: "Personal Vehicle / KM" },
   { id: "incidental", label: "Incidental Allowance" },
   { id: "claims", label: "Claim Rules" },
+  { id: "approval", label: "Approval & Exceptions" },
   { id: "exclusions", label: "Exclusions" },
   { id: "guidance", label: "Employee Guidance" },
-  { id: "summary", label: "Summary" },
+  { id: "summary", label: "Entitlement Preview" },
 ] as const;
 
 export type PolicySectionId = (typeof POLICY_SECTIONS)[number]["id"];
+
+type SetPolicy = (p: TravelPolicy) => void;
 
 export function TravelPolicySectionBody({
   section,
@@ -88,6 +94,8 @@ export function TravelPolicySectionBody({
   const set = (next: TravelPolicy) => onChange(ensureMatrixCells(next));
 
   switch (section) {
+    case "general":
+      return <GeneralSection p={p} set={set} readOnly={readOnly} />;
     case "applicability":
       return <ApplicabilitySection p={p} set={set} readOnly={readOnly} />;
     case "city":
@@ -110,6 +118,8 @@ export function TravelPolicySectionBody({
       return <IncidentalSection p={p} set={set} readOnly={readOnly} />;
     case "claims":
       return <ClaimsSection p={p} set={set} readOnly={readOnly} />;
+    case "approval":
+      return <ApprovalExceptionsSection p={p} set={set} readOnly={readOnly} />;
     case "exclusions":
       return <ExclusionsSection p={p} set={set} readOnly={readOnly} />;
     case "guidance":
@@ -121,353 +131,595 @@ export function TravelPolicySectionBody({
   }
 }
 
+/* ------------------------------------------------------------------ */
+/* Small shared UI helpers                                              */
+/* ------------------------------------------------------------------ */
+
+const TABLE_CLASS = "w-full text-xs border border-border rounded-lg overflow-hidden";
+
+function Th({ children, className }: { children?: React.ReactNode; className?: string }) {
+  return <th className={cn("px-3 py-2 text-left font-semibold whitespace-nowrap", className)}>{children}</th>;
+}
+
 function Num({
   value,
   onChange,
   disabled,
   className,
+  prefix,
+  suffix,
 }: {
   value: number;
   onChange: (n: number) => void;
   disabled?: boolean;
   className?: string;
+  prefix?: string;
+  suffix?: string;
 }) {
-  return (
+  const fmt = (n: number) => (Number.isFinite(n) ? String(n) : "");
+  const [text, setText] = useState(fmt(value));
+  useEffect(() => {
+    if (Number(text || 0) !== value) setText(fmt(value));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
+
+  const input = (
     <Input
-      value={Number.isFinite(value) ? String(value) : ""}
+      value={text}
       disabled={disabled}
-      onChange={(e) => onChange(Number(e.target.value.replace(/[^\d.]/g, "") || 0))}
-      className={cn("h-8 text-xs rounded-lg", className)}
+      inputMode="decimal"
+      onChange={(e) => {
+        const cleaned = e.target.value.replace(/[^\d.]/g, "");
+        setText(cleaned);
+        onChange(Number(cleaned || 0) || 0);
+      }}
+      className={cn(
+        "h-8 text-xs rounded-lg",
+        prefix || suffix ? "w-full" : className,
+        prefix && "pl-6",
+        suffix && "pr-9",
+      )}
     />
+  );
+  if (!prefix && !suffix) return input;
+  return (
+    <div className={cn("relative", className)}>
+      {prefix ? (
+        <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[11px] text-muted-foreground">
+          {prefix}
+        </span>
+      ) : null}
+      {input}
+      {suffix ? (
+        <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] text-muted-foreground">
+          {suffix}
+        </span>
+      ) : null}
+    </div>
   );
 }
 
-function ApplicabilitySection({
-  p,
-  set,
-  readOnly,
-}: {
-  p: TravelPolicy;
-  set: (p: TravelPolicy) => void;
-  readOnly: boolean;
-}) {
-  const designations = loadDesignations().filter((d) => d.status === "active");
-  const [groupName, setGroupName] = useState("");
+function AddLink({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button type="button" className="text-xs font-medium text-brand-600 hover:underline" onClick={onClick}>
+      {children}
+    </button>
+  );
+}
+
+function Empty({ children }: { children: React.ReactNode }) {
+  return <p className="text-xs text-muted-foreground py-2">{children}</p>;
+}
+
+/* ------------------------------------------------------------------ */
+/* Designation / entitlement helpers (display + mapping edits only)     */
+/* ------------------------------------------------------------------ */
+
+const norm = (s: string) => (s || "").trim().toLowerCase();
+
+function matchScore(groupName: string, designationName: string): number {
+  const g = norm(groupName);
+  const d = norm(designationName);
+  if (!g || !d) return 0;
+  if (g === d) return 100;
+  if (d.includes(g) || g.includes(d)) return 50;
+  const gTokens = g.split(/[^a-z0-9]+/).filter((t) => t.length >= 2);
+  const dTokens = d.split(/[^a-z0-9]+/).filter(Boolean);
+  return gTokens.filter((t) => dTokens.includes(t)).length * 10;
+}
+
+/** The designation that "owns" a shared entitlement: best name match, else first active, else first. */
+function primaryMapping(p: TravelPolicy, groupId: string): RoleMapping | undefined {
+  const maps = p.roleMappings.filter((m) => m.groupId === groupId);
+  if (!maps.length) return undefined;
+  const g = p.groups.find((x) => x.id === groupId);
+  let best: RoleMapping | undefined;
+  let bestScore = -1;
+  for (const m of maps) {
+    const score = matchScore(g?.name || "", m.designationName) * 2 + (m.active ? 1 : 0);
+    if (score > bestScore) {
+      best = m;
+      bestScore = score;
+    }
+  }
+  return best;
+}
+
+function isOwnMapping(p: TravelPolicy, m: RoleMapping): boolean {
+  return primaryMapping(p, m.groupId)?.id === m.id;
+}
+
+function designationNameFor(p: TravelPolicy, groupId: string): string {
+  return primaryMapping(p, groupId)?.designationName || p.groups.find((g) => g.id === groupId)?.name || "—";
+}
+
+function otherDesignationsFor(p: TravelPolicy, groupId: string): string[] {
+  const prim = primaryMapping(p, groupId);
+  return p.roleMappings
+    .filter((m) => m.groupId === groupId && m.id !== prim?.id && m.active && m.designationName)
+    .map((m) => m.designationName);
+}
+
+function DesignationCell({ p, groupId }: { p: TravelPolicy; groupId: string }) {
+  const others = otherDesignationsFor(p, groupId);
+  return (
+    <div>
+      <p className="font-medium">{designationNameFor(p, groupId)}</p>
+      {others.length ? (
+        <p className="text-[11px] text-muted-foreground font-normal">Also applies to {others.join(", ")}</p>
+      ) : null}
+    </div>
+  );
+}
+
+function cloneGroupRows(p: TravelPolicy, from: string, to: string): TravelPolicy {
+  const cl = <T extends { groupId: string }>(rows: T[]): T[] => [
+    ...rows,
+    ...rows.filter((r) => r.groupId === from).map((r) => ({ ...r, groupId: to })),
+  ];
+  return {
+    ...p,
+    travelModes: cl(p.travelModes),
+    localTravel: cl(p.localTravel),
+    incidentals: cl(p.incidentals),
+    lodgingBoarding: cl(p.lodgingBoarding),
+    relativesStay: cl(p.relativesStay),
+    fieldConveyance: cl(p.fieldConveyance),
+  };
+}
+
+/** After a mapping leaves a group: drop the group if nobody uses it; otherwise keep its name meaningful. */
+function settleGroup(p: TravelPolicy, groupId: string): TravelPolicy {
+  if (p.roleMappings.some((m) => m.groupId === groupId)) {
+    const prim = primaryMapping(p, groupId);
+    const g = p.groups.find((x) => x.id === groupId);
+    if (prim && g && matchScore(g.name, prim.designationName) === 0) {
+      return { ...p, groups: p.groups.map((x) => (x.id === groupId ? { ...x, name: prim.designationName } : x)) };
+    }
+    return p;
+  }
+  return {
+    ...p,
+    groups: p.groups.filter((g) => g.id !== groupId),
+    travelModes: p.travelModes.filter((r) => r.groupId !== groupId),
+    localTravel: p.localTravel.filter((r) => r.groupId !== groupId),
+    incidentals: p.incidentals.filter((r) => r.groupId !== groupId),
+    lodgingBoarding: p.lodgingBoarding.filter((r) => r.groupId !== groupId),
+    relativesStay: p.relativesStay.filter((r) => r.groupId !== groupId),
+    fieldConveyance: p.fieldConveyance.filter((r) => r.groupId !== groupId),
+  };
+}
+
+function addDesignationMapping(p: TravelPolicy, d: { id: number; name: string }): TravelPolicy {
+  const existing = p.roleMappings.find(
+    (m) => (m.designationId != null && m.designationId === d.id) || norm(m.designationName) === norm(d.name),
+  );
+  if (existing) {
+    return {
+      ...p,
+      roleMappings: p.roleMappings.map((m) =>
+        m.id === existing.id ? { ...m, designationId: d.id, designationName: d.name, active: true } : m,
+      ),
+    };
+  }
+  const gid = newGroupId();
+  return {
+    ...p,
+    groups: [...p.groups, { id: gid, name: d.name, active: true }],
+    roleMappings: [
+      ...p.roleMappings,
+      { id: newMappingId(), designationId: d.id, designationName: d.name, groupId: gid, active: true },
+    ],
+  };
+}
+
+function removeDesignationMapping(p: TravelPolicy, mappingId: string): TravelPolicy {
+  const m = p.roleMappings.find((x) => x.id === mappingId);
+  if (!m) return p;
+  return settleGroup({ ...p, roleMappings: p.roleMappings.filter((x) => x.id !== mappingId) }, m.groupId);
+}
+
+function makeMappingOwn(p: TravelPolicy, mappingId: string): TravelPolicy {
+  const m = p.roleMappings.find((x) => x.id === mappingId);
+  if (!m || isOwnMapping(p, m)) return p;
+  const oldGid = m.groupId;
+  const gid = newGroupId();
+  const next: TravelPolicy = {
+    ...p,
+    groups: [...p.groups, { id: gid, name: m.designationName || "Designation", active: true }],
+    roleMappings: p.roleMappings.map((x) => (x.id === mappingId ? { ...x, groupId: gid } : x)),
+  };
+  // Start from the same rates so nothing is blank; HR can then change them.
+  return cloneGroupRows(next, oldGid, gid);
+}
+
+function makeMappingSameAs(p: TravelPolicy, mappingId: string, targetMappingId: string): TravelPolicy {
+  const m = p.roleMappings.find((x) => x.id === mappingId);
+  const target = p.roleMappings.find((x) => x.id === targetMappingId);
+  if (!m || !target || target.groupId === m.groupId) return p;
+  const oldGid = m.groupId;
+  const next: TravelPolicy = {
+    ...p,
+    roleMappings: p.roleMappings.map((x) => (x.id === mappingId ? { ...x, groupId: target.groupId } : x)),
+  };
+  return settleGroup(next, oldGid);
+}
+
+/* ------------------------------------------------------------------ */
+/* A. General                                                           */
+/* ------------------------------------------------------------------ */
+
+function GeneralSection({ p, set, readOnly }: { p: TravelPolicy; set: SetPolicy; readOnly: boolean }) {
+  const hasMore = !!(p.approvedBy || p.approvalDate || p.internalRemark || p.document);
+  const [showMore, setShowMore] = useState(hasMore);
+  const moreVisible = showMore || (readOnly && hasMore);
 
   return (
     <div className="space-y-3">
-      <SectionCard title="Header">
+      <SectionCard title="Policy Details">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <HrOrgField label="Policy Name" required>
             <Input value={p.name} disabled={readOnly} onChange={(e) => set({ ...p, name: e.target.value })} className={hrInput()} />
           </HrOrgField>
-          <HrOrgField label="Policy Number">
-            <Input value={p.policyNumber} disabled={readOnly} onChange={(e) => set({ ...p, policyNumber: e.target.value })} className={hrInput()} />
-          </HrOrgField>
+          {p.policyNumber ? (
+            <HrOrgField label="Policy Number">
+              <Input value={p.policyNumber} disabled readOnly className={hrInput()} />
+            </HrOrgField>
+          ) : null}
           <HrOrgField label="Effective From" required>
             <HrDateInput value={p.effectiveFrom} disabled={readOnly} onChange={(v) => set({ ...p, effectiveFrom: v })} />
           </HrOrgField>
           <HrOrgField label="Effective To">
             <HrDateInput value={p.effectiveTo} disabled={readOnly} onChange={(v) => set({ ...p, effectiveTo: v })} />
           </HrOrgField>
-          <HrOrgField label="Applies To">
-            <Input value={p.appliesTo} disabled={readOnly} onChange={(e) => set({ ...p, appliesTo: e.target.value })} className={hrInput()} />
-          </HrOrgField>
-          <div className="flex flex-col gap-2">
-            <ToggleRow
-              label="Active"
-              checked={p.status === "active"}
-              disabled={readOnly}
-              onChange={(v) => set({ ...p, status: v ? "active" : "inactive", isCurrent: v ? p.isCurrent : false })}
-            />
-            <ToggleRow
-              label="Current Policy"
-              hint="Only one current policy per overlapping period"
-              checked={p.isCurrent}
-              disabled={readOnly}
-              onChange={(v) => set({ ...p, isCurrent: v })}
-            />
-          </div>
-          <HrOrgField label="Description / Purpose" size="full">
+          <ToggleRow
+            label="Active"
+            checked={p.status === "active"}
+            disabled={readOnly}
+            onChange={(v) => set({ ...p, status: v ? "active" : "inactive", isCurrent: v ? p.isCurrent : false })}
+          />
+          <ToggleRow
+            label="Use as default for new claims"
+            hint="Only one default policy applies for an overlapping period."
+            checked={p.isCurrent}
+            disabled={readOnly || p.status !== "active"}
+            onChange={(v) => set({ ...p, isCurrent: v })}
+          />
+          <HrOrgField label="Purpose / Description" size="full">
             <Textarea value={p.description} disabled={readOnly} onChange={(e) => set({ ...p, description: e.target.value })} rows={2} className="text-sm" />
           </HrOrgField>
         </div>
       </SectionCard>
 
-      <SectionCard title="Approval metadata" hint="Audit fields only — not an e-signature workflow. File stays in the browser (localStorage preview).">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <HrOrgField label="Approved By">
-            <Input
-              value={p.approvedBy}
-              disabled={readOnly}
-              onChange={(e) => set({ ...p, approvedBy: e.target.value })}
-              className={hrInput()}
-              placeholder="Name / designation"
-            />
-          </HrOrgField>
-          <HrOrgField label="Approval Date">
-            <HrDateInput value={p.approvalDate} disabled={readOnly} onChange={(v) => set({ ...p, approvalDate: v })} />
-          </HrOrgField>
-          <HrOrgField label="Internal Remark" size="full">
-            <Textarea
-              value={p.internalRemark}
-              disabled={readOnly}
-              onChange={(e) => set({ ...p, internalRemark: e.target.value })}
-              rows={2}
-              className="text-sm"
-            />
-          </HrOrgField>
-          <HrOrgField label="Policy document" size="full">
-            <div className="flex flex-wrap items-center gap-2">
-              {!readOnly ? (
-                <label className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-2.5 text-xs font-medium cursor-pointer hover:bg-muted/50">
-                  Attach PDF / file
-                  <input
-                    type="file"
-                    accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
-                    className="hidden"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      e.target.value = "";
-                      if (!file) return;
-                      if (file.size > 2 * 1024 * 1024) {
-                        window.alert("File is larger than 2 MB. Choose a smaller file for prototype storage.");
-                        return;
-                      }
-                      const reader = new FileReader();
-                      reader.onload = () => {
-                        set({
-                          ...p,
-                          document: {
-                            fileName: file.name,
-                            sizeLabel: `${Math.max(1, Math.round(file.size / 1024))} KB`,
-                            dataUrl: String(reader.result || ""),
-                          },
-                        });
-                      };
-                      reader.readAsDataURL(file);
-                    }}
-                  />
-                </label>
-              ) : null}
-              {p.document ? (
-                <span className="text-xs text-foreground">
-                  {p.document.fileName}{" "}
-                  <span className="text-muted-foreground">({p.document.sizeLabel})</span>
-                  {p.document.dataUrl ? (
-                    <a href={p.document.dataUrl} download={p.document.fileName} className="ml-2 text-brand-600 hover:underline">
-                      Download
-                    </a>
+      {!readOnly || hasMore ? (
+        <SectionCard
+          title="Approval record & document"
+          hint="Optional — who approved this policy and the supporting document."
+          actions={
+            !readOnly ? (
+              <button type="button" className="text-xs text-brand-600 hover:underline" onClick={() => setShowMore((v) => !v)}>
+                {moreVisible ? "Hide" : "Show"}
+              </button>
+            ) : undefined
+          }
+        >
+          {moreVisible ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <HrOrgField label="Approved By">
+                <Input
+                  value={p.approvedBy}
+                  disabled={readOnly}
+                  onChange={(e) => set({ ...p, approvedBy: e.target.value })}
+                  className={hrInput()}
+                  placeholder="Name / designation"
+                />
+              </HrOrgField>
+              <HrOrgField label="Approval Date">
+                <HrDateInput value={p.approvalDate} disabled={readOnly} onChange={(v) => set({ ...p, approvalDate: v })} />
+              </HrOrgField>
+              <HrOrgField label="Internal Remark" size="full">
+                <Textarea
+                  value={p.internalRemark}
+                  disabled={readOnly}
+                  onChange={(e) => set({ ...p, internalRemark: e.target.value })}
+                  rows={2}
+                  className="text-sm"
+                />
+              </HrOrgField>
+              <HrOrgField label="Policy document" size="full">
+                <div className="flex flex-wrap items-center gap-2">
+                  {!readOnly ? (
+                    <label className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-2.5 text-xs font-medium cursor-pointer hover:bg-muted/50">
+                      Attach PDF / file
+                      <input
+                        type="file"
+                        accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          e.target.value = "";
+                          if (!file) return;
+                          if (file.size > 2 * 1024 * 1024) {
+                            window.alert("File is larger than 2 MB. Choose a smaller file for prototype storage.");
+                            return;
+                          }
+                          const reader = new FileReader();
+                          reader.onload = () => {
+                            set({
+                              ...p,
+                              document: {
+                                fileName: file.name,
+                                sizeLabel: `${Math.max(1, Math.round(file.size / 1024))} KB`,
+                                dataUrl: String(reader.result || ""),
+                              },
+                            });
+                          };
+                          reader.readAsDataURL(file);
+                        }}
+                      />
+                    </label>
                   ) : null}
-                </span>
-              ) : (
-                <span className="text-[11px] text-muted-foreground">No file selected</span>
-              )}
-              {!readOnly && p.document ? (
-                <button type="button" className="text-xs text-red-600 hover:underline" onClick={() => set({ ...p, document: null })}>
-                  Remove
-                </button>
-              ) : null}
+                  {p.document ? (
+                    <span className="text-xs text-foreground">
+                      {p.document.fileName}{" "}
+                      <span className="text-muted-foreground">({p.document.sizeLabel})</span>
+                      {p.document.dataUrl ? (
+                        <a href={p.document.dataUrl} download={p.document.fileName} className="ml-2 text-brand-600 hover:underline">
+                          Download
+                        </a>
+                      ) : null}
+                    </span>
+                  ) : (
+                    <span className="text-[11px] text-muted-foreground">No file selected</span>
+                  )}
+                  {!readOnly && p.document ? (
+                    <button type="button" className="text-xs text-red-600 hover:underline" onClick={() => set({ ...p, document: null })}>
+                      Remove
+                    </button>
+                  ) : null}
+                </div>
+              </HrOrgField>
             </div>
-          </HrOrgField>
+          ) : null}
+        </SectionCard>
+      ) : null}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* B. Applicability                                                     */
+/* ------------------------------------------------------------------ */
+
+const OWN_VALUE = "__own__";
+
+function ApplicabilitySection({ p, set, readOnly }: { p: TravelPolicy; set: SetPolicy; readOnly: boolean }) {
+  const designations = useMemo(() => loadDesignations().filter((d) => d.status === "active"), []);
+  const company = loadCompanyProfile();
+  const branches = loadBranches().filter((b) => b.status === "active");
+  const departments = loadDepartments().filter((d) => d.status === "active");
+  const employeeTypes = loadEmployeeTypes().filter((t) => t.status === "active");
+  const app = p.applicability ?? {
+    companyAll: true,
+    companies: [] as string[],
+    branchAll: true,
+    branches: [] as string[],
+    departmentAll: true,
+    departments: [] as string[],
+    employeeTypeAll: true,
+    employeeTypes: [] as string[],
+  };
+
+  const setApp = (patch: Partial<typeof app>) => set({ ...p, applicability: { ...app, ...patch } });
+
+  const keyOf = (m: RoleMapping): string => {
+    const d = designations.find(
+      (x) => (m.designationId != null && x.id === m.designationId) || norm(x.name) === norm(m.designationName),
+    );
+    return d ? String(d.id) : m.designationName;
+  };
+
+  const designationOptions: { value: string; label: string; hint?: string }[] = designations.map((d) => ({
+    value: String(d.id),
+    label: d.name,
+    hint: d.code,
+  }));
+  for (const m of p.roleMappings) {
+    const k = keyOf(m);
+    if (!designationOptions.some((o) => o.value === k)) designationOptions.push({ value: k, label: m.designationName });
+  }
+  const selectedKeys = Array.from(new Set(p.roleMappings.map(keyOf)));
+
+  const handleSelect = (next: string[]) => {
+    let cur = p;
+    const removed = selectedKeys.filter((k) => !next.includes(k));
+    const added = next.filter((k) => !selectedKeys.includes(k));
+    for (const k of removed) {
+      for (const m of cur.roleMappings.filter((x) => keyOf(x) === k)) {
+        cur = removeDesignationMapping(cur, m.id);
+      }
+    }
+    for (const k of added) {
+      const d = designations.find((x) => String(x.id) === k);
+      if (d) cur = addDesignationMapping(cur, d);
+    }
+    set(cur);
+  };
+
+  const ownMappings = p.groups
+    .filter((g) => g.active)
+    .map((g) => primaryMapping(p, g.id))
+    .filter((m): m is RoleMapping => !!m);
+
+  return (
+    <div className="space-y-3">
+      <SectionCard title="Policy Applies To" hint="Choose who this policy covers. Keep “All” on to cover everyone on that filter.">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="space-y-2">
+            <ToggleRow
+              label="Company — All"
+              checked={app.companyAll}
+              disabled={readOnly}
+              onChange={(v) => setApp({ companyAll: v })}
+            />
+            {!app.companyAll ? (
+              <ChipMultiSelect
+                values={app.companies}
+                disabled={readOnly}
+                placeholder="Select company…"
+                options={[{ value: company.companyName || company.legalName || "Company", label: company.companyName || company.legalName || "Company" }]}
+                onChange={(companies) => setApp({ companies })}
+              />
+            ) : null}
+          </div>
+          <div className="space-y-2">
+            <ToggleRow
+              label="Branches — All"
+              checked={app.branchAll}
+              disabled={readOnly}
+              onChange={(v) => setApp({ branchAll: v })}
+            />
+            {!app.branchAll ? (
+              <ChipMultiSelect
+                values={app.branches}
+                disabled={readOnly}
+                placeholder="Select branches…"
+                options={branches.map((b) => ({ value: b.name, label: b.name, hint: b.code }))}
+                onChange={(branches) => setApp({ branches })}
+              />
+            ) : null}
+          </div>
+          <div className="space-y-2">
+            <ToggleRow
+              label="Departments — All"
+              checked={app.departmentAll}
+              disabled={readOnly}
+              onChange={(v) => setApp({ departmentAll: v })}
+            />
+            {!app.departmentAll ? (
+              <ChipMultiSelect
+                values={app.departments}
+                disabled={readOnly}
+                placeholder="Select departments…"
+                options={departments.map((d) => ({ value: d.name, label: d.name, hint: d.code }))}
+                onChange={(departments) => setApp({ departments })}
+              />
+            ) : null}
+          </div>
+          <div className="space-y-2">
+            <ToggleRow
+              label="Employee Types — All"
+              checked={app.employeeTypeAll}
+              disabled={readOnly}
+              onChange={(v) => setApp({ employeeTypeAll: v })}
+            />
+            {!app.employeeTypeAll ? (
+              <ChipMultiSelect
+                values={app.employeeTypes}
+                disabled={readOnly}
+                placeholder="Select employee types…"
+                options={employeeTypes.map((t) => ({ value: t.name, label: t.name, hint: t.code }))}
+                onChange={(employeeTypes) => setApp({ employeeTypes })}
+              />
+            ) : null}
+          </div>
         </div>
       </SectionCard>
 
-      <SectionCard title="Entitlement Groups" hint="Roles inherit one group so rules are not duplicated.">
-        <table className="w-full text-xs border border-border rounded-lg overflow-hidden">
-          <thead>
-            <tr className="bg-muted/40 border-b">
-              <th className="px-3 py-2 text-left font-semibold">Group Name</th>
-              <th className="px-3 py-2 text-left font-semibold">Mapped Roles</th>
-              <th className="px-3 py-2 text-left font-semibold">Active</th>
-              {!readOnly ? <th className="px-3 py-2 text-right font-semibold">Actions</th> : null}
-            </tr>
-          </thead>
-          <tbody>
-            {p.groups.map((g) => {
-              const mapped = p.roleMappings.filter((m) => m.groupId === g.id && m.active);
-              return (
-                <tr key={g.id} className="border-b border-border/60">
-                  <td className="px-3 py-1.5">
-                    <Input
-                      value={g.name}
-                      disabled={readOnly}
-                      onChange={(e) =>
-                        set({ ...p, groups: p.groups.map((x) => (x.id === g.id ? { ...x, name: e.target.value } : x)) })
-                      }
-                      className="h-8 text-xs"
-                    />
-                  </td>
-                  <td className="px-3 py-1.5 text-muted-foreground">{mapped.map((m) => m.designationName).join(", ") || "—"}</td>
-                  <td className="px-3 py-1.5">
-                    <Switch
-                      size="sm"
-                      checked={g.active}
-                      disabled={readOnly}
-                      onCheckedChange={(v) =>
-                        set({ ...p, groups: p.groups.map((x) => (x.id === g.id ? { ...x, active: v } : x)) })
-                      }
-                    />
-                  </td>
-                  {!readOnly ? (
-                    <td className="px-3 py-1.5 text-right">
-                      <HrIconActionButton
-                        label="Remove"
-                        destructive
-                        onClick={() =>
+      <SectionCard
+        title="Applicable Designations"
+        hint="Select from Organization → Designations. Choose Own entitlement or Same as another designation."
+      >
+        {!readOnly ? (
+          <ChipMultiSelect
+            values={selectedKeys}
+            options={designationOptions}
+            placeholder="Select designations…"
+            onChange={handleSelect}
+          />
+        ) : null}
+
+        {p.roleMappings.length === 0 ? (
+          <Empty>No designations selected yet.</Empty>
+        ) : (
+          <table className={TABLE_CLASS}>
+            <thead>
+              <tr className="bg-muted/40 border-b">
+                <Th>Designation</Th>
+                <Th>Entitlement</Th>
+                <Th>Active</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {p.roleMappings.map((m) => {
+                const own = isOwnMapping(p, m);
+                const prim = primaryMapping(p, m.groupId);
+                const sameAsOptions = ownMappings
+                  .filter((o) => o.id !== m.id && (o.active || o.id === prim?.id))
+                  .map((o) => ({ value: o.id, label: `Same as ${o.designationName}` }));
+                return (
+                  <tr key={m.id} className={cn("border-b border-border/60", !m.active && "opacity-60")}>
+                    <td className="px-3 py-1.5 font-medium">{m.designationName || "—"}</td>
+                    <td className="px-3 py-1.5 min-w-[14rem]">
+                      {readOnly ? (
+                        own ? "Own" : `Same as ${prim?.designationName ?? "—"}`
+                      ) : (
+                        <Combo
+                          value={own ? OWN_VALUE : prim?.id ?? OWN_VALUE}
+                          onChange={(v) =>
+                            set(v === OWN_VALUE ? makeMappingOwn(p, m.id) : makeMappingSameAs(p, m.id, v))
+                          }
+                          options={[{ value: OWN_VALUE, label: "Own Entitlement" }, ...sameAsOptions]}
+                        />
+                      )}
+                    </td>
+                    <td className="px-3 py-1.5">
+                      <Switch
+                        size="sm"
+                        checked={m.active}
+                        disabled={readOnly}
+                        onCheckedChange={(v) =>
                           set({
                             ...p,
-                            groups: p.groups.filter((x) => x.id !== g.id),
-                            roleMappings: p.roleMappings.filter((m) => m.groupId !== g.id),
+                            roleMappings: p.roleMappings.map((x) => (x.id === m.id ? { ...x, active: v } : x)),
                           })
                         }
-                      >
-                        <Trash2 />
-                      </HrIconActionButton>
+                      />
                     </td>
-                  ) : null}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-        {!readOnly ? (
-          <div className="flex items-end gap-2">
-            <HrOrgField label="New group">
-              <Input value={groupName} onChange={(e) => setGroupName(e.target.value)} className="h-8 text-xs w-48" />
-            </HrOrgField>
-            <Button
-              type="button"
-              size="sm"
-              className={hrBtn("gap-1.5")}
-              onClick={() => {
-                if (!groupName.trim()) return;
-                set({
-                  ...p,
-                  groups: [...p.groups, { id: newGroupId(), name: groupName.trim(), active: true }],
-                });
-                setGroupName("");
-              }}
-            >
-              <Plus className="w-3.5 h-3.5" /> Add Entitlement Group
-            </Button>
-          </div>
-        ) : null}
-      </SectionCard>
-
-      <SectionCard title="Role mapping" hint="Search designations. Agronomist can inherit TM without duplicating rates.">
-        <table className="w-full text-xs border border-border rounded-lg overflow-hidden">
-          <thead>
-            <tr className="bg-muted/40 border-b">
-              <th className="px-3 py-2 text-left font-semibold">Role</th>
-              <th className="px-3 py-2 text-left font-semibold">Entitlement Group</th>
-              <th className="px-3 py-2 text-left font-semibold">Active</th>
-              {!readOnly ? <th className="px-3 py-2 text-right font-semibold">Actions</th> : null}
-            </tr>
-          </thead>
-          <tbody>
-            {p.roleMappings.map((m) => (
-              <tr key={m.id} className="border-b border-border/60">
-                <td className="px-3 py-1.5">
-                  {readOnly ? (
-                    m.designationName
-                  ) : (
-                    <Combo
-                      value={m.designationId != null ? String(m.designationId) : m.designationName}
-                      onChange={(v) => {
-                        const d = designations.find((x) => String(x.id) === v);
-                        set({
-                          ...p,
-                          roleMappings: p.roleMappings.map((x) =>
-                            x.id === m.id
-                              ? {
-                                  ...x,
-                                  designationId: d?.id ?? null,
-                                  designationName: d?.name ?? v,
-                                }
-                              : x,
-                          ),
-                        });
-                      }}
-                      options={[
-                        ...designations.map((d) => ({ value: String(d.id), label: d.name, hint: d.code })),
-                        ...(m.designationId == null && m.designationName
-                          ? [{ value: m.designationName, label: m.designationName }]
-                          : []),
-                      ].map((o) => ({ value: o.value, label: o.label }))}
-                      placeholder="Designation"
-                    />
-                  )}
-                </td>
-                <td className="px-3 py-1.5">
-                  <Combo
-                    value={m.groupId}
-                    disabled={readOnly}
-                    onChange={(v) =>
-                      set({
-                        ...p,
-                        roleMappings: p.roleMappings.map((x) => (x.id === m.id ? { ...x, groupId: v } : x)),
-                      })
-                    }
-                    options={p.groups.map((g) => ({ value: g.id, label: g.name }))}
-                    placeholder="Group"
-                  />
-                </td>
-                <td className="px-3 py-1.5">
-                  <Switch
-                    size="sm"
-                    checked={m.active}
-                    disabled={readOnly}
-                    onCheckedChange={(v) =>
-                      set({
-                        ...p,
-                        roleMappings: p.roleMappings.map((x) => (x.id === m.id ? { ...x, active: v } : x)),
-                      })
-                    }
-                  />
-                </td>
-                {!readOnly ? (
-                  <td className="px-3 py-1.5 text-right">
-                    <HrIconActionButton
-                      label="Remove"
-                      destructive
-                      onClick={() => set({ ...p, roleMappings: p.roleMappings.filter((x) => x.id !== m.id) })}
-                    >
-                      <Trash2 />
-                    </HrIconActionButton>
-                  </td>
-                ) : null}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {!readOnly ? (
-          <button
-            type="button"
-            className="text-xs font-medium text-brand-600 hover:underline"
-            onClick={() =>
-              set({
-                ...p,
-                roleMappings: [
-                  ...p.roleMappings,
-                  {
-                    id: newMappingId(),
-                    designationId: null,
-                    designationName: "",
-                    groupId: p.groups[0]?.id || "",
-                    active: true,
-                  },
-                ],
-              })
-            }
-          >
-            + Add role mapping
-          </button>
-        ) : null}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
       </SectionCard>
     </div>
   );
 }
+
+/* ------------------------------------------------------------------ */
+/* D. City                                                              */
+/* ------------------------------------------------------------------ */
 
 function encodeCity(state: string, city: string) {
   return `${state}||${city}`;
@@ -477,7 +729,9 @@ function decodeCity(v: string): { state: string; city: string } {
   return { state: state || "", city: city || v };
 }
 
-function CitySection({ p, set, readOnly }: { p: TravelPolicy; set: (p: TravelPolicy) => void; readOnly: boolean }) {
+const OTHERS_TEXT = "Any location not included above";
+
+function CitySection({ p, set, readOnly }: { p: TravelPolicy; set: SetPolicy; readOnly: boolean }) {
   const cityOptions = useMemo(() => {
     const out: { value: string; label: string; hint?: string }[] = [];
     for (const state of getActiveMockStateNames()) {
@@ -491,54 +745,44 @@ function CitySection({ p, set, readOnly }: { p: TravelPolicy; set: (p: TravelPol
 
   return (
     <div className="space-y-3">
-      <p className="text-[11px] text-muted-foreground">
-        Cities come from the existing City master used by Sales Force. Unmapped cities use the fallback class.
-      </p>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        {p.cityClasses.map((cls) => (
-          <div key={cls.id} className="rounded-xl border border-border p-3 space-y-2">
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <p className="text-xs font-semibold">{cls.name}</p>
-                <p className="text-[11px] text-muted-foreground">
-                  {cls.isFallback ? "Fallback" : `${cls.cities.length} Cities`}
-                  {!cls.active ? " · Inactive" : ""}
-                </p>
-              </div>
-              {!readOnly ? (
-                <button type="button" className="text-xs text-brand-600 hover:underline" onClick={() => setEditId(cls.id)}>
-                  Edit
-                </button>
-              ) : null}
-            </div>
-            {!cls.isFallback ? (
-              <p className="text-[11px] text-muted-foreground line-clamp-2">{cls.cities.map((c) => c.city).join(", ") || "—"}</p>
-            ) : (
-              <p className="text-[11px] text-muted-foreground">Used when destination city is not mapped.</p>
-            )}
-          </div>
-        ))}
-      </div>
-      {!readOnly ? (
-        <button
-          type="button"
-          className="text-xs font-medium text-brand-600 hover:underline"
-          onClick={() =>
-            set({
-              ...p,
-              cityClasses: [
-                ...p.cityClasses,
-                { id: newClassId(), name: "New class", description: "", cities: [], isFallback: false, active: true },
-              ],
-            })
-          }
-        >
-          + Add city classification
-        </button>
-      ) : null}
+      <SectionCard
+        title="City Categories"
+        hint="Cities come from the City master. Lodging, boarding and field limits are set per category."
+      >
+        <table className={TABLE_CLASS}>
+          <thead>
+            <tr className="bg-muted/40 border-b">
+              <Th>Category</Th>
+              <Th>Cities</Th>
+              {!readOnly ? <Th className="text-right">&nbsp;</Th> : null}
+            </tr>
+          </thead>
+          <tbody>
+            {p.cityClasses.map((cls) => (
+              <tr key={cls.id} className={cn("border-b border-border/60 align-top", !cls.active && "opacity-60")}>
+                <td className="px-3 py-2 font-medium whitespace-nowrap">
+                  {cls.name}
+                  {!cls.active ? <span className="ml-1.5 text-[11px] font-normal text-muted-foreground">Inactive</span> : null}
+                </td>
+                <td className="px-3 py-2 text-muted-foreground">
+                  {cls.isFallback ? OTHERS_TEXT : cls.cities.map((c) => c.city).join(", ") || "—"}
+                </td>
+                {!readOnly ? (
+                  <td className="px-3 py-2 text-right">
+                    <button type="button" className="text-xs text-brand-600 hover:underline" onClick={() => setEditId(cls.id)}>
+                      Edit
+                    </button>
+                  </td>
+                ) : null}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </SectionCard>
 
-      {editId ? (
+      {editId && p.cityClasses.some((c) => c.id === editId) ? (
         <CityClassEditor
+          key={editId}
           cls={p.cityClasses.find((c) => c.id === editId)!}
           cityOptions={cityOptions}
           readOnly={readOnly}
@@ -549,10 +793,6 @@ function CitySection({ p, set, readOnly }: { p: TravelPolicy; set: (p: TravelPol
               return next;
             });
             set({ ...p, cityClasses: classes });
-            setEditId(null);
-          }}
-          onDelete={() => {
-            set({ ...p, cityClasses: p.cityClasses.filter((c) => c.id !== editId) });
             setEditId(null);
           }}
         />
@@ -567,14 +807,12 @@ function CityClassEditor({
   readOnly,
   onClose,
   onSave,
-  onDelete,
 }: {
   cls: CityClass;
   cityOptions: { value: string; label: string; hint?: string }[];
   readOnly: boolean;
   onClose: () => void;
   onSave: (c: CityClass) => void;
-  onDelete: () => void;
 }) {
   const [form, setForm] = useState<CityClass>(cls);
   return (
@@ -591,8 +829,8 @@ function CityClassEditor({
         </div>
         <div className="md:col-span-2">
           <ToggleRow
-            label="Default fallback"
-            hint="Only one classification may be fallback. Unmapped cities use this class."
+            label="Use for cities not listed above"
+            hint="Applies to any city that is not listed under another category."
             checked={form.isFallback}
             disabled={readOnly}
             onChange={(v) => setForm({ ...form, isFallback: v })}
@@ -612,11 +850,11 @@ function CityClassEditor({
       </div>
       {!readOnly ? (
         <div className="flex justify-end gap-2">
-          <Button variant="outline" size="sm" className={hrBtn("text-red-600")} onClick={onDelete}>
-            Delete class
+          <Button variant="outline" size="sm" className={hrBtn()} onClick={onClose}>
+            Cancel
           </Button>
           <Button size="sm" className={hrBtn("", true)} onClick={() => onSave(form)}>
-            Save class
+            Save category
           </Button>
         </div>
       ) : null}
@@ -624,44 +862,95 @@ function CityClassEditor({
   );
 }
 
-function ExHqSection({ p, set, readOnly }: { p: TravelPolicy; set: (p: TravelPolicy) => void; readOnly: boolean }) {
+/* ------------------------------------------------------------------ */
+/* C. Ex-HQ                                                             */
+/* ------------------------------------------------------------------ */
+
+const airOn = (r: TravelModeRow) => r.airAllowed && r.airTrigger !== "not_allowed";
+
+/** Reference row for the shared Air Travel Rule: first conditional air row, else first air row. */
+function airReference(p: TravelPolicy): TravelModeRow | null {
+  const on = p.travelModes.filter(airOn);
+  return on.find((r) => r.airTrigger !== "always") ?? on[0] ?? null;
+}
+
+function airSummary(r: TravelModeRow): string {
+  return airOn(r) ? `${r.airClass || "Economy"}*` : "Not allowed";
+}
+
+/**
+ * Apply an air-rule change to travel mode rows.
+ * - "all": every row that currently allows air
+ * - "conditional": rows that allow air but are not "always allowed" (so e.g. NSM stays always allowed)
+ * If nothing matches, falls back to enabled rows, then every row.
+ */
+function patchAirRows(
+  p: TravelPolicy,
+  patch: Partial<TravelModeRow>,
+  scope: "all" | "conditional",
+): TravelModeRow[] {
+  const enabled = p.travelModes.filter(airOn);
+  let targets = enabled;
+  if (scope === "conditional") {
+    const conditional = enabled.filter((r) => r.airTrigger !== "always");
+    if (conditional.length) targets = conditional;
+  }
+  const ids = new Set((targets.length ? targets : p.travelModes).map((r) => r.groupId));
+  return p.travelModes.map((r) => (ids.has(r.groupId) ? { ...r, ...patch } : r));
+}
+
+function ExHqSection({ p, set, readOnly }: { p: TravelPolicy; set: SetPolicy; readOnly: boolean }) {
+  const [addSecond, setAddSecond] = useState(false);
+  const showSecond = !!p.exHq.approver2 || (addSecond && !readOnly);
+
+  const updateMode = (groupId: string, patch: Partial<TravelModeRow>) =>
+    set({ ...p, travelModes: p.travelModes.map((x) => (x.groupId === groupId ? { ...x, ...patch } : x)) });
+
+  const ref = airReference(p);
+  const trigger: AirEligibilityTrigger = ref ? ref.airTrigger : "not_allowed";
+  const hours = ref?.airMinJourneyHours || 12;
+  const anyAlways = p.travelModes.some((r) => airOn(r) && r.airTrigger === "always");
+
+  const setTrigger = (v: AirEligibilityTrigger) => {
+    if (v === "not_allowed") {
+      set({ ...p, travelModes: p.travelModes.map((r) => ({ ...r, airAllowed: false, airTrigger: "not_allowed" as const })) });
+    } else if (v === "always") {
+      set({ ...p, travelModes: patchAirRows(p, { airAllowed: true, airTrigger: "always" }, "all") });
+    } else if (v === "journey_duration") {
+      set({ ...p, travelModes: patchAirRows(p, { airAllowed: true, airTrigger: v, airMinJourneyHours: hours }, "conditional") });
+    } else {
+      set({ ...p, travelModes: patchAirRows(p, { airAllowed: true, airTrigger: v, airPriorApproval: true }, "conditional") });
+    }
+  };
+
+  const entitlementRows = p.roleMappings.filter((m) => m.active && p.groups.some((g) => g.id === m.groupId));
+
   return (
     <div className="space-y-3">
-      <SectionCard title="Ex-HQ definition" hint="HQ / Ex-HQ / overnight / official tour are policy concepts — employees do not configure them.">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <HrOrgField label="Ex-HQ Distance Threshold (KM)">
-            <Num value={p.exHq.distanceThresholdKm} disabled={readOnly} onChange={(n) => set({ ...p, exHq: { ...p.exHq, distanceThresholdKm: n } })} />
-          </HrOrgField>
-          <HrOrgField label="Distance basis">
-            <Combo
-              value={p.exHq.distanceBasis}
+      <SectionCard title="When is travel considered Ex-HQ?">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <HrOrgField
+            label="Distance from Headquarters"
+            helper="Travel beyond this distance from the employee's Headquarters is treated as Ex-HQ."
+          >
+            <Num
+              value={p.exHq.distanceThresholdKm}
               disabled={readOnly}
-              onChange={(v) => set({ ...p, exHq: { ...p.exHq, distanceBasis: v as "one_way" | "round_trip" } })}
-              options={[
-                { value: "one_way", label: "One Way" },
-                { value: "round_trip", label: "Round Trip" },
-              ]}
+              suffix="KM"
+              onChange={(n) => set({ ...p, exHq: { ...p.exHq, distanceThresholdKm: n, distanceBasis: "one_way" } })}
             />
           </HrOrgField>
           <ToggleRow
-            label="Overnight automatically treated as Ex-HQ"
+            label="Also treat overnight stay as Ex-HQ"
             checked={p.exHq.overnightIsExHq}
             disabled={readOnly}
             onChange={(v) => set({ ...p, exHq: { ...p.exHq, overnightIsExHq: v } })}
           />
         </div>
-        <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
-          <p className="text-xs font-semibold text-amber-800">Headquarters source</p>
-          <p className="text-[11px] text-amber-800/90 mt-0.5 leading-relaxed">
-            This product does not store a dedicated Employee Headquarters field. The resolver currently uses the
-            employee&apos;s assigned Branch city when Branch master has a city, otherwise Ex-HQ is evaluated from the
-            claim distance against this threshold. Branch is not treated as HQ unless that city is present on the Branch
-            record. Distance / GPS is not on the employee master — supply it on the claim.
-          </p>
-        </div>
       </SectionCard>
-      <SectionCard title="Prior approval">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+
+      <SectionCard title="Approval">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <ToggleRow
             label="Prior Approval Required"
             checked={p.exHq.priorApprovalRequired}
@@ -676,266 +965,351 @@ function ExHqSection({ p, set, readOnly }: { p: TravelPolicy; set: (p: TravelPol
               options={APPROVER_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
             />
           </HrOrgField>
-          <HrOrgField label="Second-level approver">
-            <Combo
-              value={p.exHq.approver2 || ""}
-              disabled={readOnly}
-              onChange={(v) => set({ ...p, exHq: { ...p.exHq, approver2: (v as ApproverRole) || "" } })}
-              options={[{ value: "", label: "None" }, ...APPROVER_OPTIONS.map((o) => ({ value: o.value, label: o.label }))]}
+          {showSecond ? (
+            <HrOrgField label="Additional Approver">
+              <div className="flex items-center gap-2">
+                <div className="flex-1 min-w-0">
+                  <Combo
+                    value={p.exHq.approver2 || ""}
+                    disabled={readOnly}
+                    placeholder="Select approver"
+                    onChange={(v) => set({ ...p, exHq: { ...p.exHq, approver2: v as ApproverRole } })}
+                    options={APPROVER_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+                  />
+                </div>
+                {!readOnly ? (
+                  <button
+                    type="button"
+                    className="text-xs text-red-600 hover:underline shrink-0"
+                    onClick={() => {
+                      setAddSecond(false);
+                      set({ ...p, exHq: { ...p.exHq, approver2: "" } });
+                    }}
+                  >
+                    Remove
+                  </button>
+                ) : null}
+              </div>
+            </HrOrgField>
+          ) : !readOnly ? (
+            <div className="flex items-end pb-1.5">
+              <AddLink onClick={() => setAddSecond(true)}>+ Add additional approver</AddLink>
+            </div>
+          ) : null}
+        </div>
+      </SectionCard>
+
+      <SectionCard
+        title="Travel Entitlement"
+        hint="Rail / bus class and travel at the destination, by designation."
+      >
+        {entitlementRows.length === 0 ? (
+          <Empty>Add designations under Applicability to set their travel entitlement.</Empty>
+        ) : (
+          <>
+            <div className="overflow-x-auto border border-border rounded-lg">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-muted/40 border-b">
+                    <Th>Designation</Th>
+                    <Th>Rail / Bus</Th>
+                    <Th>Air Travel</Th>
+                    <Th>Destination Travel</Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {entitlementRows.map((m) => {
+                    const prim = primaryMapping(p, m.groupId);
+                    const own = prim?.id === m.id;
+                    const row = p.travelModes.find((x) => x.groupId === m.groupId);
+                    if (!own || !row) {
+                      const sameAs = `Same as ${prim?.designationName ?? "—"}`;
+                      return (
+                        <tr key={m.id} className="border-b border-border/60">
+                          <td className="px-3 py-1.5 font-medium">{m.designationName}</td>
+                          <td className="px-3 py-1.5 text-muted-foreground">{sameAs}</td>
+                          <td className="px-3 py-1.5 text-muted-foreground">{sameAs}</td>
+                          <td className="px-3 py-1.5 text-muted-foreground">{sameAs}</td>
+                        </tr>
+                      );
+                    }
+                    return (
+                      <tr key={m.id} className="border-b border-border/60">
+                        <td className="px-3 py-1.5 font-medium">{m.designationName}</td>
+                        <td className="px-3 py-1.5">
+                          {readOnly ? (
+                            row.railClass || "—"
+                          ) : (
+                            <Input
+                              value={row.railClass}
+                              onChange={(e) => updateMode(row.groupId, { railClass: e.target.value })}
+                              className="h-8 text-xs w-36"
+                            />
+                          )}
+                        </td>
+                        <td className="px-3 py-1.5 text-muted-foreground">{airSummary(row)}</td>
+                        <td className="px-3 py-1.5">
+                          {readOnly ? (
+                            row.destinationConveyance || "—"
+                          ) : (
+                            <Input
+                              value={row.destinationConveyance}
+                              onChange={(e) => updateMode(row.groupId, { destinationConveyance: e.target.value })}
+                              className="h-8 text-xs w-48"
+                            />
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <p className="text-[11px] text-muted-foreground">* Air travel follows the Air Travel Rule below.</p>
+          </>
+        )}
+      </SectionCard>
+
+      <SectionCard title="Air Travel Rule" hint="Applies to every designation that is allowed to travel by air.">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <HrOrgField label="Allowed Class">
+            <Input
+              value={ref?.airClass ?? "Economy"}
+              disabled={readOnly || !ref}
+              onChange={(e) => set({ ...p, travelModes: patchAirRows(p, { airClass: e.target.value }, "all") })}
+              className={hrInput()}
             />
           </HrOrgField>
-        </div>
-      </SectionCard>
-      <SectionCard title="Mode of travel" hint="Rail class, air eligibility and destination conveyance by entitlement group.">
-        <div className="overflow-x-auto border border-border rounded-lg">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="bg-muted/40 border-b">
-                {["Group", "Rail Class", "Air", "Air Class", "Air condition", "Min hours", "Air prior approval", "Destination conveyance"].map((h) => (
-                  <th key={h} className="px-3 py-2 text-left font-semibold whitespace-nowrap">
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {p.travelModes.map((row) => {
-                const g = p.groups.find((x) => x.id === row.groupId);
-                return (
-                  <tr key={row.groupId} className="border-b border-border/60">
-                    <td className="px-3 py-1.5 font-medium">{g?.name || row.groupId}</td>
-                    <td className="px-3 py-1.5">
-                      <Input
-                        value={row.railClass}
-                        disabled={readOnly}
-                        onChange={(e) =>
-                          set({
-                            ...p,
-                            travelModes: p.travelModes.map((x) => (x.groupId === row.groupId ? { ...x, railClass: e.target.value } : x)),
-                          })
-                        }
-                        className="h-8 text-xs w-28"
-                      />
-                    </td>
-                    <td className="px-3 py-1.5">
-                      <Switch
-                        size="sm"
-                        checked={row.airAllowed}
-                        disabled={readOnly}
-                        onCheckedChange={(v) =>
-                          set({
-                            ...p,
-                            travelModes: p.travelModes.map((x) => (x.groupId === row.groupId ? { ...x, airAllowed: v } : x)),
-                          })
-                        }
-                      />
-                    </td>
-                    <td className="px-3 py-1.5">
-                      <Input
-                        value={row.airClass}
-                        disabled={readOnly}
-                        onChange={(e) =>
-                          set({
-                            ...p,
-                            travelModes: p.travelModes.map((x) => (x.groupId === row.groupId ? { ...x, airClass: e.target.value } : x)),
-                          })
-                        }
-                        className="h-8 text-xs w-24"
-                      />
-                    </td>
-                    <td className="px-3 py-1.5 min-w-[11rem]">
-                      <Combo
-                        value={row.airTrigger}
-                        disabled={readOnly}
-                        onChange={(v) =>
-                          set({
-                            ...p,
-                            travelModes: p.travelModes.map((x) =>
-                              x.groupId === row.groupId ? { ...x, airTrigger: v as AirEligibilityTrigger } : x,
-                            ),
-                          })
-                        }
-                        options={[
-                          { value: "always", label: "Always Allowed" },
-                          { value: "journey_duration", label: "Journey Duration" },
-                          { value: "manual_approval", label: "Manual Approval Only" },
-                          { value: "not_allowed", label: "Not Allowed" },
-                        ]}
-                      />
-                    </td>
-                    <td className="px-3 py-1.5 w-24">
-                      <Num
-                        value={row.airMinJourneyHours}
-                        disabled={readOnly || row.airTrigger !== "journey_duration"}
-                        onChange={(n) =>
-                          set({
-                            ...p,
-                            travelModes: p.travelModes.map((x) => (x.groupId === row.groupId ? { ...x, airMinJourneyHours: n } : x)),
-                          })
-                        }
-                      />
-                    </td>
-                    <td className="px-3 py-1.5">
-                      <Switch
-                        size="sm"
-                        checked={row.airPriorApproval}
-                        disabled={readOnly}
-                        onCheckedChange={(v) =>
-                          set({
-                            ...p,
-                            travelModes: p.travelModes.map((x) => (x.groupId === row.groupId ? { ...x, airPriorApproval: v } : x)),
-                          })
-                        }
-                      />
-                    </td>
-                    <td className="px-3 py-1.5">
-                      <Input
-                        value={row.destinationConveyance}
-                        disabled={readOnly}
-                        onChange={(e) =>
-                          set({
-                            ...p,
-                            travelModes: p.travelModes.map((x) =>
-                              x.groupId === row.groupId ? { ...x, destinationConveyance: e.target.value } : x,
-                            ),
-                          })
-                        }
-                        className="h-8 text-xs w-36"
-                      />
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </SectionCard>
-      <SectionCard title="Taxi / private conveyance">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <HrOrgField label="Shared/Public Taxi">
+          <HrOrgField label="When Allowed">
             <Combo
-              value={p.taxi.sharedType}
+              value={trigger}
               disabled={readOnly}
-              onChange={(v) => set({ ...p, taxi: { ...p.taxi, sharedType: v as TaxiReimburseType } })}
+              onChange={(v) => setTrigger(v as AirEligibilityTrigger)}
               options={[
-                { value: "actual", label: "Actual" },
-                { value: "per_km", label: "Per KM" },
+                { value: "always", label: "Always" },
+                { value: "journey_duration", label: `Road or rail journey exceeds ${hours} hours` },
+                { value: "manual_approval", label: "Prior approval only" },
+                { value: "not_allowed", label: "Not allowed" },
               ]}
             />
           </HrOrgField>
-          <HrOrgField label="Rate per KM">
-            <Num value={p.taxi.sharedRatePerKm} disabled={readOnly || p.taxi.sharedType !== "per_km"} onChange={(n) => set({ ...p, taxi: { ...p.taxi, sharedRatePerKm: n } })} />
+          {trigger === "journey_duration" ? (
+            <HrOrgField label="Road / rail journey longer than">
+              <Num
+                value={ref?.airMinJourneyHours ?? 0}
+                disabled={readOnly}
+                suffix="hours"
+                onChange={(n) => set({ ...p, travelModes: patchAirRows(p, { airMinJourneyHours: n }, "conditional") })}
+              />
+            </HrOrgField>
+          ) : null}
+          <ToggleRow
+            label="Prior Approval Required"
+            checked={trigger === "manual_approval" ? true : ref?.airPriorApproval ?? false}
+            disabled={readOnly || !ref || trigger === "manual_approval" || trigger === "always"}
+            onChange={(v) => set({ ...p, travelModes: patchAirRows(p, { airPriorApproval: v }, "conditional") })}
+          />
+          <HrOrgField label="Approver">
+            <Input value={approverLabel(p.exHq.approver1)} disabled readOnly className={hrInput()} />
           </HrOrgField>
           <ToggleRow
-            label="Require Start / Destination / Approx KM"
-            checked={p.taxi.requireStartDestKm}
-            disabled={readOnly}
-            onChange={(v) => set({ ...p, taxi: { ...p.taxi, requireStartDestKm: v } })}
+            label="Lowest Available Fare"
+            hint="Employees must book the lowest available fare."
+            checked={ref?.lowestAvailableFareRequired ?? true}
+            disabled={readOnly || !ref}
+            onChange={(v) => set({ ...p, travelModes: patchAirRows(p, { lowestAvailableFareRequired: v }, "all") })}
           />
-          <HrOrgField label="Private Taxi">
+        </div>
+        {anyAlways && trigger !== "always" ? (
+          <p className="text-[11px] text-muted-foreground">
+            Designations that are always allowed to fly keep that setting.
+          </p>
+        ) : null}
+      </SectionCard>
+
+      <SectionCard title="Destination Taxi Rates">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <HrOrgField label="Shared taxi">
+            <Num
+              value={p.taxi.sharedRatePerKm}
+              disabled={readOnly}
+              prefix="₹"
+              suffix="/ KM"
+              onChange={(n) => set({ ...p, taxi: { ...p.taxi, sharedType: "per_km", sharedRatePerKm: n } })}
+            />
+          </HrOrgField>
+          <HrOrgField label="Private taxi">
             <Combo
               value={p.taxi.privateType}
               disabled={readOnly}
               onChange={(v) => set({ ...p, taxi: { ...p.taxi, privateType: v as PrivateTaxiType } })}
               options={[
-                { value: "actual_against_bill", label: "Actual Against Bill" },
-                { value: "fixed_limit", label: "Fixed Limit" },
-                { value: "not_allowed", label: "Not Allowed" },
+                { value: "actual_against_bill", label: "Actuals against bill" },
+                { value: "fixed_limit", label: "Up to a fixed limit" },
+                { value: "not_allowed", label: "Not allowed" },
               ]}
             />
           </HrOrgField>
-          <HrOrgField label="Private taxi fixed limit">
-            <Num value={p.taxi.privateFixedLimit} disabled={readOnly || p.taxi.privateType !== "fixed_limit"} onChange={(n) => set({ ...p, taxi: { ...p.taxi, privateFixedLimit: n } })} />
-          </HrOrgField>
-          <ToggleRow label="Private taxi bill required" checked={p.taxi.privateBillRequired} disabled={readOnly} onChange={(v) => set({ ...p, taxi: { ...p.taxi, privateBillRequired: v } })} />
+          {p.taxi.privateType === "fixed_limit" ? (
+            <HrOrgField label="Private taxi limit">
+              <Num
+                value={p.taxi.privateFixedLimit}
+                disabled={readOnly}
+                prefix="₹"
+                onChange={(n) => set({ ...p, taxi: { ...p.taxi, privateFixedLimit: n } })}
+              />
+            </HrOrgField>
+          ) : null}
+          {p.taxi.privateType !== "not_allowed" ? (
+            <ToggleRow
+              label="Private taxi bill required"
+              checked={p.taxi.privateBillRequired}
+              disabled={readOnly}
+              onChange={(v) => set({ ...p, taxi: { ...p.taxi, privateBillRequired: v } })}
+            />
+          ) : null}
         </div>
-      </SectionCard>
-      <SectionCard title="Own vehicle for Ex-HQ" hint="Can reuse KM reimbursement rates.">
-        <table className="w-full text-xs border border-border rounded-lg overflow-hidden">
-          <thead>
-            <tr className="bg-muted/40 border-b">
-              {["Vehicle", "Allowed", "Use shared KM rate", "Rate / KM", "Prior approval"].map((h) => (
-                <th key={h} className="px-3 py-2 text-left font-semibold">
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {p.ownVehicleExHq.map((row, i) => (
-              <tr key={row.vehicleType} className="border-b">
-                <td className="px-3 py-1.5">{row.vehicleType}</td>
-                <td className="px-3 py-1.5">
-                  <Switch size="sm" checked={row.allowed} disabled={readOnly} onCheckedChange={(v) => {
-                    const ownVehicleExHq = [...p.ownVehicleExHq];
-                    ownVehicleExHq[i] = { ...row, allowed: v };
-                    set({ ...p, ownVehicleExHq });
-                  }} />
-                </td>
-                <td className="px-3 py-1.5">
-                  <Switch size="sm" checked={row.useSharedKmRate} disabled={readOnly} onCheckedChange={(v) => {
-                    const ownVehicleExHq = [...p.ownVehicleExHq];
-                    ownVehicleExHq[i] = { ...row, useSharedKmRate: v };
-                    set({ ...p, ownVehicleExHq });
-                  }} />
-                </td>
-                <td className="px-3 py-1.5 w-28">
-                  <Num value={row.ratePerKm} disabled={readOnly || row.useSharedKmRate} onChange={(n) => {
-                    const ownVehicleExHq = [...p.ownVehicleExHq];
-                    ownVehicleExHq[i] = { ...row, ratePerKm: n };
-                    set({ ...p, ownVehicleExHq });
-                  }} />
-                </td>
-                <td className="px-3 py-1.5">
-                  <Switch size="sm" checked={row.priorApprovalRequired} disabled={readOnly} onCheckedChange={(v) => {
-                    const ownVehicleExHq = [...p.ownVehicleExHq];
-                    ownVehicleExHq[i] = { ...row, priorApprovalRequired: v };
-                    set({ ...p, ownVehicleExHq });
-                  }} />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
       </SectionCard>
     </div>
   );
 }
 
+/* ------------------------------------------------------------------ */
+/* E. Lodging                                                           */
+/* ------------------------------------------------------------------ */
+
+/** Own entitlement rows + inherited (Same as) designation rows for matrix UIs. */
+function entitlementDisplayRows(p: TravelPolicy): {
+  mapping: RoleMapping;
+  groupId: string;
+  own: boolean;
+  sameAsName: string | null;
+}[] {
+  return p.roleMappings
+    .filter((m) => m.active && p.groups.some((g) => g.id === m.groupId && g.active))
+    .map((m) => {
+      const prim = primaryMapping(p, m.groupId);
+      const own = prim?.id === m.id;
+      return {
+        mapping: m,
+        groupId: m.groupId,
+        own,
+        sameAsName: own ? null : prim?.designationName ?? designationNameFor(p, m.groupId),
+      };
+    });
+}
+
+function LodgingAmountPopover({
+  designation,
+  cityLabel,
+  lodging,
+  boarding,
+  open,
+  onOpenChange,
+  onApply,
+  readOnly,
+  children,
+}: {
+  designation: string;
+  cityLabel: string;
+  lodging: number;
+  boarding: number;
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  onApply: (lodging: number, boarding: number) => void;
+  readOnly: boolean;
+  children: React.ReactNode;
+}) {
+  const [lod, setLod] = useState(lodging);
+  const [board, setBoard] = useState(boarding);
+  useEffect(() => {
+    if (open) {
+      setLod(lodging);
+      setBoard(boarding);
+    }
+  }, [open, lodging, boarding]);
+
+  if (readOnly) return <>{children}</>;
+
+  return (
+    <Popover open={open} onOpenChange={onOpenChange}>
+      <PopoverTrigger asChild>{children}</PopoverTrigger>
+      <PopoverContent align="start" className="w-72 p-3 space-y-3">
+        <div>
+          <p className="text-xs font-semibold text-foreground">{designation}</p>
+          <p className="text-[11px] text-muted-foreground">{cityLabel}</p>
+        </div>
+        <HrOrgField label="Lodging / Day">
+          <Num value={lod} prefix="₹" onChange={setLod} />
+        </HrOrgField>
+        <HrOrgField label="Boarding / Day">
+          <Num value={board} prefix="₹" onChange={setBoard} />
+        </HrOrgField>
+        <div className="flex justify-end gap-2 pt-1">
+          <Button type="button" variant="outline" size="sm" className={hrBtn()} onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            className={hrBtn("", true)}
+            onClick={() => {
+              onApply(lod, board);
+              onOpenChange(false);
+            }}
+          >
+            Apply
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 function MatrixTable({
   p,
-  readOnly,
-  renderCell,
+  renderOwnCell,
+  sameAsColSpan,
 }: {
   p: TravelPolicy;
-  readOnly: boolean;
-  renderCell: (groupId: string, classId: string) => React.ReactNode;
+  renderOwnCell: (groupId: string, classId: string, designationName: string) => React.ReactNode;
+  /** When set, Same-as rows span all city columns with this text pattern */
+  sameAsColSpan?: boolean;
 }) {
-  const groups = p.groups.filter((g) => g.active);
   const classes = p.cityClasses.filter((c) => c.active);
+  const rows = entitlementDisplayRows(p);
   return (
     <div className="overflow-x-auto border border-border rounded-lg">
       <table className="w-full text-xs">
         <thead>
           <tr className="bg-muted/40 border-b">
-            <th className="px-3 py-2 text-left font-semibold">Group</th>
+            <Th>Designation</Th>
             {classes.map((c) => (
-              <th key={c.id} className="px-3 py-2 text-left font-semibold whitespace-nowrap">
-                {c.name}
-                {c.isFallback ? <span className="text-[10px] text-muted-foreground font-normal"> · fallback</span> : null}
-              </th>
+              <Th key={c.id}>{c.name}</Th>
             ))}
           </tr>
         </thead>
         <tbody>
-          {groups.map((g) => (
-            <tr key={g.id} className="border-b border-border/60">
-              <td className="px-3 py-2 font-medium whitespace-nowrap">{g.name}</td>
-              {classes.map((c) => (
-                <td key={c.id} className="px-3 py-2 align-top">
-                  {renderCell(g.id, c.id)}
+          {rows.map(({ mapping, groupId, own, sameAsName }) => (
+            <tr key={mapping.id} className="border-b border-border/60">
+              <td className="px-3 py-2 font-medium whitespace-nowrap">{mapping.designationName}</td>
+              {own ? (
+                classes.map((c) => (
+                  <td key={c.id} className="px-3 py-2 align-top">
+                    {renderOwnCell(groupId, c.id, mapping.designationName)}
+                  </td>
+                ))
+              ) : sameAsColSpan !== false ? (
+                <td colSpan={Math.max(classes.length, 1)} className="px-3 py-2 text-muted-foreground">
+                  Same as {sameAsName || "—"}
                 </td>
-              ))}
+              ) : (
+                classes.map((c) => (
+                  <td key={c.id} className="px-3 py-2 text-muted-foreground">
+                    Same as {sameAsName || "—"}
+                  </td>
+                ))
+              )}
             </tr>
           ))}
         </tbody>
@@ -944,96 +1318,105 @@ function MatrixTable({
   );
 }
 
-function LodgingSection({ p, set, readOnly }: { p: TravelPolicy; set: (p: TravelPolicy) => void; readOnly: boolean }) {
-  const [edit, setEdit] = useState<{ g: string; c: string } | null>(null);
+const OVER_LIMIT_OPTIONS: { value: OverLimitAction; label: string }[] = [
+  { value: "block", label: "Do not allow" },
+  { value: "allow_with_prior_approval", label: "Allow with prior approval" },
+  { value: "allow_and_flag", label: "Allow and flag for review" },
+];
+
+function LodgingSection({ p, set, readOnly }: { p: TravelPolicy; set: SetPolicy; readOnly: boolean }) {
+  const [editKey, setEditKey] = useState<string | null>(null);
   const cell = (g: string, c: string) => p.lodgingBoarding.find((x) => x.groupId === g && x.classId === c);
+  const setRules = (patch: Partial<TravelPolicy["lodgingRules"]>) => set({ ...p, lodgingRules: { ...p.lodgingRules, ...patch } });
+
   return (
     <div className="space-y-3">
-      <SectionCard title="Lodging & Boarding matrix" hint="Click a cell to edit lodging / boarding per day.">
+      <SectionCard title="Hotel Bill Rules">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+          <ToggleRow label="Hotel Bill Required" checked={p.lodgingRules.billRequired} disabled={readOnly} onChange={(v) => setRules({ billRequired: v })} />
+          <ToggleRow label="Bill Must Be in Company Name" checked={p.lodgingRules.billInCompanyName} disabled={readOnly} onChange={(v) => setRules({ billInCompanyName: v })} />
+          <ToggleRow label="GST Reimbursed Separately" checked={p.lodgingRules.gstReimbursedSeparately} disabled={readOnly} onChange={(v) => setRules({ gstReimbursedSeparately: v })} />
+          <ToggleRow label="Hotel GSTIN Required when GST is Charged" checked={p.lodgingRules.gstinRequired} disabled={readOnly} onChange={(v) => setRules({ gstinRequired: v })} />
+        </div>
+      </SectionCard>
+
+      <SectionCard
+        title="Lodging & Boarding Limits"
+        hint={readOnly ? "Daily limits (₹) by designation and city category." : "Click a city cell to edit Lodging and Boarding for that designation."}
+      >
         <MatrixTable
           p={p}
-          readOnly={readOnly}
-          renderCell={(g, c) => {
+          renderOwnCell={(g, c, designationName) => {
             const x = cell(g, c);
+            const cityLabel = p.cityClasses.find((cl) => cl.id === c)?.name ?? "";
+            const key = `${g}::${c}`;
             return (
-              <button
-                type="button"
-                disabled={readOnly}
-                onClick={() => setEdit({ g, c })}
-                className="text-left text-xs font-semibold text-brand-700 hover:underline disabled:no-underline disabled:text-foreground"
+              <LodgingAmountPopover
+                designation={designationName}
+                cityLabel={cityLabel}
+                lodging={x?.lodgingLimit ?? 0}
+                boarding={x?.boardingLimit ?? 0}
+                open={editKey === key}
+                onOpenChange={(o) => setEditKey(o ? key : null)}
+                readOnly={readOnly}
+                onApply={(lodgingLimit, boardingLimit) => {
+                  const exists = p.lodgingBoarding.some((r) => r.groupId === g && r.classId === c);
+                  set({
+                    ...p,
+                    lodgingBoarding: exists
+                      ? p.lodgingBoarding.map((r) =>
+                          r.groupId === g && r.classId === c ? { ...r, lodgingLimit, boardingLimit } : r,
+                        )
+                      : [...p.lodgingBoarding, { groupId: g, classId: c, lodgingLimit, boardingLimit }],
+                  });
+                }}
               >
-                {x ? `${formatInr(x.lodgingLimit)} / ${formatInr(x.boardingLimit)}` : "—"}
-              </button>
+                <button
+                  type="button"
+                  disabled={readOnly}
+                  className="text-left text-xs text-brand-700 hover:underline disabled:no-underline disabled:text-foreground disabled:cursor-default"
+                >
+                  {x ? (
+                    <>
+                      <span className="block font-semibold">Lodging {formatInr(x.lodgingLimit)}</span>
+                      <span className="block text-[11px] font-normal text-muted-foreground">Boarding {formatInr(x.boardingLimit)}</span>
+                    </>
+                  ) : (
+                    "—"
+                  )}
+                </button>
+              </LodgingAmountPopover>
             );
           }}
         />
       </SectionCard>
-      {edit ? (
-        <SectionCard title="Edit cell">
-          <div className="grid grid-cols-2 gap-3 max-w-md">
-            <HrOrgField label="Lodging / day">
-              <Num
-                value={cell(edit.g, edit.c)?.lodgingLimit || 0}
-                disabled={readOnly}
-                onChange={(n) =>
-                  set({
-                    ...p,
-                    lodgingBoarding: p.lodgingBoarding.map((x) =>
-                      x.groupId === edit.g && x.classId === edit.c ? { ...x, lodgingLimit: n } : x,
-                    ),
-                  })
-                }
-              />
-            </HrOrgField>
-            <HrOrgField label="Boarding / day">
-              <Num
-                value={cell(edit.g, edit.c)?.boardingLimit || 0}
-                disabled={readOnly}
-                onChange={(n) =>
-                  set({
-                    ...p,
-                    lodgingBoarding: p.lodgingBoarding.map((x) =>
-                      x.groupId === edit.g && x.classId === edit.c ? { ...x, boardingLimit: n } : x,
-                    ),
-                  })
-                }
-              />
-            </HrOrgField>
-          </div>
-          <button type="button" className="text-xs text-muted-foreground hover:underline" onClick={() => setEdit(null)}>
-            Done
-          </button>
-        </SectionCard>
-      ) : null}
-      <SectionCard title="Lodging billing rules">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-          <ToggleRow label="Bill Required" checked={p.lodgingRules.billRequired} disabled={readOnly} onChange={(v) => set({ ...p, lodgingRules: { ...p.lodgingRules, billRequired: v } })} />
-          <ToggleRow label="Bill Must Be in Company Name" checked={p.lodgingRules.billInCompanyName} disabled={readOnly} onChange={(v) => set({ ...p, lodgingRules: { ...p.lodgingRules, billInCompanyName: v } })} />
-          <ToggleRow label="GSTIN Required on Hotel Bill" checked={p.lodgingRules.gstinRequired} disabled={readOnly} onChange={(v) => set({ ...p, lodgingRules: { ...p.lodgingRules, gstinRequired: v } })} />
-          <ToggleRow label="GST Reimbursed Separately" checked={p.lodgingRules.gstReimbursedSeparately} disabled={readOnly} onChange={(v) => set({ ...p, lodgingRules: { ...p.lodgingRules, gstReimbursedSeparately: v } })} />
-          <ToggleRow label="Exceptions Require Prior Approval" checked={p.lodgingRules.exceptionsRequirePriorApproval} disabled={readOnly} onChange={(v) => set({ ...p, lodgingRules: { ...p.lodgingRules, exceptionsRequirePriorApproval: v } })} />
-          <HrOrgField label="Shared room handling">
+
+      <SectionCard title="Other Lodging Rules">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <ToggleRow
+            label="Exceptions need prior approval"
+            checked={p.lodgingRules.exceptionsRequirePriorApproval}
+            disabled={readOnly}
+            onChange={(v) => setRules({ exceptionsRequirePriorApproval: v })}
+          />
+          <HrOrgField label="When a room is shared">
             <Combo
               value={p.lodgingRules.sharedRoomHandling}
               disabled={readOnly}
-              onChange={(v) => set({ ...p, lodgingRules: { ...p.lodgingRules, sharedRoomHandling: v as TravelPolicy["lodgingRules"]["sharedRoomHandling"] } })}
+              onChange={(v) => setRules({ sharedRoomHandling: v as TravelPolicy["lodgingRules"]["sharedRoomHandling"] })}
               options={[
-                { value: "each_employee", label: "Each Employee May Claim" },
-                { value: "single_claims_full", label: "Single Employee Claims Full Bill" },
-                { value: "custom", label: "Custom" },
+                { value: "each_employee", label: "Each employee may claim" },
+                { value: "single_claims_full", label: "One employee claims the full bill" },
+                { value: "custom", label: "Decided case by case" },
               ]}
             />
           </HrOrgField>
-          <HrOrgField label="If claimed lodging > entitlement">
+          <HrOrgField label="If hotel cost is above the limit">
             <Combo
               value={p.lodgingRules.overLimitAction}
               disabled={readOnly}
-              onChange={(v) => set({ ...p, lodgingRules: { ...p.lodgingRules, overLimitAction: v as OverLimitAction } })}
-              options={[
-                { value: "block", label: "Block" },
-                { value: "allow_with_prior_approval", label: "Allow with Prior Approval" },
-                { value: "allow_and_flag", label: "Allow and Flag Exception" },
-              ]}
+              onChange={(v) => setRules({ overLimitAction: v as OverLimitAction })}
+              options={OVER_LIMIT_OPTIONS}
             />
           </HrOrgField>
         </div>
@@ -1042,52 +1425,50 @@ function LodgingSection({ p, set, readOnly }: { p: TravelPolicy; set: (p: Travel
   );
 }
 
-function RelativesSection({ p, set, readOnly }: { p: TravelPolicy; set: (p: TravelPolicy) => void; readOnly: boolean }) {
+/* ------------------------------------------------------------------ */
+/* F. Relatives / friends                                               */
+/* ------------------------------------------------------------------ */
+
+function RelativesSection({ p, set, readOnly }: { p: TravelPolicy; set: SetPolicy; readOnly: boolean }) {
   return (
-    <SectionCard title="Flat allowance per night" hint="No hotel bill unless you turn billing on elsewhere. Use empty / 0 and mark N/A with a dash.">
+    <SectionCard
+      title="Staying with Relatives / Friends"
+      hint="Allowance payable instead of hotel lodging and boarding."
+    >
       <MatrixTable
         p={p}
-        readOnly={readOnly}
-        renderCell={(g, c) => {
+        renderOwnCell={(g, c) => {
           const x = p.relativesStay.find((r) => r.groupId === g && r.classId === c);
           const na = x?.amountPerNight == null;
+          const update = (amountPerNight: number | null) => {
+            const exists = p.relativesStay.some((r) => r.groupId === g && r.classId === c);
+            set({
+              ...p,
+              relativesStay: exists
+                ? p.relativesStay.map((r) => (r.groupId === g && r.classId === c ? { ...r, amountPerNight } : r))
+                : [...p.relativesStay, { groupId: g, classId: c, amountPerNight }],
+            });
+          };
+          if (readOnly) {
+            return na ? (
+              <span className="text-muted-foreground">Not Allowed</span>
+            ) : (
+              <span className="font-semibold">
+                {formatInr(x?.amountPerNight || 0)}
+                <span className="font-normal text-muted-foreground"> / night</span>
+              </span>
+            );
+          }
           return (
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-2 min-w-[8rem]">
               {na ? (
-                <span className="text-muted-foreground">—</span>
+                <span className="text-muted-foreground">Not Allowed</span>
               ) : (
-                <Num
-                  value={x?.amountPerNight || 0}
-                  disabled={readOnly}
-                  onChange={(n) =>
-                    set({
-                      ...p,
-                      relativesStay: p.relativesStay.map((r) =>
-                        r.groupId === g && r.classId === c ? { ...r, amountPerNight: n } : r,
-                      ),
-                    })
-                  }
-                  className="w-24"
-                />
+                <Num value={x?.amountPerNight || 0} prefix="₹" className="w-24" onChange={(n) => update(n)} />
               )}
-              {!readOnly ? (
-                <button
-                  type="button"
-                  className="text-[10px] text-brand-600"
-                  onClick={() =>
-                    set({
-                      ...p,
-                      relativesStay: p.relativesStay.map((r) =>
-                        r.groupId === g && r.classId === c
-                          ? { ...r, amountPerNight: na ? 0 : null }
-                          : r,
-                      ),
-                    })
-                  }
-                >
-                  {na ? "Enable" : "N/A"}
-                </button>
-              ) : null}
+              <button type="button" className="text-[11px] text-brand-600 hover:underline whitespace-nowrap" onClick={() => update(na ? 0 : null)}>
+                {na ? "Set amount" : "Not Allowed"}
+              </button>
             </div>
           );
         }}
@@ -1096,70 +1477,69 @@ function RelativesSection({ p, set, readOnly }: { p: TravelPolicy; set: (p: Trav
   );
 }
 
-function OvernightSection({ p, set, readOnly }: { p: TravelPolicy; set: (p: TravelPolicy) => void; readOnly: boolean }) {
+/* ------------------------------------------------------------------ */
+/* G. Overnight                                                         */
+/* ------------------------------------------------------------------ */
+
+function OvernightSection({ p, set, readOnly }: { p: TravelPolicy; set: SetPolicy; readOnly: boolean }) {
+  const updateSlab = (id: string, patch: Partial<TravelPolicy["overnightSlabs"][number]>) =>
+    set({ ...p, overnightSlabs: p.overnightSlabs.map((x) => (x.id === id ? { ...x, ...patch } : x)) });
+  const allowanceText = (type: OvernightReimburseType, amount: number) =>
+    type === "percent_boarding" ? `${amount}% of Boarding Allowance` : formatInr(amount);
+
   return (
     <div className="space-y-3">
-      <SectionCard title="Duration slabs">
-        <table className="w-full text-xs border border-border rounded-lg overflow-hidden">
+      <SectionCard title="Overnight Journey Allowance" hint="Allowance for long journeys, based on how long the journey takes.">
+        <table className={TABLE_CLASS}>
           <thead>
             <tr className="bg-muted/40 border-b">
-              {["From hours", "To hours", "Type", "Amount / %", "Actions"].map((h) => (
-                <th key={h} className="px-3 py-2 text-left font-semibold">
-                  {h}
-                </th>
-              ))}
+              <Th>Journey Duration</Th>
+              <Th>Allowance</Th>
+              {!readOnly ? <Th>&nbsp;</Th> : null}
             </tr>
           </thead>
           <tbody>
             {p.overnightSlabs.map((s) => (
-              <tr key={s.id} className="border-b">
-                <td className="px-3 py-1.5 w-24">
-                  <Num
-                    value={s.fromHours}
-                    disabled={readOnly}
-                    onChange={(n) =>
-                      set({ ...p, overnightSlabs: p.overnightSlabs.map((x) => (x.id === s.id ? { ...x, fromHours: n } : x)) })
-                    }
-                  />
-                </td>
-                <td className="px-3 py-1.5 w-24">
-                  <Num
-                    value={s.toHours}
-                    disabled={readOnly}
-                    onChange={(n) =>
-                      set({ ...p, overnightSlabs: p.overnightSlabs.map((x) => (x.id === s.id ? { ...x, toHours: n } : x)) })
-                    }
-                  />
-                </td>
-                <td className="px-3 py-1.5 min-w-[12rem]">
-                  <Combo
-                    value={s.reimburseType}
-                    disabled={readOnly}
-                    onChange={(v) =>
-                      set({
-                        ...p,
-                        overnightSlabs: p.overnightSlabs.map((x) =>
-                          x.id === s.id ? { ...x, reimburseType: v as OvernightReimburseType } : x,
-                        ),
-                      })
-                    }
-                    options={[
-                      { value: "fixed", label: "Fixed Amount" },
-                      { value: "percent_boarding", label: "% of Boarding Allowance" },
-                    ]}
-                  />
-                </td>
-                <td className="px-3 py-1.5 w-28">
-                  <Num
-                    value={s.amount}
-                    disabled={readOnly}
-                    onChange={(n) =>
-                      set({ ...p, overnightSlabs: p.overnightSlabs.map((x) => (x.id === s.id ? { ...x, amount: n } : x)) })
-                    }
-                  />
+              <tr key={s.id} className="border-b border-border/60">
+                <td className="px-3 py-1.5">
+                  {readOnly ? (
+                    `${s.fromHours} – ${s.toHours} hours`
+                  ) : (
+                    <div className="flex items-center gap-1.5">
+                      <Num value={s.fromHours} className="w-16" onChange={(n) => updateSlab(s.id, { fromHours: n })} />
+                      <span className="text-muted-foreground">to</span>
+                      <Num value={s.toHours} className="w-16" onChange={(n) => updateSlab(s.id, { toHours: n })} />
+                      <span className="text-muted-foreground">hours</span>
+                    </div>
+                  )}
                 </td>
                 <td className="px-3 py-1.5">
-                  {!readOnly ? (
+                  {readOnly ? (
+                    allowanceText(s.reimburseType, s.amount)
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <div className="w-52">
+                        <Combo
+                          value={s.reimburseType}
+                          onChange={(v) => updateSlab(s.id, { reimburseType: v as OvernightReimburseType })}
+                          options={[
+                            { value: "fixed", label: "Fixed amount" },
+                            { value: "percent_boarding", label: "Share of Boarding Allowance" },
+                          ]}
+                        />
+                      </div>
+                      <Num
+                        value={s.amount}
+                        className="w-24"
+                        prefix={s.reimburseType === "fixed" ? "₹" : undefined}
+                        suffix={s.reimburseType === "percent_boarding" ? "%" : undefined}
+                        onChange={(n) => updateSlab(s.id, { amount: n })}
+                      />
+                    </div>
+                  )}
+                </td>
+                {!readOnly ? (
+                  <td className="px-3 py-1.5">
                     <HrIconActionButton
                       label="Remove"
                       destructive
@@ -1167,16 +1547,14 @@ function OvernightSection({ p, set, readOnly }: { p: TravelPolicy; set: (p: Trav
                     >
                       <Trash2 />
                     </HrIconActionButton>
-                  ) : null}
-                </td>
+                  </td>
+                ) : null}
               </tr>
             ))}
           </tbody>
         </table>
         {!readOnly ? (
-          <button
-            type="button"
-            className="text-xs font-medium text-brand-600 hover:underline"
+          <AddLink
             onClick={() =>
               set({
                 ...p,
@@ -1187,101 +1565,131 @@ function OvernightSection({ p, set, readOnly }: { p: TravelPolicy; set: (p: Trav
               })
             }
           >
-            + Add slab
-          </button>
+            + Add journey duration
+          </AddLink>
         ) : null}
       </SectionCard>
-      <SectionCard title="Exclusions for same overnight transit">
+
+      <SectionCard
+        title="Claiming Along with Overnight Journey"
+        hint="Switch off to stop these from being claimed together with the overnight journey allowance."
+      >
         <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-          <ToggleRow label="Boarding claim allowed for same transit" checked={p.overnightExclusions.boardingSameTransit} disabled={readOnly} onChange={(v) => set({ ...p, overnightExclusions: { ...p.overnightExclusions, boardingSameTransit: v } })} />
-          <ToggleRow label="Field daily conveyance allowed" checked={p.overnightExclusions.fieldConveyance} disabled={readOnly} onChange={(v) => set({ ...p, overnightExclusions: { ...p.overnightExclusions, fieldConveyance: v } })} />
-          <ToggleRow label="Incidental allowed" checked={p.overnightExclusions.incidental} disabled={readOnly} onChange={(v) => set({ ...p, overnightExclusions: { ...p.overnightExclusions, incidental: v } })} />
+          <ToggleRow
+            label="Boarding Allowance"
+            checked={p.overnightExclusions.boardingSameTransit}
+            disabled={readOnly}
+            onChange={(v) => set({ ...p, overnightExclusions: { ...p.overnightExclusions, boardingSameTransit: v } })}
+          />
+          <ToggleRow
+            label="Field Conveyance"
+            checked={p.overnightExclusions.fieldConveyance}
+            disabled={readOnly}
+            onChange={(v) => set({ ...p, overnightExclusions: { ...p.overnightExclusions, fieldConveyance: v } })}
+          />
+          <ToggleRow
+            label="Incidental Allowance"
+            checked={p.overnightExclusions.incidental}
+            disabled={readOnly}
+            onChange={(v) => set({ ...p, overnightExclusions: { ...p.overnightExclusions, incidental: v } })}
+          />
         </div>
       </SectionCard>
     </div>
   );
 }
 
-function LocalSection({ p, set, readOnly }: { p: TravelPolicy; set: (p: TravelPolicy) => void; readOnly: boolean }) {
+/* ------------------------------------------------------------------ */
+/* H. Local travel                                                      */
+/* ------------------------------------------------------------------ */
+
+const APPLICABILITY_OPTIONS: { value: TimeBandApplicability; label: string }[] = [
+  { value: "all", label: "Everyone" },
+  { value: "male", label: "Male employees" },
+  { value: "female", label: "Female employees" },
+];
+
+function LocalSection({ p, set, readOnly }: { p: TravelPolicy; set: SetPolicy; readOnly: boolean }) {
+  const rows = entitlementDisplayRows(p);
+  const update = (groupId: string, patch: Partial<TravelPolicy["localTravel"][number]>) =>
+    set({ ...p, localTravel: p.localTravel.map((x) => (x.groupId === groupId ? { ...x, ...patch } : x)) });
+
   return (
     <div className="space-y-3">
-      <SectionCard title="Meals & travel mode by group">
-        <table className="w-full text-xs border border-border rounded-lg overflow-hidden">
-          <thead>
-            <tr className="bg-muted/40 border-b">
-              {["Group", "Meals & Misc / day", "Bills", "Non-peak mode", "Peak / Odd hours mode"].map((h) => (
-                <th key={h} className="px-3 py-2 text-left font-semibold">
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {p.localTravel.map((row) => (
-              <tr key={row.groupId} className="border-b">
-                <td className="px-3 py-1.5 font-medium">{p.groups.find((g) => g.id === row.groupId)?.name}</td>
-                <td className="px-3 py-1.5 w-28">
-                  <Num
-                    value={row.mealsMiscPerDay}
-                    disabled={readOnly}
-                    onChange={(n) =>
-                      set({ ...p, localTravel: p.localTravel.map((x) => (x.groupId === row.groupId ? { ...x, mealsMiscPerDay: n } : x)) })
-                    }
-                  />
-                </td>
-                <td className="px-3 py-1.5">
-                  <Switch
-                    size="sm"
-                    checked={row.mealsBillsRequired}
-                    disabled={readOnly}
-                    onCheckedChange={(v) =>
-                      set({
-                        ...p,
-                        localTravel: p.localTravel.map((x) => (x.groupId === row.groupId ? { ...x, mealsBillsRequired: v } : x)),
-                      })
-                    }
-                  />
-                </td>
-                <td className="px-3 py-1.5">
-                  <Input
-                    value={row.nonPeakMode}
-                    disabled={readOnly}
-                    onChange={(e) =>
-                      set({ ...p, localTravel: p.localTravel.map((x) => (x.groupId === row.groupId ? { ...x, nonPeakMode: e.target.value } : x)) })
-                    }
-                    className="h-8 text-xs"
-                  />
-                </td>
-                <td className="px-3 py-1.5">
-                  <Input
-                    value={row.peakOddMode}
-                    disabled={readOnly}
-                    onChange={(e) =>
-                      set({ ...p, localTravel: p.localTravel.map((x) => (x.groupId === row.groupId ? { ...x, peakOddMode: e.target.value } : x)) })
-                    }
-                    className="h-8 text-xs"
-                  />
-                </td>
+      <SectionCard title="Meals & Local Travel" hint="Daily meals allowance and the local travel mode, by designation.">
+        <div className="overflow-x-auto">
+          <table className={TABLE_CLASS}>
+            <thead>
+              <tr className="bg-muted/40 border-b">
+                <Th>Designation</Th>
+                <Th>Meals & Misc / Day</Th>
+                <Th>Normal Travel Mode</Th>
+                <Th>Peak / Odd Hours Mode</Th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {rows.map(({ mapping, groupId, own, sameAsName }) => {
+                const row = p.localTravel.find((r) => r.groupId === groupId);
+                if (!own) {
+                  return (
+                    <tr key={mapping.id} className="border-b border-border/60">
+                      <td className="px-3 py-1.5 font-medium">{mapping.designationName}</td>
+                      <td colSpan={3} className="px-3 py-1.5 text-muted-foreground">
+                        Same as {sameAsName || "—"}
+                      </td>
+                    </tr>
+                  );
+                }
+                return (
+                  <tr key={mapping.id} className="border-b border-border/60">
+                    <td className="px-3 py-1.5 font-medium">{mapping.designationName}</td>
+                    <td className="px-3 py-1.5 w-32">
+                      <Num
+                        value={row?.mealsMiscPerDay ?? 0}
+                        disabled={readOnly}
+                        prefix="₹"
+                        onChange={(n) => update(groupId, { mealsMiscPerDay: n })}
+                      />
+                    </td>
+                    <td className="px-3 py-1.5">
+                      <Input
+                        value={row?.nonPeakMode ?? ""}
+                        disabled={readOnly}
+                        onChange={(e) => update(groupId, { nonPeakMode: e.target.value })}
+                        className="h-8 text-xs min-w-[10rem]"
+                      />
+                    </td>
+                    <td className="px-3 py-1.5">
+                      <Input
+                        value={row?.peakOddMode ?? ""}
+                        disabled={readOnly}
+                        onChange={(e) => update(groupId, { peakOddMode: e.target.value })}
+                        className="h-8 text-xs min-w-[10rem]"
+                      />
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </SectionCard>
-      <SectionCard title="Peak / Odd hour bands" hint="Gender is taken from the employee profile — not asked on the claim.">
-        <table className="w-full text-xs border border-border rounded-lg overflow-hidden">
+
+      <SectionCard title="Peak & Late-night Hours" hint="Gender is taken from the employee profile — not asked on the claim.">
+        <table className={TABLE_CLASS}>
           <thead>
             <tr className="bg-muted/40 border-b">
-              {["Category", "Applicability", "Start", "End", ""].map((h) => (
-                <th key={h} className="px-3 py-2 text-left font-semibold">
-                  {h}
-                </th>
-              ))}
+              <Th>Type</Th>
+              <Th>Applies to</Th>
+              <Th>From</Th>
+              <Th>To</Th>
+              {!readOnly ? <Th>&nbsp;</Th> : null}
             </tr>
           </thead>
           <tbody>
             {p.timeBands.map((b) => (
-              <tr key={b.id} className="border-b">
-                <td className="px-3 py-1.5 min-w-[8rem]">
+              <tr key={b.id} className="border-b border-border/60">
+                <td className="px-3 py-1.5 min-w-[9rem]">
                   <Combo
                     value={b.category}
                     disabled={readOnly}
@@ -1289,12 +1697,12 @@ function LocalSection({ p, set, readOnly }: { p: TravelPolicy; set: (p: TravelPo
                       set({ ...p, timeBands: p.timeBands.map((x) => (x.id === b.id ? { ...x, category: v as TimeBandCategory } : x)) })
                     }
                     options={[
-                      { value: "peak", label: "Peak Hours" },
-                      { value: "odd", label: "Odd Hours" },
+                      { value: "peak", label: "Peak hours" },
+                      { value: "odd", label: "Late-night hours" },
                     ]}
                   />
                 </td>
-                <td className="px-3 py-1.5 min-w-[8rem]">
+                <td className="px-3 py-1.5 min-w-[10rem]">
                   <Combo
                     value={b.applicability}
                     disabled={readOnly}
@@ -1304,11 +1712,7 @@ function LocalSection({ p, set, readOnly }: { p: TravelPolicy; set: (p: TravelPo
                         timeBands: p.timeBands.map((x) => (x.id === b.id ? { ...x, applicability: v as TimeBandApplicability } : x)),
                       })
                     }
-                    options={[
-                      { value: "all", label: "All" },
-                      { value: "male", label: "Male" },
-                      { value: "female", label: "Female" },
-                    ]}
+                    options={APPLICABILITY_OPTIONS}
                   />
                 </td>
                 <td className="px-3 py-1.5 w-28">
@@ -1333,8 +1737,8 @@ function LocalSection({ p, set, readOnly }: { p: TravelPolicy; set: (p: TravelPo
                     className="h-8 text-xs"
                   />
                 </td>
-                <td className="px-3 py-1.5">
-                  {!readOnly ? (
+                {!readOnly ? (
+                  <td className="px-3 py-1.5">
                     <HrIconActionButton
                       label="Remove"
                       destructive
@@ -1342,16 +1746,14 @@ function LocalSection({ p, set, readOnly }: { p: TravelPolicy; set: (p: TravelPo
                     >
                       <Trash2 />
                     </HrIconActionButton>
-                  ) : null}
-                </td>
+                  </td>
+                ) : null}
               </tr>
             ))}
           </tbody>
         </table>
         {!readOnly ? (
-          <button
-            type="button"
-            className="text-xs font-medium text-brand-600 hover:underline"
+          <AddLink
             onClick={() =>
               set({
                 ...p,
@@ -1362,38 +1764,33 @@ function LocalSection({ p, set, readOnly }: { p: TravelPolicy; set: (p: TravelPo
               })
             }
           >
-            + Add time band
-          </button>
+            + Add time range
+          </AddLink>
         ) : null}
       </SectionCard>
 
       <SectionCard
-        title="Odd Hours Safety Upgrade"
-        hint="Explicit rule — do not imply this by editing each peak/odd mode row."
+        title="Late-night Safety Upgrade"
+        hint="Employees travelling during late-night hours get a safer, higher travel mode."
       >
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <ToggleRow
-            label="Odd Hours Safety Upgrade"
-            hint="When on, matching employees receive a higher travel mode during odd hours."
+            label="Safety upgrade for late-night travel"
             checked={p.oddHoursSafety.enabled}
             disabled={readOnly}
             onChange={(v) => set({ ...p, oddHoursSafety: { ...p.oddHoursSafety, enabled: v } })}
           />
-          <HrOrgField label="Applicability">
+          <HrOrgField label="Applies to">
             <Combo
               value={p.oddHoursSafety.applicability}
               disabled={readOnly || !p.oddHoursSafety.enabled}
               onChange={(v) =>
                 set({ ...p, oddHoursSafety: { ...p.oddHoursSafety, applicability: v as TimeBandApplicability } })
               }
-              options={[
-                { value: "female", label: "Female" },
-                { value: "male", label: "Male" },
-                { value: "all", label: "All" },
-              ]}
+              options={APPLICABILITY_OPTIONS}
             />
           </HrOrgField>
-          <HrOrgField label="Upgrade rule">
+          <HrOrgField label="Upgrade to">
             <Combo
               value={p.oddHoursSafety.upgradeRule}
               disabled={readOnly || !p.oddHoursSafety.enabled}
@@ -1401,14 +1798,14 @@ function LocalSection({ p, set, readOnly }: { p: TravelPolicy; set: (p: TravelPo
                 set({ ...p, oddHoursSafety: { ...p.oddHoursSafety, upgradeRule: v as OddHoursUpgradeRule } })
               }
               options={[
-                { value: "one_level_higher", label: "One level higher on mode ladder" },
-                { value: "specific_mode", label: "Specific travel mode" },
-                { value: "custom", label: "Custom text" },
+                { value: "one_level_higher", label: "One step higher travel mode" },
+                { value: "specific_mode", label: "A specific travel mode" },
+                { value: "custom", label: "Custom note" },
               ]}
             />
           </HrOrgField>
           {p.oddHoursSafety.upgradeRule === "specific_mode" ? (
-            <HrOrgField label="Specific mode">
+            <HrOrgField label="Travel mode">
               <Input
                 value={p.oddHoursSafety.specificMode}
                 disabled={readOnly || !p.oddHoursSafety.enabled}
@@ -1419,178 +1816,177 @@ function LocalSection({ p, set, readOnly }: { p: TravelPolicy; set: (p: TravelPo
             </HrOrgField>
           ) : null}
           {p.oddHoursSafety.upgradeRule === "custom" ? (
-            <HrOrgField label="Custom rule" size="full">
+            <HrOrgField label="Note" size="full">
               <Input
                 value={p.oddHoursSafety.customNote}
                 disabled={readOnly || !p.oddHoursSafety.enabled}
                 onChange={(e) => set({ ...p, oddHoursSafety: { ...p.oddHoursSafety, customNote: e.target.value } })}
                 className={hrInput()}
-                placeholder="Describe the upgraded entitlement"
+                placeholder="Describe the upgraded travel entitlement"
               />
             </HrOrgField>
           ) : null}
         </div>
-        <HrOrgField label="Travel mode ladder (lowest → highest)" size="full">
-          <p className="text-[11px] text-muted-foreground mb-1.5">
-            Used when upgrade rule is One Level Higher. Match names to Non-peak / Peak-Odd modes above.
-          </p>
-          <Input
-            value={(p.modeLadder || []).join(", ")}
-            disabled={readOnly}
-            onChange={(e) =>
-              set({
-                ...p,
-                modeLadder: e.target.value
-                  .split(",")
-                  .map((s) => s.trim())
-                  .filter(Boolean),
-              })
-            }
-            className={hrInput()}
-            placeholder="Auto, Shared Taxi, Bus, Sleeper, 3AC…"
-          />
-        </HrOrgField>
+        {p.oddHoursSafety.upgradeRule === "one_level_higher" ? (
+          <HrOrgField
+            label="Travel modes, lowest to highest"
+            size="full"
+            helper="Used for “one step higher”. Names should match the travel modes above."
+          >
+            <Input
+              value={(p.modeLadder || []).join(", ")}
+              disabled={readOnly}
+              onChange={(e) =>
+                set({
+                  ...p,
+                  modeLadder: e.target.value
+                    .split(",")
+                    .map((s) => s.trim())
+                    .filter(Boolean),
+                })
+              }
+              className={hrInput()}
+              placeholder="Auto, Shared Taxi, Bus, Sleeper, 3AC…"
+            />
+          </HrOrgField>
+        ) : null}
       </SectionCard>
     </div>
   );
 }
 
-function FieldSection({ p, set, readOnly }: { p: TravelPolicy; set: (p: TravelPolicy) => void; readOnly: boolean }) {
+/* ------------------------------------------------------------------ */
+/* Field conveyance                                                     */
+/* ------------------------------------------------------------------ */
+
+function FieldSection({ p, set, readOnly }: { p: TravelPolicy; set: SetPolicy; readOnly: boolean }) {
+  const updateCell = (g: string, c: string, patch: Partial<TravelPolicy["fieldConveyance"][number]>) => {
+    const exists = p.fieldConveyance.some((r) => r.groupId === g && r.classId === c);
+    if (exists) {
+      set({
+        ...p,
+        fieldConveyance: p.fieldConveyance.map((r) => (r.groupId === g && r.classId === c ? { ...r, ...patch } : r)),
+      });
+      return;
+    }
+    set({
+      ...p,
+      fieldConveyance: [
+        ...p.fieldConveyance,
+        { groupId: g, classId: c, allowanceType: "fixed", amount: 0, billsRequired: false, ...patch },
+      ],
+    });
+  };
   return (
     <div className="space-y-3">
-      <SectionCard title="Field conveyance matrix">
+      <SectionCard title="Field Conveyance" hint="Daily conveyance for local field work, by designation and city category.">
         <MatrixTable
           p={p}
-          readOnly={readOnly}
-          renderCell={(g, c) => {
+          renderOwnCell={(g, c) => {
             const x = p.fieldConveyance.find((r) => r.groupId === g && r.classId === c);
             if (!x) return "—";
+            if (readOnly) {
+              return (
+                <div>
+                  <p className="font-semibold">
+                    {x.allowanceType === "actual" ? "Actuals against bills" : `${formatInr(x.amount)} / day`}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground">{x.billsRequired ? "Bills required" : "No bills needed"}</p>
+                </div>
+              );
+            }
             return (
               <div className="space-y-1 min-w-[9rem]">
                 <Combo
                   value={x.allowanceType}
-                  disabled={readOnly}
-                  onChange={(v) =>
-                    set({
-                      ...p,
-                      fieldConveyance: p.fieldConveyance.map((r) =>
-                        r.groupId === g && r.classId === c ? { ...r, allowanceType: v as FieldAllowanceType } : r,
-                      ),
-                    })
-                  }
+                  onChange={(v) => updateCell(g, c, { allowanceType: v as FieldAllowanceType })}
                   options={[
-                    { value: "fixed", label: "Fixed" },
-                    { value: "actual", label: "Actual" },
+                    { value: "fixed", label: "Fixed amount" },
+                    { value: "actual", label: "Actuals against bills" },
                   ]}
                 />
                 {x.allowanceType === "fixed" ? (
-                  <Num
-                    value={x.amount}
-                    disabled={readOnly}
-                    onChange={(n) =>
-                      set({
-                        ...p,
-                        fieldConveyance: p.fieldConveyance.map((r) =>
-                          r.groupId === g && r.classId === c ? { ...r, amount: n } : r,
-                        ),
-                      })
-                    }
-                  />
-                ) : (
-                  <p className="text-[11px] text-muted-foreground">Bill as configured</p>
-                )}
+                  <Num value={x.amount} prefix="₹" suffix="/ day" onChange={(n) => updateCell(g, c, { amount: n })} />
+                ) : null}
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[11px] text-muted-foreground">Bills</span>
-                  <Switch
-                    size="sm"
-                    checked={x.billsRequired}
-                    disabled={readOnly}
-                    onCheckedChange={(v) =>
-                      set({
-                        ...p,
-                        fieldConveyance: p.fieldConveyance.map((r) =>
-                          r.groupId === g && r.classId === c ? { ...r, billsRequired: v } : r,
-                        ),
-                      })
-                    }
-                  />
+                  <span className="text-[11px] text-muted-foreground">Bills required</span>
+                  <Switch size="sm" checked={x.billsRequired} onCheckedChange={(v) => updateCell(g, c, { billsRequired: v })} />
                 </div>
               </div>
             );
           }}
         />
       </SectionCard>
-      <SectionCard title="Applicability">
+      <SectionCard title="When Field Conveyance Applies">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-          <ToggleRow label="HQ local field travel" checked={p.fieldApplicability.hqLocalFieldTravel} disabled={readOnly} onChange={(v) => set({ ...p, fieldApplicability: { ...p.fieldApplicability, hqLocalFieldTravel: v } })} />
-          <ToggleRow label="Not payable during Ex-HQ tour" checked={p.fieldApplicability.notPayableDuringExHq} disabled={readOnly} onChange={(v) => set({ ...p, fieldApplicability: { ...p.fieldApplicability, notPayableDuringExHq: v } })} />
+          <ToggleRow
+            label="Payable for local field work at Headquarters"
+            checked={p.fieldApplicability.hqLocalFieldTravel}
+            disabled={readOnly}
+            onChange={(v) => set({ ...p, fieldApplicability: { ...p.fieldApplicability, hqLocalFieldTravel: v } })}
+          />
+          <ToggleRow
+            label="Not payable during Ex-HQ tours"
+            hint="Field Conveyance does not apply during Ex-HQ official tours."
+            checked={p.fieldApplicability.notPayableDuringExHq}
+            disabled={readOnly}
+            onChange={(v) => set({ ...p, fieldApplicability: { ...p.fieldApplicability, notPayableDuringExHq: v } })}
+          />
         </div>
       </SectionCard>
     </div>
   );
 }
 
-function KmSection({ p, set, readOnly }: { p: TravelPolicy; set: (p: TravelPolicy) => void; readOnly: boolean }) {
+/* ------------------------------------------------------------------ */
+/* KM                                                                   */
+/* ------------------------------------------------------------------ */
+
+function KmSection({ p, set, readOnly }: { p: TravelPolicy; set: SetPolicy; readOnly: boolean }) {
+  const updateRate = (id: string, patch: Partial<TravelPolicy["kmRates"][number]>) =>
+    set({ ...p, kmRates: p.kmRates.map((x) => (x.id === id ? { ...x, ...patch } : x)) });
   return (
     <div className="space-y-3">
-      <SectionCard title="Vehicle rates">
-        <table className="w-full text-xs border border-border rounded-lg overflow-hidden">
+      <SectionCard title="Vehicle Rates" hint="Reimbursement per KM when an employee uses their own vehicle.">
+        <table className={TABLE_CLASS}>
           <thead>
             <tr className="bg-muted/40 border-b">
-              {["Vehicle type", "₹ / KM", "Prior approval", "Monthly KM approval", "Bills", "Active", ""].map((h) => (
-                <th key={h} className="px-3 py-2 text-left font-semibold">
-                  {h}
-                </th>
-              ))}
+              <Th>Vehicle</Th>
+              <Th>Rate / KM</Th>
+              <Th>Approval Required</Th>
+              {!readOnly ? <Th>&nbsp;</Th> : null}
             </tr>
           </thead>
           <tbody>
             {p.kmRates.map((r) => (
-              <tr key={r.id} className="border-b">
+              <tr key={r.id} className={cn("border-b border-border/60", !r.active && "opacity-60")}>
                 <td className="px-3 py-1.5">
                   <Input
                     value={r.vehicleType}
                     disabled={readOnly}
-                    onChange={(e) =>
-                      set({ ...p, kmRates: p.kmRates.map((x) => (x.id === r.id ? { ...x, vehicleType: e.target.value } : x)) })
-                    }
+                    onChange={(e) => updateRate(r.id, { vehicleType: e.target.value })}
                     className="h-8 text-xs"
                   />
                 </td>
-                <td className="px-3 py-1.5 w-24">
-                  <Num
-                    value={r.ratePerKm}
-                    disabled={readOnly}
-                    onChange={(n) => set({ ...p, kmRates: p.kmRates.map((x) => (x.id === r.id ? { ...x, ratePerKm: n } : x)) })}
-                  />
+                <td className="px-3 py-1.5 w-32">
+                  <Num value={r.ratePerKm} disabled={readOnly} prefix="₹" onChange={(n) => updateRate(r.id, { ratePerKm: n })} />
                 </td>
                 <td className="px-3 py-1.5">
-                  <Switch size="sm" checked={r.priorApprovalRequired} disabled={readOnly} onCheckedChange={(v) => set({ ...p, kmRates: p.kmRates.map((x) => (x.id === r.id ? { ...x, priorApprovalRequired: v } : x)) })} />
+                  <Switch size="sm" checked={r.priorApprovalRequired} disabled={readOnly} onCheckedChange={(v) => updateRate(r.id, { priorApprovalRequired: v })} />
                 </td>
-                <td className="px-3 py-1.5">
-                  <Switch size="sm" checked={r.monthlyKmApprovalRequired} disabled={readOnly} onCheckedChange={(v) => set({ ...p, kmRates: p.kmRates.map((x) => (x.id === r.id ? { ...x, monthlyKmApprovalRequired: v } : x)) })} />
-                </td>
-                <td className="px-3 py-1.5">
-                  <Switch size="sm" checked={r.billsRequired} disabled={readOnly} onCheckedChange={(v) => set({ ...p, kmRates: p.kmRates.map((x) => (x.id === r.id ? { ...x, billsRequired: v } : x)) })} />
-                </td>
-                <td className="px-3 py-1.5">
-                  <Switch size="sm" checked={r.active} disabled={readOnly} onCheckedChange={(v) => set({ ...p, kmRates: p.kmRates.map((x) => (x.id === r.id ? { ...x, active: v } : x)) })} />
-                </td>
-                <td className="px-3 py-1.5">
-                  {!readOnly ? (
+                {!readOnly ? (
+                  <td className="px-3 py-1.5">
                     <HrIconActionButton label="Remove" destructive onClick={() => set({ ...p, kmRates: p.kmRates.filter((x) => x.id !== r.id) })}>
                       <Trash2 />
                     </HrIconActionButton>
-                  ) : null}
-                </td>
+                  </td>
+                ) : null}
               </tr>
             ))}
           </tbody>
         </table>
         {!readOnly ? (
-          <button
-            type="button"
-            className="text-xs font-medium text-brand-600 hover:underline"
+          <AddLink
             onClick={() =>
               set({
                 ...p,
@@ -1609,11 +2005,11 @@ function KmSection({ p, set, readOnly }: { p: TravelPolicy; set: (p: TravelPolic
               })
             }
           >
-            + Add vehicle type
-          </button>
+            + Add vehicle
+          </AddLink>
         ) : null}
       </SectionCard>
-      <SectionCard title="KM claim required fields">
+      <SectionCard title="Details Needed on a KM Claim">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
           {(
             [
@@ -1624,7 +2020,7 @@ function KmSection({ p, set, readOnly }: { p: TravelPolicy; set: (p: TravelPolic
               ["kmTravelled", "KM Travelled"],
               ["startOdometer", "Start Odometer (optional)"],
               ["endOdometer", "End Odometer (optional)"],
-              ["routeAttachment", "Route/Map attachment (optional)"],
+              ["routeAttachment", "Route / Map attachment (optional)"],
             ] as const
           ).map(([k, label]) => (
             <ToggleRow
@@ -1637,22 +2033,22 @@ function KmSection({ p, set, readOnly }: { p: TravelPolicy; set: (p: TravelPolic
           ))}
         </div>
       </SectionCard>
-      <SectionCard title="KM rules">
+      <SectionCard title="KM Claim Rules">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <ToggleRow label="Monthly KM approval required" checked={p.kmRules.monthlyApprovalRequired} disabled={readOnly} onChange={(v) => set({ ...p, kmRules: { ...p.kmRules, monthlyApprovalRequired: v } })} />
-          <HrOrgField label="If claimed KM differs from approved">
+          <HrOrgField label="If claimed KM differs from approved KM">
             <Combo
               value={p.kmRules.deviationAction}
               disabled={readOnly}
               onChange={(v) => set({ ...p, kmRules: { ...p.kmRules, deviationAction: v as TravelPolicy["kmRules"]["deviationAction"] } })}
               options={[
-                { value: "block", label: "Block Submission" },
-                { value: "require_exception", label: "Require Exception Approval" },
-                { value: "allow_with_warning", label: "Allow with Warning" },
+                { value: "block", label: "Do not allow submission" },
+                { value: "require_exception", label: "Needs exception approval" },
+                { value: "allow_with_warning", label: "Allow with a warning" },
               ]}
             />
           </HrOrgField>
-          <HrOrgField label="KM claims due by day of following month">
+          <HrOrgField label="Claim by day of next month">
             <Num value={p.kmRules.dueDayOfFollowingMonth} disabled={readOnly} onChange={(n) => set({ ...p, kmRules: { ...p.kmRules, dueDayOfFollowingMonth: n } })} />
           </HrOrgField>
         </div>
@@ -1661,73 +2057,159 @@ function KmSection({ p, set, readOnly }: { p: TravelPolicy; set: (p: TravelPolic
   );
 }
 
-function IncidentalSection({ p, set, readOnly }: { p: TravelPolicy; set: (p: TravelPolicy) => void; readOnly: boolean }) {
+/* ------------------------------------------------------------------ */
+/* Incidental                                                           */
+/* ------------------------------------------------------------------ */
+
+function IncidentalSection({ p, set, readOnly }: { p: TravelPolicy; set: SetPolicy; readOnly: boolean }) {
+  const ownRows = entitlementDisplayRows(p).filter((r) => r.own);
+  const amounts = ownRows
+    .map((r) => p.incidentals.find((i) => i.groupId === r.groupId))
+    .filter(Boolean);
+  const allSame =
+    amounts.length > 0 &&
+    amounts.every(
+      (a) => a!.amountPerDay === amounts[0]!.amountPerDay && a!.billsRequired === amounts[0]!.billsRequired,
+    );
+  const shared = amounts[0];
+
+  const updateAll = (patch: Partial<TravelPolicy["incidentals"][number]>) => {
+    const ids = new Set(ownRows.map((r) => r.groupId));
+    set({
+      ...p,
+      incidentals: p.incidentals.map((x) => (ids.has(x.groupId) ? { ...x, ...patch } : x)),
+    });
+  };
+
+  if (allSame && shared) {
+    return (
+      <SectionCard title="Incidental Allowance" hint="Small daily allowance for minor travel expenses.">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-w-xl">
+          <HrOrgField label="Ex-HQ Incidental Allowance">
+            <Num
+              value={shared.amountPerDay}
+              disabled={readOnly}
+              prefix="₹"
+              suffix="/ day"
+              onChange={(n) => updateAll({ amountPerDay: n })}
+            />
+          </HrOrgField>
+          <ToggleRow
+            label="Bills Required"
+            checked={shared.billsRequired}
+            disabled={readOnly}
+            onChange={(v) => updateAll({ billsRequired: v })}
+          />
+        </div>
+        <p className="text-[11px] text-muted-foreground mt-2">
+          Applies to: All designations covered by this policy
+          {p.overnightExclusions.incidental
+            ? "."
+            : ". Not payable for transit nights covered by Overnight Journey Allowance."}
+        </p>
+      </SectionCard>
+    );
+  }
+
   return (
-    <SectionCard title="Incidental allowance" hint="Typically Ex-HQ, without vouchers.">
-      <table className="w-full text-xs border border-border rounded-lg overflow-hidden">
+    <SectionCard title="Incidental Allowance" hint="Small daily allowance for minor travel expenses.">
+      <table className={TABLE_CLASS}>
         <thead>
           <tr className="bg-muted/40 border-b">
-            {["Group", "Amount / day", "Bills required", "Travel context"].map((h) => (
-              <th key={h} className="px-3 py-2 text-left font-semibold">
-                {h}
-              </th>
-            ))}
+            <Th>Designation</Th>
+            <Th>Amount per day</Th>
+            <Th>Bills required</Th>
           </tr>
         </thead>
         <tbody>
-          {p.incidentals.map((row) => (
-            <tr key={row.groupId} className="border-b">
-              <td className="px-3 py-1.5 font-medium">{p.groups.find((g) => g.id === row.groupId)?.name}</td>
-              <td className="px-3 py-1.5 w-28">
-                <Num
-                  value={row.amountPerDay}
-                  disabled={readOnly}
-                  onChange={(n) =>
-                    set({ ...p, incidentals: p.incidentals.map((x) => (x.groupId === row.groupId ? { ...x, amountPerDay: n } : x)) })
-                  }
-                />
-              </td>
-              <td className="px-3 py-1.5">
-                <Switch
-                  size="sm"
-                  checked={row.billsRequired}
-                  disabled={readOnly}
-                  onCheckedChange={(v) =>
-                    set({ ...p, incidentals: p.incidentals.map((x) => (x.groupId === row.groupId ? { ...x, billsRequired: v } : x)) })
-                  }
-                />
-              </td>
-              <td className="px-3 py-1.5">
-                <Input
-                  value={row.travelContext}
-                  disabled={readOnly}
-                  onChange={(e) =>
-                    set({ ...p, incidentals: p.incidentals.map((x) => (x.groupId === row.groupId ? { ...x, travelContext: e.target.value } : x)) })
-                  }
-                  className="h-8 text-xs"
-                />
-              </td>
-            </tr>
-          ))}
+          {entitlementDisplayRows(p).map(({ mapping, groupId, own, sameAsName }) => {
+            if (!own) {
+              return (
+                <tr key={mapping.id} className="border-b border-border/60">
+                  <td className="px-3 py-1.5 font-medium">{mapping.designationName}</td>
+                  <td colSpan={2} className="px-3 py-1.5 text-muted-foreground">
+                    Same as {sameAsName || "—"}
+                  </td>
+                </tr>
+              );
+            }
+            const row = p.incidentals.find((r) => r.groupId === groupId);
+            return (
+              <tr key={mapping.id} className="border-b border-border/60">
+                <td className="px-3 py-1.5 font-medium">{mapping.designationName}</td>
+                <td className="px-3 py-1.5 w-36">
+                  <Num
+                    value={row?.amountPerDay ?? 0}
+                    disabled={readOnly}
+                    prefix="₹"
+                    suffix="/ day"
+                    onChange={(n) =>
+                      set({
+                        ...p,
+                        incidentals: p.incidentals.map((x) => (x.groupId === groupId ? { ...x, amountPerDay: n } : x)),
+                      })
+                    }
+                  />
+                </td>
+                <td className="px-3 py-1.5">
+                  <Switch
+                    size="sm"
+                    checked={row?.billsRequired ?? false}
+                    disabled={readOnly}
+                    onCheckedChange={(v) =>
+                      set({
+                        ...p,
+                        incidentals: p.incidentals.map((x) => (x.groupId === groupId ? { ...x, billsRequired: v } : x)),
+                      })
+                    }
+                  />
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
+      <p className="text-[11px] text-muted-foreground">
+        {p.overnightExclusions.incidental
+          ? "Can also be claimed during an overnight journey."
+          : "Not payable for transit nights covered by Overnight Journey Allowance."}
+      </p>
     </SectionCard>
   );
 }
 
-function ClaimsSection({ p, set, readOnly }: { p: TravelPolicy; set: (p: TravelPolicy) => void; readOnly: boolean }) {
+/* ------------------------------------------------------------------ */
+/* Claims                                                               */
+/* ------------------------------------------------------------------ */
+
+function deadlineSummary(r: TravelPolicy["claimRules"][number]): string {
+  switch (r.deadlineMethod) {
+    case "within_days_of_completion":
+      return `Within ${r.withinDays} days of completing the travel`;
+    case "by_day_of_following_month":
+      return `By day ${r.followingMonthDay} of the following month`;
+    case "whichever_earlier":
+      return `Within ${r.withinDays} days of travel, or by day ${r.followingMonthDay} of the following month — whichever is earlier`;
+    case "absolute_max_days":
+      return `Within ${r.absoluteMaxDays} days at the latest`;
+    default:
+      return "";
+  }
+}
+
+function ClaimsSection({ p, set, readOnly }: { p: TravelPolicy; set: SetPolicy; readOnly: boolean }) {
+  const updateRule = (id: string, patch: Partial<TravelPolicy["claimRules"][number]>) =>
+    set({ ...p, claimRules: p.claimRules.map((x) => (x.id === id ? { ...x, ...patch } : x)) });
   return (
     <div className="space-y-3">
-      <SectionCard title="Claim type rules">
+      <SectionCard title="Claim Types" hint="Submission deadline and documents needed for each type of claim.">
         {p.claimRules.map((r) => (
           <div key={r.id} className="rounded-lg border border-border p-3 mb-2 space-y-2">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2">
               <Input
                 value={r.claimType}
                 disabled={readOnly}
-                onChange={(e) =>
-                  set({ ...p, claimRules: p.claimRules.map((x) => (x.id === r.id ? { ...x, claimType: e.target.value } : x)) })
-                }
+                onChange={(e) => updateRule(r.id, { claimType: e.target.value })}
                 className="h-8 text-xs font-semibold max-w-xs"
               />
               {!readOnly ? (
@@ -1740,132 +2222,145 @@ function ClaimsSection({ p, set, readOnly }: { p: TravelPolicy; set: (p: TravelP
                 </HrIconActionButton>
               ) : null}
             </div>
+            <p className="text-[11px] text-muted-foreground">Submit: {deadlineSummary(r)}</p>
+            {!readOnly ? (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                <HrOrgField label="Submission deadline">
+                  <Combo
+                    value={r.deadlineMethod}
+                    onChange={(v) => updateRule(r.id, { deadlineMethod: v as DeadlineMethod })}
+                    options={[
+                      { value: "within_days_of_completion", label: "Within a number of days" },
+                      { value: "by_day_of_following_month", label: "By a day of the next month" },
+                      { value: "whichever_earlier", label: "Whichever is earlier" },
+                      { value: "absolute_max_days", label: "Within a maximum number of days" },
+                    ]}
+                  />
+                </HrOrgField>
+                {r.deadlineMethod === "within_days_of_completion" || r.deadlineMethod === "whichever_earlier" ? (
+                  <HrOrgField label="Within (days)">
+                    <Num value={r.withinDays} onChange={(n) => updateRule(r.id, { withinDays: n })} />
+                  </HrOrgField>
+                ) : null}
+                {r.deadlineMethod === "by_day_of_following_month" || r.deadlineMethod === "whichever_earlier" ? (
+                  <HrOrgField label="Day of next month">
+                    <Num value={r.followingMonthDay} onChange={(n) => updateRule(r.id, { followingMonthDay: n })} />
+                  </HrOrgField>
+                ) : null}
+                {r.deadlineMethod === "absolute_max_days" ? (
+                  <HrOrgField label="Maximum days">
+                    <Num value={r.absoluteMaxDays} onChange={(n) => updateRule(r.id, { absoluteMaxDays: n })} />
+                  </HrOrgField>
+                ) : null}
+              </div>
+            ) : null}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-              <HrOrgField label="Deadline method">
-                <Combo
-                  value={r.deadlineMethod}
-                  disabled={readOnly}
-                  onChange={(v) =>
-                    set({ ...p, claimRules: p.claimRules.map((x) => (x.id === r.id ? { ...x, deadlineMethod: v as DeadlineMethod } : x)) })
-                  }
-                  options={[
-                    { value: "within_days_of_completion", label: "Within X days of completion" },
-                    { value: "by_day_of_following_month", label: "By X day of following month" },
-                    { value: "whichever_earlier", label: "Whichever is earlier" },
-                    { value: "absolute_max_days", label: "Absolute maximum X days" },
-                  ]}
-                />
-              </HrOrgField>
-              <HrOrgField label="Within days">
-                <Num value={r.withinDays} disabled={readOnly} onChange={(n) => set({ ...p, claimRules: p.claimRules.map((x) => (x.id === r.id ? { ...x, withinDays: n } : x)) })} />
-              </HrOrgField>
-              <HrOrgField label="Following month day">
-                <Num value={r.followingMonthDay} disabled={readOnly} onChange={(n) => set({ ...p, claimRules: p.claimRules.map((x) => (x.id === r.id ? { ...x, followingMonthDay: n } : x)) })} />
-              </HrOrgField>
-              <HrOrgField label="Absolute max days">
-                <Num value={r.absoluteMaxDays} disabled={readOnly} onChange={(n) => set({ ...p, claimRules: p.claimRules.map((x) => (x.id === r.id ? { ...x, absoluteMaxDays: n } : x)) })} />
-              </HrOrgField>
-              <ToggleRow label="Bill required" checked={r.billRequired} disabled={readOnly} onChange={(v) => set({ ...p, claimRules: p.claimRules.map((x) => (x.id === r.id ? { ...x, billRequired: v } : x)) })} />
-              <ToggleRow label="Original bill required" checked={r.originalBillRequired} disabled={readOnly} onChange={(v) => set({ ...p, claimRules: p.claimRules.map((x) => (x.id === r.id ? { ...x, originalBillRequired: v } : x)) })} />
-              <ToggleRow label="Company name on bill" checked={r.companyNameOnBill} disabled={readOnly} onChange={(v) => set({ ...p, claimRules: p.claimRules.map((x) => (x.id === r.id ? { ...x, companyNameOnBill: v } : x)) })} />
-              <ToggleRow label="GSTIN required" checked={r.gstinRequired} disabled={readOnly} onChange={(v) => set({ ...p, claimRules: p.claimRules.map((x) => (x.id === r.id ? { ...x, gstinRequired: v } : x)) })} />
-              <ToggleRow label="Attachment required" checked={r.attachmentRequired} disabled={readOnly} onChange={(v) => set({ ...p, claimRules: p.claimRules.map((x) => (x.id === r.id ? { ...x, attachmentRequired: v } : x)) })} />
-              <ToggleRow label="Prior approval required" checked={r.priorApprovalRequired} disabled={readOnly} onChange={(v) => set({ ...p, claimRules: p.claimRules.map((x) => (x.id === r.id ? { ...x, priorApprovalRequired: v } : x)) })} />
-              <HrOrgField label="Exception handling">
-                <Combo
-                  value={r.exceptionHandling}
-                  disabled={readOnly}
-                  onChange={(v) =>
-                    set({
-                      ...p,
-                      claimRules: p.claimRules.map((x) =>
-                        x.id === r.id ? { ...x, exceptionHandling: v as OverLimitAction } : x,
-                      ),
-                    })
-                  }
-                  options={[
-                    { value: "block", label: "Block" },
-                    { value: "allow_with_prior_approval", label: "Allow with prior approval" },
-                    { value: "allow_and_flag", label: "Allow and flag exception" },
-                  ]}
-                />
-              </HrOrgField>
+              <ToggleRow label="Bill required" checked={r.billRequired} disabled={readOnly} onChange={(v) => updateRule(r.id, { billRequired: v })} />
+              <ToggleRow label="Original bill required" checked={r.originalBillRequired} disabled={readOnly} onChange={(v) => updateRule(r.id, { originalBillRequired: v })} />
+              <ToggleRow label="Company name on bill" checked={r.companyNameOnBill} disabled={readOnly} onChange={(v) => updateRule(r.id, { companyNameOnBill: v })} />
+              <ToggleRow label="GSTIN on bill" checked={r.gstinRequired} disabled={readOnly} onChange={(v) => updateRule(r.id, { gstinRequired: v })} />
+              <ToggleRow label="Attachment required" checked={r.attachmentRequired} disabled={readOnly} onChange={(v) => updateRule(r.id, { attachmentRequired: v })} />
+              <ToggleRow label="Prior approval required" checked={r.priorApprovalRequired} disabled={readOnly} onChange={(v) => updateRule(r.id, { priorApprovalRequired: v })} />
             </div>
+            <HrOrgField label="If a claim falls outside these rules">
+              <Combo
+                value={r.exceptionHandling}
+                disabled={readOnly}
+                onChange={(v) => updateRule(r.id, { exceptionHandling: v as OverLimitAction })}
+                options={OVER_LIMIT_OPTIONS}
+              />
+            </HrOrgField>
           </div>
         ))}
         {!readOnly ? (
-          <button
-            type="button"
-            className="text-xs font-medium text-brand-600 hover:underline"
-            onClick={() =>
-              set({
-                ...p,
-                claimRules: [...p.claimRules, blankClaimTypeRule(newClaimRuleId())],
-              })
-            }
-          >
+          <AddLink onClick={() => set({ ...p, claimRules: [...p.claimRules, blankClaimTypeRule(newClaimRuleId())] })}>
             + Add claim type
-          </button>
+          </AddLink>
         ) : null}
       </SectionCard>
-      <SectionCard title="Maximum claim age">
+      <SectionCard title="Oldest Claim Accepted">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-w-lg">
-          <HrOrgField label="Claims older than (days)">
-            <Num value={p.maxClaimAge.days} disabled={readOnly} onChange={(n) => set({ ...p, maxClaimAge: { ...p.maxClaimAge, days: n } })} />
+          <HrOrgField label="Claims older than">
+            <Num value={p.maxClaimAge.days} disabled={readOnly} suffix="days" onChange={(n) => set({ ...p, maxClaimAge: { ...p.maxClaimAge, days: n } })} />
           </HrOrgField>
-          <HrOrgField label="Behaviour">
+          <HrOrgField label="Then">
             <Combo
               value={p.maxClaimAge.action}
               disabled={readOnly}
               onChange={(v) => set({ ...p, maxClaimAge: { ...p.maxClaimAge, action: v as TravelPolicy["maxClaimAge"]["action"] } })}
               options={[
-                { value: "block", label: "Block Submission" },
-                { value: "warn", label: "Warn" },
-                { value: "require_exception", label: "Require Exception Approval" },
+                { value: "block", label: "Do not allow submission" },
+                { value: "warn", label: "Show a warning" },
+                { value: "require_exception", label: "Needs exception approval" },
               ]}
             />
           </HrOrgField>
         </div>
       </SectionCard>
-      <SectionCard title="Global billing (only where claim type requires a bill)">
+      <SectionCard title="Billing Requirements" hint="Applied wherever a claim type requires a bill.">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
           <ToggleRow label="Bill in Company Name" checked={p.billing.billInCompanyName} disabled={readOnly} onChange={(v) => set({ ...p, billing: { ...p.billing, billInCompanyName: v } })} />
           <ToggleRow label="Original Bill Required" checked={p.billing.originalBillRequired} disabled={readOnly} onChange={(v) => set({ ...p, billing: { ...p.billing, originalBillRequired: v } })} />
           <ToggleRow label="GSTIN Required" checked={p.billing.gstinRequired} disabled={readOnly} onChange={(v) => set({ ...p, billing: { ...p.billing, gstinRequired: v } })} />
           <ToggleRow label="Attachment Mandatory" checked={p.billing.attachmentMandatory} disabled={readOnly} onChange={(v) => set({ ...p, billing: { ...p.billing, attachmentMandatory: v } })} />
-          <ToggleRow label="Approval Attachment Required" checked={p.billing.approvalAttachmentRequired} disabled={readOnly} onChange={(v) => set({ ...p, billing: { ...p.billing, approvalAttachmentRequired: v } })} />
+          <ToggleRow label="Attach approval with claim" checked={p.billing.approvalAttachmentRequired} disabled={readOnly} onChange={(v) => set({ ...p, billing: { ...p.billing, approvalAttachmentRequired: v } })} />
         </div>
       </SectionCard>
-      <SectionCard title="Exceptions">
+      <SectionCard title="Travel Advance" hint="Policy settings only — advance payment is set up separately.">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <ToggleRow label="Travel Advance Allowed" checked={p.travelAdvance.enabled} disabled={readOnly} onChange={(v) => set({ ...p, travelAdvance: { ...p.travelAdvance, enabled: v } })} />
+          <HrOrgField label="Settle within">
+            <Num value={p.travelAdvance.settlementDays} disabled={readOnly} suffix="days" onChange={(n) => set({ ...p, travelAdvance: { ...p.travelAdvance, settlementDays: n } })} />
+          </HrOrgField>
+          <ToggleRow label="Block new advance until previous is settled" checked={p.travelAdvance.blockNewIfUnsettled} disabled={readOnly} onChange={(v) => set({ ...p, travelAdvance: { ...p.travelAdvance, blockNewIfUnsettled: v } })} />
+        </div>
+      </SectionCard>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Approval & exceptions                                                */
+/* ------------------------------------------------------------------ */
+
+function ApprovalExceptionsSection({ p, set, readOnly }: { p: TravelPolicy; set: SetPolicy; readOnly: boolean }) {
+  const updateEx = (id: string, patch: Partial<TravelPolicy["exceptions"][number]>) =>
+    set({ ...p, exceptions: p.exceptions.map((x) => (x.id === id ? { ...x, ...patch } : x)) });
+  return (
+    <div className="space-y-3">
+      <SectionCard title="Exceptions" hint="Situations where employees may go beyond the policy, and who approves them.">
         {p.exceptions.map((ex) => (
           <div key={ex.id} className="flex flex-wrap items-center gap-2 border-b border-border/60 py-2">
             <Input
               value={ex.name}
               disabled={readOnly}
-              onChange={(e) => set({ ...p, exceptions: p.exceptions.map((x) => (x.id === ex.id ? { ...x, name: e.target.value } : x)) })}
+              onChange={(e) => updateEx(ex.id, { name: e.target.value })}
               className="h-8 text-xs w-48"
             />
-            <ToggleRow label="Allowed" checked={ex.allowed} disabled={readOnly} onChange={(v) => set({ ...p, exceptions: p.exceptions.map((x) => (x.id === ex.id ? { ...x, allowed: v } : x)) })} />
-            <ToggleRow label="Prior approval" checked={ex.requiresPriorApproval} disabled={readOnly} onChange={(v) => set({ ...p, exceptions: p.exceptions.map((x) => (x.id === ex.id ? { ...x, requiresPriorApproval: v } : x)) })} />
+            <ToggleRow label="Allowed" checked={ex.allowed} disabled={readOnly} onChange={(v) => updateEx(ex.id, { allowed: v })} />
+            <ToggleRow label="Prior approval" checked={ex.requiresPriorApproval} disabled={readOnly} onChange={(v) => updateEx(ex.id, { requiresPriorApproval: v })} />
             <div className="min-w-[16rem] flex-1">
               <ChipMultiSelect
                 values={ex.approvers}
                 disabled={readOnly}
+                placeholder="Select approvers…"
                 options={APPROVER_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
-                onChange={(vals) =>
-                  set({
-                    ...p,
-                    exceptions: p.exceptions.map((x) => (x.id === ex.id ? { ...x, approvers: vals as ApproverRole[] } : x)),
-                  })
-                }
+                onChange={(vals) => updateEx(ex.id, { approvers: vals as ApproverRole[] })}
               />
             </div>
+            {!readOnly ? (
+              <HrIconActionButton
+                label="Remove"
+                destructive
+                onClick={() => set({ ...p, exceptions: p.exceptions.filter((x) => x.id !== ex.id) })}
+              >
+                <Trash2 />
+              </HrIconActionButton>
+            ) : null}
           </div>
         ))}
         {!readOnly ? (
-          <button
-            type="button"
-            className="text-xs font-medium text-brand-600 hover:underline"
+          <AddLink
             onClick={() =>
               set({
                 ...p,
@@ -1877,69 +2372,53 @@ function ClaimsSection({ p, set, readOnly }: { p: TravelPolicy; set: (p: TravelP
             }
           >
             + Add exception
-          </button>
+          </AddLink>
         ) : null}
       </SectionCard>
-      <SectionCard title="Travel advance (policy only — no payment engine)">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <ToggleRow label="Travel Advance Enabled" checked={p.travelAdvance.enabled} disabled={readOnly} onChange={(v) => set({ ...p, travelAdvance: { ...p.travelAdvance, enabled: v } })} />
-          <HrOrgField label="Settlement within (days)">
-            <Num value={p.travelAdvance.settlementDays} disabled={readOnly} onChange={(n) => set({ ...p, travelAdvance: { ...p.travelAdvance, settlementDays: n } })} />
-          </HrOrgField>
-          <ToggleRow label="Block new advance if previous unsettled" checked={p.travelAdvance.blockNewIfUnsettled} disabled={readOnly} onChange={(v) => set({ ...p, travelAdvance: { ...p.travelAdvance, blockNewIfUnsettled: v } })} />
-        </div>
-      </SectionCard>
-      <SectionCard title="Approval chains">
-        {p.approvalChains.map((ch) => (
-          <p key={ch.id} className="text-xs">
-            <span className="font-medium">{ch.name}:</span> {ch.steps.map(approverLabel).join(" → ")}
-          </p>
-        ))}
+      <SectionCard title="Approval Flow" hint="Who approves a claim, in order.">
+        {p.approvalChains.map((ch) => {
+          const steps = ch.steps.filter(Boolean);
+          if (!steps.length) return null;
+          return (
+            <p key={ch.id} className="text-xs">
+              <span className="font-medium">{ch.name}:</span> {steps.map(approverLabel).join(" → ")}
+            </p>
+          );
+        })}
       </SectionCard>
     </div>
   );
 }
 
-function ExclusionsSection({ p, set, readOnly }: { p: TravelPolicy; set: (p: TravelPolicy) => void; readOnly: boolean }) {
+/* ------------------------------------------------------------------ */
+/* Exclusions                                                           */
+/* ------------------------------------------------------------------ */
+
+function ExclusionsSection({ p, set, readOnly }: { p: TravelPolicy; set: SetPolicy; readOnly: boolean }) {
   const typeOptions = p.claimRules.map((r) => ({ value: r.claimType, label: r.claimType }));
+  const updateRow = (id: string, patch: Partial<TravelPolicy["exclusions"][number]>) =>
+    set({ ...p, exclusions: p.exclusions.map((x) => (x.id === id ? { ...x, ...patch } : x)) });
   return (
     <div className="space-y-3">
       <SectionCard
-        title="Non-reimbursable expenses"
-        hint="Configurable exclusions for claims. Empty claim-type list means all types."
+        title="Non-reimbursable Expenses"
+        hint="Expenses that cannot be reimbursed. Leave claim types empty to apply to all claims."
       >
         {(p.exclusions || []).map((row) => (
           <div key={row.id} className="rounded-lg border border-border p-3 mb-2 space-y-2">
             <div className="flex items-start justify-between gap-2">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2 flex-1">
                 <HrOrgField label="Name">
-                  <Input
-                    value={row.name}
-                    disabled={readOnly}
-                    onChange={(e) =>
-                      set({
-                        ...p,
-                        exclusions: p.exclusions.map((x) => (x.id === row.id ? { ...x, name: e.target.value } : x)),
-                      })
-                    }
-                    className="h-8 text-xs"
-                  />
+                  <Input value={row.name} disabled={readOnly} onChange={(e) => updateRow(row.id, { name: e.target.value })} className="h-8 text-xs" />
                 </HrOrgField>
-                <HrOrgField label="Action">
+                <HrOrgField label="If claimed">
                   <Combo
                     value={row.action}
                     disabled={readOnly}
-                    onChange={(v) =>
-                      set({
-                        ...p,
-                        exclusions: p.exclusions.map((x) =>
-                          x.id === row.id ? { ...x, action: v as ExclusionAction } : x,
-                        ),
-                      })
-                    }
+                    onChange={(v) => updateRow(row.id, { action: v as ExclusionAction })}
                     options={[
-                      { value: "block", label: "Block" },
-                      { value: "warn", label: "Warning" },
+                      { value: "block", label: "Do not allow" },
+                      { value: "warn", label: "Show a warning" },
                     ]}
                   />
                 </HrOrgField>
@@ -1947,44 +2426,23 @@ function ExclusionsSection({ p, set, readOnly }: { p: TravelPolicy; set: (p: Tra
                   <Textarea
                     value={row.description}
                     disabled={readOnly}
-                    onChange={(e) =>
-                      set({
-                        ...p,
-                        exclusions: p.exclusions.map((x) =>
-                          x.id === row.id ? { ...x, description: e.target.value } : x,
-                        ),
-                      })
-                    }
+                    onChange={(e) => updateRow(row.id, { description: e.target.value })}
                     rows={2}
                     className="text-sm"
                   />
                 </HrOrgField>
-                <HrOrgField label="Claim types (empty = all)" size="full">
+                <HrOrgField label="Applies to claim types" size="full" helper="Leave empty to apply to all claim types.">
                   <ChipMultiSelect
                     values={row.claimTypes}
                     disabled={readOnly}
                     options={typeOptions}
-                    onChange={(vals) =>
-                      set({
-                        ...p,
-                        exclusions: p.exclusions.map((x) => (x.id === row.id ? { ...x, claimTypes: vals } : x)),
-                      })
-                    }
+                    placeholder="All claim types"
+                    onChange={(vals) => updateRow(row.id, { claimTypes: vals })}
                   />
                 </HrOrgField>
               </div>
               <div className="flex flex-col items-end gap-2 pt-5">
-                <ToggleRow
-                  label="Active"
-                  checked={row.active}
-                  disabled={readOnly}
-                  onChange={(v) =>
-                    set({
-                      ...p,
-                      exclusions: p.exclusions.map((x) => (x.id === row.id ? { ...x, active: v } : x)),
-                    })
-                  }
-                />
+                <ToggleRow label="Active" checked={row.active} disabled={readOnly} onChange={(v) => updateRow(row.id, { active: v })} />
                 {!readOnly ? (
                   <HrIconActionButton
                     label="Remove"
@@ -1999,9 +2457,7 @@ function ExclusionsSection({ p, set, readOnly }: { p: TravelPolicy; set: (p: Tra
           </div>
         ))}
         {!readOnly ? (
-          <button
-            type="button"
-            className="text-xs font-medium text-brand-600 hover:underline"
+          <AddLink
             onClick={() =>
               set({
                 ...p,
@@ -2020,7 +2476,7 @@ function ExclusionsSection({ p, set, readOnly }: { p: TravelPolicy; set: (p: Tra
             }
           >
             + Add exclusion
-          </button>
+          </AddLink>
         ) : null}
       </SectionCard>
     </div>
@@ -2056,8 +2512,8 @@ function GuidanceSection({ p, set, readOnly }: { p: TravelPolicy; set: (p: Trave
   return (
     <div className="space-y-3">
       <SectionCard
-        title="Employee guidance"
-        hint="Informational policy text for HR and future mobile display — not calculation rules."
+        title="Employee Guidance"
+        hint="Tips and instructions shown to employees. These do not affect any calculation."
       >
         {kinds.map((k) => (
           <div key={k.value} className="mb-3">
@@ -2141,133 +2597,144 @@ function GuidanceSection({ p, set, readOnly }: { p: TravelPolicy; set: (p: Trave
 }
 
 function SummarySection({ p }: { p: TravelPolicy }) {
-  const employees = loadHrEmployees().filter((e) => e.status === "active").slice(0, 12);
-  const [empId, setEmpId] = useState(String(employees[0]?.id || ""));
+  const allEmployees = loadHrEmployees().filter((e) => e.status === "active");
+  const preferred =
+    allEmployees.find((e) => /area sales|asm/i.test(e.designation || "")) ??
+    allEmployees.find((e) => /sales|territory|nsm|rsm|agronomist/i.test(e.designation || "")) ??
+    allEmployees[0];
+
+  const designationOptions = (() => {
+    const fromMaps = p.roleMappings.filter((m) => m.active && m.designationName).map((m) => m.designationName);
+    const fromEmps = allEmployees.map((e) => e.designation).filter(Boolean);
+    return Array.from(new Set([...fromMaps, ...fromEmps])).sort((a, b) => a.localeCompare(b));
+  })();
+
+  const [mode, setMode] = useState<"employee" | "designation">("designation");
+  const [empId, setEmpId] = useState(String(preferred?.id || ""));
+  const [designation, setDesignation] = useState(
+    preferred?.designation || designationOptions.find((d) => /asm|area sales/i.test(d)) || designationOptions[0] || "Area Sales Manager (ASM)",
+  );
   const [city, setCity] = useState("Mumbai");
   const [date, setDate] = useState(p.effectiveFrom || "2026-04-15");
+  const [travelKind, setTravelKind] = useState<"ex_hq" | "hq_local">("ex_hq");
   const [stay, setStay] = useState<"hotel" | "relatives_friends">("hotel");
   const [hours, setHours] = useState("7");
-  const [km, setKm] = useState("100");
-  const [vehicle, setVehicle] = useState("Two-Wheeler");
-  const [lodging, setLodging] = useState("3500");
-  const [time, setTime] = useState("09:30");
+  const [vehicle, setVehicle] = useState(p.kmRates.find((k) => /four/i.test(k.vehicleType))?.vehicleType || p.kmRates[0]?.vehicleType || "Four-Wheeler (Own)");
   const [distance, setDistance] = useState("80");
-  const [oldDate, setOldDate] = useState("2020-01-01");
 
-  const employee = employees.find((e) => String(e.id) === empId) ?? employees[0];
+  const employee: HrEmployee | null = (() => {
+    if (mode === "employee") {
+      return allEmployees.find((e) => String(e.id) === empId) ?? preferred ?? null;
+    }
+    const match = allEmployees.find((e) => normLabel(e.designation) === normLabel(designation));
+    if (match) return match;
+    if (!designation) return preferred ?? null;
+    // Preview stub when no employee matches the selected designation
+    const base: HrEmployee =
+      preferred ??
+      ({
+        id: -1,
+        employeeCode: "PREVIEW",
+        employeeName: "Preview",
+        mobileNumber: "",
+        emailId: "",
+        department: "Sales",
+        designation,
+        reportingManagerId: null,
+        reportingManagerName: "",
+        branch: "",
+        employeeType: "permanent",
+        employmentStatus: "active",
+        dateOfJoining: "2024-01-01",
+        status: "active",
+        createdBy: "system",
+        updatedBy: "system",
+        createdAt: "2024-01-01",
+        updatedAt: "2024-01-01",
+      } as unknown as HrEmployee);
+    return {
+      ...base,
+      designation,
+      employeeName: preferred?.employeeName ? `${preferred.employeeName} (preview)` : `Preview · ${designation}`,
+    };
+  })();
+
   const preview = employee
     ? getTravelEntitlement({
         employee,
+        policy: p,
         travelDate: date,
         city,
+        travelType: travelKind,
         stayType: stay,
         journeyHours: Number(hours),
-        distanceKm: Number(distance),
+        distanceKm: travelKind === "ex_hq" ? Number(distance) || 80 : 10,
         vehicleType: vehicle,
-        timeOfDay: time,
-        overnight: Number(hours) >= 18,
+        overnight: false,
       })
     : null;
-  const validation =
-    employee && preview && !("error" in preview)
-      ? validateTravelClaim({
-          employee,
-          travelDate: date,
-          city,
-          stayType: stay,
-          lodgingAmount: Number(lodging),
-          kmTravelled: Number(km),
-          vehicleType: vehicle,
-          startPoint: "HQ",
-          destination: city,
-          purpose: "Beat",
-          distanceKm: Number(distance),
-          overnight: Number(hours) >= 18,
-          journeyHours: Number(hours),
-        })
-      : null;
-  const oldPolicy = employee ? getApplicableTravelPolicy(employee, oldDate) : null;
-  const cityClass = resolveCityClassification(p, city);
-  const group = employee ? getEmployeeEntitlementGroup(p, employee) : null;
+
+  const airLabel = (air: NonNullable<Extract<typeof preview, { air: unknown }>["air"]>) => {
+    if (!air?.allowed) return "Not allowed";
+    const bits = [air.airClass || "Economy"];
+    if (air.trigger === "journey_duration" && air.minHours > 0) bits.push(`if journey > ${air.minHours}h`);
+    if (air.priorApproval) bits.push("prior approval");
+    if (air.lowestAvailableFareRequired) bits.push("lowest available fare");
+    return bits.join(" · ");
+  };
 
   return (
     <div className="space-y-3">
-      <SectionCard title="Configuration snapshot">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-          <Stat label="Policy Name" value={p.name} />
-          <Stat label="Policy Number" value={p.policyNumber || "—"} />
-          <Stat
-            label="Effective Period"
-            value={p.effectiveTo ? `${p.effectiveFrom} → ${p.effectiveTo}` : `${p.effectiveFrom} → open`}
-          />
-          <Stat label="Current / Active" value={`${p.isCurrent ? "Current" : "Historical"} · ${p.status}`} />
-          <Stat
-            label="Roles Covered"
-            value={p.roleMappings.filter((m) => m.active).map((m) => m.designationName).join(", ") || "—"}
-          />
-          <Stat label="Entitlement Groups" value={p.groups.filter((g) => g.active).map((g) => g.name).join(", ") || "—"} />
-          <Stat
-            label="City Classes"
-            value={
-              p.cityClasses.filter((c) => c.active).map((c) => `${c.name}${c.isFallback ? " (fallback)" : ""}`).join(", ") ||
-              "—"
-            }
-          />
-          <Stat
-            label="Ex-HQ Threshold"
-            value={`${p.exHq.distanceThresholdKm} KM ${p.exHq.distanceBasis.replace("_", " ")}`}
-          />
-          <Stat label="Prior Approval" value={p.exHq.priorApprovalRequired ? "Required" : "Off"} />
-          <Stat
-            label="Lodging Matrix"
-            value={`${p.lodgingBoarding.filter((c) => c.lodgingLimit > 0 || c.boardingLimit > 0).length}/${p.lodgingBoarding.length} cells set`}
-          />
-          <Stat label="KM Rates Configured" value={String(p.kmRates.filter((k) => k.active).length)} />
-          <Stat label="Overnight Slabs" value={String(p.overnightSlabs.length)} />
-          <Stat
-            label="Claim Deadline"
-            value={
-              p.claimRules[0]
-                ? `${p.claimRules[0].claimType}: ${p.claimRules[0].deadlineMethod.replace(/_/g, " ")}`
-                : "—"
-            }
-          />
-          <Stat label="Maximum Claim Age" value={`${p.maxClaimAge.days} days · ${p.maxClaimAge.action.replace(/_/g, " ")}`} />
-          <Stat
-            label="Exception Approval"
-            value={`${p.exceptions.filter((e) => e.allowed).length} allowed / ${p.exceptions.length}`}
-          />
-          <Stat
-            label="Travel Advance"
-            value={
-              p.travelAdvance.enabled
-                ? `On · settle ${p.travelAdvance.settlementDays}d`
-                : "Off"
-            }
-          />
-          <Stat label="Exclusions" value={String((p.exclusions || []).filter((e) => e.active).length)} />
-          <Stat label="Guidance Items" value={String((p.guidance || []).filter((g) => g.active).length)} />
-          <Stat label="Odd Hours Safety" value={p.oddHoursSafety?.enabled ? `On · ${p.oddHoursSafety.applicability}` : "Off"} />
-          <Stat label="Approved By" value={p.approvedBy || "—"} />
-          <Stat label="Policy Document" value={p.document?.fileName || "None"} />
-        </div>
-        <p className="text-[11px] text-muted-foreground mt-2">
-          Mode of travel: {p.travelModes.map((m) => `${p.groups.find((g) => g.id === m.groupId)?.name} air=${airTriggerLabel(m.airTrigger)}`).join(" · ")}
+      <div>
+        <h2 className="text-sm font-semibold text-navy-700">Entitlement Preview</h2>
+        <p className="text-[11px] text-muted-foreground mt-0.5">
+          Check what limits apply for a designation, destination and travel type. Read-only helper for HR demos.
         </p>
-      </SectionCard>
+      </div>
 
-      <SectionCard title="Resolver preview" hint="Admin helper only — not a mobile claim form.">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
-          <HrOrgField label="Employee">
+      <SectionCard title="Preview inputs">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+          <HrOrgField label="Lookup by">
             <Combo
-              value={empId}
-              onChange={setEmpId}
-              options={employees.map((e) => ({ value: String(e.id), label: `${e.employeeName} · ${e.designation}` }))}
-              placeholder="Employee"
+              value={mode}
+              onChange={(v) => setMode(v as "employee" | "designation")}
+              options={[
+                { value: "designation", label: "Designation" },
+                { value: "employee", label: "Employee" },
+              ]}
             />
           </HrOrgField>
-          <HrOrgField label="City">
-            <Input value={city} onChange={(e) => setCity(e.target.value)} className="h-8 text-xs" />
+          {mode === "employee" ? (
+            <HrOrgField label="Employee">
+              <Combo
+                value={empId}
+                onChange={setEmpId}
+                options={allEmployees.map((e) => ({ value: String(e.id), label: `${e.employeeName} · ${e.designation}` }))}
+                placeholder="Employee"
+              />
+            </HrOrgField>
+          ) : (
+            <HrOrgField label="Designation">
+              <Combo
+                value={designation}
+                onChange={setDesignation}
+                options={designationOptions.map((d) => ({ value: d, label: d }))}
+                placeholder="Designation"
+              />
+            </HrOrgField>
+          )}
+          <HrOrgField label="Travel type">
+            <Combo
+              value={travelKind}
+              onChange={(v) => setTravelKind(v as "ex_hq" | "hq_local")}
+              options={[
+                { value: "ex_hq", label: "Ex-HQ" },
+                { value: "hq_local", label: "HQ / Local" },
+              ]}
+            />
+          </HrOrgField>
+          <HrOrgField label="Destination">
+            <Input value={city} onChange={(e) => setCity(e.target.value)} className="h-8 text-xs" placeholder="e.g. Mumbai" />
           </HrOrgField>
           <HrOrgField label="Travel date">
             <HrDateInput value={date} onChange={setDate} />
@@ -2282,79 +2749,76 @@ function SummarySection({ p }: { p: TravelPolicy }) {
               ]}
             />
           </HrOrgField>
-          <HrOrgField label="Journey hours">
-            <Input value={hours} onChange={(e) => setHours(e.target.value)} className="h-8 text-xs" />
-          </HrOrgField>
-          <HrOrgField label="Distance KM">
-            <Input value={distance} onChange={(e) => setDistance(e.target.value)} className="h-8 text-xs" />
-          </HrOrgField>
-          <HrOrgField label="Vehicle">
+          {travelKind === "ex_hq" ? (
+            <HrOrgField label="Distance (KM one-way)">
+              <Input value={distance} onChange={(e) => setDistance(e.target.value)} className="h-8 text-xs" />
+            </HrOrgField>
+          ) : null}
+          <HrOrgField label="Vehicle (optional)">
             <Combo
               value={vehicle}
               onChange={setVehicle}
-              options={p.kmRates.map((k) => ({ value: k.vehicleType, label: k.vehicleType }))}
+              options={(p.kmRates.length ? p.kmRates : [{ id: "x", vehicleType: "Four-Wheeler (Own)" } as { id: string; vehicleType: string }]).map((k) => ({
+                value: k.vehicleType,
+                label: k.vehicleType,
+              }))}
             />
           </HrOrgField>
-          <HrOrgField label="Local time">
-            <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="h-8 text-xs" />
-          </HrOrgField>
-          <HrOrgField label="Claimed lodging">
-            <Input value={lodging} onChange={(e) => setLodging(e.target.value)} className="h-8 text-xs" />
-          </HrOrgField>
-          <HrOrgField label="Claimed KM">
-            <Input value={km} onChange={(e) => setKm(e.target.value)} className="h-8 text-xs" />
-          </HrOrgField>
-          <HrOrgField label="Older travel date (version test)">
-            <HrDateInput value={oldDate} onChange={setOldDate} />
-          </HrOrgField>
         </div>
-        {employee ? (
-          <div className="rounded-lg border border-border bg-muted/20 p-3 text-xs space-y-1">
-            <p>
-              <span className="text-muted-foreground">Group:</span> {group?.name || "Unmapped"} ·{" "}
-              <span className="text-muted-foreground">City class:</span> {cityClass?.name || "—"}
-            </p>
-            {preview && "error" in preview ? (
-              <p className="text-red-600">{preview.error}</p>
-            ) : preview ? (
-              <>
-                {preview.guidance.map((g) => (
-                  <p key={g.label}>
-                    <span className="text-muted-foreground">{g.label}:</span> {g.value}
-                  </p>
-                ))}
-                <p>
-                  Overnight slab:{" "}
-                  {preview.overnightSlab
-                    ? `${preview.overnightSlab.fromHours}–${preview.overnightSlab.toHours}h → ${
-                        preview.overnightAmount != null ? formatInr(preview.overnightAmount) : "—"
-                      }`
-                    : "—"}
-                </p>
-                <p>Local mode ({preview.timeCategory}): {preview.localMode || "—"}{preview.safetyUpgradeApplied ? " · safety upgrade" : ""}</p>
-                <p className="text-[11px] text-muted-foreground">{preview.hqNote}</p>
-              </>
-            ) : null}
-            {validation ? (
-              <div className="pt-2">
-                <p className="font-medium">{validation.ok ? "Validation: allowed" : "Validation: blocked"}</p>
-                {validation.issues.map((i, idx) => (
-                  <p key={idx} className={i.level === "block" ? "text-red-600" : i.level === "exception" ? "text-amber-700" : ""}>
-                    [{i.level}] {i.message}
-                  </p>
-                ))}
-              </div>
-            ) : null}
-            <p className="text-[11px] text-muted-foreground pt-1">
-              Policy on {oldDate}: {oldPolicy ? `${oldPolicy.name} (${oldPolicy.effectiveFrom})` : "none"}
-            </p>
+      </SectionCard>
+
+      <SectionCard title="Resolved entitlement">
+        {!employee ? (
+          <p className="text-xs text-muted-foreground">Select a designation or employee to preview.</p>
+        ) : preview && "error" in preview ? (
+          <p className="text-xs text-red-600">{preview.error}</p>
+        ) : preview ? (
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-xs">
+            <Stat label="Policy" value={preview.policyName} />
+            <Stat
+              label="Entitlement"
+              value={preview.group ? designationNameFor(p, preview.group.id) : "Not mapped"}
+            />
+            <Stat label="City Category" value={preview.cityClass?.name || "—"} />
+            <Stat label="Travel Context" value={preview.context.exHq ? "Ex-HQ" : "HQ / Local"} />
+            <Stat label="Rail" value={preview.railClass || "—"} />
+            <Stat label="Air" value={preview.air ? airLabel(preview.air) : "—"} />
+            <Stat label="Destination Conveyance" value={preview.destinationConveyance || "—"} />
+            <Stat label="Lodging" value={preview.lodgingLimit != null ? `${formatInr(preview.lodgingLimit)}/day` : stay === "relatives_friends" ? "N/A (alt. stay)" : "—"} />
+            <Stat label="Boarding" value={preview.boardingLimit != null ? `${formatInr(preview.boardingLimit)}/day` : "—"} />
+            <Stat
+              label="Alternative Stay"
+              value={
+                stay === "relatives_friends"
+                  ? preview.relativesPerNight == null
+                    ? "Not Allowed"
+                    : `${formatInr(preview.relativesPerNight)}/night`
+                  : "—"
+              }
+            />
+            <Stat label="Incidental" value={preview.incidentalPerDay != null ? `${formatInr(preview.incidentalPerDay)}/day` : "—"} />
+            <Stat
+              label="Field Conveyance"
+              value={
+                preview.fieldConveyance
+                  ? preview.fieldConveyance.allowanceType === "actual"
+                    ? "Actuals against bills"
+                    : `${formatInr(preview.fieldConveyance.amount)}/day`
+                  : "—"
+              }
+            />
+            <Stat label="KM Rate" value={preview.kmRate != null ? `₹${preview.kmRate}/km` : "—"} />
+            <Stat label="Prior Approval" value={preview.priorApproval || preview.context.priorApprovalRequired ? "Required" : "Not required"} />
+            <Stat label="Hotel Bill" value={preview.billRequiredHotel ? "Required" : "Not required"} />
           </div>
-        ) : (
-          <p className="text-xs text-muted-foreground">No active employees available for preview.</p>
-        )}
+        ) : null}
       </SectionCard>
     </div>
   );
+}
+
+function normLabel(s: string): string {
+  return (s || "").trim().toLowerCase();
 }
 
 function Stat({ label, value }: { label: string; value: string }) {

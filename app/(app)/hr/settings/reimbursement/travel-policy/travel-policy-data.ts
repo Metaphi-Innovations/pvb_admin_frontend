@@ -79,6 +79,8 @@ export interface TravelModeRow {
   airTrigger: AirEligibilityTrigger;
   airMinJourneyHours: number;
   airPriorApproval: boolean;
+  /** Prefer cheapest available fare when air is used */
+  lowestAvailableFareRequired: boolean;
   destinationConveyance: string;
 }
 
@@ -282,6 +284,32 @@ export interface ApprovalChain {
   steps: ApproverRole[];
 }
 
+/** Who the policy covers — "all" means unrestricted on that axis. */
+export interface PolicyApplicability {
+  companyAll: boolean;
+  /** Company display names (single-company demo usually leaves All on) */
+  companies: string[];
+  branchAll: boolean;
+  branches: string[];
+  departmentAll: boolean;
+  departments: string[];
+  employeeTypeAll: boolean;
+  employeeTypes: string[];
+}
+
+export function defaultPolicyApplicability(): PolicyApplicability {
+  return {
+    companyAll: true,
+    companies: [],
+    branchAll: true,
+    branches: [],
+    departmentAll: true,
+    departments: [],
+    employeeTypeAll: true,
+    employeeTypes: [],
+  };
+}
+
 export interface TravelPolicy {
   id: number;
   name: string;
@@ -292,6 +320,8 @@ export interface TravelPolicy {
   isCurrent: boolean;
   appliesTo: string;
   description: string;
+  /** Org-scope filters; designations use roleMappings / entitlement groups */
+  applicability: PolicyApplicability;
   groups: EntitlementGroup[];
   roleMappings: RoleMapping[];
   cityClasses: CityClass[];
@@ -403,7 +433,7 @@ export function defaultGuidance(): GuidanceItem[] {
     { id: "gd-3", kind: "do", text: "Record start point, destination, purpose and KM for own-vehicle claims.", sortOrder: 3, active: true },
     { id: "gd-4", kind: "dont", text: "Do not claim personal expenses, alcohol, or vehicle repair / insurance as travel.", sortOrder: 4, active: true },
     { id: "gd-5", kind: "dont", text: "Do not claim boarding, field conveyance and incidental together for the same overnight transit period if the policy excludes them.", sortOrder: 5, active: true },
-    { id: "gd-6", kind: "instruction", text: "City class, entitlement group and HQ are resolved from masters — do not self-select them on the claim.", sortOrder: 6, active: true },
+    { id: "gd-6", kind: "instruction", text: "City category and travel limits come from this Travel Policy and your designation — do not self-select them on the claim.", sortOrder: 6, active: true },
   ];
 }
 
@@ -432,8 +462,18 @@ export function normalizeTravelPolicy(raw: Partial<TravelPolicy> & { id: number 
     gstinRequired: r.gstinRequired ?? false,
     attachmentRequired: r.attachmentRequired ?? false,
   }));
+  const app = raw.applicability;
   const next: TravelPolicy = {
     ...(raw as TravelPolicy),
+    id: Number(raw.id),
+    applicability: {
+      ...defaultPolicyApplicability(),
+      ...(app ?? {}),
+      companies: Array.isArray(app?.companies) ? app!.companies : [],
+      branches: Array.isArray(app?.branches) ? app!.branches : [],
+      departments: Array.isArray(app?.departments) ? app!.departments : [],
+      employeeTypes: Array.isArray(app?.employeeTypes) ? app!.employeeTypes : [],
+    },
     oddHoursSafety: { ...seedSafety, ...(raw.oddHoursSafety ?? {}) },
     modeLadder: Array.isArray(raw.modeLadder) && raw.modeLadder.length ? raw.modeLadder : defaultModeLadder(),
     exclusions: Array.isArray(raw.exclusions) ? raw.exclusions : defaultExclusions(),
@@ -443,8 +483,51 @@ export function normalizeTravelPolicy(raw: Partial<TravelPolicy> & { id: number 
     internalRemark: raw.internalRemark ?? "",
     document: raw.document ?? null,
     claimRules,
+    travelModes: (raw.travelModes ?? []).map((m) => ({
+      ...m,
+      lowestAvailableFareRequired: m.lowestAvailableFareRequired ?? true,
+    })),
   };
-  return ensureMatrixCells(next);
+  return ensureMatrixCells(syncGroupNamesFromDesignations(next));
+}
+
+/**
+ * Display/compatibility migration: entitlement buckets keep stable ids (nsm/rsm/…)
+ * but their labels become the owning Organization Designation name so HR never
+ * sees short codes like "NSM" / "ASM" as product roles.
+ * Does not change amounts, city classes, or resolver keys.
+ */
+function syncGroupNamesFromDesignations(p: TravelPolicy): TravelPolicy {
+  const score = (groupName: string, designationName: string): number => {
+    const g = (groupName || "").trim().toLowerCase();
+    const d = (designationName || "").trim().toLowerCase();
+    if (!g || !d) return 0;
+    if (g === d) return 100;
+    if (d.includes(g) || g.includes(d)) return 50;
+    const gTokens = g.split(/[^a-z0-9]+/).filter((t) => t.length >= 2);
+    const dTokens = d.split(/[^a-z0-9]+/).filter(Boolean);
+    return gTokens.filter((t) => dTokens.includes(t)).length * 10;
+  };
+
+  const groups = (p.groups || []).map((g) => {
+    const maps = (p.roleMappings || []).filter((m) => m.groupId === g.id && m.designationName);
+    if (!maps.length) return g;
+    let best = maps[0]!;
+    let bestScore = -1;
+    for (const m of maps) {
+      const s = score(g.name, m.designationName) * 2 + (m.active ? 1 : 0);
+      if (s > bestScore) {
+        best = m;
+        bestScore = s;
+      }
+    }
+    if (best.designationName && best.designationName !== g.name) {
+      return { ...g, name: best.designationName };
+    }
+    return g;
+  });
+
+  return { ...p, groups };
 }
 
 function today(): string {
@@ -475,13 +558,13 @@ function fc(
   return { groupId, classId, allowanceType, amount, billsRequired };
 }
 
-/** Seed = first version of ParamVerse Bio Sales Force Travel Policy. Editable; not used as runtime constants. */
+/** Seed = Sales Force Travel Policy demo (client reference values). Editable; not runtime constants. */
 export function buildSeedTravelPolicy(): TravelPolicy {
   const groups: EntitlementGroup[] = [
-    { id: G.nsm, name: "NSM", active: true },
-    { id: G.rsm, name: "RSM / State Head", active: true },
-    { id: G.asm, name: "ASM", active: true },
-    { id: G.tm, name: "TM", active: true },
+    { id: G.nsm, name: "National Sales Manager (NSM)", active: true },
+    { id: G.rsm, name: "Regional Sales Manager / State Head", active: true },
+    { id: G.asm, name: "Area Sales Manager (ASM)", active: true },
+    { id: G.tm, name: "Territory Manager (TM)", active: true },
   ];
 
   const designations = typeof window === "undefined" ? [] : loadDesignations();
@@ -499,11 +582,12 @@ export function buildSeedTravelPolicy(): TravelPolicy {
     };
   };
 
+  // Agronomist maps to TM entitlement group (= "same entitlement as TM"), not a hardcoded special case.
   const roleMappings: RoleMapping[] = [
-    mapRole("National Sales Manager", G.nsm, (d) => /nsm|national sales/i.test(`${d.code} ${d.name}`)),
-    mapRole("Regional Sales Manager / State Head", G.rsm, (d) => /rsm|regional sales|state head/i.test(`${d.code} ${d.name}`)),
-    mapRole("Area Sales Manager", G.asm, (d) => /asm|area sales/i.test(`${d.code} ${d.name}`)),
-    mapRole("Territory Manager", G.tm, (d) => /(?:^|\b)tm(?:\b|$)|territory manager/i.test(`${d.code} ${d.name}`)),
+    mapRole("National Sales Manager (NSM)", G.nsm, (d) => /nsm|national sales/i.test(`${d.code} ${d.name}`)),
+    mapRole("Regional Sales Manager / State Head", G.rsm, (d) => /rsm|regional sales|state head|zonal sales|zsm/i.test(`${d.code} ${d.name}`)),
+    mapRole("Area Sales Manager (ASM)", G.asm, (d) => /asm|area sales/i.test(`${d.code} ${d.name}`)),
+    mapRole("Territory Manager (TM)", G.tm, (d) => /(?:^|\b)tm(?:\b|$)|territory manager/i.test(`${d.code} ${d.name}`)),
     mapRole("Agronomist", G.tm, (d) => /agronomist/i.test(`${d.code} ${d.name}`)),
   ];
 
@@ -526,11 +610,16 @@ export function buildSeedTravelPolicy(): TravelPolicy {
     {
       id: C.metro,
       name: "Metro",
-      description: "Other major cities",
+      description: "Other major cities (configure as needed)",
       cities: [
         { state: "Maharashtra", city: "Pune" },
         { state: "Gujarat", city: "Ahmedabad" },
         { state: "Gujarat", city: "Surat" },
+        { state: "Rajasthan", city: "Jaipur" },
+        { state: "Madhya Pradesh", city: "Indore" },
+        { state: "Uttar Pradesh", city: "Lucknow" },
+        { state: "Chandigarh", city: "Chandigarh" },
+        { state: "Odisha", city: "Bhubaneswar" },
       ],
       isFallback: false,
       active: true,
@@ -538,7 +627,7 @@ export function buildSeedTravelPolicy(): TravelPolicy {
     {
       id: C.others,
       name: "Others",
-      description: "Default when city is not mapped",
+      description: "Fallback for cities not assigned to Mega Metro or Metro",
       cities: [],
       isFallback: true,
       active: true,
@@ -554,17 +643,19 @@ export function buildSeedTravelPolicy(): TravelPolicy {
       airTrigger: "always",
       airMinJourneyHours: 0,
       airPriorApproval: false,
-      destinationConveyance: "Taxi / Cab",
+      lowestAvailableFareRequired: true,
+      destinationConveyance: "Taxi (Non-AC) / Auto",
     },
     {
       groupId: G.rsm,
-      railClass: "2nd AC",
+      railClass: "3rd AC",
       airAllowed: true,
       airClass: "Economy",
       airTrigger: "journey_duration",
       airMinJourneyHours: 12,
       airPriorApproval: true,
-      destinationConveyance: "Taxi / Cab",
+      lowestAvailableFareRequired: true,
+      destinationConveyance: "Auto / Taxi (Non-AC)",
     },
     {
       groupId: G.asm,
@@ -574,63 +665,68 @@ export function buildSeedTravelPolicy(): TravelPolicy {
       airTrigger: "journey_duration",
       airMinJourneyHours: 12,
       airPriorApproval: true,
-      destinationConveyance: "Shared taxi / Auto",
+      lowestAvailableFareRequired: true,
+      destinationConveyance: "Auto",
     },
     {
       groupId: G.tm,
-      railClass: "Sleeper / 3rd AC",
-      airAllowed: false,
+      railClass: "3rd AC / AC Bus",
+      airAllowed: true,
       airClass: "Economy",
-      airTrigger: "not_allowed",
+      airTrigger: "journey_duration",
       airMinJourneyHours: 12,
       airPriorApproval: true,
-      destinationConveyance: "Shared / Public taxi",
+      lowestAvailableFareRequired: true,
+      destinationConveyance: "Auto / Local Train",
     },
   ];
 
+  // Designation × city category lodging/boarding (INR/day) — client reference demo values
   const lodgingBoarding: LodgingBoardingCell[] = [
-    lb(G.nsm, C.mega, 4000, 800),
-    lb(G.nsm, C.metro, 3500, 700),
+    lb(G.nsm, C.mega, 5000, 1000),
+    lb(G.nsm, C.metro, 4500, 900),
     lb(G.nsm, C.others, 3000, 600),
-    lb(G.rsm, C.mega, 3000, 600),
-    lb(G.rsm, C.metro, 2500, 500),
-    lb(G.rsm, C.others, 2000, 400),
-    lb(G.asm, C.mega, 2400, 500),
-    lb(G.asm, C.metro, 2000, 400),
-    lb(G.asm, C.others, 1700, 350),
-    lb(G.tm, C.mega, 1800, 400),
-    lb(G.tm, C.metro, 1500, 350),
-    lb(G.tm, C.others, 1200, 300),
+    lb(G.rsm, C.mega, 3500, 700),
+    lb(G.rsm, C.metro, 3000, 600),
+    lb(G.rsm, C.others, 2500, 500),
+    lb(G.asm, C.mega, 3000, 600),
+    lb(G.asm, C.metro, 2600, 520),
+    lb(G.asm, C.others, 2500, 500),
+    lb(G.tm, C.mega, 2500, 500),
+    lb(G.tm, C.metro, 2500, 440),
+    lb(G.tm, C.others, 2000, 400),
   ];
 
+  // Alternative stay (relatives/friends) — null = Not Allowed
   const relativesStay: RelativesStayCell[] = [
     rs(G.nsm, C.mega, 1000),
-    rs(G.nsm, C.metro, 800),
+    rs(G.nsm, C.metro, 900),
     rs(G.nsm, C.others, 600),
-    rs(G.rsm, C.mega, 800),
+    rs(G.rsm, C.mega, 700),
     rs(G.rsm, C.metro, 600),
     rs(G.rsm, C.others, 500),
-    rs(G.asm, C.mega, 700),
-    rs(G.asm, C.metro, 500),
-    rs(G.asm, C.others, 400),
-    rs(G.tm, C.mega, 600),
+    rs(G.asm, C.mega, 600),
+    rs(G.asm, C.metro, 520),
+    rs(G.asm, C.others, null),
+    rs(G.tm, C.mega, 500),
     rs(G.tm, C.metro, 400),
-    rs(G.tm, C.others, 300),
+    rs(G.tm, C.others, null),
   ];
 
+  // Field conveyance: client policy uses Mega Metro vs Others for most roles; Metro mirrors Others
   const fieldConveyance: FieldConveyanceCell[] = [
     fc(G.nsm, C.mega, "actual", 0, true),
     fc(G.nsm, C.metro, "actual", 0, true),
     fc(G.nsm, C.others, "actual", 0, true),
-    fc(G.rsm, C.mega, "fixed", 400, false),
-    fc(G.rsm, C.metro, "fixed", 350, false),
-    fc(G.rsm, C.others, "fixed", 300, false),
-    fc(G.asm, C.mega, "fixed", 300, false),
-    fc(G.asm, C.metro, "fixed", 250, false),
-    fc(G.asm, C.others, "fixed", 200, false),
-    fc(G.tm, C.mega, "fixed", 200, false),
-    fc(G.tm, C.metro, "fixed", 150, false),
-    fc(G.tm, C.others, "fixed", 125, false),
+    fc(G.rsm, C.mega, "fixed", 475, false),
+    fc(G.rsm, C.metro, "fixed", 425, false),
+    fc(G.rsm, C.others, "fixed", 425, false),
+    fc(G.asm, C.mega, "fixed", 450, false),
+    fc(G.asm, C.metro, "fixed", 400, false),
+    fc(G.asm, C.others, "fixed", 400, false),
+    fc(G.tm, C.mega, "fixed", 400, false),
+    fc(G.tm, C.metro, "fixed", 350, false),
+    fc(G.tm, C.others, "fixed", 350, false),
   ];
 
   return {
@@ -643,7 +739,8 @@ export function buildSeedTravelPolicy(): TravelPolicy {
     isCurrent: true,
     appliesTo: "Sales Force",
     description:
-      "Travel entitlements, reimbursement limits and claim rules for Sales Force roles. Seeded from the ParamVerse Bio Sales Force Travel Policy; all values are editable.",
+      "Configurable Sales Force travel entitlements (demo seeded from client reference policy). All limits, modes, city classes and claim rules are editable — not hardcoded product rules.",
+    applicability: defaultPolicyApplicability(),
     groups,
     roleMappings,
     cityClasses,
@@ -653,20 +750,20 @@ export function buildSeedTravelPolicy(): TravelPolicy {
       overnightIsExHq: true,
       priorApprovalRequired: true,
       approver1: "reporting_manager",
-      approver2: "bu_head",
+      approver2: "",
     },
     travelModes,
     taxi: {
       sharedType: "per_km",
-      sharedRatePerKm: 4,
+      sharedRatePerKm: 5,
       requireStartDestKm: true,
       privateType: "actual_against_bill",
       privateFixedLimit: 0,
       privateBillRequired: true,
     },
     ownVehicleExHq: [
-      { vehicleType: "Two-Wheeler", allowed: true, useSharedKmRate: true, ratePerKm: 0, priorApprovalRequired: false },
-      { vehicleType: "Four-Wheeler", allowed: true, useSharedKmRate: true, ratePerKm: 0, priorApprovalRequired: true },
+      { vehicleType: "Two-Wheeler", allowed: true, useSharedKmRate: false, ratePerKm: 5, priorApprovalRequired: true },
+      { vehicleType: "Four-Wheeler", allowed: true, useSharedKmRate: false, ratePerKm: 12.5, priorApprovalRequired: true },
     ],
     lodgingBoarding,
     lodgingRules: {
@@ -680,9 +777,9 @@ export function buildSeedTravelPolicy(): TravelPolicy {
     },
     relativesStay,
     overnightSlabs: [
-      { id: "os-1", fromHours: 3, toHours: 6, reimburseType: "fixed", amount: 200 },
-      { id: "os-2", fromHours: 6, toHours: 12, reimburseType: "fixed", amount: 400 },
-      { id: "os-3", fromHours: 12, toHours: 18, reimburseType: "fixed", amount: 600 },
+      { id: "os-1", fromHours: 3, toHours: 6, reimburseType: "fixed", amount: 100 },
+      { id: "os-2", fromHours: 6, toHours: 12, reimburseType: "fixed", amount: 200 },
+      { id: "os-3", fromHours: 12, toHours: 18, reimburseType: "fixed", amount: 300 },
       { id: "os-4", fromHours: 18, toHours: 24, reimburseType: "percent_boarding", amount: 100 },
     ],
     overnightExclusions: {
@@ -691,15 +788,39 @@ export function buildSeedTravelPolicy(): TravelPolicy {
       incidental: false,
     },
     localTravel: [
-      { groupId: G.nsm, mealsMiscPerDay: 400, mealsBillsRequired: false, nonPeakMode: "Cab / Taxi", peakOddMode: "Cab (AC)" },
-      { groupId: G.rsm, mealsMiscPerDay: 350, mealsBillsRequired: false, nonPeakMode: "Cab / Taxi", peakOddMode: "Cab (AC)" },
-      { groupId: G.asm, mealsMiscPerDay: 300, mealsBillsRequired: false, nonPeakMode: "Auto / Shared taxi", peakOddMode: "Taxi" },
-      { groupId: G.tm, mealsMiscPerDay: 250, mealsBillsRequired: false, nonPeakMode: "Auto / Bus / Metro", peakOddMode: "Taxi" },
+      {
+        groupId: G.nsm,
+        mealsMiscPerDay: 200,
+        mealsBillsRequired: false,
+        nonPeakMode: "Taxi (AC) / Local Train (1st Class)",
+        peakOddMode: "Taxi (AC)",
+      },
+      {
+        groupId: G.rsm,
+        mealsMiscPerDay: 150,
+        mealsBillsRequired: false,
+        nonPeakMode: "Taxi (AC) / Auto / Local Train",
+        peakOddMode: "Taxi (AC)",
+      },
+      {
+        groupId: G.asm,
+        mealsMiscPerDay: 150,
+        mealsBillsRequired: false,
+        nonPeakMode: "Taxi (Non-AC) / Auto / Local Train",
+        peakOddMode: "Taxi (Non-AC)",
+      },
+      {
+        groupId: G.tm,
+        mealsMiscPerDay: 150,
+        mealsBillsRequired: false,
+        nonPeakMode: "Auto / Local Train",
+        peakOddMode: "Taxi (Non-AC) / Auto",
+      },
     ],
     timeBands: [
-      { id: "tb-1", category: "peak", applicability: "all", startTime: "08:00", endTime: "11:00" },
+      { id: "tb-1", category: "peak", applicability: "all", startTime: "08:00", endTime: "12:00" },
       { id: "tb-2", category: "peak", applicability: "all", startTime: "17:00", endTime: "21:00" },
-      { id: "tb-3", category: "odd", applicability: "female", startTime: "20:00", endTime: "07:00" },
+      { id: "tb-3", category: "odd", applicability: "female", startTime: "21:00", endTime: "06:00" },
       { id: "tb-4", category: "odd", applicability: "male", startTime: "22:00", endTime: "06:00" },
     ],
     fieldConveyance,
@@ -707,17 +828,17 @@ export function buildSeedTravelPolicy(): TravelPolicy {
     kmRates: [
       {
         id: "km-2w",
-        vehicleType: "Two-Wheeler",
-        ratePerKm: 3.5,
-        priorApprovalRequired: false,
+        vehicleType: "Two-Wheeler (Own)",
+        ratePerKm: 5,
+        priorApprovalRequired: true,
         monthlyKmApprovalRequired: true,
         billsRequired: false,
         active: true,
       },
       {
         id: "km-4w",
-        vehicleType: "Four-Wheeler",
-        ratePerKm: 8.5,
+        vehicleType: "Four-Wheeler (Own)",
+        ratePerKm: 12.5,
         priorApprovalRequired: true,
         monthlyKmApprovalRequired: true,
         billsRequired: false,
@@ -740,9 +861,9 @@ export function buildSeedTravelPolicy(): TravelPolicy {
       dueDayOfFollowingMonth: 3,
     },
     incidentals: [
-      { groupId: G.nsm, amountPerDay: 250, billsRequired: false, travelContext: "Ex-HQ" },
-      { groupId: G.rsm, amountPerDay: 200, billsRequired: false, travelContext: "Ex-HQ" },
-      { groupId: G.asm, amountPerDay: 150, billsRequired: false, travelContext: "Ex-HQ" },
+      { groupId: G.nsm, amountPerDay: 100, billsRequired: false, travelContext: "Ex-HQ" },
+      { groupId: G.rsm, amountPerDay: 100, billsRequired: false, travelContext: "Ex-HQ" },
+      { groupId: G.asm, amountPerDay: 100, billsRequired: false, travelContext: "Ex-HQ" },
       { groupId: G.tm, amountPerDay: 100, billsRequired: false, travelContext: "Ex-HQ" },
     ],
     claimRules: [
@@ -804,10 +925,10 @@ export function buildSeedTravelPolicy(): TravelPolicy {
       { id: "ex-lodging", name: "Lodging above limit", allowed: true, requiresPriorApproval: true, approvers: ["reporting_manager", "sales_head"] },
       { id: "ex-class", name: "Travel class upgrade", allowed: true, requiresPriorApproval: true, approvers: ["reporting_manager", "sales_head"] },
       { id: "ex-mode", name: "Different travel mode", allowed: true, requiresPriorApproval: true, approvers: ["reporting_manager"] },
-      { id: "ex-km", name: "KM deviation", allowed: true, requiresPriorApproval: true, approvers: ["reporting_manager"] },
+      { id: "ex-km", name: "KM deviation", allowed: true, requiresPriorApproval: true, approvers: ["reporting_manager", "sales_head"] },
       { id: "ex-late", name: "Late claim", allowed: false, requiresPriorApproval: true, approvers: ["hr", "finance"] },
     ],
-    travelAdvance: { enabled: true, settlementDays: 15, blockNewIfUnsettled: true },
+    travelAdvance: { enabled: true, settlementDays: 7, blockNewIfUnsettled: true },
     approvalChains: [
       { id: "ap-normal", name: "Normal Claim", steps: ["reporting_manager", "finance"] },
       { id: "ap-exception", name: "Exception", steps: ["reporting_manager", "sales_head", "finance"] },
@@ -857,14 +978,17 @@ function loadRaw(): TravelPolicy[] {
     const list = source.map((p) => normalizeTravelPolicy(p));
     const needsPersist =
       !Array.isArray(parsed) ||
-      parsed.some(
-        (p) =>
-          !p.oddHoursSafety ||
-          !Array.isArray(p.exclusions) ||
-          !Array.isArray(p.guidance) ||
-          p.approvedBy === undefined ||
-          p.claimRules?.some((r) => r.gstinRequired === undefined),
-      );
+      parsed.some((p, i) => {
+        const n = list[i];
+        if (!n) return true;
+        if (!p.oddHoursSafety || !Array.isArray(p.exclusions) || !Array.isArray(p.guidance)) return true;
+        if (p.approvedBy === undefined) return true;
+        if (p.claimRules?.some((r) => r.gstinRequired === undefined)) return true;
+        // Persist designation-label migration (NSM → National Sales Manager …) without clearing amounts
+        const rawGroups = p.groups || [];
+        if (rawGroups.length !== n.groups.length) return true;
+        return rawGroups.some((g, gi) => g.name !== n.groups[gi]?.name);
+      });
     if (needsPersist) saveRaw(list);
     return list;
   } catch {
@@ -883,7 +1007,9 @@ export function loadTravelPolicies(): TravelPolicy[] {
 }
 
 export function getTravelPolicyById(id: number): TravelPolicy | undefined {
-  return loadRaw().find((p) => p.id === id);
+  const want = Number(id);
+  if (!Number.isFinite(want)) return undefined;
+  return loadRaw().find((p) => Number(p.id) === want);
 }
 
 export function nextTravelPolicyId(): number {
@@ -995,7 +1121,7 @@ export function validateTravelPolicy(p: TravelPolicy): string[] {
     const key = (m.designationId != null ? `id:${m.designationId}` : m.designationName.trim().toLowerCase());
     if (mappedRoles.has(key) && key) errors.push(`Duplicate role mapping: ${m.designationName}`);
     mappedRoles.add(key);
-    if (!groupIds.has(m.groupId)) errors.push(`Role ${m.designationName} maps to an unknown entitlement group.`);
+    if (!groupIds.has(m.groupId)) errors.push(`${m.designationName} is not linked to a valid travel entitlement.`);
   }
   const classNames = new Set<string>();
   let fallbacks = 0;
@@ -1114,6 +1240,7 @@ export function blankTravelMode(groupId: string): TravelModeRow {
     airTrigger: "not_allowed",
     airMinJourneyHours: 12,
     airPriorApproval: true,
+    lowestAvailableFareRequired: true,
     destinationConveyance: "",
   };
 }
@@ -1151,5 +1278,23 @@ export function ensureMatrixCells(p: TravelPolicy): TravelPolicy {
       }
     }
   }
-  return { ...p, lodgingBoarding, relativesStay, fieldConveyance, travelModes, localTravel, incidentals };
+  return {
+    ...p,
+    applicability: p.applicability ?? {
+      companyAll: true,
+      companies: [],
+      branchAll: true,
+      branches: [],
+      departmentAll: true,
+      departments: [],
+      employeeTypeAll: true,
+      employeeTypes: [],
+    },
+    lodgingBoarding,
+    relativesStay,
+    fieldConveyance,
+    travelModes,
+    localTravel,
+    incidentals,
+  };
 }

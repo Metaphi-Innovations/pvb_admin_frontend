@@ -2,9 +2,10 @@
 
 import React, { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, Pencil, Plane, Save } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Pencil, Plane, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { formatHrDateDisplay } from "@/app/(app)/hr/components/HrDateInput";
 import { HrSuccessToast } from "@/app/(app)/hr/components/HrSuccessToast";
 import {
   HrOrgPageHeader,
@@ -28,56 +29,103 @@ export default function TravelPolicyDetailClient() {
   const params = useParams();
   const search = useSearchParams();
   const router = useRouter();
-  const id = Number(params.id);
+  const rawId = params?.id;
+  const id = Number(Array.isArray(rawId) ? rawId[0] : rawId);
+  const editQuery = search.get("edit") === "1";
+
   const [policy, setPolicy] = useState<TravelPolicy | null>(null);
   const [draft, setDraft] = useState<TravelPolicy | null>(null);
-  const [editing, setEditing] = useState(search.get("edit") === "1");
-  const [section, setSection] = useState<PolicySectionId>("applicability");
+  const [editing, setEditing] = useState(editQuery);
+  const [section, setSection] = useState<PolicySectionId>("general");
   const [toast, setToast] = useState<string | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
 
-  const refresh = useCallback(() => {
-    const rec = Number.isFinite(id) ? getTravelPolicyById(id) : undefined;
-    setPolicy(rec ? ensureMatrixCells(rec) : null);
-    if (!editing) setDraft(rec ? ensureMatrixCells(rec) : null);
-  }, [id, editing]);
+  const detailPath = Number.isFinite(id)
+    ? `/hr/settings/reimbursement/travel-policy/${id}`
+    : "/hr/settings/reimbursement/travel-policy";
 
-  useEffect(() => {
-    const rec = Number.isFinite(id) ? getTravelPolicyById(id) : undefined;
+  const setEditMode = useCallback(
+    (next: boolean) => {
+      setEditing(next);
+      if (!Number.isFinite(id)) return;
+      const href = next ? `${detailPath}?edit=1` : detailPath;
+      router.replace(href, { scroll: false });
+    },
+    [detailPath, id, router],
+  );
+
+  const loadPolicy = useCallback(() => {
+    if (!Number.isFinite(id)) {
+      setPolicy(null);
+      setDraft(null);
+      return null;
+    }
+    const rec = getTravelPolicyById(id);
     const next = rec ? ensureMatrixCells(rec) : null;
     setPolicy(next);
-    setDraft(next);
+    return next;
   }, [id]);
 
   useEffect(() => {
-    const onUpd = () => refresh();
+    const next = loadPolicy();
+    setDraft(next);
+  }, [loadPolicy]);
+
+  // Keep edit mode in sync with ?edit=1 (list pencil → detail)
+  useEffect(() => {
+    setEditing(editQuery);
+    if (editQuery) {
+      const next = loadPolicy();
+      if (next) setDraft(ensureMatrixCells(next));
+    }
+  }, [editQuery, loadPolicy]);
+
+  useEffect(() => {
+    const onUpd = () => {
+      const next = loadPolicy();
+      if (!editing && next) setDraft(next);
+    };
     window.addEventListener(HR_TRAVEL_POLICY_EVENT, onUpd);
     return () => window.removeEventListener(HR_TRAVEL_POLICY_EVENT, onUpd);
-  }, [refresh]);
+  }, [loadPolicy, editing]);
 
   const working = editing ? draft : policy;
 
-  const handleSave = (activate: boolean) => {
+  const handleCancel = () => {
+    setDraft(policy);
+    setErrors([]);
+    setEditMode(false);
+  };
+
+  const handleSave = (activate = false) => {
     if (!draft) return;
-    const next = activate ? { ...draft, status: "active" as const } : draft;
-    const errs = validateTravelPolicy(next);
+    const toSave: TravelPolicy = activate ? { ...draft, status: "active" } : draft;
+    const errs = validateTravelPolicy(toSave);
     setErrors(errs);
     if (errs.length) {
       setToast(errs[0]!);
       return;
     }
-    const saved = saveTravelPolicy(next);
-    setPolicy(ensureMatrixCells(saved));
-    setDraft(ensureMatrixCells(saved));
-    setEditing(false);
-    setToast(activate ? "Policy saved and active." : "Policy saved.");
+    const saved = saveTravelPolicy(toSave);
+    const next = ensureMatrixCells(saved);
+    setPolicy(next);
+    setDraft(next);
+    setEditMode(false);
+    setToast(activate ? "Policy activated." : "Policy updated.");
   };
 
   if (!working) {
     return (
       <HrOrgPageHeader title="Travel Policy" sectionLabel="Reimbursement Settings" icon={Plane}>
-        <p className="text-sm text-muted-foreground">Policy not found.</p>
-        <Button variant="outline" size="sm" className={cn(hrBtn(), "mt-3")} onClick={() => router.push("/hr/settings/reimbursement/travel-policy")}>
+        <p className="text-sm text-muted-foreground">
+          {Number.isFinite(id) ? "Policy not found." : "Invalid policy link."}
+        </p>
+        <Button
+          variant="outline"
+          size="sm"
+          className={cn(hrBtn(), "mt-3")}
+          onClick={() => router.push("/hr/settings/reimbursement/travel-policy")}
+        >
           Back
         </Button>
       </HrOrgPageHeader>
@@ -86,8 +134,14 @@ export default function TravelPolicyDetailClient() {
 
   return (
     <HrOrgPageHeader
-      title={working.name}
-      description={working.policyNumber ? `${working.policyNumber} · ${working.appliesTo}` : working.appliesTo}
+      title={editing ? "Edit Travel Policy" : working.name}
+      description={
+        editing
+          ? working.name
+          : working.policyNumber
+            ? `${working.policyNumber} · ${working.appliesTo || "Travel"}`
+            : working.appliesTo || "Travel Policy"
+      }
       icon={Plane}
       sectionLabel="Reimbursement Settings"
       maxWidthClass="max-w-[1400px] w-full"
@@ -103,27 +157,32 @@ export default function TravelPolicyDetailClient() {
           </Button>
           {editing ? (
             <>
-              <Button
-                variant="outline"
-                size="sm"
-                className={hrBtn()}
-                onClick={() => {
-                  setDraft(policy);
-                  setEditing(false);
-                  setErrors([]);
-                }}
-              >
+              <Button variant="outline" size="sm" className={hrBtn()} onClick={handleCancel}>
                 Cancel
               </Button>
-              <Button variant="outline" size="sm" className={hrBtn("gap-1.5")} onClick={() => handleSave(false)}>
-                <Save className="w-3.5 h-3.5" /> Save
+              <Button size="sm" className={hrBtn("gap-1.5", true)} onClick={() => handleSave()}>
+                <Save className="w-3.5 h-3.5" /> Update Policy
               </Button>
-              <Button size="sm" className={hrBtn("gap-1.5", true)} onClick={() => handleSave(true)}>
-                Save & Activate
-              </Button>
+              {working.status !== "active" ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className={hrBtn("gap-1.5")}
+                  onClick={() => handleSave(true)}
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Activate
+                </Button>
+              ) : null}
             </>
           ) : (
-            <Button size="sm" className={hrBtn("gap-1.5", true)} onClick={() => setEditing(true)}>
+            <Button
+              size="sm"
+              className={hrBtn("gap-1.5", true)}
+              onClick={() => {
+                setDraft(policy ? ensureMatrixCells(policy) : null);
+                setEditMode(true);
+              }}
+            >
               <Pencil className="w-3.5 h-3.5" /> Edit Policy
             </Button>
           )}
@@ -135,6 +194,48 @@ export default function TravelPolicyDetailClient() {
           {errors.slice(0, 6).map((e) => (
             <p key={e}>{e}</p>
           ))}
+        </div>
+      ) : null}
+
+      {!editing ? (
+        <div className="mb-3 rounded-xl border border-border bg-white shadow-sm px-4 py-3">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Policy Summary</p>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-2 text-xs">
+            <div>
+              <p className="text-[10px] text-muted-foreground">Policy Name</p>
+              <p className="font-semibold">{working.name}</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-muted-foreground">Effective From</p>
+              <p className="font-semibold">{working.effectiveFrom ? formatHrDateDisplay(working.effectiveFrom) : "—"}</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-muted-foreground">Status</p>
+              <p className="font-semibold capitalize">{working.status}</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-muted-foreground">Applies To</p>
+              <p className="font-semibold">{working.appliesTo || "—"}</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-muted-foreground">Ex-HQ Threshold</p>
+              <p className="font-semibold">
+                {working.exHq.distanceThresholdKm} KM
+              </p>
+            </div>
+            <div>
+              <p className="text-[10px] text-muted-foreground">City Categories</p>
+              <p className="font-semibold">
+                {working.cityClasses.filter((c) => c.active).map((c) => c.name).join(", ") || "—"}
+              </p>
+            </div>
+            <div className="md:col-span-2">
+              <p className="text-[10px] text-muted-foreground">Applicable Designations</p>
+              <p className="font-semibold">
+                {working.roleMappings.filter((m) => m.active).map((m) => m.designationName).join(", ") || "—"}
+              </p>
+            </div>
+          </div>
         </div>
       ) : null}
 
@@ -159,7 +260,10 @@ export default function TravelPolicyDetailClient() {
             section={section}
             policy={working}
             readOnly={!editing}
-            onChange={setDraft}
+            onChange={(next) => {
+              if (!editing) return;
+              setDraft(next);
+            }}
           />
         </div>
       </div>

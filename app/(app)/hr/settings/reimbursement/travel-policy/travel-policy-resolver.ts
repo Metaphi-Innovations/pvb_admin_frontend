@@ -72,6 +72,25 @@ function norm(s: string): string {
   return s.trim().toLowerCase();
 }
 
+function policyMatchesEmployee(policy: TravelPolicy, employee: HrEmployee): boolean {
+  const a = policy.applicability;
+  if (!a) return true;
+  const inList = (all: boolean, list: string[], value: string) => {
+    if (all || !list.length) return true;
+    const v = norm(value);
+    if (!v) return true;
+    return list.some((x) => norm(x) === v || v.includes(norm(x)) || norm(x).includes(v));
+  };
+  if (!a.companyAll && a.companies.length) {
+    // Single-company demo: company filter is informational unless employee carries a company field.
+    // Keep permissive when employee has no company attribute.
+  }
+  if (!inList(a.branchAll, a.branches, employee.branch || "")) return false;
+  if (!inList(a.departmentAll, a.departments, employee.department || "")) return false;
+  if (!inList(a.employeeTypeAll, a.employeeTypes, String(employee.employeeType || ""))) return false;
+  return true;
+}
+
 export function getApplicableTravelPolicy(
   employee: HrEmployee,
   travelDate: string,
@@ -83,9 +102,11 @@ export function getApplicableTravelPolicy(
     const to = p.effectiveTo || "9999-12-31";
     return travelDate >= from && travelDate <= to;
   });
-  if (dated.length === 0) return null;
-  const current = dated.find((p) => p.isCurrent);
-  return current ?? dated.sort((a, b) => b.effectiveFrom.localeCompare(a.effectiveFrom))[0] ?? null;
+  const scoped = dated.filter((p) => policyMatchesEmployee(p, employee));
+  const pool = scoped.length ? scoped : dated;
+  if (pool.length === 0) return null;
+  const current = pool.find((p) => p.isCurrent);
+  return current ?? pool.sort((a, b) => b.effectiveFrom.localeCompare(a.effectiveFrom))[0] ?? null;
 }
 
 function designationBlob(employee: HrEmployee): string {
@@ -284,7 +305,9 @@ export interface TravelEntitlementResult {
   kmAmount: number | null;
   overnightSlab: OvernightSlab | null;
   overnightAmount: number | null;
-  air: { allowed: boolean; trigger: AirEligibilityTrigger; minHours: number; priorApproval: boolean; airClass: string } | null;
+  railClass: string | null;
+  destinationConveyance: string | null;
+  air: { allowed: boolean; trigger: AirEligibilityTrigger; minHours: number; priorApproval: boolean; airClass: string; lowestAvailableFareRequired?: boolean } | null;
   billRequiredHotel: boolean;
   priorApproval: boolean;
   safetyUpgradeApplied: boolean;
@@ -382,6 +405,8 @@ export function getTravelEntitlement(q: TravelEntitlementQuery): TravelEntitleme
     kmAmount,
     overnightSlab: slab,
     overnightAmount,
+    railClass: modeRow?.railClass ?? null,
+    destinationConveyance: modeRow?.destinationConveyance ?? null,
     air: modeRow
       ? {
           allowed: modeRow.airAllowed && modeRow.airTrigger !== "not_allowed",
@@ -389,6 +414,7 @@ export function getTravelEntitlement(q: TravelEntitlementQuery): TravelEntitleme
           minHours: modeRow.airMinJourneyHours,
           priorApproval: modeRow.airPriorApproval,
           airClass: modeRow.airClass,
+          lowestAvailableFareRequired: modeRow.lowestAvailableFareRequired ?? true,
         }
       : null,
     billRequiredHotel: policy.lodgingRules.billRequired && q.stayType !== "relatives_friends",

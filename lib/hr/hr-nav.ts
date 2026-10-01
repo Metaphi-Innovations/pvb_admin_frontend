@@ -22,6 +22,7 @@ import {
   Plane,
   Radio,
   LayoutDashboard,
+  FileCheck2,
 } from "lucide-react";
 
 export type HrNavGroupId =
@@ -128,6 +129,7 @@ export const HR_NAV_GROUPS: HrNavGroup[] = [
     items: [
       { label: "Employee Directory", href: "/hr/employees", icon: Users },
       { label: "Payroll", href: "/hr/payroll", icon: Wallet },
+      { label: "Form 16", href: "/hr/payroll/form-16", icon: FileCheck2 },
       { label: "HR Letters", href: "/hr/hr-letters", icon: ScrollText },
       { label: "Offboarding", href: "/hr/offboarding", icon: LogOut },
       { label: "Notifications", href: "/hr/notifications", icon: Bell },
@@ -216,7 +218,11 @@ export function isHrNavActive(pathname: string, href: string, search = ""): bool
   if (baseNorm === "/hr/hr-letters") {
     return path === "/hr/hr-letters" || path.startsWith("/hr/hr-letters/");
   }
+  if (baseNorm === "/hr/payroll/form-16") {
+    return path === "/hr/payroll/form-16" || path.startsWith("/hr/payroll/form-16/");
+  }
   if (baseNorm === "/hr/payroll") {
+    if (path.startsWith("/hr/payroll/form-16")) return false;
     return path === "/hr/payroll" || path.startsWith("/hr/payroll/");
   }
   if (baseNorm === "/hr/offboarding") {

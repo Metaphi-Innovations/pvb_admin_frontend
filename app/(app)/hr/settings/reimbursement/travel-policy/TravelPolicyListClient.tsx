@@ -77,7 +77,8 @@ export default function TravelPolicyListClient() {
   }, [rows, search, statusFilter]);
 
   const open = (id: number, edit?: boolean) => {
-    router.push(`/hr/settings/reimbursement/travel-policy/${id}${edit ? "?edit=1" : ""}`);
+    const href = `/hr/settings/reimbursement/travel-policy/${Number(id)}${edit ? "?edit=1" : ""}`;
+    router.push(href);
   };
 
   return (
