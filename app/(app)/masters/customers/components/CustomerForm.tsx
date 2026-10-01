@@ -1565,7 +1565,7 @@ export function CustomerForm({
 				<div className="flex flex-wrap items-end gap-3">
 					<div className={cn(ERP.field, "min-w-[200px] flex-1")}>
 						<Label className={ERP.label}>
-							TDS Section <span className="text-red-500">*</span>
+							TDS Section
 						</Label>
 						<SearchableSelect
 							value={form.tdsMasterId}
@@ -2995,8 +2995,6 @@ export function validateCustomerForm(
 			e.msmeNumber = MSME_NUMBER_ERROR;
 		}
 	}
-	if (!form.tdsMasterId)
-		e.tdsMasterId = "Select TDS section from master";
 	Object.assign(e, validateComplianceRegistration(form));
 
 	if (options?.requireComplianceValidityDates) {
@@ -3413,7 +3411,7 @@ export function formValuesToUpdatePayload(
 		registered_gst_address: form.gstRegistered ? form.registeredAddress : "",
 		pan_no: form.pan.trim().toUpperCase(),
 
-		tds_applicable: form.tdsApplicable,
+		tds_applicable: Boolean(form.tdsMasterId),
 		tds_section_id: form.tdsMasterId,
 
 		credit_limit: form.creditLimit ? parseFloat(form.creditLimit) : 0,
@@ -3467,7 +3465,7 @@ export function formValuesToCreatePayload(
 		registered_gst_address: form.gstRegistered ? form.registeredAddress : "",
 		pan_no: form.pan.trim().toUpperCase(),
 
-		tds_applicable: true,
+		tds_applicable: Boolean(form.tdsMasterId),
 		tds_section_id: form.tdsMasterId,
 
 		credit_limit: form.creditLimit ? parseFloat(form.creditLimit) : 0,
@@ -3559,7 +3557,7 @@ export function formValuesToCustomer(
 			form.gstRegistered && form.gstMasterId
 				? Number(form.gstMasterId)
 				: null,
-		tdsApplicable: true,
+		tdsApplicable: Boolean(form.tdsMasterId),
 		tdsMasterId: form.tdsMasterId ? Number(form.tdsMasterId) : null,
 		pan: form.pan.trim().toUpperCase(),
 		tan: "",

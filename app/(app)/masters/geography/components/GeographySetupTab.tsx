@@ -11,9 +11,12 @@ import {
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { isActiveStatus } from "@/components/listing";
+import { ListingStatusToggle, isActiveStatus } from "@/components/listing";
+import { showToast } from "@/lib/toast";
+import { getErrorMessage } from "@/lib/masters/master-query-errors";
 import {
   useBusinessGeographyTree,
+  useToggleBusinessGeoStatus,
 } from "@/hooks/masters";
 import type {
   BusinessGeoLevel,
@@ -65,7 +68,8 @@ const LEVEL_BADGE_STYLES: Record<
 export function GeographySetupTab(_props?: { postalRecordCount?: number }) {
   const [searchQuery, setSearchQuery] = useState("");
   const debouncedSearch = useDebouncedValue(searchQuery, 300);
-  const treeQuery = useBusinessGeographyTree(debouncedSearch);
+  const treeQuery = useBusinessGeographyTree(debouncedSearch, true);
+  const toggleStatus = useToggleBusinessGeoStatus();
 
   const [formOpen, setFormOpen] = useState(false);
   const [editRecord, setEditRecord] = useState<BusinessGeoListItem | null>(null);
@@ -73,10 +77,18 @@ export function GeographySetupTab(_props?: { postalRecordCount?: number }) {
   const [defaultParentLevel, setDefaultParentLevel] = useState<BusinessGeoLevel | null>(null);
   const [viewRecord, setViewRecord] = useState<BusinessGeoListItem | null>(null);
 
-  const records = useMemo(
-    () => (treeQuery.data ?? []).filter((r) => isActiveStatus(r.status)),
-    [treeQuery.data],
-  );
+  const records = useMemo(() => treeQuery.data ?? [], [treeQuery.data]);
+
+  const handleToggleStatus = (item: BusinessGeoListItem) => {
+    toggleStatus.mutate(
+      { level: item.level, id: item.id },
+      {
+        onError: (error) => {
+          showToast(getErrorMessage(error, "Failed to update status."), "error");
+        },
+      },
+    );
+  };
 
   const STORAGE_KEY = "pvb_geo_expanded_ids";
 
@@ -197,7 +209,12 @@ export function GeographySetupTab(_props?: { postalRecordCount?: number }) {
               <span className={cn("w-2 h-2 rounded-full shrink-0", badgeStyle.dot)} />
 
               {/* Name */}
-              <span className="font-semibold text-foreground tracking-tight text-xs">
+              <span
+                className={cn(
+                  "font-semibold tracking-tight text-xs",
+                  isActiveStatus(item.status) ? "text-foreground" : "text-muted-foreground",
+                )}
+              >
                 {item.name}
               </span>
 
@@ -272,6 +289,16 @@ export function GeographySetupTab(_props?: { postalRecordCount?: number }) {
           {/* Effective Date */}
           <td className="py-2.5 px-4 text-center text-xs text-muted-foreground font-medium">
             {item.effectiveDate || "—"}
+          </td>
+
+          <td className="py-2.5 px-4 text-center">
+            <div className="flex justify-center">
+              <ListingStatusToggle
+                active={isActiveStatus(item.status)}
+                disabled={toggleStatus.isPending}
+                onChange={() => handleToggleStatus(item)}
+              />
+            </div>
           </td>
 
           {/* Actions */}
@@ -364,6 +391,7 @@ export function GeographySetupTab(_props?: { postalRecordCount?: number }) {
                   <th className="text-center py-3 px-4 font-semibold text-foreground w-[120px]">Level</th>
                   <th className="text-center py-3 px-4 font-semibold text-foreground w-[100px]">Pincode</th>
                   <th className="text-center py-3 px-4 font-semibold text-foreground w-[120px]">Effective Date</th>
+                  <th className="text-center py-3 px-4 font-semibold text-foreground w-[90px]">Status</th>
                   <th className="text-right py-3 px-4 font-semibold text-foreground w-[100px]">Actions</th>
                 </tr>
               </thead>
