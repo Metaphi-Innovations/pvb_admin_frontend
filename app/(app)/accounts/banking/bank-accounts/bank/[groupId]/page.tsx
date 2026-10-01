@@ -1,0 +1,12 @@
+import { lazyAccountsPage } from "@/lib/accounts/lazy-accounts-page";
+
+const BankGroupAccountsClient = lazyAccountsPage(() => import("../BankGroupAccountsClient"));
+
+export default async function BankGroupPage({
+  params,
+}: {
+  params: Promise<{ groupId: string }>;
+}) {
+  const { groupId } = await params;
+  return <BankGroupAccountsClient bankGroupId={Number(groupId)} />;
+}

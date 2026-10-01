@@ -1,0 +1,201 @@
+import React, { useState, useEffect } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { X, Check } from "lucide-react";
+import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
+
+interface Department {
+  id: number;
+  code: string;
+  name: string;
+  parent: number | null;
+  head: string | null;
+  users: number;
+  status: string;
+  createdBy: string;
+  createdDate: string;
+  updatedBy: string;
+  updatedDate: string;
+}
+
+interface Props {
+  open: boolean;
+  onClose: () => void;
+  onSave: () => void;
+  dept?: Department | null;
+  employees: string[];
+  departments: Department[];
+}
+
+export default function DepartmentForm({ open, onClose, onSave, dept, employees, departments }: Props) {
+  const [formData, setFormData] = useState({
+    code: "",
+    name: "",
+    parent: "",
+    head: "",
+    description: "",
+    status: "active",
+    remarks: "",
+  });
+
+  useEffect(() => {
+    if (dept) {
+      setFormData({
+        code: dept.code,
+        name: dept.name,
+        parent: dept.parent?.toString() || "",
+        head: dept.head || "",
+        description: "",
+        status: dept.status,
+        remarks: "",
+      });
+    } else {
+      setFormData({
+        code: `DEPT-${String(Math.floor(Math.random() * 999)).padStart(3, "0")}`,
+        name: "",
+        parent: "",
+        head: "",
+        description: "",
+        status: "active",
+        remarks: "",
+      });
+    }
+  }, [dept, open]);
+
+  const handleChange = (field: string, value: string) => {
+    setFormData(p => ({ ...p, [field]: value }));
+  };
+
+  const handleSave = () => {
+    // Validation would go here
+    onSave();
+  };
+
+  const parentDepts = departments.filter(d => !d.parent);
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="text-base font-semibold">
+            {dept ? "Edit Department" : "Create New Department"}
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-5 py-4">
+          {/* Name & Code Row */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-foreground mb-1.5">
+                Department Name *
+              </label>
+              <Input
+                value={formData.name}
+                onChange={(e) => handleChange("name", e.target.value)}
+                placeholder="e.g., Sales, HR, Accounts"
+                className="h-8 text-xs"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-foreground mb-1.5">
+                Department Code *
+              </label>
+              <Input
+                value={formData.code}
+                onChange={(e) => handleChange("code", e.target.value)}
+                placeholder="DEPT-001"
+                className="h-8 text-xs"
+              />
+            </div>
+          </div>
+
+          {/* Parent & Head Row */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-foreground mb-1.5">
+                Parent Department
+              </label>
+              <AutocompleteSelect
+                options={[
+                  { value: "", label: "No Parent" },
+                  ...parentDepts.map((d) => ({ value: String(d.id), label: d.name })),
+                ]}
+                value={formData.parent}
+                onChange={(v) => handleChange("parent", v)}
+                placeholder="Select parent department…"
+                searchPlaceholder="Search department…"
+                className="h-8 text-xs"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-foreground mb-1.5">
+                Department Head
+              </label>
+              <AutocompleteSelect
+                options={[
+                  { value: "", label: "Select Employee" },
+                  ...employees.map((emp) => ({ value: emp, label: emp })),
+                ]}
+                value={formData.head}
+                onChange={(v) => handleChange("head", v)}
+                placeholder="Select employee…"
+                searchPlaceholder="Search employee…"
+                className="h-8 text-xs"
+              />
+            </div>
+          </div>
+
+          {/* Description */}
+          <div>
+            <label className="block text-xs font-medium text-foreground mb-1.5">
+              Description
+            </label>
+            <Textarea
+              value={formData.description}
+              onChange={(e) => handleChange("description", e.target.value)}
+              placeholder="Brief description of the department..."
+              className="text-xs resize-none"
+              rows={2}
+            />
+          </div>
+
+          {/* Remarks */}
+          <div>
+            <label className="block text-xs font-medium text-foreground mb-1.5">
+              Remarks
+            </label>
+            <Textarea
+              value={formData.remarks}
+              onChange={(e) => handleChange("remarks", e.target.value)}
+              placeholder="Any additional notes..."
+              className="text-xs resize-none"
+              rows={2}
+            />
+          </div>
+
+          {/* System Fields (Read-only) */}
+          {dept && (
+            <div className="bg-muted/30 rounded-lg p-3 text-[11px] space-y-1">
+              <div className="flex justify-between"><span className="text-muted-foreground">Created By:</span><span className="font-medium text-foreground">{dept.createdBy}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Created Date:</span><span className="font-medium text-foreground">{dept.createdDate}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Updated By:</span><span className="font-medium text-foreground">{dept.updatedBy}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Updated Date:</span><span className="font-medium text-foreground">{dept.updatedDate}</span></div>
+            </div>
+          )}
+        </div>
+
+        {/* Actions */}
+        <div className="flex items-center justify-end gap-2 pt-4 border-t border-border">
+          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button size="sm" className="h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white" onClick={handleSave}>
+            <Check className="w-3 h-3" /> {dept ? "Update" : "Create"} Department
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}

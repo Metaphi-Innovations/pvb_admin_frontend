@@ -1,0 +1,22 @@
+/.next
+/node_modules
+node_modules/
+.env
+.env.local
+*.tsbuildinfo
+/.cursor/debug-*.log
+/.env
+AGENTS.md
+.github/
+.github/workflows/main.yml
+
+# Never commit real bank statements
+samples/*.csv
+samples/*.xlsx
+samples/*.xls
+**/bank-statement*.csv
+**/bank-statement*.xlsx
+.vercel
+
+# Official India Post source CSV (large; regenerate postal-master.json via npm run import:postal)
+data/all-india-pincode.csv

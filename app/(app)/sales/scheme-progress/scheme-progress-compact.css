@@ -1,0 +1,244 @@
+/* Page-scoped — Sales Scheme Progress */
+
+.sp-page {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.sp-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.5rem;
+  background: #fff;
+}
+
+.sp-filters input,
+.sp-filters select {
+  height: 1.75rem;
+  font-size: 0.6875rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.375rem;
+  padding: 0 0.4rem;
+  background: #fff;
+  color: hsl(var(--foreground));
+}
+
+.sp-filters input {
+  min-width: 10rem;
+  padding-left: 1.6rem;
+}
+
+.sp-filters select {
+  max-width: 9.5rem;
+}
+
+.sp-table-wrap {
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.5rem;
+  background: #fff;
+  overflow: auto;
+}
+
+.sp-table {
+  width: 100%;
+  min-width: 1100px;
+  border-collapse: collapse;
+  font-size: 0.75rem;
+}
+
+.sp-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: hsl(var(--muted) / 0.45);
+  border-bottom: 1px solid hsl(var(--border));
+  padding: 0.35rem 0.5rem;
+  text-align: left;
+  font-size: 0.5625rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: hsl(var(--muted-foreground));
+  white-space: nowrap;
+}
+
+.sp-table thead tr.sp-col-filters th {
+  top: 1.55rem;
+  padding: 0.2rem 0.35rem;
+  background: #fff;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 400;
+}
+
+.sp-table thead tr.sp-col-filters input {
+  width: 100%;
+  min-width: 4rem;
+  height: 1.4rem;
+  font-size: 0.625rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.25rem;
+  padding: 0 0.3rem;
+  background: #fff;
+}
+
+.sp-table tbody td {
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid hsl(var(--border) / 0.5);
+  vertical-align: middle;
+}
+
+.sp-table tbody tr:hover {
+  background: hsl(var(--muted) / 0.2);
+}
+
+.sp-num {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.sp-kpi {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.4rem;
+}
+
+@media (max-width: 900px) {
+  .sp-kpi {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.sp-kpi__item {
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.5rem;
+  background: #fff;
+  padding: 0.4rem 0.55rem;
+}
+
+.sp-kpi__label {
+  font-size: 0.5625rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: hsl(var(--muted-foreground));
+}
+
+.sp-kpi__value {
+  margin-top: 0.1rem;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #1a3a96;
+}
+
+.sp-section {
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.5rem;
+  background: #fff;
+  overflow: hidden;
+}
+
+.sp-section__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.35rem 0.65rem;
+  border-bottom: 1px solid hsl(var(--border) / 0.7);
+  background: hsl(var(--muted) / 0.25);
+}
+
+.sp-section__title {
+  font-size: 0.625rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: hsl(var(--muted-foreground));
+}
+
+.sp-slab {
+  display: grid;
+  gap: 0.4rem;
+  padding: 0.55rem 0.65rem;
+}
+
+.sp-slab__row {
+  display: grid;
+  grid-template-columns: 7rem 1fr auto;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid hsl(var(--border) / 0.7);
+  border-radius: 0.375rem;
+}
+
+.sp-slab__row.is-current {
+  border-color: #ffcb90;
+  background: #fff3e8;
+}
+
+.sp-slab__row.is-completed {
+  background: #f0f9f0;
+  border-color: #b0e0b0;
+}
+
+.sp-slab__bar {
+  height: 0.35rem;
+  border-radius: 999px;
+  background: hsl(var(--muted));
+  overflow: hidden;
+}
+
+.sp-slab__bar > span {
+  display: block;
+  height: 100%;
+  background: #d96a10;
+}
+
+.sp-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.625rem;
+  font-weight: 600;
+  border: 1px solid transparent;
+}
+
+.sp-recon {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.sp-recon td {
+  padding: 0.3rem 0.65rem;
+  font-size: 0.75rem;
+  border-bottom: 1px solid hsl(var(--border) / 0.45);
+}
+
+.sp-recon .sp-amt {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  white-space: nowrap;
+  width: 9rem;
+}
+
+.sp-recon .sp-less td:first-child {
+  padding-left: 1.5rem;
+  color: hsl(var(--muted-foreground));
+}
+
+.sp-recon .sp-emph td {
+  font-weight: 700;
+  color: #1a3a96;
+  background: #fff3e8;
+}

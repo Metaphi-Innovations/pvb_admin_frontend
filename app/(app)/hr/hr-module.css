@@ -1,0 +1,268 @@
+/* HR module shell — imported only from app/(app)/hr/layout.tsx
+   Colours follow Dharitri Sutra tokens (warm canvas + brand orange). */
+
+.hr-module-shell {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  width: 100%;
+  overflow: hidden;
+}
+
+.hr-module-sidebar {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  position: relative;
+  width: 232px;
+  min-width: 232px;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background: hsl(var(--card));
+  border-right: 1px solid hsl(var(--border));
+  transition: width 200ms ease, min-width 200ms ease;
+}
+
+.hr-module-sidebar.is-collapsed {
+  width: 62px;
+  min-width: 62px;
+}
+
+.hr-module-main {
+  position: relative;
+  flex: 1 1 0%;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  /* Warm ERP canvas — same as global --background */
+  background: hsl(var(--background));
+}
+
+.hr-sidebar-sticky-head {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  flex-shrink: 0;
+  background: hsl(var(--card));
+}
+
+.hr-sidebar-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.5rem 0.625rem;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.35;
+  color: hsl(var(--foreground) / 0.78);
+  outline: none;
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+.hr-sidebar-nav-item:hover {
+  background-color: hsl(28 90% 96% / 0.85); /* brand-50 tint */
+  color: hsl(24 92% 37%); /* brand-700 */
+}
+
+.hr-sidebar-nav-item.is-active {
+  font-weight: 600;
+  background-color: #fff3e8; /* brand-50 */
+  color: #b85508; /* brand-700 */
+  box-shadow: inset 3px 0 0 #d96a10; /* brand-600 */
+}
+
+.hr-sidebar-nav-item:focus-visible {
+  box-shadow: 0 0 0 2px rgb(244 121 32 / 0.35);
+}
+
+.hr-sidebar-nav-item.is-collapsed {
+  justify-content: center;
+  width: 40px;
+  min-width: 40px;
+  padding-left: 0;
+  padding-right: 0;
+  margin-left: auto;
+  margin-right: auto;
+  box-shadow: none;
+}
+
+.hr-sidebar-nav-item.is-collapsed.is-active {
+  background-color: #fff3e8;
+  box-shadow: none;
+}
+
+.hr-sidebar-nav-item.is-collapsed span {
+  display: none;
+}
+
+.hr-sidebar-section-label {
+  padding: 0.75rem 0.625rem 0.25rem;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+}
+
+.hr-sidebar-section-label.is-collapsed {
+  display: none;
+}
+
+.hr-sidebar-nav-item.is-disabled {
+  color: hsl(var(--muted-foreground) / 0.7);
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
+.hr-sidebar-nav-item.is-disabled:hover {
+  background-color: transparent;
+  color: hsl(var(--muted-foreground) / 0.7);
+}
+
+/*
+ * Employee Profile / Emp* form controls.
+ * Unlayered on purpose: must win over shadcn SelectTrigger (h-10 / text-sm = 40px / 14px)
+ * and body { font-size: 13px }. Scoped to .emp-* classes only — does not touch
+ * TopNavbar, ERP modules, or generic input/select/label/button.
+ */
+.emp-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+}
+
+.emp-type,
+.emp-fc,
+.emp-option {
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 16px;
+}
+
+.emp-fc {
+  height: 36px;
+  min-height: 36px;
+  padding-top: 0;
+  padding-bottom: 0;
+  box-sizing: border-box;
+}
+
+.emp-fc:not([type="file"]) {
+  display: flex;
+  align-items: center;
+}
+
+.emp-fc::placeholder,
+.emp-type::placeholder,
+.emp-fc > input::placeholder {
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 16px;
+  color: hsl(var(--muted-foreground));
+}
+
+.emp-fc > span,
+.emp-fc [data-placeholder] {
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 16px;
+}
+
+.emp-fc [data-placeholder] {
+  color: hsl(var(--muted-foreground));
+}
+
+.emp-fc > input {
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 16px;
+}
+
+.emp-fc svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.emp-fc::file-selector-button {
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.emp-helper {
+  font-size: 11px;
+  line-height: 15px;
+}
+
+.emp-subhead {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.emp-title {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 22px;
+}
+
+/*
+ * EmpSection uses a 12-col grid (EMP_SPAN) for row packing.
+ * Controls also use content-fit max-widths (EMP_WIDTH) so short IDs/dates
+ * do not stretch into equal "train coach" boxes inside their cells.
+ */
+.emp-w-xs {
+  width: 100%;
+  max-width: 180px;
+}
+
+.emp-w-compact {
+  width: 100%;
+  max-width: 200px;
+}
+
+.emp-w-small {
+  width: 100%;
+  max-width: 220px;
+}
+
+.emp-w-medium {
+  width: 100%;
+  max-width: 280px;
+}
+
+.emp-w-wide {
+  width: 100%;
+  max-width: 100%;
+}
+
+.emp-w-full {
+  width: 100%;
+  max-width: 100%;
+}
+
+/* Gender segmented control — content-fit chips (never flex:1 stretch) */
+.emp-gender {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+}
+
+.emp-gender-opt {
+  width: 112px;
+  flex: 0 0 auto;
+}
+
+.emp-gender-opt-wide {
+  width: 148px;
+  flex: 0 0 auto;
+}

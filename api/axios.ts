@@ -1,0 +1,152 @@
+import axios, { AxiosError, InternalAxiosRequestConfig } from "axios";
+import { API_ENDPOINTS } from "./endpoints";
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
+
+export const axiosInstance = axios.create({
+  baseURL: API_BASE_URL,
+  headers: {
+    "Content-Type": "application/json",
+  },
+  timeout: 15000, // 15s timeout
+});
+
+let getAccessTokenFn: () => string | null = () => null;
+let getRefreshTokenFn: () => string | null = () => null;
+let onTokenRefreshedFn: (access: string, refresh?: string) => void = () => {};
+let clearAuthFn: () => void = () => {};
+
+export const setAuthTokenCallbacks = (
+  getAccess: () => string | null,
+  getRefresh: () => string | null,
+  onRefreshed: (access: string, refresh?: string) => void,
+  clearAuth: () => void
+) => {
+  getAccessTokenFn = getAccess;
+  getRefreshTokenFn = getRefresh;
+  onTokenRefreshedFn = onRefreshed;
+  clearAuthFn = clearAuth;
+};
+
+// Request Interceptor
+axiosInstance.interceptors.request.use(
+  (config: InternalAxiosRequestConfig) => {
+    const token = getAccessTokenFn();
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
+let isRefreshing = false;
+let failedQueue: any[] = [];
+
+const processQueue = (error: any, token: string | null = null) => {
+  failedQueue.forEach((prom) => {
+    if (error) {
+      prom.reject(error);
+    } else {
+      prom.resolve(token);
+    }
+  });
+
+  failedQueue = [];
+};
+
+// Response Interceptor with Automatic Token Refresh & Global Error Handling
+axiosInstance.interceptors.response.use(
+  (response) => {
+    return response;
+  },
+  async (error: AxiosError) => {
+    const originalRequest = error.config as any;
+
+    if (!originalRequest) {
+      return Promise.reject(error);
+    }
+
+    // Check if error is 401 and request hasn't been retried yet
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      if (originalRequest.url === API_ENDPOINTS.AUTH.REFRESH_TOKEN) {
+        // If the refresh token request itself failed, clear credentials and redirect
+        clearAuthFn();
+        if (typeof window !== "undefined") {
+          window.location.href = "/login";
+        }
+        return Promise.reject(error);
+      }
+
+      if (isRefreshing) {
+        return new Promise((resolve, reject) => {
+          failedQueue.push({ resolve, reject });
+        })
+          .then((token) => {
+            originalRequest.headers.Authorization = `Bearer ${token}`;
+            return axiosInstance(originalRequest);
+          })
+          .catch((err) => {
+            return Promise.reject(err);
+          });
+      }
+
+      originalRequest._retry = true;
+      isRefreshing = true;
+
+      const refreshToken = getRefreshTokenFn();
+
+      if (!refreshToken) {
+        isRefreshing = false;
+        clearAuthFn();
+        if (typeof window !== "undefined") {
+          window.location.href = "/login";
+        }
+        return Promise.reject(error);
+      }
+
+      try {
+        // Call backend to refresh the token
+        const response = await axios.post(`${API_BASE_URL}${API_ENDPOINTS.AUTH.REFRESH_TOKEN}`, {
+          refresh: refreshToken,
+        });
+
+        if (response.data?.success && response.data?.data) {
+          const { access, refresh: newRefresh } = response.data.data;
+          
+          onTokenRefreshedFn(access, newRefresh);
+
+          axiosInstance.defaults.headers.common.Authorization = `Bearer ${access}`;
+          originalRequest.headers.Authorization = `Bearer ${access}`;
+
+          processQueue(null, access);
+          isRefreshing = false;
+
+          return axiosInstance(originalRequest);
+        } else {
+          throw new Error("Token refresh response structure is invalid.");
+        }
+      } catch (refreshError) {
+        processQueue(refreshError, null);
+        isRefreshing = false;
+        clearAuthFn();
+        if (typeof window !== "undefined") {
+          window.location.href = "/login";
+        }
+        return Promise.reject(refreshError);
+      }
+    }
+
+    // Global Error Handling: Map backend response errors or network errors
+    const errorResponse = {
+      status: error.response?.status || 500,
+      success: false,
+      message: (error.response?.data as any)?.message || error.message || "An unexpected error occurred.",
+      error: (error.response?.data as any)?.error || error.message || "Internal Server Error",
+    };
+
+    return Promise.reject(errorResponse);
+  }
+);

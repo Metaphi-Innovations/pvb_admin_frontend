@@ -1,0 +1,785 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Dharitri Sutra Design Tokens ─────────────────────────────────────────── */
+@layer base {
+  :root {
+    /* Warm cream canvas */
+    --background:         43 33% 96%;
+    /* Dark Text */
+    --foreground:         222 47% 11%;
+
+    --card:               0 0% 100%;
+    --card-foreground:    225 45% 14%;
+
+    --popover:            0 0% 100%;
+    --popover-foreground: 225 45% 14%;
+
+    /* Primary: brand orange */
+    --primary:            28 79% 51%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Secondary: deep navy */
+    --secondary:          215 16% 47%;
+    --secondary-foreground: 0 0% 100%;
+
+    --muted:              36 22% 94%;
+    --muted-foreground:   215 16% 47%;
+
+    --accent:             28 79% 51%;
+    --accent-foreground:  0 0% 100%;
+
+    --destructive:        0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* Success: leaf green */
+    --success:            142 76% 36%;
+    --success-foreground: 0 0% 100%;
+
+    --border:             220 13% 91%;
+    --input:              220 13% 91%;
+    --ring:               28 79% 51%;
+
+    --navbar-height: 56px;
+    --sidebar-width: 240px;
+    --radius: 0.75rem;
+  }
+
+  html {
+    /* var() without a fallback invalidates the whole font-family when next/font
+       CSS vars are missing (common after a stale .next cache) → Times New Roman.
+       Always keep an inner fallback so the stack degrades to sans-serif. */
+    font-family: var(--font-plus-jakarta, "Plus Jakarta Sans"), var(--font-inter, Inter), system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans;
+    font-family: var(--font-plus-jakarta, "Plus Jakarta Sans"), var(--font-inter, Inter), system-ui, sans-serif;
+    font-size: 13px;
+    line-height: 1.5;
+    background-image: radial-gradient(circle at 0% 0%, rgb(244 121 32 / 0.04) 0%, transparent 45%),
+      radial-gradient(circle at 100% 0%, rgb(26 58 150 / 0.03) 0%, transparent 40%);
+    background-attachment: fixed;
+  }
+
+  ::-webkit-scrollbar       { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #FFCB90; border-radius: 99px; }
+  ::-webkit-scrollbar-thumb:hover { background: #D96A10; }
+
+  ::selection {
+    background-color: #FFE4C4;
+    color: #6B2D07;
+  }
+
+  /* Hide number input spinners (debit/credit, qty, amount fields) */
+  input[type="number"]::-webkit-outer-spin-button,
+  input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  input[type="number"] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
+}
+
+@layer components {
+  .page-container {
+    @apply max-w-[1440px] mx-auto px-5 py-4;
+  }
+
+  .page-shell {
+    @apply rounded-card border border-border/50 bg-white/90 backdrop-blur-sm shadow-card;
+  }
+
+  .glass-card {
+    @apply bg-white/90 backdrop-blur-sm border border-white/80 shadow-card rounded-card;
+  }
+
+  .surface-muted {
+    @apply bg-muted/40 border border-border/40 rounded-lg;
+  }
+
+  .section-divider {
+    @apply border-t border-border/60 my-4;
+  }
+
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      hsl(var(--muted)) 25%,
+      hsl(42 30% 92%) 50%,
+      hsl(var(--muted)) 75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s ease-in-out infinite;
+  }
+
+  .table-row-hover {
+    @apply transition-colors duration-100 hover:bg-brand-50/50 cursor-pointer;
+  }
+
+  /* Shared master listing table (Customer Type, Product, Pricing, Scheme, etc.) */
+  .master-listing-table-shell {
+    @apply border border-border rounded-xl bg-white shadow-sm overflow-hidden;
+  }
+
+  .master-listing-thead-row {
+    @apply bg-white border-b border-border;
+  }
+
+  .master-listing-thead-row.sticky,
+  thead.sticky > .master-listing-thead-row,
+  thead.sticky.master-listing-thead-row {
+    box-shadow: 0 1px 0 0 hsl(var(--border));
+  }
+
+  .master-listing-th {
+    @apply bg-white;
+  }
+
+  .master-listing-th-sorted {
+    @apply bg-brand-50 text-brand-700;
+  }
+
+  .master-listing-th-sticky {
+    @apply sticky right-0 z-20 bg-white shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.05)] border-l border-border;
+  }
+
+  .master-listing-th-sticky-sorted {
+    @apply sticky right-0 z-20 bg-brand-50 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.05)] border-l border-border;
+  }
+
+  .master-listing-row {
+    @apply border-b border-border/60 bg-white transition-colors hover:bg-[#fbfaf7];
+  }
+
+  .master-listing-td-sticky {
+    @apply sticky right-0 z-10 bg-white shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.05)] border-l border-border group-hover:bg-[#fbfaf7];
+  }
+
+  /* Accounts module — compact typography (aligned with voucher entry forms)
+   * Page title 18px · section 14px · body/inputs 13px · labels/helper 12px */
+  .accounts-page-title {
+    @apply text-[17px] font-semibold text-foreground leading-tight;
+  }
+
+  .accounts-page-subtitle {
+    @apply text-[11px] text-muted-foreground mt-0.5 leading-snug;
+  }
+
+  .accounts-section-heading {
+    @apply text-sm font-semibold text-foreground leading-none;
+  }
+
+  .accounts-card-title {
+    @apply text-sm font-semibold text-foreground leading-none;
+  }
+
+  .accounts-tab {
+    @apply text-xs font-medium;
+  }
+
+  .accounts-form-label {
+    @apply text-xs font-medium text-muted-foreground leading-none;
+  }
+
+  .accounts-form-input {
+    @apply text-[13px] text-foreground;
+  }
+
+  .accounts-helper-text {
+    @apply text-xs text-muted-foreground leading-snug;
+  }
+
+  .accounts-filter-label {
+    @apply text-[10px] font-medium text-muted-foreground leading-none tracking-wide;
+  }
+
+  .accounts-filter-control {
+    height: 32px;
+    min-height: 32px;
+    max-height: 32px;
+    padding-top: 0;
+    padding-bottom: 0;
+    font-size: 12px;
+    line-height: 16px;
+    @apply text-foreground placeholder:text-xs placeholder:text-muted-foreground;
+    @apply border border-border rounded-md bg-background px-2;
+  }
+
+  /* Radix Select in accounts filters — override default h-10 / text-sm / line-clamp-1 */
+  .accounts-filter-select {
+    @apply py-0 gap-1 shrink-0;
+  }
+
+  .accounts-filter-select > span:first-of-type,
+  .accounts-filter-select [data-radix-select-value] {
+    line-clamp: unset !important;
+    -webkit-line-clamp: unset !important;
+    overflow: visible !important;
+    white-space: nowrap;
+    font-size: 12px;
+    line-height: 16px;
+  }
+
+  .accounts-filter-select svg.lucide-chevron-down,
+  .accounts-filter-select .lucide-chevron-down {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+  }
+
+  .accounts-date-filter-input {
+    @apply shrink-0 overflow-hidden;
+  }
+
+  .accounts-date-filter-input .accounts-date-display {
+    font-size: 12px;
+    line-height: 16px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .accounts-action-button {
+    height: 32px;
+    min-height: 32px;
+    @apply text-xs font-medium gap-1.5;
+  }
+
+  .accounts-breadcrumb {
+    @apply flex items-center flex-wrap gap-1 text-xs text-muted-foreground;
+  }
+
+  .accounts-breadcrumb-current {
+    @apply text-foreground font-medium;
+  }
+
+  .accounts-sidebar-group-label {
+    @apply text-xs font-medium;
+  }
+
+  .accounts-sidebar-item {
+    @apply text-xs;
+  }
+
+  /* Contextual left sidebar — module title + submenu hierarchy */
+  .accounts-sidebar-sticky-head {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    flex-shrink: 0;
+    background: #fff;
+  }
+
+  .accounts-sidebar-module-title {
+    margin: 0;
+    padding: 12px 12px 0;
+    font-size: 18px;
+    font-weight: 700;
+    line-height: 1.25;
+    color: hsl(var(--foreground));
+  }
+
+  .accounts-sidebar-module-divider {
+    margin: 16px 12px 0;
+    border-bottom: 1px solid hsl(var(--border) / 0.55);
+  }
+
+  .accounts-sidebar-nav-item {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    padding: 0.5rem 0.625rem;
+    border-radius: 0.5rem;
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 1.35;
+    color: #4b5563;
+    outline: none;
+    transition: background-color 150ms ease, color 150ms ease;
+  }
+
+  .accounts-sidebar-nav-item:hover {
+    background-color: rgb(255 243 230 / 0.65);
+    color: #9a3412;
+  }
+
+  .accounts-sidebar-nav-item.is-active {
+    font-weight: 600;
+    background-color: #fff3e6;
+    color: #9a3412;
+  }
+
+  .accounts-sidebar-nav-item:focus-visible {
+    box-shadow: 0 0 0 2px rgb(244 121 32 / 0.3);
+  }
+
+  .accounts-summary-label {
+    @apply text-[11px] font-medium text-muted-foreground leading-none;
+  }
+
+  .accounts-summary-value {
+    @apply text-[13px] font-semibold text-foreground tabular-nums leading-tight mt-0.5;
+    white-space: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .accounts-summary-value::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Accounts report layout — shared responsive standard for all report screens */
+  .accounts-report-body {
+    @apply flex flex-col gap-2 min-h-0 flex-1 w-full;
+  }
+
+  .accounts-report-kpi-grid {
+    display: grid;
+    width: 100%;
+    gap: 0.5rem;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 10.5rem), 1fr));
+  }
+
+  @media (min-width: 1280px) {
+    .accounts-report-kpi-grid {
+      grid-template-columns: repeat(auto-fill, minmax(min(100%, 11.5rem), 1fr));
+    }
+  }
+
+  .accounts-report-kpi-card {
+    @apply bg-white rounded-lg border border-border p-2 flex items-center gap-2.5 shadow-sm min-w-0;
+    min-width: 0;
+  }
+
+  .accounts-report-kpi-value {
+    @apply text-[15px] font-bold text-foreground tabular-nums leading-tight;
+    white-space: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    max-width: 100%;
+  }
+
+  .accounts-report-kpi-value::-webkit-scrollbar {
+    display: none;
+  }
+
+  .accounts-report-kpi-label {
+    @apply text-[10px] text-muted-foreground mt-0.5 leading-tight;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .accounts-report-filter-field {
+    @apply flex flex-col gap-0.5 flex-shrink-0;
+  }
+
+  .accounts-report-table-section {
+    @apply flex-1 min-h-0 flex flex-col overflow-hidden;
+  }
+
+  .accounts-status-badge {
+    @apply inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full whitespace-nowrap;
+  }
+
+  /* Accounts module — unified listing & report tables (Ledger, Day Book, Trial Balance, etc.)
+   * Sticky is applied per th — never on thead/tr (avoids header/first-row overlap in scroll containers).
+   * Row sizing uses padding on th/td — never fixed height (fixed height + sticky th overlaps first tbody row). */
+  .accounts-table-scroll {
+    @apply flex-1 min-h-0;
+    overflow: auto;
+    overscroll-behavior: contain;
+    contain: paint;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .accounts-table {
+    @apply w-full border-separate border-spacing-0;
+  }
+
+  .accounts-table-head {
+    @apply bg-brand-50;
+  }
+
+  .accounts-table-head-row {
+    /* Intentionally no height — fixed height on tr causes sticky th / first-row overlap */
+  }
+
+  .accounts-table-th {
+    @apply px-2 py-1 whitespace-nowrap text-[11px] font-semibold text-foreground text-left tracking-normal normal-case;
+    @apply border-b border-border bg-brand-50;
+    box-sizing: border-box;
+    vertical-align: middle;
+    min-height: 0;
+    line-height: 1.15;
+  }
+
+  .accounts-table-th-inner {
+    @apply flex items-center gap-1;
+  }
+
+  .accounts-table-th-sticky {
+    @apply sticky top-0 z-30 bg-brand-50;
+    box-shadow: 0 1px 0 0 hsl(var(--border));
+  }
+
+  .accounts-table-th-sorted {
+    @apply text-brand-700 bg-brand-50/80;
+    box-shadow: 0 1px 0 0 hsl(var(--border)), inset 0 -1px 0 0 rgb(244 121 32 / 0.12);
+  }
+
+  .accounts-table-th-sticky.accounts-table-th-sorted {
+    @apply bg-brand-50/80;
+  }
+
+  .accounts-table-th-uppercase {
+    @apply uppercase tracking-wide;
+  }
+
+  .accounts-col-filter-btn {
+    @apply relative inline-flex items-center justify-center w-5 h-5 rounded-sm text-muted-foreground/55 hover:text-foreground hover:bg-muted/50 transition-colors flex-shrink-0;
+  }
+
+  .accounts-col-filter-btn.is-active {
+    @apply text-brand-600 bg-brand-50 hover:bg-brand-100 hover:text-brand-700;
+  }
+
+  .accounts-col-filter-dot {
+    @apply absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-brand-600;
+  }
+
+  .accounts-col-filter-popover {
+    @apply rounded-lg border border-border bg-white shadow-lg;
+  }
+
+  .accounts-col-filter-popover .accounts-col-filter-value-list {
+    scrollbar-width: thin;
+  }
+
+  .accounts-table-body {
+    @apply bg-white;
+  }
+
+  .accounts-table-row {
+    @apply border-b border-border bg-white;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .accounts-table-row {
+      @apply transition-colors duration-150 ease-in-out;
+    }
+
+    .accounts-table-row:hover {
+      @apply bg-muted/25;
+    }
+
+    .accounts-table-body > .accounts-table-row:nth-child(even):hover,
+    .accounts-table > tbody > tr:nth-child(even):hover {
+      @apply bg-muted/30;
+    }
+  }
+
+  .accounts-table-body > .accounts-table-row:nth-child(even),
+  .accounts-table > tbody > tr:nth-child(even) {
+    @apply bg-muted/20;
+  }
+
+
+  .accounts-table-row.is-selected,
+  .accounts-table > tbody > tr.is-selected {
+    @apply !bg-brand-50/80 ring-1 ring-inset ring-brand-300/70;
+  }
+
+  .accounts-table-row.is-selected:hover,
+  .accounts-table > tbody > tr.is-selected:hover {
+    @apply !bg-brand-50/90;
+  }
+
+  .accounts-table-td {
+    @apply px-2 py-1 text-xs font-normal text-foreground;
+    box-sizing: border-box;
+    vertical-align: middle;
+    min-height: 0;
+    line-height: 1.2;
+  }
+
+  .accounts-table-td-inner {
+    @apply flex items-center gap-1;
+  }
+
+  .accounts-table-empty {
+    @apply !h-auto !min-h-0 py-4 text-center text-xs text-muted-foreground bg-white;
+  }
+
+  .accounts-col-narrow {
+    @apply w-20 max-w-[5rem];
+  }
+
+  .accounts-col-status {
+    @apply min-w-[7rem];
+  }
+
+  .accounts-col-actions {
+    @apply min-w-[3rem] w-12;
+  }
+
+  .accounts-col-actions-wide {
+    @apply min-w-[7.5rem] w-[7.5rem];
+  }
+
+  .accounts-listing-card {
+    @apply flex flex-col flex-1 min-h-0 gap-2;
+  }
+
+  .accounts-listing-filter-card {
+    background-color: #ffffff;
+    border: 1px solid #E5E7EB;
+    border-radius: 8px;
+    box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    @apply flex-shrink-0 flex flex-col gap-1.5 px-2 py-1.5 w-full min-w-0;
+  }
+
+  .accounts-listing-filter-card > .accounts-report-filter-stack {
+    @apply flex flex-wrap items-end gap-x-2 gap-y-1.5 w-full min-w-0;
+  }
+
+  .accounts-listing-filter-card [role="combobox"] {
+    height: 32px;
+    min-height: 32px;
+    max-height: 32px;
+    font-size: 12px;
+    line-height: 16px;
+    padding-top: 0;
+    padding-bottom: 0;
+    border-color: #E5E7EB;
+    background-color: #ffffff;
+  }
+
+  .accounts-listing-filter-card [role="combobox"] > span:first-of-type {
+    line-clamp: unset !important;
+    -webkit-line-clamp: unset !important;
+    overflow: visible !important;
+    white-space: nowrap;
+  }
+
+  .accounts-listing-table-card {
+    @apply overflow-hidden flex flex-col flex-1 min-h-0;
+  }
+
+  .accounts-listing-tabs-row {
+    @apply flex-shrink-0;
+  }
+
+  .accounts-col-wide {
+    min-width: 10rem;
+  }
+
+  .accounts-col-party {
+    min-width: 9rem;
+    max-width: 11rem;
+  }
+
+  .accounts-col-narration {
+    min-width: 14rem;
+  }
+
+  .accounts-table-foot {
+    @apply bg-muted/15 border-t border-border/60;
+  }
+
+  /* Legacy markup: th without component classes still get standard layout */
+  .accounts-table > thead > tr > th:not(.accounts-table-th) {
+    @apply px-2 py-1 whitespace-nowrap text-[11px] font-semibold text-[#1F2937] text-left tracking-normal normal-case;
+    @apply border-b border-[#E5E7EB] sticky top-0 z-30;
+    background-color: #FFF3E6;
+    box-sizing: border-box;
+    vertical-align: middle;
+    min-height: 0;
+    line-height: 1.15;
+    box-shadow: 0 1px 0 0 #E5E7EB;
+  }
+
+  .accounts-table > tbody > tr {
+    @apply border-b border-border bg-white;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .accounts-table > tbody > tr {
+      @apply transition-colors duration-150 ease-in-out;
+    }
+
+    .accounts-table > tbody > tr:hover {
+      @apply bg-muted/25;
+    }
+  }
+
+  .accounts-table > tbody > tr > td {
+    @apply px-2 py-1 text-xs font-normal text-[#1F2937];
+    box-sizing: border-box;
+    vertical-align: middle;
+    min-height: 0;
+    line-height: 1.2;
+  }
+
+  .input-base {
+    @apply w-full h-8 rounded-input border border-input bg-white px-3 text-xs
+           placeholder:text-muted-foreground
+           focus:outline-none focus:ring-2 focus:ring-brand-400/30 focus:border-brand-400
+           transition-all duration-150;
+  }
+
+  .btn-primary-brand {
+    @apply bg-brand-600 hover:bg-brand-700 text-white shadow-sm;
+  }
+
+  .nav-active-indicator {
+    @apply bg-gradient-to-r from-brand-50 to-white text-brand-700 border-l-2 border-brand-600 font-semibold;
+  }
+
+  .nav-active-navy {
+    @apply bg-gradient-to-r from-navy-50/80 to-white text-navy-800 border-l-2 border-navy-600 font-semibold;
+  }
+
+  /* Accounts module — two-panel shell (sidebar + content); plain CSS fallback if utilities fail */
+  .accounts-module-shell {
+    display: flex;
+    height: 100%;
+    min-height: 0;
+    width: 100%;
+    overflow: hidden;
+  }
+
+  .accounts-module-sidebar {
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    position: relative;
+    width: 232px;
+    min-width: 232px;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+    background: #fff;
+    border-right: 1px solid hsl(var(--border) / 0.8);
+    transition: width 200ms ease, min-width 200ms ease, opacity 150ms ease;
+  }
+
+  .accounts-module-sidebar.is-collapsed {
+    width: 62px;
+    min-width: 62px;
+  }
+
+  /* Chart of Accounts tree needs slightly more width for labels */
+  .accounts-module-sidebar.is-coa-section {
+    width: 272px;
+    min-width: 272px;
+  }
+
+  .accounts-coa-tree {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .accounts-coa-tree [data-coa-tree-row] {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .accounts-coa-tree [data-coa-tree-label] {
+    flex: 1 1 0%;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .accounts-sidebar-header-collapse-btn {
+    flex-shrink: 0;
+  }
+
+  .accounts-sidebar-nav-item.is-collapsed {
+    justify-content: center;
+    width: 40px;
+    min-width: 40px;
+    padding-left: 0;
+    padding-right: 0;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .accounts-sidebar-nav-item.is-collapsed span {
+    display: none;
+  }
+
+  .accounts-sidebar-coa-icon-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    margin-left: auto;
+    margin-right: auto;
+    border-radius: 0.5rem;
+    transition: background-color 150ms ease;
+  }
+
+  .accounts-sidebar-coa-icon-btn:hover {
+    background-color: rgb(255 243 230 / 0.65);
+  }
+
+  .accounts-sidebar-coa-icon-btn.is-active {
+    background-color: #fff3e6;
+    box-shadow: inset 0 0 0 1px rgb(244 121 32 / 0.25);
+  }
+
+  .accounts-sidebar-module-title.is-collapsed,
+  .accounts-sidebar-module-divider.is-collapsed {
+    display: none;
+  }
+
+  /* Scrollable panes inside Accounts left sidebar */
+  .accounts-sidebar-tree-scroll,
+  .accounts-sidebar-section-scroll {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
+
+  .accounts-module-main {
+    display: flex;
+    flex: 1 1 0%;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    height: 100%;
+    overflow: hidden;
+    background: #F9FAFB;
+  }
+}
+
+@layer utilities {
+  .text-page-title    { font-size: 20px; line-height: 28px; font-weight: 700; letter-spacing: -0.02em; color: hsl(225 45% 14%); }
+  .text-section-title { font-size: 16px; line-height: 22px; font-weight: 600; letter-spacing: -0.01em; }
+  .text-card-title    { font-size: 14px; line-height: 20px; font-weight: 600; }
+  .text-body-lg       { font-size: 13px; line-height: 18px; }
+  .text-body          { font-size: 13px; line-height: 18px; }
+  .text-table         { font-size: 12px; line-height: 16px; }
+  .text-helper        { font-size: 11px; line-height: 14px; }
+  .text-badge         { font-size: 11px; line-height: 14px; font-weight: 600; letter-spacing: 0.04em; }
+
+  .truncate-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+}
