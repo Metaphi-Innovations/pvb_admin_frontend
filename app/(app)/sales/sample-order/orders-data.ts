@@ -382,8 +382,9 @@ export function formatApprovalStatus(status: ApprovalStatus): string {
   }
 }
 
+/** Sample orders are issued to a salesperson — never show the customer in their place. */
 export function getSampleOrderDisplayRecipient(order: SalesOrder): string {
-  return order.salesManName || order.customerName || "—";
+  return order.salesManName || "—";
 }
 
 export interface SalesOrderFormValues {

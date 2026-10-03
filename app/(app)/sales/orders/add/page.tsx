@@ -111,8 +111,8 @@ export default function AddSalesOrderPage() {
 		if (salesmanData) {
 			const mapped = salesmanData.map((s: any) => ({
 				id: s.user_id,
-				employeeId: s.employee_id || s.username || "",
-				employeeCode: s.employee_id || s.username || "",
+				employeeId: s.employee_id || "",
+				employeeCode: s.employee_id || "",
 				firstName: s.first_name || "",
 				lastName: s.last_name || "",
 				fullName: `${s.first_name || ""} ${s.last_name || ""}`.trim() || s.username || "",

@@ -38,13 +38,13 @@ function AddressDetailBody({ address }: { address: SalesOrderCustomerAddress }) 
 			<div className='flex items-center gap-1.5 min-w-0'>
 				<Building2 className='w-3 h-3 text-brand-600 flex-shrink-0' />
 				<p className='text-xs font-semibold text-foreground leading-tight truncate'>
-					{address.companyName}
+					{address.companyName || "—"}
 				</p>
 			</div>
 
 			<p className='text-[11px] leading-snug'>
 				<span className='font-medium text-foreground/70'>GSTIN:</span>{" "}
-				<span className='font-medium text-foreground font-mono'>{address.gstin}</span>
+				<span className='font-medium text-foreground font-mono'>{address.gstin || "—"}</span>
 			</p>
 
 			{(addressLine || cityLine) && (

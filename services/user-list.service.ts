@@ -54,7 +54,6 @@ export type UserFilterField =
   | "username"
   | "email"
   | "mobile_number"
-  | "status"
   | "employee_type"
   | "role_type"
   | "sales_type"
@@ -117,7 +116,7 @@ export interface UserCreatePayload {
   date_of_joining?: string | null;
   role_type?: string | null;
   sales_type?: string | null;
-  status?: string | null;
+  is_active?: boolean;
   department_id?: string | null;
   role_id?: string | null;
   reporting_manager_id?: string | null;
@@ -125,9 +124,7 @@ export interface UserCreatePayload {
   geography_mapping?: Record<string, string | null> | null;
 }
 
-export type UserUpdatePayload = Partial<UserCreatePayload> & {
-  is_active?: boolean;
-};
+export type UserUpdatePayload = Partial<UserCreatePayload>;
 
 export interface UserExportParams {
   search: string;
@@ -212,12 +209,10 @@ function asString(value: unknown): string {
   return typeof value === "string" ? value : String(value ?? "");
 }
 
-function toStatus(value: unknown): "active" | "inactive" {
-  if (value === true) return "active";
-  if (value === false) return "inactive";
-  const token = asString(value).trim().toLowerCase();
-  if (token === "active") return "active";
-  return "inactive";
+function toStatus(isActive: unknown): "active" | "inactive" {
+  return isActive === true || asString(isActive).trim().toLowerCase() === "true"
+    ? "active"
+    : "inactive";
 }
 
 function toDisplayName(user: unknown): string {
@@ -265,7 +260,7 @@ function mapListItem(raw: Record<string, unknown>, fallbackIndex: number): UserL
     role: asString(role?.role_name),
     roleId: asString(role?.role_id),
     roleGeoLevel: asString(role?.geography_level),
-    status: toStatus(raw.is_active ?? raw.status),
+    status: toStatus(raw.is_active),
     createdAt: formatDate(raw.created_at),
     updatedAt: formatDate(raw.updated_at),
     createdBy: toDisplayName(raw.created_by_user),
@@ -726,7 +721,7 @@ export const UserListService = {
   async updateStatus(id: string, active: boolean): Promise<void> {
     const response = await axiosInstance.patch(
       API_ENDPOINTS.USER_MANAGEMENT.USER.STATUS_UPDATE(id),
-      { status: active ? "ACTIVE" : "INACTIVE" },
+      { is_active: active },
     );
     const body = response.data as Record<string, unknown>;
     if (body.success === false) {

@@ -26,6 +26,7 @@ import {
 import { formatFulfillmentStatus } from "@/app/(app)/sales/orders/orders-data";
 import { getProductById, calculateOrderTotalsSummary } from "@/app/(app)/sales/orders/orders-data";
 import { useStockTransfer } from "@/hooks/sales/use-stock-transfers";
+import { useWarehouseStock, formatLineStock } from "@/hooks/sales/use-warehouse-stock";
 
 function transferStatusVariant(status: TransferStatus): "active" | "inactive" | "draft" | "blocked" | "neutral" {
   if (status === "approved" || status === "confirmed" || status === "received") return "active";
@@ -43,6 +44,7 @@ export default function ViewStockTransferPage() {
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
 
   const { data: transfer, isLoading, isError } = useStockTransfer(id);
+  const stockQuery = useWarehouseStock(transfer?.sourceWarehouseId);
 
   useEffect(() => {
     if (!toast) return;
@@ -126,7 +128,7 @@ export default function ViewStockTransferPage() {
             <RecordSectionCard title="Transfer Details" accent="blue">
               <RecordKvRow label="Transfer Number" value={transfer.transferNumber} mono />
               <RecordKvRow label="Transfer Date" value={transfer.transferDate} />
-              <RecordKvRow label="Delivery Date" value={transfer.deliveryDate} />
+              <RecordKvRow label="Delivery Date" value={transfer.deliveryDate || "—"} />
               <RecordKvRow label="Source Warehouse" value={`${transfer.sourceWarehouseCode} — ${transfer.sourceWarehouseName}`} />
               <RecordKvRow label="Target Warehouse" value={`${transfer.targetWarehouseCode} — ${transfer.targetWarehouseName}`} />
               <RecordKvRow label="Status" value={formatTransferStatus(transfer.status)} />
@@ -191,9 +193,9 @@ export default function ViewStockTransferPage() {
                   <thead>
                     <tr className="border-b bg-muted/40 border-border">
                       <th className="px-4 py-2.5 text-left text-xs font-semibold">Product</th>
+                      <th className="px-4 py-2.5 text-right text-xs font-semibold w-16">Stock</th>
                       <th className="px-4 py-2.5 text-right text-xs font-semibold w-24">Qty (Cases/Loose)</th>
                       <th className="px-4 py-2.5 text-right text-xs font-semibold">Unit Price</th>
-                      <th className="px-4 py-2.5 text-right text-xs font-semibold w-20">Discount</th>
                       <th className="px-4 py-2.5 text-right text-xs font-semibold">Taxable</th>
                       {showCgstSgst && (
                         <>
@@ -214,7 +216,7 @@ export default function ViewStockTransferPage() {
                       const cases = Math.floor(line.quantity / packSize);
                       const loose = line.quantity % packSize;
                       const taxable = Math.round(
-                        Math.max(0, (line.quantity || 0) * (line.finalRate ?? line.unitPrice ?? 0) - (line.discountValue || 0)) * 100,
+                        Math.max(0, (line.quantity || 0) * (line.finalRate ?? line.unitPrice ?? 0)) * 100,
                       ) / 100;
                       const cgstAmt = Number(line.cgstAmount || 0);
                       const sgstAmt = Number(line.sgstAmount || 0);
@@ -231,6 +233,7 @@ export default function ViewStockTransferPage() {
                             <p className="text-xs font-semibold text-foreground">{line.productName || "—"}</p>
                             <p className="text-[11px] font-mono text-brand-700">{line.productCode}</p>
                           </td>
+                          <td className="px-4 py-2 text-xs text-right tabular-nums">{formatLineStock(stockQuery, line.productId)}</td>
                           <td className="px-4 py-2 text-xs text-right tabular-nums">
                             <div className="flex flex-col items-end">
                               <span className="font-semibold">{cases > 0 ? `${cases} Cases` : ""} {loose > 0 ? `${loose} Loose` : ""} {cases === 0 && loose === 0 ? "0" : ""}</span>
@@ -238,13 +241,6 @@ export default function ViewStockTransferPage() {
                             </div>
                           </td>
                           <td className="px-4 py-2 text-xs text-right tabular-nums">{formatRupee(line.unitPrice)}</td>
-                          <td className="px-4 py-2 text-xs text-right tabular-nums">
-                            {line.discountValue > 0
-                              ? formatRupee(line.discountValue)
-                              : line.discount > 0
-                                ? `${line.discount}%`
-                                : "—"}
-                          </td>
                           <td className="px-4 py-2 text-xs text-right tabular-nums">{formatRupee(taxable)}</td>
                           {showCgstSgst && (
                             <>
@@ -290,8 +286,6 @@ export default function ViewStockTransferPage() {
                       <tr className="border-b bg-muted/40 border-border">
                         <th className="px-4 py-2.5 text-left text-xs font-semibold">Expense Name</th>
                         <th className="px-4 py-2.5 text-right text-xs font-semibold">Amount</th>
-                        <th className="px-4 py-2.5 text-right text-xs font-semibold">Discount</th>
-                        <th className="px-4 py-2.5 text-right text-xs font-semibold">Net</th>
                         {showCgstSgst && (
                           <>
                             <th className="px-4 py-2.5 text-right text-xs font-semibold">CGST</th>
@@ -314,12 +308,6 @@ export default function ViewStockTransferPage() {
                           <tr key={exp.id} className="border-b border-border/60">
                             <td className="px-4 py-2 text-xs font-semibold">{exp.expenseName}</td>
                             <td className="px-4 py-2 text-xs text-right tabular-nums">{formatRupee(exp.amount)}</td>
-                            <td className="px-4 py-2 text-xs text-right tabular-nums">
-                              {exp.discountType === "percent"
-                                ? `${exp.discountValue || 0}%`
-                                : formatRupee(exp.discountValue || 0)}
-                            </td>
-                            <td className="px-4 py-2 text-xs text-right tabular-nums">{formatRupee(exp.netAmount)}</td>
                             {showCgstSgst && (
                               <>
                                 <td className="px-4 py-2 text-xs text-right tabular-nums">
@@ -359,7 +347,6 @@ export default function ViewStockTransferPage() {
             <div className="flex justify-end">
               <div className="w-full max-w-xs space-y-1 text-xs bg-white border border-border p-3 rounded-xl shadow-sm">
                 <div className="flex justify-between"><span className="text-muted-foreground">Product Line Total</span><span>{formatRupee(totals.productSubtotal)}</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">Discount</span><span>{formatRupee(totals.productDiscountTotal)}</span></div>
                 <div className="flex justify-between"><span className="text-muted-foreground">Additional Expenses</span><span>{formatRupee(totals.netAdditionalExpenses)}</span></div>
                 <div className="flex justify-between"><span className="text-muted-foreground">Taxable Amount</span><span>{formatRupee(totals.taxableAmount)}</span></div>
                 {showCgstSgst ? (

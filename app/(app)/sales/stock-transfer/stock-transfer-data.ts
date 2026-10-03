@@ -461,6 +461,11 @@ export function validateStockTransferForm(form: StockTransferFormValues): Record
   if (!form.transferDate) {
     errors.transferDate = "Transfer date is required";
   }
+  if (!form.deliveryDate) {
+    errors.deliveryDate = "Delivery date is required";
+  } else if (form.transferDate && form.deliveryDate < form.transferDate) {
+    errors.deliveryDate = "Delivery date cannot be before transfer date";
+  }
   if (!form.reasonPurpose?.trim()) {
     errors.reasonPurpose = "Reason / Purpose is required";
   }

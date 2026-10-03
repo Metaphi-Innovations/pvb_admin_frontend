@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import { IndianRupeeInput } from "@/components/ui/IndianRupeeInput";
+import { MAX_ENTRY_DIGITS } from "@/lib/quantity-limits";
 import { cn } from "@/lib/utils";
 import {
   calcAdditionalChargeTax,
@@ -336,6 +337,7 @@ export function AdditionalChargesEditor({
                       <IndianRupeeInput
                         value={row.amount}
                         onChange={(n) => update(row.uid, { amount: n })}
+                        maxDigits={MAX_ENTRY_DIGITS}
                         disabled={readOnly}
                         className={cn(inputCls, "ml-auto")}
                       />

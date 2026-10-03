@@ -16,8 +16,6 @@ export interface AdditionalChargeFormValues {
   hsnId: string;
   hsnSacCode: string;
   description: string;
-  /** Create-only override for auto-created recovery ledger name. */
-  ledgerName: string;
 }
 
 export const DEFAULT_ADDITIONAL_CHARGE_FORM: AdditionalChargeFormValues = {
@@ -28,12 +26,10 @@ export const DEFAULT_ADDITIONAL_CHARGE_FORM: AdditionalChargeFormValues = {
   hsnId: "",
   hsnSacCode: "",
   description: "",
-  ledgerName: "",
 };
 
 export function validateAdditionalChargeForm(
   form: AdditionalChargeFormValues,
-  mode: "add" | "edit",
 ): Record<string, string> {
   const errors: Record<string, string> = {};
 
@@ -52,12 +48,6 @@ export function validateAdditionalChargeForm(
       "GST rate is required — select an HSN / SAC to auto-fill";
   }
 
-  if (mode === "add" && !form.ledgerName.trim()) {
-    errors.ledgerName = "Ledger name is required";
-  } else if (form.ledgerName.trim().length > 255) {
-    errors.ledgerName = "Ledger name must be 255 characters or fewer";
-  }
-
   if (form.description.trim().length > 5000) {
     errors.description = "Description must be 5000 characters or fewer";
   }
@@ -70,7 +60,6 @@ export function AdditionalChargeForm({
   onChange,
   errors,
   onClearError,
-  mode,
   hsnOptions,
   hsnLoading,
   gstOptions,
@@ -79,7 +68,6 @@ export function AdditionalChargeForm({
   onChange: (form: AdditionalChargeFormValues) => void;
   errors: Record<string, string>;
   onClearError: (key: string) => void;
-  mode: "add" | "edit";
   hsnOptions: { value: string; label: string; gstId?: string; hsnCode?: string }[];
   hsnLoading?: boolean;
   gstOptions: { value: string; label: string }[];
@@ -167,22 +155,6 @@ export function AdditionalChargeForm({
             readOnly
           />
         </MasterField>
-
-        {mode === "add" ? (
-          <MasterField
-            label="Ledger Name"
-            required
-            error={errors.ledgerName}
-            className="sm:col-span-2"
-          >
-            <Input
-              value={form.ledgerName}
-              onChange={(e) => set("ledgerName", e.target.value)}
-              placeholder="e.g. Travelling Charges Recovery"
-              className={inputCls("ledgerName")}
-            />
-          </MasterField>
-        ) : null}
 
         <MasterField
           label="Description"
