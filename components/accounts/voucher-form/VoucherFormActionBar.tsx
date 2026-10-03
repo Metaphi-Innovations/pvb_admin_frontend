@@ -10,7 +10,7 @@ const BTN = "h-8 text-xs gap-1.5";
 export interface VoucherFormActionBarProps {
   /** Leave form without saving (navigate back / discard changes). */
   onDiscard: () => void;
-  onSaveDraft: () => void;
+  onSaveDraft?: () => void;
   /** Optional maker-checker submit — hidden until approval phase is enabled. */
   onSubmitForApproval?: () => void;
   /**
@@ -22,6 +22,8 @@ export interface VoucherFormActionBarProps {
   saveAndPostLabel?: string;
   discardDisabled?: boolean;
   saveDraftDisabled?: boolean;
+  /** When false, Save Draft is not rendered. Defaults to true when onSaveDraft is set. */
+  showSaveDraft?: boolean;
   submitForApprovalDisabled?: boolean;
   saveAndPostDisabled?: boolean;
   showSubmitForApproval?: boolean;
@@ -39,6 +41,7 @@ export function VoucherFormActionBar({
   saveAndPostLabel = "Save & Post",
   discardDisabled,
   saveDraftDisabled,
+  showSaveDraft = true,
   saveAndPostDisabled,
   className,
 }: VoucherFormActionBarProps) {
@@ -60,16 +63,18 @@ export function VoucherFormActionBar({
         Cancel
       </Button>
       <div className="flex items-center gap-2 flex-wrap justify-end w-full sm:w-auto">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className={BTN}
-          onClick={onSaveDraft}
-          disabled={saveDraftDisabled}
-        >
-          <Save className="w-3.5 h-3.5" /> Save Draft
-        </Button>
+        {showSaveDraft && onSaveDraft ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className={BTN}
+            onClick={onSaveDraft}
+            disabled={saveDraftDisabled}
+          >
+            <Save className="w-3.5 h-3.5" /> Save Draft
+          </Button>
+        ) : null}
         <Button
           type="button"
           size="sm"

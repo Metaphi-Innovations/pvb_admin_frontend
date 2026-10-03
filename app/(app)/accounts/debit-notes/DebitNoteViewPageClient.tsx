@@ -53,7 +53,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 type PrChargeRow = {
@@ -597,7 +596,7 @@ export default function DebitNoteViewPageClient({ debitNoteId }: { debitNoteId: 
               amount={record.currentDebitAmount}
             />
 
-            <VoucherFormSectionCard title="Basic Information" compact highlight>
+            <VoucherFormSectionCard title="Debit Note Details" compact highlight>
               <VoucherNoteFieldGrid columns={3}>
                 <VoucherNoteField label="Vendor">
                   <VoucherNoteReadOnly>{record.vendorName}</VoucherNoteReadOnly>
@@ -608,33 +607,13 @@ export default function DebitNoteViewPageClient({ debitNoteId }: { debitNoteId: 
                 <VoucherNoteField label="Debit Note No.">
                   <VoucherNoteReadOnly mono>{record.debitNoteNo}</VoucherNoteReadOnly>
                 </VoucherNoteField>
-                <VoucherNoteField label="Supplier Reference No.">
-                  <VoucherNoteReadOnly>{rawRecord.remarks || "—"}</VoucherNoteReadOnly>
-                </VoucherNoteField>
-                <VoucherNoteField label="Accounts Payable">
-                  <VoucherNoteReadOnly>{record.vendorName}</VoucherNoteReadOnly>
-                </VoucherNoteField>
-                <VoucherNoteField label="Status">
-                  <VoucherNoteReadOnly>{statusLabel}</VoucherNoteReadOnly>
-                </VoucherNoteField>
-              </VoucherNoteFieldGrid>
-            </VoucherFormSectionCard>
-
-            <VoucherFormSectionCard title="Debit Note Basis" compact highlight>
-              <div className="flex flex-wrap items-center gap-2 text-xs">
-                <span className="inline-flex items-center rounded-md bg-brand-50 border border-brand-100 px-2 py-0.5 text-[11px] font-medium text-brand-800">
-                  {basisLabel}
-                </span>
-                <span className="text-muted-foreground">Source: {sourceLabel}</span>
-              </div>
-            </VoucherFormSectionCard>
-
-            <VoucherFormSectionCard title="Reference Information" compact highlight>
-              <VoucherNoteFieldGrid columns={4}>
-                <VoucherNoteField label="Reason">
-                  <VoucherNoteReadOnly>{record.reason || "—"}</VoucherNoteReadOnly>
-                </VoucherNoteField>
-                {!isFresh ? (
+                {isFresh ? (
+                  <VoucherNoteField label="Adjustment Ledger">
+                    <VoucherNoteReadOnly>
+                      {record.adjustmentLedgerName || "—"}
+                    </VoucherNoteReadOnly>
+                  </VoucherNoteField>
+                ) : (
                   <>
                     <VoucherNoteField label="Purchase Invoice">
                       <VoucherNoteReadOnly mono>
@@ -647,330 +626,287 @@ export default function DebitNoteViewPageClient({ debitNoteId }: { debitNoteId: 
                       </VoucherNoteReadOnly>
                     </VoucherNoteField>
                   </>
-                ) : (
-                  <VoucherNoteField label="Adjustment Ledger">
-                    <VoucherNoteReadOnly>
-                      {record.adjustmentLedgerName || "—"}
-                    </VoucherNoteReadOnly>
-                  </VoucherNoteField>
                 )}
+                <VoucherNoteField label="Supplier Reference No.">
+                  <VoucherNoteReadOnly>{rawRecord.remarks || "—"}</VoucherNoteReadOnly>
+                </VoucherNoteField>
+                <VoucherNoteField label="Reason">
+                  <VoucherNoteReadOnly>{record.reason || "—"}</VoucherNoteReadOnly>
+                </VoucherNoteField>
               </VoucherNoteFieldGrid>
             </VoucherFormSectionCard>
 
-            <Tabs defaultValue="lines" className="w-full">
-              <TabsList className="grid w-full grid-cols-4 h-9">
-                <TabsTrigger value="lines" className="text-xs">
-                  Line Items
-                </TabsTrigger>
-                <TabsTrigger value="charges" className="text-xs">
-                  PR Additional Charges
-                </TabsTrigger>
-                <TabsTrigger value="refs" className="text-xs">
-                  References
-                </TabsTrigger>
-                <TabsTrigger value="journal" className="text-xs">
-                  Accounting Journal
-                </TabsTrigger>
-              </TabsList>
+            <VoucherFormSectionCard title="Particulars" compact highlight flush>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs table-fixed min-w-[920px]">
+                  <colgroup>
+                    <col style={{ width: "18%" }} />
+                    <col style={{ width: "16%" }} />
+                    {showLineHsn ? <col style={{ width: "8%" }} /> : null}
+                    <col style={{ width: "8%" }} />
+                    <col style={{ width: "10%" }} />
+                    <col style={{ width: "11%" }} />
+                    <col style={{ width: "7%" }} />
+                    {interstate ? (
+                      <col style={{ width: "10%" }} />
+                    ) : (
+                      <>
+                        <col style={{ width: "9%" }} />
+                        <col style={{ width: "9%" }} />
+                      </>
+                    )}
+                    <col style={{ width: "12%" }} />
+                  </colgroup>
+                  <thead>
+                    <tr className="border-b bg-muted/40">
+                      <th className="px-2 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        Description
+                      </th>
+                      <th className="px-2 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        Ledger
+                      </th>
+                      {showLineHsn ? (
+                        <th className="px-2 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                          HSN
+                        </th>
+                      ) : null}
+                      <th className="px-2 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        Quantity
+                      </th>
+                      <th className="px-2 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        Rate
+                      </th>
+                      <th className="px-2 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        Taxable
+                      </th>
+                      <th className="px-2 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        GST %
+                      </th>
+                      {interstate ? (
+                        <th className="px-2 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                          IGST
+                        </th>
+                      ) : (
+                        <>
+                          <th className="px-2 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                            CGST
+                          </th>
+                          <th className="px-2 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                            SGST
+                          </th>
+                        </>
+                      )}
+                      <th className="px-2 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        Total
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rawRecord.lines?.map((l: any) => {
+                      const cgst = parseFloat(l.cgst_amount || 0) || 0;
+                      const sgst = parseFloat(l.sgst_amount || 0) || 0;
+                      const igst = parseFloat(l.igst_amount || 0) || 0;
+                      const totalLine =
+                        parseFloat(l.taxable_amount) + cgst + sgst + igst;
+                      const hsn =
+                        l.hsn_code ||
+                        l.hsn ||
+                        l.hsn_snapshot?.hsn_code ||
+                        l.product_snapshot?.hsn_code ||
+                        "";
+                      return (
+                        <tr key={l.id} className="border-b border-border/50 hover:bg-muted/10">
+                          <td
+                            className="px-2 py-1.5 font-medium truncate"
+                            title={l.description || l.product_name || undefined}
+                          >
+                            {l.description || l.product_name || "—"}
+                          </td>
+                          <td
+                            className="px-2 py-1.5 truncate"
+                            title={l.ledger?.ledger_name || undefined}
+                          >
+                            {l.ledger?.ledger_name || "—"}
+                          </td>
+                          {showLineHsn ? (
+                            <td className="px-2 py-1.5 font-mono text-muted-foreground">
+                              {hsn || "—"}
+                            </td>
+                          ) : null}
+                          <td className="px-2 py-1.5 text-right tabular-nums">
+                            {l.quantity || "—"}
+                          </td>
+                          <td className="px-2 py-1.5 text-right tabular-nums">
+                            {l.rate ? formatINR(l.rate) : "—"}
+                          </td>
+                          <td className="px-2 py-1.5 text-right tabular-nums">
+                            {formatINR(l.taxable_amount)}
+                          </td>
+                          <td className="px-2 py-1.5 text-right tabular-nums">
+                            {l.gst_rate}%
+                          </td>
+                          {interstate ? (
+                            <td className="px-2 py-1.5 text-right tabular-nums">
+                              {formatINR(igst)}
+                            </td>
+                          ) : (
+                            <>
+                              <td className="px-2 py-1.5 text-right tabular-nums">
+                                {formatINR(cgst)}
+                              </td>
+                              <td className="px-2 py-1.5 text-right tabular-nums">
+                                {formatINR(sgst)}
+                              </td>
+                            </>
+                          )}
+                          <td className="px-2 py-1.5 text-right tabular-nums font-semibold">
+                            {formatINR(totalLine)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {(!rawRecord.lines || rawRecord.lines.length === 0) && (
+                      <tr>
+                        <td
+                          colSpan={
+                            (showLineHsn ? 1 : 0) + (interstate ? 8 : 9)
+                          }
+                          className="px-2 py-6 text-center text-muted-foreground"
+                        >
+                          No particulars
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </VoucherFormSectionCard>
 
-              <TabsContent value="lines" className="mt-2">
-                <VoucherFormSectionCard title="Line Items" compact highlight flush>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-xs table-fixed min-w-[920px]">
-                      <colgroup>
-                        <col style={{ width: "18%" }} />
-                        <col style={{ width: "16%" }} />
-                        {showLineHsn ? <col style={{ width: "8%" }} /> : null}
-                        <col style={{ width: "8%" }} />
-                        <col style={{ width: "10%" }} />
-                        <col style={{ width: "11%" }} />
-                        <col style={{ width: "7%" }} />
+            {prCharges.length > 0 ? (
+              <VoucherFormSectionCard title="Additional Charges" compact highlight flush>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-xs">
+                    <thead>
+                      <tr className="border-b bg-muted/40">
+                        <th className="px-2 py-2 text-left text-xs font-semibold">Charge Name</th>
+                        <th className="px-2 py-2 text-left text-xs font-semibold">Ledger</th>
+                        {showPrHsn ? (
+                          <th className="px-2 py-2 text-left text-xs font-semibold">HSN</th>
+                        ) : null}
+                        <th className="px-2 py-2 text-right text-xs font-semibold">Amount</th>
+                        <th className="px-2 py-2 text-right text-xs font-semibold">GST %</th>
                         {interstate ? (
-                          <col style={{ width: "10%" }} />
+                          <th className="px-2 py-2 text-right text-xs font-semibold">IGST</th>
                         ) : (
                           <>
-                            <col style={{ width: "9%" }} />
-                            <col style={{ width: "9%" }} />
+                            <th className="px-2 py-2 text-right text-xs font-semibold">CGST</th>
+                            <th className="px-2 py-2 text-right text-xs font-semibold">SGST</th>
                           </>
                         )}
-                        <col style={{ width: "12%" }} />
-                      </colgroup>
-                      <thead>
-                        <tr className="border-b bg-muted/40">
-                          <th className="px-2 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                            Description
-                          </th>
-                          <th className="px-2 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                            Ledger
-                          </th>
-                          {showLineHsn ? (
-                            <th className="px-2 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                              HSN
-                            </th>
-                          ) : null}
-                          <th className="px-2 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                            Quantity
-                          </th>
-                          <th className="px-2 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                            Rate
-                          </th>
-                          <th className="px-2 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                            Taxable
-                          </th>
-                          <th className="px-2 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                            GST %
-                          </th>
-                          {interstate ? (
-                            <th className="px-2 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                              IGST
-                            </th>
-                          ) : (
-                            <>
-                              <th className="px-2 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                                CGST
-                              </th>
-                              <th className="px-2 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                                SGST
-                              </th>
-                            </>
-                          )}
-                          <th className="px-2 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                            Total
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {rawRecord.lines?.map((l: any) => {
-                          const cgst = parseFloat(l.cgst_amount || 0) || 0;
-                          const sgst = parseFloat(l.sgst_amount || 0) || 0;
-                          const igst = parseFloat(l.igst_amount || 0) || 0;
-                          const totalLine =
-                            parseFloat(l.taxable_amount) + cgst + sgst + igst;
-                          const hsn =
-                            l.hsn_code ||
-                            l.hsn ||
-                            l.hsn_snapshot?.hsn_code ||
-                            l.product_snapshot?.hsn_code ||
-                            "";
-                          return (
-                            <tr key={l.id} className="border-b border-border/50 hover:bg-muted/10">
-                              <td
-                                className="px-2 py-1.5 font-medium truncate"
-                                title={l.description || l.product_name || undefined}
-                              >
-                                {l.description || l.product_name || "—"}
-                              </td>
-                              <td
-                                className="px-2 py-1.5 truncate"
-                                title={l.ledger?.ledger_name || undefined}
-                              >
-                                {l.ledger?.ledger_name || "—"}
-                              </td>
-                              {showLineHsn ? (
-                                <td className="px-2 py-1.5 font-mono text-muted-foreground">
-                                  {hsn || "—"}
-                                </td>
-                              ) : null}
-                              <td className="px-2 py-1.5 text-right tabular-nums">
-                                {l.quantity || "—"}
-                              </td>
-                              <td className="px-2 py-1.5 text-right tabular-nums">
-                                {l.rate ? formatINR(l.rate) : "—"}
-                              </td>
-                              <td className="px-2 py-1.5 text-right tabular-nums">
-                                {formatINR(l.taxable_amount)}
-                              </td>
-                              <td className="px-2 py-1.5 text-right tabular-nums">
-                                {l.gst_rate}%
-                              </td>
-                              {interstate ? (
-                                <td className="px-2 py-1.5 text-right tabular-nums">
-                                  {formatINR(igst)}
-                                </td>
-                              ) : (
-                                <>
-                                  <td className="px-2 py-1.5 text-right tabular-nums">
-                                    {formatINR(cgst)}
-                                  </td>
-                                  <td className="px-2 py-1.5 text-right tabular-nums">
-                                    {formatINR(sgst)}
-                                  </td>
-                                </>
-                              )}
-                              <td className="px-2 py-1.5 text-right tabular-nums font-semibold">
-                                {formatINR(totalLine)}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                        {(!rawRecord.lines || rawRecord.lines.length === 0) && (
-                          <tr>
-                            <td
-                              colSpan={
-                                (showLineHsn ? 1 : 0) + (interstate ? 8 : 9)
-                              }
-                              className="px-2 py-6 text-center text-muted-foreground"
-                            >
-                              No Line Items
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </VoucherFormSectionCard>
-              </TabsContent>
-
-              <TabsContent value="charges" className="mt-2">
-                <VoucherFormSectionCard title="PR Additional Charges" compact highlight flush>
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full text-xs">
-                      <thead>
-                        <tr className="border-b bg-muted/40">
-                          <th className="px-2 py-2 text-left text-xs font-semibold">Charge Name</th>
-                          <th className="px-2 py-2 text-left text-xs font-semibold">Ledger</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {prCharges.map((c) => (
+                        <tr key={c.id} className="border-b hover:bg-muted/10">
+                          <td className="p-2 font-medium">{c.chargeName}</td>
+                          <td className="p-2">{c.ledgerName}</td>
                           {showPrHsn ? (
-                            <th className="px-2 py-2 text-left text-xs font-semibold">HSN</th>
+                            <td className="p-2 font-mono">{c.hsn || "—"}</td>
                           ) : null}
-                          <th className="px-2 py-2 text-right text-xs font-semibold">Amount</th>
-                          <th className="px-2 py-2 text-right text-xs font-semibold">GST %</th>
+                          <td className="p-2 text-right tabular-nums">
+                            {formatINR(c.amount)}
+                          </td>
+                          <td className="p-2 text-right tabular-nums">
+                            {c.gstRate > 0 ? `${c.gstRate}%` : "—"}
+                          </td>
                           {interstate ? (
-                            <th className="px-2 py-2 text-right text-xs font-semibold">IGST</th>
+                            <td className="p-2 text-right tabular-nums">
+                              {formatINR(c.igst)}
+                            </td>
                           ) : (
                             <>
-                              <th className="px-2 py-2 text-right text-xs font-semibold">CGST</th>
-                              <th className="px-2 py-2 text-right text-xs font-semibold">SGST</th>
+                              <td className="p-2 text-right tabular-nums">
+                                {formatINR(c.cgst)}
+                              </td>
+                              <td className="p-2 text-right tabular-nums">
+                                {formatINR(c.sgst)}
+                              </td>
                             </>
                           )}
                         </tr>
-                      </thead>
-                      <tbody>
-                        {prCharges.map((c) => (
-                          <tr key={c.id} className="border-b hover:bg-muted/10">
-                            <td className="p-2 font-medium">{c.chargeName}</td>
-                            <td className="p-2">{c.ledgerName}</td>
-                            {showPrHsn ? (
-                              <td className="p-2 font-mono">{c.hsn || "—"}</td>
-                            ) : null}
-                            <td className="p-2 text-right tabular-nums">
-                              {formatINR(c.amount)}
-                            </td>
-                            <td className="p-2 text-right tabular-nums">
-                              {c.gstRate > 0 ? `${c.gstRate}%` : "—"}
-                            </td>
-                            {interstate ? (
-                              <td className="p-2 text-right tabular-nums">
-                                {formatINR(c.igst)}
-                              </td>
-                            ) : (
-                              <>
-                                <td className="p-2 text-right tabular-nums">
-                                  {formatINR(c.cgst)}
-                                </td>
-                                <td className="p-2 text-right tabular-nums">
-                                  {formatINR(c.sgst)}
-                                </td>
-                              </>
-                            )}
-                          </tr>
-                        ))}
-                        {prCharges.length === 0 && (
-                          <tr>
-                            <td
-                              colSpan={
-                                (showPrHsn ? 1 : 0) + (interstate ? 5 : 6)
-                              }
-                              className="p-4 text-center text-muted-foreground"
-                            >
-                              No Additional Charges
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </VoucherFormSectionCard>
-              </TabsContent>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </VoucherFormSectionCard>
+            ) : null}
 
-              <TabsContent value="refs" className="mt-2">
-                <VoucherFormSectionCard title="References" compact highlight flush>
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full text-xs">
-                      <thead>
-                        <tr className="border-b bg-muted/40">
-                          <th className="px-2 py-2 text-left text-xs font-semibold">Reference Type</th>
-                          <th className="px-2 py-2 text-left text-xs font-semibold">Code / Number</th>
-                          <th className="px-2 py-2 text-left text-xs font-semibold">Date</th>
-                          <th className="px-2 py-2 text-left text-xs font-semibold">Relation Type</th>
-                          <th className="px-2 py-2 text-right text-xs font-semibold">Allocated Amount</th>
-                          <th className="px-2 py-2 text-right text-xs font-semibold">Quantity</th>
+            {!isFresh && Array.isArray(rawRecord.references) && rawRecord.references.length > 0 ? (
+              <VoucherFormSectionCard title="Linked Documents" compact highlight flush>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-xs">
+                    <thead>
+                      <tr className="border-b bg-muted/40">
+                        <th className="px-2 py-2 text-left text-xs font-semibold">Type</th>
+                        <th className="px-2 py-2 text-left text-xs font-semibold">Number</th>
+                        <th className="px-2 py-2 text-left text-xs font-semibold">Date</th>
+                        <th className="px-2 py-2 text-left text-xs font-semibold">Relation</th>
+                        <th className="px-2 py-2 text-right text-xs font-semibold">Amount</th>
+                        <th className="px-2 py-2 text-right text-xs font-semibold">Qty</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rawRecord.references.map((ref: any) => (
+                        <tr key={ref.id} className="border-b hover:bg-muted/10">
+                          <td className="p-2 font-medium">{ref.reference_type}</td>
+                          <td className="p-2 font-mono">{ref.reference_code || "—"}</td>
+                          <td className="p-2">{formatDisplayDate(ref.reference_date)}</td>
+                          <td className="p-2">{ref.relation_type}</td>
+                          <td className="p-2 text-right tabular-nums">
+                            {ref.allocated_amount ? formatINR(ref.allocated_amount) : "—"}
+                          </td>
+                          <td className="p-2 text-right tabular-nums">
+                            {ref.quantity || "—"}
+                          </td>
                         </tr>
-                      </thead>
-                      <tbody>
-                        {rawRecord.references?.map((ref: any) => (
-                          <tr key={ref.id} className="border-b hover:bg-muted/10">
-                            <td className="p-2 font-medium">{ref.reference_type}</td>
-                            <td className="p-2 font-mono">{ref.reference_code || "—"}</td>
-                            <td className="p-2">{formatDisplayDate(ref.reference_date)}</td>
-                            <td className="p-2">{ref.relation_type}</td>
-                            <td className="p-2 text-right tabular-nums">
-                              {ref.allocated_amount ? formatINR(ref.allocated_amount) : "—"}
-                            </td>
-                            <td className="p-2 text-right tabular-nums">
-                              {ref.quantity || "—"}
-                            </td>
-                          </tr>
-                        ))}
-                        {(!rawRecord.references || rawRecord.references.length === 0) && (
-                          <tr>
-                            <td colSpan={6} className="p-4 text-center text-muted-foreground">
-                              No References
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </VoucherFormSectionCard>
-              </TabsContent>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </VoucherFormSectionCard>
+            ) : null}
 
-              <TabsContent value="journal" className="mt-2">
-                <VoucherFormSectionCard title="Accounting Journal" compact highlight>
-                  {rawRecord.posting ? (
-                    <div>
-                      <h5 className="font-semibold text-xs mb-2">
-                        Accounting Journal Voucher:{" "}
-                        <span className="font-mono text-brand-700">
-                          {rawRecord.posting.voucher_number}
-                        </span>
-                      </h5>
-                      <p className="text-[11px] text-muted-foreground mb-4">
-                        Posted at {new Date(rawRecord.posting.posted_at).toLocaleString()} by{" "}
-                        {rawRecord.posting.posted_by_name}
-                      </p>
-                      <LedgerImpactPreview
-                        title="Accounting Ledger Entries"
-                        lines={debitNoteImpactResolved({
-                          vendorName: record.vendorName,
-                          taxable: record.taxableAmount,
-                          taxAmount: record.gstAmount,
-                          grandTotal: record.currentDebitAmount,
-                          adjustmentLedgerName: record.adjustmentLedgerName,
-                        })}
-                      />
-                    </div>
-                  ) : (
-                    <div className="text-center py-6 text-muted-foreground text-xs">
-                      No Posted Accounting Journal Entries Found.
-                    </div>
-                  )}
-                </VoucherFormSectionCard>
-              </TabsContent>
-            </Tabs>
+            {rawRecord.posting ? (
+              <VoucherFormSectionCard title="Accounting Impact" compact highlight>
+                <div>
+                  <p className="text-[11px] text-muted-foreground mb-3">
+                    Journal{" "}
+                    <span className="font-mono font-medium text-brand-700">
+                      {rawRecord.posting.voucher_number}
+                    </span>
+                    {" · "}
+                    Posted {new Date(rawRecord.posting.posted_at).toLocaleString()}
+                    {rawRecord.posting.posted_by_name
+                      ? ` by ${rawRecord.posting.posted_by_name}`
+                      : ""}
+                  </p>
+                  <LedgerImpactPreview
+                    title="Ledger Entries"
+                    lines={debitNoteImpactResolved({
+                      vendorName: record.vendorName,
+                      taxable: record.taxableAmount,
+                      taxAmount: record.gstAmount,
+                      grandTotal: record.currentDebitAmount,
+                      adjustmentLedgerName: record.adjustmentLedgerName,
+                    })}
+                  />
+                </div>
+              </VoucherFormSectionCard>
+            ) : null}
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5">
-              <VoucherFormSectionCard title="Workflow Activity" compact highlight>
-                {record.activity.length > 0 ? (
+              {record.activity.length > 0 ? (
+                <VoucherFormSectionCard title="Workflow Activity" compact highlight>
                   <div className="space-y-1.5">
                     {[...record.activity].reverse().slice(0, 8).map((a, i) => (
                       <div
@@ -987,12 +923,15 @@ export default function DebitNoteViewPageClient({ debitNoteId }: { debitNoteId: 
                       </div>
                     ))}
                   </div>
-                ) : (
-                  <p className="text-xs text-muted-foreground">No workflow activity log.</p>
-                )}
-              </VoucherFormSectionCard>
+                </VoucherFormSectionCard>
+              ) : null}
 
-              <VoucherFormSectionCard title="Summary" compact highlight>
+              <VoucherFormSectionCard
+                title="Summary"
+                compact
+                highlight
+                className={record.activity.length === 0 ? "lg:col-start-2" : undefined}
+              >
                 <div className="space-y-1 so-invoice-summary">
                   <div className="flex items-center justify-between gap-4 py-0.5">
                     <span className="so-summary-label">Subtotal</span>

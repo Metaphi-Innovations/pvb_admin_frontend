@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Download, FileText, Paperclip, Plus, Truck, XCircle } from "lucide-react";
+import { Download, FileText, Paperclip, Plus, Truck, XCircle, CheckCircle2 } from "lucide-react";
 import {
   parsePurchaseInvoiceTabParam,
   purchaseInvoicesListHref,
@@ -11,6 +11,7 @@ import {
   type PurchaseInvoiceListTabId,
 } from "./purchase-invoice-nav";
 import {
+  AccountsEditAction,
   AccountsMoreActions,
   AccountsTableActionCell,
   AccountsViewAction,
@@ -18,6 +19,7 @@ import {
   ACCOUNTS_ACTION_BTN_CLASS,
   ACCOUNTS_ACTION_ICON_CLASS,
 } from "@/components/accounts/AccountsTableActions";
+import { dispatchAccountsDataChanged } from "@/lib/accounts/accounts-data-events";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -212,24 +214,40 @@ function PostingStatusText({ label }: { label: string }) {
 
 function ListingRowActions({
   viewHref,
+  editHref,
   canDownload,
   canCancel,
+  canPostDraft,
   downloading,
   actionBusy,
+  postingDraft,
   onDownload,
   onCancel,
+  onPostDraft,
 }: {
   viewHref: string;
+  /** Draft Direct Purchase — open view (Post Invoice lives there). */
+  editHref?: string | null;
   canDownload: boolean;
   canCancel?: boolean;
+  canPostDraft?: boolean;
   downloading: boolean;
   actionBusy?: boolean;
+  postingDraft?: boolean;
   onDownload: () => void;
   onCancel?: () => void;
+  onPostDraft?: () => void;
 }) {
+  const showMore = Boolean(
+    (canCancel && onCancel) || (canPostDraft && onPostDraft),
+  );
+
   return (
     <AccountsTableActionCell>
       <AccountsViewAction href={viewHref} />
+      {editHref ? (
+        <AccountsEditAction href={editHref} title="Edit Draft" />
+      ) : null}
       {canDownload ? (
         <button
           type="button"
@@ -242,15 +260,27 @@ function ListingRowActions({
           <Download className={ACCOUNTS_ACTION_ICON_CLASS} />
         </button>
       ) : null}
-      {canCancel && onCancel ? (
+      {showMore ? (
         <AccountsMoreActions contentClassName="w-44">
-          <DropdownMenuItem
-            className="text-xs gap-2 text-red-600"
-            disabled={actionBusy}
-            onClick={onCancel}
-          >
-            <XCircle className="w-4 h-4" /> Cancel
-          </DropdownMenuItem>
+          {canPostDraft && onPostDraft ? (
+            <DropdownMenuItem
+              className="text-xs gap-2"
+              disabled={actionBusy || postingDraft}
+              onClick={onPostDraft}
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              {postingDraft ? "Posting…" : "Post Invoice"}
+            </DropdownMenuItem>
+          ) : null}
+          {canCancel && onCancel ? (
+            <DropdownMenuItem
+              className="text-xs gap-2 text-red-600"
+              disabled={actionBusy}
+              onClick={onCancel}
+            >
+              <XCircle className="w-4 h-4" /> Cancel
+            </DropdownMenuItem>
+          ) : null}
         </AccountsMoreActions>
       ) : null}
     </AccountsTableActionCell>
@@ -336,7 +366,9 @@ function PurchaseInvoicesTabTable({
   downloadingId,
   onDownload,
   actionBusy,
+  postingDraftId,
   onCancel,
+  onPostDraft,
 }: {
   toolbarRows: PurchaseInvoiceListRow[];
   listReturnHref: string;
@@ -348,7 +380,9 @@ function PurchaseInvoicesTabTable({
   downloadingId: string | null;
   onDownload: (row: PurchaseInvoiceListRow) => void;
   actionBusy?: boolean;
+  postingDraftId?: string | null;
   onCancel?: (row: PurchaseInvoiceListRow) => void;
+  onPostDraft?: (row: PurchaseInvoiceListRow) => void;
 }) {
   const opts = (key: string) => filterOptions[key] || [];
   const filterProps = (key: string) => {
@@ -446,6 +480,16 @@ function PurchaseInvoicesTabTable({
                       `/accounts/purchase-invoices/${inv.id}`,
                       listReturnHref,
                     )}
+                    editHref={
+                      PurchaseInvoiceService.isUuid(inv.id) &&
+                      inv.status === "DRAFT" &&
+                      inv.sourceType === "direct_purchase"
+                        ? withReturnTo(
+                            `/accounts/purchase-invoices/${inv.id}/edit`,
+                            listReturnHref,
+                          )
+                        : null
+                    }
                     canDownload={
                       PurchaseInvoiceService.isUuid(inv.id) && inv.hasAttachment
                     }
@@ -456,10 +500,17 @@ function PurchaseInvoicesTabTable({
                       inv.paymentStatus === "unpaid" &&
                       inv.amountPaid <= 0.0001
                     }
+                    canPostDraft={
+                      PurchaseInvoiceService.isUuid(inv.id) &&
+                      inv.status === "DRAFT" &&
+                      inv.sourceType === "direct_purchase"
+                    }
                     downloading={downloadingId === inv.id}
                     actionBusy={actionBusy}
+                    postingDraft={postingDraftId === inv.id}
                     onDownload={() => onDownload(inv)}
                     onCancel={onCancel ? () => onCancel(inv) : undefined}
+                    onPostDraft={onPostDraft ? () => onPostDraft(inv) : undefined}
                   />
                 </AccountsTableCell>
               </AccountsTableRow>
@@ -589,7 +640,9 @@ function PurchaseInvoicesTabBody({
   onExportExcel,
   onExportCsv,
   actionBusy,
+  postingDraftId,
   onCancel,
+  onPostDraft,
 }: {
   invoices: PurchaseInvoiceListRow[];
   listReturnHref: string;
@@ -621,7 +674,9 @@ function PurchaseInvoicesTabBody({
   onExportExcel: () => void;
   onExportCsv: () => void;
   actionBusy?: boolean;
+  postingDraftId?: string | null;
   onCancel?: (row: PurchaseInvoiceListRow) => void;
+  onPostDraft?: (row: PurchaseInvoiceListRow) => void;
 }) {
   return (
     <AccountsTableListing
@@ -733,7 +788,9 @@ function PurchaseInvoicesTabBody({
         downloadingId={downloadingId}
         onDownload={onDownload}
         actionBusy={actionBusy}
+        postingDraftId={postingDraftId}
         onCancel={onCancel}
+        onPostDraft={onPostDraft}
       />
     </AccountsTableListing>
   );
@@ -845,6 +902,8 @@ export default function PurchaseInvoiceListClient() {
   const [cancelTarget, setCancelTarget] = useState<PurchaseInvoiceListRow | null>(null);
   const [cancelBusy, setCancelBusy] = useState(false);
   const cancelBusyRef = useRef(false);
+  const [postingDraftId, setPostingDraftId] = useState<string | null>(null);
+  const postingDraftRef = useRef(false);
   const [listRefreshKey, setListRefreshKey] = useState(0);
   const [invoiceFilterOptions, setInvoiceFilterOptions] = useState<FilterValueOptions>({});
   const [invoiceFilterLoading, setInvoiceFilterLoading] = useState<FilterFlagMap>({});
@@ -1113,6 +1172,33 @@ export default function PurchaseInvoiceListClient() {
     [router],
   );
 
+  const handlePostDraft = useCallback(async (row: PurchaseInvoiceListRow) => {
+    if (!PurchaseInvoiceService.isUuid(row.id) || postingDraftRef.current) return;
+    if (row.status !== "DRAFT" || row.sourceType !== "direct_purchase") return;
+    postingDraftRef.current = true;
+    setPostingDraftId(row.id);
+    setError(null);
+    try {
+      await PurchaseInvoiceService.postDraftDirectPurchase(row.id);
+      showToast(
+        row.invoiceNo
+          ? `Posted ${row.invoiceNo}`
+          : "Direct purchase invoice posted successfully.",
+        "success",
+      );
+      dispatchAccountsDataChanged("purchase-invoices");
+      setListRefreshKey((k) => k + 1);
+    } catch (e) {
+      showToast(
+        e instanceof Error ? e.message : "Failed to post direct purchase draft.",
+        "error",
+      );
+    } finally {
+      postingDraftRef.current = false;
+      setPostingDraftId(null);
+    }
+  }, []);
+
   const handleTabChange = useCallback(
     (next: Tab) => {
       router.push(purchaseInvoicesListHref(next), { scroll: false });
@@ -1317,8 +1403,10 @@ export default function PurchaseInvoiceListClient() {
                   exporting={exporting}
                   onExportExcel={() => handleExportInvoices("xlsx")}
                   onExportCsv={() => handleExportInvoices("csv")}
-                  actionBusy={cancelBusy}
+                  actionBusy={cancelBusy || Boolean(postingDraftId)}
+                  postingDraftId={postingDraftId}
                   onCancel={setCancelTarget}
+                  onPostDraft={(row) => void handlePostDraft(row)}
                 />
               </div>
             </AccountsColumnFilterProvider>

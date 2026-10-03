@@ -734,6 +734,8 @@ export const API_ENDPOINTS = {
       CREATE_FROM_GRN: (grnId: string) =>
         `/accounts/purchase-invoice/from-grn/${grnId}`,
       CREATE_DIRECT_PURCHASE: "/accounts/purchase-invoice/direct-purchase",
+      UPDATE_DRAFT: (id: string) => `/accounts/purchase-invoice/${id}`,
+      POST_DRAFT: (id: string) => `/accounts/purchase-invoice/${id}/post-draft`,
     },
     PENDING_INVOICES: {
       LIST: "/accounts/pending-invoices/list",
