@@ -428,6 +428,9 @@ export function buildPurchaseReturnApiFilters(filters: FilterState): Record<stri
   const status = firstFilterValue(filters.status);
   if (status) apiFilters.status = status;
 
+  const returnNumber = firstFilterValue(filters.returnNumber);
+  if (returnNumber) apiFilters.return_no = returnNumber;
+
   const supplierName = firstFilterValue(filters.supplierName);
   if (supplierName) {
     apiFilters.supplier = { supplier_name: supplierName };

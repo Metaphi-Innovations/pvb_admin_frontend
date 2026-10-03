@@ -36,6 +36,7 @@ import {
   MASTER_FILTER_FIELD_MAPS,
   mergeListRequestFilters,
   resolveListStatus,
+  buildStatusFilter,
 } from "@/lib/masters/list-api-filters";
 import { useAppliedListFilters } from "@/lib/masters/use-applied-list-filters";
 import { useLazyFilterColumns } from "@/lib/masters/use-lazy-filter-columns";
@@ -46,6 +47,13 @@ import {
 import type { MasterListKeyParams } from "@/lib/masters/master-query-keys";
 
 interface ToastState { msg: string; type: "success" | "error" }
+
+const COUNT_PARAMS = {
+  page: 1,
+  pageSize: 1,
+  search: "",
+  ordering: "",
+};
 
 function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void }) {
   return (
@@ -177,6 +185,17 @@ export default function EmployeeListingPage() {
   );
 
   const listQuery = useUsers(listParams);
+  const allCountQuery = useUsers({ ...COUNT_PARAMS, status: "all", apiFilters: {} });
+  const activeCountQuery = useUsers({
+    ...COUNT_PARAMS,
+    status: "active",
+    apiFilters: buildStatusFilter("active", "is_active"),
+  });
+  const inactiveCountQuery = useUsers({
+    ...COUNT_PARAMS,
+    status: "inactive",
+    apiFilters: buildStatusFilter("inactive", "is_active"),
+  });
   const toggleStatusMutation = useToggleUserStatus();
   const exportMutation = useExportUsers();
 
@@ -196,11 +215,14 @@ export default function EmployeeListingPage() {
     setPage(1);
   }, [appliedSearch, apiFilters, pageSize, sort.key, sort.direction]);
 
-  const stats = useMemo(() => {
-    const active = records.filter((r) => r.status === "active").length;
-    const inactive = records.filter((r) => r.status === "inactive").length;
-    return { total: totalRecords, active, inactive };
-  }, [records, totalRecords]);
+  const stats = useMemo(
+    () => ({
+      total: allCountQuery.data?.total ?? 0,
+      active: activeCountQuery.data?.total ?? 0,
+      inactive: inactiveCountQuery.data?.total ?? 0,
+    }),
+    [allCountQuery.data?.total, activeCountQuery.data?.total, inactiveCountQuery.data?.total],
+  );
 
   const handleStatusToggleRequest = (record: UserRecord) => {
     setStatusTarget(record);

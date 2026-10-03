@@ -19,7 +19,6 @@ function buildTransferNoteHtml(transfer: StockTransfer): string {
         <td style="padding:6px 8px;border:1px solid #e5e7eb">${line.productCode} — ${line.productName}</td>
         <td style="padding:6px 8px;border:1px solid #e5e7eb;text-align:right">${line.quantity}</td>
         <td style="padding:6px 8px;border:1px solid #e5e7eb;text-align:right">${formatRupee(line.unitPrice)}</td>
-        <td style="padding:6px 8px;border:1px solid #e5e7eb;text-align:right">${line.discount}%</td>
         <td style="padding:6px 8px;border:1px solid #e5e7eb;text-align:right">${formatRupee(line.gstAmount)}</td>
         <td style="padding:6px 8px;border:1px solid #e5e7eb;text-align:right;font-weight:600">${formatRupee(line.lineTotal)}</td>
       </tr>
@@ -29,7 +28,7 @@ function buildTransferNoteHtml(transfer: StockTransfer): string {
   const expensesRows = (transfer.additionalExpenses || [])
     .map(exp => `
       <tr>
-        <td colspan="6" style="padding:4px 8px;border:1px solid #e5e7eb;text-align:right">${exp.expenseName}:</td>
+        <td colspan="5" style="padding:4px 8px;border:1px solid #e5e7eb;text-align:right">${exp.expenseName}:</td>
         <td style="padding:4px 8px;border:1px solid #e5e7eb;text-align:right;font-weight:600">${formatRupee(exp.netAmount)}</td>
       </tr>
     `)
@@ -66,7 +65,7 @@ function buildTransferNoteHtml(transfer: StockTransfer): string {
     <div style="text-align:right">
       <h2>Document No: ${transfer.transferNumber}</h2>
       <p><span class="label">Date</span><br/><strong>${transfer.transferDate}</strong></p>
-      <p style="margin-top:8px"><span class="label">Expected Delivery Date</span><br/>${transfer.deliveryDate}</p>
+      <p style="margin-top:8px"><span class="label">Expected Delivery Date</span><br/>${transfer.deliveryDate || "—"}</p>
     </div>
   </div>
 
@@ -90,20 +89,18 @@ function buildTransferNoteHtml(transfer: StockTransfer): string {
         <th>Product</th>
         <th style="text-align:right">Qty</th>
         <th style="text-align:right">Unit Price</th>
-        <th style="text-align:right">Discount (%)</th>
         <th style="text-align:right">GST</th>
         <th style="text-align:right">Line Total</th>
       </tr>
     </thead>
     <tbody>
-      ${rows || '<tr><td colspan="7" style="padding:12px;text-align:center;color:#6b7280">No line items</td></tr>'}
+      ${rows || '<tr><td colspan="6" style="padding:12px;text-align:center;color:#6b7280">No line items</td></tr>'}
       ${expensesRows}
     </tbody>
   </table>
 
   <table class="totals">
     <tr><td>Product Subtotal:</td><td style="text-align:right">${formatRupee(totals.productSubtotal)}</td></tr>
-    <tr><td>Product Discount Total:</td><td style="text-align:right">${formatRupee(totals.productDiscountTotal)}</td></tr>
     <tr><td>Additional Expenses:</td><td style="text-align:right">${formatRupee(totals.netAdditionalExpenses)}</td></tr>
     <tr><td>Taxable Amount:</td><td style="text-align:right">${formatRupee(totals.taxableAmount)}</td></tr>
     <tr><td>Total GST:</td><td style="text-align:right">${formatRupee(totals.totalGst)}</td></tr>

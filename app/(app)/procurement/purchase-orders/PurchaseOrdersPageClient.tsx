@@ -82,7 +82,7 @@ import {
   canCreatePurchaseReturnPO,
   canShortClosePOStatus,
 } from "./po-actions";
-import { COMPANY_BILLING } from "@/lib/procurement/config";
+import { EMPTY_PO_BILLING } from "./po-address-utils";
 import { purchaseReturnRoutes } from "../purchase-returns/purchase-return-utils";
 
 type TabId = "all" | "draft" | "po_return";
@@ -234,7 +234,7 @@ export default function PurchaseOrdersPageClient() {
       notes: "",
       sourcePrId: modalListItem.sourcePrId || null,
       sourcePrNumber: modalListItem.sourcePrNumber,
-      billing: { ...COMPANY_BILLING },
+      billing: { ...EMPTY_PO_BILLING },
       shipping: {
         shipToLocation: "",
         branch: "",

@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { exceedsEntryDigits } from "@/lib/quantity-limits";
 import type { DispatchProduct, DispatchRecord } from "@/app/(app)/warehouse/dispatch/types";
 import { getPackingRecords } from "@/app/(app)/warehouse/packing/mock-data";
 import type { PackedBatchAllocation, PackedProduct } from "@/app/(app)/warehouse/packing/types";
@@ -653,10 +654,10 @@ export function SalesReturnProductForm({
                                                 </Select>
                                               </td>
                                               <td className="px-2 py-2 w-20">
-                                                <Input disabled={!isCaseType} value={!isCaseType ? "" : (entry.returnCaseQty || "")} onChange={(event) => onCaseQtyChange(batch.key, event.target.value)} inputMode="numeric" className="h-8 text-xs w-full disabled:opacity-50" placeholder="0" />
+                                                <Input disabled={!isCaseType} value={!isCaseType ? "" : (entry.returnCaseQty || "")} onChange={(event) => { if (!exceedsEntryDigits(event.target.value)) onCaseQtyChange(batch.key, event.target.value); }} inputMode="numeric" className="h-8 text-xs w-full disabled:opacity-50" placeholder="0" />
                                               </td>
                                               <td className="px-2 py-2 w-20">
-                                                <Input disabled={isCaseType} value={isCaseType ? "" : (entry.returnLooseQty || "")} onChange={(event) => onLooseQtyChange(batch.key, event.target.value)} inputMode="numeric" className="h-8 text-xs w-full disabled:opacity-50" placeholder="0" />
+                                                <Input disabled={isCaseType} value={isCaseType ? "" : (entry.returnLooseQty || "")} onChange={(event) => { if (!exceedsEntryDigits(event.target.value)) onLooseQtyChange(batch.key, event.target.value); }} inputMode="numeric" className="h-8 text-xs w-full disabled:opacity-50" placeholder="0" />
                                               </td>
                                               <td className="px-3 py-3 align-top">
                                                 <SalesReturnStackedQty

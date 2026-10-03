@@ -24,9 +24,7 @@ import { MasterListingSheets } from "@/components/masters/MasterListingSheets";
 import { MasterDrawerSection } from "@/components/masters/MasterRecordDrawer";
 import {
   additionalChargeToForm,
-  formatGstApplicableLabel,
   formatGstRateDisplay,
-  formatLedgerDisplay,
   toAdditionalChargeRecord,
   type AdditionalChargeRecord,
 } from "./additional-charge-data";
@@ -104,7 +102,6 @@ function buildCreatePayload(form: AdditionalChargeFormValues) {
     hsn_id: form.hsnId.trim() || null,
     hsn_sac_code: form.hsnSacCode.trim() || null,
     description: form.description.trim() || null,
-    ledger_name: form.ledgerName.trim() || null,
   };
 }
 
@@ -192,9 +189,9 @@ export default function AdditionalChargesPageClient() {
   const descriptionOptionsQuery = useAdditionalChargeFilterDropdown("description", {
     enabled: isFilterOpen("description"),
   });
-  const gstApplicableOptionsQuery = useAdditionalChargeFilterDropdown(
-    "gst_applicable",
-    { enabled: isFilterOpen("gstApplicable") },
+  const gstRateOptionsQuery = useAdditionalChargeFilterDropdown(
+    "default_gst_rate__gstPercentage",
+    { enabled: isFilterOpen("defaultGstRate") },
   );
   const statusOptionsQuery = useAdditionalChargeFilterDropdown("is_active", {
     enabled: isFilterOpen("status"),
@@ -216,13 +213,10 @@ export default function AdditionalChargesPageClient() {
     () => descriptionOptionsQuery.data ?? [],
     [descriptionOptionsQuery.data],
   );
-  const gstApplicableOptions = useMemo(() => {
-    if (gstApplicableOptionsQuery.data?.length) return gstApplicableOptionsQuery.data;
-    return [
-      { label: "Yes", value: "yes" },
-      { label: "No", value: "no" },
-    ];
-  }, [gstApplicableOptionsQuery.data]);
+  const gstRateOptions = useMemo(
+    () => gstRateOptionsQuery.data ?? [],
+    [gstRateOptionsQuery.data],
+  );
   const statusOptions = useMemo(() => {
     if (statusOptionsQuery.data?.length) return statusOptionsQuery.data;
     return [
@@ -418,40 +412,16 @@ export default function AdditionalChargesPageClient() {
         ),
       },
       {
-        key: "ledgerName",
-        header: "Ledger",
-        sortable: false,
-        filterable: false,
-        width: "200px",
-        render: (_val, row) => (
-          <span className="text-xs text-muted-foreground">
-            {formatLedgerDisplay(row.ledgerCode, row.ledgerName)}
-          </span>
-        ),
-      },
-      {
-        key: "gstApplicable",
-        header: "GST Applicable",
+        key: "defaultGstRate",
+        header: "GST %",
         sortable: true,
         filterable: true,
         filterType: "dropdown",
-        filterOptions: gstApplicableOptions,
-        width: "120px",
-        render: (_val, row) => (
-          <span className="text-xs text-foreground">
-            {formatGstApplicableLabel(row.gstApplicable)}
-          </span>
-        ),
-      },
-      {
-        key: "defaultGstRate",
-        header: "GST %",
-        sortable: false,
-        filterable: false,
+        filterOptions: gstRateOptions,
         width: "90px",
         render: (_val, row) => (
           <span className="text-xs font-medium text-foreground">
-            {row.gstApplicable ? formatGstRateDisplay(row.defaultGstRate) : "—"}
+            {formatGstRateDisplay(row.defaultGstRate)}
           </span>
         ),
       },
@@ -532,7 +502,7 @@ export default function AdditionalChargesPageClient() {
     [
       chargeCodeOptions,
       chargeNameOptions,
-      gstApplicableOptions,
+      gstRateOptions,
       hsnOptions,
       descriptionOptions,
       statusOptions,
@@ -557,10 +527,7 @@ export default function AdditionalChargesPageClient() {
   ];
 
   const persist = () => {
-    const fieldErrors = validateAdditionalChargeForm(
-      form,
-      sheetMode === "edit" ? "edit" : "add",
-    );
+    const fieldErrors = validateAdditionalChargeForm(form);
     setErrors(fieldErrors);
     if (Object.keys(fieldErrors).length > 0) return;
 
@@ -649,18 +616,8 @@ export default function AdditionalChargesPageClient() {
         basicInfo: [
           { label: "Charge Code", value: active.chargeCode || "—" },
           {
-            label: "Ledger",
-            value: formatLedgerDisplay(active.ledgerCode, active.ledgerName),
-          },
-          {
-            label: "GST Applicable",
-            value: formatGstApplicableLabel(active.gstApplicable),
-          },
-          {
-            label: "Default GST %",
-            value: active.gstApplicable
-              ? formatGstRateDisplay(active.defaultGstRate)
-              : "—",
+            label: "GST %",
+            value: formatGstRateDisplay(active.defaultGstRate),
           },
           { label: "HSN/SAC", value: active.hsnSacCode || "—" },
           {
@@ -757,7 +714,6 @@ export default function AdditionalChargesPageClient() {
                   return copy;
                 })
               }
-              mode={sheetMode === "edit" ? "edit" : "add"}
               hsnOptions={hsnSelectOptions}
               hsnLoading={hsnDropdownQuery.isFetching}
               gstOptions={gstSelectOptions}

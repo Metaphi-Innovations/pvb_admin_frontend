@@ -1,4 +1,3 @@
-import { COMPANY_BILLING } from "@/lib/procurement/config";
 import type { SalesOrderCustomerAddress } from "@/app/(app)/sales/orders/sales-order-address-utils";
 import type { WarehouseDropdownItem } from "@/services/warehouse.service";
 
@@ -12,13 +11,13 @@ export function warehouseToPOAddress(
 	return {
 		id: `${kind}-wh-${w.warehouse_id}`,
 		label: `${w.warehouse_name} — ${kindLabel}`,
-		companyName: w.registered_legal_name || COMPANY_BILLING.companyName,
+		companyName: w.warehouse_name || w.registered_legal_name || "",
 		addressLine1: w.address || "",
 		addressLine2: w.address_1 || "",
 		city: w.city || "",
 		state: w.state || "",
 		pincode: w.pincode || "",
-		gstin: w.gst_number || COMPANY_BILLING.gstNumber,
+		gstin: w.gst_number || "",
 		phone: primary?.mobile_number || "—",
 		email: primary?.email_address || "—",
 	};
@@ -62,25 +61,26 @@ export function findPOAddressById(
 	return addresses.find((a) => a.id === id) ?? null;
 }
 
+/** Empty billing snapshot used before a Bill To warehouse is chosen. */
+export const EMPTY_PO_BILLING = {
+	companyName: "",
+	billingAddress: "",
+	gstNumber: "",
+	state: "",
+	city: "",
+	pincode: "",
+};
+
 /** Billing snapshot fields from a selected Bill To warehouse address. */
 export function billingFromPOAddress(address: SalesOrderCustomerAddress | null) {
-	if (!address) {
-		return {
-			companyName: COMPANY_BILLING.companyName,
-			billingAddress: "",
-			gstNumber: "",
-			state: "",
-			city: "",
-			pincode: "",
-		};
-	}
+	if (!address) return { ...EMPTY_PO_BILLING };
 	const billingAddress = [address.addressLine1, address.addressLine2]
 		.filter(Boolean)
 		.join(", ");
 	return {
-		companyName: address.companyName || COMPANY_BILLING.companyName,
+		companyName: address.companyName || "",
 		billingAddress,
-		gstNumber: address.gstin || COMPANY_BILLING.gstNumber,
+		gstNumber: address.gstin || "",
 		state: address.state || "",
 		city: address.city || "",
 		pincode: address.pincode || "",

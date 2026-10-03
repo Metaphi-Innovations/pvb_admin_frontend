@@ -313,6 +313,7 @@ export const API_ENDPOINTS = {
     },
   },
   SALES: {
+    WAREHOUSE_STOCK: "/sales/warehouse-stock",
     SALES_ORDER: {
       NEXT_SO_NUMBER: "/sales/sales-order/next-so-number",
       FILTER: "/sales/sales-order/filter",

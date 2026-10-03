@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { axiosInstance } from "@/api/axios";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -32,6 +31,7 @@ import {
 	getDefaultBillShipAddressIds,
 } from "../sales-order-address-utils";
 import { useCustomerDetails, useWarehousesDropdown } from "@/hooks/sales/use-sales-orders";
+import { useProductsWithWarehouseStock, withLatestLineStock } from "@/hooks/sales/use-warehouse-stock";
 import {
 	type SalesOrder,
 	type SalesOrderFormValues,
@@ -302,8 +302,8 @@ export function validateSplitOrderForm(
 		if (!parentLine) continue;
 		const max = line.maxSplitQty ?? parentLine.quantity;
 		const acc = (splitBySource[line.splitSourceLineId] ?? 0) + line.quantity;
-		if (acc > max) {
-			e.lineItems = `Split quantity cannot exceed available quantity for ${line.productName || "this product"}`;
+		if (acc > max + 1e-9) {
+			e.lineItems = `Split quantity for ${line.productName || "this product"} cannot exceed ${max} (quantity not yet in a packing list).`;
 			break;
 		}
 		splitBySource[line.splitSourceLineId] = acc;
@@ -327,58 +327,17 @@ export default function SalesOrderForm({
 	excludeOrderId,
 }: SalesOrderFormProps) {
 	const [customerInfoOpen, setCustomerInfoOpen] = useState(false);
-	const [warehouseStock, setWarehouseStock] = useState<Record<string, number>>({});
+	const {
+		products,
+		stock: warehouseStock,
+		isError: stockError,
+	} = useProductsWithWarehouseStock(originalProducts, form.warehouseId);
 
 	useEffect(() => {
-		if (!form.warehouseId) {
-			setWarehouseStock({});
-			return;
-		}
-		const fetchStock = async () => {
-			try {
-				const PAGE_SIZE = 100;
-				const stockMap: Record<string, number> = {};
-				let page = 1;
-				let totalFetched = 0;
-				let totalRecords = Infinity;
-
-				while (totalFetched < totalRecords) {
-					const response = await axiosInstance.post(
-						`/warehouse/stock-overview/inventory/list?warehouse_id=${form.warehouseId}&page=${page}&page_size=${PAGE_SIZE}`,
-						{ warehouse_id: form.warehouseId }
-					);
-					const items: any[] = Array.isArray(response.data?.data) ? response.data.data : [];
-					if (page === 1) totalRecords = Number(response.data?.totalRecords ?? items.length);
-					if (items.length === 0) break;
-					items.forEach((item: any) => {
-						const sku = item.sku;
-						if (sku && sku !== "-") {
-							stockMap[sku] = (stockMap[sku] || 0) + Number(item.available_qty || 0);
-						}
-					});
-					totalFetched += items.length;
-					page++;
-				}
-				setWarehouseStock(stockMap);
-			} catch (err) {
-				console.error("Failed to fetch warehouse stock:", err);
-			}
-		};
-		fetchStock();
-	}, [form.warehouseId]);
-
-	const products = useMemo(() => {
-		if (Object.keys(warehouseStock).length === 0) {
-			if (form.warehouseId) {
-				return originalProducts.map((p) => ({ ...p, stock: 0 }));
-			}
-			return originalProducts;
-		}
-		return originalProducts.map((p) => ({
-			...p,
-			stock: (p.sku ? warehouseStock[p.sku] : 0) || 0,
-		}));
-	}, [originalProducts, warehouseStock, form.warehouseId]);
+		if (!warehouseStock) return;
+		const lineItems = withLatestLineStock(form.lineItems, warehouseStock);
+		if (lineItems) onChange({ ...form, lineItems });
+	}, [warehouseStock, form, onChange]);
 
 
 
@@ -705,7 +664,11 @@ export default function SalesOrderForm({
 							options={salesmen}
 							placeholder='Select salesman…'
 							error={errors.salesManId}
-							getLabel={(s) => `${s.employeeId} — ${s.fullName}`}
+							getLabel={(s) => s.fullName}
+							getSublabel={(s) => s.employeeId}
+							matchOption={(s, q) =>
+								`${s.fullName} ${s.employeeId}`.toLowerCase().includes(q.toLowerCase())
+							}
 						/>
 					</div>
 
@@ -801,6 +764,11 @@ export default function SalesOrderForm({
 					}}
 				/>
 
+				{stockError && (
+					<p className="flex items-center gap-1 text-[11px] text-red-500">
+						<AlertCircle className="w-3.5 h-3.5 flex-shrink-0" /> Could not load stock for the selected warehouse. Stock is shown as 0.
+					</p>
+				)}
 				<ProductLinesEditor
 					lines={form.lineItems}
 					products={products}

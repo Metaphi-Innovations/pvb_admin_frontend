@@ -51,6 +51,7 @@ import {
   useUpdateSampleOrderStatus,
 } from "@/hooks/sales/use-sample-orders";
 import { useCustomer } from "@/hooks/masters/use-customers";
+import { useWarehouseStock, formatLineStock } from "@/hooks/sales/use-warehouse-stock";
 import { openPackingListPdfById } from "@/app/(app)/sales/orders/pl-pdf/packingListPdfGenerator";
 import { PackingListDownloadDialog, type PackingListDownloadOption } from "@/app/(app)/sales/shared/PackingListDownloadDialog";
 
@@ -86,6 +87,7 @@ export default function ViewSalesOrderPage() {
 
   const { data: rawOrder, isLoading, refetch } = useSampleOrder(id);
   const { data: billingCustomer } = useCustomer(rawOrder?.customerId ? String(rawOrder.customerId) : null);
+  const stockQuery = useWarehouseStock(rawOrder?.warehouseId);
   const updateStatusMutation = useUpdateSampleOrderStatus();
 
   useEffect(() => {
@@ -458,6 +460,7 @@ export default function ViewSalesOrderPage() {
                 <thead>
                   <tr className="border-b bg-muted/40 border-border">
                     <th className="px-4 py-2.5 text-left text-xs font-semibold">Product</th>
+                    <th className="px-4 py-2.5 text-right text-xs font-semibold w-16">Stock</th>
                     <th className="px-4 py-2.5 text-right text-xs font-semibold w-24">Qty (Cases/Loose)</th>
                     <th className="px-4 py-2.5 text-left text-xs font-semibold w-16">Unit</th>
                     <th className="px-4 py-2.5 text-left text-xs font-semibold">Batch</th>
@@ -480,6 +483,7 @@ export default function ViewSalesOrderPage() {
                           <p className="text-xs font-semibold text-foreground">{line.productName || "—"}</p>
                           <p className="text-[11px] font-mono text-brand-700">{line.productCode}</p>
                         </td>
+                        <td className="px-4 py-2 text-xs text-right tabular-nums">{formatLineStock(stockQuery, line.productId)}</td>
                         <td className="px-4 py-2 text-xs text-right tabular-nums">
                           <div className="flex flex-col items-end">
                             <span className="font-semibold">{cases > 0 ? `${cases} Cases` : ""} {loose > 0 ? `${loose} Loose` : ""} {cases === 0 && loose === 0 ? "0" : ""}</span>
