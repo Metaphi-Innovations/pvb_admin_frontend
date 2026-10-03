@@ -45,8 +45,8 @@ const SampleOrderInvoiceLineRow = memo(function SampleOrderInvoiceLineRow({
       </td>
       <td className="px-2 py-1.5 align-middle so-col-batch">
         <p className="so-batch-value leading-tight truncate">{line.batchNo?.trim() || "—"}</p>
-        <p className="so-product-meta mt-0.5 leading-tight">MFG: {formatMonthYear(line.manufacturingDate)}</p>
-        <p className="so-product-meta leading-tight">EXP: {formatMonthYear(line.expiryDate)}</p>
+        <p className="so-product-meta mt-0.5 leading-tight">MFG Date: {formatMonthYear(line.manufacturingDate)}</p>
+        <p className="so-product-meta leading-tight">EXP Date: {formatMonthYear(line.expiryDate)}</p>
         {line.batchAvailableQty != null ? (
           <p className="so-product-meta leading-tight text-muted-foreground">
             Avail: {line.batchAvailableQty}

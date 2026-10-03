@@ -162,10 +162,10 @@ function CoaLedgerDetailTableBody({
                         </AccountsTableCell>
                       </>
                     ) : null}
-                    <MoneyCell amount={r.debit} dashIfZero className="accounts-table-td" />
-                    <MoneyCell amount={r.credit} dashIfZero className="accounts-table-td" />
+                    <MoneyCell amount={r.debit} className="accounts-table-td" />
+                    <MoneyCell amount={r.credit} className="accounts-table-td" />
                     <AccountsTableCell align="right" className="tabular-nums font-medium whitespace-nowrap">
-                      {r.runningBalance > 0 ? formatMoney(r.runningBalance) : "—"}
+                      {formatMoney(r.runningBalance)}
                     </AccountsTableCell>
                     <AccountsTableCell align="center" className="whitespace-nowrap">
                       {r.runningBalance > 0 ? (

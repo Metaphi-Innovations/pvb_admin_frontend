@@ -34,16 +34,7 @@ import {
   formatINR,
   withReturnTo,
 } from "../note-utils";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { ACCOUNTS_FILTER_LABEL_CLASS } from "@/lib/accounts/accounts-typography";
 import { formatDisplayDate, toIsoDateOnly } from "@/lib/accounts/date-display";
-import { Label } from "@/components/ui/label";
 import { DebitNoteService } from "@/services/debit-note.service";
 import { showToast } from "@/lib/toast";
 import { useDebouncedValue } from "@/app/(app)/accounts/reports/pl/pl-hooks";
@@ -193,7 +184,6 @@ export function PendingDebitNotesPanel({
   const [totalRecords, setTotalRecords] = useState(0);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
-  const [dispatchFilter, setDispatchFilter] = useState("all");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const debouncedSearch = useDebouncedValue(search, 300);
@@ -204,7 +194,7 @@ export function PendingDebitNotesPanel({
 
   useEffect(() => {
     setPage((p) => (p === 1 ? p : 1));
-  }, [debouncedSearch, dispatchFilter, pageSize]);
+  }, [debouncedSearch, pageSize]);
 
   useEffect(() => {
     if (page !== 1 && pendingQueryKeyRef.current !== pendingQueryKey) {
@@ -320,25 +310,6 @@ export function PendingDebitNotesPanel({
             placeholder="Search return no., supplier, PO, GRN…"
             className="min-w-[180px] flex-1 max-w-sm"
           />
-          <div className="space-y-0.5 flex-shrink-0">
-            <Label className={ACCOUNTS_FILTER_LABEL_CLASS}>Dispatch</Label>
-            <Select value={dispatchFilter} onValueChange={setDispatchFilter}>
-              <SelectTrigger className="h-8 w-[148px] text-xs">
-                <SelectValue placeholder="All statuses" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all" className="text-xs">
-                  All statuses
-                </SelectItem>
-                <SelectItem value="Ready for Dispatch" className="text-xs">
-                  Ready for Dispatch
-                </SelectItem>
-                <SelectItem value="Dispatched" className="text-xs">
-                  Dispatched
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
         </AccountsListingFilterCard>
       }
     >

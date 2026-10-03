@@ -276,15 +276,23 @@ export type FetchSalesInvoicesOptions = {
   pageSize?: number;
 };
 
+/** Backend list validation caps page_size at 100. */
+const LIST_PAGE_SIZE_MAX = 100;
+
 /** Load sales invoices for a tab from the Accounts Sales Invoice API. */
 export async function fetchSalesInvoicesByTab(
   tab: SalesInvoiceTabId,
   opts: FetchSalesInvoicesOptions = {},
 ): Promise<{ rows: SalesInvoiceListRow[]; total: number }> {
   const invoiceType = tabToInvoiceType(tab);
-  const result = await SalesInvoiceService.list({
-    page: opts.page ?? 1,
-    page_size: opts.pageSize ?? 100,
+  const requestedSize = opts.pageSize ?? LIST_PAGE_SIZE_MAX;
+  const pageSize = Math.min(
+    LIST_PAGE_SIZE_MAX,
+    Math.max(1, Number.isFinite(requestedSize) ? requestedSize : LIST_PAGE_SIZE_MAX),
+  );
+  const singlePage = opts.page != null && opts.page > 0;
+
+  const baseQuery = {
     search: opts.search?.trim() || undefined,
     from_date: opts.dateFrom || undefined,
     to_date: opts.dateTo || undefined,
@@ -293,16 +301,41 @@ export async function fetchSalesInvoicesByTab(
         ? opts.financialYearId
         : undefined,
     invoice_type: invoiceType,
-  });
+    page_size: pageSize,
+  } as const;
 
-  let rows = (result.results || []).map(mapApiInvoiceToListRow);
-  if (tab === "sample_order") {
-    rows = rows.filter((r) => r.sourceType === "sample_order");
-  } else if (tab === "sales_order") {
-    rows = rows.filter((r) => r.sourceType === "sales_order");
+  const mapAndFilter = (results: SalesInvoiceListDto[]) => {
+    let rows = (results || []).map(mapApiInvoiceToListRow);
+    if (tab === "sample_order") {
+      rows = rows.filter((r) => r.sourceType === "sample_order");
+    } else if (tab === "sales_order") {
+      rows = rows.filter((r) => r.sourceType === "sales_order");
+    }
+    return rows;
+  };
+
+  // Single-page fetch (server-driven paging).
+  if (singlePage) {
+    const result = await SalesInvoiceService.list({
+      ...baseQuery,
+      page: opts.page,
+    });
+    const rows = mapAndFilter(result.results || []);
+    return { rows, total: result.total ?? rows.length };
   }
 
-  return { rows, total: result.total ?? rows.length };
+  // Full-set fetch for client-side tab paging — walk pages within API max size.
+  const first = await SalesInvoiceService.list({ ...baseQuery, page: 1 });
+  const total = first.total ?? (first.results || []).length;
+  const allResults = [...(first.results || [])];
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  for (let page = 2; page <= totalPages; page++) {
+    const next = await SalesInvoiceService.list({ ...baseQuery, page });
+    allResults.push(...(next.results || []));
+  }
+
+  const rows = mapAndFilter(allResults);
+  return { rows, total: rows.length };
 }
 
 /** Tabs shown in the Sales Invoice register UI (no dedicated Service tab). */

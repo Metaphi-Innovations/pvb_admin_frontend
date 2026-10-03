@@ -69,7 +69,6 @@ import {
   clearToAccountFields,
   CONTRA_LIST_PATH,
   CROSS_WAREHOUSE_CASH_MESSAGE,
-  contraEditPath,
   contraViewPath,
   emptyContraForm,
   formatEligibleBankLabel,
@@ -622,8 +621,9 @@ export function ContraVoucherApiForm({
     else router.push(CONTRA_LIST_PATH);
   };
 
-  /** Save current form then post immediately — no confirmation dialog. */
+  /** Save current form then post immediately — redirect to listing (never stay on edit UI). */
   const handleSaveAndPost = async () => {
+    const startedAsCreate = !currentId;
     const saved = await saveDraft({ skipToast: true, skipNavigate: true });
     if (!saved?.contra_voucher_id) return;
     const posted = await runAction(
@@ -631,7 +631,8 @@ export function ContraVoucherApiForm({
       "Contra posted successfully.",
       { keepBusy: true },
     );
-    if (posted) {
+    // From create, always leave the form so hydrateFromDetail cannot leave the user on "Edit".
+    if (posted || startedAsCreate) {
       goToList();
       return;
     }

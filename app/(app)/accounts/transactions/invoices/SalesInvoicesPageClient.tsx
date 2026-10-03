@@ -67,10 +67,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { loadFinancialYears } from "@/app/(app)/accounts/masters/masters-data";
+import { FinancialYearApiService } from "@/services/financial-year.service";
 import { resolveDateRangePreset } from "@/lib/accounts/report-date-presets";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { accountsDataService } from "@/lib/accounts/accounts-data-service";
 import {
+  AccountsClearListingFiltersButton,
   AccountsColumnFilterProvider,
   AccountsColumnHeader,
   SortTh,
@@ -163,6 +165,24 @@ function applyToolbarFilters(
   }
   if (opts.branches.length) list = list.filter((r) => opts.branches.includes(r.branch));
   return list;
+}
+
+/** Export control inside column-filter provider — uses global + table filters. */
+function SalesInvoicesExportMenu({
+  tab,
+  toolbarRows,
+}: {
+  tab: SalesInvoiceTabId;
+  toolbarRows: SalesInvoiceListRow[];
+}) {
+  const exportRows = useAccountsFilteredRows(toolbarRows);
+  return (
+    <AccountsExportMenu
+      onExcel={() => exportSalesInvoiceTabExcel(tab, exportRows)}
+      onPdf={() => exportSalesInvoiceTabPdf(tab, exportRows)}
+      disabled={exportRows.length === 0}
+    />
+  );
 }
 
 async function exportSalesInvoiceTabExcel(tab: SalesInvoiceTabId, rows: SalesInvoiceListRow[]) {
@@ -682,14 +702,19 @@ function SalesInvoicesTable({
   const meta = SALES_INVOICE_TAB_META[tab];
   const ctx = useAccountsColumnFilterContext();
   const visible = useAccountsFilteredRows(toolbarRows);
+  const safePageSize = Number.isFinite(pageSize) && pageSize > 0 ? pageSize : 25;
+  const safePage = Math.max(1, page || 1);
   const pagedRows = useMemo(
-    () => visible.slice((page - 1) * pageSize, page * pageSize),
-    [visible, page, pageSize],
+    () => visible.slice((safePage - 1) * safePageSize, safePage * safePageSize),
+    [visible, safePage, safePageSize],
   );
 
+  // Reset to page 1 only when filters/sort actually change — not when onPageChange identity changes.
+  const filterSortKey = `${JSON.stringify(ctx?.columnFilters ?? {})}|${ctx?.sortKey ?? ""}|${ctx?.sortDir ?? ""}`;
   useEffect(() => {
     onPageChange(1);
-  }, [ctx?.columnFilters, ctx?.sortKey, ctx?.sortDir, onPageChange]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: reset only on filter/sort content change
+  }, [filterSortKey]);
 
   const isAll = tab === "all";
   const isStockTransfer = tab === "stock_transfer";
@@ -697,6 +722,10 @@ function SalesInvoicesTable({
   // Source tabs also show Status (Sent / Cancelled) so cancelled invoices are visible.
   const colSpan = 11;
 
+
+  const hasColumnOrSort =
+    (ctx?.activeFilterCount ?? 0) > 0 || Boolean(ctx?.sortKey);
+  const canClearFilters = hasToolbarFilters || hasColumnOrSort;
 
   const emptyStates =
     loading && toolbarRows.length === 0 ? (
@@ -707,10 +736,14 @@ function SalesInvoicesTable({
       <AccountsTableEmpty
         colSpan={colSpan}
         message={meta.emptyMessage}
-        onClear={hasToolbarFilters ? clearFilters : undefined}
+        onClear={canClearFilters ? clearFilters : undefined}
       />
     ) : visible.length === 0 ? (
-      <AccountsTableEmpty colSpan={colSpan} message="No records match the column filters." />
+      <AccountsTableEmpty
+        colSpan={colSpan}
+        message="No records match the column filters."
+        onClear={canClearFilters ? clearFilters : undefined}
+      />
     ) : null;
 
   if (isAll) {
@@ -992,8 +1025,7 @@ export default function SalesInvoicesPageClient() {
         dateFrom: df,
         dateTo: dt,
         financialYearId: fy,
-        page: 1,
-        pageSize: 100,
+        // Omit page so fetch walks API pages (max 100 each) for the full filtered set.
       });
       setTabState((prev) => ({
         ...prev,
@@ -1098,18 +1130,31 @@ export default function SalesInvoicesPageClient() {
   const handleFinancialYearChange = useCallback(
     (fyId: string) => {
       setFinancialYearId(fyId);
-      if (fyId !== "all") {
-        const fy = loadFinancialYears().find((f) => String(f.id) === fyId);
-        if (fy) {
-          const today = new Date().toISOString().slice(0, 10);
-          setDateFrom(fy.startDate);
-          setDateTo(today < fy.endDate ? today : fy.endDate);
-          setPreset("custom");
-        }
+      if (fyId === "all") return;
+
+      const applyFyDates = (startDate: string, endDate: string) => {
+        setDateFrom(startDate);
+        setDateTo(endDate);
+        setPreset("custom");
+      };
+
+      const localFy = loadFinancialYears().find((f) => String(f.id) === fyId);
+      if (localFy) {
+        applyFyDates(localFy.startDate, localFy.endDate);
+        return;
       }
+
+      void FinancialYearApiService.getDropdown()
+        .then((list) => {
+          const fy = list.find((f) => String(f.financialYearId) === fyId);
+          if (fy) applyFyDates(fy.startDate, fy.endDate);
+        })
+        .catch(() => undefined);
     },
     [setDateFrom, setDateTo, setPreset],
   );
+
+  const [filterEpoch, setFilterEpoch] = useState(0);
 
   const clearFilters = useCallback(() => {
     setTabState((prev) => ({
@@ -1122,6 +1167,7 @@ export default function SalesInvoicesPageClient() {
     const { from, to } = resolveDateRangePreset("this_year");
     setDateFrom(from);
     setDateTo(to);
+    setFilterEpoch((n) => n + 1);
   }, [activeTab, setDateFrom, setDateTo, setPreset]);
 
   const hasToolbarFilters =
@@ -1300,7 +1346,7 @@ export default function SalesInvoicesPageClient() {
   return (
     <div className="sales-invoices-compact h-full min-h-0">
       <AccountsColumnFilterProvider
-        key={activeTab}
+        key={`${activeTab}-${filterEpoch}`}
         rows={toolbarRows}
         getCellValue={getCellValue}
         columnConfig={columnConfig}
@@ -1325,6 +1371,10 @@ export default function SalesInvoicesPageClient() {
             <ReportFilterRow
               end={
                 <div className="flex items-center gap-2">
+                  <AccountsClearListingFiltersButton
+                    hasToolbarFilters={hasToolbarFilters}
+                    onClear={clearFilters}
+                  />
                   <Button
                     asChild
                     size="sm"
@@ -1340,11 +1390,7 @@ export default function SalesInvoicesPageClient() {
                       Create Service Invoice
                     </Link>
                   </Button>
-                  <AccountsExportMenu
-                    onExcel={() => exportSalesInvoiceTabExcel(activeTab, toolbarRows)}
-                    onPdf={() => exportSalesInvoiceTabPdf(activeTab, toolbarRows)}
-                    disabled={toolbarRows.length === 0}
-                  />
+                  <SalesInvoicesExportMenu tab={activeTab} toolbarRows={toolbarRows} />
                 </div>
               }
             >

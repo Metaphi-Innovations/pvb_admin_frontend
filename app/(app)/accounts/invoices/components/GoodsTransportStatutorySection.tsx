@@ -194,7 +194,18 @@ export function GoodsTransportStatutorySection({
           <AccountsDateInput
             className="h-8 text-xs w-full"
             value={value.lrDate}
-            onChange={(v) => set({ lrDate: v })}
+            onChange={(v) => {
+              const patch: Partial<GoodsTransportStatutoryState> = { lrDate: v };
+              // Transport Doc Date cannot be earlier than LR Date.
+              if (
+                v &&
+                value.transportDocDate &&
+                value.transportDocDate < v
+              ) {
+                patch.transportDocDate = v;
+              }
+              set(patch);
+            }}
             aria-label="LR Date"
           />
         </Field>
@@ -209,6 +220,7 @@ export function GoodsTransportStatutorySection({
           <AccountsDateInput
             className="h-8 text-xs w-full"
             value={value.transportDocDate}
+            min={value.lrDate || undefined}
             onChange={(v) => set({ transportDocDate: v })}
             aria-label="Transport Doc Date"
           />

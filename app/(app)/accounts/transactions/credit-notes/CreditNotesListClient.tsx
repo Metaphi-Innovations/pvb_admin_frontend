@@ -13,6 +13,12 @@ import {
   accountsActionColClass,
 } from "@/components/accounts/AccountsTableActions";
 import { XCircle, Download } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { AccountsToast, useAccountsToast } from "@/components/accounts/AccountsToast";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import {
@@ -388,8 +394,37 @@ function CreditNotesRecordsTable({
                   <AccountsTableCell className="truncate text-xs">
                     {sourceLabel(r.source_type)}
                   </AccountsTableCell>
-                  <AccountsTableCell mono className="truncate text-xs" title={r.invoiceNos.join(", ") || undefined}>
-                    {r.invoiceNos.length ? r.invoiceNos.join(", ") : "—"}
+                  <AccountsTableCell mono className="text-xs">
+                    {r.invoiceNos.length === 0 ? (
+                      "—"
+                    ) : r.invoiceNos.length <= 2 ? (
+                      <span>{r.invoiceNos.join(", ")}</span>
+                    ) : (
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span>{r.invoiceNos.slice(0, 2).join(", ")}</span>
+                        <TooltipProvider delayDuration={150}>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="cursor-pointer inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-brand-50 text-brand-700 border border-brand-200 hover:bg-brand-100">
+                                +{r.invoiceNos.length - 2} more
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-xs max-h-48 overflow-y-auto">
+                              <p className="font-semibold mb-1 text-[11px]">
+                                All Linked Invoices ({r.invoiceNos.length}):
+                              </p>
+                              <div className="flex flex-wrap gap-1 font-mono text-[10px]">
+                                {r.invoiceNos.map((inv) => (
+                                  <span key={inv} className="bg-muted px-1 py-0.5 rounded">
+                                    {inv}
+                                  </span>
+                                ))}
+                              </div>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </div>
+                    )}
                   </AccountsTableCell>
                   <AccountsTableCell className="accounts-col-party truncate text-xs font-medium" title={r.customerName}>
                     {r.customerName || "—"}

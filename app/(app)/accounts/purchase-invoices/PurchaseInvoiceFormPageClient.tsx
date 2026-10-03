@@ -12,6 +12,10 @@ import {
   purchaseInvoiceReturnPath,
   withReturnTo,
 } from "./purchase-invoice-nav";
+import {
+  PurchaseInvoiceService,
+  mapPurchaseInvoiceDetailToRecord,
+} from "@/services/purchase-invoice.service";
 
 export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId?: string }) {
   const router = useRouter();
@@ -26,8 +30,11 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
   );
 
   const [sourceType, setSourceType] = useState<PurchaseSourceType>(() =>
-    initialMode === "direct" ? "direct_purchase" : "from_grn",
+    initialMode === "direct" || isEdit ? "direct_purchase" : "from_grn",
   );
+  const [editLoading, setEditLoading] = useState(isEdit);
+  const [editError, setEditError] = useState<string | null>(null);
+  const [editReady, setEditReady] = useState(!isEdit);
 
   useEffect(() => {
     if (searchParams.get("mode") === "manual") {
@@ -41,28 +48,79 @@ export default function PurchaseInvoiceFormPageClient({ invoiceId }: { invoiceId
 
   useEffect(() => {
     if (!invoiceId) return;
-    router.replace(withReturnTo(`/accounts/purchase-invoices/${invoiceId}`, listHref));
+    let cancelled = false;
+    (async () => {
+      setEditLoading(true);
+      setEditError(null);
+      try {
+        if (!PurchaseInvoiceService.isUuid(invoiceId)) {
+          throw new Error("Invalid purchase invoice id.");
+        }
+        const dto = await PurchaseInvoiceService.getById(invoiceId);
+        const record = mapPurchaseInvoiceDetailToRecord(dto);
+        if (cancelled) return;
+        if (record.sourceType !== "direct_purchase") {
+          throw new Error("Only Direct Purchase drafts can be edited.");
+        }
+        if (String(record.backendStatus || "").toUpperCase() !== "DRAFT") {
+          router.replace(withReturnTo(`/accounts/purchase-invoices/${invoiceId}`, listHref));
+          return;
+        }
+        setSourceType("direct_purchase");
+        setEditReady(true);
+      } catch (e) {
+        if (cancelled) return;
+        setEditError(e instanceof Error ? e.message : "Failed to load draft.");
+      } finally {
+        if (!cancelled) setEditLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [invoiceId, router, listHref]);
 
-  if (isEdit) {
+  if (isEdit && editLoading) {
     return (
       <>
         <PurchaseInvoicePageShell
-          breadcrumbs={accountsBreadcrumb("Transactions", "Purchase Invoice")}
-          title="Opening invoice"
-          description="Posted purchase invoices cannot be edited. Cancel and recreate if needed."
+          breadcrumbs={accountsBreadcrumb("Transactions", "Edit Draft")}
+          title="Loading draft…"
+          description=""
         >
-          <p className="text-xs text-muted-foreground">Redirecting to the invoice…</p>
+          <p className="text-xs text-muted-foreground">Opening Direct Purchase draft…</p>
         </PurchaseInvoicePageShell>
         <AccountsToast toast={toast} onDismiss={dismissToast} />
       </>
     );
   }
 
-  if (sourceType === "direct_purchase") {
+  if (isEdit && editError) {
+    return (
+      <>
+        <PurchaseInvoicePageShell
+          breadcrumbs={accountsBreadcrumb("Transactions", "Edit Draft")}
+          title="Cannot edit invoice"
+          description={editError}
+        >
+          <button
+            type="button"
+            className="text-sm text-brand-700 hover:underline"
+            onClick={() => router.push(listHref)}
+          >
+            Back to list
+          </button>
+        </PurchaseInvoicePageShell>
+        <AccountsToast toast={toast} onDismiss={dismissToast} />
+      </>
+    );
+  }
+
+  if (sourceType === "direct_purchase" && (!isEdit || editReady)) {
     return (
       <>
         <PurchaseInvoiceDirectForm
+          invoiceId={invoiceId}
           listHref={listHref}
           onCancel={() => router.push(listHref)}
           showToast={(msg) => showToast(msg)}

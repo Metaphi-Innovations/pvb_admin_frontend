@@ -24,7 +24,10 @@ import { useSuppliersDropdown, useSupplier } from "@/hooks/masters/use-supplier"
 import { useWarehousesDropdown, useWarehouse } from "@/hooks/masters/use-warehouse-master";
 import { useHsnDropdown } from "@/hooks/masters/use-hsn";
 import { cn } from "@/lib/utils";
-import { PurchaseInvoiceService } from "@/services/purchase-invoice.service";
+import {
+  PurchaseInvoiceService,
+  mapPurchaseInvoiceDetailToRecord,
+} from "@/services/purchase-invoice.service";
 import { useFY, setStoredFYId, getStoredFYId } from "@/lib/fy-store";
 import {
   GoodsInvoiceAdditionalChargesEditor,
@@ -32,6 +35,7 @@ import {
 } from "@/app/(app)/accounts/invoices/components/GoodsInvoiceAdditionalChargesEditor";
 import {
   calcAdditionalExpensesTotals,
+  createEmptyAdditionalExpense,
   toAdditionalChargePayloadList,
   type InvoiceAdditionalExpense,
 } from "@/app/(app)/accounts/invoices/invoice-additional-expenses";
@@ -58,16 +62,18 @@ function selectedLedgerId(ledgerId: string | number | null | undefined): string 
 }
 
 export function PurchaseInvoiceDirectForm({
+  invoiceId,
   onCancel,
   showToast,
   listHref = "/accounts/purchase-invoices",
 }: {
-  invoiceId?: number;
+  invoiceId?: string;
   onCancel: () => void;
   showToast: (msg: string) => void;
   listHref?: string;
 }) {
   const router = useRouter();
+  const isEdit = Boolean(invoiceId);
   const { selectedFY, isLoading: fyLoading } = useFY();
   const { data: supplierData } = useSuppliersDropdown();
   const { data: warehouseData } = useWarehousesDropdown();
@@ -92,6 +98,11 @@ export function PurchaseInvoiceDirectForm({
     [warehouseData],
   );
 
+  const [hydrating, setHydrating] = useState(isEdit);
+  const [hydrateError, setHydrateError] = useState<string | null>(null);
+  const autoFillPlaceOfSupplyRef = useRef(!isEdit);
+  const autoFillBranchGstinRef = useRef(!isEdit);
+
   const [supplierId, setSupplierId] = useState("");
   const [warehouseId, setWarehouseId] = useState("");
   const [vendorInvoiceNo, setVendorInvoiceNo] = useState("");
@@ -114,6 +125,72 @@ export function PurchaseInvoiceDirectForm({
   const { data: warehouseDetail } = useWarehouse(warehouseId || null);
 
   useEffect(() => {
+    if (!invoiceId) {
+      setHydrating(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      setHydrating(true);
+      setHydrateError(null);
+      try {
+        const dto = await PurchaseInvoiceService.getById(invoiceId);
+        const record = mapPurchaseInvoiceDetailToRecord(dto);
+        if (cancelled) return;
+        if (record.sourceType !== "direct_purchase") {
+          throw new Error("Only Direct Purchase drafts can be edited.");
+        }
+        if (String(record.backendStatus || "").toUpperCase() !== "DRAFT") {
+          throw new Error("Only DRAFT invoices can be edited.");
+        }
+
+        autoFillPlaceOfSupplyRef.current = false;
+        autoFillBranchGstinRef.current = false;
+
+        setSupplierId(String(dto.supplier_id || dto.supplier?.supplier_id || ""));
+        setWarehouseId(String(dto.warehouse_id || dto.warehouse?.warehouse_id || ""));
+        setVendorInvoiceNo(record.vendorInvoiceNo || "");
+        setInvoiceDate(record.invoiceDate || new Date().toISOString().slice(0, 10));
+        setDueDate(record.dueDate || "");
+        setPurchaseNature(record.purchaseNature || "expense");
+        setPlaceOfSupply(record.placeOfSupply || COMPANY_BILLING.state);
+        setBranchGstin(record.branchGstin || COMPANY_BILLING.gstNumber);
+        setNarration(record.narration || record.remarks || "");
+        setLines(
+          record.directLines?.length
+            ? record.directLines
+            : [emptyDirectLine(defaultItc)],
+        );
+        setAdditionalExpenses(
+          (record.additionalCharges || []).map((c) => ({
+            ...createEmptyAdditionalExpense("manual"),
+            id: c.uid || createEmptyAdditionalExpense().id,
+            expenseHead: c.chargeName || "",
+            amount: c.amount || 0,
+            gstApplicable: Boolean(c.gstApplicable) || (c.gstPct || 0) > 0,
+            gstPct: c.gstPct || 0,
+            remarks: c.remarks || "",
+            coaLedgerId: c.ledgerId || null,
+            coaLedgerName: c.ledgerName || "",
+            hsnId: c.hsnId || null,
+            hsnCode: c.hsnCode || null,
+            chargeSource: "INVOICE" as const,
+          })),
+        );
+      } catch (e) {
+        if (cancelled) return;
+        setHydrateError(e instanceof Error ? e.message : "Failed to load draft.");
+      } finally {
+        if (!cancelled) setHydrating(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [invoiceId]);
+
+  useEffect(() => {
+    if (!autoFillBranchGstinRef.current) return;
     const gstin = String(
       (warehouseDetail as { gst_number?: string; gstNumber?: string } | undefined)?.gst_number ||
         (warehouseDetail as { gstNumber?: string } | undefined)?.gstNumber ||
@@ -127,12 +204,16 @@ export function PurchaseInvoiceDirectForm({
       (warehouseDetail as { state?: string } | undefined)?.state || "",
     ).trim();
     if (whState) {
-      // Keep company GSTIN if warehouse has state but no GSTIN — interstate still uses placeOfSupply vs branch.
       setBranchGstin(COMPANY_BILLING.gstNumber);
+      return;
     }
-  }, [warehouseDetail]);
+    if (warehouseId) {
+      setBranchGstin("");
+    }
+  }, [warehouseDetail, warehouseId]);
 
   useEffect(() => {
+    if (!autoFillPlaceOfSupplyRef.current) return;
     const supplierState = String(
       (supplierDetail as { state?: string } | undefined)?.state || "",
     ).trim();
@@ -150,6 +231,18 @@ export function PurchaseInvoiceDirectForm({
       setPlaceOfSupply(stateFromGstin(supplierGstin));
     }
   }, [supplierDetail]);
+
+  const warehouseLocationOk = useMemo(() => {
+    if (!warehouseId) return true;
+    if (!warehouseDetail) return true;
+    const gstin = String(
+      (warehouseDetail as { gst_number?: string; gstNumber?: string }).gst_number ||
+        (warehouseDetail as { gstNumber?: string }).gstNumber ||
+        "",
+    ).trim();
+    const state = String((warehouseDetail as { state?: string }).state || "").trim();
+    return Boolean(gstin || state);
+  }, [warehouseDetail, warehouseId]);
 
   const interstate = isInterstatePurchase(branchGstin, placeOfSupply);
 
@@ -174,10 +267,11 @@ export function PurchaseInvoiceDirectForm({
   );
 
   useEffect(() => {
+    if (hydrating) return;
     setLines((prev) =>
       prev.map((l) => recalcDirectLine({ ...l, purchaseNature }, interstate)),
     );
-  }, [branchGstin, placeOfSupply, purchaseNature, interstate]);
+  }, [branchGstin, placeOfSupply, purchaseNature, interstate, hydrating]);
 
   const totals = useMemo(() => {
     const base = computeDirectPurchaseInvoiceTotals(lines, { roundingAdjustment: 0 });
@@ -210,6 +304,12 @@ export function PurchaseInvoiceDirectForm({
     }
     if (!warehouseId) {
       setError("Select a warehouse / branch.");
+      return false;
+    }
+    if (!warehouseLocationOk) {
+      setError(
+        "Selected warehouse has no state or GSTIN. Update Warehouse Master or choose another warehouse.",
+      );
       return false;
     }
     if (!vendorInvoiceNo.trim()) {
@@ -258,7 +358,47 @@ export function PurchaseInvoiceDirectForm({
     return true;
   };
 
-  const handlePost = async () => {
+  const buildPayload = (asDraft: boolean) => {
+    const additionalCharges = toAdditionalChargePayloadList(
+      additionalExpenses,
+      "INVOICE",
+    );
+    return {
+      purchase_invoice_date: invoiceDate,
+      supplier_invoice_number: vendorInvoiceNo.trim(),
+      supplier_invoice_date: invoiceDate,
+      due_date: dueDate || null,
+      warehouse_id: warehouseId,
+      supplier_id: supplierId,
+      narration: narration.trim() || undefined,
+      remarks: narration.trim() || undefined,
+      round_off_amount: roundingAdjustment,
+      attachment,
+      save_as_draft: asDraft,
+      additional_charges: additionalCharges.length > 0 ? additionalCharges : undefined,
+      items: lines.map((line) => {
+        const expenseLedgerId = selectedLedgerId(line.expenseLedgerId);
+        if (!expenseLedgerId) {
+          throw new Error(`Ledger UUID missing for "${line.description}".`);
+        }
+        return {
+          item_type: purchaseNature === "service" ? ("SERVICE" as const) : ("EXPENSE" as const),
+          expense_ledger_id: expenseLedgerId,
+          expense_description: line.description.trim(),
+          sac_id: purchaseNature === "service" ? line.sacId || null : null,
+          hsn_id: purchaseNature === "service" ? null : line.hsnId || null,
+          quantity: line.quantity || 1,
+          quantity_type: line.uqc || "NOS",
+          rate: line.rate || line.taxableAmount,
+          gst_rate: line.gstRate,
+          is_input_credit_eligible: line.itcClassification === "eligible",
+          narration: line.remarks || null,
+        };
+      }),
+    };
+  };
+
+  const handleSubmit = async (asDraft: boolean) => {
     if (!validate()) return;
 
     if (!selectedFY.id && !getStoredFYId()) {
@@ -272,81 +412,98 @@ export function PurchaseInvoiceDirectForm({
 
     setSaving(true);
     setError("");
-    // Ensure the FY id is in localStorage before axios fires the request.
     if (selectedFY?.id) setStoredFYId(selectedFY.id);
     const financialYearId = selectedFY.id || getStoredFYId();
     try {
-      const additionalCharges = toAdditionalChargePayloadList(
-        additionalExpenses,
-        "INVOICE",
-      );
+      const payload = buildPayload(asDraft);
 
-      const created = await PurchaseInvoiceService.createDirectPurchase(
-        {
-          purchase_invoice_date: invoiceDate,
-          supplier_invoice_number: vendorInvoiceNo.trim(),
-          supplier_invoice_date: invoiceDate,
-          due_date: dueDate || null,
-          warehouse_id: warehouseId,
-          supplier_id: supplierId,
-          narration: narration.trim() || undefined,
-          remarks: narration.trim() || undefined,
-          round_off_amount: roundingAdjustment,
-          attachment,
-          additional_charges: additionalCharges.length > 0 ? additionalCharges : undefined,
-          items: lines.map((line) => {
-            const expenseLedgerId = selectedLedgerId(line.expenseLedgerId);
-            if (!expenseLedgerId) {
-              throw new Error(`Ledger UUID missing for "${line.description}".`);
-            }
-            return {
-              item_type: purchaseNature === "service" ? ("SERVICE" as const) : ("EXPENSE" as const),
-              expense_ledger_id: expenseLedgerId,
-              expense_description: line.description.trim(),
-              sac_id: purchaseNature === "service" ? line.sacId || null : null,
-              hsn_id: purchaseNature === "service" ? null : line.hsnId || null,
-              quantity: line.quantity || 1,
-              quantity_type: line.uqc || "NOS",
-              rate: line.rate || line.taxableAmount,
-              gst_rate: line.gstRate,
-              is_input_credit_eligible: line.itcClassification === "eligible",
-              narration: line.remarks || null,
-            };
-          }),
-        },
-        { financialYearId },
-      );
+      if (invoiceId) {
+        await PurchaseInvoiceService.updateDraftDirectPurchase(invoiceId, payload, {
+          financialYearId,
+        });
+        if (!asDraft) {
+          await PurchaseInvoiceService.postDraftDirectPurchase(invoiceId);
+        }
+      } else {
+        await PurchaseInvoiceService.createDirectPurchase(payload, { financialYearId });
+      }
+
       dispatchAccountsDataChanged("purchase-invoices");
       showToast(
-        created.already_posted
-          ? "Direct purchase invoice was already posted."
+        asDraft
+          ? invoiceId
+            ? "Direct purchase draft updated."
+            : "Direct purchase invoice saved as draft."
           : "Direct purchase posted. Supplier outstanding and ledger entries were created.",
       );
       router.replace(listHref);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Post failed.");
+      setError(
+        e instanceof Error
+          ? e.message
+          : asDraft
+            ? "Failed to save direct purchase draft."
+            : "Post failed.",
+      );
       setSaving(false);
     }
   };
 
+  if (hydrating) {
+    return (
+      <div className="sales-order-invoice-form-compact h-full min-h-0 flex flex-col w-full">
+        <InvoiceFormLayout
+          title="Edit Direct Purchase Draft"
+          subtitle="Accounts → Transactions → Direct Purchase Invoice"
+          breadcrumb={accountsBreadcrumb("Transactions", "Edit Draft", listHref)}
+          backHref={listHref}
+          onBackClick={onCancel}
+        >
+          <p className="text-sm text-muted-foreground py-8 text-center">Loading draft…</p>
+        </InvoiceFormLayout>
+      </div>
+    );
+  }
+
+  if (hydrateError) {
+    return (
+      <div className="sales-order-invoice-form-compact h-full min-h-0 flex flex-col w-full">
+        <InvoiceFormLayout
+          title="Edit Direct Purchase Draft"
+          subtitle="Accounts → Transactions → Direct Purchase Invoice"
+          breadcrumb={accountsBreadcrumb("Transactions", "Edit Draft", listHref)}
+          backHref={listHref}
+          onBackClick={onCancel}
+        >
+          <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 font-medium">
+            <AlertCircle className="w-4 h-4 flex-shrink-0" />
+            {hydrateError}
+          </div>
+        </InvoiceFormLayout>
+      </div>
+    );
+  }
+
   return (
     <div className="sales-order-invoice-form-compact h-full min-h-0 flex flex-col w-full">
       <InvoiceFormLayout
-        title="New Direct Purchase Invoice"
+        title={isEdit ? "Edit Direct Purchase Draft" : "New Direct Purchase Invoice"}
         subtitle="Accounts → Transactions → Direct Purchase Invoice"
-        breadcrumb={accountsBreadcrumb("Transactions", "New Direct Purchase", listHref)}
+        breadcrumb={accountsBreadcrumb(
+          "Transactions",
+          isEdit ? "Edit Draft" : "New Direct Purchase",
+          listHref,
+        )}
         backHref={listHref}
         onBackClick={onCancel}
         stickyFooter={
           <VoucherFormActionBar
             onDiscard={onCancel}
-            onSaveDraft={() =>
-              showToast("Draft is not supported for direct purchase invoices. Use Post Invoice.")
-            }
-            onSaveAndPost={() => void handlePost()}
+            onSaveDraft={() => void handleSubmit(true)}
+            onSaveAndPost={() => void handleSubmit(false)}
             saveAndPostLabel="Post Invoice"
             discardDisabled={saving}
-            saveDraftDisabled
+            saveDraftDisabled={saving}
             saveAndPostDisabled={saving}
           />
         }
@@ -367,7 +524,10 @@ export function PurchaseInvoiceDirectForm({
                     hideLabel
                     suppliers={suppliers}
                     supplierId={supplierId}
-                    onSupplierSelect={setSupplierId}
+                    onSupplierSelect={(id) => {
+                      autoFillPlaceOfSupplyRef.current = true;
+                      setSupplierId(id);
+                    }}
                     className={INVOICE_DETAIL_SELECT_CLASS}
                   />
                 </InvoiceDetailField>
@@ -375,12 +535,20 @@ export function PurchaseInvoiceDirectForm({
                   <DirectPurchaseSelectField
                     hideLabel
                     value={warehouseId}
-                    onChange={setWarehouseId}
+                    onChange={(id) => {
+                      autoFillBranchGstinRef.current = true;
+                      setWarehouseId(id);
+                    }}
                     options={warehouseOptions}
                     placeholder="Select warehouse…"
                     searchPlaceholder="Search warehouses…"
                     className={INVOICE_DETAIL_SELECT_CLASS}
                   />
+                  {warehouseId && warehouseDetail && !warehouseLocationOk ? (
+                    <p className="mt-1 text-[11px] text-red-600 leading-snug">
+                      This warehouse has no state or GSTIN. Update it in Masters or pick another warehouse.
+                    </p>
+                  ) : null}
                 </InvoiceDetailField>
                 <InvoiceDetailField label="Supplier Invoice No" required>
                   <Input

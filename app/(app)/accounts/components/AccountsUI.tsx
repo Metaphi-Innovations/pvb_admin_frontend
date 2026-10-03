@@ -16,6 +16,7 @@ export { ExcelColumnFilter, ExcelColumnHeader } from "@/components/accounts/Exce
 export {
   AccountingReportToolbar,
   AccountsClearAllColumnFiltersButton,
+  AccountsClearListingFiltersButton,
 } from "@/components/accounts/AccountingReportToolbar";
 export { useAccountsColumnFilters } from "@/components/accounts/useAccountsColumnFilters";
 export {

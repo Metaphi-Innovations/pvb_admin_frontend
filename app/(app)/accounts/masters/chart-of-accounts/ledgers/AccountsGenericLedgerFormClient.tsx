@@ -90,6 +90,42 @@ function resolveLedgerOpeningBalance(
   return detail.openingBalance ?? detail.openingBalances?.[0] ?? null;
 }
 
+/** Map form GST fields to API create/update payload keys. */
+function toApiGstFields(form: LedgerFormValues) {
+  if (!form.gstApplicable) {
+    return {
+      gstApplicable: false,
+      registrationType: null as string | null,
+      gstinNo: null as string | null,
+      registeredGstAddress: null as string | null,
+    };
+  }
+  return {
+    gstApplicable: true,
+    registrationType: form.gstRegistrationType?.trim() || null,
+    gstinNo: form.gstin.trim().toUpperCase() || null,
+    registeredGstAddress: form.registeredGstAddress.trim() || null,
+  };
+}
+
+/** Hydrate GST form fields from ledger detail API response. */
+function gstFieldsFromDetail(detail: LedgerDetailDto): Pick<
+  LedgerFormValues,
+  "gstApplicable" | "gstRegistrationType" | "gstin" | "registeredGstAddress"
+> {
+  const gstApplicable = Boolean(detail.gstApplicable);
+  return {
+    gstApplicable,
+    gstRegistrationType: gstApplicable
+      ? detail.registrationType?.trim() || "regular"
+      : "regular",
+    gstin: gstApplicable ? (detail.gstinNo ?? "").trim().toUpperCase() : "",
+    registeredGstAddress: gstApplicable
+      ? (detail.registeredGstAddress ?? "").trim()
+      : "",
+  };
+}
+
 export interface AccountsGenericLedgerFormClientProps {
   mode: "add" | "edit";
   ledgerId?: CoaNodeId | string;
@@ -197,7 +233,7 @@ export default function AccountsGenericLedgerFormClient({
                   ? "Credit"
                   : "Debit",
             billWiseAccounting: Boolean(detail.billWiseOutstanding),
-            gstApplicable: Boolean(detail.gstApplicable),
+            ...gstFieldsFromDetail(detail),
             tdsApplicable: Boolean(detail.tdsApplicable),
             defaultTdsSection: detail.tdsSectionId ?? "",
             tcsApplicable: Boolean(detail.tcsApplicable),
@@ -316,19 +352,26 @@ export default function AccountsGenericLedgerFormClient({
       const parentNode = records.find((r) => r.id === form.parentGroupId);
       const apiParentNodeId = parentNode?.apiNodeId || String(form.parentGroupId);
 
+      const gstFields = toApiGstFields(form);
+      const taxAndPostingFields = {
+        ...gstFields,
+        tdsApplicable: form.tdsApplicable,
+        tdsSectionId:
+          form.tdsApplicable && form.defaultTdsSection ? form.defaultTdsSection : null,
+        tcsApplicable: form.tcsApplicable,
+        tcsSection:
+          form.tcsApplicable && form.defaultTcsSection ? form.defaultTcsSection : null,
+        costCenterApplicable: form.costCenterApplicable,
+        billWiseOutstanding: form.billWiseAccounting,
+      };
+
       if (mode === "add") {
         const created = await LedgerService.create({
           ledgerName: form.ledgerName.trim(),
           aliasName: form.alias?.trim() || null,
           accountSubGroupId: apiParentNodeId,
           description: form.description?.trim() || null,
-          gstApplicable: form.gstApplicable,
-          tdsApplicable: form.tdsApplicable,
-          tdsSectionId: form.tdsApplicable && form.defaultTdsSection ? form.defaultTdsSection : null,
-          tcsApplicable: form.tcsApplicable,
-          tcsSection: form.tcsApplicable && form.defaultTcsSection ? form.defaultTcsSection : null,
-          costCenterApplicable: form.costCenterApplicable,
-          billWiseOutstanding: form.billWiseAccounting,
+          ...taxAndPostingFields,
           openingBalance,
         });
         savedId = form.parentGroupId ?? 0;
@@ -339,13 +382,7 @@ export default function AccountsGenericLedgerFormClient({
           aliasName: form.alias?.trim() || null,
           accountSubGroupId: apiParentNodeId,
           description: form.description?.trim() || null,
-          gstApplicable: form.gstApplicable,
-          tdsApplicable: form.tdsApplicable,
-          tdsSectionId: form.tdsApplicable && form.defaultTdsSection ? form.defaultTdsSection : null,
-          tcsApplicable: form.tcsApplicable,
-          tcsSection: form.tcsApplicable && form.defaultTcsSection ? form.defaultTcsSection : null,
-          costCenterApplicable: form.costCenterApplicable,
-          billWiseOutstanding: form.billWiseAccounting,
+          ...taxAndPostingFields,
         });
         if (fy?.financialYearId) {
           const latest = await LedgerService.view(active.apiNodeId ?? String(active.id));

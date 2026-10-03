@@ -159,6 +159,18 @@ export interface AccountsTablePaginationProps {
   recordLabel?: string;
 }
 
+function scrollListingTableToTop(fromEl: HTMLElement | null) {
+  const card = fromEl?.closest(".accounts-listing-card");
+  const scroller =
+    (card?.querySelector(".accounts-table-scroll") as HTMLElement | null) ??
+    (document.querySelector(".accounts-table-scroll") as HTMLElement | null);
+  if (scroller) {
+    scroller.scrollTo({ top: 0, left: scroller.scrollLeft, behavior: "auto" });
+    return;
+  }
+  fromEl?.scrollIntoView({ block: "start", behavior: "auto" });
+}
+
 export function AccountsTablePagination({
   page,
   pageSize,
@@ -167,16 +179,32 @@ export function AccountsTablePagination({
   onPageSizeChange,
   recordLabel = "records",
 }: AccountsTablePaginationProps) {
+  const footerRef = React.useRef<HTMLDivElement>(null);
+
+  const handlePageChange = (next: number) => {
+    onPageChange(next);
+    requestAnimationFrame(() => scrollListingTableToTop(footerRef.current));
+  };
+
+  const handlePageSizeChange = onPageSizeChange
+    ? (next: number) => {
+        onPageSizeChange(next);
+        requestAnimationFrame(() => scrollListingTableToTop(footerRef.current));
+      }
+    : undefined;
+
   return (
-    <Pagination
-      page={page}
-      pageSize={pageSize}
-      totalRecords={totalRecords}
-      onPageChange={onPageChange}
-      onPageSizeChange={onPageSizeChange}
-      recordLabel={recordLabel}
-      variant="compact"
-    />
+    <div ref={footerRef}>
+      <Pagination
+        page={page}
+        pageSize={pageSize}
+        totalRecords={totalRecords}
+        onPageChange={handlePageChange}
+        onPageSizeChange={handlePageSizeChange}
+        recordLabel={recordLabel}
+        variant="compact"
+      />
+    </div>
   );
 }
 

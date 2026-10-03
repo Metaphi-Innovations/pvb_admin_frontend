@@ -55,6 +55,42 @@ export function AccountsClearAllColumnFiltersButton({
 }
 
 /**
+ * Clear filters control for listing toolbars.
+ * Shows when toolbar filters, column filters, or a user-applied sort are active.
+ */
+export function AccountsClearListingFiltersButton({
+  hasToolbarFilters = false,
+  onClear,
+  className,
+}: {
+  hasToolbarFilters?: boolean;
+  onClear: () => void;
+  className?: string;
+}) {
+  const ctx = useAccountsColumnFilterContext();
+  const hasColumnFilters = (ctx?.activeFilterCount ?? 0) > 0;
+  const hasCustomSort = Boolean(ctx?.sortKey);
+  if (!hasToolbarFilters && !hasColumnFilters && !hasCustomSort) return null;
+
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      className={cn("h-8 text-xs gap-1 px-2.5 shrink-0", className)}
+      onClick={() => {
+        ctx?.clearAllColumnFilters();
+        ctx?.removeSort();
+        onClear();
+      }}
+    >
+      <X className="w-3.5 h-3.5" />
+      Clear filters
+    </Button>
+  );
+}
+
+/**
  * Compact single-line report filter row.
  * Prefer this (or ReportFilterRow with `end=`) over placing Export in the page title actions.
  */

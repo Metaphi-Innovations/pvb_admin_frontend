@@ -62,8 +62,8 @@ const StockTransferInvoiceLineRow = memo(function StockTransferInvoiceLineRow({
         <p className="so-product-name leading-tight truncate" title={line.productName || undefined}>
           {line.productName || "—"}
         </p>
-        <p className="so-product-meta mt-0.5 leading-tight">MFG: {formatMonthYear(line.manufacturingDate)}</p>
-        <p className="so-product-meta leading-tight">EXP: {formatMonthYear(line.expiryDate)}</p>
+        <p className="so-product-meta mt-0.5 leading-tight">MFG Date: {formatMonthYear(line.manufacturingDate)}</p>
+        <p className="so-product-meta leading-tight">EXP Date: {formatMonthYear(line.expiryDate)}</p>
       </td>
       <td className="px-2 py-1.5 align-middle so-col-sku">
         <p className="so-sku-value leading-tight truncate">{line.productCode || "—"}</p>
