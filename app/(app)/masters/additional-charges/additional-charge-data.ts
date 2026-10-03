@@ -24,23 +24,11 @@ export function additionalChargeToForm(
     hsnId: record.hsnId || "",
     hsnSacCode: record.hsnSacCode || "",
     description: record.description || "",
-    ledgerName: record.ledgerName || "",
   };
-}
-
-export function formatGstApplicableLabel(value: boolean): string {
-  return value ? "Yes" : "No";
 }
 
 export function formatGstRateDisplay(rate: string): string {
   const trimmed = rate.trim();
   if (!trimmed) return "—";
   return trimmed.includes("%") ? trimmed : `${trimmed}%`;
-}
-
-export function formatLedgerDisplay(code: string, name: string): string {
-  const c = code.trim();
-  const n = name.trim();
-  if (c && n) return `${c} — ${n}`;
-  return c || n || "—";
 }

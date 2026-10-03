@@ -1745,10 +1745,51 @@ export function canEditOrder(order: SalesOrder): boolean {
   return EDITABLE_ORDER_STATUSES.includes(order.status);
 }
 
+/** Qty on a line not yet included in any packing list — the only qty that can be split off. */
+export function getSplittableQty(line: SalesOrderLineItem): number {
+  return Math.max(0, (line.quantity || 0) - Number(line.generatedBaseQty || 0));
+}
+
+/** Resize a line to `quantity`, scaling tax and flat discount proportionally. */
+export function scaleLineToQuantity(line: SalesOrderLineItem, quantity: number): SalesOrderLineItem {
+  const current = line.quantity || 0;
+  if (current <= 0 || Math.abs(current - quantity) < 1e-9) return line;
+  const ratio = quantity / current;
+  const round2 = (n: number | undefined) => Math.round((n || 0) * ratio * 100) / 100;
+  const packSize = line.packSize || 1;
+  const wholeCases = line.quantityType === "Case" && packSize > 0 && quantity % packSize === 0;
+  return recalculateLineItem({
+    ...line,
+    quantity,
+    quantityType: line.quantityType === "Case" && !wholeCases ? "Piece" : line.quantityType,
+    caseQuantity: wholeCases ? quantity / packSize : 0,
+    pieceQuantity: wholeCases ? 0 : quantity,
+    discountValue: normalizeLineDiscountType(line.discountType) === "Flat" ? round2(line.discountValue) : line.discountValue,
+    gstAmount: round2(line.gstAmount),
+    cgstAmount: round2(line.cgstAmount),
+    sgstAmount: round2(line.sgstAmount),
+    igstAmount: round2(line.igstAmount),
+  });
+}
+
 export function canSplitOrder(order: SalesOrder): boolean {
   if (isOrderCancelled(order)) return false;
   const fulfillment = order.fulfillmentStatus || "";
-  return !["Fully Dispatched", "DELIVERED", "delivered", "dispatched"].includes(fulfillment);
+  const blocked = [
+    "Fully Packed",
+    "Fully Dispatched",
+    "FULLY_DISPATCHED",
+    "DELIVERED",
+    "delivered",
+    "dispatched",
+    "CANCELLED",
+  ];
+  if (blocked.includes(fulfillment)) return false;
+  const lines = order.lineItems ?? [];
+  if (lines.length > 0) {
+    return lines.some((l) => Boolean(l.productId) && getSplittableQty(l) > 1e-9);
+  }
+  return true;
 }
 
 /** Cancellation is only allowed before any packing list is generated (packing lists deduct stock). */

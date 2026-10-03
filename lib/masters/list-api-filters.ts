@@ -394,15 +394,11 @@ export const MASTER_FILTER_FIELD_MAPS = {
     chargeName: "charge_name",
     hsnSacCode: "hsn_sac_code",
     description: "description",
-    gstApplicable: (value) => {
-      const token = normalizeStatusToken(value);
-      if (token === "yes" || token === "true") return { gst_applicable: true };
-      if (token === "no" || token === "false") return { gst_applicable: false };
+    defaultGstRate: (value) => {
       const raw = Array.isArray(value) ? value[0] : value;
-      const label = String(raw ?? "").trim().toLowerCase();
-      if (label === "yes") return { gst_applicable: true };
-      if (label === "no") return { gst_applicable: false };
-      return null;
+      const pct = Number(String(raw ?? "").replace("%", "").trim());
+      if (raw === undefined || raw === null || raw === "" || !Number.isFinite(pct)) return null;
+      return { default_gst_rate: { gstPercentage: pct } };
     },
     status: statusColumnMapper,
     ...AUDIT_FILTER_FIELDS,

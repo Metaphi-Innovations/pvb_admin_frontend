@@ -57,6 +57,7 @@ import {
 } from "@/app/(app)/masters/scheme/product-discount-scheme";
 import { Badge } from "@/components/ui/badge";
 import { useSalesOrder, useApproveRejectSalesOrder, useCancelSalesOrder } from "@/hooks/sales/use-sales-orders";
+import { useWarehouseStock, formatLineStock } from "@/hooks/sales/use-warehouse-stock";
 
 function orderStatusVariant(status: OrderStatus): "active" | "inactive" | "draft" | "blocked" | "neutral" {
   if (["approved", "confirmed", "APPROVED"].includes(status)) return "active";
@@ -81,6 +82,7 @@ export default function ViewSalesOrderPage() {
   const approvalMode = searchParams.get("from") === "approval";
 
   const { data: order, isLoading, error: fetchError, refetch } = useSalesOrder(id);
+  const stockQuery = useWarehouseStock(order?.warehouseId);
 
   const [activeTab, setActiveTab] = useState("overview");
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
@@ -431,7 +433,7 @@ export default function ViewSalesOrderPage() {
                             <p className="text-xs font-semibold text-foreground">{line.productName || "—"}</p>
                             <p className="text-[11px] font-mono text-brand-700">{line.productCode}</p>
                           </td>
-                          <td className="px-4 py-2 text-xs text-right tabular-nums">{line.productId ? line.availableStock : "—"}</td>
+                          <td className="px-4 py-2 text-xs text-right tabular-nums">{formatLineStock(stockQuery, line.productId)}</td>
                           <td className="px-4 py-2 text-xs text-right tabular-nums">
                             <div className="flex flex-col items-end">
                               <span className="font-semibold">{cases > 0 ? `${cases} Cases` : ""} {loose > 0 ? `${loose} Loose` : ""} {cases === 0 && loose === 0 ? "0" : ""}</span>

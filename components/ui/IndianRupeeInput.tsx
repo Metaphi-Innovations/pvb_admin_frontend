@@ -9,6 +9,7 @@ import {
   parseIndianRupeeInput,
 } from "@/lib/currency/indian-rupee";
 import { MONEY_INPUT_CLASS } from "@/lib/accounts/money-format";
+import { exceedsEntryDigits } from "@/lib/quantity-limits";
 
 export interface IndianRupeeInputProps {
   value: number;
@@ -22,6 +23,8 @@ export interface IndianRupeeInputProps {
   max?: number;
   /** When set, values below this are clamped up on commit. */
   min?: number;
+  /** When set, keystrokes / paste with more digits than this before the decimal point are rejected. */
+  maxDigits?: number;
   /** Called after the value is committed on blur. */
   onBlur?: () => void;
 }
@@ -43,6 +46,7 @@ export function IndianRupeeInput({
   "aria-label": ariaLabel,
   max,
   min = 0,
+  maxDigits,
   onBlur,
 }: IndianRupeeInputProps) {
   const [focused, setFocused] = useState(false);
@@ -94,6 +98,9 @@ export function IndianRupeeInput({
         const numeric = parseIndianRupeeInput(next);
         // Reject keystrokes / paste that would exceed max (same idea as pack size / unit per case).
         if (max !== undefined && numeric > max) {
+          return;
+        }
+        if (maxDigits !== undefined && exceedsEntryDigits(next, maxDigits)) {
           return;
         }
         if (min !== undefined && numeric < min && next.trim() !== "" && numeric !== 0) {

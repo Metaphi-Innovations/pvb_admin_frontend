@@ -45,7 +45,6 @@ export interface AdditionalChargeCreatePayload {
   hsn_id?: string | null;
   hsn_sac_code?: string | null;
   description?: string | null;
-  ledger_name?: string | null;
 }
 
 export interface AdditionalChargeUpdatePayload {
@@ -74,7 +73,7 @@ export type AdditionalChargeFilterField =
   | "charge_name"
   | "hsn_sac_code"
   | "description"
-  | "gst_applicable"
+  | "default_gst_rate__gstPercentage"
   | "is_active"
   | "created_by_user__username"
   | "created_by_user__first_name"
@@ -89,7 +88,7 @@ const SORT_KEY_TO_ORDERING: Record<string, string> = {
   chargeName: "chargeName",
   hsnSacCode: "hsnSacCode",
   description: "description",
-  gstApplicable: "gstApplicable",
+  defaultGstRate: "defaultGstRate",
   status: "isActive",
   createdAt: "createdAt",
   updatedAt: "updatedAt",
@@ -237,18 +236,19 @@ function mapFilterOptions(
       continue;
     }
 
-    if (fieldName === "gst_applicable") {
-      const applicable = raw === true || value.toLowerCase() === "true";
-      options.push({
-        label: applicable ? "Yes" : "No",
-        value: applicable ? "yes" : "no",
-      });
+    if (fieldName === "default_gst_rate__gstPercentage") {
+      const pct = Number(value);
+      if (!Number.isFinite(pct)) continue;
+      options.push({ label: `${pct.toFixed(2)}%`, value: String(pct) });
       continue;
     }
 
     options.push({ label: value, value });
   }
 
+  if (fieldName === "default_gst_rate__gstPercentage") {
+    return options.sort((a, b) => Number(a.value) - Number(b.value));
+  }
   return options.sort((a, b) => a.label.localeCompare(b.label));
 }
 

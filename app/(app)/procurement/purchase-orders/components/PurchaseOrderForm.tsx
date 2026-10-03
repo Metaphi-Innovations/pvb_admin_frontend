@@ -6,7 +6,6 @@ import {
 	Upload,
 	Trash2,
 } from "lucide-react";
-import { COMPANY_BILLING } from "@/lib/procurement/config";
 import {
 	calcPackingToBaseQty,
 	enrichProductForProcurement,
@@ -44,11 +43,13 @@ import { applyTaxSupplyToPOLines, enrichPOLineItem, recalcPO } from "../po-data"
 import { loadProducts } from "@/app/(app)/masters/products/product-data";
 import { findProductRef } from "@/lib/pricing/resolve-pricing";
 import {
+	EMPTY_PO_BILLING,
 	billingFromPOAddress,
 	findPOAddressById,
 	getDefaultPOBillShipIds,
 	getPOBillToAddressesFromWarehouses,
 	getPOShipToAddressesFromWarehouses,
+	warehouseToPOAddress,
 } from "../po-address-utils";
 import type { SalesOrderCustomerAddress } from "@/app/(app)/sales/orders/sales-order-address-utils";
 import { POLineItemsSection } from "./POLineItemsSection";
@@ -349,14 +350,7 @@ export function defaultPOForm(sourcePrId: string | null = null): POFormValues {
 		sourcePrNumber: "",
 		billToAddressId: "",
 		shipToAddressId: "",
-		billing: {
-			companyName: COMPANY_BILLING.companyName,
-			billingAddress: "",
-			gstNumber: "",
-			state: "",
-			city: "",
-			pincode: "",
-		},
+		billing: { ...EMPTY_PO_BILLING },
 		shipping: {
 			shipToLocation: "",
 			branch: "",
@@ -621,13 +615,13 @@ export function PurchaseOrderForm({
 		return {
 			id: form.billToAddressId || "bill-saved",
 			label: "Bill To",
-			companyName: form.billing.companyName || COMPANY_BILLING.companyName,
+			companyName: form.billing.companyName || "",
 			addressLine1: form.billing.billingAddress,
 			addressLine2: "",
 			city: form.billing.city || "",
 			state: form.billing.state || "",
 			pincode: form.billing.pincode || "",
-			gstin: form.billing.gstNumber || COMPANY_BILLING.gstNumber,
+			gstin: form.billing.gstNumber || "",
 			phone: "—",
 			email: "—",
 		};
@@ -642,13 +636,17 @@ export function PurchaseOrderForm({
 		return {
 			id: `ship-wh-${form.warehouseId}`,
 			label: `${form.warehouseName} — Ship To`,
-			companyName: selectedWarehouse?.registered_legal_name || COMPANY_BILLING.companyName,
+			companyName:
+				selectedWarehouse?.warehouse_name ||
+				form.warehouseName ||
+				selectedWarehouse?.registered_legal_name ||
+				"",
 			addressLine1: form.shipping.address,
 			addressLine2: "",
 			city: selectedWarehouse?.city || "",
 			state: form.state || selectedWarehouse?.state || "",
 			pincode: selectedWarehouse?.pincode || "",
-			gstin: selectedWarehouse?.gst_number || COMPANY_BILLING.gstNumber,
+			gstin: selectedWarehouse?.gst_number || "",
 			phone: form.shipping.contactNumber || primaryContact?.mobile_number || "—",
 			email: primaryContact?.email_address || "—",
 		};
@@ -845,16 +843,7 @@ export function PurchaseOrderForm({
 			deliveryAddress: "",
 			billToAddressId: billStillValid ? form.billToAddressId : "",
 			shipToAddressId: "",
-			billing: billStillValid
-				? form.billing
-				: {
-						companyName: COMPANY_BILLING.companyName,
-						billingAddress: "",
-						gstNumber: "",
-						state: "",
-						city: "",
-						pincode: "",
-					},
+			billing: billStillValid ? form.billing : { ...EMPTY_PO_BILLING },
 			shipping: {
 				shipToLocation: "",
 				branch: "",
@@ -893,29 +882,14 @@ export function PurchaseOrderForm({
 			billToAddressId: nextBillId,
 			shipToAddressId: wh ? `ship-wh-${wh.warehouse_id}` : "",
 			billing: billingFromPOAddress(
-				billAddr ??
-					(wh
-						? {
-								id: `bill-wh-${wh.warehouse_id}`,
-								label: `${wh.warehouse_name} — Bill To`,
-								companyName: wh.registered_legal_name || COMPANY_BILLING.companyName,
-								addressLine1: wh.address || "",
-								addressLine2: wh.address_1 || "",
-								city: wh.city || "",
-								state: wh.state || "",
-								pincode: wh.pincode || "",
-								gstin: wh.gst_number || COMPANY_BILLING.gstNumber,
-								phone: primaryContact?.mobile_number || "—",
-								email: primaryContact?.email_address || "—",
-							}
-						: null),
+				billAddr ?? (wh ? warehouseToPOAddress(wh, "bill") : null),
 			),
 			shipping: wh
 				? {
 						shipToLocation: wh.warehouse_name || "",
 						branch: "",
 						address: addressStr,
-						contactPerson: primaryContact?.contact_person || "Warehouse Manager",
+						contactPerson: primaryContact?.contact_person || "",
 						contactNumber: primaryContact?.mobile_number || "",
 						sameAsBilling: false,
 					}

@@ -123,8 +123,10 @@ export function mapBackendSampleOrder(raw: any): SalesOrder {
     customerCode: asString(cust.customer_code),
     territory: asString(cust.territory || ""),
     salesManId: raw.salesperson_id || salesperson.user_id,
-    salesManName: salesperson ? `${salesperson.first_name || ""} ${salesperson.last_name || ""}`.trim() : "",
-    salesManCode: asString(salesperson.employee_id || salesperson.username || ""),
+    salesManName:
+      `${salesperson.first_name || ""} ${salesperson.last_name || ""}`.trim() ||
+      asString(salesperson.username || ""),
+    salesManCode: asString(salesperson.employee_id || ""),
     orderDate: asDateOnly(raw.order_date),
     deliveryDate: asDateOnly(raw.order_date),
     status: mapBackendStatusToFrontend(raw.status),

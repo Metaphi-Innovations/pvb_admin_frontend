@@ -3,6 +3,7 @@
 import React, { useMemo, useState, useEffect } from "react";
 import { AlertTriangle, Plus, Trash2, ChevronsUpDown, Search, Pencil, Check, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { exceedsEntryDigits } from "@/lib/quantity-limits";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -249,7 +250,10 @@ export default function TransferProductLinesEditor({
                   type="number"
                   min={1}
                   value={topInputQty}
-                  onChange={(e) => setTopInputQty(e.target.value)}
+                  onChange={(e) => {
+                    if (exceedsEntryDigits(e.target.value)) return;
+                    setTopInputQty(e.target.value);
+                  }}
                   className="h-8 text-xs w-20 bg-white"
                   placeholder="1"
                 />
@@ -374,7 +378,8 @@ export default function TransferProductLinesEditor({
                               : (draftLine.pieceQuantity === 0 && !draftLine.quantity ? "" : draftLine.pieceQuantity)
                           }
                           onChange={(e) => {
-                            const val = e.target.value.slice(0, 5);
+                            const val = e.target.value;
+                            if (exceedsEntryDigits(val)) return;
                             const num = val ? Number(val) : 0;
                             if (draftLine.quantityType === "Case") {
                               updateDraft({ caseQuantity: num });

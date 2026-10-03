@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useMemo, useState, useEffect } from "react";
-import { axiosInstance } from "@/api/axios";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -20,6 +19,7 @@ import {
 	formatCustomerDropdownSublabel,
 } from "@/lib/masters/entity-display";
 import { useCustomerDetails, useCustomersDropdown, useWarehousesDropdown, useProductPricingDropdown } from "@/hooks/sales/use-sales-orders";
+import { useProductsWithWarehouseStock, withLatestLineStock } from "@/hooks/sales/use-warehouse-stock";
 import { setDynamicPricingRecords, mapProductPricingDropdownRecords } from "@/app/(app)/masters/pricing/pricing-data";
 import {
 	loadWarehouses,
@@ -272,58 +272,17 @@ export default function SampleOrderForm({
 	originalOrder,
 	auditInfo,
 }: SampleOrderFormProps) {
-	const [warehouseStock, setWarehouseStock] = useState<Record<string, number>>({});
+	const {
+		products,
+		stock: warehouseStock,
+		isError: stockError,
+	} = useProductsWithWarehouseStock(originalProducts, form.warehouseId);
 
 	useEffect(() => {
-		if (!form.warehouseId) {
-			setWarehouseStock({});
-			return;
-		}
-		const fetchStock = async () => {
-			try {
-				const PAGE_SIZE = 100;
-				const stockMap: Record<string, number> = {};
-				let page = 1;
-				let totalFetched = 0;
-				let totalRecords = Infinity;
-
-				while (totalFetched < totalRecords) {
-					const response = await axiosInstance.post(
-						`/warehouse/stock-overview/inventory/list?warehouse_id=${form.warehouseId}&page=${page}&page_size=${PAGE_SIZE}`,
-						{ warehouse_id: form.warehouseId }
-					);
-					const items: any[] = Array.isArray(response.data?.data) ? response.data.data : [];
-					if (page === 1) totalRecords = Number(response.data?.totalRecords ?? items.length);
-					if (items.length === 0) break;
-					items.forEach((item: any) => {
-						const sku = item.sku;
-						if (sku && sku !== "-") {
-							stockMap[sku] = (stockMap[sku] || 0) + Number(item.available_qty || 0);
-						}
-					});
-					totalFetched += items.length;
-					page++;
-				}
-				setWarehouseStock(stockMap);
-			} catch (err) {
-				console.error("Failed to fetch warehouse stock:", err);
-			}
-		};
-		fetchStock();
-	}, [form.warehouseId]);
-
-	const products = useMemo(() => {
-		if (Object.keys(warehouseStock).length === 0) {
-			if (form.warehouseId) {
-				return originalProducts.map((p) => ({ ...p, stock: 0 }));
-			}
-			return originalProducts;
-		}
-		return originalProducts.map((p) => ({
-			...p,
-			stock: (p.sku ? warehouseStock[p.sku] : 0) || 0,
-		}));
-	}, [originalProducts, warehouseStock, form.warehouseId]);
+		if (!warehouseStock) return;
+		const lineItems = withLatestLineStock(form.lineItems, warehouseStock);
+		if (lineItems) onChange({ ...form, lineItems });
+	}, [warehouseStock, form, onChange]);
 	const { data: customerData } = useCustomersDropdown();
 	const { data: customerDetails } = useCustomerDetails(
 		form.customerId ? String(form.customerId) : null,
@@ -620,6 +579,11 @@ export default function SampleOrderForm({
 					/>
 				)}
 
+				{stockError && (
+					<p className="flex items-center gap-1 text-[11px] text-red-500">
+						<AlertCircle className="w-3.5 h-3.5 flex-shrink-0" /> Could not load stock for the selected warehouse. Stock is shown as 0.
+					</p>
+				)}
 				<ProductLinesEditor
 					lines={form.lineItems}
 					products={form.warehouseId ? products : []}

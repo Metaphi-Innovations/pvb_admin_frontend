@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import { cn } from "@/lib/utils";
+import { exceedsEntryDigits } from "@/lib/quantity-limits";
 import { formatCurrency, calcLineAmounts, applyTaxSupplyToRates, round2, type TaxSupplyType } from "@/lib/procurement/utils";
 import {
   applyGstMasterToTaxRates,
@@ -437,6 +438,7 @@ export function POLineItemsSection({
                 value={quickQty}
                 onChange={(e) => {
                   const cleaned = sanitizeIntegerInput(e.target.value);
+                  if (exceedsEntryDigits(cleaned)) return;
                   const val = Number(cleaned);
                   if (val > 0 || cleaned === "") {
                     setQuickQty(cleaned);
@@ -681,6 +683,7 @@ export function POLineItemsSection({
                             value={draft.packingQty}
                             onChange={(e) => {
                               const cleaned = sanitizeIntegerInput(e.target.value);
+                              if (exceedsEntryDigits(cleaned)) return;
                               const val = Number(cleaned);
                               if (val > 0 || cleaned === "") {
                                 setInlineEditDraft((prev) =>

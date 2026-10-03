@@ -1,7 +1,6 @@
 import { axiosInstance } from "@/api/axios";
 import { API_ENDPOINTS } from "@/api/endpoints";
 import { openEditablePdfPreview } from "@/lib/pdf/paramverse";
-import { COMPANY_BILLING } from "@/lib/procurement/config";
 import { amountInWords, round2 } from "@/lib/procurement/utils";
 import {
   calcPackingToBaseQty,
@@ -21,6 +20,7 @@ import type {
 } from "@/app/(app)/procurement/purchase-orders/po-data";
 import type { POFormValues } from "@/app/(app)/procurement/purchase-orders/components/PurchaseOrderForm";
 import { recalcPO } from "@/app/(app)/procurement/purchase-orders/po-data";
+import { EMPTY_PO_BILLING } from "@/app/(app)/procurement/purchase-orders/po-address-utils";
 import type { POFollowUpEntry } from "@/app/(app)/procurement/purchase-orders/po-followup-data";
 import {
   openPurchaseOrderPdfWindow,
@@ -135,21 +135,20 @@ function primaryWarehouseContact(source: Record<string, unknown>): {
 function mapBillingFromRaw(raw: Record<string, unknown>) {
   const billing = asRecord(raw.billing_address);
   if (!Object.keys(billing).length) {
-    return { ...COMPANY_BILLING };
+    return { ...EMPTY_PO_BILLING };
   }
   const address =
     joinAddressParts(billing.address, billing.address_1, billing.address_2) ||
     asString(billing.registered_gst_address);
   return {
     companyName:
-      asString(billing.registered_legal_name) ||
       asString(billing.warehouse_name) ||
-      COMPANY_BILLING.companyName,
-    billingAddress: address || COMPANY_BILLING.billingAddress,
-    gstNumber: asString(billing.gst_number) || COMPANY_BILLING.gstNumber,
-    state: asString(billing.state) || COMPANY_BILLING.state,
-    city: asString(billing.city) || COMPANY_BILLING.city,
-    pincode: asString(billing.pincode) || COMPANY_BILLING.pincode,
+      asString(billing.registered_legal_name),
+    billingAddress: address,
+    gstNumber: asString(billing.gst_number),
+    state: asString(billing.state),
+    city: asString(billing.city),
+    pincode: asString(billing.pincode),
   };
 }
 

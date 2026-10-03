@@ -2,7 +2,6 @@
 
 import React, { useMemo, useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
-import { axiosInstance } from "@/api/axios";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -25,6 +24,7 @@ import {
   recalculateExpense,
 } from "@/app/(app)/sales/orders/orders-data";
 import { useStockTransferDropdowns } from "@/hooks/sales/use-stock-transfers";
+import { useProductsWithWarehouseStock, withLatestLineStock } from "@/hooks/sales/use-warehouse-stock";
 import { loadWarehouses } from "@/app/(app)/masters/warehouse/warehouse-data";
 
 interface WarehouseMaster {
@@ -232,58 +232,17 @@ export default function StockTransferForm({
   auditInfo,
 }: StockTransferFormProps) {
   const { data: dropdownData } = useStockTransferDropdowns();
-  const [warehouseStock, setWarehouseStock] = useState<Record<string, number>>({});
+  const {
+    products: dynamicProducts,
+    stock: warehouseStock,
+    isError: stockError,
+  } = useProductsWithWarehouseStock(products, form.sourceWarehouseId);
 
   useEffect(() => {
-    if (!form.sourceWarehouseId) {
-      setWarehouseStock({});
-      return;
-    }
-    const fetchStock = async () => {
-      try {
-        const PAGE_SIZE = 100;
-        const stockMap: Record<string, number> = {};
-        let page = 1;
-        let totalFetched = 0;
-        let totalRecords = Infinity;
-
-        while (totalFetched < totalRecords) {
-          const response = await axiosInstance.post(
-            `/warehouse/stock-overview/inventory/list?warehouse_id=${form.sourceWarehouseId}&page=${page}&page_size=${PAGE_SIZE}`,
-            { warehouse_id: form.sourceWarehouseId }
-          );
-          const items: any[] = Array.isArray(response.data?.data) ? response.data.data : [];
-          if (page === 1) totalRecords = Number(response.data?.totalRecords ?? items.length);
-          if (items.length === 0) break;
-          items.forEach((item: any) => {
-            const sku = item.sku;
-            if (sku && sku !== "-") {
-              stockMap[sku] = (stockMap[sku] || 0) + Number(item.available_qty || 0);
-            }
-          });
-          totalFetched += items.length;
-          page++;
-        }
-        setWarehouseStock(stockMap);
-      } catch (err) {
-        console.error("Failed to fetch warehouse stock:", err);
-      }
-    };
-    fetchStock();
-  }, [form.sourceWarehouseId]);
-
-  const dynamicProducts = useMemo(() => {
-    if (Object.keys(warehouseStock).length === 0) {
-      if (form.sourceWarehouseId) {
-        return products.map((p) => ({ ...p, stock: 0 }));
-      }
-      return products;
-    }
-    return products.map((p) => ({
-      ...p,
-      stock: (p.sku ? warehouseStock[p.sku] : 0) || 0,
-    }));
-  }, [products, warehouseStock, form.sourceWarehouseId]);
+    if (!warehouseStock) return;
+    const lineItems = withLatestLineStock(form.lineItems, warehouseStock);
+    if (lineItems) onChange({ ...form, lineItems });
+  }, [warehouseStock, form, onChange]);
 
   const warehouses = useMemo(() => {
     if (!dropdownData?.warehouses) return [];
@@ -496,6 +455,11 @@ export default function StockTransferForm({
         ) : null}
       </div>
 
+      {stockError && (
+        <p className="flex items-center gap-1 text-[11px] text-red-500">
+          <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" /> Could not load stock for the source warehouse. Stock is shown as 0.
+        </p>
+      )}
       <TransferProductLinesEditor
         lines={form.lineItems}
         products={form.sourceWarehouseId ? dynamicProducts : []}
@@ -521,10 +485,6 @@ export default function StockTransferForm({
               {
                 label: "Product Subtotal:",
                 value: formatRupee(totalsSummary.productSubtotal),
-              },
-              {
-                label: "Product Discount Total:",
-                value: formatRupee(totalsSummary.productDiscountTotal),
               },
               {
                 label: "Additional Expenses Total:",

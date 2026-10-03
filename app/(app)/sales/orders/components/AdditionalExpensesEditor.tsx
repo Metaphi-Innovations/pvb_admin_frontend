@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import { IndianRupeeInput } from "@/components/ui/IndianRupeeInput";
+import { MAX_ENTRY_DIGITS } from "@/lib/quantity-limits";
 import { cn } from "@/lib/utils";
 import { useAdditionalChargeDropdown } from "@/hooks/masters/use-additional-charge";
 import {
@@ -196,6 +197,7 @@ export default function AdditionalExpensesEditor({
 										<IndianRupeeInput
 											value={row.amount}
 											onChange={(n) => update(row.id, { amount: n })}
+											maxDigits={MAX_ENTRY_DIGITS}
 											placeholder="₹ 0"
 											className={cn(inputCls, "w-full shadow-sm")}
 										/>
