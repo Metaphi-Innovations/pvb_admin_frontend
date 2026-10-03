@@ -88,11 +88,11 @@ function mapLineSchemeForApi(line: SalesOrderLineItem): {
 function toDisplayName(user: unknown): string {
   if (!user || typeof user !== "object") return "";
   const record = user as Record<string, unknown>;
-  const username = asString(record.username).trim();
-  if (username) return username;
   const first = asString(record.first_name).trim();
   const last = asString(record.last_name).trim();
-  return `${first} ${last}`.trim();
+  const fullName = `${first} ${last}`.trim();
+  if (fullName) return fullName;
+  return asString(record.username).trim();
 }
 
 function mapBackendStatusToFrontend(status: string): any {
@@ -679,24 +679,27 @@ export const SalesOrderService = {
           remarks: exp.remarks || "",
         };
       }),
-      items: form.lineItems.map((line) => ({
-        product_id: line.productId,
-        base_qty: line.quantity,
-        quantity_type: line.quantityType,
-        unit_price: line.unitPrice,
-        ...mapLineDiscountForApi(line),
-        ...mapLineSchemeForApi(line),
-        gst_percentage: line.gstPercentage ?? 0,
-        gst_amount: line.gstAmount,
-        cgst_percentage: line.cgstPercentage ?? 0,
-        cgst_amount: line.cgstAmount || 0,
-        sgst_percentage: line.sgstPercentage ?? 0,
-        sgst_amount: line.sgstAmount || 0,
-        igst_percentage: line.igstPercentage ?? 0,
-        igst_amount: line.igstAmount || 0,
-        item_total: line.lineTotal,
-        remarks: "",
-      })),
+      items: form.lineItems
+        .filter((line) => line.productId && line.quantity > 0)
+        .map((line) => ({
+          parent_item_id: toUuidOrNull(line.splitSourceLineId),
+          product_id: line.productId,
+          base_qty: line.quantity,
+          quantity_type: line.quantityType,
+          unit_price: line.unitPrice,
+          ...mapLineDiscountForApi(line),
+          ...mapLineSchemeForApi(line),
+          gst_percentage: line.gstPercentage ?? 0,
+          gst_amount: line.gstAmount,
+          cgst_percentage: line.cgstPercentage ?? 0,
+          cgst_amount: line.cgstAmount || 0,
+          sgst_percentage: line.sgstPercentage ?? 0,
+          sgst_amount: line.sgstAmount || 0,
+          igst_percentage: line.igstPercentage ?? 0,
+          igst_amount: line.igstAmount || 0,
+          item_total: line.lineTotal,
+          remarks: "",
+        })),
     };
 
     const response = await axiosInstance.post(API_ENDPOINTS.SALES.SALES_ORDER.SPLIT(String(id)), body);

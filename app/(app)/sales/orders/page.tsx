@@ -176,6 +176,7 @@ export default function SalesOrdersPage() {
       customerName: "customer__customer_name",
       items: "items",
       status: "status",
+      fulfillmentStatus: "fulfillment_status",
       orderDate: "order_date",
       totalAmount: "grand_total",
     };
@@ -350,7 +351,7 @@ export default function SalesOrdersPage() {
     {
       key: "fulfillmentStatus",
       header: "Fulfillment",
-      sortable: false,
+      sortable: true,
       filterable: activeTab === "all",
       filterType: "dropdown",
       filterOptions: FULFILLMENT_STATUS_OPTIONS,

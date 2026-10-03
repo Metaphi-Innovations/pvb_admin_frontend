@@ -17,6 +17,8 @@ import {
   type ProductCatalogItem,
   hydrateOrderLineItems,
   canSplitOrder,
+  getSplittableQty,
+  scaleLineToQuantity,
   setDynamicProducts,
   orderToFormValues,
 } from "../../orders-data";
@@ -94,8 +96,8 @@ export default function SplitSalesOrderPage() {
     if (salesmanData) {
       const mapped = salesmanData.map((s: any) => ({
         id: s.user_id,
-        employeeId: s.employee_id || s.username || "",
-        employeeCode: s.employee_id || s.username || "",
+        employeeId: s.employee_id || "",
+        employeeCode: s.employee_id || "",
         firstName: s.first_name || "",
         lastName: s.last_name || "",
         fullName: `${s.first_name || ""} ${s.last_name || ""}`.trim() || s.username || "",
@@ -140,7 +142,10 @@ export default function SplitSalesOrderPage() {
     if (!loadedOrder) return;
 
     if (!canSplitOrder(loadedOrder)) {
-      setToast({ msg: "This order cannot be split.", type: "error" });
+      setToast({
+        msg: "This order cannot be split: it is cancelled, or all its quantity is already in packing lists.",
+        type: "error",
+      });
       setTimeout(() => router.push(`/sales/orders/${id}`), 1200);
       return;
     }
@@ -152,15 +157,17 @@ export default function SplitSalesOrderPage() {
     setForm({
       ...baseForm,
       status: hydrated.status === "draft" ? "draft" : "confirmed",
-      lineItems:
-        hydrated.lineItems.length > 0
-          ? hydrated.lineItems.map((item) => ({
-              ...item,
-              id: `line-split-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-              splitSourceLineId: item.id,
-              maxSplitQty: item.quantity,
-            }))
-          : [],
+      lineItems: hydrated.lineItems
+        .filter((item) => item.productId && getSplittableQty(item) > 1e-9)
+        .map((item) => {
+          const splittable = getSplittableQty(item);
+          return {
+            ...scaleLineToQuantity(item, splittable),
+            id: `line-split-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            splitSourceLineId: item.id,
+            maxSplitQty: splittable,
+          };
+        }),
       additionalExpenses: (baseForm.additionalExpenses ?? []).map((exp) => ({
         ...exp,
         id: `exp-split-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,

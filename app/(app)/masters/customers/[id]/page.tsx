@@ -42,8 +42,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
 import {
   type CustomerStatus,
   formatMobile,
@@ -139,9 +137,6 @@ export default function CustomerDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [perms, setPerms] = useState(readCustomerPermissions);
   const [activeTab, setActiveTab] = useState("overview");
-  const [blockOpen, setBlockOpen] = useState(false);
-  const [blockReason, setBlockReason] = useState("");
-  const [blockError, setBlockError] = useState("");
   const [confirmDeactivate, setConfirmDeactivate] = useState(false);
   const [previewDoc, setPreviewDoc] = useState<{
     title: string;
@@ -865,24 +860,14 @@ export default function CustomerDetailPage() {
                 label: "Edit Customer",
                 onClick: () => router.push(`/masters/customers/${customer.customerUuid}/edit`),
               },
-              ...(customer.status !== "blocked"
+              ...(customer.status === "blocked"
                 ? [
-                  {
-                    label: "Block Customer",
-                    onClick: () => {
-                      setBlockReason("");
-                      setBlockError("");
-                      setBlockOpen(true);
-                    },
-                    destructive: true,
-                  },
-                ]
-                : [
                   {
                     label: "Unblock Customer",
                     onClick: () => updateStatus("active", true),
                   },
-                ]),
+                ]
+                : []),
               ...(customer.status === "draft"
                 ? [
                   {
@@ -897,37 +882,6 @@ export default function CustomerDetailPage() {
       >
         {renderTabContent()}
       </RecordDetailPage>
-
-      <Dialog open={blockOpen} onOpenChange={setBlockOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-sm">Block customer</DialogTitle>
-          </DialogHeader>
-          <div className="py-2 space-y-3">
-            <Label className="text-xs">Reason</Label>
-            <Textarea
-              value={blockReason}
-              onChange={(e) => setBlockReason(e.target.value)}
-              className="text-xs min-h-[80px]"
-            />
-            {blockError && <p className="text-xs text-red-600">{blockError}</p>}
-            <Button
-              size="sm"
-              className="w-full text-white bg-red-600 hover:bg-red-700"
-              onClick={() => {
-                if (!blockReason.trim()) {
-                  setBlockError("Block reason is required");
-                  return;
-                }
-                updateStatus("blocked", false);
-                setBlockOpen(false);
-              }}
-            >
-              Confirm Block
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
 
       <Dialog open={confirmDeactivate} onOpenChange={setConfirmDeactivate}>
         <DialogContent className="max-w-sm bg-white border shadow-xl border-border rounded-xl">

@@ -3,6 +3,7 @@
 import { Trash2, Package } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { exceedsEntryDigits } from "@/lib/quantity-limits";
 import type { DispatchRecord } from "@/app/(app)/warehouse/dispatch/types";
 import { formatReturnAmount } from "../sample-return-data";
 import { calcReturnLineAmount } from "../sample-return-utils";
@@ -122,6 +123,7 @@ export function SampleReturnProductForm({
                       <Input
                         value={caseQty || ""}
                         onChange={(e) => {
+                          if (exceedsEntryDigits(e.target.value)) return;
                           const val = parseInt(e.target.value) || 0;
                           onUpdateItem(p.sku, { requestedQty: val * 10 + (isCaseType ? 0 : pieceQty) });
                         }}
@@ -136,6 +138,7 @@ export function SampleReturnProductForm({
                         disabled={isCaseType}
                         value={isCaseType ? "" : (pieceQty || "")}
                         onChange={(e) => {
+                          if (exceedsEntryDigits(e.target.value)) return;
                           const val = parseInt(e.target.value) || 0;
                           onUpdateItem(p.sku, { requestedQty: caseQty * 10 + val });
                         }}

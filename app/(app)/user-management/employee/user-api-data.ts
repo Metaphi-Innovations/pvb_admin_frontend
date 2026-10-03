@@ -352,7 +352,6 @@ export function employeeToCreatePayload(
     date_of_joining: employee.joiningDate || null,
     role_type: employee.roleType || null,
     sales_type: employee.salesType || null,
-    status: employee.status === "active" ? "Active" : "Inactive",
     department_id:
       employee.departmentId !== null && employee.departmentId !== undefined
         ? String(employee.departmentId)
