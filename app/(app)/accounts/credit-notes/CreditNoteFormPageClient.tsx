@@ -1303,7 +1303,7 @@ export default function CreditNoteFormPageClient({
                       <CreditNoteWarehouseInfoButton warehouseId={warehouseId || null} />
                     }
                   >
-                    {pendingEntitlementLocked && isSalesReturnCn ? (
+                    {pendingEntitlementLocked ? (
                       <div className="so-goods-ro w-full">
                         {pending?.warehouse?.warehouse_name || selectedWarehouse?.name || "—"}
                       </div>

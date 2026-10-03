@@ -384,6 +384,7 @@ function ProductTable({
     UOM: "so-col-uom",
     Rate: "so-col-rate",
     "Gross Amount": "so-col-gross",
+    "Scheme Applied": "so-col-scheme",
     "Final Rate": "so-col-final-rate",
     "Manual Discount": "so-col-manual-disc",
     Taxable: "so-col-taxable",
@@ -397,7 +398,12 @@ function ProductTable({
 
   return (
     <div className="so-goods-product-table-wrap">
-      <table className="w-full text-xs min-w-[1100px] so-goods-product-table table-fixed">
+      <table
+        className={cn(
+          "w-full text-xs so-goods-product-table table-fixed",
+          hideDiscount ? "min-w-[1100px]" : "min-w-[1680px]",
+        )}
+      >
         <thead className="border-b border-border/60 bg-muted/20">
           <tr>
             {headers.map((h) => (
@@ -437,10 +443,10 @@ function ProductTable({
                       {line.productName || "—"}
                     </p>
                     <p className="so-product-meta mt-0.5 leading-tight">
-                      MFG: {formatMonthYear(line.manufacturingDate)}
+                      MFG Date: {formatMonthYear(line.manufacturingDate)}
                     </p>
                     <p className="so-product-meta leading-tight">
-                      EXP: {formatMonthYear(line.expiryDate)}
+                      EXP Date: {formatMonthYear(line.expiryDate)}
                     </p>
                   </td>
                   <td className="px-2 py-1.5 align-middle so-col-sku">
@@ -471,16 +477,16 @@ function ProductTable({
                   </td>
                   {!hideDiscount ? (
                     <>
-                      <td className="px-2 py-1.5 align-middle">
+                      <td className="px-2 py-1.5 align-middle so-col-scheme">
                         {hasScheme ? (
-                          <div className="min-w-[110px] max-w-[150px]">
-                            <p className="text-[11px] font-medium leading-tight truncate">
+                          <div className="min-w-0 max-w-full overflow-hidden">
+                            <p className="text-[11px] font-medium leading-tight truncate" title={line.schemeName || "Product Discount"}>
                               {line.schemeName || "Product Discount"}
                             </p>
                             <p className="font-mono text-[10px] text-brand-700 leading-tight truncate">
                               {line.schemeCode || "—"}
                             </p>
-                            <p className="text-[10px] text-muted-foreground leading-tight">
+                            <p className="text-[10px] text-muted-foreground leading-tight truncate">
                               {schemeRateLabel(line) || "Product Discount"}
                               {disc.schemeAmt > 0 ? ` · −${formatINR(disc.schemeAmt)}` : ""}
                             </p>

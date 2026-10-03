@@ -206,6 +206,11 @@
   min-height: 1.375rem;
 }
 
+.accounts-ui-dense .accounts-pagination-footer [role="combobox"] {
+  width: 4.25rem;
+  min-width: 4.25rem;
+}
+
 .accounts-ui-dense .accounts-pagination-footer button.h-6 {
   width: 1.375rem;
 }

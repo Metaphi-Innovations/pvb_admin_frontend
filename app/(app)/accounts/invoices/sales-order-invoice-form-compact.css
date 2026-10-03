@@ -368,6 +368,11 @@ div:has(> .accounts-module-shell):has(.invoice-form-shell) {
   min-width: 110px;
   max-width: 120px;
 }
+.sales-order-invoice-form-compact .so-goods-product-table .so-col-scheme {
+  width: 150px;
+  min-width: 140px;
+  max-width: 170px;
+}
 .sales-order-invoice-form-compact .so-goods-product-table .so-col-disc-pct {
   width: 75px;
   min-width: 70px;
