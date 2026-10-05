@@ -39,7 +39,10 @@ export const INVOICE_LISTING_DATE_PRESETS: { id: DateRangePresetId; label: strin
   { id: "custom", label: "Custom Range" },
 ];
 
-import { demoFinancialYearStart } from "@/lib/accounts/demo-date-utils";
+import {
+  demoFinancialYearEnd,
+  demoFinancialYearStart,
+} from "@/lib/accounts/demo-date-utils";
 
 function formatIsoDate(date: Date): string {
   return date.toISOString().slice(0, 10);
@@ -87,7 +90,11 @@ export function resolveDateRangePreset(
       return { from: formatIsoDate(startOfQuarter(refDate)), to };
     case "this_year":
     case "this_financial_year":
-      return { from: demoFinancialYearStart(refDate), to };
+      // Full Indian FY (Apr 1 – Mar 31), not FY-start through today.
+      return {
+        from: demoFinancialYearStart(refDate),
+        to: demoFinancialYearEnd(refDate),
+      };
     case "all_transactions":
       return { from: "", to: "" };
     case "custom":

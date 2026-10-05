@@ -22,14 +22,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { isActiveStatus } from "@/components/listing";
-import {
-  BankAccountToggle,
-  BankAccountToggleRow,
-} from "@/app/(app)/accounts/banking/bank-accounts/components/BankAccountToggle";
+import { isActiveStatus, ListingStatusToggle } from "@/components/listing";
+import { BankAccountToggleRow } from "@/app/(app)/accounts/banking/bank-accounts/components/BankAccountToggle";
 import { AccountsFormLayout } from "@/app/(app)/accounts/expenses/components/AccountsFormLayout";
 import { ReportMultiSelect } from "@/components/accounts/ReportMultiSelect";
-import { CHART_OF_ACCOUNTS_HREF } from "@/lib/accounts/accounts-nav";
+import {
+  BANKING_HOME_HREF,
+  CHART_OF_ACCOUNTS_HREF,
+} from "@/lib/accounts/accounts-nav";
 import { useFY } from "@/lib/fy-store";
 import { usePermissionsOptional } from "@/lib/auth";
 import { showToast } from "@/lib/toast";
@@ -403,12 +403,12 @@ export default function BankAccountFormClient({
               ]
             : [
                 { label: "Accounts", href: CHART_OF_ACCOUNTS_HREF },
-                { label: "Banking", href: bankingListHref },
-                { label: "Bank Accounts", href: bankingListHref },
+                { label: "Banking", href: BANKING_HOME_HREF },
                 {
-                  label: crumbLabel,
-                  href: crumbHref,
+                  label: "Bank Accounts",
+                  href: bankingListHref || BANKING_HOME_HREF,
                 },
+                { label: crumbLabel, href: crumbHref },
               ]
         }
         footer={
@@ -509,10 +509,10 @@ export default function BankAccountFormClient({
                     <div className="space-y-1.5 w-[7.5rem] shrink-0 self-start">
                       <Label className="text-xs font-medium">Status</Label>
                       <div className="h-9 flex items-center">
-                        <BankAccountToggle
-                          checked={isActiveStatus(form.status)}
+                        <ListingStatusToggle
+                          active={isActiveStatus(form.status)}
                           disabled={saving}
-                          onCheckedChange={(active) =>
+                          onChange={(active) =>
                             setField("status", active ? "ACTIVE" : "INACTIVE")
                           }
                         />

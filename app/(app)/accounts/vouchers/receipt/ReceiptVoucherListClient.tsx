@@ -623,7 +623,7 @@ export function ReceiptVoucherListClient() {
           search={{
             value: search,
             onChange: onSearchChange,
-            placeholder: "Search draft no., customer, UTR…",
+            placeholder: "Search draft no., customer, UTR, mode…",
           }}
           filters={
             <>

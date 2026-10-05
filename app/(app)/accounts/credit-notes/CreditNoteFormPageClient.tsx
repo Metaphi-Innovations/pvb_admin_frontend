@@ -1303,7 +1303,7 @@ export default function CreditNoteFormPageClient({
                       <CreditNoteWarehouseInfoButton warehouseId={warehouseId || null} />
                     }
                   >
-                    {pendingEntitlementLocked && isSalesReturnCn ? (
+                    {pendingEntitlementLocked ? (
                       <div className="so-goods-ro w-full">
                         {pending?.warehouse?.warehouse_name || selectedWarehouse?.name || "—"}
                       </div>
@@ -1357,6 +1357,9 @@ export default function CreditNoteFormPageClient({
                           onClick={() => {
                             setDirectMode("on_account");
                             setInvoiceId("");
+                            setInvoices([]);
+                            setInvoicesError(null);
+                            setInvoicesLoading(false);
                           }}
                         >
                           On-account
@@ -1371,6 +1374,12 @@ export default function CreditNoteFormPageClient({
                           Against Sales Invoice
                         </button>
                       </div>
+                      {directMode === "on_account" ? (
+                        <p className="text-[10px] text-muted-foreground mt-0.5 leading-snug">
+                          No invoice outstanding. Use for on-account credit (e.g. cancelled order with
+                          advance). Refund cash via Payment → Customer Refund.
+                        </p>
+                      ) : null}
                     </InvoiceDetailField>
 
                     {directMode === "against_invoice" ? (
@@ -1414,7 +1423,9 @@ export default function CreditNoteFormPageClient({
                         </InvoiceDetailField>
                         <InvoiceDetailField label="Outstanding">
                           <div className="so-goods-ro w-full tabular-nums">
-                            {invoiceOutstanding != null ? formatCnMoney(invoiceOutstanding) : "—"}
+                            {invoiceId && invoiceOutstanding != null
+                              ? formatCnMoney(invoiceOutstanding)
+                              : "—"}
                           </div>
                           {invoiceId && invoiceOutstanding == null && !invoicesLoading ? (
                             <p className="text-[10px] text-muted-foreground mt-0.5 leading-snug">

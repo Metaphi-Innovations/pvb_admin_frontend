@@ -164,7 +164,7 @@ export function CreditNoteParticularsEditor({
     onDirectLinesChange(directLines.filter((l) => l.key !== key));
   };
 
-  const renderDirectCell = (col: ParticularColumnKey, line: DirectLineDraft) => {
+  const renderDirectCell = (col: ParticularColumnKey, line: DirectLineDraft, lineIndex: number) => {
     const preview = computeDirectLinePreview(line, interstate);
     switch (col) {
       case "particular":
@@ -279,15 +279,17 @@ export function CreditNoteParticularsEditor({
       case "actions":
         return (
           <Cell key={col} align="center" className="so-col-actions">
-            <button
-              type="button"
-              className="p-1 rounded hover:bg-red-50 text-muted-foreground hover:text-red-600 disabled:opacity-40"
-              onClick={() => removeLine(line.key)}
-              disabled={!editable || directLines.length <= 1}
-              aria-label="Remove line"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
+            {lineIndex > 0 && directLines.length > 1 ? (
+              <button
+                type="button"
+                className="p-1 rounded hover:bg-red-50 text-muted-foreground hover:text-red-600 disabled:opacity-40"
+                onClick={() => removeLine(line.key)}
+                disabled={!editable}
+                aria-label="Remove line"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            ) : null}
           </Cell>
         );
       default:
@@ -483,9 +485,9 @@ export function CreditNoteParticularsEditor({
           </thead>
           <tbody>
             {isDirect
-              ? directLines.map((line) => (
+              ? directLines.map((line, lineIndex) => (
                   <tr key={line.key} className="border-b border-border/40 last:border-0">
-                    {columns.map((col) => renderDirectCell(col, line))}
+                    {columns.map((col) => renderDirectCell(col, line, lineIndex))}
                   </tr>
                 ))
               : pendingLines.length

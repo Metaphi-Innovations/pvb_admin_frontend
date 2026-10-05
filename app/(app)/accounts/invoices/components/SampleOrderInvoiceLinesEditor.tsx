@@ -10,17 +10,9 @@
 import { memo } from "react";
 import { cn } from "@/lib/utils";
 import type { InvoiceLineItem } from "../invoices-data";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 import { formatINR } from "../invoice-utils";
 import { getCostPriceBySku, isCpMissing, resolveSku } from "@/lib/accounts/inventory-accounting-data";
-
-function formatMonthYear(iso?: string): string {
-  if (!iso?.trim()) return "—";
-  const [y, m] = iso.split("-");
-  if (!y || !m) return iso;
-  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  const mi = parseInt(m, 10) - 1;
-  return months[mi] ? `${months[mi]}-${y}` : iso;
-}
 
 const SampleOrderInvoiceLineRow = memo(function SampleOrderInvoiceLineRow({
   line,
@@ -45,8 +37,8 @@ const SampleOrderInvoiceLineRow = memo(function SampleOrderInvoiceLineRow({
       </td>
       <td className="px-2 py-1.5 align-middle so-col-batch">
         <p className="so-batch-value leading-tight truncate">{line.batchNo?.trim() || "—"}</p>
-        <p className="so-product-meta mt-0.5 leading-tight">MFG: {formatMonthYear(line.manufacturingDate)}</p>
-        <p className="so-product-meta leading-tight">EXP: {formatMonthYear(line.expiryDate)}</p>
+        <p className="so-product-meta mt-0.5 leading-tight">MFG Date: {formatDisplayDate(line.manufacturingDate)}</p>
+        <p className="so-product-meta leading-tight">EXP Date: {formatDisplayDate(line.expiryDate)}</p>
         {line.batchAvailableQty != null ? (
           <p className="so-product-meta leading-tight text-muted-foreground">
             Avail: {line.batchAvailableQty}

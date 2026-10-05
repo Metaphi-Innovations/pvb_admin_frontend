@@ -47,7 +47,10 @@ import { formatDisplayDate } from "@/lib/accounts/date-display";
 import { cn } from "@/lib/utils";
 import { SkeletonRow } from "@/components/ui/Loaders";
 import { useFY } from "@/lib/fy-store";
-import { RECONCILIATION_LIST_PATH } from "./reconciliation-utils";
+import {
+  RECONCILIATION_BREADCRUMB,
+  RECONCILIATION_LIST_PATH,
+} from "./reconciliation-utils";
 import { BankReconTallyStatusBadge } from "./components/BankReconTallyStatusBadge";
 import { BankReconTallyUndoDialog } from "./components/BankReconTallyUndoDialog";
 import {
@@ -395,9 +398,7 @@ export default function BankReconciliationWorkspacePageClient({
     return (
       <AccountsPageShell
         breadcrumbs={[
-          { label: "Accounts", href: "/accounts/masters/chart-of-accounts" },
-          { label: "Banking" },
-          { label: "Bank Reconciliation", href: RECONCILIATION_LIST_PATH },
+          ...RECONCILIATION_BREADCRUMB,
           { label: "Loading…" },
         ]}
         title="Bank Reconciliation"
@@ -413,9 +414,7 @@ export default function BankReconciliationWorkspacePageClient({
     return (
       <AccountsPageShell
         breadcrumbs={[
-          { label: "Accounts", href: "/accounts/masters/chart-of-accounts" },
-          { label: "Banking" },
-          { label: "Bank Reconciliation", href: RECONCILIATION_LIST_PATH },
+          ...RECONCILIATION_BREADCRUMB,
           { label: "Not Available" },
         ]}
         title="Bank Account Not Available"

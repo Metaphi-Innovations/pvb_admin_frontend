@@ -53,7 +53,8 @@ export type EligibleDispatchesQuery = {
 export type AdditionalChargeInput = {
   charge_name: string;
   ledger_id: string;
-  hsn_id: string;
+  /** Required when gst_applicable is true. */
+  hsn_id?: string | null;
   amount: number | string;
   gst_applicable?: boolean;
   gst_rate?: number | string;
@@ -455,6 +456,7 @@ export type PrepareDispatchInvoiceDto = {
   sales_order: {
     sales_order_id: string;
     so_number: string | null;
+    order_date?: string | null;
     salesperson_name?: string | null;
   } | null;
   customer: Record<string, unknown>;

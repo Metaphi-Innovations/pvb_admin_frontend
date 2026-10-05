@@ -46,6 +46,8 @@ import {
   AccountsColumnFilterProvider,
   AccountsColumnHeader,
   SortTh,
+  useAccountsColumnFilterContext,
+  useAccountsFilteredRows,
 } from "../../components/AccountsUI";
 import {
   NotesListingFilterBar,
@@ -82,6 +84,27 @@ import { canCreate, canEdit } from "@/lib/auth/permissions";
 import { useDebouncedValue } from "@/app/(app)/accounts/reports/pl/pl-hooks";
 
 const LIST_PATH = DEBIT_NOTES_LIST_PATH;
+
+function mapNotesStatusFilterToApi(status: string): string | undefined {
+  switch (status) {
+    case "draft":
+      return "DRAFT";
+    case "pending_approval":
+      return "PENDING_APPROVAL";
+    case "approved":
+      return "APPROVED";
+    case "posted":
+      return "POSTED";
+    case "cancelled":
+      return "CANCELLED";
+    case "reversed":
+      return "REVERSED";
+    case "rejected":
+      return "REJECTED";
+    default:
+      return undefined;
+  }
+}
 
 function getRowActions(status: string, approvalRequired: boolean): string[] {
   const s = status.toUpperCase();
@@ -142,8 +165,14 @@ function DebitNotesRecordsTable({
   hasCreatePermission: boolean;
   hasUpdatePermission: boolean;
 }) {
-  const visible = toolbarFiltered;
-  const pagedRows = toolbarFiltered;
+  const visible = useAccountsFilteredRows(toolbarFiltered);
+  const ctx = useAccountsColumnFilterContext();
+  // Server already paginates the All tab; column sort/filter apply within the loaded page.
+  const pagedRows = visible;
+
+  useEffect(() => {
+    onPageChange(1);
+  }, [ctx?.columnFilters, ctx?.sortKey, ctx?.sortDir, onPageChange]);
 
   return (
     <>
@@ -163,7 +192,12 @@ function DebitNotesRecordsTable({
             <SortTh label="SGST" colKey="sgstAmount" filterType="amount" align="right" />
             <SortTh label="IGST" colKey="igstAmount" filterType="amount" align="right" />
             <SortTh label="Total" colKey="currentDebitAmount" filterType="amount" align="right" className="min-w-[6.5rem]" />
-            <SortTh label="Status" colKey="status" />
+            <SortTh
+              label="Status"
+              colKey="status"
+              filterType="status"
+              statusOptions={["Draft", "Pending Approval", "Approved", "Posted", "Rejected", "Cancelled", "Reversed"]}
+            />
             <AccountsColumnHeader
               label="Actions"
               colKey="_actions"
@@ -181,6 +215,8 @@ function DebitNotesRecordsTable({
             <AccountsTableLoading colSpan={12} message="Loading debit notes…" />
           ) : toolbarFiltered.length === 0 ? (
             <AccountsTableEmpty colSpan={12} message="No debit notes found." />
+          ) : visible.length === 0 ? (
+            <AccountsTableEmpty colSpan={12} message="No records match the column filters." />
           ) : (
             pagedRows.map((r) => {
               const badge = noteWorkflowStatusToBadge(r.status);
@@ -440,10 +476,11 @@ export default function DebitNotesListClient() {
           .filter((v): v is "DIRECT" | "PURCHASE_RETURN" => v != null);
 
         let statusParam: string | undefined;
-        if (statusTab !== "all") {
+        const moreFilterStatus = mapNotesStatusFilterToApi(filters.status);
+        if (moreFilterStatus) {
+          statusParam = moreFilterStatus;
+        } else if (statusTab !== "all") {
           statusParam = statusTab.toUpperCase();
-        } else if (filters.status !== "all") {
-          statusParam = filters.status.toUpperCase();
         }
 
         const res = await DebitNoteService.list({
@@ -575,7 +612,6 @@ export default function DebitNotesListClient() {
         });
 
         setStatusCounts(nextCounts);
-        setTotalRecords(nextCounts.all);
       } catch {}
     })();
     return () => {
@@ -675,9 +711,21 @@ export default function DebitNotesListClient() {
     { value: "Purchase Return", label: "Purchase Return" },
   ];
 
+  const toolbarFiltered = useMemo(() => {
+    const apiStatus = mapNotesStatusFilterToApi(filters.status);
+    if (!apiStatus) return records;
+    return records.filter(
+      (r) => String(r.status || "").toUpperCase() === apiStatus,
+    );
+  }, [records, filters.status]);
+
   const getCellValue = useCallback((row: DebitNoteRecord, key: string) => {
     if (key === "source") return DEBIT_NOTE_SOURCE_LABELS[row.source] ?? "—";
     if (key === "branch") return row.branch;
+    if (key === "status") {
+      const badge = noteWorkflowStatusToBadge(row.status);
+      return badge.label;
+    }
     return (row as unknown as Record<string, unknown>)[key];
   }, []);
 
@@ -700,11 +748,11 @@ export default function DebitNotesListClient() {
   );
 
   const handleExport = async () => {
-    if (!records.length) return;
+    if (!toolbarFiltered.length) return;
     setExporting(true);
     try {
       const { exportDebitNotesToExcel } = await import("@/app/(app)/accounts/debit-notes/debit-notes-export");
-      await exportDebitNotesToExcel(records);
+      await exportDebitNotesToExcel(toolbarFiltered);
     } finally {
       setExporting(false);
     }
@@ -735,7 +783,7 @@ export default function DebitNotesListClient() {
           <NotesListHeaderActions
             onRefresh={handleHeaderRefresh}
             onExportExcel={moduleTab === "records" ? handleExport : undefined}
-            exportDisabled={exporting || records.length === 0}
+            exportDisabled={exporting || toolbarFiltered.length === 0}
             createLabel="Create Debit Note"
             onCreate={() =>
               router.push(
@@ -763,7 +811,7 @@ export default function DebitNotesListClient() {
             />
           ) : (
             <AccountsColumnFilterProvider
-              rows={records}
+              rows={toolbarFiltered}
               getCellValue={getCellValue}
               columnConfig={columnConfig}
               defaultSortKey="debitNoteDate"
@@ -789,6 +837,7 @@ export default function DebitNotesListClient() {
                       sourceOptions={sourceOptions}
                       statusOptions={NOTES_STATUS_FILTER_OPTIONS}
                       searchPlaceholder="Search DN no., supplier, invoice, return…"
+                      showInvoiceNoFilter={false}
                       onChange={(patch) => {
                         setPage(1);
                         setFilters((prev) => ({ ...prev, ...patch }));
@@ -801,7 +850,7 @@ export default function DebitNotesListClient() {
                 <DebitNotesRecordsTable
                   loading={loading}
                   error={error}
-                  toolbarFiltered={records}
+                  toolbarFiltered={toolbarFiltered}
                   listReturnHref={listReturnHref}
                   page={page}
                   pageSize={pageSize}

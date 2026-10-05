@@ -5,7 +5,9 @@ import { createFlatDateAuditFieldMapper } from "@/lib/masters/list-api-filters";
 
 export interface CustomerBranchDocumentPayload {
     document_type_id: string;
-    file_key: string;
+    file_key?: string;
+    /** Existing uploaded path; sent on edit so unchanged files are kept. */
+    file_url?: string | null;
 }
 
 export interface CustomerBranchDocument {
@@ -674,7 +676,7 @@ export const CustomerListService = {
         const response = await axiosInstance.post(
             API_ENDPOINTS.MASTER.CUSTOMER.CREATE,
             formData,
-            { headers: { "Content-Type": "multipart/form-data" } },
+            { headers: { "Content-Type": "multipart/form-data" }, timeout: 60_000 },
         );
 
         const body = response.data as Record<string, unknown>;
@@ -720,7 +722,7 @@ export const CustomerListService = {
         const response = await axiosInstance.put(
             API_ENDPOINTS.MASTER.CUSTOMER.UPDATE(id),
             formData,
-            { headers: { "Content-Type": "multipart/form-data" } },
+            { headers: { "Content-Type": "multipart/form-data" }, timeout: 60_000 },
         );
 
         const body = response.data as Record<string, unknown>;

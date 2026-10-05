@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo } from "react";
-import { RefreshCw, Search } from "lucide-react";
+import { RefreshCw, Search, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { CoaExplorerTree } from "@/app/(app)/accounts/masters/chart-of-accounts/components/CoaExplorerTree";
 import { requestCoaAddLedger } from "@/app/(app)/accounts/masters/chart-of-accounts/coa-add-ledger-bridge";
@@ -155,17 +155,38 @@ export function CoaSidebarNavTree({
             onToggleCollapse={toggleCollapsed}
           />
         ) : null}
-        <div className="relative px-3 pb-2">
-          <Search className="w-3.5 h-3.5 absolute left-[1.35rem] top-1/2 -translate-y-1/2 text-muted-foreground/70 pointer-events-none" />
-          <Input
-            className="h-8 pl-8 text-xs bg-muted/20 border-border/70 rounded-md placeholder:text-muted-foreground/70"
-            placeholder="Search accounts..."
-            value={treeSearchTerm}
-            onChange={(e) => setTreeSearchTerm(e.target.value)}
-          />
-          {isTreeSearching ? (
-            <RefreshCw className="w-3.5 h-3.5 absolute right-[1.35rem] top-1/2 -translate-y-1/2 text-muted-foreground/70 animate-spin pointer-events-none" />
-          ) : null}
+        <div className="px-3 pb-2">
+          <div className="relative">
+            <Search
+              className="pointer-events-none absolute left-2.5 top-1/2 z-[1] h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/70"
+              aria-hidden
+            />
+            <Input
+              className={cn(
+                "h-8 pl-8 text-xs bg-muted/20 border-border/70 rounded-md placeholder:text-muted-foreground/70",
+                (treeSearchTerm || isTreeSearching) && "pr-8",
+              )}
+              placeholder="Search accounts..."
+              value={treeSearchTerm}
+              onChange={(e) => setTreeSearchTerm(e.target.value)}
+              aria-label="Search accounts"
+            />
+            {isTreeSearching ? (
+              <RefreshCw
+                className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 animate-spin text-muted-foreground/70"
+                aria-hidden
+              />
+            ) : treeSearchTerm ? (
+              <button
+                type="button"
+                onClick={() => setTreeSearchTerm("")}
+                aria-label="Clear search"
+                className="absolute right-2 top-1/2 inline-flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            ) : null}
+          </div>
         </div>
         <div className="flex items-center gap-2 px-3 pb-2">
           <button

@@ -498,6 +498,25 @@ export function accountsBreadcrumb(
 
 }
 
+/** Landing route for the Banking sidebar section. */
+export const BANKING_HOME_HREF = ACCOUNTS_SECTION_LANDING_HREF.banking;
+
+/**
+ * Breadcrumbs for Banking and its submodules:
+ * Accounts → Banking → …trail
+ */
+export function bankingBreadcrumb(
+  ...trail: Array<string | BreadcrumbItem>
+): BreadcrumbItem[] {
+  return [
+    { label: "Accounts", href: ACCOUNTS_HOME_HREF },
+    { label: "Banking", href: BANKING_HOME_HREF },
+    ...trail.map((item) =>
+      typeof item === "string" ? { label: item } : item,
+    ),
+  ];
+}
+
 
 
 /** Tab slug from `/accounts/vouchers?tab=…` nav links (receipt, payment, contra). */

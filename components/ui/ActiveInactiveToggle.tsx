@@ -32,9 +32,9 @@ export function CompactToggle({
         if (!disabled) onCheckedChange(!checked);
       }}
       className={cn(
-        "relative inline-flex shrink-0 items-center rounded-full transition-colors duration-200",
+        "relative box-border inline-flex shrink-0 items-center rounded-full transition-colors duration-200",
         // Hide text caret inside the control; keep keyboard focus-visible ring.
-        "select-none caret-transparent",
+        "select-none caret-transparent overflow-hidden",
         showLabel ? "h-6 w-[52px]" : "h-5 w-9",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/50",
         checked ? "bg-brand-600" : "bg-slate-300",
@@ -56,10 +56,10 @@ export function CompactToggle({
       <span
         aria-hidden="true"
         className={cn(
-          "pointer-events-none absolute rounded-full bg-white shadow-sm transition-transform duration-200",
+          "pointer-events-none absolute top-0.5 rounded-full bg-white shadow-sm transition-[left] duration-200",
           showLabel
-            ? cn("top-0.5 h-5 w-5", checked ? "translate-x-[30px]" : "translate-x-0.5")
-            : cn("top-0.5 h-4 w-4", checked ? "translate-x-[18px]" : "translate-x-0.5"),
+            ? cn("h-5 w-5", checked ? "left-[30px]" : "left-0.5")
+            : cn("h-4 w-4", checked ? "left-[18px]" : "left-0.5"),
         )}
       />
     </button>

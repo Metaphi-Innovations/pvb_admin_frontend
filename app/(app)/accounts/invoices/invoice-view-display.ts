@@ -4,19 +4,16 @@
  * Does not mutate invoice totals or posting data.
  */
 
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 import {
   calcLineAmounts,
   type InvoiceLineItem,
   type InvoiceRecord,
 } from "./invoices-data";
 
+/** Full calendar date for MFG / EXP on invoice product lines (DD/MM/YYYY). */
 export function formatMonthYear(iso?: string): string {
-  if (!iso?.trim()) return "—";
-  const [y, m] = iso.split("-");
-  if (!y || !m) return iso;
-  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  const mi = parseInt(m, 10) - 1;
-  return months[mi] ? `${months[mi]}-${y}` : iso;
+  return formatDisplayDate(iso);
 }
 
 /** Effective discount % for display (line or scheme). */

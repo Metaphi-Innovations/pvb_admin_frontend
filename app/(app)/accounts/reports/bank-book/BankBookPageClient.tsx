@@ -19,7 +19,7 @@ import {
   buildEntityFilterSummary,
   type ReportFilterSummaryItem,
 } from "@/lib/accounts/report-multi-filter-utils";
-import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
+import { bankingBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { formatBalanceAmount, formatMoney } from "@/lib/accounts/money-format";
 import { useClientMounted } from "@/lib/use-client-mounted";
 import { useDebouncedValue } from "@/app/(app)/accounts/reports/pl/pl-hooks";
@@ -470,7 +470,7 @@ function BankBookPageContent() {
 
   return (
     <AccountsPageShell
-      breadcrumbs={accountsBreadcrumb("Banking", "Bank Book")}
+      breadcrumbs={bankingBreadcrumb("Bank Book")}
       title="Bank Book"
       description="Read-only bank ledger report from posted accounting vouchers."
       filters={

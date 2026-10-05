@@ -69,6 +69,7 @@ export const BANK_ACCOUNT_ORDERING_BY_COLUMN: Record<string, string> = {
   accountType: "bank_account__account_type",
   status: "status",
   openingBalance: "opening_balances__opening_amount",
+  currentBalance: "current_balance",
   createdAt: "created_at",
   updatedAt: "updated_at",
 };
