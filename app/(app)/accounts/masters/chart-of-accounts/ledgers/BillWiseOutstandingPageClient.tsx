@@ -863,7 +863,11 @@ function BillWiseOutstandingBody({
                   align="right"
                 />
                 <SortTh label="Status" colKey="status" filterType="status" />
-                <AccountsTableHeadCell sticky={false} align="right">
+                <AccountsTableHeadCell
+                  sticky={false}
+                  align="right"
+                  className={accountsActionColClass("single")}
+                >
                   View
                 </AccountsTableHeadCell>
               </AccountsTableHeadRow>
@@ -890,23 +894,21 @@ function BillWiseOutstandingBody({
                 paginated.map((row) => {
                   return (
                     <AccountsTableRow key={row.documentId} className="group">
-                      <AccountsTableCell>
-                        <span className="font-mono text-xs font-semibold text-brand-700">
+                      <AccountsTableCell mono>
+                        <span className="text-xs font-semibold text-brand-700">
                           {row.documentNo}
                         </span>
                       </AccountsTableCell>
                       <AccountsTableCell>{formatDisplayDate(row.documentDate)}</AccountsTableCell>
                       <AccountsTableCell>{formatDisplayDate(row.dueDate)}</AccountsTableCell>
-                      <AccountsTableCell align="right">
-                        <span className="tabular-nums">{formatMoney(row.documentAmount)}</span>
+                      <AccountsTableCell align="right" money>
+                        {formatMoney(row.documentAmount)}
                       </AccountsTableCell>
-                      <AccountsTableCell align="right">
-                        <span className="tabular-nums">{formatMoney(row.adjustedAmount)}</span>
+                      <AccountsTableCell align="right" money>
+                        {formatMoney(row.adjustedAmount)}
                       </AccountsTableCell>
-                      <AccountsTableCell align="right">
-                        <span className="tabular-nums font-semibold">
-                          {formatMoney(row.outstandingAmount)}
-                        </span>
+                      <AccountsTableCell align="right" money>
+                        <span className="font-semibold">{formatMoney(row.outstandingAmount)}</span>
                       </AccountsTableCell>
                       <AccountsTableCell align="right">
                         <span className="tabular-nums text-xs">{row.daysOverdue}</span>
@@ -921,10 +923,7 @@ function BillWiseOutstandingBody({
                           {row.status}
                         </span>
                       </AccountsTableCell>
-                      <AccountsTableCell
-                        align="right"
-                        className={accountsActionColClass("single")}
-                      >
+                      <AccountsTableCell align="right" actions="single">
                         <AccountsTableActionCell variant="single">
                           <AccountsViewAction
                             title={`View ${docLabel.toLowerCase()}`}
