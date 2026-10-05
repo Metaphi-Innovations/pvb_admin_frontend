@@ -62,10 +62,26 @@ export function debitNoteReturnPath(
   fallbackTab?: string | null,
   fallbackStatus?: string | null,
 ): string {
-  return safeInternalReturnPath(
-    returnTo,
-    debitNotesListHref(fallbackTab, fallbackStatus),
-  );
+  const fallback = debitNotesListHref(fallbackTab, fallbackStatus);
+  const safe = safeInternalReturnPath(returnTo, "");
+  if (!safe) return fallback;
+
+  try {
+    const url = new URL(safe, "http://local.invalid");
+    const listPath = DEBIT_NOTES_LIST_PATH.replace(/\/$/, "");
+    const pathname = url.pathname.replace(/\/$/, "");
+    if (pathname === listPath) {
+      // Prefer tab/status on returnTo; if `?` was stripped from returnTo
+      // (All tab = `?tab=records`), recover from leftover document query params.
+      const tab = url.searchParams.get("tab") || fallbackTab;
+      const status = url.searchParams.get("status") || fallbackStatus;
+      return debitNotesListHref(tab, status);
+    }
+  } catch {
+    return fallback;
+  }
+
+  return safe;
 }
 
 export { withReturnTo, safeInternalReturnPath };

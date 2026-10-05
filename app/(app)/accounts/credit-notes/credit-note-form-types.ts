@@ -191,6 +191,17 @@ export interface PendingCreditNoteDetail {
     gst_rate?: string | number | null;
     gst_applicable?: boolean;
   }>;
+  /**
+   * Sales Return only — mirrors post-time allocation:
+   * settle min(CN, SI outstanding); residual on-account.
+   */
+  sales_return_settlement_preview?: {
+    eligible_cn_amount?: string | number | null;
+    invoice_outstanding_amount?: string | number | null;
+    suggested_settlement_amount?: string | number | null;
+    suggested_on_account_amount?: string | number | null;
+    invoice_open_item_status?: string | null;
+  } | null;
   credit_note?: {
     credit_note_id: string;
     cn_number?: string | null;

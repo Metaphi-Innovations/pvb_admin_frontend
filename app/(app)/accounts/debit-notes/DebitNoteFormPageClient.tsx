@@ -148,7 +148,12 @@ export default function DebitNoteFormPageClient({
   const router = useRouter();
   const searchParams = useSearchParams();
   const listHref = useMemo(
-    () => debitNoteReturnPath(searchParams.get("returnTo")),
+    () =>
+      debitNoteReturnPath(
+        searchParams.get("returnTo"),
+        searchParams.get("tab"),
+        searchParams.get("status"),
+      ),
     [searchParams],
   );
   const { toast, showToast, dismissToast } = useAccountsToast();
