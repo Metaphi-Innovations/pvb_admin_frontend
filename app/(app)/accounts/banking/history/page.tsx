@@ -1,6 +1,6 @@
 import { lazyAccountsPage } from "@/lib/accounts/lazy-accounts-page";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
-import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
+import { bankingBreadcrumb } from "@/lib/accounts/accounts-nav";
 
 const ReconciliationHistoryClient = lazyAccountsPage(() =>
   import("@/components/accounts/ReconciliationHistoryClient").then((m) => ({
@@ -11,7 +11,7 @@ const ReconciliationHistoryClient = lazyAccountsPage(() =>
 export default function ReconciliationHistoryPage() {
   return (
     <AccountsPageShell
-      breadcrumbs={accountsBreadcrumb("Banking", "Reconciliation History")}
+      breadcrumbs={bankingBreadcrumb("Reconciliation History")}
       title="Reconciliation History"
       description="Audit trail of categorized and reconciled bank transactions"
       hideDescription

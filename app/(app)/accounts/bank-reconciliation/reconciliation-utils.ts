@@ -49,7 +49,7 @@ export const BANK_RECON_IMPORT_HISTORY_PATH = `${RECONCILIATION_LIST_PATH}/impor
 
 export const RECONCILIATION_BREADCRUMB = [
   { label: "Accounts", href: "/accounts/masters/chart-of-accounts" },
-  { label: "Banking" },
+  { label: "Banking", href: "/accounts/banking/bank-accounts" },
   { label: "Bank Reconciliation", href: RECONCILIATION_LIST_PATH },
 ];
 

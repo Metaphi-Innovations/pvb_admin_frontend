@@ -43,6 +43,11 @@ import {
 import { Pagination } from "@/components/listing/Pagination";
 import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
 import {
+  escapeHtml,
+  exportTabularReportToPdf,
+  todayExportDateSuffix,
+} from "@/lib/accounts/report-export-presentation";
+import {
   ReportSearchFilter,
   ReportDateRangeFilter,
   ReportFilterRow,
@@ -159,6 +164,35 @@ const LISTING_SELECT_TRIGGER_CLASS = cn(
 function formatDateOnly(value: string | null | undefined): string {
   return formatDisplayDate(value, "—");
 }
+
+function approvalStatusLabel(status: PurchaseInvoiceApprovalStatus): string {
+  if (status === "pending_approval") return "Pending Approval";
+  if (status === "draft") return "Draft";
+  return "Approved";
+}
+
+function paymentStatusLabel(status: PurchaseInvoicePaymentStatus): string {
+  if (status === "paid") return "Paid";
+  if (status === "partial") return "Partial";
+  return "Unpaid";
+}
+
+const PURCHASE_INVOICE_PDF_COLUMNS = [
+  { label: "Invoice No" },
+  { label: "Source Type" },
+  { label: "Supplier" },
+  { label: "Supplier Inv. No" },
+  { label: "Invoice Date" },
+  { label: "Purchase Nature" },
+  { label: "Taxable Amount", align: "right" as const, className: "num" },
+  { label: "GST Amount", align: "right" as const, className: "num" },
+  { label: "Net Payable", align: "right" as const, className: "num" },
+  { label: "Due Date" },
+  { label: "Approval" },
+  { label: "Posting" },
+  { label: "Payment" },
+  { label: "Attachment" },
+];
 
 function isQcCompletedStatus(status: string | null | undefined): boolean {
   return String(status ?? "").trim().toUpperCase() === "QC_COMPLETED";
@@ -638,7 +672,7 @@ function PurchaseInvoicesTabBody({
   onDownload,
   exporting,
   onExportExcel,
-  onExportCsv,
+  onExportPdf,
   actionBusy,
   postingDraftId,
   onCancel,
@@ -672,7 +706,7 @@ function PurchaseInvoicesTabBody({
   onDownload: (row: PurchaseInvoiceListRow) => void;
   exporting: boolean;
   onExportExcel: () => void;
-  onExportCsv: () => void;
+  onExportPdf: () => void;
   actionBusy?: boolean;
   postingDraftId?: string | null;
   onCancel?: (row: PurchaseInvoiceListRow) => void;
@@ -687,8 +721,7 @@ function PurchaseInvoicesTabBody({
             end={
               <AccountsExportMenu
                 onExcel={onExportExcel}
-                onCsv={onExportCsv}
-                // onPdf={onExportCsv}
+                onPdf={onExportPdf}
                 disabled={exporting}
               />
             }
@@ -1135,23 +1168,94 @@ export default function PurchaseInvoiceListClient() {
     invoiceFiltersKey,
   ]);
 
-  const handleExportInvoices = useCallback(
-    async (format: "csv" | "xlsx") => {
-      setExporting(true);
-      setError(null);
-      try {
-        await PurchaseInvoiceService.export({
-          ...buildExportQuery(),
-          format,
+  const handleExportExcel = useCallback(async () => {
+    setExporting(true);
+    setError(null);
+    try {
+      await PurchaseInvoiceService.export({
+        ...buildExportQuery(),
+        format: "xlsx",
+      });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to export purchase invoices.");
+    } finally {
+      setExporting(false);
+    }
+  }, [buildExportQuery]);
+
+  const handleExportPdf = useCallback(async () => {
+    setExporting(true);
+    setError(null);
+    try {
+      const query = buildExportQuery();
+      const pageLimit = 100;
+      const allRows: PurchaseInvoiceListRow[] = [];
+      let pageNum = 1;
+      let total = Number.POSITIVE_INFINITY;
+
+      while (allRows.length < total) {
+        const listRes = await PurchaseInvoiceService.list({
+          ...query,
+          page: pageNum,
+          page_size: pageLimit,
         });
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Failed to export purchase invoices.");
-      } finally {
-        setExporting(false);
+        const batch = (listRes.results || []).map(mapPurchaseInvoiceListDto);
+        total = listRes.total ?? batch.length;
+        allRows.push(...batch);
+        if (batch.length === 0) break;
+        pageNum += 1;
       }
-    },
-    [buildExportQuery],
-  );
+
+      if (allRows.length === 0) {
+        throw new Error("No purchase invoices found to export.");
+      }
+
+      const bodyHtml = allRows
+        .map((row) => {
+          const sourceLabel =
+            PURCHASE_SOURCE_TYPE_LABELS[row.sourceType] ?? row.sourceType;
+          const natureLabel =
+            row.purchaseNatureLabel ||
+            (row.purchaseNature
+              ? PURCHASE_NATURE_OPTION_LABELS[row.purchaseNature] ?? row.purchaseNature
+              : "—");
+          return `<tr>
+            <td>${escapeHtml(row.invoiceNo || "—")}</td>
+            <td>${escapeHtml(sourceLabel)}</td>
+            <td>${escapeHtml(row.vendorName || "—")}</td>
+            <td>${escapeHtml(row.vendorInvoiceNo || "—")}</td>
+            <td>${escapeHtml(formatDateOnly(row.invoiceDate))}</td>
+            <td>${escapeHtml(natureLabel)}</td>
+            <td class="num">${formatMoney(row.taxableAmount)}</td>
+            <td class="num">${formatMoney(row.gstAmount)}</td>
+            <td class="num">${formatMoney(row.netPayable)}</td>
+            <td>${escapeHtml(formatDateOnly(row.dueDate))}</td>
+            <td>${escapeHtml(approvalStatusLabel(row.approvalStatus))}</td>
+            <td>${escapeHtml(row.postingStatusLabel || "—")}</td>
+            <td>${escapeHtml(paymentStatusLabel(row.paymentStatus))}</td>
+            <td>${row.hasAttachment ? "Yes" : "No"}</td>
+          </tr>`;
+        })
+        .join("");
+
+      exportTabularReportToPdf({
+        title: "Purchase Invoices",
+        header: {
+          reportTitle: "Purchase Invoices",
+          dateFrom: dateFrom || undefined,
+          dateTo: dateTo || undefined,
+        },
+        columns: PURCHASE_INVOICE_PDF_COLUMNS,
+        bodyHtml,
+        landscape: true,
+        footerNote: `Exported ${todayExportDateSuffix()} · ${allRows.length} record(s)`,
+      });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to export purchase invoices PDF.");
+    } finally {
+      setExporting(false);
+    }
+  }, [buildExportQuery, dateFrom, dateTo]);
 
   const handleCreateInvoiceFromGrn = useCallback(
     async (grn: EligibleGrnDto) => {
@@ -1401,8 +1505,8 @@ export default function PurchaseInvoiceListClient() {
                   downloadingId={downloadingId}
                   onDownload={handleDownloadInvoice}
                   exporting={exporting}
-                  onExportExcel={() => handleExportInvoices("xlsx")}
-                  onExportCsv={() => handleExportInvoices("csv")}
+                  onExportExcel={() => void handleExportExcel()}
+                  onExportPdf={() => void handleExportPdf()}
                   actionBusy={cancelBusy || Boolean(postingDraftId)}
                   postingDraftId={postingDraftId}
                   onCancel={setCancelTarget}

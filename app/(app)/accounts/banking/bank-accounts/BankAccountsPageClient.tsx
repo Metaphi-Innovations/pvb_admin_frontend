@@ -31,7 +31,7 @@ import {
 } from "@/components/accounts/AccountsTableListing";
 import { AccountsListingTableSkeleton } from "@/components/accounts/AccountsListingStates";
 import { AccountsToast, useAccountsToast } from "@/components/accounts/AccountsToast";
-import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
+import { bankingBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { MoneyAmount } from "@/components/accounts/MoneyAmount";
 import {
   AccountsColumnFilterProvider,
@@ -76,12 +76,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { isActiveStatus } from "@/components/listing";
-import { BankAccountToggle } from "@/app/(app)/accounts/banking/bank-accounts/components/BankAccountToggle";
+import { isActiveStatus, ListingStatusToggle } from "@/components/listing";
 import { cn } from "@/lib/utils";
 
 const COL_SPAN = 11;
-const DEFAULT_ORDERING = "ledger_name";
+const DEFAULT_ORDERING = "-created_at";
 
 const ACCOUNT_TYPE_OPTION_LABELS: Record<string, string> = Object.fromEntries(
   ACCOUNT_TYPE_OPTIONS.map((o) => [o.value, o.label]),
@@ -326,12 +325,11 @@ function BankAccountsTable({
             optionsLoading={loadingOpts("openingBalance")}
             optionsReady={readyOpts("openingBalance")}
           />
-          <AccountsColumnHeader
+          <SortTh
             label="Current Balance"
             colKey="currentBalance"
             filterType="amount"
             align="right"
-            sortable={false}
             filterable={false}
           />
           <SortTh
@@ -459,22 +457,15 @@ function BankAccountsTable({
                   <MappedWarehousesCell names={account.mappedWarehouseNames} />
                 </AccountsTableCell>
                 <AccountsTableCell className={cn(rowBgClass, "bank-accounts-status-cell", "whitespace-nowrap")}>
-                  <div
-                    className="inline-flex items-center"
-                    onClick={(e) => e.stopPropagation()}
-                    onKeyDown={(e) => e.stopPropagation()}
-                  >
-                    <BankAccountToggle
-                      checked={isActiveStatus(account.status)}
-                      disabled={
-                        !canUpdate ||
-                        !account.bankAccountId ||
-                        statusPendingBankAccountId === account.bankAccountId
-                      }
-                      onCheckedChange={() => onRequestStatusChange(account)}
-                      showLabel={false}
-                    />
-                  </div>
+                  <ListingStatusToggle
+                    active={isActiveStatus(account.status)}
+                    disabled={
+                      !canUpdate ||
+                      !account.bankAccountId ||
+                      statusPendingBankAccountId === account.bankAccountId
+                    }
+                    onChange={() => onRequestStatusChange(account)}
+                  />
                 </AccountsTableCell>
                 <AccountsTableCell
                   align="right"
@@ -536,8 +527,8 @@ export default function BankAccountsPageClient() {
   const debouncedSearch = useDebouncedValue(search, 300);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  const [uiSortKey, setUiSortKey] = useState("ledgerName");
-  const [uiSortDir, setUiSortDir] = useState<"asc" | "desc">("asc");
+  const [uiSortKey, setUiSortKey] = useState("createdAt");
+  const [uiSortDir, setUiSortDir] = useState<"asc" | "desc">("desc");
   const [columnFilters, setColumnFilters] = useState<AccountsColumnFilters>({});
   const [statusTarget, setStatusTarget] = useState<BankAccountListRow | null>(null);
   const { toast, showToast, dismissToast } = useAccountsToast();
@@ -709,8 +700,8 @@ export default function BankAccountsPageClient() {
     : null;
 
   const handleSortChange = useCallback((sortKey: string, sortDir: "asc" | "desc") => {
-    setUiSortKey(sortKey || "ledgerName");
-    setUiSortDir(sortDir);
+    setUiSortKey(sortKey || "createdAt");
+    setUiSortDir(sortKey ? sortDir : "desc");
   }, []);
 
   const handleFiltersChange = useCallback((filters: AccountsColumnFilters) => {
@@ -806,14 +797,14 @@ export default function BankAccountsPageClient() {
             optionLabels: STATUS_OPTION_LABELS,
           },
         }}
-        defaultSortKey="ledgerName"
-        defaultSortDir="asc"
+        defaultSortKey="createdAt"
+        defaultSortDir="desc"
       >
         <SortSync onSortChange={handleSortChange} />
         <FilterSync onFiltersChange={handleFiltersChange} />
         <div className="bank-accounts-dense h-full min-h-0 flex flex-col">
           <AccountsPageShell
-            breadcrumbs={accountsBreadcrumb("Banking", "Bank Accounts")}
+            breadcrumbs={bankingBreadcrumb("Bank Accounts")}
             title="Bank Accounts"
             description="Company bank ledgers used in Bank Book, vouchers and reconciliation."
             hideDescription

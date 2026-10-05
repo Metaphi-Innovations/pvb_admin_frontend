@@ -637,10 +637,11 @@ export default function DebitNoteViewPageClient({ debitNoteId }: { debitNoteId: 
                   </>
                 )}
                 <VoucherNoteField label="Supplier Reference No.">
-                  <VoucherNoteReadOnly>{rawRecord.remarks || "—"}</VoucherNoteReadOnly>
-                </VoucherNoteField>
-                <VoucherNoteField label="Reason">
-                  <VoucherNoteReadOnly>{record.reason || "—"}</VoucherNoteReadOnly>
+                  <VoucherNoteReadOnly>
+                    {record.referenceNo?.trim() ||
+                      String(rawRecord.supplier_reference_no || "").trim() ||
+                      "—"}
+                  </VoucherNoteReadOnly>
                 </VoucherNoteField>
               </VoucherNoteFieldGrid>
             </VoucherFormSectionCard>
@@ -994,7 +995,7 @@ export default function DebitNoteViewPageClient({ debitNoteId }: { debitNoteId: 
                 <div>
                   <p className="text-[11px] font-medium text-muted-foreground mb-0.5">Narration</p>
                   <p className="text-xs text-foreground whitespace-pre-wrap leading-snug">
-                    {record.remarks || record.reason || "—"}
+                    {rawRecord.narration || record.remarks || record.reason || "—"}
                   </p>
                 </div>
                 {record.attachments && record.attachments.length > 0 ? (

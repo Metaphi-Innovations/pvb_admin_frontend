@@ -386,8 +386,8 @@ function FollowUpDialog({
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-md p-0 gap-0 overflow-hidden">
-        <DialogHeader className="px-4 py-3 border-b border-border">
+      <DialogContent className="max-w-xl p-0 gap-0 overflow-hidden">
+        <DialogHeader className="px-5 py-3 border-b border-border">
           <DialogTitle className="text-sm font-semibold text-foreground">
             {editing ? "Update Follow-up" : "Add Follow-up"}
           </DialogTitle>
@@ -395,7 +395,7 @@ function FollowUpDialog({
             {customerName || "Select customer"} · Does not change outstanding or accounting
           </p>
         </DialogHeader>
-        <div className="px-4 py-3 space-y-3 max-h-[60vh] overflow-y-auto">
+        <div className="px-5 py-3 space-y-3 max-h-[65vh] overflow-y-auto">
           {!editing && (
             <div className="space-y-1.5">
               <Label className="text-xs font-medium">Customer</Label>
@@ -522,35 +522,86 @@ function FollowUpDialog({
             />
           </div>
           {(historyLoading || history.length > 0) && (
-            <div className="rounded-lg border border-border bg-muted/20 p-2.5 space-y-1.5">
+            <div className="rounded-lg border border-border bg-muted/20 p-3 space-y-2.5">
               <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
                 Collection History
               </p>
               {historyLoading ? (
                 <p className="text-[11px] text-muted-foreground">Loading history…</p>
               ) : (
-                history.slice(0, 6).map((h) => {
-                  const methodLabel = contactMethodLabel(h.contactMethod);
-                  const statusLabel =
-                    FOLLOW_UP_STATUS.find((s) => s.value === h.status)?.label ?? h.status;
-                  const detail = [statusLabel, methodLabel, h.remarks || ""]
-                    .filter(Boolean)
-                    .join(" · ");
-                  return (
-                  <div key={h.id} className="text-[11px] flex justify-between gap-2">
-                    <span className="text-muted-foreground shrink-0">{formatDisplayDate(h.date)}</span>
-                    <span className="font-medium truncate text-right">
-                      {detail || "—"}
-                    </span>
-                  </div>
-                  );
-                })
+                <div className="space-y-2">
+                  {[...history]
+                    .reverse()
+                    .slice(0, 6)
+                    .map((h) => {
+                      const methodLabel = contactMethodLabel(h.contactMethod);
+                      const statusLabel =
+                        FOLLOW_UP_STATUS.find((s) => s.value === h.status)?.label ?? h.status;
+                      const detailItems: { label: string; value: string }[] = [
+                        {
+                          label: "Next follow-up",
+                          value: h.nextFollowUpDate
+                            ? formatDisplayDate(h.nextFollowUpDate)
+                            : "—",
+                        },
+                        {
+                          label: "Promised payment",
+                          value: h.promisedPaymentDate
+                            ? formatDisplayDate(h.promisedPaymentDate)
+                            : "—",
+                        },
+                        {
+                          label: "Assigned to",
+                          value: h.assignedTo || "—",
+                        },
+                        {
+                          label: "Contact",
+                          value: methodLabel || "—",
+                        },
+                      ];
+                      return (
+                        <div
+                          key={h.id}
+                          className="rounded-md border border-border/60 bg-background px-3 py-2.5 space-y-2"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="text-xs font-semibold text-foreground">
+                                {statusLabel}
+                              </p>
+                              <p className="text-[11px] text-muted-foreground mt-0.5">
+                                {formatDisplayDate(h.date)}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+                            {detailItems.map((item) => (
+                              <div key={item.label} className="min-w-0">
+                                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                  {item.label}
+                                </p>
+                                <p className="text-[11px] font-medium text-foreground truncate">
+                                  {item.value}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                          {h.remarks ? (
+                            <p className="text-[11px] text-foreground/90 break-words border-t border-border/50 pt-1.5">
+                              <span className="text-muted-foreground">Remarks: </span>
+                              {h.remarks}
+                            </p>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+                </div>
               )}
             </div>
           )}
           {error && <p className="text-xs text-red-600">{error}</p>}
         </div>
-        <DialogFooter className="px-4 py-3 border-t border-border bg-muted/20">
+        <DialogFooter className="px-5 py-3 border-t border-border bg-muted/20">
           <Button variant="outline" size="sm" className="h-8 text-xs" onClick={onClose}>
             Cancel
           </Button>

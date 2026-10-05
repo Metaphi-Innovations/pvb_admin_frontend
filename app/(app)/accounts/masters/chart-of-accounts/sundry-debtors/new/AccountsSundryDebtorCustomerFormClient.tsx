@@ -28,6 +28,7 @@ import {
 import { useCreateCustomer, useCustomer, useUpdateCustomer } from "@/hooks/masters";
 import { useCustomerTypeDropdown } from "@/hooks/masters/use-customer-types";
 import { CustomerListService } from "@/services/customer-list.service";
+import { extractCustomerApiError } from "@/lib/masters/customer-api-errors";
 import { useQueryClient } from "@tanstack/react-query";
 import { chartOfAccountsKeys } from "@/hooks/accounts/use-chart-of-accounts";
 import type { CoaNodeId } from "../../../../data";
@@ -285,11 +286,15 @@ export default function AccountsSundryDebtorCustomerFormClient({
             }
           },
           onError: (err) => {
+            const { toastMessage } = extractCustomerApiError(
+              err,
+              "Failed to update customer.",
+            );
             setToast({
-              msg: err instanceof Error ? err.message : "Failed to update customer.",
+              msg: toastMessage,
               type: "error",
             });
-            setTimeout(() => setToast(null), 3200);
+            setTimeout(() => setToast(null), 4200);
           },
         },
       );
@@ -360,11 +365,15 @@ export default function AccountsSundryDebtorCustomerFormClient({
           }
         },
         onError: (err) => {
+          const { toastMessage } = extractCustomerApiError(
+            err,
+            "Failed to create customer.",
+          );
           setToast({
-            msg: err instanceof Error ? err.message : "Failed to create customer.",
+            msg: toastMessage,
             type: "error",
           });
-          setTimeout(() => setToast(null), 3200);
+          setTimeout(() => setToast(null), 4200);
         },
       },
     );

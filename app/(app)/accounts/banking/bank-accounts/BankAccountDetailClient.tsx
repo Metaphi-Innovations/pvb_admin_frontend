@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
-import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
+import { BANKING_HOME_HREF, bankingBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { StatusBadge } from "@/app/(app)/accounts/components/AccountsUI";
 import { MoneyAmount } from "@/components/accounts/MoneyAmount";
 import { formatMoney } from "@/lib/accounts/money-format";
@@ -18,8 +18,7 @@ import {
   type BankAccountApiAccountType,
   type BankAccountDetail,
 } from "@/services/bank-accounts-list.service";
-import { isActiveStatus } from "@/components/listing";
-import { BankAccountToggle } from "@/app/(app)/accounts/banking/bank-accounts/components/BankAccountToggle";
+import { isActiveStatus, ListingStatusToggle } from "@/components/listing";
 import { formatDisplayDateTime } from "@/lib/accounts/date-display";
 import { cn } from "@/lib/utils";
 
@@ -122,14 +121,15 @@ export default function BankAccountDetailClient({ ledgerId }: { ledgerId: string
       )
     : null;
 
+  const listCrumb = {
+    label: "Bank Accounts",
+    href: BANKING_HOME_HREF,
+  } as const;
+
   if (loading) {
     return (
       <AccountsPageShell
-        breadcrumbs={accountsBreadcrumb(
-          "Banking",
-          "Bank Accounts",
-          "/accounts/banking/bank-accounts",
-        )}
+        breadcrumbs={bankingBreadcrumb(listCrumb, "Bank Account")}
         title="Bank Account"
         description="Loading…"
         layout="split"
@@ -142,11 +142,7 @@ export default function BankAccountDetailClient({ ledgerId }: { ledgerId: string
   if (error || !account) {
     return (
       <AccountsPageShell
-        breadcrumbs={accountsBreadcrumb(
-          "Banking",
-          "Bank Accounts",
-          "/accounts/banking/bank-accounts",
-        )}
+        breadcrumbs={bankingBreadcrumb(listCrumb, "Not found")}
         title="Account not found"
         description="This bank account could not be loaded."
         layout="split"
@@ -154,7 +150,7 @@ export default function BankAccountDetailClient({ ledgerId }: { ledgerId: string
         <div className="p-6 text-center space-y-2">
           <p className="text-xs text-red-600">{error || "Bank account not found."}</p>
           <Link
-            href="/accounts/banking/bank-accounts"
+            href={BANKING_HOME_HREF}
             className="text-xs text-brand-600 hover:underline"
           >
             Back to Bank Accounts
@@ -167,6 +163,11 @@ export default function BankAccountDetailClient({ ledgerId }: { ledgerId: string
   const openingAmount = Number(account.openingBalance) || 0;
   const openingSide =
     account.openingBalanceType === "CREDIT" ? ("Credit" as const) : ("Debit" as const);
+  const hasCurrentBalance =
+    account.currentBalance != null && account.currentBalance !== "";
+  const currentAmount = hasCurrentBalance ? Number(account.currentBalance) || 0 : 0;
+  const currentSide =
+    account.currentBalanceType === "CREDIT" ? ("Credit" as const) : ("Debit" as const);
   const editHref =
     account.bankDetailsStatus === "PENDING"
       ? `/accounts/banking/bank-accounts/${account.ledgerId}/complete`
@@ -179,10 +180,9 @@ export default function BankAccountDetailClient({ ledgerId }: { ledgerId: string
 
   return (
     <AccountsPageShell
-      breadcrumbs={accountsBreadcrumb(
-        "Banking",
-        "Bank Accounts",
-        "/accounts/banking/bank-accounts",
+      breadcrumbs={bankingBreadcrumb(
+        listCrumb,
+        account.ledgerName || "Bank Account",
       )}
       title={account.ledgerName || "Bank Account"}
       description={
@@ -205,7 +205,7 @@ export default function BankAccountDetailClient({ ledgerId }: { ledgerId: string
             size="sm"
             variant="outline"
             className="h-8 text-xs"
-            onClick={() => router.push("/accounts/banking/bank-accounts")}
+            onClick={() => router.push(BANKING_HOME_HREF)}
           >
             Back to list
           </Button>
@@ -223,7 +223,15 @@ export default function BankAccountDetailClient({ ledgerId }: { ledgerId: string
             />
           </KpiChip>
           <KpiChip label="Current Balance">
-            <p className="text-xs font-semibold text-muted-foreground">—</p>
+            {hasCurrentBalance ? (
+              <MoneyAmount
+                amount={currentAmount}
+                side={currentSide}
+                className="text-xs font-semibold"
+              />
+            ) : (
+              <p className="text-xs font-semibold text-muted-foreground">—</p>
+            )}
           </KpiChip>
           <KpiChip label="Details">
             <StatusBadge
@@ -232,10 +240,10 @@ export default function BankAccountDetailClient({ ledgerId }: { ledgerId: string
           </KpiChip>
           <KpiChip label="Status">
             <div className="pt-0.5">
-              <BankAccountToggle
-                checked={isActiveStatus(account.status)}
+              <ListingStatusToggle
+                active={isActiveStatus(account.status)}
                 disabled
-                onCheckedChange={() => undefined}
+                onChange={() => undefined}
               />
             </div>
           </KpiChip>
