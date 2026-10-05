@@ -136,7 +136,7 @@ export interface CreateGrnPayload {
   invoices: CreateGrnInvoicePayload[];
 }
 
-/** Edit payload — source_id / source_type / grnNumber are optional (immutable on backend). */
+/** Edit payload — source_type / grnNumber are immutable; source_id may change for Purchase GRNs only. */
 export type UpdateGrnPayload = Omit<CreateGrnPayload, "source_id" | "source_type" | "grnNumber" | "status"> & {
   source_id?: string;
   source_type?: GrnSourceType;
