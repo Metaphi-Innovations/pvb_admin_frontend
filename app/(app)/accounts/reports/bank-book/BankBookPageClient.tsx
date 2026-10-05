@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Landmark, AlertCircle } from "lucide-react";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { AccountsListingTableCard } from "@/components/accounts/AccountsListingHeader";
@@ -15,6 +15,7 @@ import {
   ReportSearchFilter,
   useReportDateRange,
 } from "@/components/accounts/ReportFilters";
+import { resolveDateRangePreset } from "@/lib/accounts/report-date-presets";
 import {
   buildEntityFilterSummary,
   type ReportFilterSummaryItem,
@@ -146,6 +147,22 @@ function BankBookPageContent() {
     const match = bankOptions.find((b) => String(b.ledgerId) === String(effectiveLedgerId));
     return match?.bankAccountId || undefined;
   }, [effectiveLedgerId, bankOptions]);
+
+  // Reset date filter to default when the selected bank ledger changes.
+  const bankLedgerFilterKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    const key = bankLedgerId || "";
+    if (bankLedgerFilterKeyRef.current === null) {
+      bankLedgerFilterKeyRef.current = key;
+      return;
+    }
+    if (bankLedgerFilterKeyRef.current === key) return;
+    bankLedgerFilterKeyRef.current = key;
+    const { from, to } = resolveDateRangePreset("this_year");
+    setPreset("this_year");
+    setDateFrom(from);
+    setDateTo(to);
+  }, [bankLedgerId, setPreset, setDateFrom, setDateTo]);
 
   // Reset page when filters or sorting change
   useEffect(() => {

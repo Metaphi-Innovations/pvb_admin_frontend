@@ -71,6 +71,7 @@ import {
 import { useDebouncedValue } from "@/app/(app)/accounts/reports/pl/pl-hooks";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
+import { useFY, useIsFinancialYearReady } from "@/lib/fy-store";
 import { useLazyFilterColumns } from "@/lib/masters/use-lazy-filter-columns";
 import { formatMoney } from "@/lib/accounts/money-format";
 import { formatDisplayDate, toIsoDateOnly } from "@/lib/accounts/date-display";
@@ -122,8 +123,10 @@ const PURCHASE_INVOICE_DATE_PRESETS = [
   ...INVOICE_LISTING_DATE_PRESETS.filter((option) => option.id === "custom"),
 ];
 
-function listingFilterDefaults() {
-  const { from, to } = resolveDateRangePreset(LISTING_DEFAULT_PRESET);
+function listingFilterDefaults(fyDates?: { from?: string; to?: string } | null) {
+  const presetDates = resolveDateRangePreset(LISTING_DEFAULT_PRESET);
+  const from = fyDates?.from || presetDates.from;
+  const to = fyDates?.to || presetDates.to;
   return {
     search: "",
     preset: LISTING_DEFAULT_PRESET,
@@ -132,6 +135,12 @@ function listingFilterDefaults() {
     sourceType: "all" as SourceTypeFilter,
     purchaseNature: "all" as PurchaseNatureFilter,
   };
+}
+
+function fyDateBounds(fy: { startDate?: string | null; endDate?: string | null } | null | undefined) {
+  const from = fy?.startDate ? String(fy.startDate).slice(0, 10) : "";
+  const to = fy?.endDate ? String(fy.endDate).slice(0, 10) : "";
+  return from && to ? { from, to } : null;
 }
 
 function ListingFilterReset({
@@ -677,6 +686,7 @@ function PurchaseInvoicesTabBody({
   postingDraftId,
   onCancel,
   onPostDraft,
+  filterDefaults,
 }: {
   invoices: PurchaseInvoiceListRow[];
   listReturnHref: string;
@@ -711,6 +721,7 @@ function PurchaseInvoicesTabBody({
   postingDraftId?: string | null;
   onCancel?: (row: PurchaseInvoiceListRow) => void;
   onPostDraft?: (row: PurchaseInvoiceListRow) => void;
+  filterDefaults: ReturnType<typeof listingFilterDefaults>;
 }) {
   return (
     <AccountsTableListing
@@ -777,16 +788,15 @@ function PurchaseInvoicesTabBody({
                   sourceType: sourceTypeFilter,
                   purchaseNature: purchaseNatureFilter,
                 },
-                listingFilterDefaults(),
+                filterDefaults,
               )}
               onClick={() => {
-                const defaults = listingFilterDefaults();
-                setSearch(defaults.search);
-                setSourceTypeFilter(defaults.sourceType);
-                setPurchaseNatureFilter(defaults.purchaseNature);
-                setPreset(defaults.preset);
-                setDateFrom(defaults.dateFrom);
-                setDateTo(defaults.dateTo);
+                setSearch(filterDefaults.search);
+                setSourceTypeFilter(filterDefaults.sourceType);
+                setPurchaseNatureFilter(filterDefaults.purchaseNature);
+                setPreset(filterDefaults.preset);
+                setDateFrom(filterDefaults.dateFrom);
+                setDateTo(filterDefaults.dateTo);
                 onPageChange(1);
               }}
             />
@@ -908,6 +918,8 @@ export default function PurchaseInvoiceListClient() {
   const tab =
     parsePurchaseInvoiceTabParam(searchParams.get("tab")) ?? "invoices";
   const listReturnHref = purchaseInvoicesListHref(tab);
+  const { selectedFY } = useFY();
+  const fyReady = useIsFinancialYearReady();
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedValue(search, 300);
   const [sourceTypeFilter, setSourceTypeFilter] = useState<SourceTypeFilter>("all");
@@ -924,9 +936,14 @@ export default function PurchaseInvoiceListClient() {
   });
 
   const [invoices, setInvoices] = useState<PurchaseInvoiceListRow[]>([]);
+  /** Filtered list total used by pagination. */
   const [invoiceTotal, setInvoiceTotal] = useState(0);
+  /** Stable All Invoices tab badge — not affected by search/column filters. */
+  const [invoiceTabCount, setInvoiceTabCount] = useState<number | null>(null);
   const [pendingGrns, setPendingGrns] = useState<EligibleGrnDto[]>([]);
   const [pendingGrnTotal, setPendingGrnTotal] = useState(0);
+  /** Stable GRN Pending tab badge — unfiltered. */
+  const [pendingTabCount, setPendingTabCount] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [grnLoading, setGrnLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -964,9 +981,57 @@ export default function PurchaseInvoiceListClient() {
     return JSON.stringify(merged);
   }, [invoiceColumnFilters, purchaseNatureFilter]);
   const grnFiltersKey = JSON.stringify(grnColumnFilters);
+  const filterDefaults = useMemo(
+    () => listingFilterDefaults(fyDateBounds(selectedFY)),
+    [selectedFY?.id, selectedFY?.startDate, selectedFY?.endDate],
+  );
+
+  // Keep "This Year" aligned to the Working FY so date filters don't wipe the list.
+  useEffect(() => {
+    if (preset !== "this_year" && preset !== "this_financial_year") return;
+    const bounds = fyDateBounds(selectedFY);
+    if (!bounds) return;
+    if (bounds.from !== dateFrom) setDateFrom(bounds.from);
+    if (bounds.to !== dateTo) setDateTo(bounds.to);
+  }, [
+    preset,
+    selectedFY?.id,
+    selectedFY?.startDate,
+    selectedFY?.endDate,
+    dateFrom,
+    dateTo,
+    setDateFrom,
+    setDateTo,
+  ]);
+
+  // Tab badges must load on every tab (and survive filter changes / abort races).
+  useEffect(() => {
+    if (!fyReady) return;
+    const ac = new AbortController();
+    (async () => {
+      try {
+        const [invoiceRes, pendingRes] = await Promise.all([
+          PurchaseInvoiceService.list(
+            { page: 1, page_size: 1, include_pending: false },
+            ac.signal,
+          ),
+          PurchaseInvoiceService.countPendingGrns(ac.signal),
+        ]);
+        if (ac.signal.aborted) return;
+        setInvoiceTabCount(invoiceRes.total ?? 0);
+        setPendingTabCount(pendingRes.total ?? 0);
+      } catch {
+        // Keep last known badge counts on abort/transient errors.
+      }
+    })();
+    return () => {
+      ac.abort();
+    };
+  }, [fyReady, selectedFY?.id, sectionRefresh, listRefreshKey]);
 
   useEffect(() => {
     if (tab !== "invoices") return;
+    if (!fyReady) return;
     const ac = new AbortController();
     (async () => {
       setLoading(true);
@@ -1008,6 +1073,8 @@ export default function PurchaseInvoiceListClient() {
     };
   }, [
     tab,
+    fyReady,
+    selectedFY?.id,
     sectionRefresh,
     page,
     pageSize,
@@ -1023,24 +1090,8 @@ export default function PurchaseInvoiceListClient() {
   ]);
 
   useEffect(() => {
-    if (tab !== "invoices") return;
-    const ac = new AbortController();
-    (async () => {
-      try {
-        const pendingRes = await PurchaseInvoiceService.countPendingGrns(ac.signal);
-        if (ac.signal.aborted) return;
-        setPendingGrnTotal(pendingRes.total ?? 0);
-      } catch {
-        if (!ac.signal.aborted) setPendingGrnTotal(0);
-      }
-    })();
-    return () => {
-      ac.abort();
-    };
-  }, [tab, sectionRefresh]);
-
-  useEffect(() => {
     if (tab !== "grn_pending") return;
+    if (!fyReady) return;
     const ac = new AbortController();
     (async () => {
       setGrnLoading(true);
@@ -1077,6 +1128,8 @@ export default function PurchaseInvoiceListClient() {
     };
   }, [
     tab,
+    fyReady,
+    selectedFY?.id,
     sectionRefresh,
     grnPage,
     grnPageSize,
@@ -1433,8 +1486,8 @@ export default function PurchaseInvoiceListClient() {
         subHeader={
           <PurchaseInvoiceTabs
             tab={tab}
-            invoiceCount={invoiceTotal}
-            pendingCount={pendingGrnTotal}
+            invoiceCount={invoiceTabCount}
+            pendingCount={pendingTabCount ?? pendingGrnTotal}
             onTabChange={handleTabChange}
           />
         }
@@ -1511,6 +1564,7 @@ export default function PurchaseInvoiceListClient() {
                   postingDraftId={postingDraftId}
                   onCancel={setCancelTarget}
                   onPostDraft={(row) => void handlePostDraft(row)}
+                  filterDefaults={filterDefaults}
                 />
               </div>
             </AccountsColumnFilterProvider>
@@ -1597,7 +1651,7 @@ function PurchaseInvoiceTabs({
   onTabChange,
 }: {
   tab: Tab;
-  invoiceCount: number;
+  invoiceCount: number | null;
   pendingCount: number;
   onTabChange?: (tab: Tab) => void;
 }) {
@@ -1606,9 +1660,11 @@ function PurchaseInvoiceTabs({
       <TabBtn active={tab === "invoices"} onClick={() => onTabChange?.("invoices")}>
         <FileText className="w-4 h-4" />
         All Invoices
-        <span className="ml-1 rounded-full bg-muted px-1.5 py-0.5 text-xs font-semibold tabular-nums">
-          {invoiceCount}
-        </span>
+        {invoiceCount != null && (
+          <span className="ml-1 rounded-full bg-muted px-1.5 py-0.5 text-xs font-semibold tabular-nums">
+            {invoiceCount}
+          </span>
+        )}
       </TabBtn>
       <TabBtn active={tab === "grn_pending"} onClick={() => onTabChange?.("grn_pending")}>
         <Truck className="w-4 h-4" />
