@@ -16,12 +16,6 @@ import { showToast } from "@/lib/toast";
 import { grnKeys } from "@/lib/warehouse/grn-query-keys";
 import { invalidatePurchaseOrderModuleListingQueries } from "@/lib/procurement/invalidate-po-listing-queries";
 import {
-  estimateCaseRowCount,
-  exceedsMaxLineQty,
-  MAX_LINE_ENTRY_QTY,
-  maxLineQtyMessage,
-} from "@/lib/quantity-limits";
-import {
   buildQcListHref,
   qcListPathForSource,
   resolveQcReturnTo,
@@ -290,18 +284,6 @@ function CreateQcForm() {
         }
         if (sum > item.receivedQty) {
           return `Batch ${item.batchNumber}: total allocated qty exceeds received qty.`;
-        }
-        const qtyType = String(item.quantityType || "PIECE").toUpperCase();
-        const caseSize = item.unitPerPacking || 10;
-        if (qtyType === "CASE") {
-          const caseRows =
-            estimateCaseRowCount(item.acceptedQty, caseSize) +
-            estimateCaseRowCount(item.rejectedQty, caseSize);
-          if (exceedsMaxLineQty(caseRows)) {
-            return `Batch ${item.batchNumber}: CASE QC is limited to ${MAX_LINE_ENTRY_QTY} cases per batch (would create ${caseRows}).`;
-          }
-        } else if (exceedsMaxLineQty(item.receivedQty)) {
-          return `Batch ${item.batchNumber}: ${maxLineQtyMessage("Received quantity")}`;
         }
         return null;
       })
