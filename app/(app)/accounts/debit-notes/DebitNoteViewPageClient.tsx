@@ -114,7 +114,12 @@ export default function DebitNoteViewPageClient({ debitNoteId }: { debitNoteId: 
   const router = useRouter();
   const searchParams = useSearchParams();
   const listHref = useMemo(
-    () => debitNoteReturnPath(searchParams.get("returnTo")),
+    () =>
+      debitNoteReturnPath(
+        searchParams.get("returnTo"),
+        searchParams.get("tab"),
+        searchParams.get("status"),
+      ),
     [searchParams],
   );
   const { permissions } = usePermissions();
@@ -428,7 +433,11 @@ export default function DebitNoteViewPageClient({ debitNoteId }: { debitNoteId: 
         <AccountsFormLayout
           fullWidth
           title="View Debit Note"
-          breadcrumb={[...DEBIT_NOTES_BREADCRUMB]}
+          breadcrumb={[
+            DEBIT_NOTES_BREADCRUMB[0],
+            { label: "Debit Notes", href: listHref },
+          ]}
+          onBackClick={() => router.push(listHref)}
           code={record.debitNoteNo}
           headerMeta={
             <>

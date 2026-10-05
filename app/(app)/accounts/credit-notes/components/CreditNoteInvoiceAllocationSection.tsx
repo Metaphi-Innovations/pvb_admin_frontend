@@ -39,7 +39,10 @@ export function CreditNoteInvoiceAllocationSection({
   if (!visible) return null;
 
   const allocNum = Number(allocation) || 0;
-  const outstanding = selected?.outstanding_amount ?? selected?.invoice_amount ?? null;
+  const outstanding =
+    invoiceId && typeof selected?.outstanding_amount === "number"
+      ? selected.outstanding_amount
+      : null;
 
   return (
     <VoucherFormSectionCard title="Invoice Allocation" compact>
@@ -92,7 +95,7 @@ export function CreditNoteInvoiceAllocationSection({
             </VoucherNoteField>
             <VoucherNoteField label="Outstanding" width="sm">
               <VoucherNoteReadOnly>
-                {outstanding != null ? formatCnMoney(outstanding) : "Not returned by API"}
+                {outstanding != null ? formatCnMoney(outstanding) : "—"}
               </VoucherNoteReadOnly>
             </VoucherNoteField>
             <VoucherNoteField label="Allocation Amount" width="md">
@@ -119,7 +122,8 @@ export function CreditNoteInvoiceAllocationSection({
         ) : (
           <VoucherNoteField label="Settlement" width="lg">
             <VoucherNoteReadOnly>
-              On-account — no invoice settlement unless an allocation is supplied later.
+              On-account — no invoice outstanding or settlement. Use for on-account credit (e.g.
+              cancelled order with advance). Refund cash via Payment → Customer Refund.
             </VoucherNoteReadOnly>
           </VoucherNoteField>
         )}

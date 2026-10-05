@@ -27,7 +27,10 @@ import {
   AccountsColumnFilterProvider,
   AccountsColumnHeader,
   SortTh,
+  useAccountsColumnFilterContext,
+  useAccountsFilteredRows,
 } from "@/app/(app)/accounts/components/AccountsUI";
+import type { AccountsColumnFilterConfig } from "@/lib/accounts/column-filter-types";
 import {
   DEBIT_NOTES_LIST_PATH,
   debitNotesListHref,
@@ -53,12 +56,61 @@ interface PendingDebitNoteRow {
   totalAmount: number;
 }
 
+function matchesPendingSearch(row: PendingDebitNoteRow, q: string): boolean {
+  if (!q) return true;
+  const hay = [
+    row.returnNumber,
+    row.supplierName,
+    row.poNumber,
+    row.grnNo,
+    row.dispatchNo,
+  ]
+    .join(" ")
+    .toLowerCase();
+  return hay.includes(q);
+}
+
+function mapPendingApiRow(raw: any): PendingDebitNoteRow {
+  const refs: Array<{ reference_type?: string; reference_code?: string | null }> =
+    raw.references || [];
+  const poFromRef = refs.find((r) => r.reference_type === "PURCHASE_ORDER")?.reference_code;
+  const grnCodes = refs
+    .filter((r) => r.reference_type === "GRN" && r.reference_code)
+    .map((r) => r.reference_code as string);
+  const returnDateRaw = raw.purchase_return?.return_date || raw.eligibility_date || null;
+  const lines: Array<{ quantity?: string | number }> = raw.lines || [];
+  const qtySum = lines.reduce(
+    (acc, line) => acc + parseFloat(String(line.quantity || "0")),
+    0,
+  );
+  const gstFromSplit =
+    parseFloat(raw.cgst_amount || "0") +
+    parseFloat(raw.sgst_amount || "0") +
+    parseFloat(raw.igst_amount || "0");
+
+  return {
+    returnId: raw.pending_debit_note_id,
+    returnNumber: raw.purchase_return_number || raw.purchase_return?.return_no || "—",
+    returnDate: toIsoDateOnly(returnDateRaw),
+    supplierName: raw.supplier_name || raw.supplier?.supplier_name || "—",
+    poNumber: raw.purchase_return?.purchase_order?.po_no || poFromRef || "—",
+    grnNo: grnCodes.length ? grnCodes.join(", ") : "—",
+    dispatchNo: raw.dispatch?.dispatch_number || raw.dispatch?.challan_number || "—",
+    totalReturnQty: qtySum,
+    taxableAmount: parseFloat(raw.taxable_amount || "0"),
+    gstAmount:
+      parseFloat(raw.gst_amount || "0") > 0
+        ? parseFloat(raw.gst_amount || "0")
+        : gstFromSplit,
+    totalAmount: parseFloat(raw.eligible_dn_amount || "0"),
+  };
+}
+
 function PendingDebitNotesTable({
   loading,
   toolbarFiltered,
   page,
   pageSize,
-  totalRecords,
   onPageChange,
   onPageSizeChange,
   onCreate,
@@ -67,13 +119,20 @@ function PendingDebitNotesTable({
   toolbarFiltered: PendingDebitNoteRow[];
   page: number;
   pageSize: number;
-  totalRecords: number;
   onPageChange: (p: number) => void;
   onPageSizeChange: (s: number) => void;
   onCreate: (row: PendingDebitNoteRow) => void;
 }) {
-  const visible = toolbarFiltered;
-  const pagedRows = toolbarFiltered;
+  const visible = useAccountsFilteredRows(toolbarFiltered);
+  const ctx = useAccountsColumnFilterContext();
+  const pagedRows = useMemo(
+    () => visible.slice((page - 1) * pageSize, page * pageSize),
+    [visible, page, pageSize],
+  );
+
+  useEffect(() => {
+    onPageChange(1);
+  }, [ctx?.columnFilters, ctx?.sortKey, ctx?.sortDir, onPageChange]);
 
   return (
     <>
@@ -87,9 +146,27 @@ function PendingDebitNotesTable({
             <SortTh label="GRN No." colKey="grnNo" />
             <SortTh label="Dispatch" colKey="dispatchNo" />
             <SortTh label="Qty" colKey="totalReturnQty" filterType="amount" align="right" />
-            <SortTh label="Taxable" colKey="taxableAmount" filterType="amount" align="right" className="min-w-[6.5rem]" />
-            <SortTh label="GST" colKey="gstAmount" filterType="amount" align="right" className="min-w-[5.5rem]" />
-            <SortTh label="Total" colKey="totalAmount" filterType="amount" align="right" className="min-w-[6.5rem]" />
+            <SortTh
+              label="Taxable"
+              colKey="taxableAmount"
+              filterType="amount"
+              align="right"
+              className="min-w-[6.5rem]"
+            />
+            <SortTh
+              label="GST"
+              colKey="gstAmount"
+              filterType="amount"
+              align="right"
+              className="min-w-[5.5rem]"
+            />
+            <SortTh
+              label="Total"
+              colKey="totalAmount"
+              filterType="amount"
+              align="right"
+              className="min-w-[6.5rem]"
+            />
             <AccountsColumnHeader
               label="Actions"
               colKey="_actions"
@@ -108,6 +185,8 @@ function PendingDebitNotesTable({
               colSpan={11}
               message="No purchase returns pending debit note."
             />
+          ) : visible.length === 0 ? (
+            <AccountsTableEmpty colSpan={11} message="No records match the column filters." />
           ) : (
             pagedRows.map((row) => (
               <AccountsTableRow key={row.returnId}>
@@ -135,13 +214,25 @@ function PendingDebitNotesTable({
                 <AccountsTableCell align="right" className="tabular-nums text-xs">
                   {row.totalReturnQty}
                 </AccountsTableCell>
-                <AccountsTableCell align="right" money className="text-xs tabular-nums min-w-[6.5rem]">
+                <AccountsTableCell
+                  align="right"
+                  money
+                  className="text-xs tabular-nums min-w-[6.5rem]"
+                >
                   {formatINR(row.taxableAmount)}
                 </AccountsTableCell>
-                <AccountsTableCell align="right" money className="text-xs tabular-nums min-w-[5.5rem]">
+                <AccountsTableCell
+                  align="right"
+                  money
+                  className="text-xs tabular-nums min-w-[5.5rem]"
+                >
                   {formatINR(row.gstAmount)}
                 </AccountsTableCell>
-                <AccountsTableCell align="right" money className="text-xs font-medium tabular-nums min-w-[6.5rem]">
+                <AccountsTableCell
+                  align="right"
+                  money
+                  className="text-xs font-medium tabular-nums min-w-[6.5rem]"
+                >
                   {formatINR(row.totalAmount)}
                 </AccountsTableCell>
                 <AccountsTableCell align="right" className={accountsActionColClass("single")}>
@@ -161,7 +252,7 @@ function PendingDebitNotesTable({
         <AccountsTablePagination
           page={page}
           pageSize={pageSize}
-          totalRecords={totalRecords}
+          totalRecords={visible.length}
           onPageChange={onPageChange}
           onPageSizeChange={onPageSizeChange}
           recordLabel="pending returns"
@@ -181,7 +272,6 @@ export function PendingDebitNotesPanel({
 }) {
   const router = useRouter();
   const [rows, setRows] = useState<PendingDebitNoteRow[]>([]);
-  const [totalRecords, setTotalRecords] = useState(0);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
@@ -189,77 +279,26 @@ export function PendingDebitNotesPanel({
   const debouncedSearch = useDebouncedValue(search, 300);
   const onCountChangeRef = useRef(onCountChange);
   onCountChangeRef.current = onCountChange;
-  const pendingQueryKeyRef = useRef("");
-  const pendingQueryKey = `${page}|${pageSize}|${debouncedSearch.trim()}`;
 
   useEffect(() => {
-    setPage((p) => (p === 1 ? p : 1));
-  }, [debouncedSearch, pageSize]);
-
-  useEffect(() => {
-    if (page !== 1 && pendingQueryKeyRef.current !== pendingQueryKey) {
-      pendingQueryKeyRef.current = pendingQueryKey;
-      return;
-    }
-    pendingQueryKeyRef.current = pendingQueryKey;
-
     let cancelled = false;
     setLoading(true);
     (async () => {
       try {
         const res = await DebitNoteService.listPending({
-          page,
-          page_size: pageSize,
-          search: debouncedSearch.trim() || undefined,
+          page: 1,
+          page_size: 100,
           status: "PENDING",
         });
         if (cancelled) return;
 
-        const mapped = res.items.map((raw: any) => {
-          const refs: Array<{ reference_type?: string; reference_code?: string | null }> =
-            raw.references || [];
-          const poFromRef = refs.find((r) => r.reference_type === "PURCHASE_ORDER")?.reference_code;
-          const grnCodes = refs
-            .filter((r) => r.reference_type === "GRN" && r.reference_code)
-            .map((r) => r.reference_code as string);
-          const returnDateRaw =
-            raw.purchase_return?.return_date || raw.eligibility_date || null;
-          const lines: Array<{ quantity?: string | number }> = raw.lines || [];
-          const qtySum = lines.reduce(
-            (acc, line) => acc + parseFloat(String(line.quantity || "0")),
-            0,
-          );
-          const gstFromSplit =
-            parseFloat(raw.cgst_amount || "0") +
-            parseFloat(raw.sgst_amount || "0") +
-            parseFloat(raw.igst_amount || "0");
-
-          return {
-            returnId: raw.pending_debit_note_id,
-            returnNumber:
-              raw.purchase_return_number || raw.purchase_return?.return_no || "—",
-            returnDate: toIsoDateOnly(returnDateRaw),
-            supplierName: raw.supplier_name || raw.supplier?.supplier_name || "—",
-            poNumber: raw.purchase_return?.purchase_order?.po_no || poFromRef || "—",
-            grnNo: grnCodes.length ? grnCodes.join(", ") : "—",
-            dispatchNo:
-              raw.dispatch?.dispatch_number || raw.dispatch?.challan_number || "—",
-            totalReturnQty: qtySum,
-            taxableAmount: parseFloat(raw.taxable_amount || "0"),
-            gstAmount:
-              parseFloat(raw.gst_amount || "0") > 0
-                ? parseFloat(raw.gst_amount || "0")
-                : gstFromSplit,
-            totalAmount: parseFloat(raw.eligible_dn_amount || "0"),
-          };
-        });
-
+        const mapped = (res.items ?? []).map(mapPendingApiRow);
         setRows(mapped);
-        setTotalRecords(res.pagination.total);
-        onCountChangeRef.current?.(res.pagination.total);
+        onCountChangeRef.current?.(res.pagination?.total ?? mapped.length);
       } catch (e: any) {
         if (cancelled) return;
         showToast(e.message || "Failed to load pending debit notes.", "error");
+        setRows([]);
         onCountChangeRef.current?.(0);
       } finally {
         if (!cancelled) setLoading(false);
@@ -268,25 +307,36 @@ export function PendingDebitNotesPanel({
     return () => {
       cancelled = true;
     };
-  }, [page, pageSize, debouncedSearch, refreshTick, pendingQueryKey]);
+  }, [refreshTick]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, pageSize]);
+
+  const toolbarFiltered = useMemo(() => {
+    const q = debouncedSearch.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter((row) => matchesPendingSearch(row, q));
+  }, [rows, debouncedSearch]);
 
   const getCellValue = useCallback((row: PendingDebitNoteRow, key: string) => {
     if (key === "dispatchNo") return row.dispatchNo || "";
+    if (key === "grnNo") return row.grnNo || "";
     return (row as unknown as Record<string, unknown>)[key];
   }, []);
 
   const columnConfig = useMemo(
-    () => ({
-      returnNumber: { type: "text" as const },
-      returnDate: { type: "date" as const },
-      supplierName: { type: "text" as const },
-      poNumber: { type: "text" as const },
-      grnNo: { type: "text" as const },
-      dispatchNo: { type: "text" as const },
-      totalReturnQty: { type: "amount" as const },
-      taxableAmount: { type: "amount" as const },
-      gstAmount: { type: "amount" as const },
-      totalAmount: { type: "amount" as const },
+    (): AccountsColumnFilterConfig => ({
+      returnNumber: { type: "text" },
+      returnDate: { type: "date" },
+      supplierName: { type: "text" },
+      poNumber: { type: "text" },
+      grnNo: { type: "text" },
+      dispatchNo: { type: "text" },
+      totalReturnQty: { type: "amount" },
+      taxableAmount: { type: "amount" },
+      gstAmount: { type: "amount" },
+      totalAmount: { type: "amount" },
     }),
     [],
   );
@@ -314,7 +364,7 @@ export function PendingDebitNotesPanel({
       }
     >
       <AccountsColumnFilterProvider
-        rows={rows}
+        rows={toolbarFiltered}
         getCellValue={getCellValue}
         columnConfig={columnConfig}
         defaultSortKey="returnDate"
@@ -322,15 +372,14 @@ export function PendingDebitNotesPanel({
       >
         <PendingDebitNotesTable
           loading={loading}
-          toolbarFiltered={rows}
-            page={page}
-            pageSize={pageSize}
-            totalRecords={totalRecords}
-            onPageChange={setPage}
-            onPageSizeChange={setPageSize}
-            onCreate={handleCreate}
-          />
-        </AccountsColumnFilterProvider>
+          toolbarFiltered={toolbarFiltered}
+          page={page}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+          onCreate={handleCreate}
+        />
+      </AccountsColumnFilterProvider>
     </AccountsTableListing>
   );
 }

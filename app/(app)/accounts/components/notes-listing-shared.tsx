@@ -131,6 +131,8 @@ interface NotesListingFilterBarProps {
    * Those dimensions are already available as table column filters.
    */
   showEntityFilters?: boolean;
+  /** Debit Notes More Filters: Status + Voucher Number only. */
+  showInvoiceNoFilter?: boolean;
 }
 
 export function NotesListingFilterBar({
@@ -144,11 +146,12 @@ export function NotesListingFilterBar({
   onChange,
   onReset,
   showEntityFilters = true,
+  showInvoiceNoFilter = true,
 }: NotesListingFilterBarProps) {
   const moreActiveCount =
     (filters.status !== "all" ? 1 : 0) +
     (filters.voucherNo.trim() ? 1 : 0) +
-    (filters.invoiceNo.trim() ? 1 : 0);
+    (showInvoiceNoFilter && filters.invoiceNo.trim() ? 1 : 0);
 
   return (
     <ReportFilterRow>
@@ -222,19 +225,21 @@ export function NotesListingFilterBar({
               <Input
                 value={filters.voucherNo}
                 onChange={(e) => onChange({ voucherNo: e.target.value })}
-                placeholder="CN-2026-0001 / DN-…"
+                placeholder={showInvoiceNoFilter ? "CN-2026-0001 / DN-…" : "DN-…"}
                 className="h-8 text-xs"
               />
             </div>
-            <div className="space-y-1.5">
-              <Label className={ACCOUNTS_FILTER_LABEL_CLASS}>Invoice Number</Label>
-              <Input
-                value={filters.invoiceNo}
-                onChange={(e) => onChange({ invoiceNo: e.target.value })}
-                placeholder="INV-… / PUR-…"
-                className="h-8 text-xs"
-              />
-            </div>
+            {showInvoiceNoFilter ? (
+              <div className="space-y-1.5">
+                <Label className={ACCOUNTS_FILTER_LABEL_CLASS}>Invoice Number</Label>
+                <Input
+                  value={filters.invoiceNo}
+                  onChange={(e) => onChange({ invoiceNo: e.target.value })}
+                  placeholder="INV-… / PUR-…"
+                  className="h-8 text-xs"
+                />
+              </div>
+            ) : null}
           </ReportMoreFilters>
         </>
       ) : null}
@@ -270,14 +275,13 @@ export const NOTES_STATUS_TABS = [
   { id: "reversed", label: "Reversed" },
 ] as const;
 
+/** More Filters status options — aligned with NOTES_STATUS_TABS. */
 export const NOTES_STATUS_FILTER_OPTIONS = [
   { value: "all", label: "All Statuses" },
   { value: "draft", label: "Draft" },
-  { value: "pending_approval", label: "Pending Approval" },
-  { value: "approved", label: "Posted" },
+  { value: "posted", label: "Posted" },
   { value: "cancelled", label: "Cancelled" },
   { value: "reversed", label: "Reversed" },
-  { value: "rejected", label: "Rejected" },
 ];
 
 export function uniqueOptionsFromValues(values: string[]): ReportMultiSelectOption[] {

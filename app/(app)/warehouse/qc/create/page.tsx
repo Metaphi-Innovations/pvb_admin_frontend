@@ -464,7 +464,13 @@ function CreateQcForm() {
               <TextField label="Warehouse" value={warehouse} readOnly className="h-8 text-xs bg-muted/30 font-medium" />
             </>
           )}
-          <TextField type="date" label="Inspection Date" value={qcDate} readOnly className="h-8 text-xs bg-muted/30 text-muted-foreground" />
+          <TextField
+            type="date"
+            label="Inspection Date"
+            value={qcDate}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setQcDate(e.target.value)}
+            className="h-8 text-xs"
+          />
         </div>
 
         <TextField

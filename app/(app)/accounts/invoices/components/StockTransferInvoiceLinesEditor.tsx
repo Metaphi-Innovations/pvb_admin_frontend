@@ -14,16 +14,8 @@ import {
   recalculateLineItem,
   type InvoiceLineItem,
 } from "../invoices-data";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 import { formatINR } from "../invoice-utils";
-
-function formatMonthYear(iso?: string): string {
-  if (!iso?.trim()) return "—";
-  const [y, m] = iso.split("-");
-  if (!y || !m) return iso;
-  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  const mi = parseInt(m, 10) - 1;
-  return months[mi] ? `${months[mi]}-${y}` : iso;
-}
 
 function clampQty(line: InvoiceLineItem, nextQty: number): { qty: number; error?: string } {
   if (!Number.isFinite(nextQty) || nextQty <= 0) {
@@ -62,8 +54,8 @@ const StockTransferInvoiceLineRow = memo(function StockTransferInvoiceLineRow({
         <p className="so-product-name leading-tight truncate" title={line.productName || undefined}>
           {line.productName || "—"}
         </p>
-        <p className="so-product-meta mt-0.5 leading-tight">MFG Date: {formatMonthYear(line.manufacturingDate)}</p>
-        <p className="so-product-meta leading-tight">EXP Date: {formatMonthYear(line.expiryDate)}</p>
+        <p className="so-product-meta mt-0.5 leading-tight">MFG Date: {formatDisplayDate(line.manufacturingDate)}</p>
+        <p className="so-product-meta leading-tight">EXP Date: {formatDisplayDate(line.expiryDate)}</p>
       </td>
       <td className="px-2 py-1.5 align-middle so-col-sku">
         <p className="so-sku-value leading-tight truncate">{line.productCode || "—"}</p>

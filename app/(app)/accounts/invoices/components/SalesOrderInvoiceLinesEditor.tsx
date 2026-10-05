@@ -16,16 +16,8 @@ import {
   recalculateLineItem,
   type InvoiceLineItem,
 } from "../invoices-data";
+import { formatDisplayDate } from "@/lib/accounts/date-display";
 import { formatINR } from "../invoice-utils";
-
-function formatMonthYear(iso?: string): string {
-  if (!iso?.trim()) return "—";
-  const [y, m] = iso.split("-");
-  if (!y || !m) return iso;
-  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  const mi = parseInt(m, 10) - 1;
-  return months[mi] ? `${months[mi]}-${y}` : iso;
-}
 
 function schemeDiscountLabel(line: InvoiceLineItem): string {
   if (line.schemeDiscountType === "Rupees" && line.schemeDiscountAmount != null) {
@@ -163,8 +155,8 @@ const SalesOrderInvoiceLineRow = memo(function SalesOrderInvoiceLineRow({
         <p className="so-product-name leading-tight truncate" title={line.productName || undefined}>
           {line.productName || "—"}
         </p>
-        <p className="so-product-meta mt-0.5 leading-tight">MFG Date: {formatMonthYear(line.manufacturingDate)}</p>
-        <p className="so-product-meta leading-tight">EXP Date: {formatMonthYear(line.expiryDate)}</p>
+        <p className="so-product-meta mt-0.5 leading-tight">MFG Date: {formatDisplayDate(line.manufacturingDate)}</p>
+        <p className="so-product-meta leading-tight">EXP Date: {formatDisplayDate(line.expiryDate)}</p>
       </td>
       <td className={cn("px-2 py-1.5 align-middle", COL.sku)}>
         <p className="so-sku-value leading-tight truncate" title={line.productCode || undefined}>

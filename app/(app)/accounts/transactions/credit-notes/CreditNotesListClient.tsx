@@ -204,6 +204,8 @@ function mapUiStatusToApi(status: string): string | undefined {
       return "POSTED";
     case "cancelled":
       return "CANCELLED";
+    case "reversed":
+      return "REVERSED";
     case "rejected":
       return "REJECTED";
     default:
@@ -220,6 +222,7 @@ function applyCreditNoteToolbarFilters(
   if (statusTab === "draft") list = list.filter((x) => x.status === "DRAFT");
   else if (statusTab === "posted") list = list.filter((x) => x.status === "POSTED" || x.status === "APPROVED");
   else if (statusTab === "cancelled") list = list.filter((x) => x.status === "CANCELLED");
+  else if (statusTab === "reversed") list = list.filter((x) => x.status === "REVERSED");
 
   if (filters.dateFrom) list = list.filter((x) => x.creditNoteDate >= filters.dateFrom);
   if (filters.dateTo) list = list.filter((x) => x.creditNoteDate <= filters.dateTo);

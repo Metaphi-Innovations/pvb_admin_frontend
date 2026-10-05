@@ -315,11 +315,56 @@ export function CreditNoteSourceEntitlementSection({
                 value={formatDisplayDate(firstReturn?.reference_date || pending.eligibility_date)}
               />
               <SummaryItem
-                label="Eligible / Approved CN Amount"
-                value={formatCnMoney(pending.eligible_cn_amount)}
+                label="Return / CN Value"
+                value={formatCnMoney(
+                  pending.sales_return_settlement_preview?.eligible_cn_amount ??
+                    pending.eligible_cn_amount,
+                )}
                 mono
               />
+              {pending.sales_return_settlement_preview ? (
+                <>
+                  <SummaryItem
+                    label="Invoice Outstanding"
+                    value={
+                      pending.sales_return_settlement_preview.invoice_outstanding_amount != null
+                        ? formatCnMoney(
+                            pending.sales_return_settlement_preview.invoice_outstanding_amount,
+                          )
+                        : "—"
+                    }
+                    mono
+                  />
+                  <SummaryItem
+                    label="Will Settle Against Invoice"
+                    value={formatCnMoney(
+                      pending.sales_return_settlement_preview.suggested_settlement_amount,
+                    )}
+                    mono
+                  />
+                  <SummaryItem
+                    label="On-account Credit (after post)"
+                    value={formatCnMoney(
+                      pending.sales_return_settlement_preview.suggested_on_account_amount,
+                    )}
+                    mono
+                  />
+                </>
+              ) : (
+                <SummaryItem
+                  label="Eligible / Approved CN Amount"
+                  value={formatCnMoney(pending.eligible_cn_amount)}
+                  mono
+                />
+              )}
               {customerGstin ? <SummaryItem label="Customer GSTIN" value={customerGstin} mono /> : null}
+              {pending.sales_return_settlement_preview ? (
+                <div className="sm:col-span-2 lg:col-span-3 text-[10px] text-muted-foreground leading-snug px-0.5">
+                  CN value is the full returned invoice amount (not reduced to partial payment). On
+                  post, settlement is capped at invoice outstanding; any remainder becomes on-account
+                  credit (refund via Payment → Customer Refund if needed).
+                </div>
+              ) : null}
             </>
           ) : null}
 
