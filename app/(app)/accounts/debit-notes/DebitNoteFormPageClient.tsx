@@ -148,7 +148,12 @@ export default function DebitNoteFormPageClient({
   const router = useRouter();
   const searchParams = useSearchParams();
   const listHref = useMemo(
-    () => debitNoteReturnPath(searchParams.get("returnTo")),
+    () =>
+      debitNoteReturnPath(
+        searchParams.get("returnTo"),
+        searchParams.get("tab"),
+        searchParams.get("status"),
+      ),
     [searchParams],
   );
   const { toast, showToast, dismissToast } = useAccountsToast();
@@ -559,7 +564,6 @@ export default function DebitNoteFormPageClient({
         setSourceReturnId(String(detail.purchase_return_id || ""));
         setSourceReturnNo(returnNo);
         setReferenceReturnId(String(detail.purchase_return_id || ""));
-        setReferenceNo(returnNo !== "—" ? returnNo : "");
         setSourceDispatchNo(
           detail.dispatch?.dispatch_number || detail.dispatch?.challan_number || "",
         );
@@ -576,6 +580,7 @@ export default function DebitNoteFormPageClient({
               piRef?.reference_code ||
               "",
           ).trim();
+          setReferenceNo(piNo);
           const suggested = String(detail.suggested_narration || "").trim();
           setNarration(
             suggested ||
@@ -764,12 +769,19 @@ export default function DebitNoteFormPageClient({
       setOriginalAmount(String(rec.originalAmount));
       setAlreadyAdjusted(String(rec.alreadyAdjustedAmount));
       setRemarks(rec.remarks);
-      setNarration(rec.remarks);
+      setNarration(String(dn.narration || rec.remarks || "").trim());
       setBankAccountId(
         typeof rec.bankAccountId === "string" ? rec.bankAccountId : null,
       );
       setAttachments(rec.attachments ?? []);
-      setReferenceNo(rec.referenceNo ?? "");
+      setReferenceNo(
+        String(
+          rec.referenceNo ||
+            dn.supplier_reference_no ||
+            (dn.remarks && dn.remarks !== dn.narration ? dn.remarks : "") ||
+            "",
+        ).trim(),
+      );
       setAdjustmentLedgerId(rec.adjustmentLedgerId ?? null);
       setAdjustmentLedgerName(rec.adjustmentLedgerName ?? "");
       if (dn.warehouse_id) setWarehouseId(dn.warehouse_id);
@@ -1322,7 +1334,7 @@ export default function DebitNoteFormPageClient({
     return {
       dn_date: debitNoteDate,
       narration: narration.trim() || null,
-      remarks: remarks.trim() || null,
+      remarks: referenceNo.trim() || remarks.trim() || null,
       round_off_amount: roundOff,
       line_gst_overrides,
       extra_charges: [] as Array<{
@@ -1395,7 +1407,7 @@ export default function DebitNoteFormPageClient({
       warehouse_id: String(wId),
       supplier_id: String(input.vendorId),
       narration: input.remarks || null,
-      remarks: input.remarks || null,
+      remarks: input.referenceNo?.trim() || null,
       purchase_invoice_id:
         isDirectMode && directMode === "against_invoice" && referenceInvoiceId
           ? String(referenceInvoiceId)
@@ -1780,6 +1792,14 @@ export default function DebitNoteFormPageClient({
                               onChange={(id) => {
                                 setReferenceInvoiceId(id);
                                 setSourceInvoiceId(id ? Number(id) || null : null);
+                                const inv = eligiblePurchaseInvoices.find(
+                                  (x) => x.purchase_invoice_id === id,
+                                );
+                                if (inv?.supplier_invoice_number) {
+                                  setReferenceNo(inv.supplier_invoice_number);
+                                } else if (inv?.purchase_invoice_number) {
+                                  setReferenceNo(inv.purchase_invoice_number);
+                                }
                               }}
                               options={eligiblePurchaseInvoices.map((inv) => ({
                                 value: inv.purchase_invoice_id,

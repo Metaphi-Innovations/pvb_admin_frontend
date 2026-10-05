@@ -82,8 +82,8 @@ export function mapDebitNoteToRecord(item: any): DebitNoteRecord {
         adjustmentLedgerName: line.ledger?.ledger_name || "",
       };
     }) || [],
-    reason: item.remarks || item.narration || "",
-    remarks: item.remarks || item.narration || "",
+    reason: item.narration || item.remarks || "",
+    remarks: item.narration || "",
     attachments: item.attachments || [],
     status: item.status?.toLowerCase() || "draft",
     activity: item.activity?.map((act: any) => ({
@@ -99,7 +99,12 @@ export function mapDebitNoteToRecord(item: any): DebitNoteRecord {
     source: (item.source_type?.toLowerCase() || "manual") as DebitNoteRecord["source"],
     sourceReturnId: item.purchase_return_id || undefined,
     sourceReturnNo: item.purchase_return?.return_no || undefined,
-    referenceNo: item.remarks || "",
+    // remarks holds Supplier Reference No.; API also resolves linked PI supplier invoice no.
+    referenceNo: String(
+      item.supplier_reference_no ||
+        (item.remarks && item.remarks !== item.narration ? item.remarks : "") ||
+        "",
+    ).trim(),
     adjustmentLedgerId: item.lines?.[0]?.ledger_id || null,
     adjustmentLedgerName: item.lines?.[0]?.ledger?.ledger_name || "",
     cgstAmount: parseFloat(item.cgst_amount || "0"),

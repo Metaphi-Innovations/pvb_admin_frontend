@@ -164,7 +164,8 @@ export interface InvoiceAdditionalExpense {
 export type InvoiceAdditionalChargePayload = {
 	charge_name: string;
 	ledger_id: string;
-	hsn_id: string;
+	/** Required when gst_applicable is true; omitted/empty when GST is not applicable. */
+	hsn_id?: string | null;
 	amount: number;
 	gst_applicable: boolean;
 	gst_rate: number;
@@ -373,13 +374,14 @@ export function toAdditionalChargePayload(
 			? "ORDER"
 			: fallbackSource);
 
+	const gstApplicable = Boolean(row.gstApplicable);
 	return {
 		charge_name: particular,
 		ledger_id: ledgerId,
-		hsn_id: hsnId,
+		hsn_id: gstApplicable ? hsnId || null : null,
 		amount: roundMoney(Math.max(0, row.amount)),
-		gst_applicable: Boolean(row.gstApplicable),
-		gst_rate: row.gstApplicable ? Math.max(0, row.gstPct) : 0,
+		gst_applicable: gstApplicable,
+		gst_rate: gstApplicable ? Math.max(0, row.gstPct) : 0,
 		remarks: row.remarks?.trim() || null,
 		charge_source: source,
 		additional_charge_id: row.chargeMasterId || null,

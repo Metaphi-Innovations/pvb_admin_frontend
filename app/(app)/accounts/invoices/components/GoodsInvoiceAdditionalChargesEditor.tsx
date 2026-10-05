@@ -67,6 +67,7 @@ const ChargeRow = memo(function ChargeRow({
   hsnOptions,
   disabled,
   interstate,
+  showGstColumns,
   onUpdate,
   onRemove,
   tableVariant = "default",
@@ -75,6 +76,7 @@ const ChargeRow = memo(function ChargeRow({
   hsnOptions: { value: string; label: string; selectedLabel?: string; sub?: string; gstPercentage: number; hsnCode: string }[];
   disabled?: boolean;
   interstate: boolean;
+  showGstColumns: boolean;
   onUpdate: (id: string, patch: Partial<InvoiceAdditionalExpense>) => void;
   onRemove: (id: string) => void;
   tableVariant?: "default" | "invoice";
@@ -85,6 +87,7 @@ const ChargeRow = memo(function ChargeRow({
     ? "border-b border-border/40 last:border-0"
     : "border-b border-border/40 last:border-b-0";
   const cellClass = invoiceTable ? "p-1.5 align-middle" : "px-1.5 py-1.5 align-middle";
+  const gstOn = Boolean(row.gstApplicable);
 
   const renderComputed = (value: string, opts?: { muted?: boolean; strong?: boolean }) => {
     if (invoiceTable) {
@@ -141,26 +144,6 @@ const ChargeRow = memo(function ChargeRow({
           }
         />
       </td>
-      <td className={cn(cellClass, "min-w-[140px] w-[150px]")}>
-        <SearchableSelect
-          value={row.hsnId ?? ""}
-          onChange={(id) => {
-            const hit = hsnOptions.find((o) => o.value === id);
-            onUpdate(row.id, {
-              hsnId: id || null,
-              hsnCode: hit?.hsnCode ?? null,
-              ...(row.gstApplicable && hit
-                ? { gstPct: hit.gstPercentage }
-                : {}),
-            });
-          }}
-          options={hsnOptions}
-          placeholder="Select HSN…"
-          disabled={disabled}
-          contentClassName="w-[320px]"
-          triggerClassName="h-8 px-2 text-xs rounded-lg"
-        />
-      </td>
       <td className={cn(cellClass, "min-w-[120px] w-[130px]")}>
         <AccountsMoneyInput
           className={NUM_INPUT_CLASS}
@@ -178,59 +161,97 @@ const ChargeRow = memo(function ChargeRow({
           />
         </div>
       </td>
-      <td className={cn(cellClass, "min-w-[90px] w-[100px]")}>
-        <Input
-          type="number"
-          min={0}
-          max={100}
-          step={0.01}
-          disabled={disabled || !row.gstApplicable}
-          className={cn(NUM_INPUT_CLASS, !row.gstApplicable && "bg-muted/25")}
-          value={row.gstApplicable ? row.gstPct || "" : ""}
-          onChange={(e) =>
-            onUpdate(row.id, {
-              gstPct: parseFloat(e.target.value) || 0,
-            })
-          }
-        />
-      </td>
-      {interstate ? (
-        <td className={cn(cellClass, "min-w-[110px] w-[120px]")}>
-          {renderComputed(
-            row.gstApplicable && calc.igst > 0 ? formatINR(calc.igst) : "—",
-            { muted: true },
-          )}
-        </td>
-      ) : (
+      {showGstColumns ? (
         <>
-          <td className={cn(cellClass, "min-w-[110px] w-[120px]")}>
-            {renderComputed(
-              row.gstApplicable && calc.cgst > 0 ? formatINR(calc.cgst) : "—",
-              { muted: true },
-            )}
+          <td className={cn(cellClass, "min-w-[140px] w-[150px]")}>
+            {gstOn ? (
+              <SearchableSelect
+                value={row.hsnId ?? ""}
+                onChange={(id) => {
+                  const hit = hsnOptions.find((o) => o.value === id);
+                  onUpdate(row.id, {
+                    hsnId: id || null,
+                    hsnCode: hit?.hsnCode ?? null,
+                    ...(row.gstApplicable && hit
+                      ? { gstPct: hit.gstPercentage }
+                      : {}),
+                  });
+                }}
+                options={hsnOptions}
+                placeholder="Select HSN…"
+                disabled={disabled}
+                contentClassName="w-[320px]"
+                triggerClassName="h-8 px-2 text-xs rounded-lg"
+              />
+            ) : null}
           </td>
-          <td className={cn(cellClass, "min-w-[110px] w-[120px]")}>
-            {renderComputed(
-              row.gstApplicable && calc.sgst > 0 ? formatINR(calc.sgst) : "—",
-              { muted: true },
-            )}
+          <td className={cn(cellClass, "min-w-[90px] w-[100px]")}>
+            {gstOn ? (
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                step={0.01}
+                disabled={disabled}
+                className={NUM_INPUT_CLASS}
+                value={row.gstPct || ""}
+                onChange={(e) =>
+                  onUpdate(row.id, {
+                    gstPct: parseFloat(e.target.value) || 0,
+                  })
+                }
+              />
+            ) : null}
+          </td>
+          {interstate ? (
+            <td className={cn(cellClass, "min-w-[110px] w-[120px]")}>
+              {gstOn
+                ? renderComputed(calc.igst > 0 ? formatINR(calc.igst) : "—", {
+                    muted: true,
+                  })
+                : null}
+            </td>
+          ) : (
+            <>
+              <td className={cn(cellClass, "min-w-[110px] w-[120px]")}>
+                {gstOn
+                  ? renderComputed(calc.cgst > 0 ? formatINR(calc.cgst) : "—", {
+                      muted: true,
+                    })
+                  : null}
+              </td>
+              <td className={cn(cellClass, "min-w-[110px] w-[120px]")}>
+                {gstOn
+                  ? renderComputed(calc.sgst > 0 ? formatINR(calc.sgst) : "—", {
+                      muted: true,
+                    })
+                  : null}
+              </td>
+            </>
+          )}
+          <td className={cn(cellClass, "min-w-[120px] w-[130px]")}>
+            {gstOn
+              ? renderComputed(
+                  calc.totalAmount > 0 ? formatINR(calc.totalAmount) : "—",
+                  { strong: calc.totalAmount > 0, muted: calc.totalAmount <= 0 },
+                )
+              : null}
           </td>
         </>
-      )}
-      <td className={cn(cellClass, "min-w-[120px] w-[130px]")}>
-        {renderComputed(
-          calc.totalAmount > 0 ? formatINR(calc.totalAmount) : "—",
-          { strong: calc.totalAmount > 0, muted: calc.totalAmount <= 0 },
-        )}
-      </td>
+      ) : null}
       <td className={cn(cellClass, "min-w-[160px] w-[180px]")}>
-        <Input
-          className="h-8 text-xs"
-          placeholder="Optional"
-          disabled={disabled}
-          value={row.remarks}
-          onChange={(e) => onUpdate(row.id, { remarks: e.target.value })}
-        />
+        {disabled ? (
+          <div className="h-8 px-2 flex items-center text-xs text-foreground">
+            {row.remarks?.trim() || ""}
+          </div>
+        ) : (
+          <Input
+            className="h-8 text-xs"
+            placeholder="Optional"
+            value={row.remarks}
+            onChange={(e) => onUpdate(row.id, { remarks: e.target.value })}
+          />
+        )}
       </td>
       {!disabled ? (
         <td className={cn(cellClass, "so-col-actions w-9")}>
@@ -281,42 +302,31 @@ function GoodsInvoiceAdditionalChargesEditorInner({
     [hsnDropdown],
   );
 
-  const gstHeaders = interstate ? (["IGST"] as const) : (["CGST", "SGST"] as const);
-  const headers = (
-    disabled
-      ? ([
-          "Particular",
-          "Additional Charges Ledger",
-          "HSN",
-          "Amount",
-          "GST",
-          "GST %",
-          ...gstHeaders,
-          "Total Amount",
-          "Remark",
-        ] as const)
-      : ([
-          "Particular",
-          "Additional Charges Ledger",
-          "HSN",
-          "Amount",
-          "GST",
-          "GST %",
-          ...gstHeaders,
-          "Total Amount",
-          "Remark",
-          "",
-        ] as const)
+  /** Show GST-dependent columns when any row has GST Applicable on. */
+  const showGstColumns = useMemo(
+    () => expenses.some((row) => row.gstApplicable),
+    [expenses],
   );
+
+  const gstHeaders = interstate ? ["IGST"] : ["CGST", "SGST"];
+  const headers: string[] = [
+    "Particular",
+    "Additional Charges Ledger",
+    "Amount",
+    "GST",
+    ...(showGstColumns ? ["HSN", "GST %", ...gstHeaders, "Total Amount"] : []),
+    "Remark",
+    ...(disabled ? [] : [""]),
+  ];
 
   const rightAlign = new Set(["Amount", "GST %", "CGST", "SGST", "IGST", "Total Amount"]);
 
   const colClassByHeader: Record<string, string> = {
     Particular: "min-w-[180px] w-[200px]",
     "Additional Charges Ledger": "min-w-[240px] w-[260px]",
-    HSN: "min-w-[140px] w-[150px]",
     Amount: "min-w-[120px] w-[130px]",
     GST: "min-w-[72px] w-[80px]",
+    HSN: "min-w-[140px] w-[150px]",
     "GST %": "min-w-[90px] w-[100px]",
     CGST: "min-w-[110px] w-[120px]",
     SGST: "min-w-[110px] w-[120px]",
@@ -380,7 +390,7 @@ function GoodsInvoiceAdditionalChargesEditorInner({
             invoiceTable
               ? "so-invoice-table so-invoice-charges-table text-xs w-full"
               : "w-full text-xs",
-            "min-w-[1480px]",
+            showGstColumns ? "min-w-[1480px]" : "min-w-[900px]",
           )}
         >
           <thead className={invoiceTable ? undefined : "border-b border-border/60 bg-muted/20"}>
@@ -418,6 +428,7 @@ function GoodsInvoiceAdditionalChargesEditorInner({
                   hsnOptions={hsnOptions}
                   disabled={disabled}
                   interstate={interstate}
+                  showGstColumns={showGstColumns}
                   onUpdate={update}
                   onRemove={removeRow}
                   tableVariant={tableVariant}
@@ -467,14 +478,16 @@ export function validateGoodsAdditionalCharges(
     if (!hasLedger) {
       return `Select Additional Charges Ledger for "${particular}".`;
     }
-    if (!hasHsn) {
-      return `Select HSN for "${particular}".`;
-    }
     if (!(row.amount > 0)) {
       return `Enter a valid amount for "${particular}".`;
     }
-    if (row.gstApplicable && !(row.gstPct > 0)) {
-      return `GST % is required when GST Applicable is Yes for "${particular}".`;
+    if (row.gstApplicable) {
+      if (!hasHsn) {
+        return `Select HSN for "${particular}" when GST Applicable is Yes.`;
+      }
+      if (!(row.gstPct > 0)) {
+        return `GST % is required when GST Applicable is Yes for "${particular}".`;
+      }
     }
   }
   return null;

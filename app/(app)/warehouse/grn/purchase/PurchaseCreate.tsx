@@ -52,11 +52,6 @@ import {
   ProductSkuCell,
 } from "../shared/components/ProductSkuCell";
 import { PartialGrnConfirmDialog, type PartialGrnProductRow } from "../shared/components/PartialGrnConfirmDialog";
-import {
-  exceedsMaxLineQty,
-  maxLineQtyMessage,
-} from "@/lib/quantity-limits";
-
 interface ManualInvoiceRow {
   id: string;
   sourceItemId: string;
@@ -451,9 +446,6 @@ function validateManualRow(row: ManualInvoiceRow): string | null {
   if (!row.mfgDate.trim()) return "MFG Date is required";
   if (!row.expDate.trim()) return "Expiry Date is required";
   if (row.quantity <= 0) return "Quantity must be greater than 0";
-  if (exceedsMaxLineQty(row.displayQty)) {
-    return maxLineQtyMessage("Invoice quantity");
-  }
   if (row.mfgDate && row.expDate && row.expDate < row.mfgDate) {
     return "Expiry Date cannot be before MFG Date";
   }
@@ -659,11 +651,11 @@ export function PurchaseCreate({
   ]);
 
   useEffect(() => {
-    if (isEdit) return;
+    if (isEdit && (!existingGrn || selectedPoId === existingGrn.sourceId)) return;
     if (selectedPo?.warehouseId) {
       setWarehouseId(String(selectedPo.warehouseId));
     }
-  }, [isEdit, selectedPo?.warehouseId]);
+  }, [isEdit, existingGrn, selectedPoId, selectedPo?.warehouseId]);
 
   const productOptions = useMemo(
     () =>
@@ -819,7 +811,7 @@ export function PurchaseCreate({
     setWarehouseId("");
     setItems([]);
     setManualRows([createEmptyRow()]);
-    setInvoiceNumber("");
+    if (!isEdit) setInvoiceNumber("");
     setItemErrors({});
     setItemWarnings({});
     setExtractionWarnings([]);
@@ -834,7 +826,7 @@ export function PurchaseCreate({
     setWarehouseId("");
     setItems([]);
     setManualRows([createEmptyRow()]);
-    setInvoiceNumber("");
+    if (!isEdit) setInvoiceNumber("");
     setItemErrors({});
     setItemWarnings({});
     setExtractionWarnings([]);
@@ -848,11 +840,19 @@ export function PurchaseCreate({
   const handleSupplierChange = (value: string) => {
     setSupplierId(value);
     resetDependentOnSupplier();
+    if (isEdit) setEditItemsSeeded(false);
   };
 
   const handlePoChange = (value: string) => {
     setSelectedPoId(value);
     resetDependentOnPo();
+    if (!isEdit) return;
+    // Items re-seed from the selected PO; switching back to the original PO restores this GRN's entries.
+    setEditItemsSeeded(false);
+    if (existingGrn && value === existingGrn.sourceId) {
+      setWarehouseId(existingGrn.warehouseUuid || "");
+      setManualRows(buildManualRowsFromGrn(existingGrn));
+    }
   };
 
   const handleItemQtyChange = (
@@ -1321,13 +1321,6 @@ export function PurchaseCreate({
         );
         return;
       }
-      const entryQty = Number(it.displayQty ?? it.receivedCases ?? 0);
-      if (exceedsMaxLineQty(entryQty)) {
-        setFormError(
-          `${it.productName}: ${maxLineQtyMessage("Received quantity")}`,
-        );
-        return;
-      }
       const pending = it.maxReceivableQty ?? it.pendingQty ?? 0;
       if (it.receivedQty > pending) {
         setFormError(
@@ -1468,6 +1461,7 @@ export function PurchaseCreate({
       setIsSubmitting(true);
       if (isEdit && grnId) {
         const updatePayload: UpdateGrnPayload = {
+          source_id: selectedPoId,
           supplierId,
           warehouseId,
           grnDate,
@@ -1556,18 +1550,30 @@ export function PurchaseCreate({
       value: po.purchase_order_id,
       label: po.po_no,
     }));
+    // Keep the GRN's original PO selectable in edit even if it no longer has pending qty.
+    if (
+      isEdit &&
+      existingGrn?.sourceId &&
+      supplierId === existingGrn.supplierId &&
+      !options.some((o) => o.value === existingGrn.sourceId)
+    ) {
+      options.unshift({
+        value: existingGrn.sourceId,
+        label: existingGrn.poNumber || existingGrn.sourceId,
+      });
+    }
     if (
       selectedPoId &&
       !options.some((o) => o.value === selectedPoId) &&
-      (existingGrn?.poNumber || selectedPo?.poNumber)
+      selectedPo?.poNumber
     ) {
       options.unshift({
         value: selectedPoId,
-        label: existingGrn?.poNumber || selectedPo?.poNumber || selectedPoId,
+        label: selectedPo.poNumber,
       });
     }
     return options;
-  }, [poOptions, selectedPoId, existingGrn?.poNumber, selectedPo?.poNumber]);
+  }, [poOptions, selectedPoId, isEdit, supplierId, existingGrn, selectedPo?.poNumber]);
 
   if (isEdit && grnLoading) {
     return (
@@ -1621,7 +1627,7 @@ export function PurchaseCreate({
       title={isEdit ? "Edit Purchase GRN" : "Generate GRN"}
       description={
         isEdit
-          ? "Update received quantities and batch details for this purchase GRN. Supplier and PO cannot be changed."
+          ? "Update received quantities and batch details for this purchase GRN. Supplier and PO can be changed until QC is done."
           : "Capture physical goods receipt and batch details against a single purchase order. Upload an invoice to auto-fill header and batch rows."
       }
       onBack={() => router.push(backHref)}
@@ -1672,7 +1678,7 @@ export function PurchaseCreate({
               onChange={handleSupplierChange}
               placeholder={suppliersLoading ? "Loading suppliers…" : "Select supplier…"}
               searchPlaceholder="Search vendor…"
-              disabled={suppliersLoading || isEdit}
+              disabled={suppliersLoading}
               className="h-9 text-xs py-1.5 px-3 rounded-lg border-border focus:ring-1 focus:ring-brand-500 bg-white shadow-none focus:outline-none"
             />
           </Field>
@@ -1681,9 +1687,11 @@ export function PurchaseCreate({
             label="Select Purchase Order"
             required
             hint={
-              !isEdit && supplierId && !posLoading && poOptions.length === 0
+              supplierId && !posLoading && poSelectOptions.length === 0
                 ? "No purchase orders found for this supplier."
-                : undefined
+                : isEdit
+                  ? "Changing the PO clears the received quantities and invoice lines."
+                  : undefined
             }
           >
             <AutocompleteSelect
@@ -1698,7 +1706,7 @@ export function PurchaseCreate({
                     : "Select PO…"
               }
               searchPlaceholder="Search PO…"
-              disabled={!supplierId || posLoading || isEdit}
+              disabled={!supplierId || posLoading}
               className="h-9 text-xs py-1.5 px-3 rounded-lg border-border focus:ring-1 focus:ring-brand-500 bg-white shadow-none focus:outline-none"
             />
           </Field>

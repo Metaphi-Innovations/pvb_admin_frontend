@@ -25,6 +25,7 @@ interface SalesInvoiceDispatchDetailsDialogProps {
   context?: {
     salesOrderNo?: string;
     salesOrderDate?: string;
+    dispatchDate?: string;
     placeOfSupply?: string;
     billFrom?: string;
     billTo?: string;
@@ -109,6 +110,12 @@ export function SalesInvoiceDispatchDetailsDialog({
     orderDate = bySo?.orderDate || "";
   }
 
+  const resolvedDispatchDate =
+    context?.dispatchDate ||
+    dispatch?.dispatchDate ||
+    dispatch?.dispatch_date ||
+    "";
+
   const qty =
     context?.dispatchQty ??
     dispatch?.products?.reduce((s, p) => s + (p.dispatchQty || 0), 0) ??
@@ -127,7 +134,7 @@ export function SalesInvoiceDispatchDetailsDialog({
     },
     {
       label: "Dispatch Date",
-      value: formatDisplayDate(dispatch?.dispatchDate || dispatch?.dispatch_date),
+      value: formatDisplayDate(resolvedDispatchDate),
     },
     {
       label: "Warehouse",

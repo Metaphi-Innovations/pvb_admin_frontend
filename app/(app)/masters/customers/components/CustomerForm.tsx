@@ -46,6 +46,7 @@ import {
 import { useFY, fyOpeningDateIso } from "@/lib/fy-store";
 import { formatIndianRupeeDisplay } from "@/lib/currency/indian-rupee";
 import { getStandardMrp } from "@/lib/pricing/resolve-pricing";
+import { resolveProductAssetUrl } from "@/app/(app)/masters/products/product-data";
 import {
 	GST_REGISTRATION_TYPE_DEFAULT,
 	GST_CATEGORY_UNREGISTERED,
@@ -166,6 +167,12 @@ export interface CustomerTypeWithDocs {
 	customerInitialCode?: string
 	documents?: CustomerTypeDocument[];
 }
+
+/** Must stay in sync with backend CUSTOMER_BRANCH_DOC_MAX_BYTES. */
+export const CUSTOMER_BRANCH_DOC_MAX_BYTES = 25 * 1024 * 1024; // 25MB
+export const CUSTOMER_BRANCH_DOC_MAX_LABEL = "25MB";
+export const CUSTOMER_BRANCH_DOC_ACCEPT =
+	".jpg,.jpeg,.png,.gif,.pdf,.doc,.docx,.xls,.xlsx,.csv,image/jpeg,image/png,image/gif,application/pdf";
 
 export function getDocumentsForCustomerType(
 	customerTypeId: string,
@@ -523,18 +530,18 @@ function LocalToast({
 	return (
 		<div
 			className={cn(
-				"fixed top-5 right-5 z-[100] flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl text-white text-sm font-medium",
+				"fixed top-5 right-5 z-[100] flex items-start gap-2.5 px-4 py-3 rounded-xl shadow-xl text-white text-sm font-medium max-w-md",
 				"animate-in slide-in-from-top-2 fade-in-0 duration-300",
 				toast.type === "success" ? "bg-emerald-600" : "bg-red-600",
 			)}
 		>
 			{toast.type === "success" ? (
-				<CheckCircle2 className='flex-shrink-0 w-4 h-4' />
+				<CheckCircle2 className='flex-shrink-0 w-4 h-4 mt-0.5' />
 			) : (
-				<XCircle className='flex-shrink-0 w-4 h-4' />
+				<XCircle className='flex-shrink-0 w-4 h-4 mt-0.5' />
 			)}
-			{toast.msg}
-			<button onClick={onDismiss} className='ml-1 opacity-70 hover:opacity-100'>
+			<span className='leading-snug'>{toast.msg}</span>
+			<button onClick={onDismiss} className='ml-1 opacity-70 hover:opacity-100 shrink-0'>
 				<X className='w-3.5 h-3.5' />
 			</button>
 		</div>
@@ -1004,18 +1011,32 @@ interface CustomerFormProps {
 	onStepChange?: (step: CustomerFormStepId) => void;
 }
 
+function toStoredFileUrl(url?: string): string | undefined {
+	if (!url) return undefined;
+	if (url.startsWith("blob:") || url.startsWith("data:")) return undefined;
+	const marker = "/uploads/";
+	const idx = url.indexOf(marker);
+	if (idx >= 0) return url.slice(idx);
+	if (url.startsWith("/")) return url;
+	return undefined;
+}
+
 function branchDocumentsToPayload(
 	documents: BranchDocument[],
 	branchIndex: number,
 ): CustomerBranchDocumentPayload[] {
 	return documents
-		.filter((d): d is BranchDocument & { documentTypeId: string; file: File } =>
-			!!d.documentTypeId && !!d.file,
-		)
-		.map((d) => ({
-			document_type_id: d.documentTypeId,
-			file_key: buildFileKey(branchIndex, d.documentTypeId),
-		}));
+		.filter((d) => !!d.documentTypeId && (!!d.file || !!toStoredFileUrl(d.fileUrl)))
+		.map((d) => {
+			const storedUrl = toStoredFileUrl(d.fileUrl);
+			return {
+				document_type_id: d.documentTypeId as string,
+				...(d.file
+					? { file_key: buildFileKey(branchIndex, d.documentTypeId as string) }
+					: {}),
+				...(storedUrl && !d.file ? { file_url: storedUrl } : {}),
+			};
+		});
 }
 
 function branchToPayload(
@@ -1076,6 +1097,32 @@ export function CustomerForm({
 	const formRef = useRef(form);
 	formRef.current = form;
 
+	useEffect(() => {
+		if (readOnly) return;
+		if (!form.customerType || customerTypes.length === 0) return;
+		const template = getDocumentsForCustomerType(form.customerType, customerTypes);
+		if (!template.length) return;
+
+		const current = formRef.current;
+		const nextBranches = current.branches.map((branch) => {
+			const merged = mergeBranchDocumentsWithType(
+				branch.documents,
+				form.customerType,
+				customerTypes,
+			);
+			const sameLength = merged.length === branch.documents.length;
+			const sameTypes =
+				sameLength &&
+				merged.every(
+					(d, i) => d.documentTypeId === branch.documents[i]?.documentTypeId,
+				);
+			if (sameTypes) return branch;
+			return { ...branch, documents: merged };
+		});
+		const changed = nextBranches.some((b, i) => b !== current.branches[i]);
+		if (changed) onChange({ ...current, branches: nextBranches });
+	}, [form.customerType, customerTypes, readOnly, onChange]);
+
 	const { selectedFY } = useFY();
 	const [geoNodes] = useState(() =>
 		typeof window !== "undefined" ? loadGeoNodes() : [],
@@ -1106,10 +1153,19 @@ export function CustomerForm({
 	const [gstAddressSnapshot, setGstAddressSnapshot] =
 		useState<GstAddressSnapshot | null>(null);
 	const [toastState, setToastState] = useState<ToastState | null>(null);
+	const [docUploadErrors, setDocUploadErrors] = useState<Record<string, string>>(
+		{},
+	);
 	const showToast = (msg: string, type: "success" | "error") => {
 		setToastState({ msg, type });
-		setTimeout(() => setToastState(null), 3200);
+		const holdMs =
+			type === "error"
+				? Math.min(9000, 3200 + msg.length * 30)
+				: 3200;
+		setTimeout(() => setToastState(null), holdMs);
 	};
+	const docFileErrorKey = (branchIndex: number, docIndex: number) =>
+		`branch_${branchIndex}_doc_${docIndex}_file`;
 
 	const gstRegistered = form.gstRegistered;
 
@@ -1188,6 +1244,28 @@ export function CustomerForm({
 		if (!activeBranchUpload) return;
 
 		const { branchIndex, docIndex } = activeBranchUpload;
+		const docLabel =
+			form.branches[branchIndex]?.documents[docIndex]?.documentName?.trim() ||
+			"this document";
+		const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
+
+		const fileErrKey = docFileErrorKey(branchIndex, docIndex);
+
+		if (file.size > CUSTOMER_BRANCH_DOC_MAX_BYTES) {
+			const msg = `“${file.name}” is ${sizeMb}MB and is too large for ${docLabel}. Choose a file up to ${CUSTOMER_BRANCH_DOC_MAX_LABEL}, then try again.`;
+			showToast(msg, "error");
+			setDocUploadErrors((prev) => ({ ...prev, [fileErrKey]: msg }));
+			onClearError(fileErrKey);
+			setActiveBranchUpload(null);
+			e.target.value = "";
+			return;
+		}
+
+		const previousUrl = form.branches[branchIndex]?.documents[docIndex]?.fileUrl;
+		if (previousUrl?.startsWith("blob:")) {
+			URL.revokeObjectURL(previousUrl);
+		}
+
 		const fileUrl = URL.createObjectURL(file);
 		const fileName = file.name;
 
@@ -1199,8 +1277,21 @@ export function CustomerForm({
 			),
 		};
 		onChange({ ...form, branches: updatedBranches });
-		showToast("Document uploaded successfully.", "success");
+		setDocUploadErrors((prev) => {
+			if (!prev[fileErrKey]) return prev;
+			const next = { ...prev };
+			delete next[fileErrKey];
+			return next;
+		});
+		onClearError(fileErrKey);
+		showToast(
+			previousUrl
+				? `“${fileName}” replaced for ${docLabel}.`
+				: `“${fileName}” uploaded for ${docLabel}.`,
+			"success",
+		);
 		setActiveBranchUpload(null);
+		e.target.value = "";
 	};
 	// console.log('customerTypes[0]:', customerTypes[0]); // ⬅ add here
 
@@ -2406,9 +2497,18 @@ export function CustomerForm({
 
 												{/* Branch Documents Section */}
 												<div className='pt-3 space-y-3 border-t border-border/40'>
-													<p className='text-xs font-bold uppercase tracking-wider text-foreground flex items-center leading-none'>
-														Document Upload Checklist <span className='text-red-500 ml-1'>*</span>
-													</p>
+													<div className='flex flex-wrap items-baseline justify-between gap-2'>
+														<p className='text-xs font-bold uppercase tracking-wider text-foreground flex items-center leading-none'>
+															Document Upload Checklist{" "}
+															<span className='text-red-500 ml-1'>*</span>
+														</p>
+														{!readOnly ? (
+															<p className='text-[10px] text-muted-foreground'>
+																PDF, images, Word/Excel · max{" "}
+																{CUSTOMER_BRANCH_DOC_MAX_LABEL} per file
+															</p>
+														) : null}
+													</div>
 
 													<div className='space-y-4 duration-200 animate-in fade-in-50'>
 														{!form.customerType ? (
@@ -2434,7 +2534,10 @@ export function CustomerForm({
 																		<tbody>
 																			{branch.documents.map(
 																				(doc, originalIdx) => {
-																					const isAttached = !!doc.fileName;
+																					const isAttached =
+																						!!doc.fileName ||
+																						!!doc.fileUrl ||
+																						!!doc.file;
 																					return (
 																						<tr
 																							key={originalIdx}
@@ -2483,29 +2586,66 @@ export function CustomerForm({
 																							</td>
 																							<td className='px-3 py-2'>
 																								{isAttached ? (
-																									<button
-																										type='button'
-																										className='text-xs text-brand-600 hover:text-brand-700 hover:underline font-medium text-left truncate max-w-[280px] block'
-																										title={`Click to view ${doc.fileName}`}
-																										onClick={() => {
-																											if (
-																												doc.fileUrl &&
-																												doc.fileName
-																											) {
-																												setPreviewDoc({
-																													title:
-																														doc.documentName ||
-																														"Document",
-																													fileUrl:
-																														doc.fileUrl,
-																													fileName:
-																														doc.fileName,
-																												});
-																											}
-																										}}
-																									>
-																										{doc.fileName}
-																									</button>
+																									<div className='space-y-1'>
+																										<div className='flex flex-wrap items-center gap-2'>
+																											<button
+																												type='button'
+																												className='text-xs text-brand-600 hover:text-brand-700 hover:underline font-medium text-left truncate max-w-[220px]'
+																												title={`Click to view ${doc.fileName}`}
+																												onClick={() => {
+																												if (
+																													doc.fileUrl &&
+																													(doc.fileName || doc.file)
+																												) {
+																													setPreviewDoc({
+																														title:
+																															doc.documentName ||
+																															"Document",
+																														fileUrl: doc.fileUrl.startsWith("blob:")
+																															? doc.fileUrl
+																															: resolveProductAssetUrl(doc.fileUrl),
+																														fileName:
+																															doc.fileName || "Document",
+																													});
+																												}
+																												}}
+																											>
+																												{doc.fileName}
+																											</button>
+																											{!readOnly ? (
+																												<Button
+																													type='button'
+																													variant='outline'
+																													size='sm'
+																													className='h-7 text-[11px] shrink-0'
+																													onClick={() =>
+																														triggerBranchUpload(
+																															bIdx,
+																															originalIdx,
+																														)
+																													}
+																												>
+																													<Upload className='w-3 h-3 mr-1 shrink-0' />
+																													Change File
+																												</Button>
+																											) : null}
+																										</div>
+																										{(errors[
+																											`branch_${bIdx}_doc_${originalIdx}_file`
+																										] ||
+																											docUploadErrors[
+																											`branch_${bIdx}_doc_${originalIdx}_file`
+																											]) && (
+																												<p className='text-[10px] text-red-500 mt-0.5 max-w-[320px]'>
+																													{errors[
+																														`branch_${bIdx}_doc_${originalIdx}_file`
+																													] ||
+																														docUploadErrors[
+																														`branch_${bIdx}_doc_${originalIdx}_file`
+																														]}
+																												</p>
+																											)}
+																									</div>
 																								) : readOnly ? (
 																									<span className='text-muted-foreground'>
 																										—
@@ -2527,15 +2667,19 @@ export function CustomerForm({
 																											<Upload className='w-3 h-3 mr-1 shrink-0' />
 																											Choose File
 																										</Button>
-																										{errors[
+																										{(errors[
 																											`branch_${bIdx}_doc_${originalIdx}_file`
-																										] && (
-																												<p className='text-[10px] text-red-500 mt-0.5'>
-																													{
-																														errors[
+																										] ||
+																											docUploadErrors[
+																											`branch_${bIdx}_doc_${originalIdx}_file`
+																											]) && (
+																												<p className='text-[10px] text-red-500 mt-0.5 max-w-[320px]'>
+																													{errors[
 																														`branch_${bIdx}_doc_${originalIdx}_file`
-																														]
-																													}
+																													] ||
+																														docUploadErrors[
+																														`branch_${bIdx}_doc_${originalIdx}_file`
+																														]}
 																												</p>
 																											)}
 																									</div>
@@ -2686,6 +2830,7 @@ export function CustomerForm({
 				type='file'
 				ref={fileInputRef}
 				className='hidden'
+				accept={CUSTOMER_BRANCH_DOC_ACCEPT}
 				onChange={handleFileChange}
 			/>
 
@@ -2836,14 +2981,52 @@ export interface CustomerApiRecord {
 }
 
 function apiDocToBranchDocument(doc: CustomerApiBranchDocument): BranchDocument {
-	const fileName = doc.file_url ? doc.file_url.split("/").pop() : undefined;
+	const stored = toStoredFileUrl(doc.file_url) || doc.file_url || "";
+	const rawName = stored ? stored.split("/").pop() : undefined;
+	let fileName = rawName;
+	try {
+		if (rawName) fileName = decodeURIComponent(rawName);
+	} catch {
+		fileName = rawName;
+	}
 	return {
 		documentTypeId: doc.document_type_id,
 		documentName: doc.document_type?.title ?? "",
 		required: true,
-		fileUrl: doc.file_url || undefined,
+		fileUrl: stored ? resolveProductAssetUrl(stored) : undefined,
 		fileName: fileName || undefined,
 	};
+}
+
+function mergeBranchDocumentsWithType(
+	existing: BranchDocument[],
+	customerTypeId: string,
+	customerTypes: CustomerTypeWithDocs[],
+): BranchDocument[] {
+	const template = getDocumentsForCustomerType(customerTypeId, customerTypes);
+	if (!template.length) return existing;
+	const byType = new Map(
+		existing
+			.filter((d) => d.documentTypeId)
+			.map((d) => [d.documentTypeId as string, d]),
+	);
+	const merged = template.map((slot) => {
+		const current = byType.get(slot.documentTypeId as string);
+		if (!current) return slot;
+		return {
+			...slot,
+			fileName: current.fileName,
+			fileUrl: current.fileUrl,
+			file: current.file,
+			fileKey: current.fileKey,
+		};
+	});
+	const extras = existing.filter(
+		(d) =>
+			d.documentTypeId &&
+			!template.some((t) => t.documentTypeId === d.documentTypeId),
+	);
+	return extras.length ? [...merged, ...extras] : merged;
 }
 
 function apiBranchToFormBranch(b: CustomerApiBranch): CustomerBranch {

@@ -117,7 +117,12 @@ export function parsePendingGrnViewId(id: string): string | null {
 }
 
 export type PurchaseInvoiceBackendType = "PURCHASE" | "DIRECT_PURCHASE" | "STOCK_TRANSFER";
-export type PurchaseInvoiceBackendStatus = "POSTED" | "CANCELLED" | "REVERSED" | "PENDING";
+export type PurchaseInvoiceBackendStatus =
+  | "DRAFT"
+  | "POSTED"
+  | "CANCELLED"
+  | "REVERSED"
+  | "PENDING";
 
 export type PiNumberParams = {
   warehouseId?: string | null;
@@ -163,7 +168,8 @@ export type EligibleGrnsQuery = {
 export type AdditionalChargeInput = {
   charge_name: string;
   ledger_id: string;
-  hsn_id: string;
+  /** Required when gst_applicable is true. */
+  hsn_id?: string | null;
   amount: number | string;
   gst_applicable?: boolean;
   gst_rate?: number | string;
@@ -209,6 +215,8 @@ export type CreateDirectPurchasePayload = {
   narration?: string | null;
   remarks?: string | null;
   round_off_amount?: number | string | null;
+  /** Persist as DRAFT without accounting post. */
+  save_as_draft?: boolean;
   items: DirectPurchaseItemInput[];
   additional_charges?: AdditionalChargeInput[];
   attachment?: File | null;
@@ -778,7 +786,7 @@ function mapApprovalStatus(
 
 function mapPostingStatusLabel(status: string): string {
   if (status === "POSTED") return "Posted";
-  if (status === "PENDING") return "Draft";
+  if (status === "DRAFT" || status === "PENDING") return "Draft";
   if (status === "CANCELLED") return "Cancelled";
   if (status === "REVERSED") return "Reversed";
   return status || "—";
@@ -1526,6 +1534,48 @@ export const PurchaseInvoiceService = {
     } catch (error) {
       throw new Error(
         extractErrorMessage(error, "Failed to create direct purchase invoice."),
+      );
+    }
+  },
+
+  async updateDraftDirectPurchase(
+    id: string,
+    payload: CreateDirectPurchasePayload,
+    options?: { financialYearId?: string | null },
+  ): Promise<PurchaseInvoiceCreateResult> {
+    try {
+      const fyId = resolveFyHeaderId(options?.financialYearId);
+      const formData = buildMultipartPayload(payload as Record<string, unknown>);
+      const response = await axiosInstance.put(
+        API_ENDPOINTS.ACCOUNTS.PURCHASE_INVOICE.UPDATE_DRAFT(id),
+        formData,
+        {
+          headers: multipartFyHeaders(fyId),
+        },
+      );
+      const data = unwrapData(response);
+      if (!data) throw new Error("Failed to update direct purchase draft.");
+      return data as PurchaseInvoiceCreateResult;
+    } catch (error) {
+      throw new Error(
+        extractErrorMessage(error, "Failed to update direct purchase draft."),
+      );
+    }
+  },
+
+  async postDraftDirectPurchase(
+    id: string,
+  ): Promise<PurchaseInvoiceCreateResult> {
+    try {
+      const response = await axiosInstance.post(
+        API_ENDPOINTS.ACCOUNTS.PURCHASE_INVOICE.POST_DRAFT(id),
+      );
+      const data = unwrapData(response);
+      if (!data) throw new Error("Failed to post direct purchase invoice draft.");
+      return data as PurchaseInvoiceCreateResult;
+    } catch (error) {
+      throw new Error(
+        extractErrorMessage(error, "Failed to post direct purchase invoice draft."),
       );
     }
   },

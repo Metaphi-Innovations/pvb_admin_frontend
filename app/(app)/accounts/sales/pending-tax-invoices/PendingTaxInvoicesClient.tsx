@@ -52,6 +52,7 @@ import { loadFinancialYears } from "@/app/(app)/accounts/masters/masters-data";
 import { resolveDateRangePreset, type DateRangePresetId } from "@/lib/accounts/report-date-presets";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import {
+  AccountsClearListingFiltersButton,
   AccountsColumnFilterProvider,
   AccountsColumnHeader,
   SortTh,
@@ -66,10 +67,13 @@ import {
   type PendingInvoiceTabId,
 } from "./pending-invoice-tab-data";
 import { pendingInvoicesService } from "@/services/pending-invoices.service";
+import { FinancialYearApiService } from "@/services/financial-year.service";
 import { WarehouseService } from "@/services/warehouse.service";
 import { useQuery } from "@tanstack/react-query";
 import { useDebouncedValue } from "@/app/(app)/accounts/reports/pl/pl-hooks";
 import "./pending-invoices-compact.css";
+
+const PENDING_EXPORT_PAGE_SIZE = 100;
 type TabCache = {
   loaded: boolean;
   loading: boolean;
@@ -142,6 +146,151 @@ function applyToolbarFilters(
   }
   if (opts.branches.length) list = list.filter((r) => opts.branches.includes(r.branch));
   return list;
+}
+
+function mapPendingApiItemToRow(
+  item: {
+    dispatch_id: string;
+    dispatch_no: string;
+    source_order_no: string;
+    customer_name: string;
+    customer_code?: string;
+    customer_gstin?: string;
+    customer_id?: string;
+    dispatch_date?: string;
+    branch?: string;
+    invoice_value: number;
+    total_qty: number;
+  },
+  tab: PendingInvoiceTabId,
+): PendingInvoiceListRow {
+  const generateParams = new URLSearchParams();
+  generateParams.set("dispatchId", item.dispatch_id);
+  generateParams.set("dispatch", item.dispatch_no);
+  generateParams.set("sourceType", tab);
+  generateParams.set("returnTo", pendingInvoicesListHref(tab));
+  const date = item.dispatch_date ? item.dispatch_date.split("T")[0] : "—";
+
+  return {
+    id: item.dispatch_id,
+    sourceType: tab,
+    sourceRecordId: null,
+    invoiceId: null,
+    dispatchId: item.dispatch_id,
+    dispatchNo: item.dispatch_no,
+    sourceNo: item.source_order_no,
+    partyName: item.customer_name,
+    dispatchDate: date,
+    branch: item.branch || "",
+    taxableValue: item.invoice_value,
+    gstAmount: 0,
+    invoiceValue: item.invoice_value,
+    status: "Ready for Dispatch",
+    generatedBy: null,
+    schemeLabel: null,
+    settlementLabel: null,
+    orderDate: date,
+    customerCode: item.customer_code || "",
+    gstin: item.customer_gstin || "",
+    customerId: item.customer_id || "",
+    salesperson: "—",
+    itemCount: 0,
+    qty: item.total_qty,
+    fromWarehouse: tab === "stock_transfer" ? item.branch || "" : "",
+    toWarehouse: tab === "stock_transfer" ? item.customer_name : "",
+    totalAmount: item.invoice_value,
+    generateHref: `/accounts/transactions/invoices/new?${generateParams.toString()}`,
+    detailHref: null,
+    printHref: null,
+  };
+}
+
+/** Load all pending rows matching toolbar + column filters for export. */
+async function fetchAllPendingForExport(opts: {
+  tab: PendingInvoiceTabId;
+  search: string;
+  dateFrom: string;
+  dateTo: string;
+  branches: string[];
+  sortKey: string;
+  sortDir: "asc" | "desc";
+  columnFilters: Record<string, unknown>;
+}): Promise<PendingInvoiceListRow[]> {
+  const sourceType = opts.tab === "sales_order" ? "normal_sales" : "stock_transfer";
+  let backendSortField = "dispatchDate";
+  if (opts.sortKey === "dispatchNo") backendSortField = "dispatchNo";
+  else if (opts.sortKey === "partyName") backendSortField = "partyName";
+  else if (opts.sortKey === "branch") backendSortField = "branch";
+  else if (opts.sortKey === "sourceNo") backendSortField = "sourceNo";
+  const ordering = opts.sortDir === "desc" ? `-${backendSortField}` : backendSortField;
+
+  const baseQuery = {
+    source_type: sourceType as "normal_sales" | "stock_transfer",
+    from_date: opts.dateFrom || undefined,
+    to_date: opts.dateTo || undefined,
+    branch_names: opts.branches.length ? opts.branches.join(",") : undefined,
+    search: opts.search.trim() || undefined,
+    filters:
+      Object.keys(opts.columnFilters || {}).length > 0
+        ? JSON.stringify(opts.columnFilters)
+        : undefined,
+    ordering,
+    page_size: PENDING_EXPORT_PAGE_SIZE,
+  };
+
+  const first = await pendingInvoicesService.list({ ...baseQuery, page: 1 });
+  const total = first.pagination?.total ?? first.data.length;
+  const all = [...first.data];
+  const totalPages = Math.max(1, Math.ceil(total / PENDING_EXPORT_PAGE_SIZE));
+  for (let page = 2; page <= totalPages; page++) {
+    const next = await pendingInvoicesService.list({ ...baseQuery, page });
+    all.push(...next.data);
+  }
+  return all.map((item) => mapPendingApiItemToRow(item, opts.tab));
+}
+
+/** Export control inside column-filter provider — toolbar + table filters. */
+function PendingInvoicesExportMenu({
+  tab,
+  toolbarRows,
+  exportQuery,
+}: {
+  tab: PendingInvoiceTabId;
+  toolbarRows: PendingInvoiceListRow[];
+  exportQuery: {
+    search: string;
+    dateFrom: string;
+    dateTo: string;
+    branches: string[];
+    sortKey: string;
+    sortDir: "asc" | "desc";
+    columnFilters: Record<string, unknown>;
+  };
+}) {
+  const visible = useAccountsFilteredRows(toolbarRows);
+  const [exporting, setExporting] = useState(false);
+
+  const runExport = async (kind: "excel" | "pdf") => {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const rows = await fetchAllPendingForExport({ tab, ...exportQuery });
+      // Prefer full filtered set; fall back to currently visible page rows.
+      const exportRows = rows.length > 0 ? rows : visible;
+      if (kind === "excel") await exportPendingTabExcel(tab, exportRows);
+      else await exportPendingTabPdf(tab, exportRows);
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  return (
+    <AccountsExportMenu
+      onExcel={() => void runExport("excel")}
+      onPdf={() => void runExport("pdf")}
+      disabled={exporting || (toolbarRows.length === 0 && visible.length === 0)}
+    />
+  );
 }
 
 async function exportPendingTabExcel(tab: PendingInvoiceTabId, rows: PendingInvoiceListRow[]) {
@@ -476,6 +625,10 @@ function PendingInvoicesTable({
     );
   };
 
+  const hasColumnOrSort =
+    (ctx?.activeFilterCount ?? 0) > 0 || Boolean(ctx?.sortKey);
+  const canClearFilters = hasToolbarFilters || hasColumnOrSort;
+
   const emptyStates =
     loading && toolbarRows.length === 0 ? (
       <AccountsTableLoading colSpan={colSpan} message="Loading pending invoices…" />
@@ -485,10 +638,14 @@ function PendingInvoicesTable({
       <AccountsTableEmpty
         colSpan={colSpan}
         message={meta.emptyMessage}
-        onClear={hasToolbarFilters ? clearFilters : undefined}
+        onClear={canClearFilters ? clearFilters : undefined}
       />
     ) : visible.length === 0 ? (
-      <AccountsTableEmpty colSpan={colSpan} message="No records match the column filters." />
+      <AccountsTableEmpty
+        colSpan={colSpan}
+        message="No records match the column filters."
+        onClear={canClearFilters ? clearFilters : undefined}
+      />
     ) : null;
 
   if (isSalesOrder) {
@@ -793,47 +950,9 @@ export default function PendingTaxInvoicesClient() {
       queryParams.ordering = ordering;
 
       const res = await pendingInvoicesService.list(queryParams);
-
-      const rows: PendingInvoiceListRow[] = res.data.map((item: any) => {
-        const generateParams = new URLSearchParams();
-        generateParams.set("dispatchId", item.dispatch_id);
-        generateParams.set("dispatch", item.dispatch_no);
-        generateParams.set("sourceType", tab);
-        generateParams.set("returnTo", pendingInvoicesListHref(tab));
-        
-        return {
-          id: item.dispatch_id,
-          sourceType: tab,
-          sourceRecordId: null,
-          invoiceId: null,
-          dispatchId: item.dispatch_id,
-          dispatchNo: item.dispatch_no,
-          sourceNo: item.source_order_no,
-          partyName: item.customer_name,
-          dispatchDate: item.dispatch_date ? item.dispatch_date.split("T")[0] : "—",
-          branch: item.branch,
-          taxableValue: item.invoice_value,
-          gstAmount: 0,
-          invoiceValue: item.invoice_value,
-          status: "Ready for Dispatch",
-          generatedBy: null,
-          schemeLabel: null,
-          settlementLabel: null,
-          orderDate: item.dispatch_date ? item.dispatch_date.split("T")[0] : "—",
-          customerCode: item.customer_code || "",
-          gstin: item.customer_gstin || "",
-          customerId: item.customer_id || "",
-          salesperson: "—",
-          itemCount: 0,
-          qty: item.total_qty,
-          fromWarehouse: tab === "stock_transfer" ? item.branch : "",
-          toWarehouse: tab === "stock_transfer" ? item.customer_name : "",
-          totalAmount: item.invoice_value,
-          generateHref: `/accounts/transactions/invoices/new?${generateParams.toString()}`,
-          detailHref: null,
-          printHref: null,
-        };
-      });
+      const rows: PendingInvoiceListRow[] = res.data.map((item) =>
+        mapPendingApiItemToRow(item, tab),
+      );
 
       setTabState((prev) => ({
         ...prev,
@@ -1103,36 +1222,62 @@ export default function PendingTaxInvoicesClient() {
 
   const handleFinancialYearChange = useCallback(
     (fyId: string) => {
-      if (fyId !== "all") {
-        const fy = loadFinancialYears().find((f) => String(f.id) === fyId);
-        if (fy) {
-          const today = new Date().toISOString().slice(0, 10);
-          const toDateVal = today < fy.endDate ? today : fy.endDate;
-          setTabState((prev) => ({
-            ...prev,
-            [activeTab]: {
-              ...prev[activeTab],
-              financialYearId: fyId,
-              dateFrom: fy.startDate,
-              dateTo: toDateVal,
-              preset: "custom",
-              page: 1,
-            },
-          }));
-        }
-      } else {
+      if (fyId === "all") {
+        setTabState((prev) => ({
+          ...prev,
+          [activeTab]: {
+            ...prev[activeTab],
+            financialYearId: "all",
+            page: 1,
+          },
+        }));
+        return;
+      }
+
+      const applyFyDates = (startDate: string, endDate: string) => {
         setTabState((prev) => ({
           ...prev,
           [activeTab]: {
             ...prev[activeTab],
             financialYearId: fyId,
+            dateFrom: startDate,
+            dateTo: endDate,
+            preset: "custom",
             page: 1,
           },
         }));
+      };
+
+      // Always persist selection immediately so the select shows the chosen year.
+      const localFy = loadFinancialYears().find((f) => String(f.id) === fyId);
+      if (localFy) {
+        applyFyDates(localFy.startDate, localFy.endDate);
+        return;
       }
+
+      setTabState((prev) => ({
+        ...prev,
+        [activeTab]: {
+          ...prev[activeTab],
+          financialYearId: fyId,
+          page: 1,
+        },
+      }));
+
+      void FinancialYearApiService.getDropdown()
+        .then((list) => {
+          const fy = list.find((f) => String(f.financialYearId) === fyId);
+          if (!fy) return;
+          applyFyDates(fy.startDate, fy.endDate);
+        })
+        .catch(() => {
+          /* selection already stored; dates stay until API resolves */
+        });
     },
     [activeTab],
   );
+
+  const [filterEpoch, setFilterEpoch] = useState(0);
 
   const clearFilters = useCallback(() => {
     const { from, to } = resolveDateRangePreset("this_year");
@@ -1148,9 +1293,12 @@ export default function PendingTaxInvoicesClient() {
         dateFrom: from,
         dateTo: to,
         columnFilters: {},
+        sortKey: "dispatchDate",
+        sortDir: "desc",
       },
     }));
     setSearchText("");
+    setFilterEpoch((n) => n + 1);
   }, [activeTab]);
 
   const hasToolbarFilters =
@@ -1240,7 +1388,7 @@ export default function PendingTaxInvoicesClient() {
   return (
     <div className="pending-invoices-compact h-full min-h-0">
       <AccountsColumnFilterProvider
-        key={activeTab}
+        key={`${activeTab}-${filterEpoch}`}
         rows={toolbarRows}
         getCellValue={getCellValue}
         columnConfig={columnConfig}
@@ -1290,11 +1438,25 @@ export default function PendingTaxInvoicesClient() {
           filters={
             <ReportFilterRow
               end={
-                  <AccountsExportMenu
-                    onExcel={() => exportPendingTabExcel(activeTab, toolbarRows)}
-                    onPdf={() => exportPendingTabPdf(activeTab, toolbarRows)}
-                    disabled={toolbarRows.length === 0}
+                <div className="flex items-center gap-2">
+                  <AccountsClearListingFiltersButton
+                    hasToolbarFilters={hasToolbarFilters}
+                    onClear={clearFilters}
                   />
+                  <PendingInvoicesExportMenu
+                    tab={activeTab}
+                    toolbarRows={toolbarRows}
+                    exportQuery={{
+                      search: active.search,
+                      dateFrom,
+                      dateTo,
+                      branches,
+                      sortKey: active.sortKey,
+                      sortDir: active.sortDir,
+                      columnFilters: active.columnFilters,
+                    }}
+                  />
+                </div>
               }
             >
               <ReportFinancialYearFilter

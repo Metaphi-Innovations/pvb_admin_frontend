@@ -46,7 +46,7 @@ import {
   PurchaseInvoiceMatchStatusBadge,
 } from "../PurchaseInvoiceQtyComparisonTable";
 import { DirectPurchaseAttachmentPanel } from "../DirectPurchaseAttachmentPanel";
-import { purchaseInvoiceReturnPath } from "../purchase-invoice-nav";
+import { purchaseInvoiceReturnPath, withReturnTo } from "../purchase-invoice-nav";
 import { formatDisplayDate, isoToDisplayDate } from "@/lib/accounts/date-display";
 import { VoucherFormSectionCard } from "@/components/accounts/voucher-form/VoucherFormSectionCard";
 import {
@@ -54,6 +54,7 @@ import {
   buildVoucherViewMeta,
   voucherStatusToBadgeKey,
 } from "@/components/accounts/voucher-form/TransactionViewHero";
+import { dispatchAccountsDataChanged } from "@/lib/accounts/accounts-data-events";
 import Link from "next/link";
 import "@/components/accounts/voucher-form/transaction-view.css";
 
@@ -74,6 +75,7 @@ function DateField({ label, value }: { label: string; value?: string | null }) {
 }
 
 const POSTING_STATUS_LABELS: Record<string, string> = {
+  DRAFT: "Draft",
   POSTED: "Posted",
   CANCELLED: "Cancelled",
   PENDING: "Pending",
@@ -139,6 +141,7 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: st
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [cancelling, setCancelling] = useState(false);
+  const [postingDraft, setPostingDraft] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoadError(null);
@@ -176,6 +179,27 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: st
   const postingStatus = invoice?.backendStatus || "POSTED";
   const canCancel =
     postingStatus === "POSTED" && (invoice?.amountPaid ?? 0) <= 0.0001;
+  const canPostDraft = isDirect && postingStatus === "DRAFT";
+  const editDraftHref = canPostDraft
+    ? withReturnTo(`/accounts/purchase-invoices/${recordHref}/edit`, listHref)
+    : null;
+
+  const handlePostDraft = async () => {
+    if (!canPostDraft || postingDraft) return;
+    setPostingDraft(true);
+    setLoadError(null);
+    try {
+      await PurchaseInvoiceService.postDraftDirectPurchase(recordHref);
+      dispatchAccountsDataChanged("purchase-invoices");
+      await refresh();
+    } catch (e) {
+      setLoadError(
+        e instanceof Error ? e.message : "Failed to post direct purchase draft.",
+      );
+    } finally {
+      setPostingDraft(false);
+    }
+  };
 
   const handleCancel = async () => {
     if (!canCancel) return;
@@ -289,6 +313,26 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: st
             <ArrowLeft className="w-4 h-4" />
             Back
           </Button>
+          {editDraftHref && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-9 text-sm font-medium"
+              asChild
+            >
+              <Link href={editDraftHref}>Edit Draft</Link>
+            </Button>
+          )}
+          {canPostDraft && (
+            <Button
+              size="sm"
+              className="h-9 text-sm font-medium bg-brand-600 hover:bg-brand-700 text-white"
+              disabled={postingDraft}
+              onClick={() => void handlePostDraft()}
+            >
+              {postingDraft ? "Posting…" : "Post Invoice"}
+            </Button>
+          )}
           {canCancel && (
             <Button
               variant="outline"

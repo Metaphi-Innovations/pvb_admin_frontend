@@ -38,22 +38,25 @@ export function Pagination({
   variant = "full",
 }: PaginationProps) {
   const isCompact = variant === "compact";
-  const totalPages = Math.max(1, Math.ceil(totalRecords / pageSize));
-  const startItem = totalRecords === 0 ? 0 : (page - 1) * pageSize + 1;
-  const endItem = Math.min(page * pageSize, totalRecords);
-  const [pageInput, setPageInput] = useState(String(page));
-  const pageSizeOptions = (PAGE_SIZE_OPTIONS as readonly number[]).includes(pageSize)
+  const safePageSize =
+    Number.isFinite(pageSize) && pageSize > 0 ? Math.floor(pageSize) : 25;
+  const totalPages = Math.max(1, Math.ceil(totalRecords / safePageSize));
+  const safePage = Math.min(Math.max(1, page || 1), totalPages);
+  const startItem = totalRecords === 0 ? 0 : (safePage - 1) * safePageSize + 1;
+  const endItem = Math.min(safePage * safePageSize, totalRecords);
+  const [pageInput, setPageInput] = useState(String(safePage));
+  const pageSizeOptions = (PAGE_SIZE_OPTIONS as readonly number[]).includes(safePageSize)
     ? PAGE_SIZE_OPTIONS
-    : [...PAGE_SIZE_OPTIONS, pageSize].sort((a, b) => a - b);
+    : [...PAGE_SIZE_OPTIONS, safePageSize].sort((a, b) => a - b);
 
   useEffect(() => {
-    setPageInput(String(page));
-  }, [page]);
+    setPageInput(String(safePage));
+  }, [safePage]);
 
   const getPageNumbers = () => {
     const pages: number[] = [];
     const maxVisible = 5;
-    let start = Math.max(1, page - Math.floor(maxVisible / 2));
+    let start = Math.max(1, safePage - Math.floor(maxVisible / 2));
     const end = Math.min(totalPages, start + maxVisible - 1);
 
     if (end - start + 1 < maxVisible) {
@@ -109,16 +112,26 @@ export function Pagination({
         </p>
 
         {onPageSizeChange && (
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1.5">
             <span className="text-[10px] text-muted-foreground whitespace-nowrap">
               {isCompact ? "Rows:" : "Rows per page:"}
             </span>
             <Select
-              value={String(pageSize)}
-              onValueChange={(val) => onPageSizeChange(Number(val))}
+              value={String(safePageSize)}
+              onValueChange={(val) => {
+                const next = Number(val);
+                if (Number.isFinite(next) && next > 0) onPageSizeChange(next);
+              }}
             >
-              <SelectTrigger className="h-6 w-auto min-w-0 text-[10px] rounded border-border bg-white px-2 gap-1 [&>svg]:h-3 [&>svg]:w-3">
-                <SelectValue />
+              <SelectTrigger
+                className={cn(
+                  "h-7 text-[11px] rounded border-border bg-white px-2 gap-1 shrink-0",
+                  "w-[4.25rem] min-w-[4.25rem] [&>span]:truncate [&>svg]:h-3 [&>svg]:w-3",
+                )}
+              >
+                <SelectValue placeholder={String(safePageSize)}>
+                  {safePageSize}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent className="!min-w-[75px] !w-[75px]">
                 {pageSizeOptions.map((n) => (
@@ -136,92 +149,82 @@ export function Pagination({
         <Button
           variant="outline"
           size="icon"
-          className={cn("rounded border-border shrink-0", isCompact ? "h-7 w-7" : "h-7 w-7")}
-          disabled={page <= 1 || totalRecords === 0}
-          onClick={() => onPageChange(page - 1)}
+          className="h-7 w-7 rounded border-border shrink-0"
+          disabled={safePage <= 1 || totalRecords === 0}
+          onClick={() => onPageChange(safePage - 1)}
           aria-label="Previous page"
         >
-          <ChevronLeft className={isCompact ? "w-3.5 h-3.5" : "w-3.5 h-3.5"} />
+          <ChevronLeft className="w-3.5 h-3.5" />
         </Button>
 
-        {isCompact ? (
-          totalRecords > 0 && (
-            <span className="h-7 min-w-[1.75rem] px-2 inline-flex items-center justify-center text-[11px] font-semibold rounded bg-brand-600 text-white tabular-nums">
-              {page}
-            </span>
-          )
-        ) : (
+        {totalRecords > 0 && pageNumbers[0] > 1 && (
           <>
-            {totalRecords > 0 && pageNumbers[0] > 1 && (
-              <>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-7 min-w-7 px-2 text-[11px] rounded border-border tabular-nums shrink-0"
-                  onClick={() => onPageChange(1)}
-                >
-                  1
-                </Button>
-                {pageNumbers[0] > 2 && (
-                  <span className="text-xs text-muted-foreground px-0.5 select-none shrink-0">
-                    …
-                  </span>
-                )}
-              </>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 min-w-7 px-2 text-[11px] rounded border-border tabular-nums shrink-0"
+              onClick={() => onPageChange(1)}
+            >
+              1
+            </Button>
+            {pageNumbers[0] > 2 && (
+              <span className="text-xs text-muted-foreground px-0.5 select-none shrink-0">
+                …
+              </span>
             )}
+          </>
+        )}
 
-            {totalRecords > 0 &&
-              pageNumbers.map((p) => {
-                const isCurrent = p === page;
-                return (
-                  <Button
-                    key={p}
-                    variant={isCurrent ? "default" : "outline"}
-                    size="sm"
-                    className={cn(
-                      "h-7 min-w-7 px-2 text-[11px] rounded border-border tabular-nums shrink-0",
-                      isCurrent &&
-                        "bg-brand-600 hover:bg-brand-700 text-white border-brand-600 font-semibold",
-                    )}
-                    onClick={() => onPageChange(p)}
-                  >
-                    {p}
-                  </Button>
-                );
-              })}
-
-            {totalRecords > 0 && pageNumbers[pageNumbers.length - 1] < totalPages && (
-              <>
-                {pageNumbers[pageNumbers.length - 1] < totalPages - 1 && (
-                  <span className="text-xs text-muted-foreground px-0.5 select-none shrink-0">
-                    …
-                  </span>
+        {totalRecords > 0 &&
+          pageNumbers.map((p) => {
+            const isCurrent = p === safePage;
+            return (
+              <Button
+                key={p}
+                variant={isCurrent ? "default" : "outline"}
+                size="sm"
+                className={cn(
+                  "h-7 min-w-7 px-2 text-[11px] rounded border-border tabular-nums shrink-0",
+                  isCurrent &&
+                    "bg-brand-600 hover:bg-brand-700 text-white border-brand-600 font-semibold",
                 )}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-7 min-w-7 px-2 text-[11px] rounded border-border tabular-nums shrink-0"
-                  onClick={() => onPageChange(totalPages)}
-                >
-                  {totalPages}
-                </Button>
-              </>
+                onClick={() => onPageChange(p)}
+              >
+                {p}
+              </Button>
+            );
+          })}
+
+        {totalRecords > 0 && pageNumbers[pageNumbers.length - 1] < totalPages && (
+          <>
+            {pageNumbers[pageNumbers.length - 1] < totalPages - 1 && (
+              <span className="text-xs text-muted-foreground px-0.5 select-none shrink-0">
+                …
+              </span>
             )}
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 min-w-7 px-2 text-[11px] rounded border-border tabular-nums shrink-0"
+              onClick={() => onPageChange(totalPages)}
+            >
+              {totalPages}
+            </Button>
           </>
         )}
 
         <Button
           variant="outline"
           size="icon"
-          className={cn("rounded border-border shrink-0", isCompact ? "h-7 w-7" : "h-7 w-7")}
-          disabled={page >= totalPages || totalRecords === 0}
-          onClick={() => onPageChange(page + 1)}
+          className="h-7 w-7 rounded border-border shrink-0"
+          disabled={safePage >= totalPages || totalRecords === 0}
+          onClick={() => onPageChange(safePage + 1)}
           aria-label="Next page"
         >
-          <ChevronRight className={isCompact ? "w-3.5 h-3.5" : "w-3.5 h-3.5"} />
+          <ChevronRight className="w-3.5 h-3.5" />
         </Button>
 
-        {!isCompact && (
+        {totalPages > 1 && (
           <div className="flex items-center gap-1.5 ml-1.5 pl-1.5 border-l border-border/60 shrink-0">
             <span className="text-[10px] text-muted-foreground whitespace-nowrap">Go to</span>
             <input

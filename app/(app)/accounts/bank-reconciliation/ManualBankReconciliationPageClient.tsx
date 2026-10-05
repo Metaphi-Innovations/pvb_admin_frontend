@@ -36,7 +36,7 @@ import {
   ReportSearchFilter,
   useReportDateRange,
 } from "@/components/accounts/ReportFilters";
-import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
+import { bankingBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { formatMoney, formatMoneyOrDash, MONEY_AMOUNT_CLASS } from "@/lib/accounts/money-format";
 import { cn } from "@/lib/utils";
 import { buildBookEntries, computeBookSummary } from "@/lib/accounts/banking-book-utils";
@@ -665,7 +665,7 @@ export default function ManualBankReconciliationPageClient() {
         defaultSortDir="desc"
       >
       <AccountsPageShell
-        breadcrumbs={accountsBreadcrumb("Banking", "Bank Reconciliation")}
+        breadcrumbs={bankingBreadcrumb("Bank Reconciliation")}
         title="Bank Reconciliation"
         description="Manually reconcile book entries against bank statements using processing dates."
         actions={

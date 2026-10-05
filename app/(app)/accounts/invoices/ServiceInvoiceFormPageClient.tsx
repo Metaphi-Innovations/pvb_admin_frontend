@@ -430,7 +430,9 @@ export default function ServiceInvoiceFormPageClient() {
       setError("Select a warehouse.");
       return;
     }
-    if (bankAccountId == null) {
+    // Bank account is local PDF print metadata only (not sent on create).
+    // Require it for Post so the posted invoice can print bank details; never block Save Draft.
+    if (!asDraft && bankAccountId == null) {
       setError("Select a Bank Account for the invoice PDF.");
       return;
     }
@@ -632,7 +634,7 @@ export default function ServiceInvoiceFormPageClient() {
                     triggerClassName={INVOICE_DETAIL_SELECT_CLASS}
                   />
                 </InvoiceDetailField>
-                <InvoiceDetailField label="Bank Account" required>
+                <InvoiceDetailField label="Bank Account">
                   <WarehouseMappedBankAccountSelect
                     warehouseId={warehouseId}
                     value={bankAccountId}

@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
-import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
+import { BANKING_HOME_HREF, bankingBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { MoneyAmount } from "@/components/accounts/MoneyAmount";
 import { listAccountsForBankGroup, loadBankAccounts } from "@/lib/accounts/bank-accounts-data";
 import { formatBankAccountMaster } from "@/lib/accounts/bank-account-display";
@@ -37,12 +37,12 @@ export default function BankGroupAccountsClient({ bankGroupId }: { bankGroupId: 
   if (!bankGroup) {
     return (
       <AccountsPageShell
-        breadcrumbs={accountsBreadcrumb("Banking", "Bank Accounts", "/accounts/banking/bank-accounts")}
+        breadcrumbs={bankingBreadcrumb("Bank Accounts")}
         title="Bank not found"
         description="This bank group may have been removed."
       >
         <div className="p-8 text-center text-sm text-muted-foreground">
-          <Link href="/accounts/banking/bank-accounts" className="text-brand-600 hover:underline">
+          <Link href={BANKING_HOME_HREF} className="text-brand-600 hover:underline">
             Back to Bank Accounts
           </Link>
         </div>
@@ -52,7 +52,10 @@ export default function BankGroupAccountsClient({ bankGroupId }: { bankGroupId: 
 
   return (
     <AccountsPageShell
-      breadcrumbs={accountsBreadcrumb("Banking", bankGroup.accountName, "/accounts/banking/bank-accounts")}
+      breadcrumbs={bankingBreadcrumb(
+        { label: "Bank Accounts", href: BANKING_HOME_HREF },
+        bankGroup.accountName,
+      )}
       title={bankGroup.accountName}
       description="All account ledgers under this bank group"
       actions={

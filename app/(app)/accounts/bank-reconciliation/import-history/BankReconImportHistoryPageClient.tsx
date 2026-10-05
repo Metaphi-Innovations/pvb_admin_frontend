@@ -29,6 +29,7 @@ import {
   BANK_RECON_IMPORT_HISTORY_PATH,
   bankReconUploadPath,
   bankReconWorkspacePath,
+  RECONCILIATION_BREADCRUMB,
   RECONCILIATION_LIST_PATH,
 } from "@/app/(app)/accounts/bank-reconciliation/reconciliation-utils";
 import { loadImportBatches, loadBankReconTransactions } from "@/lib/accounts/bank-recon-register";
@@ -113,9 +114,7 @@ export default function BankReconImportHistoryPageClient() {
   return (
     <AccountsPageShell
       breadcrumbs={[
-        { label: "Accounts", href: "/accounts/masters/chart-of-accounts" },
-        { label: "Banking" },
-        { label: "Bank Reconciliation", href: RECONCILIATION_LIST_PATH },
+        ...RECONCILIATION_BREADCRUMB,
         { label: "Import History" },
       ]}
       title="Statement Import History"

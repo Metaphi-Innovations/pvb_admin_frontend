@@ -112,6 +112,8 @@ export function ReceiptVoucherApiForm({
   const { selectedFY } = useFY();
   const [form, setForm] = useState<ReceiptFormState>(emptyReceiptForm);
   const [detail, setDetail] = useState<ReceiptVoucherDetail | null>(null);
+  /** Explicit draft serial — kept so edit screens always show Draft Receipt No. */
+  const [draftSrNo, setDraftSrNo] = useState<string | null>(null);
   const [status, setStatus] = useState<ReceiptVoucherStatus>("DRAFT");
   const [currentId, setCurrentId] = useState<string | undefined>(voucherId);
   const [approvalRequired, setApprovalRequired] = useState(true);
@@ -395,6 +397,11 @@ export function ReceiptVoucherApiForm({
       return mapDetailToForm(d);
     });
     setDetail(d);
+    setDraftSrNo(
+      d.sr_no != null && String(d.sr_no).trim() !== ""
+        ? formatSrNo(d.sr_no)
+        : null,
+    );
     setStatus(d.status);
     setCurrentId(d.receipt_voucher_id);
   }, []);
@@ -863,6 +870,12 @@ export function ReceiptVoucherApiForm({
     setBusy(false);
   };
 
+  const draftReceiptNoDisplay =
+    draftSrNo ||
+    (detail?.sr_no != null && String(detail.sr_no).trim() !== ""
+      ? formatSrNo(detail.sr_no)
+      : null);
+
   const title =
     readOnlyProp || !fieldsEditable
       ? "View Receipt Voucher"
@@ -877,9 +890,11 @@ export function ReceiptVoucherApiForm({
         ? "Edit Receipt Voucher"
         : "Create Receipt Voucher";
 
-  const subtitle = detail
-    ? `Draft No. ${formatSrNo(detail.sr_no)} · ${RECEIPT_STATUS_LABELS[status]}`
-    : "Create a receipt against customer outstanding, supplier recoverable, or other ledger.";
+  const subtitle = draftReceiptNoDisplay
+    ? `Draft Receipt No. ${draftReceiptNoDisplay} · ${RECEIPT_STATUS_LABELS[status]}`
+    : currentId
+      ? RECEIPT_STATUS_LABELS[status]
+      : "Create a receipt against customer outstanding, supplier recoverable, or other ledger.";
 
   const actionBar = (
     <ReceiptFormActionBar
@@ -994,7 +1009,7 @@ export function ReceiptVoucherApiForm({
 
         {isViewMode ? (
           <ReceiptViewHero
-            draftNo={detail ? formatSrNo(detail.sr_no) : "—"}
+            draftNo={draftReceiptNoDisplay || "—"}
             accountingVoucherNo={detail?.accounting_voucher?.voucher_number}
             voucherDate={form.voucher_date}
             branchName={warehouseName || undefined}
@@ -1018,7 +1033,8 @@ export function ReceiptVoucherApiForm({
             <div className="so-invoice-details-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
               <InvoiceDetailField label="Draft Receipt No.">
                 <div className="so-goods-ro so-goods-ro--mono w-full text-brand-700">
-                  {detail ? formatSrNo(detail.sr_no) : "Auto on save"}
+                  {draftReceiptNoDisplay ||
+                    (currentId || voucherId ? "—" : "Auto on save")}
                 </div>
               </InvoiceDetailField>
               <InvoiceDetailField label="Branch / Warehouse" required>

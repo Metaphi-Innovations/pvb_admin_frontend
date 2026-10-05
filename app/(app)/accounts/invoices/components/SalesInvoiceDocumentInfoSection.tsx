@@ -42,6 +42,7 @@ export interface SalesInvoiceDocumentInfoSectionProps {
   dispatchContext?: {
     salesOrderNo?: string;
     salesOrderDate?: string;
+    dispatchDate?: string;
     placeOfSupply?: string;
     billFrom?: string;
     billTo?: string;

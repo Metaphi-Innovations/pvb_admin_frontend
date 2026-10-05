@@ -59,7 +59,6 @@ import {
   isDraftEditable,
   isPartyLedgerEntity,
   JOURNAL_LIST_PATH,
-  journalEditPath,
   journalViewPath,
   mapDetailToForm,
   resolveJournalPartyLedgerId,
@@ -537,10 +536,22 @@ export function JournalVoucherApiForm({
     else router.push(JOURNAL_LIST_PATH);
   };
 
+  /** Save current form then post immediately — redirect to listing (never stay on edit UI). */
   const handleSaveAndPost = async () => {
-    const saved = await saveDraft({ skipNavigate: true });
-    if (!saved) return;
-    setPostOpen(true);
+    const startedAsCreate = !currentId;
+    const saved = await saveDraft({ skipToast: true, skipNavigate: true });
+    if (!saved?.journal_voucher_id) return;
+    const posted = await runAction(
+      () => JournalVoucherService.post(saved.journal_voucher_id),
+      "Journal posted successfully.",
+      { keepBusy: true },
+    );
+    // From create, always leave the form so hydrateFromDetail cannot leave the user on "Edit".
+    if (posted || startedAsCreate) {
+      goToList();
+      return;
+    }
+    setBusy(false);
   };
 
   const title =

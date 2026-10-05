@@ -895,7 +895,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
             sourceType: "sales_order",
             salesOrderId: prepared.sales_order?.sales_order_id ?? null,
             salesOrderNo: prepared.sales_order?.so_number || row.soNumber || "",
-            salesOrderDate: "",
+            salesOrderDate: String(prepared.sales_order?.order_date || "").slice(0, 10),
             sourceDispatchId: prepared.dispatch.dispatch_id,
             dispatchNo: prepared.dispatch.dispatch_number,
             dispatchDate: String(prepared.dispatch.dispatch_date || "").slice(0, 10),
@@ -1142,7 +1142,9 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
             salesOrderNo: isSTDispatch
               ? (stData?.transfer_no || "")
               : (prepared.sales_order?.so_number || ""),
-            salesOrderDate: "",
+            salesOrderDate: isSTDispatch
+              ? ""
+              : String(prepared.sales_order?.order_date || "").slice(0, 10),
             sourceDispatchId: prepared.dispatch.dispatch_id,
             dispatchNo: prepared.dispatch.dispatch_number,
             dispatchDate: String(prepared.dispatch.dispatch_date || "").slice(0, 10),
@@ -1589,8 +1591,8 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
       (c) =>
         Boolean(c.charge_name?.trim()) &&
         Boolean(c.ledger_id?.trim()) &&
-        Boolean(c.hsn_id?.trim()) &&
-        Number(c.amount) > 0,
+        Number(c.amount) > 0 &&
+        (c.gst_applicable ? Boolean(c.hsn_id?.trim()) : true),
     );
 
     const lineOverrides = lines.map(toDispatchLineItemOverride);
@@ -2193,6 +2195,14 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
           setError("Transport Document Date is required.");
           return;
         }
+        if (
+          transport.lrDate.trim() &&
+          transport.transportDocDate.trim() &&
+          transport.transportDocDate.trim() < transport.lrDate.trim()
+        ) {
+          setError("Transport Doc Date cannot be earlier than LR Date.");
+          return;
+        }
         if (transport.ewayBillNo.trim() && !transport.ewayBillExpiryDate.trim()) {
           setError("E-Way Bill Expiry Date is required when E-Way Bill No. is entered.");
           return;
@@ -2241,6 +2251,14 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
         }
         if (!transport.transportDocDate.trim()) {
           setError("Transport Document Date is required.");
+          return;
+        }
+        if (
+          transport.lrDate.trim() &&
+          transport.transportDocDate.trim() &&
+          transport.transportDocDate.trim() < transport.lrDate.trim()
+        ) {
+          setError("Transport Doc Date cannot be earlier than LR Date.");
           return;
         }
       }
@@ -2410,7 +2428,9 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
   const compactGen = soGen || stGen || smGen;
 
   const summaryRoundOff =
-    isDispatchGenerationPreview && dispatchTotalsPreview
+    isDispatchGenerationPreview &&
+    !useLocalDispatchSummary &&
+    dispatchTotalsPreview
       ? dispatchTotalsPreview.roundOff
       : roundOff;
   const summaryGrandTotal =
@@ -2525,11 +2545,6 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
               Cancel
             </Button>
             <div className="flex items-center gap-2 flex-wrap justify-end w-full sm:w-auto">
-              {stGen ? (
-                <span className="inline-flex items-center h-7 px-2.5 rounded-md border border-border bg-muted/40 text-[11px] font-semibold text-foreground">
-                  Stock Transfer
-                </span>
-              ) : null}
               {smGen ? (
                 <span className="inline-flex items-center h-7 px-2.5 rounded-md border border-border bg-muted/40 text-[11px] font-semibold text-foreground">
                   Sample Order
@@ -2740,6 +2755,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
                 ? {
                     salesOrderNo: salesOrderRef,
                     salesOrderDate,
+                    dispatchDate,
                     placeOfSupply,
                     billFrom: billFrom || warehouse,
                     billTo: billTo || customerName,

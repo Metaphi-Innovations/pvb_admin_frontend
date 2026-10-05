@@ -632,7 +632,7 @@ export function PaymentVoucherListClient() {
           search={{
             value: search,
             onChange: onSearchChange,
-            placeholder: "Search draft no., supplier, UTR…",
+            placeholder: "Search draft no., supplier, UTR, mode…",
           }}
           filters={
             <>

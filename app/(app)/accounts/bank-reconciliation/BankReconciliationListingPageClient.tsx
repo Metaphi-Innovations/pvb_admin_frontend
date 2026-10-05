@@ -49,7 +49,7 @@ import { formatMoney } from "@/lib/accounts/money-format";
 import { formatDisplayDate } from "@/lib/accounts/date-display";
 import { useFY } from "@/lib/fy-store";
 import { useClientMounted } from "@/lib/use-client-mounted";
-import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
+import { bankingBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { cn } from "@/lib/utils";
 import { SkeletonRow } from "@/components/ui/Loaders";
 import { bankReconWorkspacePath, RECONCILIATION_LIST_PATH } from "./reconciliation-utils";
@@ -390,7 +390,7 @@ export default function BankReconciliationListingPageClient() {
 
   return (
     <AccountsPageShell
-      breadcrumbs={accountsBreadcrumb("Banking", "Bank Reconciliation", RECONCILIATION_LIST_PATH)}
+      breadcrumbs={bankingBreadcrumb("Bank Reconciliation")}
       title="Bank Reconciliation"
       description={`Mark book entries cleared by bank date · ${selectedFY.label}`}
       hideDescription

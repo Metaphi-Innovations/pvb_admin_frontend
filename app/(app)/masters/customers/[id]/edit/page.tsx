@@ -26,98 +26,18 @@ import { CHART_OF_ACCOUNTS_HREF } from "@/lib/accounts/accounts-nav";
 import { hasCustomerPermission } from "../../customer-permissions";
 import { useUpdateCustomer, useCustomer } from "@/hooks/masters";
 import { useCustomerTypeDropdown } from "@/hooks/masters/use-customer-types";
+import { extractCustomerApiError } from "@/lib/masters/customer-api-errors";
 
 interface ToastState {
   msg: string;
   type: "success" | "error";
 }
 
-type ApiValidationError = { path?: string; message?: string };
-
-function mapApiPathToFieldKey(path: string): string {
-  const normalized = path.trim();
-  if (!normalized) return "";
-
-  const directMap: Record<string, string> = {
-    email: "email",
-    mobile_no: "mobile",
-    customer_name: "customerName",
-    customer_type_id: "customerType",
-    gstin_no: "gstin",
-    pan_no: "pan",
-    tds_section_id: "tdsMasterId",
-    account_number: "accountNumber",
-    ifsc_code: "ifscCode",
-    branch_name: "branch",
-    payment_type: "paymentType",
-    credit_days: "creditDays",
-    advance: "advancePercentage",
-    credit_limit: "creditLimit",
-    branches: "branches",
-  };
-
-  if (directMap[normalized]) return directMap[normalized];
-
-  const branchMatch =
-    normalized.match(/^branches\[(\d+)\]\.(.+)$/) ??
-    normalized.match(/^branches\.(\d+)\.(.+)$/);
-  if (!branchMatch) return normalized;
-
-  const branchIdx = Number.parseInt(branchMatch[1], 10);
-  const field = branchMatch[2];
-
-  if (field === "billing_address_line_1") return `branch_${branchIdx}_billingAddressLine1`;
-  if (field === "billing_address_line_2") return `branch_${branchIdx}_billingAddressLine2`;
-  if (field === "billing_city") return `branch_${branchIdx}_billingCity`;
-  if (field === "billing_state") return `branch_${branchIdx}_billingState`;
-  if (field === "billing_town") return `branch_${branchIdx}_billingTown`;
-  if (field === "billing_pincode") return `branch_${branchIdx}_billingPincode`;
-  if (field === "shipping_address_line_1") return `branch_${branchIdx}_shippingAddressLine1`;
-  if (field === "shipping_address_line_2") return `branch_${branchIdx}_shippingAddressLine2`;
-  if (field === "shipping_city") return `branch_${branchIdx}_shippingCity`;
-  if (field === "shipping_state") return `branch_${branchIdx}_shippingState`;
-  if (field === "shipping_town") return `branch_${branchIdx}_shippingTown`;
-  if (field === "shipping_pincode") return `branch_${branchIdx}_shippingPincode`;
-  if (field === "sales_man_id") return `branch_${branchIdx}_salesManId`;
-  return `branch_${branchIdx}_${field}`;
-}
-
 function extractApiValidation(err: unknown): {
   toastMessage: string;
   fieldErrors: Record<string, string>;
 } {
-  const fallback = "Failed to update customer.";
-  const e = err as {
-    message?: string;
-    response?: {
-      data?: {
-        message?: string;
-        error?: string;
-        validation_errors?: ApiValidationError[];
-      };
-    };
-  };
-
-  const payload = e.response?.data;
-  const validationErrors = Array.isArray(payload?.validation_errors)
-    ? payload.validation_errors
-    : [];
-
-  const fieldErrors: Record<string, string> = {};
-  validationErrors.forEach((item) => {
-    const key = mapApiPathToFieldKey(String(item.path ?? ""));
-    const msg = String(item.message ?? "").trim();
-    if (key && msg) fieldErrors[key] = msg;
-  });
-
-  const toastMessage =
-    validationErrors[0]?.message?.trim() ||
-    payload?.message ||
-    payload?.error ||
-    e.message ||
-    fallback;
-
-  return { toastMessage, fieldErrors };
+  return extractCustomerApiError(err, "Failed to update customer.");
 }
 
 function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void }) {
@@ -321,7 +241,7 @@ export default function EditCustomerPage() {
             msg: toastMessage,
             type: "error",
           });
-          setTimeout(() => setToast(null), 3200);
+          setTimeout(() => setToast(null), Math.min(8000, 2800 + toastMessage.length * 25));
         },
       },
     );

@@ -13,10 +13,6 @@ import {
 	resolvePOLineCostPrice,
 } from "@/lib/procurement/procurement-line-utils";
 import {
-	exceedsMaxLineQty,
-	maxLineQtyMessage,
-} from "@/lib/quantity-limits";
-import {
 	applyTaxSupplyToRates,
 	lineNeedsTaxSupplyUpdate,
 	resolveTaxSupplyType,
@@ -125,8 +121,6 @@ export function validatePOForm(form: POFormValues): POFormErrors {
 		e.lines = "At least one product is required";
 	} else if (validLines.some((l) => (l.orderedQtyPack ?? 0) <= 0)) {
 		e.lines = "Each line must have a quantity greater than zero";
-	} else if (validLines.some((l) => exceedsMaxLineQty(l.orderedQtyPack ?? 0))) {
-		e.lines = maxLineQtyMessage("Ordered quantity");
 	}
 	return e;
 }

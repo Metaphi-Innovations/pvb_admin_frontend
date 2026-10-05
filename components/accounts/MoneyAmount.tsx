@@ -8,7 +8,6 @@ import {
   type BalanceSide,
   balanceSideLabel,
   formatMoney,
-  formatMoneyOrDash,
   formatMoneyWithSide,
 } from "@/lib/accounts/money-format";
 
@@ -65,7 +64,7 @@ export function MoneyCell({ amount, side, className, dashIfZero, as = "td" }: Mo
     ) : side ? (
       formatMoneyWithSide(amount, side)
     ) : (
-      formatMoneyOrDash(amount)
+      formatMoney(amount)
     );
 
   if (as === "span") {
