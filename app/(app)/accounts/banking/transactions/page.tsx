@@ -1,6 +1,6 @@
 import { lazyAccountsPage } from "@/lib/accounts/lazy-accounts-page";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
-import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
+import { bankingBreadcrumb } from "@/lib/accounts/accounts-nav";
 
 const BankTransactionsClient = lazyAccountsPage(() =>
   import("@/components/accounts/BankTransactionsClient").then((m) => ({
@@ -11,7 +11,7 @@ const BankTransactionsClient = lazyAccountsPage(() =>
 export default function BankTransactionsPage() {
   return (
     <AccountsPageShell
-      breadcrumbs={accountsBreadcrumb("Banking", "Transactions")}
+      breadcrumbs={bankingBreadcrumb("Transactions")}
       title="Bank Transactions"
       description="Categorize and reconcile bank transactions"
       hideDescription

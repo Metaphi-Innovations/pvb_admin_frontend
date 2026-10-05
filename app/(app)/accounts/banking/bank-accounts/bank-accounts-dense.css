@@ -215,6 +215,8 @@
 .bank-accounts-dense .bank-accounts-status-cell,
 .bank-accounts-dense .bank-accounts-status-cell .accounts-table-td-inner {
   overflow: visible;
+  min-width: 3.75rem;
+  max-width: none;
 }
 
 .bank-accounts-dense .bank-accounts-wh-trigger {

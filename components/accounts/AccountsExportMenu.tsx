@@ -30,9 +30,10 @@ export function AccountsExportMenu({
   label = "Export",
 }: AccountsExportMenuProps) {
   const handleExcel = onExcel ?? onCsv;
-  const handlePdf = onPdf ?? onCsv;
+  // Only show PDF when an explicit PDF handler is provided — never fall back to CSV/Excel.
+  const handlePdf = onPdf;
 
-  if (!handleExcel && !handlePdf) return null;
+  if (!handleExcel && !handlePdf && !onCsv) return null;
 
   const menu = (
     <DropdownMenu>

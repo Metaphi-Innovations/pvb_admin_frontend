@@ -29,7 +29,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { FileSpreadsheet, FlaskConical, Landmark, MoreVertical, Plus, Trash2, Upload } from "lucide-react";
-import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
+import { bankingBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { seedDummyBankReconciliation } from "./bank-reconciliation-demo";
 import {
   deleteBankStatement,
@@ -374,7 +374,7 @@ export default function ReconciliationPageClient({ embedded = false }: Reconcili
     return (
       <>
         <AccountsPageShell
-          breadcrumbs={accountsBreadcrumb("Banking", "Bank Reconciliation")}
+          breadcrumbs={bankingBreadcrumb("Bank Reconciliation")}
           title="Bank Reconciliation"
           description="Upload month-wise bank statements and manually match entries to payments, purchases, sales, and ledgers."
           actions={headerActions}
