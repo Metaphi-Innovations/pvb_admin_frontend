@@ -187,11 +187,6 @@ export function getDocumentsForCustomerType(
 	}));
 }
 
-function extractPreviewSequence(previewNumber: string): string {
-	const parts = previewNumber.split("-");
-	return parts.length > 1 ? parts[parts.length - 1] : previewNumber;
-}
-
 export interface CustomerFormValues {
 	customerName: string;
 	countryCode: string;

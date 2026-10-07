@@ -323,10 +323,15 @@ export function StockTransferQcListing() {
       filterable: true,
       filterType: "dropdown",
       filterOptions: fromWarehouseOptions,
-      width: "140px",
-      render: (_val, row) => (
-        <span className="text-xs text-foreground">{row.fromWarehouse || row.vendorName || "—"}</span>
-      ),
+      width: "260px",
+      render: (_val, row) => {
+        const label = row.fromWarehouse || row.vendorName || "—";
+        return (
+          <span className="text-xs text-foreground" title={label !== "—" ? label : undefined}>
+            {label}
+          </span>
+        );
+      },
     },
     {
       key: "toWarehouse",
@@ -335,10 +340,15 @@ export function StockTransferQcListing() {
       filterable: true,
       filterType: "dropdown",
       filterOptions: toWarehouseOptions,
-      width: "140px",
-      render: (_val, row) => (
-        <span className="text-xs text-foreground">{row.toWarehouse || row.warehouse || "—"}</span>
-      ),
+      width: "260px",
+      render: (_val, row) => {
+        const label = row.toWarehouse || row.warehouse || "—";
+        return (
+          <span className="text-xs text-foreground" title={label !== "—" ? label : undefined}>
+            {label}
+          </span>
+        );
+      },
     },
     {
       key: "inspectionDate",

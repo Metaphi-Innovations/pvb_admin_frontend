@@ -6,6 +6,8 @@ import {
   type MasterStatus,
 } from "@/lib/masters/common";
 
+export type HsnCodeType = "HSN" | "SAC";
+
 export interface HSNMaster {
   id: number;
   /** Backend UUID for API routes */
@@ -13,6 +15,8 @@ export interface HSNMaster {
   gstId?: string;
   hsnCode: string;
   hsnDescription: string;
+  /** HSN (goods) or SAC (services) */
+  codeType: HsnCodeType;
   gstRate: string;
   productCategory?: string;
   effectiveDate?: string;
@@ -27,6 +31,7 @@ export interface HSNForm {
   hsnCode: string;
   hsnDescription: string;
   gstId: string;
+  codeType: HsnCodeType;
   /** @deprecated client-only legacy fields */
   gstRate?: string;
   productCategory?: string;
@@ -38,7 +43,17 @@ export const DEFAULT_HSN_FORM: HSNForm = {
   hsnCode: "",
   hsnDescription: "",
   gstId: "",
+  codeType: "HSN",
 };
+
+export const HSN_CODE_TYPE_OPTIONS: { value: HsnCodeType; label: string }[] = [
+  { value: "HSN", label: "HSN (Goods)" },
+  { value: "SAC", label: "SAC (Services)" },
+];
+
+export function normalizeHsnCodeType(value: unknown): HsnCodeType {
+  return String(value ?? "").trim().toUpperCase() === "SAC" ? "SAC" : "HSN";
+}
 
 export function formatHsnDisplayCode(srNo: number): string {
   return `HSN-${String(srNo).padStart(4, "0")}`;
@@ -53,13 +68,17 @@ export function validateHsnApiForm(form: HSNForm): Record<string, string> {
   const code = sanitizeHsnCodeInput(form.hsnCode ?? "");
 
   if (!code) {
-    errors.hsnCode = "HSN code is required.";
+    errors.hsnCode = "HSN/SAC code is required.";
   } else if (!/^\d{4,8}$/.test(code)) {
-    errors.hsnCode = "HSN code must be 4 to 8 digits.";
+    errors.hsnCode = "HSN/SAC code must be 4 to 8 digits.";
+  }
+
+  if (!form.codeType || (form.codeType !== "HSN" && form.codeType !== "SAC")) {
+    errors.codeType = "Type is required.";
   }
 
   if (!form.hsnDescription.trim()) {
-    errors.hsnDescription = "HSN description is required.";
+    errors.hsnDescription = "Description is required.";
   }
   if (!form.gstId) {
     errors.gstId = "GST rate is required.";
@@ -80,6 +99,7 @@ export const HSN_SEED: HSNMaster[] = [
     id: 1,
     hsnCode: "31021010",
     hsnDescription: "Urea — nitrogenous fertilizer",
+    codeType: "HSN",
     gstRate: "5%",
     productCategory: "Fertilizer",
     effectiveDate: "2026-01-01",
@@ -93,6 +113,7 @@ export const HSN_SEED: HSNMaster[] = [
     id: 2,
     hsnCode: "31052000",
     hsnDescription: "NPK — mineral or chemical fertilizers",
+    codeType: "HSN",
     gstRate: "12%",
     productCategory: "Fertilizer",
     effectiveDate: "2026-01-01",
@@ -106,6 +127,7 @@ export const HSN_SEED: HSNMaster[] = [
     id: 3,
     hsnCode: "38089340",
     hsnDescription: "Pesticides — herbicides, fungicides, insecticides",
+    codeType: "HSN",
     gstRate: "18%",
     productCategory: "Pesticide",
     effectiveDate: "2026-01-01",
@@ -119,6 +141,7 @@ export const HSN_SEED: HSNMaster[] = [
     id: 4,
     hsnCode: "12099990",
     hsnDescription: "Vegetable seeds for planting/sowing",
+    codeType: "HSN",
     gstRate: "0%",
     productCategory: "Seeds",
     effectiveDate: "2026-01-01",
@@ -145,6 +168,7 @@ function migrateRecord(raw: Record<string, unknown>): HSNMaster {
     id: Number(p.id ?? 0),
     hsnCode,
     hsnDescription: String(p.hsnDescription ?? ""),
+    codeType: normalizeHsnCodeType(p.codeType),
     gstRate: String(p.gstRate ?? "18%"),
     productCategory: String(p.productCategory ?? ""),
     effectiveDate: String(p.effectiveDate ?? ""),
@@ -193,6 +217,7 @@ export function hsnToForm(record: HSNMaster): HSNForm {
     hsnCode: record.hsnCode,
     hsnDescription: record.hsnDescription,
     gstId: record.gstId ?? "",
+    codeType: normalizeHsnCodeType(record.codeType),
     gstRate: record.gstRate,
     productCategory: record.productCategory ?? "",
     effectiveDate: record.effectiveDate ?? "",
@@ -210,6 +235,7 @@ export function formToHsn(
     id,
     hsnCode: (form.hsnCode ?? "").trim(),
     hsnDescription: form.hsnDescription.trim(),
+    codeType: normalizeHsnCodeType(form.codeType),
     gstRate: form.gstRate ?? "",
     productCategory: (form.productCategory ?? "").trim(),
     effectiveDate: (form.effectiveDate ?? "").trim(),

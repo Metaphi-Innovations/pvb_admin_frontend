@@ -131,7 +131,9 @@ export default function StockOverviewPage() {
               }}
               placeholder="Select warehouse..."
               searchPlaceholder="Search warehouse..."
-              className="h-9 w-[200px] text-xs rounded-lg border-border bg-white focus:ring-1 focus:ring-brand-500"
+              showLabelTooltip
+              className="h-9 w-[260px] max-w-[min(260px,50vw)] text-xs rounded-lg border-border bg-white focus:ring-1 focus:ring-brand-500"
+              popoverClassName="w-[min(300px,calc(100vw-2rem))] min-w-[260px]"
             />
           </div>
         ) : null

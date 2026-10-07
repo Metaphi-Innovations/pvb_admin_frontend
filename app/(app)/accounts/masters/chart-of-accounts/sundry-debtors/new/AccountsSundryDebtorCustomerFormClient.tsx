@@ -123,22 +123,14 @@ export default function AccountsSundryDebtorCustomerFormClient({
       return;
     }
 
-    function extractPreviewSequence(previewNumber: string): string {
-      const parts = previewNumber.split("-");
-      return parts.length > 1 ? parts[parts.length - 1] : previewNumber;
-    }
-
-    const selectedType = customerTypes.find((ct) => ct.id === form.customerType);
-
     let cancelled = false;
     setCodeLoading(true);
     setCustomerCode("");
 
-    CustomerListService.previewNumber()
+    CustomerListService.previewNumber(form.customerType)
       .then((code) => {
         if (!cancelled) {
-          const sequence = extractPreviewSequence(code);
-          setCustomerCode(`${selectedType?.customerInitialCode || ""}-${sequence}`);
+          setCustomerCode(code);
         }
       })
       .catch((err) => {
@@ -154,7 +146,7 @@ export default function AccountsSundryDebtorCustomerFormClient({
     return () => {
       cancelled = true;
     };
-  }, [form.customerType, customerTypes, isEdit]);
+  }, [form.customerType, isEdit]);
 
   useEffect(() => {
     if (!isEdit || !customer) return;

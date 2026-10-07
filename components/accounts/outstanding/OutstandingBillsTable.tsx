@@ -75,33 +75,24 @@ function SortHeader({
   const active = sortBy === colKey;
   return (
     <AccountsTableHeadCell
-      className={cn(
-        "cursor-pointer select-none whitespace-nowrap",
-        active && "bg-brand-50/60",
-        align === "right" && "text-right",
-      )}
+      align={align}
+      sorted={active}
+      className="cursor-pointer select-none whitespace-nowrap"
       onClick={() => onSort?.(colKey)}
     >
-      <div
-        className={cn(
-          "flex items-center gap-1.5",
-          align === "right" && "justify-end",
-        )}
-      >
-        <span className={active ? "text-brand-700" : "text-foreground"}>
-          {label}
-        </span>
-        {active ? (
-          <ChevronDown
-            className={cn(
-              "w-3 h-3 text-brand-600 transition-transform",
-              sortOrder === "desc" && "rotate-180",
-            )}
-          />
-        ) : (
-          <ChevronsUpDown className="w-3 h-3 text-muted-foreground/40" />
-        )}
-      </div>
+      <span className={cn("whitespace-nowrap", active ? "text-brand-700" : "text-foreground")}>
+        {label}
+      </span>
+      {active ? (
+        <ChevronDown
+          className={cn(
+            "w-3 h-3 text-brand-600 transition-transform flex-shrink-0",
+            sortOrder === "desc" && "rotate-180",
+          )}
+        />
+      ) : (
+        <ChevronsUpDown className="w-3 h-3 text-muted-foreground/40 flex-shrink-0" />
+      )}
     </AccountsTableHeadCell>
   );
 }
@@ -192,7 +183,9 @@ export function OutstandingBillsTable({
             />
             <AccountsTableHeadCell>Status</AccountsTableHeadCell>
             <AccountsTableHeadCell
-              className={cn("text-right", accountsActionColClass("single"))}
+              align="right"
+              sticky={false}
+              className={accountsActionColClass("single")}
             >
               View
             </AccountsTableHeadCell>
@@ -223,8 +216,8 @@ export function OutstandingBillsTable({
           ) : (
             rows.map((row) => (
               <AccountsTableRow key={row.openItemId} className="group">
-                <AccountsTableCell>
-                  <span className="font-mono text-xs font-semibold text-brand-700">
+                <AccountsTableCell mono>
+                  <span className="text-xs font-semibold text-brand-700">
                     {row.documentNumber}
                   </span>
                 </AccountsTableCell>
@@ -234,20 +227,14 @@ export function OutstandingBillsTable({
                 <AccountsTableCell>
                   {formatOutstandingReportDate(row.dueDate)}
                 </AccountsTableCell>
-                <AccountsTableCell align="right">
-                  <span className="tabular-nums">
-                    {formatMoney(row.originalAmount)}
-                  </span>
+                <AccountsTableCell align="right" money>
+                  {formatMoney(row.originalAmount)}
                 </AccountsTableCell>
-                <AccountsTableCell align="right">
-                  <span className="tabular-nums">
-                    {formatMoney(row.adjustedAmount)}
-                  </span>
+                <AccountsTableCell align="right" money>
+                  {formatMoney(row.adjustedAmount)}
                 </AccountsTableCell>
-                <AccountsTableCell align="right">
-                  <span className="tabular-nums font-semibold">
-                    {formatMoney(row.outstandingAmount)}
-                  </span>
+                <AccountsTableCell align="right" money>
+                  <span className="font-semibold">{formatMoney(row.outstandingAmount)}</span>
                 </AccountsTableCell>
                 <AccountsTableCell align="right">
                   <span
@@ -269,10 +256,7 @@ export function OutstandingBillsTable({
                     {statusDisplayLabel(row.displayStatus)}
                   </span>
                 </AccountsTableCell>
-                <AccountsTableCell
-                  align="right"
-                  className={accountsActionColClass("single")}
-                >
+                <AccountsTableCell align="right" actions="single">
                   <AccountsTableActionCell variant="single">
                     <AccountsViewAction
                       title={`View ${docLabel.toLowerCase()}`}

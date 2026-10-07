@@ -1721,7 +1721,9 @@ export function PurchaseCreate({
               }
               searchPlaceholder="Search warehouse…"
               disabled={!supplierId}
+              showLabelTooltip
               className="h-9 text-xs py-1.5 px-3 rounded-lg border-border focus:ring-1 focus:ring-brand-500 bg-white shadow-none focus:outline-none"
+              popoverClassName="w-[min(300px,calc(100vw-2rem))] min-w-[var(--radix-popover-trigger-width)]"
             />
           </Field>
 

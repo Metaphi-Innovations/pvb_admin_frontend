@@ -780,6 +780,7 @@ export function ReturnGrnCreate({
               value={warehouseName || (returnDetailLoading ? "Loading…" : "")}
               placeholder="Auto-populated from return…"
               readOnly
+              title={warehouseName || undefined}
               className={READONLY_FIELD_CLASS}
               error={fieldErrors.warehouseId}
             />

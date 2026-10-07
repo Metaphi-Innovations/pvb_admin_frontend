@@ -50,6 +50,11 @@ interface AutocompleteSelectProps {
   className?: string;
   /** Extra classes on the dropdown panel (e.g. min-w for narrow table cells). */
   popoverClassName?: string;
+  /**
+   * When true, shows the full option/selected label on hover (native title tooltip).
+   * Useful for long names that may still truncate in the list or trigger.
+   */
+  showLabelTooltip?: boolean;
   renderTriggerLabel?: (selectedOptions: AutocompleteOption | AutocompleteOption[]) => React.ReactNode;
   onBlur?: () => void;
   "aria-invalid"?: boolean;
@@ -74,6 +79,7 @@ export function AutocompleteSelect({
   confirmOnDone = false,
   className,
   popoverClassName,
+  showLabelTooltip = false,
   renderTriggerLabel,
   onBlur,
   "aria-invalid": ariaInvalid,
@@ -234,12 +240,33 @@ export function AutocompleteSelect({
       ? 1
       : 0;
 
+  const triggerTooltip = useMemo(() => {
+    if (!showLabelTooltip) return undefined;
+    if (multiple) {
+      const currentValues = Array.isArray(value) ? value : [];
+      if (currentValues.length === 0) return undefined;
+      return options
+        .filter((o) => currentValues.includes(o.value))
+        .map((o) => o.label)
+        .join(", ");
+    }
+    const selectedOpt =
+      options.find((o) => o.value === value) ||
+      options.find(
+        (o) =>
+          typeof value === "string" &&
+          o.value.toLowerCase() === value.trim().toLowerCase(),
+      );
+    return selectedOpt?.label || (typeof value === "string" && value.trim() ? value : undefined);
+  }, [showLabelTooltip, multiple, value, options]);
+
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
         <button
           type="button"
           disabled={disabled}
+          title={triggerTooltip}
           aria-invalid={ariaInvalid ?? (error ? true : undefined)}
           aria-describedby={ariaDescribedBy}
           data-pr-field={dataPrField}
@@ -381,6 +408,11 @@ export function AutocompleteSelect({
                     key={opt.value}
                     type="button"
                     disabled={opt.disabled}
+                    title={
+                      showLabelTooltip
+                        ? [opt.label, opt.sublabel].filter(Boolean).join(" — ")
+                        : undefined
+                    }
                     onClick={() => handleSelect(opt.value)}
                     style={
                       useVirtual

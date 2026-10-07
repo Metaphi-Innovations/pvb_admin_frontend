@@ -199,31 +199,14 @@ export default function NewCustomerPage() {
       return;
     }
 
-    function extractPreviewSequence(previewNumber: string): string {
-      const parts = previewNumber.split("-");
-      const sequencePart = parts.length > 1 ? parts[parts.length - 1] : previewNumber;
-
-      const parsedNumber = parseInt(sequencePart, 10);
-
-      if (isNaN(parsedNumber)) {
-        return sequencePart;
-      }
-
-      return (parsedNumber + 1).toString().padStart(sequencePart.length, "0");
-    }
-
-    const selectedType = customerTypes.find((ct) => ct.id === form.customerType);
-
-
     let cancelled = false;
     setCodeLoading(true);
     setCustomerCode("");
 
-    CustomerListService.previewNumber()
+    CustomerListService.previewNumber(form.customerType)
       .then((code) => {
         if (!cancelled) {
-          const sequence = extractPreviewSequence(code);
-          setCustomerCode(`${selectedType?.customerInitialCode}-${sequence}`);
+          setCustomerCode(code);
         }
       })
       .catch((err) => {
@@ -241,7 +224,7 @@ export default function NewCustomerPage() {
     return () => {
       cancelled = true;
     };
-  }, [form.customerType, customerTypes]);
+  }, [form.customerType]);
 
   const clearErr = (key: string) =>
     setErrors((prev) => {
