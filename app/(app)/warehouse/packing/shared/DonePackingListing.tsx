@@ -304,12 +304,14 @@ export function DonePackingListing({ sourceFilter }: DonePackingListingProps) {
         filterable: true,
         filterType: "dropdown",
         filterOptions: warehouseOptions,
-        width: "160px",
+        width: "260px",
         render: (_: unknown, row: PackingRecord) => {
           const type = resolveWarehouseOrderType(row);
+          const label =
+            type === "stock_transfer" ? (row.sourceWarehouse || row.warehouse) : row.warehouse;
           return (
-            <span className="text-xs text-foreground">
-              {type === "stock_transfer" ? (row.sourceWarehouse || row.warehouse) : row.warehouse}
+            <span className="text-xs text-foreground" title={label || undefined}>
+              {label}
             </span>
           );
         },

@@ -338,8 +338,10 @@ export function StockAdjustmentDialog({
               }}
               placeholder="Select warehouse..."
               searchPlaceholder="Search warehouse..."
+              showLabelTooltip
               disabled={submitting || warehouseLocked || warehouseOptions.length === 0}
               className="h-8 text-xs rounded-lg border-border bg-white"
+              popoverClassName="w-[min(300px,calc(100vw-2rem))] min-w-[var(--radix-popover-trigger-width)]"
             />
           </div>
 

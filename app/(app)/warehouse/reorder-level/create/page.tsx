@@ -147,7 +147,9 @@ function CreateReorderLevelForm() {
                   placeholder="Select warehouse"
                   searchPlaceholder="Search warehouse..."
                   error={!!errors.warehouse}
+                  showLabelTooltip
                   className="h-8 text-xs rounded-lg border-border bg-white"
+                  popoverClassName="w-[min(300px,calc(100vw-2rem))] min-w-[var(--radix-popover-trigger-width)]"
                 />
                 {errors.warehouse && <p className="text-[10px] text-red-500 font-semibold mt-1">{errors.warehouse}</p>}
               </div>

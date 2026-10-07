@@ -293,6 +293,7 @@ export const MASTER_FILTER_FIELD_MAPS = {
   hsn: {
     hsnCode: "hsnCode",
     hsnDescription: "hsnDescription",
+    codeType: "codeType",
     gstRate: (value) => {
       const raw = Array.isArray(value) ? value[0] : value;
       const label = String(raw).split(" — ")[0];

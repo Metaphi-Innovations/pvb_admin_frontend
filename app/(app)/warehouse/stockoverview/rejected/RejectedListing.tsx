@@ -200,6 +200,7 @@ export function RejectedListing({ warehouseId, onFiltersApplied }: RejectedListi
       filterable: true,
       filterType: "dropdown",
       filterOptions: filterOptions.warehouse_name || [],
+      width: "260px",
     },
     {
       key: "batch_no",

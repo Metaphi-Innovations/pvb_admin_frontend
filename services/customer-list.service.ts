@@ -645,9 +645,10 @@ export const CustomerListService = {
         return mapDetail(data as Record<string, unknown>);
     },
 
-    async previewNumber(): Promise<string> {
+    async previewNumber(customerTypeId?: string): Promise<string> {
         const response = await axiosInstance.get(
             API_ENDPOINTS.MASTER.CUSTOMER.PREVIEW_NUMBER,
+            { params: customerTypeId ? { customer_type_id: customerTypeId } : undefined },
         );
         const payload = response.data as Record<string, unknown>;
         const data = payload.data as Record<string, unknown> | undefined;

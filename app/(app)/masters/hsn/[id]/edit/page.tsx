@@ -19,6 +19,8 @@ import {
 	formToHsn,
 	validateHsnForm,
 	sanitizeHsnCodeInput,
+	HSN_CODE_TYPE_OPTIONS,
+	normalizeHsnCodeType,
 } from "../../hsn-data";
 import { loadGSTMasters } from "../../../gst/gst-data";
 
@@ -42,6 +44,7 @@ export default function EditHSNPage() {
 		id: 0,
 		hsnCode: "",
 		hsnDescription: "",
+		codeType: "HSN",
 		gstRate: "",
 		status: "active",
 		createdBy: "",
@@ -166,7 +169,7 @@ export default function EditHSNPage() {
 					<div className='grid grid-cols-1 sm:grid-cols-2 gap-3'>
 						<div className='space-y-1'>
 							<Label className='text-xs font-medium'>
-								HSN Code <span className='text-red-500'>*</span>
+								HSN/SAC Code <span className='text-red-500'>*</span>
 							</Label>
 							<Input
 								value={form.hsnCode}
@@ -179,6 +182,21 @@ export default function EditHSNPage() {
 								maxLength={8}
 							/>
 							<FieldError msg={errors.hsnCode} />
+						</div>
+
+						<div className='space-y-1'>
+							<Label className='text-xs font-medium'>
+								Type <span className='text-red-500'>*</span>
+							</Label>
+							<AutocompleteSelect
+								options={HSN_CODE_TYPE_OPTIONS}
+								value={form.codeType}
+								onChange={(value) => set("codeType", normalizeHsnCodeType(value))}
+								placeholder='Select type…'
+								error={!!errors.codeType}
+								className='h-8 text-xs'
+							/>
+							<FieldError msg={errors.codeType} />
 						</div>
 
 						<div className='space-y-1'>

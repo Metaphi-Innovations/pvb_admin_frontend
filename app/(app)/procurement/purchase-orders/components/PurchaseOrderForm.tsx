@@ -408,7 +408,7 @@ const readOnlyCls = cn(inputCls, "bg-muted/30 text-foreground");
 
 function ReadOnlyField({ value }: { value: string }) {
 	return (
-		<Input value={value || "—"} readOnly className={readOnlyCls} />
+		<Input value={value || "—"} readOnly className={readOnlyCls} title={value || undefined} />
 	);
 }
 
@@ -1187,7 +1187,7 @@ export function PurchaseOrderForm({
 								<p className="text-[11px] text-red-500">{errors.state}</p>
 							)}
 						</div>
-						<div id="po-field-warehouseId" className="space-y-1">
+						<div id="po-field-warehouseId" className="space-y-1 min-w-[240px]">
 							<Label className="text-xs font-medium">
 								Warehouse <span className="text-red-500">*</span>
 							</Label>
@@ -1199,8 +1199,11 @@ export function PurchaseOrderForm({
 									value={form.warehouseId ? String(form.warehouseId) : ""}
 									onChange={(v) => onWarehouseChange(String(v))}
 									placeholder="Select warehouse"
+									searchPlaceholder="Search warehouse..."
 									error={!!errors.warehouseId}
+									showLabelTooltip
 									className={inputCls}
+									popoverClassName="w-[min(300px,calc(100vw-2rem))] min-w-[var(--radix-popover-trigger-width)]"
 								/>
 							)}
 							{errors.warehouseId && (

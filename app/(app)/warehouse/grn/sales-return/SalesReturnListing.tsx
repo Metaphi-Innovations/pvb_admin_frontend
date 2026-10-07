@@ -84,8 +84,12 @@ export function SalesReturnListing() {
         filterable: true,
         filterType: "dropdown",
         filterOptions: getFilterOptionsForColumn("warehouse"),
-        width: "140px",
-        render: (val) => <span className="text-xs text-foreground">{val}</span>,
+        width: "260px",
+        render: (val) => (
+          <span className="text-xs text-foreground" title={val ? String(val) : undefined}>
+            {val}
+          </span>
+        ),
       },
       {
         key: "grnDate",

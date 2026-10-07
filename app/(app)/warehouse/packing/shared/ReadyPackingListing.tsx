@@ -259,12 +259,18 @@ export function ReadyPackingListing({ sourceFilter }: ReadyPackingListingProps) 
         filterable: true,
         filterType: "dropdown",
         filterOptions: warehouseOptions,
-        width: "160px",
-        render: (_: unknown, row: PackingListListItem) => (
-          <span className="text-xs text-foreground">
-            {sourceFilter === "stock_transfer" ? (row.sourceWarehouse || row.warehouseName) : row.warehouseName}
-          </span>
-        ),
+        width: "260px",
+        render: (_: unknown, row: PackingListListItem) => {
+          const label =
+            sourceFilter === "stock_transfer"
+              ? row.sourceWarehouse || row.warehouseName
+              : row.warehouseName;
+          return (
+            <span className="text-xs text-foreground" title={label || undefined}>
+              {label}
+            </span>
+          );
+        },
       },
       {
         key: "totalItems",
