@@ -71,8 +71,6 @@ const DEFAULT_SPECIAL_INSTRUCTIONS: string[] = [
   "Deliver directly to Central Warehouse, MIDC Phase-II. No direct site deliveries.",
   "Batch-wise packing required, with batch stickers on each carton.",
   "Test Certificate and COA mandatory for all biological raw materials.",
-  "Maintain cold chain (2–8°C) for Trichoderma and Bacillus concentrates during transport.",
-  "Fragile – handle HDPE bottles with care. Maximum stacking of 4 layers.",
 ];
 
 function buildPaymentTerms(po: PurchaseOrder): string {
