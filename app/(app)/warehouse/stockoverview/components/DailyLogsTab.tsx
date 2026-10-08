@@ -538,6 +538,7 @@ export function DailyLogsTab() {
       filterable: true,
       filterType: "dropdown",
       filterOptions: filterOptions.warehouse || [],
+      width: "260px",
     },
     {
       key: "cp",

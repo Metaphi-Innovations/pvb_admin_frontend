@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Banknote, AlertCircle } from "lucide-react";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { AccountsListingTableCard } from "@/components/accounts/AccountsListingHeader";
@@ -15,6 +15,7 @@ import {
   ReportSearchFilter,
   useReportDateRange,
 } from "@/components/accounts/ReportFilters";
+import { resolveDateRangePreset } from "@/lib/accounts/report-date-presets";
 import {
   buildEntityFilterSummary,
   type ReportFilterSummaryItem,
@@ -135,6 +136,22 @@ function CashBookPageContent() {
 
   // Selected Cash Ledger ID
   const effectiveLedgerId = cashLedgerId && cashLedgerId !== "all" ? cashLedgerId : undefined;
+
+  // Reset date filter to default when the selected cash ledger changes.
+  const cashLedgerFilterKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    const key = cashLedgerId || "";
+    if (cashLedgerFilterKeyRef.current === null) {
+      cashLedgerFilterKeyRef.current = key;
+      return;
+    }
+    if (cashLedgerFilterKeyRef.current === key) return;
+    cashLedgerFilterKeyRef.current = key;
+    const { from, to } = resolveDateRangePreset("this_year");
+    setPreset("this_year");
+    setDateFrom(from);
+    setDateTo(to);
+  }, [cashLedgerId, setPreset, setDateFrom, setDateTo]);
 
   // Reset page when filters or sorting change
   useEffect(() => {

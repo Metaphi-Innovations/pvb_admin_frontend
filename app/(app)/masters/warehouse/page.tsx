@@ -289,9 +289,10 @@ export default function WarehouseListPage() {
       filterable: true,
       filterType: "dropdown",
       filterOptions: warehouseNameOptions,
-      width: "200px",
+      width: "260px",
+      tooltipText: (_val, row) => row.warehouseName || null,
       render: (_val, row) => (
-        <Link href={`/masters/warehouse/${row.warehouseUuid}`} className="block group/name">
+        <Link href={`/masters/warehouse/${row.warehouseUuid}`} className="block group/name" title={row.warehouseName}>
           <p className="text-xs font-semibold leading-4 text-foreground group-hover/name:text-brand-700">{row.warehouseName}</p>
         </Link>
       ),

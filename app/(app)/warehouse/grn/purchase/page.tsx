@@ -96,9 +96,11 @@ export default function PurchaseListingRoutePage() {
         filterable: true,
         filterType: "dropdown",
         filterOptions: getFilterOptionsForColumn("warehouse"),
-        width: "140px",
+        width: "260px",
         render: (_val, row) => (
-          <span className="text-xs text-foreground">{row.warehouse || "—"}</span>
+          <span className="text-xs text-foreground" title={row.warehouse || undefined}>
+            {row.warehouse || "—"}
+          </span>
         ),
       },
       {

@@ -107,7 +107,12 @@ export function GrnPendingListing({ grnPendingForWarehouse }: GrnPendingListingP
       filterable: true,
       filterType: "dropdown",
       filterOptions: WAREHOUSE_OPTIONS,
-      render: (val, row) => <span className="text-xs text-foreground">{row.warehouse}</span>,
+      width: "260px",
+      render: (val, row) => (
+        <span className="text-xs text-foreground" title={row.warehouse || undefined}>
+          {row.warehouse}
+        </span>
+      ),
     },
     {
       key: "batchNumber",

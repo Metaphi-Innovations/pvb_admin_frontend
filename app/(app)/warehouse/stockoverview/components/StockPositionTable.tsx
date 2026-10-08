@@ -129,6 +129,7 @@ export function StockPositionTable({
         filterable: true,
         filterType: "dropdown",
         filterOptions: filterOptions.warehouses.map((w) => ({ label: w, value: w })),
+        width: "260px",
       },
       status: {
         key: "status",

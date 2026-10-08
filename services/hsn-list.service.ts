@@ -11,11 +11,14 @@ export interface HsnListParams {
   signal?: AbortSignal;
 }
 
+export type HsnCodeType = "HSN" | "SAC";
+
 export interface HsnListRecord {
   id: number;
   hsnUuid: string;
   hsnCode: string;
   hsnDescription: string;
+  codeType: HsnCodeType;
   gstId: string;
   gstPercentage: number;
   status: "active" | "inactive";
@@ -34,7 +37,7 @@ export interface HsnDropdownItem {
   id: string;
   hsnCode: string;
   hsnDescription: string;
-  codeType: "HSN" | "SAC";
+  codeType: HsnCodeType;
   gstRate: string;
   gstId: string;
   gstPercentage: number;
@@ -48,6 +51,7 @@ export interface HsnFilterOption {
 export type HsnFilterField =
   | "hsnCode"
   | "hsnDescription"
+  | "codeType"
   | "gstPercentage"
   | "is_active"
   | "created_by_user__username"
@@ -56,6 +60,7 @@ export type HsnFilterField =
 const SORT_KEY_TO_ORDERING: Record<string, string> = {
   hsnCode: "hsnCode",
   hsnDescription: "hsnDescription",
+  codeType: "codeType",
   gstRate: "gst__gstPercentage",
   status: "is_active",
   createdBy: "created_at",
@@ -118,12 +123,14 @@ export interface HsnCreatePayload {
   hsnCode: string;
   hsnDescription: string;
   gstId: string;
+  codeType: HsnCodeType;
 }
 
 export interface HsnUpdatePayload {
   hsnCode: string;
   hsnDescription: string;
   gstId: string;
+  codeType: HsnCodeType;
 }
 
 export interface HsnExportParams {
@@ -156,6 +163,10 @@ function toGstPercentage(value: unknown): number {
   return Number.isFinite(num) ? num : 0;
 }
 
+function toCodeType(value: unknown): HsnCodeType {
+  return asString(value).trim().toUpperCase() === "SAC" ? "SAC" : "HSN";
+}
+
 function readGst(raw: Record<string, unknown>): { gstId: string; gstPercentage: number } {
   const gst = raw.gst;
   if (gst && typeof gst === "object" && !Array.isArray(gst)) {
@@ -179,6 +190,7 @@ function mapItem(raw: Record<string, unknown>, fallbackIndex: number): HsnListRe
     hsnUuid: asString(raw.id),
     hsnCode: asString(raw.hsnCode ?? raw.hsn_code),
     hsnDescription: asString(raw.hsnDescription),
+    codeType: toCodeType(raw.codeType ?? raw.code_type),
     gstId: gst.gstId,
     gstPercentage: gst.gstPercentage,
     status: toStatus(raw.is_active),
@@ -197,6 +209,7 @@ function mapDetail(raw: Record<string, unknown>): HsnListRecord {
     hsnUuid: asString(raw.id),
     hsnCode: asString(raw.hsnCode ?? raw.hsn_code),
     hsnDescription: asString(raw.hsnDescription),
+    codeType: toCodeType(raw.codeType ?? raw.code_type),
     gstId: gst.gstId,
     gstPercentage: gst.gstPercentage,
     status: toStatus(raw.is_active),
@@ -250,6 +263,7 @@ export const HsnListService = {
       hsnCode: payload.hsnCode.trim(),
       hsnDescription: payload.hsnDescription.trim(),
       gstId: payload.gstId,
+      codeType: toCodeType(payload.codeType),
     });
 
     const body = response.data as Record<string, unknown>;
@@ -263,6 +277,7 @@ export const HsnListService = {
       hsnCode: payload.hsnCode.trim(),
       hsnDescription: payload.hsnDescription.trim(),
       gstId: payload.gstId,
+      codeType: toCodeType(payload.codeType),
     });
 
     const body = response.data as Record<string, unknown>;

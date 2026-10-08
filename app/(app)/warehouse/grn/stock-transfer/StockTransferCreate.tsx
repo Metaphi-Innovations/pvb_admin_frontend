@@ -827,6 +827,7 @@ export function StockTransferCreate({
               value={warehouseName || (detailLoading ? "Loading…" : "")}
               placeholder="Auto-populated from packing snapshot…"
               readOnly
+              title={warehouseName || undefined}
               className={READONLY_FIELD_CLASS}
               error={fieldErrors.warehouseId}
             />
@@ -836,6 +837,7 @@ export function StockTransferCreate({
               value={fromWarehouseName || (detailLoading ? "Loading…" : "")}
               placeholder="—"
               readOnly
+              title={fromWarehouseName || undefined}
               className={READONLY_FIELD_CLASS}
             />
 

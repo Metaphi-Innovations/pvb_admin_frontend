@@ -468,6 +468,14 @@ export default function ChartOfAccountsPageClient() {
 
   useEffect(() => {
     setContentSearch("");
+    // Date filters are page-level state — reset to Working FY default when navigating ledgers/groups.
+    if (!selectedFY?.id) return;
+    const next = defaultLedgerDateRangeState(selectedFY);
+    setPreset(next.preset);
+    setDateFrom(next.from);
+    setDateTo(next.to);
+    // Only when the selected COA node changes (not on FY object identity churn).
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- selectedFY read for defaults; node id is the trigger
   }, [selectedNode?.id, showRoot]);
 
   useEffect(() => {

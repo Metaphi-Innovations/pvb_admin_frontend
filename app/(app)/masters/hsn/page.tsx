@@ -25,7 +25,10 @@ import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 import {
 	type HSNMaster,
 	type HSNForm,
+	type HsnCodeType,
 	DEFAULT_HSN_FORM,
+	HSN_CODE_TYPE_OPTIONS,
+	normalizeHsnCodeType,
 	sanitizeHsnCodeInput,
 	validateHsnApiForm,
 } from "./hsn-data";
@@ -110,11 +113,28 @@ function formatGstRate(pct: number): string {
 	return `${pct}%`;
 }
 
+function CodeTypePill({ codeType }: { codeType: HsnCodeType }) {
+	const isSac = codeType === "SAC";
+	return (
+		<span
+			className={cn(
+				"inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold",
+				isSac
+					? "bg-navy-50 text-navy-700"
+					: "bg-brand-50 text-brand-700",
+			)}
+		>
+			{codeType}
+		</span>
+	);
+}
+
 function toHsnRow(item: {
 	id: number;
 	hsnUuid: string;
 	hsnCode: string;
 	hsnDescription: string;
+	codeType?: string;
 	gstId: string;
 	gstPercentage: number;
 	status: "active" | "inactive";
@@ -129,6 +149,7 @@ function toHsnRow(item: {
 		gstId: item.gstId,
 		hsnCode: item.hsnCode || "",
 		hsnDescription: item.hsnDescription,
+		codeType: normalizeHsnCodeType(item.codeType),
 		gstRate: formatGstRate(item.gstPercentage),
 		status: item.status,
 		createdBy: item.createdBy || "—",
@@ -201,6 +222,9 @@ export default function HSNPage() {
 	const hsnDescriptionOptionsQuery = useHsnFilterDropdown("hsnDescription", {
 		enabled: isFilterOpen("hsnDescription"),
 	});
+	const codeTypeOptionsQuery = useHsnFilterDropdown("codeType", {
+		enabled: isFilterOpen("codeType"),
+	});
 	const gstRateOptionsQuery = useHsnFilterDropdown("gstPercentage", { enabled: isFilterOpen("gstRate") });
 	const statusOptionsQuery = useHsnFilterDropdown("is_active", { enabled: isFilterOpen("status") });
 
@@ -212,6 +236,13 @@ export default function HSNPage() {
 		() => hsnDescriptionOptionsQuery.data ?? [],
 		[hsnDescriptionOptionsQuery.data],
 	);
+	const codeTypeFilterOptions = useMemo(() => {
+		if (codeTypeOptionsQuery.data?.length) return codeTypeOptionsQuery.data;
+		return HSN_CODE_TYPE_OPTIONS.map((opt) => ({
+			label: opt.value,
+			value: opt.value,
+		}));
+	}, [codeTypeOptionsQuery.data]);
 	const gstRateFilterOptions = useMemo(() => {
 		if (gstRateOptionsQuery.data?.length) return gstRateOptionsQuery.data;
 		return (gstDropdownQuery.data ?? []).map((item) => ({
@@ -329,6 +360,7 @@ export default function HSNPage() {
 			hsnCode: record.hsnCode,
 			hsnDescription: record.hsnDescription,
 			gstId: matched,
+			codeType: normalizeHsnCodeType(record.codeType),
 		};
 	}
 
@@ -375,7 +407,7 @@ export default function HSNPage() {
 	const columns: ColumnConfig<HSNMaster>[] = [
 		{
 			key: "hsnCode",
-			header: "HSN Code",
+			header: "HSN/SAC Code",
 			sortable: true,
 			filterable: true,
 			filterType: "dropdown",
@@ -392,13 +424,23 @@ export default function HSNPage() {
 			),
 		},
 		{
+			key: "codeType",
+			header: "Type",
+			sortable: true,
+			filterable: true,
+			filterType: "dropdown",
+			filterOptions: codeTypeFilterOptions,
+			width: "90px",
+			render: (_val, row) => <CodeTypePill codeType={row.codeType} />,
+		},
+		{
 			key: "hsnDescription",
-			header: "HSN Description",
+			header: "Description",
 			sortable: true,
 			filterable: true,
 			filterType: "dropdown",
 			filterOptions: hsnDescriptionOptions,
-			width: "300px",
+			width: "280px",
 			render: (_val, row) => (
 				<span className="text-xs text-foreground line-clamp-2">{row.hsnDescription}</span>
 			),
@@ -491,6 +533,7 @@ export default function HSNPage() {
 					hsnCode: normalizedForm.hsnCode,
 					hsnDescription: normalizedForm.hsnDescription,
 					gstId: normalizedForm.gstId,
+					codeType: normalizeHsnCodeType(normalizedForm.codeType),
 				},
 				{
 					onSuccess: () => {
@@ -519,6 +562,7 @@ export default function HSNPage() {
 					hsnCode: normalizedForm.hsnCode,
 					hsnDescription: normalizedForm.hsnDescription,
 					gstId: normalizedForm.gstId,
+					codeType: normalizeHsnCodeType(normalizedForm.codeType),
 				},
 			},
 			{
@@ -561,10 +605,14 @@ export default function HSNPage() {
 	const viewDrawer = active
 		? {
 				title: active.hsnCode || "HSN",
-				subtitle: "Government HSN classification",
+				subtitle:
+					active.codeType === "SAC"
+						? "SAC — Service Accounting Code"
+						: "HSN — Harmonized System of Nomenclature",
 				status: active.status,
 				basicInfo: [
-					{ label: "HSN Code", value: active.hsnCode || "—", mono: true },
+					{ label: "HSN/SAC Code", value: active.hsnCode || "—", mono: true },
+					{ label: "Type", value: active.codeType },
 					{ label: "GST Rate", value: active.gstRate },
 					{ label: "Description", value: active.hsnDescription },
 				],
@@ -624,7 +672,7 @@ export default function HSNPage() {
 				addLabel="Add HSN"
 				onExport={handleExport}
 				emptyMessage="HSN records"
-				searchPlaceholder="Search HSN code or description..."
+				searchPlaceholder="Search HSN/SAC code, type, or description..."
 				currentFilters={filters}
 				currentSort={sort}
 				onOpenFilter={handleOpenFilter}
@@ -644,7 +692,7 @@ export default function HSNPage() {
 				formContent={
 					sheetMode !== "view" ? (
 						<MasterFormGrid>
-							<MasterField label="HSN Code" required error={errors.hsnCode}>
+							<MasterField label="HSN/SAC Code" required error={errors.hsnCode}>
 								<Input
 									className={cn(compactInput(), "font-mono")}
 									value={form.hsnCode}
@@ -654,9 +702,28 @@ export default function HSNPage() {
 											hsnCode: sanitizeHsnCodeInput(e.target.value),
 										}))
 									}
-									placeholder="e.g. 31021010"
+									placeholder={
+										form.codeType === "SAC" ? "e.g. 998399" : "e.g. 31021010"
+									}
 									maxLength={8}
 									disabled={saving}
+								/>
+							</MasterField>
+
+							<MasterField label="Type" required error={errors.codeType}>
+								<AutocompleteSelect
+									options={HSN_CODE_TYPE_OPTIONS}
+									value={form.codeType}
+									onChange={(value) =>
+										setForm((prev) => ({
+											...prev,
+											codeType: normalizeHsnCodeType(value),
+										}))
+									}
+									placeholder="Select type…"
+									error={!!errors.codeType}
+									disabled={saving}
+									className="h-8 text-xs"
 								/>
 							</MasterField>
 
@@ -680,7 +747,7 @@ export default function HSNPage() {
 							</MasterField>
 
 							<MasterField
-								label="HSN Description"
+								label="Description"
 								required
 								error={errors.hsnDescription}
 								className="sm:col-span-2"
@@ -694,7 +761,11 @@ export default function HSNPage() {
 											hsnDescription: e.target.value,
 										}))
 									}
-									placeholder="e.g. Insecticides, fungicides, herbicides"
+									placeholder={
+										form.codeType === "SAC"
+											? "e.g. Other professional, technical and business services"
+											: "e.g. Insecticides, fungicides, herbicides"
+									}
 									rows={3}
 									disabled={saving}
 								/>

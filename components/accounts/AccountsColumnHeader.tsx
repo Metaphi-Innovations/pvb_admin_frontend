@@ -118,7 +118,9 @@ export function AccountsColumnHeader({
     >
       <div
         className={cn(
-          "inline-flex items-center gap-0.5 max-w-full min-w-0",
+          "flex items-center gap-0.5 max-w-full min-w-0",
+          // Fill the cell so right/center-aligned headers line up with values.
+          (align === "right" || align === "center") && "w-full",
           align === "right" && "justify-end",
           align === "center" && "justify-center",
         )}

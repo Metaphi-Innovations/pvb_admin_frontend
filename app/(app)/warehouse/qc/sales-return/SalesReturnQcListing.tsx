@@ -301,8 +301,12 @@ export function SalesReturnQcListing() {
       filterable: true,
       filterType: "dropdown",
       filterOptions: warehouseOptions,
-      width: "140px",
-      render: (_val, row) => <span className="text-xs text-foreground">{row.warehouse}</span>,
+      width: "260px",
+      render: (_val, row) => (
+        <span className="text-xs text-foreground" title={row.warehouse || undefined}>
+          {row.warehouse}
+        </span>
+      ),
     },
     {
       key: "inspectionDate",

@@ -29,6 +29,7 @@ import {
   ReportVoucherTypeMultiFilter,
   useReportDateRange,
 } from "@/components/accounts/ReportFilters";
+import { resolveDateRangePreset } from "@/lib/accounts/report-date-presets";
 import {
   buildEntityFilterSummary,
   countActiveMoreFilters,
@@ -427,9 +428,14 @@ function GeneralLedgerPageContent() {
       setGroupId("");
       setPage(1);
       setPartyError(null);
-      syncUrl({ ledgerId: value, groupId: "" });
+      // Reset date filter to default so a prior ledger's "Today"/custom range does not carry over.
+      const { from, to } = resolveDateRangePreset("this_year");
+      setPreset("this_year");
+      setDateFrom(from);
+      setDateTo(to);
+      syncUrl({ ledgerId: value, groupId: "", dateFrom: from, dateTo: to });
     },
-    [syncUrl],
+    [syncUrl, setPreset, setDateFrom, setDateTo],
   );
 
   const handleLedgerTypeChange = useCallback(

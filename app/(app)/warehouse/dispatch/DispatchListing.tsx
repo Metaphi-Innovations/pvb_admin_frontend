@@ -426,7 +426,7 @@ export function DispatchListing({ selectedWarehouse = "All" }: DispatchListingPr
         filterable: true,
         filterType: "dropdown",
         filterOptions: sourceWarehouseOptions,
-        width: "150px",
+        width: "260px",
         truncate: true,
         tooltipText: (_: unknown, row: DispatchRecord) => {
           const value = resolveDispatchSourceWarehouseLabel(row);

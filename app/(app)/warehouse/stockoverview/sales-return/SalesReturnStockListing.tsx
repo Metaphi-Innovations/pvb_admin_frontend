@@ -240,7 +240,12 @@ export function SalesReturnStockListing({ warehouseId, onFiltersApplied }: Sales
       filterable: true,
       filterType: "dropdown",
       filterOptions: filterOptions.warehouse_name || [],
-      render: (val) => <span className="text-xs text-foreground">{val}</span>,
+      width: "260px",
+      render: (val) => (
+        <span className="text-xs text-foreground" title={val ? String(val) : undefined}>
+          {val}
+        </span>
+      ),
     },
     {
       key: "batch_no",

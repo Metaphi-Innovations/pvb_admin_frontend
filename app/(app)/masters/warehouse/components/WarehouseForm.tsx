@@ -1289,7 +1289,7 @@ export function WarehouseForm({
 				/>
 				<div className='grid grid-cols-12 gap-2.5'>
 					{/* Warehouse Name */}
-					<div className='col-span-12 sm:col-span-4 space-y-1'>
+					<div className='col-span-12 sm:col-span-5 space-y-1'>
 						<Label className='text-xs font-medium'>
 							Warehouse Name <span className='text-red-500'>*</span>
 						</Label>
@@ -1297,13 +1297,14 @@ export function WarehouseForm({
 							value={form.warehouseName}
 							onChange={(e) => set("warehouseName", e.target.value)}
 							placeholder='e.g., Central Distribution Hub'
+							title={form.warehouseName || undefined}
 							className={inputCls("warehouseName")}
 						/>
 						<FieldError msg={errors.warehouseName} />
 					</div>
 
 					{/* Operated By */}
-					<div className='col-span-12 sm:col-span-4'>
+					<div className='col-span-12 sm:col-span-3'>
 						<AC
 							label='Operated By'
 							value={form.operatedBy}

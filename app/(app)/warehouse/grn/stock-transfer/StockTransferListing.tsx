@@ -249,8 +249,12 @@ export function StockTransferListing() {
         filterable: true,
         filterType: "dropdown",
         filterOptions: pendingFilterOptions.fromWarehouse || [],
-        width: "140px",
-        render: (_val, row) => <span className="text-xs text-foreground">{row.fromWarehouse}</span>,
+        width: "260px",
+        render: (_val, row) => (
+          <span className="text-xs text-foreground" title={row.fromWarehouse || undefined}>
+            {row.fromWarehouse}
+          </span>
+        ),
       },
       {
         key: "toWarehouse",
@@ -259,8 +263,12 @@ export function StockTransferListing() {
         filterable: true,
         filterType: "dropdown",
         filterOptions: pendingFilterOptions.toWarehouse || [],
-        width: "140px",
-        render: (_val, row) => <span className="text-xs text-foreground">{row.toWarehouse}</span>,
+        width: "260px",
+        render: (_val, row) => (
+          <span className="text-xs text-foreground" title={row.toWarehouse || undefined}>
+            {row.toWarehouse}
+          </span>
+        ),
       },
       {
         key: "dispatchDate",
@@ -334,8 +342,12 @@ export function StockTransferListing() {
         filterable: true,
         filterType: "dropdown",
         filterOptions: getFilterOptionsForColumn("fromWarehouse"),
-        width: "140px",
-        render: (_val, row) => <span className="text-xs text-foreground">{row.fromWarehouse}</span>,
+        width: "260px",
+        render: (_val, row) => (
+          <span className="text-xs text-foreground" title={row.fromWarehouse || undefined}>
+            {row.fromWarehouse}
+          </span>
+        ),
       },
       {
         key: "toWarehouse",
@@ -344,8 +356,12 @@ export function StockTransferListing() {
         filterable: true,
         filterType: "dropdown",
         filterOptions: getFilterOptionsForColumn("toWarehouse"),
-        width: "140px",
-        render: (_val, row) => <span className="text-xs text-foreground">{row.toWarehouse}</span>,
+        width: "260px",
+        render: (_val, row) => (
+          <span className="text-xs text-foreground" title={row.toWarehouse || undefined}>
+            {row.toWarehouse}
+          </span>
+        ),
       },
       {
         key: "dispatchDate",
