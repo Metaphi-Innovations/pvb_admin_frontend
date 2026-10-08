@@ -175,6 +175,15 @@ function mapListItem(
         "—"
       : undefined;
 
+  const invoicesRaw = Array.isArray(raw.invoices) ? raw.invoices : [];
+  const invoiceNumbersFromList = invoicesRaw
+    .map((inv) => asString(asRecord(inv).invoiceNumber).trim())
+    .filter(Boolean);
+  const invoiceNumber =
+    asString(raw.invoiceNumber).trim() ||
+    invoiceNumbersFromList.join(", ") ||
+    undefined;
+
   return {
     id: asString(raw.id),
     grnNo,
@@ -192,6 +201,7 @@ function mapListItem(
     supplierInvoices: [],
     ocrExtractedInvoices: [],
     ocrExtractionCompleted: false,
+    invoiceNumber,
     sourceType: mapSourceTypeToFrontend(tabContext.sourceType),
     stockTransferNo,
     fromWarehouse,
