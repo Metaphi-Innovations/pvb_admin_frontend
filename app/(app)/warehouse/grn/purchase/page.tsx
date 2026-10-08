@@ -80,6 +80,17 @@ export default function PurchaseListingRoutePage() {
         ),
       },
       {
+        key: "invoiceNumber",
+        header: "Supplier Invoice No.",
+        sortable: false,
+        width: "150px",
+        render: (_val, row) => (
+          <span className="font-mono text-xs text-foreground" title={row.invoiceNumber || undefined}>
+            {row.invoiceNumber || "—"}
+          </span>
+        ),
+      },
+      {
         key: "vendorName",
         header: "Supplier",
         sortable: true,
