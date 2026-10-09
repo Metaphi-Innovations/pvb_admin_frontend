@@ -49,6 +49,7 @@ export type GrnFilterField =
   | "supplier__supplier_name"
   | "warehouse__warehouse_name"
   | "po_no"
+  | "invoiceNumber"
   | "sales_return_no"
   | "sample_return_no"
   | "stock_transfer_no"
@@ -307,6 +308,11 @@ export function buildGrnApiFilters(
     apiFilters.po_no = poNumber;
   }
 
+  const invoiceNumber = firstFilterValue(filters.invoiceNumber);
+  if (invoiceNumber) {
+    apiFilters.invoices = { invoiceNumber };
+  }
+
   const salesReturnNo = firstFilterValue(filters.salesReturnNo);
   if (salesReturnNo) {
     apiFilters.sales_return_no = salesReturnNo;
@@ -384,6 +390,7 @@ export function buildGrnOrdering(
     grnNo: "grnNumber",
     grnDate: "grnDate",
     poNumber: "po_no",
+    invoiceNumber: "invoiceNumber",
     vendorName: "supplier__supplier_name",
     warehouse: "warehouse__warehouse_name",
     status: "status",
@@ -417,6 +424,7 @@ export const GRN_FILTER_COLUMN_MAP: Record<string, GrnFilterField> = {
   toWarehouse: "warehouse__warehouse_name",
   fromWarehouse: "from_warehouse",
   poNumber: "po_no",
+  invoiceNumber: "invoiceNumber",
   salesReturnNo: "sales_return_no",
   sampleReturnNo: "sample_return_no",
   stockTransferNo: "stock_transfer_no",

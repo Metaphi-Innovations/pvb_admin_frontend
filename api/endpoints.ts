@@ -615,6 +615,7 @@ export const API_ENDPOINTS = {
       FILTER_DROPDOWN: "/warehouse/packing-list/filter-dropdown",
       LIST: "/warehouse/packing-list/list",
       CREATE: "/warehouse/packing-list/create",
+      BULK_UPLOAD: "/warehouse/packing-list/bulk-upload",
       DETAILS: (id: string) => `/warehouse/packing-list/details/${id}`,
       PREVIEW: (id: string) => `/warehouse/packing-list/details/${id}/preview`,
       PDF: (id: string) => `/warehouse/packing-list/details/${id}/pdf`,
