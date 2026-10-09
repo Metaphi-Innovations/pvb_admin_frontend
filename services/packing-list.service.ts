@@ -324,6 +324,21 @@ export const PackingListService = {
     return response.data;
   },
 
+  /** Bulk create packing lists (+ packing done when Pack Full = YES). Field name: `file`. */
+  async bulkUpload(file: File): Promise<any> {
+    const formData = new FormData();
+    formData.append("file", file);
+    const response = await axiosInstance.post(
+      API_ENDPOINTS.WAREHOUSE.PACKING_LIST.BULK_UPLOAD,
+      formData,
+      {
+        headers: { "Content-Type": "multipart/form-data" },
+        timeout: 10 * 60 * 1000,
+      },
+    );
+    return response.data;
+  },
+
   async revert(id: string): Promise<any> {
     const response = await axiosInstance.post(
       API_ENDPOINTS.WAREHOUSE.PACKING_LIST.REVERT(id)

@@ -2241,16 +2241,8 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
           setError("Transport Mode is required.");
           return;
         }
-        if (!transport.vehicleNo.trim() && !transport.transporterName.trim()) {
-          setError("Enter Vehicle No. or Transporter Name.");
-          return;
-        }
-        if (!transport.transportDocNo.trim()) {
-          setError("Transport Document No. is required.");
-          return;
-        }
-        if (!transport.transportDocDate.trim()) {
-          setError("Transport Document Date is required.");
+        if (!transport.distanceKm.trim() || Number(transport.distanceKm) < 0) {
+          setError("Distance (KM) is required.");
           return;
         }
         if (
@@ -2809,6 +2801,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
                 <GoodsTransportStatutorySection
                   value={transport}
                   onChange={patchTransport}
+                  requireTransportDocs={!stGen}
                 />
               </div>
             </VoucherFormSectionCard>
@@ -2818,6 +2811,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
               <GoodsTransportStatutorySection
                 value={transport}
                 onChange={patchTransport}
+                requireTransportDocs={!stGen}
               />
             </div>
           </InvoiceFormCard>
@@ -3297,8 +3291,8 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
                 </li>
               </ul>
               <p>
-                Enter complete transport details here (mode, distance, vehicle /
-                transporter, document no. &amp; date) — they are required for EWB
+                Transport Mode and Distance (KM) are required here. Other transport
+                fields are optional on the invoice; fill them when needed for EWB
                 generation.
               </p>
             </div>
