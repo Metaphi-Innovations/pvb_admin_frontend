@@ -82,7 +82,10 @@ export default function PurchaseListingRoutePage() {
       {
         key: "invoiceNumber",
         header: "Supplier Invoice No.",
-        sortable: false,
+        sortable: true,
+        filterable: true,
+        filterType: "dropdown",
+        filterOptions: getFilterOptionsForColumn("invoiceNumber"),
         width: "150px",
         render: (_val, row) => (
           <span className="font-mono text-xs text-foreground" title={row.invoiceNumber || undefined}>

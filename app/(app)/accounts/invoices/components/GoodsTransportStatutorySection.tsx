@@ -118,11 +118,14 @@ export function GoodsTransportStatutorySection({
   value,
   onChange,
   hideDistance = false,
+  /** Sales Order keeps doc fields required; Stock Transfer only requires mode + distance. */
+  requireTransportDocs = true,
 }: {
   value: GoodsTransportStatutoryState;
   onChange: (patch: Partial<GoodsTransportStatutoryState>) => void;
   /** Stock Transfer: Distance field hidden from UI. */
   hideDistance?: boolean;
+  requireTransportDocs?: boolean;
 }) {
   const set = (patch: Partial<GoodsTransportStatutoryState>) => onChange(patch);
 
@@ -209,14 +212,14 @@ export function GoodsTransportStatutorySection({
             aria-label="LR Date"
           />
         </Field>
-        <Field label="Transport Doc No." className="so-span-1" required>
+        <Field label="Transport Doc No." className="so-span-1" required={requireTransportDocs}>
           <CtrlInput
             value={value.transportDocNo}
             onChange={(v) => set({ transportDocNo: v })}
             placeholder="Transport document no."
           />
         </Field>
-        <Field label="Transport Doc Date" className="so-span-1" required>
+        <Field label="Transport Doc Date" className="so-span-1" required={requireTransportDocs}>
           <AccountsDateInput
             className="h-8 text-xs w-full"
             value={value.transportDocDate}

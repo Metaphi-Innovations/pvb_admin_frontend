@@ -231,28 +231,5 @@ export function validateDispatchTransportSoft(
   if (!transport.distanceKm.trim() || Number(transport.distanceKm) < 0) {
     return "Approx. distance (km) is required for stock transfer dispatch.";
   }
-  if (
-    !transport.transporterName.trim() &&
-    !transport.transporterId.trim()
-  ) {
-    return "Enter transporter name or transporter ID.";
-  }
-  const mode = transport.transportMode.trim().toLowerCase();
-  if (mode === "road" || mode === "1") {
-    if (!transport.vehicleNo.trim()) {
-      return "Vehicle number is required for Road transport.";
-    }
-  } else {
-    const docNo =
-      transport.transportDocNo.trim() || transport.lrNo.trim();
-    const docDate =
-      transport.transportDocDate.trim() || transport.lrDate.trim();
-    if (!docNo) {
-      return "Transport document number (or LR number) is required for this transport mode.";
-    }
-    if (!docDate) {
-      return "Transport document date (or LR date) is required for this transport mode.";
-    }
-  }
   return null;
 }
