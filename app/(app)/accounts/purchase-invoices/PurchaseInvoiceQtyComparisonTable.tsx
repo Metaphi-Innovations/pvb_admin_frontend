@@ -9,16 +9,24 @@ export interface QtyComparisonRow {
   comparison: PurchaseInvoiceLineQtyComparison;
 }
 
+export type QtyComparisonVariant = "supplier" | "stock_transfer";
+
 interface PurchaseInvoiceQtyComparisonTableProps {
   rows: QtyComparisonRow[];
   className?: string;
+  /** Stock Transfer uses allocated transfer qty — not a supplier invoice. */
+  variant?: QtyComparisonVariant;
 }
 
 export function PurchaseInvoiceQtyComparisonTable({
   rows,
   className,
+  variant = "supplier",
 }: PurchaseInvoiceQtyComparisonTableProps) {
   if (rows.length === 0) return null;
+
+  const isStockTransfer = variant === "stock_transfer";
+  const allocatedLabel = isStockTransfer ? "Transfer Allocated Qty" : "Supplier Invoice Qty";
 
   return (
     <div className={cn("overflow-x-auto", className)}>
@@ -27,7 +35,7 @@ export function PurchaseInvoiceQtyComparisonTable({
           <tr className="border-b border-border/60 bg-muted/30">
             <th className="px-2 py-2 text-left font-semibold text-muted-foreground">Product</th>
             <th className="px-2 py-2 text-left font-semibold text-muted-foreground">Batch</th>
-            <th className="px-2 py-2 text-right font-semibold text-muted-foreground">Supplier Invoice Qty</th>
+            <th className="px-2 py-2 text-right font-semibold text-muted-foreground">{allocatedLabel}</th>
             <th className="px-2 py-2 text-right font-semibold text-muted-foreground">GRN Received Qty</th>
             <th className="px-2 py-2 text-right font-semibold text-muted-foreground">QC Accepted Qty</th>
             <th className="px-2 py-2 text-right font-semibold text-muted-foreground">QC Rejected Qty</th>

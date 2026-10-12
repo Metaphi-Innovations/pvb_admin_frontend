@@ -1971,7 +1971,8 @@ export default function DebitNoteFormPageClient({
                   <NoteQuantityLinesTable
                     lines={quantityLineViews}
                     qtyLocked={isReturnRefMode || isPendingEntitlement}
-                    gstEditable={isPendingEntitlement && !saving}
+                    // Purchase Return DN inherits GST from the source return — never editable.
+                    gstEditable={false}
                     currentQtyLabel="Qty"
                     onCurrentQtyChange={handleQuantityLineQtyChange}
                     onTaxPctChange={handleQuantityLineTaxPctChange}

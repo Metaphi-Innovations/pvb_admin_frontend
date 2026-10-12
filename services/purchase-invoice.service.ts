@@ -321,6 +321,18 @@ export type PurchaseInvoiceListDto = {
 export type PurchaseInvoiceDetailDto = PurchaseInvoiceListDto & {
   items?: Array<Record<string, unknown>>;
   additional_charges?: Array<Record<string, unknown>>;
+  /** STOCK_TRANSFER: allocated ST batches vs destination GRN/QC. */
+  stock_transfer_qty_comparison?: Array<{
+    product_id?: string | null;
+    product_name?: string;
+    batch_number?: string | null;
+    transfer_allocated_qty?: number;
+    supplier_invoice_qty?: number;
+    grn_received_qty?: number;
+    qc_accepted_qty?: number;
+    qc_rejected_qty?: number;
+    short_qty?: number;
+  }>;
   is_reverse_charge?: boolean;
   purchase_order?: {
     purchase_order_id?: string | null;
@@ -744,13 +756,37 @@ function snapshotStr(
   return "";
 }
 
+/**
+ * Resolve a usable batch object from purchase-invoice `batch_snapshot`.
+ * - GRN invoices: `{ batches: [{ batch_number, ... }] }`
+ * - Stock Transfer / Sales Invoice mirror: flat `{ batch_no, ... }`
+ */
 function firstBatchSnapshot(
   snapshot: Record<string, unknown> | null | undefined,
 ): Record<string, unknown> | null {
-  const batches = snapshot?.batches;
-  if (!Array.isArray(batches) || batches.length === 0) return null;
-  const first = batches[0];
-  return first && typeof first === "object" ? (first as Record<string, unknown>) : null;
+  if (!snapshot) return null;
+  const batches = snapshot.batches;
+  if (Array.isArray(batches) && batches.length > 0) {
+    const first = batches[0];
+    return first && typeof first === "object" ? (first as Record<string, unknown>) : null;
+  }
+  // Flat SI / Stock Transfer snapshot (buildBatchSnapshot uses batch_no).
+  if (
+    snapshot.batch_no != null ||
+    snapshot.batch_number != null ||
+    snapshot.batchNumber != null ||
+    snapshot.inventory_detail_id != null ||
+    snapshot.grn_batch_id != null
+  ) {
+    return snapshot;
+  }
+  return null;
+}
+
+function batchNumberFromSnapshot(
+  batchSnap: Record<string, unknown> | null | undefined,
+): string {
+  return snapshotStr(batchSnap, "batch_number", "batchNumber", "batch_no");
 }
 
 function hasPurchaseInvoiceAttachment(
@@ -1080,9 +1116,9 @@ export function mapPurchaseInvoiceDetailToRecord(
         asString(item.sku),
       ),
       description: asString(item.expense_description) || asString(item.narration),
-      batchNumber: snapshotStr(batchSnap, "batch_number", "batchNumber"),
-      mfgDate: asDateOnly(batchSnap?.manufacture_date),
-      expDate: asDateOnly(batchSnap?.expiry_date),
+      batchNumber: batchNumberFromSnapshot(batchSnap),
+      mfgDate: asDateOnly(batchSnap?.manufacture_date ?? batchSnap?.mfg_date),
+      expDate: asDateOnly(batchSnap?.expiry_date ?? batchSnap?.exp_date),
       invoiceQty: qty,
       unit:
         asString(item.quantity_type) ||
@@ -1244,6 +1280,24 @@ export function mapPurchaseInvoiceDetailToRecord(
     updatedAt: new Date().toISOString(),
     activity: [],
     invoiceMatchStatus: "matched",
+    stockTransferQtyComparison: (dto.stock_transfer_qty_comparison || []).map((row) => {
+      const allocated =
+        asNumber(row.transfer_allocated_qty) || asNumber(row.supplier_invoice_qty);
+      const grnReceivedQty = asNumber(row.grn_received_qty);
+      return {
+        productName: asString(row.product_name) || "Product",
+        batchNumber: asString(row.batch_number) || undefined,
+        comparison: {
+          supplierInvoiceQty: allocated,
+          grnReceivedQty,
+          qcAcceptedQty: asNumber(row.qc_accepted_qty),
+          qcRejectedQty: asNumber(row.qc_rejected_qty),
+          shortQty:
+            asNumber(row.short_qty) ||
+            Math.max(0, Math.round((allocated - grnReceivedQty) * 100) / 100),
+        },
+      };
+    }),
     backendId: dto.purchase_invoice_id,
     backendStatus: status,
   };
@@ -1267,9 +1321,9 @@ export function mapPrepareItemsToLines(
         resolveSkuFromProductSnapshot(snap),
       ),
       description: snapshotStr(snap, "hsn_code", "hsn") || "",
-      batchNumber: snapshotStr(batchSnap, "batch_number", "batchNumber"),
-      mfgDate: asDateOnly(batchSnap?.manufacture_date),
-      expDate: asDateOnly(batchSnap?.expiry_date),
+      batchNumber: batchNumberFromSnapshot(batchSnap),
+      mfgDate: asDateOnly(batchSnap?.manufacture_date ?? batchSnap?.mfg_date),
+      expDate: asDateOnly(batchSnap?.expiry_date ?? batchSnap?.exp_date),
       invoiceQty: asNumber(item.quantity),
       unit: snapshotStr(snap, "unit", "uom") || "NOS",
       unitPrice: asNumber(item.rate),

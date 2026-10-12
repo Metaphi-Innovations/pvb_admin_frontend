@@ -193,6 +193,12 @@ export interface DebitNoteRecord {
   reversed_at?: string | null;
   reversed_by?: string | null;
   reversal_reason?: string | null;
+  /**
+   * POSTED only. False when an active Receipt Voucher settlement exists on the
+   * DN open item — cancel/reverse UI must stay hidden until that Receipt is reversed.
+   */
+  canReverse?: boolean;
+  reverseBlockedReason?: string | null;
 }
 
 const STORAGE_KEY = "ds_accounts_debit_notes_v3";

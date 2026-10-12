@@ -818,6 +818,10 @@ export function applySchemeTypeChange(
   category: SchemeCategory,
 ): SchemeUnifiedForm {
   const next = createDefaultUnifiedForm(category);
+  // Product scope is hidden for Cash/Turnover/Payment — never carry SPECIFIC leftovers.
+  // Special Discount always restarts on All Products (Sales Quantity re-forces Selected).
+  const keepProductSelection =
+    categoryUsesProducts(category) && category !== "Special Discount";
   return {
     ...next,
     schemeName: form.schemeName,
@@ -829,14 +833,8 @@ export function applySchemeTypeChange(
     customerTypes: form.customerTypes,
     customerIds: form.customerIds,
     stateNames: form.stateNames,
-    productScope:
-      category === "Special Discount" ? "All Products" : form.productScope,
-    productIds:
-      category === "Special Discount"
-        ? []
-        : categoryUsesProducts(category)
-          ? form.productIds
-          : [],
+    productScope: keepProductSelection ? form.productScope : "All Products",
+    productIds: keepProductSelection ? form.productIds : [],
     discountMode: "COMMON",
     productDiscountRules: [],
     excludeFromTurnoverDiscount: categoryShowsImpactFlags(category)

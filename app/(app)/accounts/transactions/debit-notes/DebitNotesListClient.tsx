@@ -222,7 +222,11 @@ function DebitNotesRecordsTable({
               const badge = noteWorkflowStatusToBadge(r.status);
               const actions = getRowActions(r.status, approvalRequired);
               const canEditRow = actions.includes("edit") && hasUpdatePermission;
-              const canCancelRow = actions.includes("cancel") && hasCreatePermission;
+              const isPosted = r.status?.toUpperCase() === "POSTED";
+              const canCancelRow =
+                actions.includes("cancel") &&
+                hasCreatePermission &&
+                (!isPosted || r.canReverse !== false);
 
               return (
                 <AccountsTableRow key={r.id}>

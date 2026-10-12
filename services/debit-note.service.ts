@@ -118,6 +118,14 @@ export function mapDebitNoteToRecord(item: any): DebitNoteRecord {
     reversed_at: item.reversal?.posted_at || null,
     reversed_by: item.reversal?.posted_by_name || null,
     reversal_reason: item.reversal_reason || null,
+    canReverse:
+      item.can_reverse == null
+        ? item.status?.toUpperCase() === "POSTED"
+        : Boolean(item.can_reverse),
+    reverseBlockedReason:
+      typeof item.reverse_blocked_reason === "string"
+        ? item.reverse_blocked_reason
+        : null,
   };
 }
 

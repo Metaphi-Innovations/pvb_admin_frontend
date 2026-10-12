@@ -18,9 +18,11 @@ import {
   calcLineAmounts,
   getInvoiceById,
   getInvoiceRowActions,
+  type InvoiceAppliedCnScheme,
   type InvoiceLineItem,
   type InvoiceRecord,
 } from "./invoices-data";
+import { formatSchemeRupee } from "@/app/(app)/masters/scheme/product-near-expiry-scheme";
 import {
   SalesInvoiceService,
   mapSalesInvoiceDetailToRecord,
@@ -613,6 +615,86 @@ function CompactSchemeInformation({ record }: { record: InvoiceRecord }) {
   );
 }
 
+function cnSchemeTypeLabel(type: string): string {
+  if (type === "NEAR_EXPIRY") return "Near Expiry";
+  if (type === "SPECIAL_SCHEME") return "Special Discount";
+  return type || "—";
+}
+
+function cnSchemeDiscountLabel(scheme: InvoiceAppliedCnScheme): string {
+  if (scheme.discountType === "Percentage" && scheme.discountValue != null) {
+    return `${scheme.discountValue}%`;
+  }
+  if (scheme.discountValue != null) {
+    return scheme.schemeType === "NEAR_EXPIRY"
+      ? `₹${scheme.discountValue}/unit`
+      : formatSchemeRupee(scheme.discountValue);
+  }
+  return "—";
+}
+
+/** Credit Note scheme applied at post — Pending CN benefit; not invoice line discount. */
+function CompactAppliedCnSchemeInformation({
+  scheme,
+}: {
+  scheme: InvoiceAppliedCnScheme;
+}) {
+  const benefit =
+    scheme.estimatedBenefitAmount != null && scheme.estimatedBenefitAmount > 0
+      ? formatSchemeRupee(scheme.estimatedBenefitAmount)
+      : "—";
+
+  return (
+    <div className="rounded-lg border border-amber-200/80 bg-amber-50/40 px-3 py-2">
+      <p className="text-[10px] font-bold uppercase tracking-widest text-amber-900/80 mb-1.5">
+        Applied Credit Note Scheme
+      </p>
+      <div className="flex flex-wrap gap-x-5 gap-y-1 text-[11px]">
+        <span>
+          <span className="text-muted-foreground">Scheme Name: </span>
+          <span className="font-medium">{scheme.schemeName || "—"}</span>
+        </span>
+        <span>
+          <span className="text-muted-foreground">Scheme Code: </span>
+          <span className="font-mono font-semibold text-brand-700">
+            {scheme.schemeCode || "—"}
+          </span>
+        </span>
+        <span>
+          <span className="text-muted-foreground">Scheme Type: </span>
+          {cnSchemeTypeLabel(scheme.schemeType)}
+        </span>
+        <span>
+          <span className="text-muted-foreground">Scheme Discount: </span>
+          {cnSchemeDiscountLabel(scheme)}
+        </span>
+        <span>
+          <span className="text-muted-foreground">Discount Amount: </span>
+          <span className="font-medium tabular-nums">{benefit}</span>
+        </span>
+        {scheme.runMode ? (
+          <span>
+            <span className="text-muted-foreground">Applied: </span>
+            {scheme.runMode === "AUTOMATIC" ? "Automatic" : "Selected"}
+          </span>
+        ) : null}
+        <span>
+          <span className="text-muted-foreground">Included in Turnover Calculation: </span>
+          {scheme.excludeFromTurnoverDiscount ? "No" : "Yes"}
+        </span>
+        {scheme.summary ? (
+          <span className="basis-full text-muted-foreground">
+            {scheme.summary}
+          </span>
+        ) : null}
+      </div>
+      <p className="mt-1.5 text-[10px] text-muted-foreground">
+        Settles via Pending Credit Note. Does not change invoice product totals.
+      </p>
+    </div>
+  );
+}
+
 export default function InvoiceViewPageClient({
   invoiceId,
 }: {
@@ -1201,9 +1283,15 @@ export default function InvoiceViewPageClient({
                 productSkuByUuid={productSkuByUuid}
                 hideDiscount={isStockTransferView}
               />
-              {!isStockTransferView ? (
-                <div className="px-3 pb-3">
+              {!isStockTransferView &&
+              (invoiceHasProductDiscount(record) || record.appliedCnScheme) ? (
+                <div className="px-3 pb-3 space-y-2">
                   <CompactSchemeInformation record={record} />
+                  {record.appliedCnScheme ? (
+                    <CompactAppliedCnSchemeInformation
+                      scheme={record.appliedCnScheme}
+                    />
+                  ) : null}
                 </div>
               ) : null}
             </VoucherFormSectionCard>

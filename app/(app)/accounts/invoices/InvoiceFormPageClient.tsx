@@ -2302,17 +2302,11 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
       setSaving(true);
       const status: InvoiceStatus = asDraft ? "draft" : "sent";
 
-      const goToInvoiceView = (salesInvoiceId: string, message: string) => {
-        dispatchAccountsDataChanged("sales-invoices");
-        showToast(message, "success");
-        router.replace(`${INVOICES_LIST_PATH}/${salesInvoiceId}`);
-      };
-
-      const goToInvoiceList = (message: string) => {
+      const goToInvoiceList = (message: string, href = listHref) => {
         dispatchAccountsDataChanged("sales-invoices");
         showToast(message, "success");
         // replace + no post-success setState — setSaving(false) after push can abort soft nav
-        router.replace(listHref);
+        router.replace(href);
       };
 
       if ((isSalesOrderGeneration || isStockTransferGeneration) && !asDraft) {
@@ -2320,7 +2314,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
 
         const lineItemOverrides = lines.map(toDispatchLineItemOverride);
 
-        const created = await SalesInvoiceService.createFromDispatch(sourceDispatchId, {
+        await SalesInvoiceService.createFromDispatch(sourceDispatchId, {
           invoice_date: invoiceDate,
           due_date: dueDate || undefined,
           narration: narration.trim() || undefined,
@@ -2345,11 +2339,12 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
           selected_cn_scheme_id: selectedCnSchemeId || undefined,
         });
 
-        goToInvoiceView(
-          created.sales_invoice_id,
+        // Always land on Sales Invoice Listing (not Pending returnTo / invoice detail).
+        goToInvoiceList(
           isStockTransferGeneration
-            ? "Stock Transfer Invoice generated. Use E-Invoice / E-Way Bill on this page to generate IRN or EWB."
-            : "Sales Invoice generated. Use E-Invoice / E-Way Bill on this page to generate IRN or EWB.",
+            ? "Stock Transfer Invoice generated successfully."
+            : "Sales Invoice generated successfully.",
+          invoicesListHrefForSourceType(routeSourceType || sourceType || undefined),
         );
         return;
       }
