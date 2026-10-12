@@ -1731,10 +1731,16 @@ export function PurchaseCreate({
             label="GRN Date"
             type="date"
             value={grnDate}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setGrnDate(e.target.value)}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+              const next = e.target.value;
+              setGrnDate(next);
+              // Keep invoice date on/before GRN date when backdating receipt.
+              if (next && invoiceDate && invoiceDate > next) {
+                setInvoiceDate(next);
+              }
+            }}
             className="h-9 text-xs"
             max={todayStr}
-            min={invoiceDate}
             error={grnDateError}
           />
         </div>

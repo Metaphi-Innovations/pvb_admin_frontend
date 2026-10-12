@@ -23,6 +23,13 @@ import { StackedQtyDisplay, type QtyStackMeta } from "@/app/(app)/sales/shared/S
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+/** Prefer HSN code for listing / filters / export; fall back to description only if code is missing. */
+function hsnOptionLabel(code: string | null | undefined, description?: string | null): string {
+  const hsnCode = String(code ?? "").trim();
+  if (hsnCode) return hsnCode;
+  return String(description ?? "").trim();
+}
+
 function displayHsn(
   value: string | null | undefined,
   hsnOptions?: Array<{ label: string; value: string }>,
@@ -31,7 +38,7 @@ function displayHsn(
   if (!raw || raw === "-") return "—";
   if (UUID_RE.test(raw)) {
     const match = hsnOptions?.find((o) => o.value === raw);
-    return match?.label || "—";
+    return String(match?.label ?? "").trim() || "—";
   }
   return raw;
 }
@@ -200,9 +207,9 @@ export function DailyLogsTab() {
             .map((value) => ({ label: value, value }));
 
         const hsnFromMaster = hsnList
-          .filter((h) => h.id && h.hsnDescription?.trim())
+          .filter((h) => h.id && (h.hsnCode?.trim() || h.hsnDescription?.trim()))
           .map((h) => ({
-            label: h.hsnDescription.trim(),
+            label: hsnOptionLabel(h.hsnCode, h.hsnDescription),
             value: h.id,
           }))
           .sort((a, b) => a.label.localeCompare(b.label));
@@ -212,10 +219,12 @@ export function DailyLogsTab() {
           const options: Array<{ label: string; value: string }> = [];
           for (const p of prod) {
             const id = p.hsn?.id?.trim();
+            const code = p.hsn?.hsnCode?.trim() || p.hsn?.hsn_code?.trim();
             const name = p.hsn?.hsnDescription?.trim();
-            if (!id || !name || seen.has(id)) continue;
+            const label = hsnOptionLabel(code, name);
+            if (!id || !label || seen.has(id)) continue;
             seen.add(id);
-            options.push({ label: name, value: id });
+            options.push({ label, value: id });
           }
           return options.sort((a, b) => a.label.localeCompare(b.label));
         })();
@@ -327,9 +336,9 @@ export function DailyLogsTab() {
       HsnListService.dropdown()
         .then((hsnList) => {
           const options = hsnList
-            .filter((h) => h.id && h.hsnDescription?.trim())
+            .filter((h) => h.id && (h.hsnCode?.trim() || h.hsnDescription?.trim()))
             .map((h) => ({
-              label: h.hsnDescription.trim(),
+              label: hsnOptionLabel(h.hsnCode, h.hsnDescription),
               value: h.id,
             }))
             .sort((a, b) => a.label.localeCompare(b.label));
@@ -418,12 +427,12 @@ export function DailyLogsTab() {
       filterable: true,
       filterType: "dropdown",
       filterOptions: filterOptions.hsn || productMetaOptions.hsn,
-      width: "160px",
+      width: "120px",
       render: (v) => {
-        const name = displayHsn(String(v ?? ""), productMetaOptions.hsn);
+        const code = displayHsn(String(v ?? ""), productMetaOptions.hsn);
         return (
-          <span className="text-xs text-muted-foreground truncate max-w-[150px] block" title={name}>
-            {name}
+          <span className="font-mono text-xs text-muted-foreground truncate max-w-[110px] block" title={code}>
+            {code}
           </span>
         );
       },
