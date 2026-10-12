@@ -63,6 +63,7 @@ export function PurchaseInvoiceDirectLineTable({
   purchaseNature,
   defaultItc,
   hsnOptions = [],
+  gstRates,
   readOnly,
   hideAddButton = false,
   onBindAddRow,
@@ -73,6 +74,8 @@ export function PurchaseInvoiceDirectLineTable({
   purchaseNature: PurchaseNature;
   defaultItc: ItcClassification;
   hsnOptions?: HsnDropdownItem[];
+  /** Active GST % values from GST Master. */
+  gstRates?: number[];
   readOnly?: boolean;
   hideAddButton?: boolean;
   onBindAddRow?: (addRow: () => void) => void;
@@ -174,11 +177,15 @@ export function PurchaseInvoiceDirectLineTable({
                     disabled={readOnly}
                     onChange={(id) => {
                       const picked = hsnOptions.find((h) => h.id === id);
+                      const hsnGst = Number(picked?.gstPercentage);
                       updateLine(idx, {
                         hsnId: purchaseNature === "service" ? null : id || null,
                         sacId: purchaseNature === "service" ? id || null : null,
                         hsnSac: picked?.hsnCode || "",
-                        gstRate: picked?.gstPercentage ?? line.gstRate,
+                        gstRate:
+                          Number.isFinite(hsnGst) && hsnGst >= 0
+                            ? hsnGst
+                            : line.gstRate,
                       });
                     }}
                     options={hsnOptions.map((h) => ({
@@ -227,6 +234,7 @@ export function PurchaseInvoiceDirectLineTable({
                 <td className={cn(TABLE_CELL, "relative z-0")}>
                   <DirectPurchaseGstRateSelect
                     value={line.gstRate}
+                    rates={gstRates}
                     disabled={readOnly}
                     onChange={(rate) => updateLine(idx, { gstRate: rate })}
                   />

@@ -239,7 +239,11 @@ export default function DebitNoteViewPageClient({ debitNoteId }: { debitNoteId: 
   const canApproveDoc = status === "PENDING_APPROVAL" && approvalRequired && hasApprovePermission;
   const canRejectDoc = status === "PENDING_APPROVAL" && approvalRequired && hasApprovePermission;
   const canDownloadPdf = canDownloadDebitNoteOfficialPdf(status);
-  const canReverse = status === "POSTED" && hasCreatePermission;
+  // Posted DN with an active Receipt settlement cannot reverse until Receipt is reversed.
+  const canReverse =
+    status === "POSTED" &&
+    hasCreatePermission &&
+    record.canReverse !== false;
   const canUpdateEway =
     ["DRAFT", "PENDING_APPROVAL", "APPROVED", "REJECTED"].includes(status) && hasUpdatePermission;
 
@@ -458,102 +462,111 @@ export default function DebitNoteViewPageClient({ debitNoteId }: { debitNoteId: 
               >
                 Back
               </Button>
-              <div className="flex items-center gap-1.5">
-                {canDownloadPdf ? (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 text-xs gap-1"
-                    disabled={pdfBusy}
-                    onClick={handleDownload}
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                    {pdfBusy ? "Opening…" : "PDF"}
-                  </Button>
+              <div className="flex flex-col items-end gap-1.5">
+                <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                  {canDownloadPdf ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 text-xs gap-1"
+                      disabled={pdfBusy}
+                      onClick={handleDownload}
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      {pdfBusy ? "Opening…" : "PDF"}
+                    </Button>
+                  ) : null}
+                  {canEditDoc ? (
+                    <Button
+                      size="sm"
+                      className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white"
+                      onClick={() =>
+                        router.push(
+                          withReturnTo(
+                            `${DEBIT_NOTES_LIST_PATH}/${record.id}/edit`,
+                            listHref,
+                          ),
+                        )
+                      }
+                    >
+                      Edit
+                    </Button>
+                  ) : null}
+                  {canSubmit && (
+                    <Button
+                      size="sm"
+                      className="h-8 text-xs bg-indigo-600 hover:bg-indigo-700 text-white"
+                      onClick={() => setSubmitOpen(true)}
+                    >
+                      Submit for Approval
+                    </Button>
+                  )}
+                  {canApproveDoc && (
+                    <Button
+                      size="sm"
+                      className="h-8 text-xs bg-green-600 hover:bg-green-700 text-white"
+                      onClick={handleApprove}
+                    >
+                      Approve
+                    </Button>
+                  )}
+                  {canRejectDoc && (
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      className="h-8 text-xs"
+                      onClick={() => setRejectOpen(true)}
+                    >
+                      Reject
+                    </Button>
+                  )}
+                  {canPost && (
+                    <Button
+                      size="sm"
+                      className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
+                      onClick={handlePost}
+                    >
+                      Post to Ledger
+                    </Button>
+                  )}
+                  {canUpdateEway && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 text-xs"
+                      onClick={() => setEwayOpen(true)}
+                    >
+                      E-Way Bill
+                    </Button>
+                  )}
+                  {canCancel && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 text-xs text-red-600"
+                      onClick={() => setCancelOpen(true)}
+                    >
+                      Cancel Voucher
+                    </Button>
+                  )}
+                  {canReverse && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 text-xs text-purple-700 hover:bg-purple-50"
+                      onClick={() => setReverseOpen(true)}
+                    >
+                      Reverse Voucher
+                    </Button>
+                  )}
+                </div>
+                {status === "POSTED" &&
+                record.canReverse === false &&
+                record.reverseBlockedReason ? (
+                  <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-2.5 py-1.5 max-w-xl text-right">
+                    {record.reverseBlockedReason}
+                  </p>
                 ) : null}
-                {canEditDoc ? (
-                  <Button
-                    size="sm"
-                    className="h-8 text-xs bg-brand-600 hover:bg-brand-700 text-white"
-                    onClick={() =>
-                      router.push(
-                        withReturnTo(
-                          `${DEBIT_NOTES_LIST_PATH}/${record.id}/edit`,
-                          listHref,
-                        ),
-                      )
-                    }
-                  >
-                    Edit
-                  </Button>
-                ) : null}
-                {canSubmit && (
-                  <Button
-                    size="sm"
-                    className="h-8 text-xs bg-indigo-600 hover:bg-indigo-700 text-white"
-                    onClick={() => setSubmitOpen(true)}
-                  >
-                    Submit for Approval
-                  </Button>
-                )}
-                {canApproveDoc && (
-                  <Button
-                    size="sm"
-                    className="h-8 text-xs bg-green-600 hover:bg-green-700 text-white"
-                    onClick={handleApprove}
-                  >
-                    Approve
-                  </Button>
-                )}
-                {canRejectDoc && (
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                    className="h-8 text-xs"
-                    onClick={() => setRejectOpen(true)}
-                  >
-                    Reject
-                  </Button>
-                )}
-                {canPost && (
-                  <Button
-                    size="sm"
-                    className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
-                    onClick={handlePost}
-                  >
-                    Post to Ledger
-                  </Button>
-                )}
-                {canUpdateEway && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 text-xs"
-                    onClick={() => setEwayOpen(true)}
-                  >
-                    E-Way Bill
-                  </Button>
-                )}
-                {canCancel && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 text-xs text-red-600"
-                    onClick={() => setCancelOpen(true)}
-                  >
-                    Cancel Voucher
-                  </Button>
-                )}
-                {canReverse && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 text-xs text-purple-700 hover:bg-purple-50"
-                    onClick={() => setReverseOpen(true)}
-                  >
-                    Reverse Voucher
-                  </Button>
-                )}
               </div>
             </div>
           }

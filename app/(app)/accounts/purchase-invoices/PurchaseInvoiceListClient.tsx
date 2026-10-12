@@ -965,6 +965,8 @@ export default function PurchaseInvoiceListClient() {
   const { handleOpenFilter: markGrnFilterOpened } = useLazyFilterColumns();
   const invoiceFilterLoadedRef = useRef<Set<string>>(new Set());
   const grnFilterLoadedRef = useRef<Set<string>>(new Set());
+  /** Invalidates in-flight tab-badge requests so a stale 0 cannot overwrite a good count. */
+  const badgeRequestIdRef = useRef(0);
 
   const [grnSearch, setGrnSearch] = useState("");
   const debouncedGrnSearch = useDebouncedValue(grnSearch, 300);
@@ -1004,35 +1006,49 @@ export default function PurchaseInvoiceListClient() {
     setDateTo,
   ]);
 
-  // Tab badges must load on every tab (and survive filter changes / abort races).
+  // Tab badges: avoid AbortController here — navigate-back / Strict Mode abort races
+  // were leaving All Invoices stuck at 0 while the list still loaded.
   useEffect(() => {
     if (!fyReady) return;
-    const ac = new AbortController();
+    const requestId = ++badgeRequestIdRef.current;
     (async () => {
       try {
-        const [invoiceRes, pendingRes] = await Promise.all([
-          PurchaseInvoiceService.list(
-            { page: 1, page_size: 1, include_pending: false },
-            ac.signal,
-          ),
-          PurchaseInvoiceService.countPendingGrns(ac.signal),
-        ]);
-        if (ac.signal.aborted) return;
+        const invoiceRes = await PurchaseInvoiceService.list({
+          page: 1,
+          page_size: 1,
+          include_pending: false,
+        });
+        if (requestId !== badgeRequestIdRef.current) return;
         setInvoiceTabCount(invoiceRes.total ?? 0);
+      } catch {
+        // Keep last known badge count on transient errors.
+      }
+      try {
+        const pendingRes = await PurchaseInvoiceService.countPendingGrns();
+        if (requestId !== badgeRequestIdRef.current) return;
         setPendingTabCount(pendingRes.total ?? 0);
       } catch {
-        // Keep last known badge counts on abort/transient errors.
+        // Keep last known pending badge on transient errors.
       }
     })();
-    return () => {
-      ac.abort();
-    };
   }, [fyReady, selectedFY?.id, sectionRefresh, listRefreshKey]);
 
   useEffect(() => {
     if (tab !== "invoices") return;
     if (!fyReady) return;
     const ac = new AbortController();
+    const filtersAreDefault =
+      !debouncedSearch.trim() &&
+      sourceTypeFilter === "all" &&
+      purchaseNatureFilter === "all" &&
+      invoiceFiltersKey === "{}";
+    const fyBounds = fyDateBounds(selectedFY);
+    // Wait until "This Year" has been synced to Working FY dates before seeding the badge,
+    // otherwise a transient calendar-year query can write count 0 and stick.
+    const datesReadyForBadge =
+      preset !== "this_year" && preset !== "this_financial_year"
+        ? true
+        : !fyBounds || (dateFrom === fyBounds.from && dateTo === fyBounds.to);
     (async () => {
       setLoading(true);
       setError(null);
@@ -1057,8 +1073,15 @@ export default function PurchaseInvoiceListClient() {
           ac.signal,
         );
         if (ac.signal.aborted) return;
+        const total = listRes.total ?? 0;
         setInvoices((listRes.results || []).map(mapPurchaseInvoiceListDto));
-        setInvoiceTotal(listRes.total ?? 0);
+        setInvoiceTotal(total);
+        // Keep All-tab badge aligned with the loaded list when filters are open,
+        // so navigate-back never leaves the badge at 0 while rows are visible.
+        if (filtersAreDefault && datesReadyForBadge) {
+          badgeRequestIdRef.current += 1; // invalidate in-flight badge responses
+          setInvoiceTabCount(total);
+        }
       } catch (e) {
         if (ac.signal.aborted) return;
         setError(e instanceof Error ? e.message : "Failed to load purchase invoices.");
@@ -1075,12 +1098,15 @@ export default function PurchaseInvoiceListClient() {
     tab,
     fyReady,
     selectedFY?.id,
+    selectedFY?.startDate,
+    selectedFY?.endDate,
     sectionRefresh,
     page,
     pageSize,
     debouncedSearch,
     sourceTypeFilter,
     purchaseNatureFilter,
+    preset,
     dateFrom,
     dateTo,
     invoiceSortKey,
@@ -1486,7 +1512,13 @@ export default function PurchaseInvoiceListClient() {
         subHeader={
           <PurchaseInvoiceTabs
             tab={tab}
-            invoiceCount={invoiceTabCount}
+            invoiceCount={
+              invoiceTabCount != null
+                ? Math.max(invoiceTabCount, tab === "invoices" ? invoiceTotal : 0)
+                : tab === "invoices" && !loading
+                  ? invoiceTotal
+                  : null
+            }
             pendingCount={pendingTabCount ?? pendingGrnTotal}
             onTabChange={handleTabChange}
           />

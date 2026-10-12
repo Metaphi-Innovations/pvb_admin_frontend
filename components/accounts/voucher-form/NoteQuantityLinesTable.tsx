@@ -60,10 +60,12 @@ function fmtQty(n: number): string {
 function fmtDate(raw?: string): string {
   const s = raw?.trim();
   if (!s) return "—";
-  // Prefer YYYY-MM-DD when ISO-like
   if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
   return s;
 }
+
+const TH = "accounts-table-th whitespace-nowrap";
+const TD = "px-2 py-1.5 text-[12px] align-middle";
 
 export function NoteQuantityLinesTable({
   lines,
@@ -89,22 +91,37 @@ export function NoteQuantityLinesTable({
 
   return (
     <div className={cn("overflow-x-auto", className)}>
-      <table className="w-full min-w-[1080px] accounts-table">
+      <table className="w-full min-w-[1080px] table-fixed accounts-table">
+        <colgroup>
+          <col className="w-[16%]" />
+          <col className="w-[8%]" />
+          <col className="w-[8%]" />
+          <col className="w-[7%]" />
+          <col className="w-[6%]" />
+          <col className="w-[5%]" />
+          <col className="w-[7%]" />
+          <col className="w-[9%]" />
+          <col className="w-[6%]" />
+          <col className="w-[8%]" />
+          <col className="w-[8%]" />
+          <col className="w-[8%]" />
+          <col className="w-[10%]" />
+        </colgroup>
         <thead>
           <tr className="accounts-table-head-row bg-muted/40 border-b border-border">
-            <th className="accounts-table-th !text-left">Product</th>
-            <th className="accounts-table-th !text-left">Batch</th>
-            <th className="accounts-table-th !text-left">Expiry</th>
-            <th className="accounts-table-th !text-left">HSN</th>
-            <th className="accounts-table-th !text-right">{currentQtyLabel}</th>
-            <th className="accounts-table-th !text-left">UOM</th>
-            <th className="accounts-table-th !text-right">Rate</th>
-            <th className="accounts-table-th !text-right">Basic Amount</th>
-            <th className="accounts-table-th cn-gst-pct-th !text-right">GST %</th>
-            <th className="accounts-table-th !text-right">CGST</th>
-            <th className="accounts-table-th !text-right">SGST</th>
-            <th className="accounts-table-th !text-right">IGST</th>
-            <th className="accounts-table-th !text-right">Line Total</th>
+            <th className={cn(TH, "!text-left")}>Product</th>
+            <th className={cn(TH, "!text-left")}>Batch</th>
+            <th className={cn(TH, "!text-left")}>Expiry</th>
+            <th className={cn(TH, "!text-left")}>HSN</th>
+            <th className={cn(TH, "!text-right")}>{currentQtyLabel}</th>
+            <th className={cn(TH, "!text-left")}>UOM</th>
+            <th className={cn(TH, "!text-right")}>Rate</th>
+            <th className={cn(TH, "!text-right")}>Basic Amount</th>
+            <th className={cn(TH, "cn-gst-pct-th !text-right")}>GST %</th>
+            <th className={cn(TH, "!text-right")}>CGST</th>
+            <th className={cn(TH, "!text-right")}>SGST</th>
+            <th className={cn(TH, "!text-right")}>IGST</th>
+            <th className={cn(TH, "!text-right")}>Line Total</th>
           </tr>
         </thead>
         <tbody>
@@ -119,28 +136,28 @@ export function NoteQuantityLinesTable({
               maxQty != null && line.currentQty > maxQty + 0.0001;
             return (
               <tr key={line.id} className="border-b border-border/40">
-                <td className="px-2 py-1.5 min-w-[160px] max-w-[220px] whitespace-normal">
-                  <p className="text-[12px] font-normal text-foreground leading-snug">
+                <td className={cn(TD, "min-w-0 whitespace-normal !text-left")}>
+                  <p className="font-normal text-foreground leading-snug truncate" title={line.productName}>
                     {line.productName || "—"}
                   </p>
                   {line.sku?.trim() ? (
-                    <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
+                    <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight truncate">
                       SKU: {line.sku}
                     </p>
                   ) : null}
                 </td>
-                <td className="px-2 py-1.5 text-[12px] font-mono text-muted-foreground whitespace-nowrap">
+                <td className={cn(TD, "font-mono text-muted-foreground whitespace-nowrap !text-left")}>
                   {line.batchNo?.trim() || "—"}
                 </td>
-                <td className="px-2 py-1.5 text-[12px] text-muted-foreground whitespace-nowrap">
+                <td className={cn(TD, "text-muted-foreground whitespace-nowrap !text-left")}>
                   {fmtDate(line.expiryDate)}
                 </td>
-                <td className="px-2 py-1.5 text-[12px] font-mono text-muted-foreground whitespace-nowrap">
+                <td className={cn(TD, "font-mono text-muted-foreground whitespace-nowrap !text-left")}>
                   {line.hsn?.trim() || "—"}
                 </td>
-                <td className="px-2 py-1.5 text-right">
+                <td className={cn(TD, "!text-right")}>
                   {lockQty ? (
-                    <span className="tabular-nums text-[12px]">{fmtQty(line.currentQty)}</span>
+                    <span className="tabular-nums">{fmtQty(line.currentQty)}</span>
                   ) : (
                     <Input
                       type="number"
@@ -165,16 +182,16 @@ export function NoteQuantityLinesTable({
                     />
                   )}
                 </td>
-                <td className="px-2 py-1.5 text-[12px] text-muted-foreground">
+                <td className={cn(TD, "text-muted-foreground !text-left")}>
                   {line.uom?.trim() || "—"}
                 </td>
-                <td className="px-2 py-1.5 text-right tabular-nums text-[12px]">
+                <td className={cn(TD, "tabular-nums !text-right")}>
                   {line.rate > 0 ? line.rate.toFixed(2) : "—"}
                 </td>
-                <td className="px-2 py-1.5 text-right tabular-nums text-[12px]">
+                <td className={cn(TD, "tabular-nums !text-right")}>
                   {formatMoney(line.taxable)}
                 </td>
-                <td className="px-2 py-1.5 text-right cn-gst-pct-cell">
+                <td className={cn(TD, "cn-gst-pct-cell !text-right")}>
                   {canEditGst ? (
                     <Input
                       type="number"
@@ -196,21 +213,21 @@ export function NoteQuantityLinesTable({
                       inputMode="decimal"
                     />
                   ) : (
-                    <span className="tabular-nums text-[12px]">
+                    <span className="tabular-nums">
                       {line.taxPct > 0 ? `${line.taxPct}%` : "—"}
                     </span>
                   )}
                 </td>
-                <td className="px-2 py-1.5 text-right tabular-nums text-[12px] text-muted-foreground">
+                <td className={cn(TD, "tabular-nums text-muted-foreground !text-right")}>
                   {formatMoney(line.cgst)}
                 </td>
-                <td className="px-2 py-1.5 text-right tabular-nums text-[12px] text-muted-foreground">
+                <td className={cn(TD, "tabular-nums text-muted-foreground !text-right")}>
                   {formatMoney(line.sgst)}
                 </td>
-                <td className="px-2 py-1.5 text-right tabular-nums text-[12px] text-muted-foreground">
+                <td className={cn(TD, "tabular-nums text-muted-foreground !text-right")}>
                   {formatMoney(line.igst)}
                 </td>
-                <td className="px-2 py-1.5 text-right tabular-nums text-[12px] font-medium">
+                <td className={cn(TD, "tabular-nums font-medium !text-right")}>
                   {formatMoney(line.lineTotal)}
                 </td>
               </tr>

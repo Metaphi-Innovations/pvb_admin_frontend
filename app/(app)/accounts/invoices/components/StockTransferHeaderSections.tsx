@@ -34,7 +34,7 @@ export function StockTransferWarehouseDetailsSection({
           {transferTaxBadge}
         </div>
       ) : null}
-    <div className="so-goods-field-grid">
+    <div className="so-goods-field-grid so-warehouse-transfer-grid">
       <div className="so-goods-field so-w-wh">
         <p className="so-goods-field__label">Source Warehouse</p>
         <div className="so-goods-field__control">
@@ -77,7 +77,9 @@ export function StockTransferWarehouseDetailsSection({
       <div className="so-goods-field so-w-pos">
         <p className="so-goods-field__label">Place of Supply</p>
         <div className="so-goods-field__control">
-          <div className="so-goods-ro w-full">{placeOfSupply || "—"}</div>
+          <div className="so-goods-ro w-full truncate" title={placeOfSupply}>
+            {placeOfSupply || "—"}
+          </div>
         </div>
         <p className="so-goods-field__helper">Destination warehouse state</p>
       </div>

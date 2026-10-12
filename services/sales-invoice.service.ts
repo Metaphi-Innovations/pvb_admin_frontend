@@ -2,6 +2,7 @@ import { axiosInstance } from "@/api/axios";
 import { API_ENDPOINTS } from "@/api/endpoints";
 import type { ApiResponse } from "@/types/api.types";
 import type {
+  InvoiceAppliedCnScheme,
   InvoiceLineItem,
   InvoiceRecord,
   InvoiceStatus,
@@ -431,6 +432,10 @@ export type SalesInvoiceDetailDto = SalesInvoiceListDto & {
     eway_bill_valid_upto?: string | Date | null;
     eway_bill_qr_code?: string | null;
   } | null;
+  applied_cn_scheme_id?: string | null;
+  applied_cn_scheme_snapshot?: Record<string, unknown> | null;
+  exclude_from_turnover_discount?: boolean;
+  exclude_from_cash_discount?: boolean;
 };
 
 export type PrepareDispatchInvoiceDto = {
@@ -956,10 +961,11 @@ function mapBackendLineItem(
     rawManualType === "Flat" || rawManualType === "Percentage"
       ? rawManualType
       : undefined;
+  const hasSchemeId = Boolean(asString(raw.scheme_id));
   const hasSplitDiscount =
-    raw.scheme_discount_amount != null || manualType != null;
+    raw.scheme_discount_amount != null || manualType != null || hasSchemeId;
   const schemeLineAmount = asNumber(raw.scheme_discount_amount);
-  const hasSchemeOnLine = Boolean(raw.scheme_id) || schemeLineAmount > 0;
+  const hasSchemeOnLine = hasSchemeId || schemeLineAmount > 0;
   const snapSchemeType = asString(schemeSnap.discount_type).toLowerCase();
   const snapSchemeValue = asNumber(schemeSnap.discount_value);
 
@@ -1182,6 +1188,36 @@ export function mapSalesInvoiceDetailToRecord(
     mapBackendAdditionalCharge(c, idx),
   );
   const srNo = asNumber(dto.sr_no);
+  const cnSnap = (dto.applied_cn_scheme_snapshot || null) as Record<
+    string,
+    unknown
+  > | null;
+  const appliedCnSchemeId =
+    asString(dto.applied_cn_scheme_id) || asString(cnSnap?.scheme_id);
+  const appliedCnScheme: InvoiceAppliedCnScheme | null = appliedCnSchemeId
+    ? {
+        schemeId: appliedCnSchemeId,
+        schemeCode: asString(cnSnap?.scheme_code),
+        schemeName: asString(cnSnap?.scheme_name),
+        schemeType: asString(cnSnap?.scheme_type) || "SPECIAL_SCHEME",
+        runMode: asString(cnSnap?.run_mode) || null,
+        discountType: asString(cnSnap?.discount_type) || null,
+        discountValue:
+          cnSnap?.discount_value != null && cnSnap.discount_value !== ""
+            ? asNumber(cnSnap.discount_value)
+            : null,
+        estimatedBenefitAmount:
+          cnSnap?.estimated_benefit_amount != null &&
+          cnSnap.estimated_benefit_amount !== ""
+            ? asNumber(cnSnap.estimated_benefit_amount)
+            : null,
+        summary: asString(cnSnap?.summary) || null,
+        excludeFromTurnoverDiscount: Boolean(
+          cnSnap?.exclude_from_turnover_discount,
+        ),
+        excludeFromCashDiscount: Boolean(cnSnap?.exclude_from_cash_discount),
+      }
+    : null;
 
   return {
     id: srNo || 0,
@@ -1336,6 +1372,8 @@ export function mapSalesInvoiceDetailToRecord(
       salespersonName ||
       lineItems.find((line) => line.salesperson)?.salesperson ||
       undefined,
+    appliedCnScheme,
+    productDiscountTurnoverEligible: !Boolean(dto.exclude_from_turnover_discount),
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     createdBy: "",

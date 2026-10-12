@@ -4,6 +4,7 @@
 
 import type { SchemeUnifiedForm } from "./scheme-unified-config";
 import {
+  categoryPersistsProducts,
   createDefaultUnifiedForm,
   emptyPaymentDaySlab,
   emptySpecialDiscountAmountSlab,
@@ -164,16 +165,20 @@ function buildScopes(
   let product_scope: "ALL" | "SPECIFIC" = "ALL";
   let product_ids: string[] = [];
 
-  if (forceProductSpecific) {
-    product_scope = "SPECIFIC";
-    product_ids = rawProductIds;
-  } else if (rawProductIds.length > 0) {
-    const products = resolveScope(rawProductIds, optionLists?.productIds);
-    product_scope = products.scope;
-    product_ids = products.ids;
-  } else if (form.productScope === "Selected Products") {
-    product_scope = "SPECIFIC";
-    product_ids = [];
+  // Cash / Turnover / Payment do not use products — never send SPECIFIC leftovers
+  // from a previous scheme type (e.g. Product Discount → Cash Discount).
+  if (categoryPersistsProducts(form.schemeCategory, form)) {
+    if (forceProductSpecific) {
+      product_scope = "SPECIFIC";
+      product_ids = rawProductIds;
+    } else if (rawProductIds.length > 0) {
+      const products = resolveScope(rawProductIds, optionLists?.productIds);
+      product_scope = products.scope;
+      product_ids = products.ids;
+    } else if (form.productScope === "Selected Products") {
+      product_scope = "SPECIFIC";
+      product_ids = [];
+    }
   }
 
   return {
