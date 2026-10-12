@@ -360,11 +360,31 @@ export interface InvoiceRecord {
 	/** Pending Near Expiry scheme settlements — informational; no impact on invoice totals. */
 	nearExpirySchemeSettlements?: InvoiceNearExpirySchemeSettlement[];
 	/**
+	 * Credit Note scheme (Near Expiry / Special) applied at invoice post.
+	 * Creates Pending CN — does not change invoice product totals.
+	 */
+	appliedCnScheme?: InvoiceAppliedCnScheme | null;
+	/**
 	 * ERP-provided Product Discount → turnover eligibility flag (display only).
 	 * When omitted, View derives Yes unless exclusion reason is present.
 	 */
 	productDiscountTurnoverEligible?: boolean;
 	productDiscountExclusionReason?: string;
+}
+
+/** Applied invoice-level CN scheme from `applied_cn_scheme_snapshot`. */
+export interface InvoiceAppliedCnScheme {
+	schemeId: string;
+	schemeCode: string;
+	schemeName: string;
+	schemeType: "NEAR_EXPIRY" | "SPECIAL_SCHEME" | string;
+	runMode?: "AUTOMATIC" | "MANUAL" | string | null;
+	discountType?: "Percentage" | "Flat" | string | null;
+	discountValue?: number | null;
+	estimatedBenefitAmount?: number | null;
+	summary?: string | null;
+	excludeFromTurnoverDiscount?: boolean;
+	excludeFromCashDiscount?: boolean;
 }
 
 const STORAGE_KEY = "ds_accounts_invoices_v2";

@@ -344,7 +344,7 @@ function parseFilenameFromDisposition(disposition: string | undefined, fallback:
   return plainMatch?.[1]?.trim() || fallback;
 }
 
-async function downloadCsvBlob(
+async function downloadExportBlob(
   response: { data: Blob; headers?: { [key: string]: unknown } },
   fallback: string,
 ): Promise<void> {
@@ -371,6 +371,13 @@ async function downloadCsvBlob(
   link.click();
   link.remove();
   window.URL.revokeObjectURL(url);
+}
+
+async function downloadCsvBlob(
+  response: { data: Blob; headers?: { [key: string]: unknown } },
+  fallback: string,
+): Promise<void> {
+  return downloadExportBlob(response, fallback);
 }
 
 function listExportQuery(params: {
@@ -1022,7 +1029,7 @@ export const StockOverviewApi = {
       },
       { responseType: "blob", timeout: 120000 },
     );
-    await downloadCsvBlob(response, "daily_log.csv");
+    await downloadExportBlob(response, "daily_log.xlsx");
   },
 
   async exportInventory(params: Omit<ListBaseParams, "page" | "page_size" | "signal">): Promise<void> {

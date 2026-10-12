@@ -23,6 +23,7 @@ import { COMPANY_BILLING } from "@/lib/procurement/config";
 import { useSuppliersDropdown, useSupplier } from "@/hooks/masters/use-supplier";
 import { useWarehousesDropdown, useWarehouse } from "@/hooks/masters/use-warehouse-master";
 import { useHsnDropdown } from "@/hooks/masters/use-hsn";
+import { useGstDropdown } from "@/hooks/masters/use-gst";
 import { cn } from "@/lib/utils";
 import {
   PurchaseInvoiceService,
@@ -78,6 +79,14 @@ export function PurchaseInvoiceDirectForm({
   const { data: supplierData } = useSuppliersDropdown();
   const { data: warehouseData } = useWarehousesDropdown();
   const { data: hsnDropdown = [] } = useHsnDropdown();
+  const { data: gstDropdown = [] } = useGstDropdown();
+
+  const gstRates = useMemo(() => {
+    const rates = (gstDropdown || [])
+      .map((g) => Number(g.gstPercentage))
+      .filter((n) => Number.isFinite(n) && n >= 0);
+    return Array.from(new Set(rates)).sort((a, b) => a - b);
+  }, [gstDropdown]);
 
   const suppliers = useMemo(
     () =>
@@ -628,6 +637,7 @@ export function PurchaseInvoiceDirectForm({
               purchaseNature={purchaseNature}
               defaultItc={defaultItc}
               hsnOptions={hsnOptions}
+              gstRates={gstRates}
               hideAddButton
               onBindAddRow={(fn) => {
                 addLineRowRef.current = fn;

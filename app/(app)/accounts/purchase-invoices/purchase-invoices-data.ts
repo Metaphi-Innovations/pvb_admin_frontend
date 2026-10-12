@@ -220,6 +220,15 @@ export interface PurchaseInvoiceRecord {
   qcNo?: string;
   /** Quantity match workflow status */
   invoiceMatchStatus?: PurchaseInvoiceMatchStatus;
+  /**
+   * Stock Transfer only — one row per ST allocated batch vs destination GRN/QC.
+   * Prefer this over lineItems qtyComparison (SI/PI lines can duplicate).
+   */
+  stockTransferQtyComparison?: Array<{
+    productName: string;
+    batchNumber?: string;
+    comparison: PurchaseInvoiceLineQtyComparison;
+  }>;
   hasQuantityMismatch?: boolean;
   pendingDebitNoteId?: number | null;
   pendingDebitNoteNo?: string;

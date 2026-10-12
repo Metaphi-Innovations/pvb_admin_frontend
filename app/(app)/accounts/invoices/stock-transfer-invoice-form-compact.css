@@ -31,6 +31,58 @@
 .stock-transfer-invoice-form-compact .so-w-dispatch { width: 180px; max-width: 100%; }
 .stock-transfer-invoice-form-compact .so-w-bank { width: 320px; max-width: 100%; }
 
+/* Warehouse Transfer Details — wrap overflow fields instead of clipping the card */
+.stock-transfer-invoice-form-compact .so-warehouse-transfer-grid {
+  display: flex !important;
+  flex-wrap: wrap;
+  grid-auto-flow: unset !important;
+  grid-auto-columns: unset !important;
+  grid-template-columns: unset !important;
+  width: 100%;
+  max-width: 100%;
+  gap: var(--so-field-row-gap, 0.5rem) var(--so-field-gap);
+  align-items: start;
+  justify-content: flex-start;
+  min-width: 0;
+}
+
+.stock-transfer-invoice-form-compact .so-warehouse-transfer-grid .so-goods-field {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.stock-transfer-invoice-form-compact .so-warehouse-transfer-grid .so-w-wh {
+  width: 240px;
+  flex-basis: 240px;
+  max-width: 100%;
+}
+
+.stock-transfer-invoice-form-compact .so-warehouse-transfer-grid .so-w-gstin {
+  width: 180px;
+  flex-basis: 180px;
+  max-width: 100%;
+}
+
+.stock-transfer-invoice-form-compact .so-warehouse-transfer-grid .so-w-so {
+  width: 180px;
+  flex-basis: 180px;
+  max-width: 100%;
+}
+
+.stock-transfer-invoice-form-compact .so-warehouse-transfer-grid .so-w-pos {
+  width: 200px;
+  flex-basis: 200px;
+  max-width: 100%;
+}
+
+@media (max-width: 640px) {
+  .stock-transfer-invoice-form-compact .so-warehouse-transfer-grid .so-goods-field {
+    width: 100% !important;
+    flex-basis: 100% !important;
+  }
+}
+
 .stock-transfer-invoice-form-compact textarea.so-goods-narration {
   min-height: 56px !important;
   max-height: 72px !important;

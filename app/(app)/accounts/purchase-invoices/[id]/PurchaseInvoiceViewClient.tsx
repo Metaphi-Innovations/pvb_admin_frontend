@@ -93,9 +93,12 @@ const BASE_CHARGE_COLUMNS = [
   "GST %",
 ] as const;
 
-function purchaseItemColumns(interstate: boolean): string[] {
+function purchaseItemColumns(interstate: boolean, showBatch: boolean): string[] {
+  const base = showBatch
+    ? (["#", "Product", "Batch No.", "Description", "Qty", "Unit", "Rate", "Taxable"] as const)
+    : BASE_ITEM_COLUMNS;
   return [
-    ...BASE_ITEM_COLUMNS,
+    ...base,
     ...(interstate ? ["IGST"] : ["CGST", "SGST"]),
     "Total",
   ];
@@ -223,6 +226,14 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: st
   );
   const qtyComparisonRows = useMemo(() => {
     if (!invoice) return [];
+    // Stock Transfer: use ST-order allocated batches vs destination GRN (not SI/PI lines).
+    if (
+      invoice.sourceType === "stock_transfer" &&
+      invoice.stockTransferQtyComparison &&
+      invoice.stockTransferQtyComparison.length > 0
+    ) {
+      return invoice.stockTransferQtyComparison;
+    }
     return invoice.lineItems.map((line, i) => ({
       productName: line.productName,
       batchNumber: line.batchNumber,
@@ -273,7 +284,8 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: st
 
   const outstanding = Math.max(0, (invoice.netPayable ?? invoice.grandTotal) - invoice.amountPaid);
   const gst = getPurchaseInvoiceGstBreakup(invoice);
-  const itemColumns = purchaseItemColumns(gst.interstate);
+  const showBatchColumn = isStockTransfer || isGrn;
+  const itemColumns = purchaseItemColumns(gst.interstate, showBatchColumn);
   const chargeColumns = purchaseChargeColumns(gst.interstate);
   const showMismatchBanner =
     isGrn &&
@@ -541,7 +553,13 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: st
 
         {/* Line Items */}
         <VoucherFormSectionCard
-          title={isDirect ? "Purchase Particulars" : "Supplier Invoice Items"}
+          title={
+            isDirect
+              ? "Purchase Particulars"
+              : isStockTransfer
+                ? "Transferred Items"
+                : "Supplier Invoice Items"
+          }
           highlight
           flush={!isDirect || !invoice.directLines?.length}
         >
@@ -641,7 +659,11 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: st
                       key={h}
                       className={cn(
                         "px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-foreground whitespace-nowrap",
-                        h === "#" || h === "Product" || h === "Description" || h === "Unit"
+                        h === "#" ||
+                          h === "Product" ||
+                          h === "Batch No." ||
+                          h === "Description" ||
+                          h === "Unit"
                           ? "text-left"
                           : "text-right",
                       )}
@@ -675,6 +697,11 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: st
                             </p>
                           ) : null}
                         </td>
+                        {showBatchColumn ? (
+                          <td className="px-3 py-2 font-mono text-muted-foreground">
+                            {line.batchNumber?.trim() || "—"}
+                          </td>
+                        ) : null}
                         <td className="px-3 py-2 text-muted-foreground">{line.description || "—"}</td>
                         <td className="px-3 py-2 text-right tabular-nums">{line.invoiceQty}</td>
                         <td className="px-3 py-2 text-muted-foreground">{line.unit}</td>
@@ -781,12 +808,17 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: st
           </VoucherFormSectionCard>
         )}
 
-        {qtyComparisonRows.length > 0 && invoice.grnNo && (
+        {(isGrn || isStockTransfer) && qtyComparisonRows.length > 0 && invoice.grnNo && (
           <VoucherFormSectionCard title="Quantity Comparison" highlight>
             <p className="text-xs text-muted-foreground mb-3">
-              Comparison only — supplier invoice values are not adjusted by GRN or QC.
+              {isStockTransfer
+                ? "Comparison only — shows batches dispatched for this Stock Transfer vs destination GRN/QC."
+                : "Comparison only — supplier invoice values are not adjusted by GRN or QC."}
             </p>
-            <PurchaseInvoiceQtyComparisonTable rows={qtyComparisonRows} />
+            <PurchaseInvoiceQtyComparisonTable
+              rows={qtyComparisonRows}
+              variant={isStockTransfer ? "stock_transfer" : "supplier"}
+            />
           </VoucherFormSectionCard>
         )}
 
@@ -872,59 +904,6 @@ export default function PurchaseInvoiceViewClient({ invoiceId }: { invoiceId: st
             </div>
           </VoucherFormSectionCard>
         </div>
-
-        {/* Supplier Ledger Impact */}
-        <VoucherFormSectionCard title="Supplier Ledger Entry" highlight flush>
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs min-w-[960px]">
-              <thead>
-                <tr className="border-b border-border/30 bg-muted/50">
-                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-muted-foreground">Date</th>
-                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-muted-foreground">Voucher</th>
-                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-muted-foreground">Narration</th>
-                  <th className="px-3 py-2 text-right text-xs font-semibold uppercase text-muted-foreground">Debit</th>
-                  <th className="px-3 py-2 text-right text-xs font-semibold uppercase text-muted-foreground">Credit</th>
-                  <th className="px-3 py-2 text-right text-xs font-semibold uppercase text-muted-foreground">Balance</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr className="border-b border-border/20 hover:bg-muted/20">
-                  <td className="px-3 py-2.5 text-muted-foreground">{formatDisplayDate(invoice.invoiceDate)}</td>
-                  <td className="px-3 py-2.5 font-mono font-semibold text-brand-700">{invoice.invoiceNo}</td>
-                  <td className="px-3 py-2.5">
-                    Purchase from {invoice.vendorName}
-                    {invoice.grnNo && (
-                      <span className="ml-1.5 text-blue-600 font-mono">({invoice.grnNo})</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">—</td>
-                  <td className="px-3 py-2.5 text-right tabular-nums font-semibold text-red-600">
-                    {formatMoney(invoice.grandTotal)}
-                  </td>
-                  <td className="px-3 py-2.5 text-right tabular-nums font-bold text-red-600">
-                    {formatMoney(invoice.grandTotal)} Cr
-                  </td>
-                </tr>
-                {invoice.amountPaid > 0 && (
-                  <tr className="hover:bg-muted/20">
-                    <td className="px-3 py-2.5 text-muted-foreground">{formatDisplayDate(invoice.invoiceDate)}</td>
-                    <td className="px-3 py-2.5 font-mono text-muted-foreground">PYMT</td>
-                    <td className="px-3 py-2.5 text-muted-foreground">
-                      Payment received against {invoice.invoiceNo}
-                    </td>
-                    <td className="px-3 py-2.5 text-right tabular-nums text-emerald-700 font-semibold">
-                      {formatMoney(invoice.amountPaid)}
-                    </td>
-                    <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">—</td>
-                    <td className="px-3 py-2.5 text-right tabular-nums font-bold text-red-600">
-                      {formatMoney(outstanding)} Cr
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </VoucherFormSectionCard>
 
         {/* Remarks / Narration */}
         {(invoice.narration || invoice.remarks) && (
