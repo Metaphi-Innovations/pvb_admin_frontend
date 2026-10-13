@@ -66,6 +66,8 @@ import { formatDisplayDate, toIsoDateOnly } from "@/lib/accounts/date-display";
 import { WarehouseService } from "@/services/warehouse.service";
 import {
   CONTRA_ACCOUNT_TYPE_LABELS,
+  CONTRA_STATUS_FILTER_LABELS,
+  CONTRA_STATUS_FILTER_VALUES,
   CONTRA_STATUS_LABELS,
   type ContraAccountType,
   type ContraEligibleAccount,
@@ -215,7 +217,7 @@ function accountFilterIdFromRow(
   );
 }
 
-const STATUS_FILTER_OPTIONS = toValueOptions(Object.keys(CONTRA_STATUS_LABELS));
+const STATUS_FILTER_OPTIONS = toValueOptions(CONTRA_STATUS_FILTER_VALUES);
 const ACCOUNT_TYPE_FILTER_OPTIONS = toValueOptions(
   Object.keys(CONTRA_ACCOUNT_TYPE_LABELS),
 );
@@ -246,12 +248,26 @@ function ContraListSortSync({
 
   useEffect(() => {
     if (!ctx) return;
-    const ctxFiltersStr = JSON.stringify(ctx.columnFilters || {});
-    const propFiltersStr = JSON.stringify(columnFilters || {});
-    if (ctxFiltersStr !== propFiltersStr) {
-      onFilterChange(ctx.columnFilters || {});
+    const ctxF = ctx.columnFilters || {};
+    const parentF = columnFilters || {};
+
+    // Parent intentionally cleared a key (e.g. account after branch/type change) —
+    // drop it from the provider first so we never push the stale value back.
+    let clearedStale = false;
+    for (const key of Object.keys(ctxF)) {
+      if (!(key in parentF)) {
+        ctx.setColumnFilter(key, undefined);
+        clearedStale = true;
+      }
     }
-  }, [ctx?.columnFilters, columnFilters, onFilterChange]);
+    if (clearedStale) return;
+
+    const ctxFiltersStr = JSON.stringify(ctxF);
+    const propFiltersStr = JSON.stringify(parentF);
+    if (ctxFiltersStr !== propFiltersStr) {
+      onFilterChange(ctxF);
+    }
+  }, [ctx?.columnFilters, columnFilters, onFilterChange, ctx]);
 
   return null;
 }
@@ -335,7 +351,7 @@ function ContraListTable({
             colKey="status"
             filterType="status"
             valueOptions={STATUS_FILTER_OPTIONS}
-            statusOptions={Object.keys(CONTRA_STATUS_LABELS)}
+            statusOptions={[...CONTRA_STATUS_FILTER_VALUES]}
           />
           <AccountsColumnHeader
             label="Actions"
@@ -541,25 +557,17 @@ export function ContraVoucherListClient() {
     | ContraAccountType
     | undefined;
 
-  // Clear stale From account filter when warehouse / type context changes
+  // Drop stale From/To account filters when branch or type context changes
+  // (synced into the column-filter provider via ContraListSortSync).
   useEffect(() => {
     setColumnFilters((prev) => {
-      if (!prev.from_account) return prev;
+      if (!prev.from_account && !prev.to_account) return prev;
       const next = { ...prev };
-      delete next.from_account;
+      if (next.from_account) delete next.from_account;
+      if (next.to_account) delete next.to_account;
       return next;
     });
-  }, [resolvedFromWh, fromType]);
-
-  // Clear stale To account filter when warehouse / type context changes
-  useEffect(() => {
-    setColumnFilters((prev) => {
-      if (!prev.to_account) return prev;
-      const next = { ...prev };
-      delete next.to_account;
-      return next;
-    });
-  }, [resolvedToWh, toType]);
+  }, [resolvedFromWh, fromType, resolvedToWh, toType]);
 
   const fromAccountOptsFromRows = useMemo(
     () => listRowsToAccountOptions(rows, "from", fromType),
@@ -936,9 +944,9 @@ export function ContraVoucherListClient() {
                     <SelectItem value="all" className="text-xs">
                       All statuses
                     </SelectItem>
-                    {Object.entries(CONTRA_STATUS_LABELS).map(([k, v]) => (
-                      <SelectItem key={k} value={k} className="text-xs">
-                        {v}
+                    {CONTRA_STATUS_FILTER_VALUES.map((status) => (
+                      <SelectItem key={status} value={status} className="text-xs">
+                        {CONTRA_STATUS_FILTER_LABELS[status]}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -1034,8 +1042,8 @@ export function ContraVoucherListClient() {
         columnConfig={{
           status: {
             type: "status",
-            options: Object.keys(CONTRA_STATUS_LABELS),
-            optionLabels: CONTRA_STATUS_LABELS,
+            options: [...CONTRA_STATUS_FILTER_VALUES],
+            optionLabels: CONTRA_STATUS_FILTER_LABELS,
           },
           from_account_type: {
             type: "status",

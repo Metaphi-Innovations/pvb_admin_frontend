@@ -408,6 +408,7 @@ export interface ApiCollectionFollowUpRow {
   dueDate: string;
   followUpDate: string;
   assignedTo: string;
+  assignedToUserId?: string | null;
   contactPerson: string;
   phone: string;
   promiseToPayDate: string;

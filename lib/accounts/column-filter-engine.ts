@@ -321,6 +321,15 @@ export function collectColumnValueCounts<T>(
     .slice(0, max);
 }
 
+function isPureAmountCell(v: unknown): boolean {
+  if (typeof v === "number") return Number.isFinite(v);
+  if (typeof v !== "string") return false;
+  const s = v.trim();
+  // Amounts may include currency/commas; reject codes / invoice nos with letters or slashes.
+  if (/[a-zA-Z/_]/.test(s)) return false;
+  return parseNum(s) != null;
+}
+
 export function sortAccountsRows<T>(
   rows: T[],
   sortKey: string | null,
@@ -332,9 +341,16 @@ export function sortAccountsRows<T>(
   return [...rows].sort((a, b) => {
     const av = getCellValue(a, sortKey);
     const bv = getCellValue(b, sortKey);
-    const an = parseNum(av);
-    const bn = parseNum(bv);
-    if (an != null && bn != null) return (an - bn) * dir;
-    return normStr(av).localeCompare(normStr(bv)) * dir;
+    // Pure numeric cells (amounts) — compare as numbers.
+    if (isPureAmountCell(av) && isPureAmountCell(bv)) {
+      return ((parseNum(av) as number) - (parseNum(bv) as number)) * dir;
+    }
+    // Invoice nos / codes with digits — numeric-aware string compare (PI-2 < PI-10).
+    return (
+      normStr(av).localeCompare(normStr(bv), undefined, {
+        numeric: true,
+        sensitivity: "base",
+      }) * dir
+    );
   });
 }

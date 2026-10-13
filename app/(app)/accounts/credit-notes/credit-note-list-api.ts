@@ -43,6 +43,9 @@ export type CreditNoteListQuery = {
   from_date?: string;
   to_date?: string;
   cn_number?: string;
+  customer_id?: string;
+  warehouse_id?: string;
+  financial_year_id?: string;
 };
 
 export type PendingCreditNoteListQuery = {
