@@ -95,6 +95,8 @@ export interface SalesInvoiceListRow {
   qtyOrItemCount: number;
   itemCount: number;
   branch: string;
+  /** Warehouse UUID when API provides it — used for server-side branch filter. */
+  warehouseId?: string;
   invoiceStatus: InvoiceRecord["invoiceStatus"];
   viewHref: string;
   editHref: string | null;
@@ -248,6 +250,8 @@ export function mapApiInvoiceToListRow(
     qtyOrItemCount: totalQty,
     itemCount: totalQty > 0 ? 1 : 0,
     branch: warehouseName,
+    warehouseId:
+      dto.warehouse_id || dto.warehouse?.warehouse_id || undefined,
     invoiceStatus: status,
     viewHref: `${LIST_PATH}/${id}`,
     editHref: null,
@@ -272,6 +276,8 @@ export type FetchSalesInvoicesOptions = {
   dateFrom?: string;
   dateTo?: string;
   financialYearId?: string;
+  /** Single warehouse UUID — passed as API `warehouse_id` when exactly one branch is selected. */
+  warehouseId?: string;
   page?: number;
   pageSize?: number;
 };
@@ -300,6 +306,7 @@ export async function fetchSalesInvoicesByTab(
       opts.financialYearId && opts.financialYearId !== "all"
         ? opts.financialYearId
         : undefined,
+    warehouse_id: opts.warehouseId || undefined,
     invoice_type: invoiceType,
     page_size: pageSize,
   } as const;

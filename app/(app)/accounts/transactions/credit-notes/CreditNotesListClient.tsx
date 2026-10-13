@@ -544,11 +544,51 @@ export default function CreditNotesListClient() {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const [listResult, pendingResult] = await Promise.all([
-        CreditNoteListApi.list({ page: 1, page_size: 100 }),
+      const apiStatus =
+        statusTab !== "all"
+          ? statusTab === "posted"
+            ? "POSTED"
+            : statusTab.toUpperCase()
+          : mapUiStatusToApi(filters.status);
+      const sourceType =
+        filters.sources.length === 1
+          ? Object.entries(CN_SOURCE_LABELS).find(
+              ([, label]) => label === filters.sources[0],
+            )?.[0]
+          : undefined;
+
+      const baseQuery = {
+        search: filters.search.trim() || undefined,
+        status: apiStatus || undefined,
+        source_type: sourceType,
+        from_date: filters.dateFrom || undefined,
+        to_date: filters.dateTo || undefined,
+        cn_number: filters.voucherNo.trim() || undefined,
+      };
+
+      const FETCH_PAGE_SIZE = 100;
+      const [first, pendingResult] = await Promise.all([
+        CreditNoteListApi.list({
+          ...baseQuery,
+          page: 1,
+          page_size: FETCH_PAGE_SIZE,
+        }),
         CreditNoteListApi.listPending({ page: 1, page_size: 1 }),
       ]);
-      setRecords((listResult.items ?? []).map(mapCreditNoteListRow));
+
+      const allItems = [...(first.items ?? [])];
+      const total = first.pagination?.total ?? allItems.length;
+      const totalPages = Math.max(1, Math.ceil(total / FETCH_PAGE_SIZE));
+      for (let p = 2; p <= totalPages; p++) {
+        const next = await CreditNoteListApi.list({
+          ...baseQuery,
+          page: p,
+          page_size: FETCH_PAGE_SIZE,
+        });
+        allItems.push(...(next.items ?? []));
+      }
+
+      setRecords(allItems.map(mapCreditNoteListRow));
       setPendingCount(pendingResult.pagination?.total ?? pendingResult.items?.length ?? 0);
     } catch (e) {
       setRecords([]);
@@ -556,7 +596,7 @@ export default function CreditNotesListClient() {
     } finally {
       setLoading(false);
     }
-  }, [showToast]);
+  }, [showToast, statusTab, filters.search, filters.status, filters.sources, filters.dateFrom, filters.dateTo, filters.voucherNo]);
 
   useEffect(() => {
     if (!mounted) return;

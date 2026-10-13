@@ -70,6 +70,8 @@ export const BANK_ACCOUNT_ORDERING_BY_COLUMN: Record<string, string> = {
   status: "status",
   openingBalance: "opening_balances__opening_amount",
   currentBalance: "current_balance",
+  mappedWarehousesLabel:
+    "bank_account__warehouse_mappings__warehouse__warehouse_name",
   createdAt: "created_at",
   updatedAt: "updated_at",
 };

@@ -68,6 +68,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { loadFinancialYears } from "@/app/(app)/accounts/masters/masters-data";
 import { FinancialYearApiService } from "@/services/financial-year.service";
+import { WarehouseService } from "@/services/warehouse.service";
 import { resolveDateRangePreset } from "@/lib/accounts/report-date-presets";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { accountsDataService } from "@/lib/accounts/accounts-data-service";
@@ -987,6 +988,9 @@ export default function SalesInvoicesPageClient() {
     useReportDateRange("this_year");
   const [financialYearId, setFinancialYearId] = useState("all");
   const [branches, setBranches] = useState<string[]>([]);
+  const [warehouseIdByName, setWarehouseIdByName] = useState<Map<string, string>>(
+    () => new Map(),
+  );
   const [cancelTarget, setCancelTarget] = useState<SalesInvoiceListRow | null>(null);
   const [sendEmailInvoiceId, setSendEmailInvoiceId] = useState<string | null>(null);
   const [sendEmailOpen, setSendEmailOpen] = useState(false);
@@ -1009,11 +1013,52 @@ export default function SalesInvoicesPageClient() {
   const prevFilterKey = useRef<string | null>(null);
 
   // Keep a stable ref to the latest filter params so callbacks never go stale.
-  const filterParamsRef = useRef({ dateFrom, dateTo, financialYearId });
-  filterParamsRef.current = { dateFrom, dateTo, financialYearId };
+  const filterParamsRef = useRef({
+    dateFrom,
+    dateTo,
+    financialYearId,
+    branches,
+    warehouseIdByName,
+  });
+  filterParamsRef.current = {
+    dateFrom,
+    dateTo,
+    financialYearId,
+    branches,
+    warehouseIdByName,
+  };
+
+  useEffect(() => {
+    if (!mounted) return;
+    let cancelled = false;
+    void WarehouseService.dropdown()
+      .then((list) => {
+        if (cancelled) return;
+        const map = new Map<string, string>();
+        for (const w of list) {
+          const name = String(w.warehouse_name || "").trim();
+          const id = String(w.warehouse_id || "").trim();
+          if (name && id) map.set(name, id);
+        }
+        setWarehouseIdByName(map);
+      })
+      .catch(() => {
+        /* branch filter still works client-side */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [mounted]);
 
   const fetchTab = useCallback(async (tab: SalesInvoiceTabId) => {
-    const { dateFrom: df, dateTo: dt, financialYearId: fy } = filterParamsRef.current;
+    const {
+      dateFrom: df,
+      dateTo: dt,
+      financialYearId: fy,
+      branches: br,
+      warehouseIdByName: whMap,
+    } = filterParamsRef.current;
+    const warehouseId = br.length === 1 ? whMap.get(br[0]) : undefined;
     setTabState((prev) => ({
       ...prev,
       [tab]: { ...prev[tab], loading: true, error: null },
@@ -1025,6 +1070,7 @@ export default function SalesInvoicesPageClient() {
         dateFrom: df,
         dateTo: dt,
         financialYearId: fy,
+        warehouseId,
         // Omit page so fetch walks API pages (max 100 each) for the full filtered set.
       });
       setTabState((prev) => ({
