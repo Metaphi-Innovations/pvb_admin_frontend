@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { XCircle } from "lucide-react";
@@ -226,16 +226,20 @@ function ContraListSortSync({
   sortKey,
   sortDir,
   columnFilters,
+  accountFilterResetKey,
   onSortChange,
   onFilterChange,
 }: {
   sortKey: string;
   sortDir: "asc" | "desc";
   columnFilters: AccountsColumnFilters;
+  /** Changes when From/To branch or account type changes — clears Transfer account filters. */
+  accountFilterResetKey: string;
   onSortChange: (sortKey: string, sortDir: "asc" | "desc") => void;
   onFilterChange: (filters: AccountsColumnFilters) => void;
 }) {
   const ctx = useAccountsColumnFilterContext();
+  const prevAccountResetKey = useRef(accountFilterResetKey);
 
   useEffect(() => {
     if (!ctx) return;
@@ -246,28 +250,26 @@ function ContraListSortSync({
     }
   }, [ctx?.sortKey, ctx?.sortDir, sortKey, sortDir, onSortChange]);
 
+  // Match Receipt/Payment: always push provider filters → parent (do not treat
+  // "key missing in parent" as a clear — that wiped brand-new column filters).
   useEffect(() => {
     if (!ctx) return;
-    const ctxF = ctx.columnFilters || {};
-    const parentF = columnFilters || {};
-
-    // Parent intentionally cleared a key (e.g. account after branch/type change) —
-    // drop it from the provider first so we never push the stale value back.
-    let clearedStale = false;
-    for (const key of Object.keys(ctxF)) {
-      if (!(key in parentF)) {
-        ctx.setColumnFilter(key, undefined);
-        clearedStale = true;
-      }
-    }
-    if (clearedStale) return;
-
-    const ctxFiltersStr = JSON.stringify(ctxF);
-    const propFiltersStr = JSON.stringify(parentF);
+    const ctxFiltersStr = JSON.stringify(ctx.columnFilters || {});
+    const propFiltersStr = JSON.stringify(columnFilters || {});
     if (ctxFiltersStr !== propFiltersStr) {
-      onFilterChange(ctxF);
+      onFilterChange(ctx.columnFilters || {});
     }
-  }, [ctx?.columnFilters, columnFilters, onFilterChange, ctx]);
+  }, [ctx?.columnFilters, columnFilters, onFilterChange]);
+
+  // When branch / account-type context changes, drop Transfer From/To account
+  // filters in the provider; the push-to-parent effect above syncs parent state.
+  useEffect(() => {
+    if (!ctx?.setColumnFilter) return;
+    if (prevAccountResetKey.current === accountFilterResetKey) return;
+    prevAccountResetKey.current = accountFilterResetKey;
+    ctx.setColumnFilter("from_account", undefined);
+    ctx.setColumnFilter("to_account", undefined);
+  }, [accountFilterResetKey, ctx?.setColumnFilter]);
 
   return null;
 }
@@ -557,17 +559,16 @@ export function ContraVoucherListClient() {
     | ContraAccountType
     | undefined;
 
-  // Drop stale From/To account filters when branch or type context changes
-  // (synced into the column-filter provider via ContraListSortSync).
-  useEffect(() => {
-    setColumnFilters((prev) => {
-      if (!prev.from_account && !prev.to_account) return prev;
-      const next = { ...prev };
-      if (next.from_account) delete next.from_account;
-      if (next.to_account) delete next.to_account;
-      return next;
-    });
-  }, [resolvedFromWh, fromType, resolvedToWh, toType]);
+  const accountFilterResetKey = useMemo(
+    () =>
+      [
+        resolvedFromWh || "",
+        fromType || "",
+        resolvedToWh || "",
+        toType || "",
+      ].join("|"),
+    [resolvedFromWh, fromType, resolvedToWh, toType],
+  );
 
   const fromAccountOptsFromRows = useMemo(
     () => listRowsToAccountOptions(rows, "from", fromType),
@@ -1074,6 +1075,7 @@ export function ContraVoucherListClient() {
           sortKey={sortKey}
           sortDir={sortDir}
           columnFilters={columnFilters}
+          accountFilterResetKey={accountFilterResetKey}
           onSortChange={handleSortChange}
           onFilterChange={handleFilterChange}
         />
