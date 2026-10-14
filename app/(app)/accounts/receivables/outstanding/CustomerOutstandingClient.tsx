@@ -45,6 +45,10 @@ import { AgeingPartySummaryTable } from "@/components/accounts/AgeingPartySummar
 import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
 import { CustomerListService } from "@/services/customer-list.service";
 import { ReceivablesService } from "@/services/receivables.service";
+import {
+  UserListService,
+  type UserDropdownItem,
+} from "@/services/user-list.service";
 import { formatMoneyNumber, MONEY_CELL_CLASS } from "@/lib/accounts/money-format";
 import { defaultAsOnDate } from "@/lib/accounts/report-date-presets";
 import {
@@ -236,6 +240,8 @@ function FollowUpDialog({
   const [promiseToPayDate, setPromiseToPayDate] = useState("");
   const [remarks, setRemarks] = useState("");
   const [assignedTo, setAssignedTo] = useState("");
+  const [users, setUsers] = useState<UserDropdownItem[]>([]);
+  const [usersLoading, setUsersLoading] = useState(false);
   const [contactMethod, setContactMethod] = useState<ApiFollowUpContactMethod | "">("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -250,7 +256,7 @@ function FollowUpDialog({
       setNextFollowUpDate(editing.nextFollowUpDate || "");
       setPromiseToPayDate(editing.promiseToPayDate || "");
       setRemarks(editing.remarks || "");
-      setAssignedTo(editing.assignedTo || "");
+      setAssignedTo(editing.assignedToUserId || "");
       setContactMethod("");
       setOpenItemId(editing.openItemId ? String(editing.openItemId) : "");
     } else {
@@ -263,6 +269,25 @@ function FollowUpDialog({
       setOpenItemId("");
     }
   }, [open, editing, initialCustomerId, initialCustomerName]);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    (async () => {
+      setUsersLoading(true);
+      try {
+        const rows = await UserListService.dropdown();
+        if (!cancelled) setUsers(rows);
+      } catch {
+        if (!cancelled) setUsers([]);
+      } finally {
+        if (!cancelled) setUsersLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open || !customerId) {
@@ -506,11 +531,27 @@ function FollowUpDialog({
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs font-medium">Assigned To</Label>
-            <Input
-              value={assignedTo}
-              onChange={(e) => setAssignedTo(e.target.value)}
-              className="h-9 text-sm"
-            />
+            <Select
+              value={assignedTo || "__none__"}
+              onValueChange={(v) => setAssignedTo(v === "__none__" ? "" : v)}
+              disabled={usersLoading}
+            >
+              <SelectTrigger className="h-9 text-sm">
+                <SelectValue
+                  placeholder={usersLoading ? "Loading users…" : "Select user"}
+                />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">— Unassigned —</SelectItem>
+                {users.map((u) => (
+                  <SelectItem key={u.userId} value={u.userId}>
+                    {u.label ||
+                      [u.firstName, u.lastName].filter(Boolean).join(" ") ||
+                      u.username}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs font-medium">Remarks</Label>

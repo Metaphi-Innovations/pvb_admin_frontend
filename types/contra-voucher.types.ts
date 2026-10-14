@@ -336,6 +336,24 @@ export const CONTRA_STATUS_LABELS: Record<ContraVoucherStatus, string> = {
   REVERSED: "Reversed",
 };
 
+/** Statuses shown in Contra list toolbar + column filters (excludes approval workflow). */
+export const CONTRA_STATUS_FILTER_VALUES: ContraVoucherStatus[] = [
+  "DRAFT",
+  "APPROVED",
+  "POSTED",
+  "CANCELLED",
+  "REVERSED",
+];
+
+export const CONTRA_STATUS_FILTER_LABELS: Partial<
+  Record<ContraVoucherStatus, string>
+> = Object.fromEntries(
+  CONTRA_STATUS_FILTER_VALUES.map((status) => [
+    status,
+    CONTRA_STATUS_LABELS[status],
+  ]),
+);
+
 export const CONTRA_ACCOUNT_TYPE_LABELS: Record<ContraAccountType, string> = {
   CASH: "Cash",
   BANK: "Bank",

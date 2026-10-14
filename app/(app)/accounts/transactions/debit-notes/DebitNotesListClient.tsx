@@ -139,12 +139,10 @@ function DebitNotesRecordsTable({
   listReturnHref,
   page,
   pageSize,
-  totalRecords,
   onPageChange,
   onPageSizeChange,
   onCancel,
   onDownloadPdf,
-  onRefresh,
   approvalRequired,
   hasCreatePermission,
   hasUpdatePermission,
@@ -155,20 +153,21 @@ function DebitNotesRecordsTable({
   listReturnHref: string;
   page: number;
   pageSize: number;
-  totalRecords: number;
   onPageChange: (p: number) => void;
   onPageSizeChange: (s: number) => void;
   onCancel: (r: DebitNoteRecord) => void;
   onDownloadPdf: (r: DebitNoteRecord) => void;
-  onRefresh: () => void;
   approvalRequired: boolean;
   hasCreatePermission: boolean;
   hasUpdatePermission: boolean;
 }) {
   const visible = useAccountsFilteredRows(toolbarFiltered);
   const ctx = useAccountsColumnFilterContext();
-  // Server already paginates the All tab; column sort/filter apply within the loaded page.
-  const pagedRows = visible;
+  // Full filtered set is loaded; column sort/filter apply across all rows, then paginate.
+  const pagedRows = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return visible.slice(start, start + pageSize);
+  }, [visible, page, pageSize]);
 
   useEffect(() => {
     onPageChange(1);
@@ -318,7 +317,7 @@ function DebitNotesRecordsTable({
         <AccountsTablePagination
           page={page}
           pageSize={pageSize}
-          totalRecords={totalRecords}
+          totalRecords={visible.length}
           onPageChange={onPageChange}
           onPageSizeChange={onPageSizeChange}
           recordLabel="debit notes"
@@ -416,7 +415,6 @@ export default function DebitNotesListClient() {
         dateFrom: filters.dateFrom,
         dateTo: filters.dateTo,
         statusTab,
-        pageSize,
       }),
     [
       debouncedSearch,
@@ -428,7 +426,6 @@ export default function DebitNotesListClient() {
       filters.dateFrom,
       filters.dateTo,
       statusTab,
-      pageSize,
     ],
   );
 
@@ -445,15 +442,10 @@ export default function DebitNotesListClient() {
     setPage((p) => (p === 1 ? p : 1));
   }, [listFiltersKey]);
 
-  // All-tab list: only while All is active
+  // All-tab list: load full filtered set (API pages of 100) so column sort/filter work globally.
   useEffect(() => {
     if (!mounted || moduleTab !== "records") return;
     if (mastersGate === "wait") return;
-    // Filter change resets page via the effect above; skip the stale page>1 request
-    if (page !== 1 && listFiltersKeyRef.current !== listFiltersKey) {
-      listFiltersKeyRef.current = listFiltersKey;
-      return;
-    }
     listFiltersKeyRef.current = listFiltersKey;
 
     let cancelled = false;
@@ -487,9 +479,7 @@ export default function DebitNotesListClient() {
           statusParam = statusTab.toUpperCase();
         }
 
-        const res = await DebitNoteService.list({
-          page,
-          page_size: pageSize,
+        const baseQuery = {
           search: debouncedSearch.trim() || undefined,
           supplier_ids: selectedSupplierIds.length ? selectedSupplierIds : undefined,
           warehouse_ids: selectedWarehouseIds.length ? selectedWarehouseIds : undefined,
@@ -498,14 +488,35 @@ export default function DebitNotesListClient() {
           dn_number: filters.voucherNo.trim() || undefined,
           from_date: filters.dateFrom || undefined,
           to_date: filters.dateTo || undefined,
+        };
+
+        const FETCH_PAGE_SIZE = 100;
+        const first = await DebitNoteService.list({
+          ...baseQuery,
+          page: 1,
+          page_size: FETCH_PAGE_SIZE,
         });
         if (cancelled) return;
-        const mappedRecords = res.items.map(mapDebitNoteToRecord);
+
+        const allItems = [...(first.items ?? [])];
+        const total = first.pagination?.total ?? allItems.length;
+        const totalPages = Math.max(1, Math.ceil(total / FETCH_PAGE_SIZE));
+        for (let p = 2; p <= totalPages; p++) {
+          const next = await DebitNoteService.list({
+            ...baseQuery,
+            page: p,
+            page_size: FETCH_PAGE_SIZE,
+          });
+          if (cancelled) return;
+          allItems.push(...(next.items ?? []));
+        }
+
+        const mappedRecords = allItems.map(mapDebitNoteToRecord);
         setRecords(mappedRecords);
-        setTotalRecords(res.pagination.total);
+        setTotalRecords(mappedRecords.length);
         if (statusTab === "all") {
           const nextCounts: Record<string, number> = {
-            all: res.pagination.total ?? mappedRecords.length,
+            all: mappedRecords.length,
             draft: 0,
             posted: 0,
             cancelled: 0,
@@ -536,7 +547,6 @@ export default function DebitNotesListClient() {
   }, [
     mounted,
     moduleTab,
-    page,
     listFiltersKey,
     listRefreshTick,
     mastersGate,
@@ -858,7 +868,6 @@ export default function DebitNotesListClient() {
                   listReturnHref={listReturnHref}
                   page={page}
                   pageSize={pageSize}
-                  totalRecords={totalRecords}
                   onPageChange={setPage}
                   onPageSizeChange={setPageSize}
                   onCancel={setCancelTarget}
@@ -869,7 +878,6 @@ export default function DebitNotesListClient() {
                       showToast(message, "error");
                     });
                   }}
-                  onRefresh={refreshRecords}
                   approvalRequired={approvalRequired}
                   hasCreatePermission={hasCreatePermission}
                   hasUpdatePermission={hasUpdatePermission}

@@ -213,18 +213,11 @@ export default function VendorOutstandingDetailClient() {
       title="Supplier Outstanding Details"
       description={`${supplier.supplierCode} · Outstanding as on ${formatDisplayDate(asOnDate)}`}
       actions={
-        <div className="flex items-center gap-2">
-          <Link href="/accounts/payables/outstanding">
-            <Button variant="outline" size="sm" className="h-9 text-sm font-medium gap-1">
-              <ArrowLeft className="w-4 h-4" /> Back
-            </Button>
-          </Link>
-          <Link href={`/accounts/payables/payment-allocation?vendorId=${supplier.supplierId}`}>
-            <Button size="sm" className="h-9 text-sm font-medium bg-brand-600 hover:bg-brand-700 text-white">
-              Go to Payment Allocation
-            </Button>
-          </Link>
-        </div>
+        <Link href="/accounts/payables/outstanding">
+          <Button variant="outline" size="sm" className="h-9 text-sm font-medium gap-1">
+            <ArrowLeft className="w-4 h-4" /> Back
+          </Button>
+        </Link>
       }
       layout="split"
       className="h-full min-h-0"

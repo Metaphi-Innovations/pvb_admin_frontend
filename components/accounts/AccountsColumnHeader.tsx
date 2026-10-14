@@ -2,7 +2,7 @@
 
 import React from "react";
 import { cn } from "@/lib/utils";
-import { ChevronDown, ChevronsUpDown } from "lucide-react";
+import { ChevronDown, ChevronUp, ChevronsUpDown } from "lucide-react";
 import { AccountsTableHeadCell } from "@/components/accounts/AccountsTable";
 import { accountsActionColClass } from "@/components/accounts/AccountsTableActions";
 import { AccountsColumnFilterPopover } from "./AccountsColumnFilterPopover";
@@ -140,7 +140,11 @@ export function AccountsColumnHeader({
           {sortable && (
             <span className="flex-shrink-0 text-muted-foreground/70">
               {sorted ? (
-                <ChevronDown className={cn("w-3 h-3 text-brand-600", sortDir === "desc" && "rotate-180")} />
+                sortDir === "asc" ? (
+                  <ChevronUp className="w-3 h-3 text-brand-600" />
+                ) : (
+                  <ChevronDown className="w-3 h-3 text-brand-600" />
+                )
               ) : (
                 <ChevronsUpDown className="w-3 h-3 opacity-40" />
               )}

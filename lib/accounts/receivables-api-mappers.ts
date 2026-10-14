@@ -248,6 +248,7 @@ export function mapFollowUpRow(row: FollowUpApiRow): ApiCollectionFollowUpRow {
     dueDate: "—",
     followUpDate: row.createdAt.slice(0, 10),
     assignedTo: row.assignedTo?.name ?? "—",
+    assignedToUserId: row.assignedTo?.id ?? null,
     contactPerson: "",
     phone: "",
     promiseToPayDate: row.promisedPaymentDate ?? "",

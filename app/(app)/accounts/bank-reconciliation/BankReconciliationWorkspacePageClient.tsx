@@ -53,12 +53,7 @@ import {
 } from "./reconciliation-utils";
 import { BankReconTallyStatusBadge } from "./components/BankReconTallyStatusBadge";
 import { BankReconTallyUndoDialog } from "./components/BankReconTallyUndoDialog";
-import {
-  BankReconModeSwitch,
-  type BankReconWorkspaceMode,
-} from "./components/BankReconModeSwitch";
 import { BankReconCommonSummaryStrip } from "./components/BankReconCommonSummaryStrip";
-import { BankReconStatementMode } from "./components/BankReconStatementMode";
 import { BankReconciliationService } from "@/services/bank-reconciliation.service";
 import {
   mapBookEntryToUiRow,
@@ -117,7 +112,6 @@ export default function BankReconciliationWorkspacePageClient({
   const [account, setAccount] = useState<WorkspaceAccountUi | null>(null);
   const [summary, setSummary] = useState<WorkspaceSummaryUi | null>(null);
 
-  const [reconMode, setReconMode] = useState<BankReconWorkspaceMode>("manual");
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("UNRECONCILED");
@@ -144,7 +138,6 @@ export default function BankReconciliationWorkspacePageClient({
     if (!accountId) return;
     setStatusFilter("UNRECONCILED");
     setSelectedIds(new Set());
-    setReconMode("manual");
     setDateFrom(selectedFY.startDate || "");
     setDateTo(selectedFY.endDate || "");
   }, [accountId, selectedFY.startDate, selectedFY.endDate]);
@@ -278,10 +271,8 @@ export default function BankReconciliationWorkspacePageClient({
   ]);
 
   useEffect(() => {
-    if (reconMode === "manual") {
-      void loadBooks();
-    }
-  }, [loadBooks, reconMode, refreshKey]);
+    void loadBooks();
+  }, [loadBooks, refreshKey]);
 
   const bookById = useMemo(() => new Map(books.map((book) => [book.id, book])), [books]);
 
@@ -582,15 +573,13 @@ export default function BankReconciliationWorkspacePageClient({
             <RotateCcw className="w-3.5 h-3.5" />
             Reset
           </Button>
-          <BankReconModeSwitch mode={reconMode} onChange={setReconMode} />
         </div>
 
         {summary && (
-          <BankReconCommonSummaryStrip key={`${accountId}-${reconMode}`} mode={reconMode} summary={summary} />
+          <BankReconCommonSummaryStrip key={accountId} mode="manual" summary={summary} />
         )}
 
-        {reconMode === "manual" ? (
-          <div className="flex-1 min-h-0 flex flex-col border border-border/70 rounded-lg bg-white overflow-hidden">
+        <div className="flex-1 min-h-0 flex flex-col border border-border/70 rounded-lg bg-white overflow-hidden">
             <div className="h-9 flex-shrink-0 flex items-center gap-3 border-b border-border/60 bg-white px-3">
               <span className="text-xs text-muted-foreground whitespace-nowrap">
                 <strong className="text-foreground">{booksTotal}</strong>{" "}
@@ -712,15 +701,6 @@ export default function BankReconciliationWorkspacePageClient({
               />
             </div>
           </div>
-        ) : (
-          <BankReconStatementMode
-            bankAccountId={accountId}
-            dateFrom={dateFrom}
-            dateTo={dateTo}
-            onToast={(msg, type) => setToast({ msg, type })}
-            onRefresh={refreshAll}
-          />
-        )}
       </div>
 
       <BankReconTallyUndoDialog

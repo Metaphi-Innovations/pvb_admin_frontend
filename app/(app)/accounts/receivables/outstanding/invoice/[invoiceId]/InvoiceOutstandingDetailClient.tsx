@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
-import { ArrowLeft, FileText, Receipt } from "lucide-react";
+import { ArrowLeft, FileText } from "lucide-react";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import {
@@ -202,11 +202,6 @@ export default function InvoiceOutstandingDetailClient() {
               </Button>
             </Link>
           ) : null}
-          <Link href={`/accounts/receivables/receipt-allocation?customer=${mappedInvoice.customerId}`}>
-            <Button size="sm" className="h-9 text-sm font-medium gap-1 bg-brand-600 hover:bg-brand-700 text-white">
-              <Receipt className="w-4 h-4" /> Go to Receipt Allocation
-            </Button>
-          </Link>
         </div>
       }
       layout="split"

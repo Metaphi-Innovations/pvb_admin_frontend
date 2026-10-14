@@ -67,6 +67,7 @@ import {
   AccountsColumnHeader,
   SortTh,
   useAccountsColumnFilterContext,
+  useAccountsFilteredRows,
 } from "@/app/(app)/accounts/components/AccountsUI";
 import { useDebouncedValue } from "@/app/(app)/accounts/reports/pl/pl-hooks";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
@@ -94,6 +95,7 @@ const PURCHASE_NATURE_OPTION_LABELS: Record<string, string> = {
   service: "Service",
   fixed_asset: "Fixed Asset",
   other_non_stock: "Capital Goods",
+  stock_transfer: "Stock Transfer",
 };
 
 const PURCHASE_NATURE_COLUMN_FILTER_OPTIONS = Object.keys(PURCHASE_NATURE_OPTION_LABELS).map(
@@ -402,6 +404,9 @@ function PurchaseInvoicesTabTable({
   toolbarRows,
   listReturnHref,
   loading,
+  page,
+  pageSize,
+  onPageChange,
   filterOptions,
   filterLoading,
   filterReady,
@@ -416,6 +421,9 @@ function PurchaseInvoicesTabTable({
   toolbarRows: PurchaseInvoiceListRow[];
   listReturnHref: string;
   loading: boolean;
+  page: number;
+  pageSize: number;
+  onPageChange: (p: number) => void;
   filterOptions: FilterValueOptions;
   filterLoading: FilterFlagMap;
   filterReady: FilterFlagMap;
@@ -427,6 +435,17 @@ function PurchaseInvoicesTabTable({
   onCancel?: (row: PurchaseInvoiceListRow) => void;
   onPostDraft?: (row: PurchaseInvoiceListRow) => void;
 }) {
+  const ctx = useAccountsColumnFilterContext();
+  const visible = useAccountsFilteredRows(toolbarRows);
+  const pagedRows = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return visible.slice(start, start + pageSize);
+  }, [visible, page, pageSize]);
+
+  useEffect(() => {
+    onPageChange(1);
+  }, [ctx?.columnFilters, ctx?.sortKey, ctx?.sortDir, onPageChange]);
+
   const opts = (key: string) => filterOptions[key] || [];
   const filterProps = (key: string) => {
     const loaded = opts(key);
@@ -472,8 +491,10 @@ function PurchaseInvoicesTabTable({
             <AccountsTableEmpty colSpan={14} message="Loading purchase invoices…" />
           ) : toolbarRows.length === 0 ? (
             <AccountsTableEmpty colSpan={14} message="No purchase invoices found." />
+          ) : visible.length === 0 ? (
+            <AccountsTableEmpty colSpan={14} message="No records match the column filters." />
           ) : (
-            toolbarRows.map((inv) => (
+            pagedRows.map((inv) => (
               <AccountsTableRow key={inv.id}>
                 <AccountsTableCell className="font-medium">
                   {PurchaseInvoiceService.isUuid(inv.id) ? (
@@ -568,6 +589,9 @@ function PurchaseInvoicesTabTable({
 function GrnPendingTabTable({
   toolbarRows,
   loading,
+  page,
+  pageSize,
+  onPageChange,
   filterOptions,
   filterLoading,
   filterReady,
@@ -576,12 +600,26 @@ function GrnPendingTabTable({
 }: {
   toolbarRows: EligibleGrnDto[];
   loading: boolean;
+  page: number;
+  pageSize: number;
+  onPageChange: (p: number) => void;
   filterOptions: FilterValueOptions;
   filterLoading: FilterFlagMap;
   filterReady: FilterFlagMap;
   onOpenFilter: (key: string) => void;
   onCreateInvoice: (grn: EligibleGrnDto) => void;
 }) {
+  const ctx = useAccountsColumnFilterContext();
+  const visible = useAccountsFilteredRows(toolbarRows);
+  const pagedRows = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return visible.slice(start, start + pageSize);
+  }, [visible, page, pageSize]);
+
+  useEffect(() => {
+    onPageChange(1);
+  }, [ctx?.columnFilters, ctx?.sortKey, ctx?.sortDir, onPageChange]);
+
   const opts = (key: string) => filterOptions[key] || [];
   const filterProps = (key: string) => ({
     valueOptions: opts(key),
@@ -619,8 +657,10 @@ function GrnPendingTabTable({
               colSpan={8}
               message="No purchase-order GRNs are pending a purchase invoice."
             />
+          ) : visible.length === 0 ? (
+            <AccountsTableEmpty colSpan={8} message="No records match the column filters." />
           ) : (
-            toolbarRows.map((grn) => (
+            pagedRows.map((grn) => (
               <AccountsTableRow key={grn.grn_id}>
                 <AccountsTableCell className="font-medium">{grn.grn_number || "—"}</AccountsTableCell>
                 <AccountsTableCell>{grn.po_no || "—"}</AccountsTableCell>
@@ -655,7 +695,6 @@ function GrnPendingTabTable({
 function PurchaseInvoicesTabBody({
   invoices,
   listReturnHref,
-  totalRecords,
   search,
   setSearch,
   sourceTypeFilter,
@@ -690,7 +729,6 @@ function PurchaseInvoicesTabBody({
 }: {
   invoices: PurchaseInvoiceListRow[];
   listReturnHref: string;
-  totalRecords: number;
   search: string;
   setSearch: (v: string) => void;
   sourceTypeFilter: SourceTypeFilter;
@@ -723,6 +761,8 @@ function PurchaseInvoicesTabBody({
   onPostDraft?: (row: PurchaseInvoiceListRow) => void;
   filterDefaults: ReturnType<typeof listingFilterDefaults>;
 }) {
+  const visibleCount = useAccountsFilteredRows(invoices).length;
+
   return (
     <AccountsTableListing
       className="h-full min-h-0"
@@ -804,11 +844,11 @@ function PurchaseInvoicesTabBody({
         </AccountsListingFilterCard>
       }
       footer={
-        totalRecords > 0 ? (
+        visibleCount > 0 ? (
           <Pagination
             page={page}
             pageSize={pageSize}
-            totalRecords={totalRecords}
+            totalRecords={visibleCount}
             onPageChange={onPageChange}
             onPageSizeChange={(size) => {
               onPageSizeChange(size);
@@ -824,6 +864,9 @@ function PurchaseInvoicesTabBody({
         toolbarRows={invoices}
         listReturnHref={listReturnHref}
         loading={loading}
+        page={page}
+        pageSize={pageSize}
+        onPageChange={onPageChange}
         filterOptions={filterOptions}
         filterLoading={filterLoading}
         filterReady={filterReady}
@@ -846,7 +889,6 @@ function GrnPendingTabBody({
   setSearch,
   page,
   pageSize,
-  totalRecords,
   onPageChange,
   onPageSizeChange,
   filterOptions,
@@ -861,7 +903,6 @@ function GrnPendingTabBody({
   setSearch: (v: string) => void;
   page: number;
   pageSize: number;
-  totalRecords: number;
   onPageChange: (p: number) => void;
   onPageSizeChange: (s: number) => void;
   filterOptions: FilterValueOptions;
@@ -870,6 +911,7 @@ function GrnPendingTabBody({
   onOpenFilter: (key: string) => void;
   onCreateInvoice: (grn: EligibleGrnDto) => void;
 }) {
+  const visibleCount = useAccountsFilteredRows(pendingGrns).length;
   return (
     <AccountsTableListing
       className="h-full min-h-0"
@@ -886,13 +928,16 @@ function GrnPendingTabBody({
         </AccountsListingFilterCard>
       }
       footer={
-        totalRecords > 0 ? (
+        visibleCount > 0 ? (
           <Pagination
             page={page}
             pageSize={pageSize}
-            totalRecords={totalRecords}
+            totalRecords={visibleCount}
             onPageChange={onPageChange}
-            onPageSizeChange={onPageSizeChange}
+            onPageSizeChange={(size) => {
+              onPageSizeChange(size);
+              onPageChange(1);
+            }}
             recordLabel="pending GRNs"
             variant="full"
           />
@@ -902,6 +947,9 @@ function GrnPendingTabBody({
       <GrnPendingTabTable
         toolbarRows={pendingGrns}
         loading={loading}
+        page={page}
+        pageSize={pageSize}
+        onPageChange={onPageChange}
         filterOptions={filterOptions}
         filterLoading={filterLoading}
         filterReady={filterReady}
@@ -975,14 +1023,13 @@ export default function PurchaseInvoiceListClient() {
   const [grnSortKey, setGrnSortKey] = useState("");
   const [grnSortDir, setGrnSortDir] = useState<"asc" | "desc">("asc");
   const [grnColumnFilters, setGrnColumnFilters] = useState<Record<string, unknown>>({});
-  const invoiceFiltersKey = useMemo(() => {
-    const merged: Record<string, unknown> = { ...invoiceColumnFilters };
-    if (purchaseNatureFilter !== "all") {
-      merged.purchaseNature = { selectedValues: [purchaseNatureFilter] };
-    }
-    return JSON.stringify(merged);
-  }, [invoiceColumnFilters, purchaseNatureFilter]);
-  const grnFiltersKey = JSON.stringify(grnColumnFilters);
+  /** Server-only filter payload (toolbar Purchase Nature). Excel column filters stay client-side. */
+  const invoiceServerFiltersKey = useMemo(() => {
+    if (purchaseNatureFilter === "all") return "{}";
+    return JSON.stringify({
+      purchaseNature: { selectedValues: [purchaseNatureFilter] },
+    });
+  }, [purchaseNatureFilter]);
   const filterDefaults = useMemo(
     () => listingFilterDefaults(fyDateBounds(selectedFY)),
     [selectedFY?.id, selectedFY?.startDate, selectedFY?.endDate],
@@ -1040,8 +1087,7 @@ export default function PurchaseInvoiceListClient() {
     const filtersAreDefault =
       !debouncedSearch.trim() &&
       sourceTypeFilter === "all" &&
-      purchaseNatureFilter === "all" &&
-      invoiceFiltersKey === "{}";
+      purchaseNatureFilter === "all";
     const fyBounds = fyDateBounds(selectedFY);
     // Wait until "This Year" has been synced to Working FY dates before seeding the badge,
     // otherwise a transient calendar-year query can write count 0 and stick.
@@ -1053,34 +1099,40 @@ export default function PurchaseInvoiceListClient() {
       setLoading(true);
       setError(null);
       try {
-        const ordering = invoiceSortKey
-          ? invoiceSortDir === "desc"
-            ? `-${invoiceSortKey}`
-            : invoiceSortKey
-          : undefined;
-        const listRes = await PurchaseInvoiceService.list(
-          {
-            page,
-            page_size: pageSize,
-            search: debouncedSearch.trim() || undefined,
-            invoice_type: sourceTypeToInvoiceType(sourceTypeFilter),
-            from_date: dateFrom || undefined,
-            to_date: dateTo || undefined,
-            ordering,
-            filters: invoiceFiltersKey !== "{}" ? invoiceFiltersKey : undefined,
-            include_pending: false,
-          },
+        // Load full filtered set so column sort/filter apply globally (then client-paginate).
+        const FETCH_PAGE_SIZE = 100;
+        const baseQuery = {
+          search: debouncedSearch.trim() || undefined,
+          invoice_type: sourceTypeToInvoiceType(sourceTypeFilter),
+          from_date: dateFrom || undefined,
+          to_date: dateTo || undefined,
+          filters:
+            invoiceServerFiltersKey !== "{}" ? invoiceServerFiltersKey : undefined,
+          include_pending: false as const,
+        };
+        const first = await PurchaseInvoiceService.list(
+          { ...baseQuery, page: 1, page_size: FETCH_PAGE_SIZE },
           ac.signal,
         );
         if (ac.signal.aborted) return;
-        const total = listRes.total ?? 0;
-        setInvoices((listRes.results || []).map(mapPurchaseInvoiceListDto));
-        setInvoiceTotal(total);
+        const all = [...(first.results || [])];
+        const total = first.total ?? all.length;
+        const totalPages = Math.max(1, Math.ceil(total / FETCH_PAGE_SIZE));
+        for (let p = 2; p <= totalPages; p++) {
+          const next = await PurchaseInvoiceService.list(
+            { ...baseQuery, page: p, page_size: FETCH_PAGE_SIZE },
+            ac.signal,
+          );
+          if (ac.signal.aborted) return;
+          all.push(...(next.results || []));
+        }
+        setInvoices(all.map(mapPurchaseInvoiceListDto));
+        setInvoiceTotal(all.length);
         // Keep All-tab badge aligned with the loaded list when filters are open,
         // so navigate-back never leaves the badge at 0 while rows are visible.
         if (filtersAreDefault && datesReadyForBadge) {
           badgeRequestIdRef.current += 1; // invalidate in-flight badge responses
-          setInvoiceTabCount(total);
+          setInvoiceTabCount(all.length);
         }
       } catch (e) {
         if (ac.signal.aborted) return;
@@ -1101,17 +1153,13 @@ export default function PurchaseInvoiceListClient() {
     selectedFY?.startDate,
     selectedFY?.endDate,
     sectionRefresh,
-    page,
-    pageSize,
     debouncedSearch,
     sourceTypeFilter,
     purchaseNatureFilter,
     preset,
     dateFrom,
     dateTo,
-    invoiceSortKey,
-    invoiceSortDir,
-    invoiceFiltersKey,
+    invoiceServerFiltersKey,
     listRefreshKey,
   ]);
 
@@ -1122,24 +1170,29 @@ export default function PurchaseInvoiceListClient() {
     (async () => {
       setGrnLoading(true);
       try {
-        const ordering = grnSortKey
-          ? grnSortDir === "desc"
-            ? `-${grnSortKey}`
-            : grnSortKey
-          : undefined;
-        const grnRes = await PurchaseInvoiceService.listPendingGrns(
-          {
-            page: grnPage,
-            page_size: grnPageSize,
-            search: debouncedGrnSearch.trim() || undefined,
-            ordering,
-            filters: grnFiltersKey !== "{}" ? grnFiltersKey : undefined,
-          },
+        // Full set — column sort/filter + pagination are client-side.
+        const FETCH_PAGE_SIZE = 100;
+        const baseQuery = {
+          search: debouncedGrnSearch.trim() || undefined,
+        };
+        const first = await PurchaseInvoiceService.listPendingGrns(
+          { ...baseQuery, page: 1, page_size: FETCH_PAGE_SIZE },
           ac.signal,
         );
         if (ac.signal.aborted) return;
-        setPendingGrns(grnRes.results || []);
-        setPendingGrnTotal(grnRes.total ?? 0);
+        const all = [...(first.results || [])];
+        const total = first.total ?? all.length;
+        const totalPages = Math.max(1, Math.ceil(total / FETCH_PAGE_SIZE));
+        for (let p = 2; p <= totalPages; p++) {
+          const next = await PurchaseInvoiceService.listPendingGrns(
+            { ...baseQuery, page: p, page_size: FETCH_PAGE_SIZE },
+            ac.signal,
+          );
+          if (ac.signal.aborted) return;
+          all.push(...(next.results || []));
+        }
+        setPendingGrns(all);
+        setPendingGrnTotal(all.length);
       } catch (e) {
         if (ac.signal.aborted) return;
         setError(e instanceof Error ? e.message : "Failed to load pending GRNs.");
@@ -1152,18 +1205,7 @@ export default function PurchaseInvoiceListClient() {
     return () => {
       ac.abort();
     };
-  }, [
-    tab,
-    fyReady,
-    selectedFY?.id,
-    sectionRefresh,
-    grnPage,
-    grnPageSize,
-    debouncedGrnSearch,
-    grnSortKey,
-    grnSortDir,
-    grnFiltersKey,
-  ]);
+  }, [tab, fyReady, selectedFY?.id, sectionRefresh, debouncedGrnSearch, listRefreshKey]);
 
   useEffect(() => {
     invoiceFilterLoadedRef.current = new Set();
@@ -1181,11 +1223,20 @@ export default function PurchaseInvoiceListClient() {
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, sourceTypeFilter, purchaseNatureFilter, dateFrom, dateTo, invoiceSortKey, invoiceSortDir, invoiceFiltersKey]);
+  }, [
+    debouncedSearch,
+    sourceTypeFilter,
+    purchaseNatureFilter,
+    dateFrom,
+    dateTo,
+    invoiceSortKey,
+    invoiceSortDir,
+    invoiceColumnFilters,
+  ]);
 
   useEffect(() => {
     setGrnPage(1);
-  }, [debouncedGrnSearch, grnSortKey, grnSortDir, grnFiltersKey]);
+  }, [debouncedGrnSearch, grnSortKey, grnSortDir, grnColumnFilters]);
 
   const handleInvoiceSortChange = useCallback((key: string, dir: "asc" | "desc") => {
     setInvoiceSortKey(key);
@@ -1228,23 +1279,29 @@ export default function PurchaseInvoiceListClient() {
         ? `-${invoiceSortKey}`
         : invoiceSortKey
       : undefined;
+    const exportFilters: Record<string, unknown> = { ...invoiceColumnFilters };
+    if (purchaseNatureFilter !== "all") {
+      exportFilters.purchaseNature = { selectedValues: [purchaseNatureFilter] };
+    }
+    const filtersJson = JSON.stringify(exportFilters);
     return {
       search: debouncedSearch.trim() || undefined,
       invoice_type: sourceTypeToInvoiceType(sourceTypeFilter),
       from_date: dateFrom || undefined,
       to_date: dateTo || undefined,
       ordering,
-      filters: invoiceFiltersKey !== "{}" ? invoiceFiltersKey : undefined,
+      filters: filtersJson !== "{}" ? filtersJson : undefined,
       include_pending: false,
     };
   }, [
     debouncedSearch,
     sourceTypeFilter,
+    purchaseNatureFilter,
     dateFrom,
     dateTo,
     invoiceSortKey,
     invoiceSortDir,
-    invoiceFiltersKey,
+    invoiceColumnFilters,
   ]);
 
   const handleExportExcel = useCallback(async () => {
@@ -1450,8 +1507,11 @@ export default function PurchaseInvoiceListClient() {
 
   const getInvoiceCellValue = useCallback((row: PurchaseInvoiceListRow, key: string) => {
     if (key === "purchaseNature") {
-      return row.sourceType === "from_grn" ? "inventory" : row.purchaseNature ?? "expense";
+      if (row.sourceType === "stock_transfer") return "stock_transfer";
+      if (row.sourceType === "from_grn") return "inventory";
+      return row.purchaseNature ?? "expense";
     }
+    if (key === "sourceType") return row.sourceType;
     if (key === "hasAttachment") return row.hasAttachment ? "yes" : "no";
     return (row as unknown as Record<string, unknown>)[key];
   }, []);
@@ -1565,7 +1625,6 @@ export default function PurchaseInvoiceListClient() {
                 <PurchaseInvoicesTabBody
                   invoices={invoices}
                   listReturnHref={listReturnHref}
-                  totalRecords={invoiceTotal}
                   search={search}
                   setSearch={setSearch}
                   sourceTypeFilter={sourceTypeFilter}
@@ -1622,12 +1681,8 @@ export default function PurchaseInvoiceListClient() {
                   setSearch={setGrnSearch}
                   page={grnPage}
                   pageSize={grnPageSize}
-                  totalRecords={pendingGrnTotal}
                   onPageChange={setGrnPage}
-                  onPageSizeChange={(s) => {
-                    setGrnPageSize(s);
-                    setGrnPage(1);
-                  }}
+                  onPageSizeChange={setGrnPageSize}
                   filterOptions={grnFilterOptions}
                   filterLoading={grnFilterLoading}
                   filterReady={grnFilterReady}

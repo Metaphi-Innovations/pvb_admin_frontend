@@ -195,7 +195,7 @@ function PaymentListTable({
     <AccountsTable minWidth={1200}>
       <AccountsTableHead>
         <AccountsTableHeadRow>
-          <SortTh label="Draft No." colKey="sr_no" filterable={false} />
+          <SortTh label="Payment No." colKey="sr_no" filterable={false} />
           <SortTh label="Date" colKey="voucher_date" filterType="date" />
           <SortTh
             label="Branch"
