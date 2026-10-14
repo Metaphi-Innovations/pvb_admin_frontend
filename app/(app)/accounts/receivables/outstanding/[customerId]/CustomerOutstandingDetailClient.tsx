@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft, Receipt } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
@@ -200,27 +200,15 @@ export default function CustomerOutstandingDetailClient() {
       title="Customer Outstanding Details"
       description={`${customer.customerCode} · ${customer.territory || "—"}`}
       actions={
-        <div className="flex flex-wrap items-center gap-2">
-          <Link href="/accounts/receivables/outstanding">
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-9 text-sm font-medium gap-1"
-            >
-              <ArrowLeft className="w-4 h-4" /> Back
-            </Button>
-          </Link>
-          <Link
-            href={`/accounts/receivables/receipt-allocation?customer=${customer.customerId}`}
+        <Link href="/accounts/receivables/outstanding">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-9 text-sm font-medium gap-1"
           >
-            <Button
-              size="sm"
-              className="h-9 text-sm font-medium gap-1 bg-brand-600 hover:bg-brand-700 text-white"
-            >
-              <Receipt className="w-4 h-4" /> Go to Receipt Allocation
-            </Button>
-          </Link>
-        </div>
+            <ArrowLeft className="w-4 h-4" /> Back
+          </Button>
+        </Link>
       }
       layout="split"
       className="h-full min-h-0"
