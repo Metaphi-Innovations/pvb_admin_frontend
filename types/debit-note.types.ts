@@ -101,6 +101,22 @@ export interface CreateDebitNoteFromPendingPayload {
   }>;
 }
 
+/** Update draft — pending-generated DNs must not send `lines` / PI settlement fields. */
+export interface UpdateDraftDebitNotePayload {
+  dn_date?: string;
+  narration?: string | null;
+  remarks?: string | null;
+  lines?: DebitNoteLineInput[];
+  purchase_invoice_id?: string | null;
+  allocated_amount?: number | string | null;
+  references?: DebitNoteReferenceInput[];
+  round_off_amount?: number | string | null;
+  line_gst_overrides?: Array<{
+    debit_note_line_id: string;
+    gst_rate: number | string;
+  }>;
+}
+
 export interface UpdateDebitNoteEwayBillPayload {
   eway_bill_number?: string;
   eway_bill_date?: string;

@@ -40,7 +40,6 @@ import {
 	type SalesOrderPricingContext,
 	ORDER_APPROVAL_THRESHOLD,
 	ORDER_STATUS_OPTIONS,
-	EDITABLE_ORDER_STATUSES,
 	calculateOrderTotalsSummary,
 	orderRequiresApproval,
 	repriceOrderLineItems,
@@ -599,7 +598,7 @@ export default function SalesOrderForm({
 								allowedStatuses={
 									form.status === "draft"
 										? ["draft", "pending_approval", "approved", "rejected"]
-										: EDITABLE_ORDER_STATUSES
+										: [form.status]
 								}
 							/>
 						</div>

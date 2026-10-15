@@ -111,7 +111,9 @@ export interface ContraVoucherListQuery {
   financial_year_id?: string;
   from_warehouse_id?: string;
   to_warehouse_id?: string;
+  /** Single status or comma-separated list. */
   status?: ContraVoucherStatus | string;
+  /** Single account type or comma-separated list. */
   from_account_type?: ContraAccountType | string;
   to_account_type?: ContraAccountType | string;
   /** Exact Transfer From Cash ledger ID (when From is Cash). */
@@ -122,6 +124,18 @@ export interface ContraVoucherListQuery {
   to_cash_ledger_id?: string;
   /** Exact Transfer To Bank Account ID (when To is Bank). */
   to_bank_account_id?: string;
+  /** Comma-separated Transfer From Cash ledger IDs. */
+  from_cash_ledger_ids?: string;
+  /** Comma-separated Transfer From Bank Account IDs. */
+  from_bank_account_ids?: string;
+  /** Comma-separated Transfer To Cash ledger IDs. */
+  to_cash_ledger_ids?: string;
+  /** Comma-separated Transfer To Bank Account IDs. */
+  to_bank_account_ids?: string;
+  /** Comma-separated From Branch warehouse names. */
+  from_warehouse_names?: string;
+  /** Comma-separated To Branch warehouse names. */
+  to_warehouse_names?: string;
   reference_number?: string;
   from_date?: string;
   to_date?: string;

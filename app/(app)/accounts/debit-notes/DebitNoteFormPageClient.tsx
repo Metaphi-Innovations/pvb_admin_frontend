@@ -159,6 +159,9 @@ export default function DebitNoteFormPageClient({
   const { toast, showToast, dismissToast } = useAccountsToast();
   const pendingId = pendingIdProp?.trim() || "";
   const isPendingEntitlement = Boolean(pendingId) && isUuid(pendingId);
+  /** Set when editing a DN that was created from a Pending entitlement. */
+  const [pendingGeneratedId, setPendingGeneratedId] = useState<string | null>(null);
+  const isPendingGenerated = Boolean(pendingGeneratedId) || isPendingEntitlement;
   const isEdit = debitNoteId != null;
   const isFresh = !isEdit && mode === "fresh" && !isPendingEntitlement;
   const isReturn =
@@ -296,8 +299,8 @@ export default function DebitNoteFormPageClient({
   const [narration, setNarration] = useState("");
 
   const vendorLocked =
-    Boolean(referencePreview) || isReturn || isPurchaseInvoice || isPendingEntitlement;
-  const refControlsLocked = isReturn || isPurchaseInvoice || isPendingEntitlement;
+    Boolean(referencePreview) || isReturn || isPurchaseInvoice || isPendingGenerated;
+  const refControlsLocked = isReturn || isPurchaseInvoice || isPendingGenerated;
   const alreadyAdjustedNum = parseFloat(alreadyAdjusted) || 0;
 
   const clearDirectInvoiceSettlement = () => {
@@ -750,6 +753,11 @@ export default function DebitNoteFormPageClient({
     if (!isEdit || debitNoteId == null || vendors.length === 0) return;
     DebitNoteService.getById(debitNoteId).then((dn) => {
       const rec = mapDebitNoteToRecord(dn);
+      const pendingLinkId =
+        typeof dn.pending_debit_note_id === "string" && isUuid(dn.pending_debit_note_id)
+          ? dn.pending_debit_note_id
+          : null;
+      setPendingGeneratedId(pendingLinkId);
       setDebitNoteNo(rec.debitNoteNo);
       setDebitNoteDate(rec.debitNoteDate);
       setVendorId(rec.vendorId ? String(rec.vendorId) : "");
@@ -789,7 +797,14 @@ export default function DebitNoteFormPageClient({
       if (rec.sourceInvoiceId) setReferenceInvoiceId(String(rec.sourceInvoiceId));
       if (rec.sourceReturnId) setReferenceReturnId(String(rec.sourceReturnId));
 
-      if (rec.sourceReturnId) {
+      const sourceType = String(dn.source_type || "").toUpperCase();
+      const isPurchaseReturnDn =
+        Boolean(pendingLinkId) ||
+        sourceType === "PURCHASE_RETURN" ||
+        Boolean(rec.sourceReturnId);
+
+      if (isPurchaseReturnDn) {
+        // Pending-generated / Purchase Return DNs: lines & PI settlement are locked server-side.
         setUiRefType("purchase_return");
         setDirectMode("on_account");
         setReferenceInvoiceId("");
@@ -797,12 +812,18 @@ export default function DebitNoteFormPageClient({
         let loaded = rec.lineItems.length
           ? rec.lineItems.map((l: any) => normalizeDebitLine(l))
           : [];
-        const p = buildReferenceFromPurchaseReturn(Number(rec.sourceReturnId));
+        const numericReturnId = Number(rec.sourceReturnId);
+        const p =
+          Number.isFinite(numericReturnId) && numericReturnId > 0
+            ? buildReferenceFromPurchaseReturn(numericReturnId)
+            : null;
         if (p) {
           setReferencePreview(p);
           if (!loaded.length && p.lineItems?.length) {
             loaded = p.lineItems.map((l) => normalizeDebitLine(l));
           }
+        } else {
+          setReferencePreview(null);
         }
         setLines(loaded);
         setDirectParticularLines([newDirectDnLine()]);
@@ -1234,7 +1255,7 @@ export default function DebitNoteFormPageClient({
       setError("Select a supplier before saving.");
       return false;
     }
-    if (isPendingEntitlement) {
+    if (isPendingGenerated) {
       if (!(narration || remarks).trim()) {
         setError("Narration is required.");
         return false;
@@ -1351,6 +1372,20 @@ export default function DebitNoteFormPageClient({
     };
   };
 
+  /** Pending-generated drafts: header/GST overrides only — never rewrite lines or PI links. */
+  const buildPendingDraftUpdatePayload = () => ({
+    dn_date: debitNoteDate,
+    narration: narration.trim() || null,
+    remarks: referenceNo.trim() || remarks.trim() || null,
+    round_off_amount: roundOff,
+    line_gst_overrides: lines
+      .filter((l) => Boolean(l.id) && isUuid(String(l.id)))
+      .map((l) => ({
+        debit_note_line_id: String(l.id),
+        gst_rate: Number(l.taxPct) || 0,
+      })),
+  });
+
   const [submitApproverOpen, setSubmitApproverOpen] = useState(false);
   const [approvers, setApprovers] = useState<any[]>([]);
   const [selectedApproverId, setSelectedApproverId] = useState("");
@@ -1448,13 +1483,16 @@ export default function DebitNoteFormPageClient({
         router.replace(listHref);
         return;
       }
-      const input = buildInput("draft");
-      const payload = mapFormInputToPayload(input);
       if (isEdit && debitNoteId != null) {
-        await DebitNoteService.updateDraft(debitNoteId, payload);
+        await DebitNoteService.updateDraft(
+          debitNoteId,
+          isPendingGenerated
+            ? buildPendingDraftUpdatePayload()
+            : mapFormInputToPayload(buildInput("draft")),
+        );
         showToast("Debit note updated as draft", "success");
       } else {
-        await DebitNoteService.createDirect(payload);
+        await DebitNoteService.createDirect(mapFormInputToPayload(buildInput("draft")));
         showToast("Debit note saved as draft", "success");
       }
       dispatchAccountsDataChanged("debit-notes");
@@ -1470,13 +1508,18 @@ export default function DebitNoteFormPageClient({
     if (!validateForm()) return;
     setSaving(true);
     try {
-      const input = buildInput("draft");
-      const payload = mapFormInputToPayload(input);
       let targetId: string | number | undefined = debitNoteId;
       if (isEdit && debitNoteId != null) {
-        await DebitNoteService.updateDraft(debitNoteId, payload);
+        await DebitNoteService.updateDraft(
+          debitNoteId,
+          isPendingGenerated
+            ? buildPendingDraftUpdatePayload()
+            : mapFormInputToPayload(buildInput("draft")),
+        );
       } else {
-        const res = await DebitNoteService.createDirect(payload);
+        const res = await DebitNoteService.createDirect(
+          mapFormInputToPayload(buildInput("draft")),
+        );
         targetId = res?.debit_note_id || res?.id;
       }
       if (targetId) {
@@ -1537,13 +1580,18 @@ export default function DebitNoteFormPageClient({
         router.replace(listHref);
         return;
       }
-      const input = buildInput("draft");
-      const payload = mapFormInputToPayload(input);
       let targetId: string | number | undefined = debitNoteId;
       if (isEdit && debitNoteId != null) {
-        await DebitNoteService.updateDraft(debitNoteId, payload);
+        await DebitNoteService.updateDraft(
+          debitNoteId,
+          isPendingGenerated
+            ? buildPendingDraftUpdatePayload()
+            : mapFormInputToPayload(buildInput("draft")),
+        );
       } else {
-        const res = await DebitNoteService.createDirect(payload);
+        const res = await DebitNoteService.createDirect(
+          mapFormInputToPayload(buildInput("draft")),
+        );
         targetId = res?.debit_note_id || res?.id;
       }
       if (targetId) {
@@ -1887,7 +1935,7 @@ export default function DebitNoteFormPageClient({
                     <div className="lg:col-span-2 min-w-0">
                       <InvoiceDetailField label="Reference Type">
                         <div className="so-goods-ro w-full">
-                          {isReturnRefMode || isReturn || isPendingEntitlement
+                          {isReturnRefMode || isReturn || isPendingGenerated
                             ? `Purchase Return${sourceReturnNo ? ` · ${sourceReturnNo}` : ""}`
                             : `Purchase Invoice${
                                 referencePreview?.sourceInvoiceNo
@@ -1948,7 +1996,7 @@ export default function DebitNoteFormPageClient({
             {usesQuantityLines ? (
               <VoucherFormSectionCard title="Particulars" flush>
                 <div className="w-full space-y-2">
-                  {!isPendingEntitlement ? (
+                  {!isPendingGenerated ? (
                     <div className="px-3 pt-2 max-w-sm">
                       <p className="text-[11px] font-medium text-muted-foreground mb-1">
                         Adjustment Ledger <span className="text-red-500">*</span>
@@ -1970,7 +2018,7 @@ export default function DebitNoteFormPageClient({
                   ) : null}
                   <NoteQuantityLinesTable
                     lines={quantityLineViews}
-                    qtyLocked={isReturnRefMode || isPendingEntitlement}
+                    qtyLocked={isReturnRefMode || isPendingGenerated}
                     // Purchase Return DN inherits GST from the source return — never editable.
                     gstEditable={false}
                     currentQtyLabel="Qty"
@@ -2000,7 +2048,7 @@ export default function DebitNoteFormPageClient({
               <VoucherFormSectionCard
                 title="Narration"
                 headerActions={
-                  isPendingEntitlement || isSourceRefMode ? (
+                  isPendingGenerated || isSourceRefMode ? (
                     <span className="text-red-500 text-sm font-semibold leading-none" aria-hidden>
                       *
                     </span>
@@ -2015,7 +2063,7 @@ export default function DebitNoteFormPageClient({
                     setRemarks(e.target.value);
                   }}
                   placeholder={
-                    isPendingEntitlement || isSourceRefMode
+                    isPendingGenerated || isSourceRefMode
                       ? "Enter narration…"
                       : "Optional narration…"
                   }
