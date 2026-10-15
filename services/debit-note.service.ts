@@ -6,6 +6,7 @@ import type {
   DebitNoteListQueryParams,
   CreateDirectDebitNotePayload,
   CreateDebitNoteFromPendingPayload,
+  UpdateDraftDebitNotePayload,
   UpdateDebitNoteEwayBillPayload,
   DebitNoteConfig,
   EligiblePurchaseInvoicesQuery,
@@ -40,13 +41,35 @@ function coalesceInflightGet<T>(key: string, run: () => Promise<T>): Promise<T> 
 
 export function mapDebitNoteToRecord(item: any): DebitNoteRecord {
   const dnAmount = parseFloat(item.dn_amount ?? item.grand_total ?? "0");
+  const refs: Array<{
+    reference_type?: string;
+    reference_id?: string;
+    reference_code?: string | null;
+    relation_type?: string;
+  }> = Array.isArray(item.references) ? item.references : [];
+  const prRef = refs.find(
+    (r) => String(r.reference_type || "").toUpperCase() === "PURCHASE_RETURN",
+  );
+  const piRef = refs.find((r) => {
+    const type = String(r.reference_type || "").toUpperCase();
+    const rel = String(r.relation_type || "").toUpperCase();
+    return type === "PURCHASE_INVOICE" && rel !== "SOURCE";
+  });
+  const sourceReturnId =
+    item.purchase_return_id ||
+    prRef?.reference_id ||
+    item.purchase_return?.purchase_order_return_id ||
+    null;
+  const sourceInvoiceId =
+    item.purchase_invoice_id || piRef?.reference_id || null;
   return {
     id: item.debit_note_id || item.id,
     debitNoteNo: item.dn_number || item.debit_note_number || item.voucher_no || "—",
     debitNoteDate: item.dn_date ? new Date(item.dn_date).toISOString().split("T")[0] : "—",
-    againstType: item.against_type || (item.purchase_invoice_id ? "purchase_invoice" : "standalone_adjustment"),
-    sourceInvoiceId: item.purchase_invoice_id || null,
-    sourceInvoiceNo: item.purchase_invoice?.invoice_no || "—",
+    againstType: item.against_type || (sourceInvoiceId ? "purchase_invoice" : "standalone_adjustment"),
+    sourceInvoiceId,
+    sourceInvoiceNo:
+      item.purchase_invoice?.invoice_no || piRef?.reference_code || "—",
     sourcePoId: item.purchase_order_id || null,
     sourcePoNo: item.purchase_order?.po_no || "—",
     sourceGrnNo: item.grn?.grn_no || "—",
@@ -97,8 +120,9 @@ export function mapDebitNoteToRecord(item: any): DebitNoteRecord {
     createdAt: item.created_at || new Date().toISOString(),
     updatedAt: item.updated_at || new Date().toISOString(),
     source: (item.source_type?.toLowerCase() || "manual") as DebitNoteRecord["source"],
-    sourceReturnId: item.purchase_return_id || undefined,
-    sourceReturnNo: item.purchase_return?.return_no || undefined,
+    sourceReturnId: sourceReturnId || undefined,
+    sourceReturnNo:
+      item.purchase_return?.return_no || prRef?.reference_code || undefined,
     // remarks holds Supplier Reference No.; API also resolves linked PI supplier invoice no.
     referenceNo: String(
       item.supplier_reference_no ||
@@ -168,8 +192,8 @@ export const DebitNoteService = {
     return response.data?.data;
   },
 
-  async updateDraft(id: string | number, payload: Partial<CreateDirectDebitNotePayload>): Promise<any> {
-    const response = await axiosInstance.patch(API_ENDPOINTS.ACCOUNTS.DEBIT_NOTE.UPDATE(id), payload);
+  async updateDraft(id: string | number, payload: UpdateDraftDebitNotePayload): Promise<any> {
+    const response = await axiosInstance.put(API_ENDPOINTS.ACCOUNTS.DEBIT_NOTE.UPDATE(id), payload);
     return response.data?.data;
   },
 

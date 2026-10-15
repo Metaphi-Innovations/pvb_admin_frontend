@@ -198,17 +198,21 @@ export function checkSalesOrderCreditLimit(params: {
 	currentOrderValue: number;
 	excludeOrderId?: number;
 }): { exceeded: boolean; summary: CustomerCreditSummary | null } {
-	const { customer, currentOrderValue, excludeOrderId } = params;
-	if (!customer) return { exceeded: false, summary: null };
+	// TEMP: credit limit enforcement disabled — re-enable by restoring the block below.
+	void params;
+	return { exceeded: false, summary: null };
 
-	const summary = calculateCustomerCreditSummary({
-		customer,
-		currentOrderValue,
-		excludeOrderId,
-	});
-
-	return {
-		exceeded: isCreditLimitExceeded(summary),
-		summary,
-	};
+	// const { customer, currentOrderValue, excludeOrderId } = params;
+	// if (!customer) return { exceeded: false, summary: null };
+	//
+	// const summary = calculateCustomerCreditSummary({
+	// 	customer,
+	// 	currentOrderValue,
+	// 	excludeOrderId,
+	// });
+	//
+	// return {
+	// 	exceeded: isCreditLimitExceeded(summary),
+	// 	summary,
+	// };
 }

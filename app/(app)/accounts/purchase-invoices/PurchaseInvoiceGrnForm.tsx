@@ -46,6 +46,7 @@ import {
 } from "@/services/purchase-invoice.service";
 import {
   calcAdditionalExpensesTotals,
+  createEmptyAdditionalExpense,
   mapSuggestedAdditionalChargesToExpenses,
   toAdditionalChargePayloadList,
   type InvoiceAdditionalExpense,
@@ -262,19 +263,22 @@ export function PurchaseInvoiceGrnForm({
   const [remarks, setRemarks] = useState("");
   const [attachment, setAttachment] = useState<File | null>(null);
   const [additionalExpenses, setAdditionalExpenses] = useState<InvoiceAdditionalExpense[]>([]);
+  /** PO-origin charges shown as ERP reference only (same pattern as Sales Invoice SO charges). */
+  const [poOriginExpenses, setPoOriginExpenses] = useState<InvoiceAdditionalExpense[]>([]);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const addChargeRowRef = useRef<(() => void) | null>(null);
 
   function applyPrepared(data: PrepareGrnInvoiceDto, fallback?: EligibleGrnDto | null) {
     setPrepared(data);
-    // Seed PO suggested charges as editable rows — ledger left blank (no master auto-map).
-    setAdditionalExpenses(
-      mapSuggestedAdditionalChargesToExpenses(
-        data.suggested_additional_charges || [],
-        "purchase_order",
-      ),
+    // Match Sales Invoice: keep PO suggested charges as reference-only, not editable rows.
+    const suggested = data.suggested_additional_charges || [];
+    setPoOriginExpenses(
+      suggested.length
+        ? mapSuggestedAdditionalChargesToExpenses(suggested, "purchase_order")
+        : [],
     );
+    setAdditionalExpenses([createEmptyAdditionalExpense()]);
     setVendorInvoiceNo(data.supplier_invoice.supplier_invoice_number || "");
     setSupplierInvoiceDate(formatDateInput(data.supplier_invoice.supplier_invoice_date));
     setInvoiceDate(formatDateInput(data.grn.grn_date) || todayIsoDate());
@@ -551,6 +555,7 @@ export function PurchaseInvoiceGrnForm({
                       setDueDate("");
                       setAttachment(null);
                       setAdditionalExpenses([]);
+                      setPoOriginExpenses([]);
                     }}
                   >
                     Change GRN
@@ -728,6 +733,68 @@ export function PurchaseInvoiceGrnForm({
                   </table>
                 </div>
               </VoucherFormSectionCard>
+
+              {poOriginExpenses.length > 0 ? (
+                <VoucherFormSectionCard
+                  title="Purchase Order Additional Charges (ERP — Reference Only)"
+                  flush
+                >
+                  <div className="overflow-x-auto rounded-lg border border-border/40 bg-muted/10">
+                    <table className="w-full text-xs text-left border-collapse">
+                      <thead>
+                        <tr className="border-b border-border/60 bg-muted/40">
+                          <th className="px-3 py-2.5 font-semibold text-muted-foreground">
+                            Particular (From Purchase Order)
+                          </th>
+                          <th className="px-3 py-2.5 font-semibold text-right text-muted-foreground">
+                            Amount
+                          </th>
+                          <th className="px-3 py-2.5 font-semibold text-center text-muted-foreground">
+                            GST Applicable
+                          </th>
+                          <th className="px-3 py-2.5 font-semibold text-right text-muted-foreground">
+                            GST %
+                          </th>
+                          <th className="px-3 py-2.5 font-semibold text-right text-muted-foreground">
+                            Total
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border/20 bg-background/50">
+                        {poOriginExpenses.map((exp, idx) => {
+                          const gstAmount =
+                            exp.gstApplicable && exp.gstPct > 0
+                              ? (exp.amount * exp.gstPct) / 100
+                              : 0;
+                          const total = exp.amount + gstAmount;
+                          return (
+                            <tr key={exp.id || idx} className="hover:bg-muted/20 transition-colors">
+                              <td className="px-3 py-2 font-medium text-foreground">
+                                {exp.expenseHead || "Additional Charge"}
+                                <span className="ml-2 text-[10px] text-muted-foreground font-normal bg-muted px-1.5 py-0.5 rounded">
+                                  ERP Origin
+                                </span>
+                              </td>
+                              <td className="px-3 py-2 text-right tabular-nums font-mono">
+                                {formatMoney(exp.amount)}
+                              </td>
+                              <td className="px-3 py-2 text-center text-muted-foreground">
+                                {exp.gstApplicable ? "Yes" : "No"}
+                              </td>
+                              <td className="px-3 py-2 text-right tabular-nums font-mono">
+                                {exp.gstApplicable && exp.gstPct > 0 ? `${exp.gstPct}%` : "—"}
+                              </td>
+                              <td className="px-3 py-2 text-right tabular-nums font-mono font-semibold text-foreground">
+                                {formatMoney(total)}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </VoucherFormSectionCard>
+              ) : null}
 
               <VoucherFormSectionCard
                 title="Additional Charges"
