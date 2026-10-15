@@ -10,7 +10,7 @@ This ERP uses a single visual language aligned with Dharitri Sutra branding.
 | Deep blue | Headings, secondary buttons, nav emphasis | `navy-*`, `secondary` |
 | Green | Success, approved, active records | `leaf-*`, `success` |
 
-Use color **strategically** — avoid flooding screens with brand hues.
+Use color **strategically** — avoid flooding screens with brand hues..
 
 ## Canonical imports
 
