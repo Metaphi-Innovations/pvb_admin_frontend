@@ -48,9 +48,21 @@ export type ApprovalStatus = "not_required" | "pending_approval" | "approved" | 
 /** Order statuses shown on the Sales Order Approval listing tab. */
 export const APPROVAL_ORDER_STATUSES: OrderStatus[] = ["pending_approval", "approved", "rejected"];
 
-/** Statuses that may be changed on edit. */
+/** Statuses selectable when changing a draft on the edit form. */
 export const EDITABLE_ORDER_STATUSES: OrderStatus[] = [
   "draft",
+];
+
+/** Fulfillment statuses at/after packing — order can no longer be edited. */
+export const PACKED_OR_BEYOND_FULFILLMENT_STATUSES: string[] = [
+  "Partially Packed",
+  "Fully Packed",
+  "Partially Dispatched",
+  "Fully Dispatched",
+  "FULLY_DISPATCHED",
+  "DELIVERED",
+  "delivered",
+  "dispatched",
 ];
 
 export const ORDER_STATUS_OPTIONS: { value: OrderStatus; label: string }[] = [
@@ -219,6 +231,8 @@ export interface SalesOrder {
   packingListId?: number | string;
   packingListNumber?: string;
   packingStatus?: PackingStatus;
+  /** True when an active packing list exists (from API list/detail). */
+  hasPackingList?: boolean;
   /** All packing lists for this order (multi-PL download). */
   packingLists?: Array<{
     packingListId: string;
@@ -1740,9 +1754,28 @@ export function isOrderCancelled(order: SalesOrder): boolean {
   return order.status === "cancelled";
 }
 
+/** True once any packing list exists (or fulfillment shows packing has begun). */
+export function hasPackingListGenerated(order: SalesOrder): boolean {
+  if (order.hasPackingList === true) return true;
+  if (order.packingListId || order.packingListNumber) return true;
+  if ((order.packingLists?.length ?? 0) > 0) return true;
+  const lines = order.lineItems ?? [];
+  if (lines.some((l) => Number(l.generatedBaseQty || 0) > 1e-9)) return true;
+  const fulfillment = (order.fulfillmentStatus || "PENDING").toString();
+  if (fulfillment.toUpperCase() === "PENDING") return false;
+  if (fulfillment === "Ready For Packing") return true;
+  if (PACKED_OR_BEYOND_FULFILLMENT_STATUSES.includes(fulfillment)) return true;
+  if (fulfillment.toUpperCase() === "CANCELLED") return true;
+  return false;
+}
+
+/** Editable until a packing list is generated (draft / pending / approved). */
 export function canEditOrder(order: SalesOrder): boolean {
   if (isOrderCancelled(order)) return false;
-  return EDITABLE_ORDER_STATUSES.includes(order.status);
+  const status = (order.status || "").toString().toLowerCase().replace(/\s+/g, "_");
+  if (status === "rejected" || status === "cancelled") return false;
+  if (hasPackingListGenerated(order)) return false;
+  return true;
 }
 
 /** Qty on a line not yet included in any packing list — the only qty that can be split off. */

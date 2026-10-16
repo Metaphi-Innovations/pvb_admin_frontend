@@ -140,6 +140,12 @@ export default function EditSalesOrderPage() {
 	useEffect(() => {
 		if (!order) return;
 
+		if (!canEditOrder(order)) {
+			setToast({ msg: "This sample order cannot be edited.", type: "error" });
+			setTimeout(() => router.push("/sales/sample-order"), 1200);
+			return;
+		}
+
 		setOrderNumber(order.soNumber);
 		setForm(orderToFormValues(order));
 		setAuditInfo({
@@ -148,7 +154,7 @@ export default function EditSalesOrderPage() {
 			updatedBy: order.updatedBy,
 			updatedDate: order.updatedDate,
 		});
-	}, [order]);
+	}, [order, router]);
 
 	useEffect(() => {
 		if (!toast) return;

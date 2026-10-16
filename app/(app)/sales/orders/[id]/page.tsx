@@ -125,6 +125,7 @@ export default function ViewSalesOrderPage() {
       ? getPackingListById(order.packingListId)
       : undefined;
 
+  // Editable until packing list is generated (see canEditOrder).
   const editable = canEditOrder(order);
   const splittable = canSplitOrder(order);
   const cancellable = canCancelOrder(order);

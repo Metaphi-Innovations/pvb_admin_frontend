@@ -378,6 +378,7 @@ export default function SalesOrdersPage() {
       sticky: true,
       render: (val, row) => {
         const hydrated = hydrateOrderLineItems(row);
+        // Editable until packing list is generated (see canEditOrder).
         const editable = canEditOrder(hydrated);
         const splittable = canSplitOrder(hydrated);
         const cancellable = canCancelOrder(hydrated);

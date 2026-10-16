@@ -138,11 +138,21 @@ function normalizeMatchText(value: string | null | undefined): string {
   return (value || "").trim().toLowerCase();
 }
 
+/**
+ * Normalize SKU for PO matching. Masters use "LT" for litres; invoices often
+ * say "LTR" or "L" — treat them as the same unit.
+ */
 function normalizeSkuMatchText(value: string | null | undefined): string {
-  return (value || "")
+  let sku = (value || "")
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]/g, "");
+
+  // Litre aliases → lt (master). Keep "ml" untouched.
+  sku = sku.replace(/(\d+(?:\.\d+)?)ltr/g, "$1lt");
+  sku = sku.replace(/(\d+(?:\.\d+)?)l(?![a-z])/g, "$1lt");
+
+  return sku;
 }
 
 function getPoLineId(line: POLineItem): string {
@@ -216,34 +226,19 @@ function buildExtractedInvoiceItemsSnapshot(
     const matched = matchExtractedItemToPoLine(item, poLines);
     const lineId = matched ? getPoLineId(matched) : "";
 
-
+    // Qty in units from OCR; pricing always from PO / product master when matched
     const qty =
       item.total_quantity != null && Number.isFinite(item.total_quantity)
         ? Math.max(0, item.total_quantity)
         : 0;
 
-    const taxableFromOcr =
-      item.amount != null && Number.isFinite(item.amount)
-        ? Math.max(0, item.amount)
+    const rate =
+      matched != null && Number.isFinite(matched.unitPrice)
+        ? matched.unitPrice
         : null;
-
-    let rate: number | null =
-      item.price != null && Number.isFinite(item.price) ? item.price : null;
-    if (rate == null && taxableFromOcr != null && qty > 0) {
-      rate = round2(taxableFromOcr / qty);
-    }
-
-    const taxable =
-      taxableFromOcr != null
-        ? taxableFromOcr
-        : rate != null
-          ? round2(qty * rate)
-          : 0;
-
     const gst =
-      item.gst_percentage != null && Number.isFinite(item.gst_percentage)
-        ? item.gst_percentage
-        : null;
+      matched != null ? getLineGstPct(matched) : null;
+    const taxable = rate != null ? round2(qty * rate) : 0;
     const gstAmount =
       gst != null ? round2((taxable * gst) / 100) : null;
 
@@ -268,6 +263,7 @@ function buildExtractedInvoiceItemsSnapshot(
         exp_date: item.exp_date,
         total_quantity: item.total_quantity,
         bag_case_quantity: item.bag_case_quantity,
+        // Keep raw OCR commercial fields for audit only — not used for GRN pricing
         price: item.price,
         gst_percentage: item.gst_percentage,
         amount: item.amount,
@@ -844,6 +840,11 @@ export function PurchaseCreate({
   };
 
   const handlePoChange = (value: string) => {
+    // Re-selecting the same PO must not wipe items/warehouse: resetDependentOnPo()
+    // would clear state, but selectedPoId/selectedPo would not change so rebuild
+    // effects never run (leaving empty items + blank warehouse).
+    if (value === selectedPoId) return;
+
     setSelectedPoId(value);
     resetDependentOnPo();
     if (!isEdit) return;
@@ -1072,8 +1073,11 @@ export function PurchaseCreate({
         return lineId || null;
       });
 
-      const isKanBiosys = /kan\s*biosys/i.test(result.supplier_name || "");
-
+      /**
+       * Common OCR → GRN mapping for all suppliers:
+       * - From invoice: product (SKU match), batch, mfg, exp, qty in case, qty in units
+       * - From PO / product master: unit price, GST %, amount calculations
+       */
       return sourceItems.map((item, index) => {
         const lineId = matchedLineIds[index] || "";
         const line = poLines.find((l) => getPoLineId(l) === lineId);
@@ -1087,67 +1091,33 @@ export function PurchaseCreate({
             productCode: item?.sku || "",
           };
 
-        let displayQty = 0;
+        // Qty in Case (OCR bag_case_quantity)
+        const displayQty = Math.max(
+          0,
+          Number(
+            item?.bag_case_quantity != null &&
+              Number.isFinite(item.bag_case_quantity)
+              ? item.bag_case_quantity
+              : 0,
+          ) || 0,
+        );
+
+        // Qty in Units (OCR total_quantity); else derive from cases via packing
         let quantity = 0;
-        let unitPrice = 0;
-        let gstPct = 0;
-        let amounts;
-
-        if (isKanBiosys) {
-          const displayQtyRaw =
-            item?.bag_case_quantity ?? item?.total_quantity ?? 0;
-          displayQty = Math.max(0, Number(displayQtyRaw) || 0);
-
-          quantity = lineId
-            ? toInvoiceBaseQty(lineId, displayQty)
-            : displayQty;
-
-          unitPrice = line ? line.unitPrice : withProduct.unitPrice;
-          gstPct = line ? getLineGstPct(line) : withProduct.gstPct;
-          amounts = calcAmounts(quantity, unitPrice, gstPct);
+        if (
+          item?.total_quantity != null &&
+          Number.isFinite(item.total_quantity)
+        ) {
+          quantity = Math.max(0, item.total_quantity);
+        } else if (lineId && displayQty > 0) {
+          quantity = toInvoiceBaseQty(lineId, displayQty);
         } else {
-          // Trust invoice numbers directly for other suppliers
-          const displayQtyRaw =
-            item?.bag_case_quantity ?? item?.total_quantity ?? withProduct.displayQty;
-          displayQty = Math.max(0, Number(displayQtyRaw) || 0);
-
-          quantity =
-            item?.total_quantity != null && Number.isFinite(item.total_quantity)
-              ? Math.max(0, item.total_quantity)
-              : lineId
-                ? toInvoiceBaseQty(lineId, displayQty)
-                : displayQty;
-
-          const extractedTaxable =
-            item?.amount != null && Number.isFinite(item.amount)
-              ? Math.max(0, item.amount)
-              : null;
-          const derivedUnitPrice =
-            extractedTaxable != null &&
-              quantity > 0 &&
-              Number.isFinite(quantity)
-              ? round2(extractedTaxable / quantity)
-              : null;
-          unitPrice =
-            derivedUnitPrice != null
-              ? derivedUnitPrice
-              : item?.price != null && Number.isFinite(item.price)
-                ? item.price
-                : withProduct.unitPrice;
-          gstPct =
-            item?.gst_percentage != null && Number.isFinite(item.gst_percentage)
-              ? item.gst_percentage
-              : withProduct.gstPct;
-          amounts =
-            extractedTaxable != null
-              ? {
-                gstAmount: round2((extractedTaxable * gstPct) / 100),
-                totalAmount: round2(
-                  extractedTaxable + (extractedTaxable * gstPct) / 100,
-                ),
-              }
-              : calcAmounts(quantity, unitPrice, gstPct);
+          quantity = displayQty;
         }
+
+        const unitPrice = line ? line.unitPrice : withProduct.unitPrice;
+        const gstPct = line ? getLineGstPct(line) : withProduct.gstPct;
+        const amounts = calcAmounts(quantity, unitPrice, gstPct);
 
         return {
           ...withProduct,
