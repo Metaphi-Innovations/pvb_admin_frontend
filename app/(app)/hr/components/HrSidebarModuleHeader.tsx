@@ -37,7 +37,7 @@ export const HrSidebarModuleHeader = memo(function HrSidebarModuleHeader({
     <>
       <div className="flex items-center justify-between gap-2 px-3 pt-2.5 pb-0 min-h-[40px]">
         <div className="min-w-0">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">HR Module</p>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">HR</p>
           <h2 className="text-sm font-semibold text-foreground truncate leading-tight" title={title}>
             {title}
           </h2>

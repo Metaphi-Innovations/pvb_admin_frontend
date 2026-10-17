@@ -36,6 +36,11 @@ export const EMPLOYEE_BRANCH_STATE_MAP: Record<string, string> = {
   "branch-nagpur": "Maharashtra",
   "warehouse-aurangabad": "Maharashtra",
   "branch-dehradun": "Uttarakhand",
+  // Organization Settings branch codes (employee.branch often stores these)
+  "HO-PUN": "Maharashtra",
+  "BR-MUM": "Maharashtra",
+  "BR-NAG": "Maharashtra",
+  "BR-AUR": "Maharashtra",
 };
 
 export interface EmployeeHolidayScope {

@@ -382,9 +382,9 @@ function GeneralSection({ p, set, readOnly }: { p: TravelPolicy; set: SetPolicy;
             <Input value={p.name} disabled={readOnly} onChange={(e) => set({ ...p, name: e.target.value })} className={hrInput()} />
           </HrOrgField>
           {p.policyNumber ? (
-            <HrOrgField label="Policy Number">
+          <HrOrgField label="Policy Number">
               <Input value={p.policyNumber} disabled readOnly className={hrInput()} />
-            </HrOrgField>
+          </HrOrgField>
           ) : null}
           <HrOrgField label="Effective From" required>
             <HrDateInput value={p.effectiveFrom} disabled={readOnly} onChange={(v) => set({ ...p, effectiveFrom: v })} />
@@ -392,19 +392,19 @@ function GeneralSection({ p, set, readOnly }: { p: TravelPolicy; set: SetPolicy;
           <HrOrgField label="Effective To">
             <HrDateInput value={p.effectiveTo} disabled={readOnly} onChange={(v) => set({ ...p, effectiveTo: v })} />
           </HrOrgField>
-          <ToggleRow
-            label="Active"
-            checked={p.status === "active"}
-            disabled={readOnly}
-            onChange={(v) => set({ ...p, status: v ? "active" : "inactive", isCurrent: v ? p.isCurrent : false })}
-          />
-          <ToggleRow
+            <ToggleRow
+              label="Active"
+              checked={p.status === "active"}
+              disabled={readOnly}
+              onChange={(v) => set({ ...p, status: v ? "active" : "inactive", isCurrent: v ? p.isCurrent : false })}
+            />
+            <ToggleRow
             label="Use as default for new claims"
             hint="Only one default policy applies for an overlapping period."
-            checked={p.isCurrent}
+              checked={p.isCurrent}
             disabled={readOnly || p.status !== "active"}
-            onChange={(v) => set({ ...p, isCurrent: v })}
-          />
+              onChange={(v) => set({ ...p, isCurrent: v })}
+            />
           <HrOrgField label="Purpose / Description" size="full">
             <Textarea value={p.description} disabled={readOnly} onChange={(e) => set({ ...p, description: e.target.value })} rows={2} className="text-sm" />
           </HrOrgField>
@@ -424,84 +424,84 @@ function GeneralSection({ p, set, readOnly }: { p: TravelPolicy; set: SetPolicy;
           }
         >
           {moreVisible ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <HrOrgField label="Approved By">
-                <Input
-                  value={p.approvedBy}
-                  disabled={readOnly}
-                  onChange={(e) => set({ ...p, approvedBy: e.target.value })}
-                  className={hrInput()}
-                  placeholder="Name / designation"
-                />
-              </HrOrgField>
-              <HrOrgField label="Approval Date">
-                <HrDateInput value={p.approvalDate} disabled={readOnly} onChange={(v) => set({ ...p, approvalDate: v })} />
-              </HrOrgField>
-              <HrOrgField label="Internal Remark" size="full">
-                <Textarea
-                  value={p.internalRemark}
-                  disabled={readOnly}
-                  onChange={(e) => set({ ...p, internalRemark: e.target.value })}
-                  rows={2}
-                  className="text-sm"
-                />
-              </HrOrgField>
-              <HrOrgField label="Policy document" size="full">
-                <div className="flex flex-wrap items-center gap-2">
-                  {!readOnly ? (
-                    <label className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-2.5 text-xs font-medium cursor-pointer hover:bg-muted/50">
-                      Attach PDF / file
-                      <input
-                        type="file"
-                        accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
-                        className="hidden"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          e.target.value = "";
-                          if (!file) return;
-                          if (file.size > 2 * 1024 * 1024) {
-                            window.alert("File is larger than 2 MB. Choose a smaller file for prototype storage.");
-                            return;
-                          }
-                          const reader = new FileReader();
-                          reader.onload = () => {
-                            set({
-                              ...p,
-                              document: {
-                                fileName: file.name,
-                                sizeLabel: `${Math.max(1, Math.round(file.size / 1024))} KB`,
-                                dataUrl: String(reader.result || ""),
-                              },
-                            });
-                          };
-                          reader.readAsDataURL(file);
-                        }}
-                      />
-                    </label>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <HrOrgField label="Approved By">
+            <Input
+              value={p.approvedBy}
+              disabled={readOnly}
+              onChange={(e) => set({ ...p, approvedBy: e.target.value })}
+              className={hrInput()}
+              placeholder="Name / designation"
+            />
+          </HrOrgField>
+          <HrOrgField label="Approval Date">
+            <HrDateInput value={p.approvalDate} disabled={readOnly} onChange={(v) => set({ ...p, approvalDate: v })} />
+          </HrOrgField>
+          <HrOrgField label="Internal Remark" size="full">
+            <Textarea
+              value={p.internalRemark}
+              disabled={readOnly}
+              onChange={(e) => set({ ...p, internalRemark: e.target.value })}
+              rows={2}
+              className="text-sm"
+            />
+          </HrOrgField>
+          <HrOrgField label="Policy document" size="full">
+            <div className="flex flex-wrap items-center gap-2">
+              {!readOnly ? (
+                <label className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-2.5 text-xs font-medium cursor-pointer hover:bg-muted/50">
+                  Attach PDF / file
+                  <input
+                    type="file"
+                    accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      e.target.value = "";
+                      if (!file) return;
+                      if (file.size > 2 * 1024 * 1024) {
+                        window.alert("File is larger than 2 MB. Choose a smaller file for prototype storage.");
+                        return;
+                      }
+                      const reader = new FileReader();
+                      reader.onload = () => {
+                        set({
+                          ...p,
+                          document: {
+                            fileName: file.name,
+                            sizeLabel: `${Math.max(1, Math.round(file.size / 1024))} KB`,
+                            dataUrl: String(reader.result || ""),
+                          },
+                        });
+                      };
+                      reader.readAsDataURL(file);
+                    }}
+                  />
+                </label>
+              ) : null}
+              {p.document ? (
+                <span className="text-xs text-foreground">
+                  {p.document.fileName}{" "}
+                  <span className="text-muted-foreground">({p.document.sizeLabel})</span>
+                  {p.document.dataUrl ? (
+                    <a href={p.document.dataUrl} download={p.document.fileName} className="ml-2 text-brand-600 hover:underline">
+                      Download
+                    </a>
                   ) : null}
-                  {p.document ? (
-                    <span className="text-xs text-foreground">
-                      {p.document.fileName}{" "}
-                      <span className="text-muted-foreground">({p.document.sizeLabel})</span>
-                      {p.document.dataUrl ? (
-                        <a href={p.document.dataUrl} download={p.document.fileName} className="ml-2 text-brand-600 hover:underline">
-                          Download
-                        </a>
-                      ) : null}
-                    </span>
-                  ) : (
-                    <span className="text-[11px] text-muted-foreground">No file selected</span>
-                  )}
-                  {!readOnly && p.document ? (
-                    <button type="button" className="text-xs text-red-600 hover:underline" onClick={() => set({ ...p, document: null })}>
-                      Remove
-                    </button>
-                  ) : null}
-                </div>
-              </HrOrgField>
+                </span>
+              ) : (
+                <span className="text-[11px] text-muted-foreground">No file selected</span>
+              )}
+              {!readOnly && p.document ? (
+                <button type="button" className="text-xs text-red-600 hover:underline" onClick={() => set({ ...p, document: null })}>
+                  Remove
+                </button>
+              ) : null}
             </div>
+          </HrOrgField>
+        </div>
           ) : null}
-        </SectionCard>
+      </SectionCard>
       ) : null}
     </div>
   );
@@ -571,7 +571,7 @@ function ApplicabilitySection({ p, set, readOnly }: { p: TravelPolicy; set: SetP
     .map((g) => primaryMapping(p, g.id))
     .filter((m): m is RoleMapping => !!m);
 
-  return (
+              return (
     <div className="space-y-3">
       <SectionCard title="Policy Applies To" hint="Choose who this policy covers. Keep “All” on to cover everyone on that filter.">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -579,18 +579,18 @@ function ApplicabilitySection({ p, set, readOnly }: { p: TravelPolicy; set: SetP
             <ToggleRow
               label="Company — All"
               checked={app.companyAll}
-              disabled={readOnly}
+                      disabled={readOnly}
               onChange={(v) => setApp({ companyAll: v })}
             />
             {!app.companyAll ? (
               <ChipMultiSelect
                 values={app.companies}
-                disabled={readOnly}
+                      disabled={readOnly}
                 placeholder="Select company…"
                 options={[{ value: company.companyName || company.legalName || "Company", label: company.companyName || company.legalName || "Company" }]}
                 onChange={(companies) => setApp({ companies })}
               />
-            ) : null}
+                  ) : null}
           </div>
           <div className="space-y-2">
             <ToggleRow
@@ -607,7 +607,7 @@ function ApplicabilitySection({ p, set, readOnly }: { p: TravelPolicy; set: SetP
                 options={branches.map((b) => ({ value: b.name, label: b.name, hint: b.code }))}
                 onChange={(branches) => setApp({ branches })}
               />
-            ) : null}
+        ) : null}
           </div>
           <div className="space-y-2">
             <ToggleRow
@@ -663,14 +663,14 @@ function ApplicabilitySection({ p, set, readOnly }: { p: TravelPolicy; set: SetP
           <Empty>No designations selected yet.</Empty>
         ) : (
           <table className={TABLE_CLASS}>
-            <thead>
-              <tr className="bg-muted/40 border-b">
+          <thead>
+            <tr className="bg-muted/40 border-b">
                 <Th>Designation</Th>
                 <Th>Entitlement</Th>
                 <Th>Active</Th>
-              </tr>
-            </thead>
-            <tbody>
+            </tr>
+          </thead>
+          <tbody>
               {p.roleMappings.map((m) => {
                 const own = isOwnMapping(p, m);
                 const prim = primaryMapping(p, m.groupId);
@@ -681,36 +681,36 @@ function ApplicabilitySection({ p, set, readOnly }: { p: TravelPolicy; set: SetP
                   <tr key={m.id} className={cn("border-b border-border/60", !m.active && "opacity-60")}>
                     <td className="px-3 py-1.5 font-medium">{m.designationName || "—"}</td>
                     <td className="px-3 py-1.5 min-w-[14rem]">
-                      {readOnly ? (
+                  {readOnly ? (
                         own ? "Own" : `Same as ${prim?.designationName ?? "—"}`
-                      ) : (
-                        <Combo
+                  ) : (
+                    <Combo
                           value={own ? OWN_VALUE : prim?.id ?? OWN_VALUE}
                           onChange={(v) =>
                             set(v === OWN_VALUE ? makeMappingOwn(p, m.id) : makeMappingSameAs(p, m.id, v))
                           }
                           options={[{ value: OWN_VALUE, label: "Own Entitlement" }, ...sameAsOptions]}
-                        />
-                      )}
-                    </td>
-                    <td className="px-3 py-1.5">
-                      <Switch
-                        size="sm"
-                        checked={m.active}
-                        disabled={readOnly}
-                        onCheckedChange={(v) =>
-                          set({
-                            ...p,
-                            roleMappings: p.roleMappings.map((x) => (x.id === m.id ? { ...x, active: v } : x)),
-                          })
-                        }
-                      />
-                    </td>
-                  </tr>
+                    />
+                  )}
+                </td>
+                <td className="px-3 py-1.5">
+                  <Switch
+                    size="sm"
+                    checked={m.active}
+                    disabled={readOnly}
+                    onCheckedChange={(v) =>
+                      set({
+                        ...p,
+                        roleMappings: p.roleMappings.map((x) => (x.id === m.id ? { ...x, active: v } : x)),
+                      })
+                    }
+                  />
+                </td>
+              </tr>
                 );
               })}
-            </tbody>
-          </table>
+          </tbody>
+        </table>
         )}
       </SectionCard>
     </div>
@@ -758,7 +758,7 @@ function CitySection({ p, set, readOnly }: { p: TravelPolicy; set: SetPolicy; re
             </tr>
           </thead>
           <tbody>
-            {p.cityClasses.map((cls) => (
+        {p.cityClasses.map((cls) => (
               <tr key={cls.id} className={cn("border-b border-border/60 align-top", !cls.active && "opacity-60")}>
                 <td className="px-3 py-2 font-medium whitespace-nowrap">
                   {cls.name}
@@ -767,13 +767,13 @@ function CitySection({ p, set, readOnly }: { p: TravelPolicy; set: SetPolicy; re
                 <td className="px-3 py-2 text-muted-foreground">
                   {cls.isFallback ? OTHERS_TEXT : cls.cities.map((c) => c.city).join(", ") || "—"}
                 </td>
-                {!readOnly ? (
+              {!readOnly ? (
                   <td className="px-3 py-2 text-right">
-                    <button type="button" className="text-xs text-brand-600 hover:underline" onClick={() => setEditId(cls.id)}>
-                      Edit
-                    </button>
+                <button type="button" className="text-xs text-brand-600 hover:underline" onClick={() => setEditId(cls.id)}>
+                  Edit
+                </button>
                   </td>
-                ) : null}
+              ) : null}
               </tr>
             ))}
           </tbody>
@@ -969,9 +969,9 @@ function ExHqSection({ p, set, readOnly }: { p: TravelPolicy; set: SetPolicy; re
             <HrOrgField label="Additional Approver">
               <div className="flex items-center gap-2">
                 <div className="flex-1 min-w-0">
-                  <Combo
-                    value={p.exHq.approver2 || ""}
-                    disabled={readOnly}
+            <Combo
+              value={p.exHq.approver2 || ""}
+              disabled={readOnly}
                     placeholder="Select approver"
                     onChange={(v) => set({ ...p, exHq: { ...p.exHq, approver2: v as ApproverRole } })}
                     options={APPROVER_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
@@ -990,7 +990,7 @@ function ExHqSection({ p, set, readOnly }: { p: TravelPolicy; set: SetPolicy; re
                   </button>
                 ) : null}
               </div>
-            </HrOrgField>
+          </HrOrgField>
           ) : !readOnly ? (
             <div className="flex items-end pb-1.5">
               <AddLink onClick={() => setAddSecond(true)}>+ Add additional approver</AddLink>
@@ -1007,24 +1007,24 @@ function ExHqSection({ p, set, readOnly }: { p: TravelPolicy; set: SetPolicy; re
           <Empty>Add designations under Applicability to set their travel entitlement.</Empty>
         ) : (
           <>
-            <div className="overflow-x-auto border border-border rounded-lg">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="bg-muted/40 border-b">
+        <div className="overflow-x-auto border border-border rounded-lg">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="bg-muted/40 border-b">
                     <Th>Designation</Th>
                     <Th>Rail / Bus</Th>
                     <Th>Air Travel</Th>
                     <Th>Destination Travel</Th>
-                  </tr>
-                </thead>
-                <tbody>
+              </tr>
+            </thead>
+            <tbody>
                   {entitlementRows.map((m) => {
                     const prim = primaryMapping(p, m.groupId);
                     const own = prim?.id === m.id;
                     const row = p.travelModes.find((x) => x.groupId === m.groupId);
                     if (!own || !row) {
                       const sameAs = `Same as ${prim?.designationName ?? "—"}`;
-                      return (
+                return (
                         <tr key={m.id} className="border-b border-border/60">
                           <td className="px-3 py-1.5 font-medium">{m.designationName}</td>
                           <td className="px-3 py-1.5 text-muted-foreground">{sameAs}</td>
@@ -1036,35 +1036,35 @@ function ExHqSection({ p, set, readOnly }: { p: TravelPolicy; set: SetPolicy; re
                     return (
                       <tr key={m.id} className="border-b border-border/60">
                         <td className="px-3 py-1.5 font-medium">{m.designationName}</td>
-                        <td className="px-3 py-1.5">
+                    <td className="px-3 py-1.5">
                           {readOnly ? (
                             row.railClass || "—"
                           ) : (
-                            <Input
-                              value={row.railClass}
+                      <Input
+                        value={row.railClass}
                               onChange={(e) => updateMode(row.groupId, { railClass: e.target.value })}
                               className="h-8 text-xs w-36"
                             />
                           )}
-                        </td>
+                    </td>
                         <td className="px-3 py-1.5 text-muted-foreground">{airSummary(row)}</td>
-                        <td className="px-3 py-1.5">
+                    <td className="px-3 py-1.5">
                           {readOnly ? (
                             row.destinationConveyance || "—"
                           ) : (
-                            <Input
-                              value={row.destinationConveyance}
+                      <Input
+                        value={row.destinationConveyance}
                               onChange={(e) => updateMode(row.groupId, { destinationConveyance: e.target.value })}
                               className="h-8 text-xs w-48"
                             />
                           )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
             <p className="text-[11px] text-muted-foreground">* Air travel follows the Air Travel Rule below.</p>
           </>
         )}
@@ -1101,7 +1101,7 @@ function ExHqSection({ p, set, readOnly }: { p: TravelPolicy; set: SetPolicy; re
                 suffix="hours"
                 onChange={(n) => set({ ...p, travelModes: patchAirRows(p, { airMinJourneyHours: n }, "conditional") })}
               />
-            </HrOrgField>
+          </HrOrgField>
           ) : null}
           <ToggleRow
             label="Prior Approval Required"
@@ -1132,11 +1132,11 @@ function ExHqSection({ p, set, readOnly }: { p: TravelPolicy; set: SetPolicy; re
           <HrOrgField label="Shared taxi">
             <Num
               value={p.taxi.sharedRatePerKm}
-              disabled={readOnly}
+            disabled={readOnly}
               prefix="₹"
               suffix="/ KM"
               onChange={(n) => set({ ...p, taxi: { ...p.taxi, sharedType: "per_km", sharedRatePerKm: n } })}
-            />
+          />
           </HrOrgField>
           <HrOrgField label="Private taxi">
             <Combo
@@ -1158,7 +1158,7 @@ function ExHqSection({ p, set, readOnly }: { p: TravelPolicy; set: SetPolicy; re
                 prefix="₹"
                 onChange={(n) => set({ ...p, taxi: { ...p.taxi, privateFixedLimit: n } })}
               />
-            </HrOrgField>
+          </HrOrgField>
           ) : null}
           {p.taxi.privateType !== "not_allowed" ? (
             <ToggleRow
@@ -1295,9 +1295,9 @@ function MatrixTable({
               <td className="px-3 py-2 font-medium whitespace-nowrap">{mapping.designationName}</td>
               {own ? (
                 classes.map((c) => (
-                  <td key={c.id} className="px-3 py-2 align-top">
+                <td key={c.id} className="px-3 py-2 align-top">
                     {renderOwnCell(groupId, c.id, mapping.designationName)}
-                  </td>
+                </td>
                 ))
               ) : sameAsColSpan !== false ? (
                 <td colSpan={Math.max(classes.length, 1)} className="px-3 py-2 text-muted-foreground">
@@ -1371,9 +1371,9 @@ function LodgingSection({ p, set, readOnly }: { p: TravelPolicy; set: SetPolicy;
                   });
                 }}
               >
-                <button
-                  type="button"
-                  disabled={readOnly}
+              <button
+                type="button"
+                disabled={readOnly}
                   className="text-left text-xs text-brand-700 hover:underline disabled:no-underline disabled:text-foreground disabled:cursor-default"
                 >
                   {x ? (
@@ -1384,7 +1384,7 @@ function LodgingSection({ p, set, readOnly }: { p: TravelPolicy; set: SetPolicy;
                   ) : (
                     "—"
                   )}
-                </button>
+              </button>
               </LodgingAmountPopover>
             );
           }}
@@ -1396,7 +1396,7 @@ function LodgingSection({ p, set, readOnly }: { p: TravelPolicy; set: SetPolicy;
           <ToggleRow
             label="Exceptions need prior approval"
             checked={p.lodgingRules.exceptionsRequirePriorApproval}
-            disabled={readOnly}
+                disabled={readOnly}
             onChange={(v) => setRules({ exceptionsRequirePriorApproval: v })}
           />
           <HrOrgField label="When a room is shared">
@@ -1442,8 +1442,8 @@ function RelativesSection({ p, set, readOnly }: { p: TravelPolicy; set: SetPolic
           const na = x?.amountPerNight == null;
           const update = (amountPerNight: number | null) => {
             const exists = p.relativesStay.some((r) => r.groupId === g && r.classId === c);
-            set({
-              ...p,
+                    set({
+                      ...p,
               relativesStay: exists
                 ? p.relativesStay.map((r) => (r.groupId === g && r.classId === c ? { ...r, amountPerNight } : r))
                 : [...p.relativesStay, { groupId: g, classId: c, amountPerNight }],
@@ -1468,7 +1468,7 @@ function RelativesSection({ p, set, readOnly }: { p: TravelPolicy; set: SetPolic
               )}
               <button type="button" className="text-[11px] text-brand-600 hover:underline whitespace-nowrap" onClick={() => update(na ? 0 : null)}>
                 {na ? "Set amount" : "Not Allowed"}
-              </button>
+                </button>
             </div>
           );
         }}
@@ -1519,17 +1519,17 @@ function OvernightSection({ p, set, readOnly }: { p: TravelPolicy; set: SetPolic
                   ) : (
                     <div className="flex items-center gap-2">
                       <div className="w-52">
-                        <Combo
-                          value={s.reimburseType}
+                  <Combo
+                    value={s.reimburseType}
                           onChange={(v) => updateSlab(s.id, { reimburseType: v as OvernightReimburseType })}
-                          options={[
+                    options={[
                             { value: "fixed", label: "Fixed amount" },
                             { value: "percent_boarding", label: "Share of Boarding Allowance" },
-                          ]}
-                        />
+                    ]}
+                  />
                       </div>
-                      <Num
-                        value={s.amount}
+                  <Num
+                    value={s.amount}
                         className="w-24"
                         prefix={s.reimburseType === "fixed" ? "₹" : undefined}
                         suffix={s.reimburseType === "percent_boarding" ? "%" : undefined}
@@ -1538,7 +1538,7 @@ function OvernightSection({ p, set, readOnly }: { p: TravelPolicy; set: SetPolic
                     </div>
                   )}
                 </td>
-                {!readOnly ? (
+                  {!readOnly ? (
                   <td className="px-3 py-1.5">
                     <HrIconActionButton
                       label="Remove"
@@ -1547,7 +1547,7 @@ function OvernightSection({ p, set, readOnly }: { p: TravelPolicy; set: SetPolic
                     >
                       <Trash2 />
                     </HrIconActionButton>
-                  </td>
+                </td>
                 ) : null}
               </tr>
             ))}
@@ -1619,15 +1619,15 @@ function LocalSection({ p, set, readOnly }: { p: TravelPolicy; set: SetPolicy; r
       <SectionCard title="Meals & Local Travel" hint="Daily meals allowance and the local travel mode, by designation.">
         <div className="overflow-x-auto">
           <table className={TABLE_CLASS}>
-            <thead>
-              <tr className="bg-muted/40 border-b">
+          <thead>
+            <tr className="bg-muted/40 border-b">
                 <Th>Designation</Th>
                 <Th>Meals & Misc / Day</Th>
                 <Th>Normal Travel Mode</Th>
                 <Th>Peak / Odd Hours Mode</Th>
-              </tr>
-            </thead>
-            <tbody>
+            </tr>
+          </thead>
+          <tbody>
               {rows.map(({ mapping, groupId, own, sameAsName }) => {
                 const row = p.localTravel.find((r) => r.groupId === groupId);
                 if (!own) {
@@ -1646,32 +1646,32 @@ function LocalSection({ p, set, readOnly }: { p: TravelPolicy; set: SetPolicy; r
                     <td className="px-3 py-1.5 w-32">
                       <Num
                         value={row?.mealsMiscPerDay ?? 0}
-                        disabled={readOnly}
+                    disabled={readOnly}
                         prefix="₹"
                         onChange={(n) => update(groupId, { mealsMiscPerDay: n })}
-                      />
-                    </td>
-                    <td className="px-3 py-1.5">
-                      <Input
+                  />
+                </td>
+                <td className="px-3 py-1.5">
+                  <Input
                         value={row?.nonPeakMode ?? ""}
-                        disabled={readOnly}
+                    disabled={readOnly}
                         onChange={(e) => update(groupId, { nonPeakMode: e.target.value })}
                         className="h-8 text-xs min-w-[10rem]"
-                      />
-                    </td>
-                    <td className="px-3 py-1.5">
-                      <Input
+                  />
+                </td>
+                <td className="px-3 py-1.5">
+                  <Input
                         value={row?.peakOddMode ?? ""}
-                        disabled={readOnly}
+                    disabled={readOnly}
                         onChange={(e) => update(groupId, { peakOddMode: e.target.value })}
                         className="h-8 text-xs min-w-[10rem]"
-                      />
-                    </td>
-                  </tr>
+                  />
+                </td>
+              </tr>
                 );
               })}
-            </tbody>
-          </table>
+          </tbody>
+        </table>
         </div>
       </SectionCard>
 
@@ -1737,7 +1737,7 @@ function LocalSection({ p, set, readOnly }: { p: TravelPolicy; set: SetPolicy; r
                     className="h-8 text-xs"
                   />
                 </td>
-                {!readOnly ? (
+                  {!readOnly ? (
                   <td className="px-3 py-1.5">
                     <HrIconActionButton
                       label="Remove"
@@ -1746,7 +1746,7 @@ function LocalSection({ p, set, readOnly }: { p: TravelPolicy; set: SetPolicy; r
                     >
                       <Trash2 />
                     </HrIconActionButton>
-                  </td>
+                </td>
                 ) : null}
               </tr>
             ))}
@@ -1833,22 +1833,22 @@ function LocalSection({ p, set, readOnly }: { p: TravelPolicy; set: SetPolicy; r
             size="full"
             helper="Used for “one step higher”. Names should match the travel modes above."
           >
-            <Input
-              value={(p.modeLadder || []).join(", ")}
-              disabled={readOnly}
-              onChange={(e) =>
-                set({
-                  ...p,
-                  modeLadder: e.target.value
-                    .split(",")
-                    .map((s) => s.trim())
-                    .filter(Boolean),
-                })
-              }
-              className={hrInput()}
-              placeholder="Auto, Shared Taxi, Bus, Sleeper, 3AC…"
-            />
-          </HrOrgField>
+          <Input
+            value={(p.modeLadder || []).join(", ")}
+            disabled={readOnly}
+            onChange={(e) =>
+              set({
+                ...p,
+                modeLadder: e.target.value
+                  .split(",")
+                  .map((s) => s.trim())
+                  .filter(Boolean),
+              })
+            }
+            className={hrInput()}
+            placeholder="Auto, Shared Taxi, Bus, Sleeper, 3AC…"
+          />
+        </HrOrgField>
         ) : null}
       </SectionCard>
     </div>
@@ -1974,12 +1974,12 @@ function KmSection({ p, set, readOnly }: { p: TravelPolicy; set: SetPolicy; read
                 <td className="px-3 py-1.5">
                   <Switch size="sm" checked={r.priorApprovalRequired} disabled={readOnly} onCheckedChange={(v) => updateRate(r.id, { priorApprovalRequired: v })} />
                 </td>
-                {!readOnly ? (
+                  {!readOnly ? (
                   <td className="px-3 py-1.5">
                     <HrIconActionButton label="Remove" destructive onClick={() => set({ ...p, kmRates: p.kmRates.filter((x) => x.id !== r.id) })}>
                       <Trash2 />
                     </HrIconActionButton>
-                  </td>
+                </td>
                 ) : null}
               </tr>
             ))}
@@ -2082,7 +2082,7 @@ function IncidentalSection({ p, set, readOnly }: { p: TravelPolicy; set: SetPoli
   };
 
   if (allSame && shared) {
-    return (
+  return (
       <SectionCard title="Incidental Allowance" hint="Small daily allowance for minor travel expenses.">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-w-xl">
           <HrOrgField label="Ex-HQ Incidental Allowance">
@@ -2140,31 +2140,31 @@ function IncidentalSection({ p, set, readOnly }: { p: TravelPolicy; set: SetPoli
                 <td className="px-3 py-1.5 w-36">
                   <Num
                     value={row?.amountPerDay ?? 0}
-                    disabled={readOnly}
+                  disabled={readOnly}
                     prefix="₹"
                     suffix="/ day"
-                    onChange={(n) =>
+                  onChange={(n) =>
                       set({
                         ...p,
                         incidentals: p.incidentals.map((x) => (x.groupId === groupId ? { ...x, amountPerDay: n } : x)),
                       })
-                    }
-                  />
-                </td>
-                <td className="px-3 py-1.5">
-                  <Switch
-                    size="sm"
+                  }
+                />
+              </td>
+              <td className="px-3 py-1.5">
+                <Switch
+                  size="sm"
                     checked={row?.billsRequired ?? false}
-                    disabled={readOnly}
-                    onCheckedChange={(v) =>
+                  disabled={readOnly}
+                  onCheckedChange={(v) =>
                       set({
                         ...p,
                         incidentals: p.incidentals.map((x) => (x.groupId === groupId ? { ...x, billsRequired: v } : x)),
                       })
-                    }
-                  />
-                </td>
-              </tr>
+                  }
+                />
+              </td>
+            </tr>
             );
           })}
         </tbody>
@@ -2224,33 +2224,33 @@ function ClaimsSection({ p, set, readOnly }: { p: TravelPolicy; set: SetPolicy; 
             </div>
             <p className="text-[11px] text-muted-foreground">Submit: {deadlineSummary(r)}</p>
             {!readOnly ? (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                 <HrOrgField label="Submission deadline">
-                  <Combo
-                    value={r.deadlineMethod}
+                <Combo
+                  value={r.deadlineMethod}
                     onChange={(v) => updateRule(r.id, { deadlineMethod: v as DeadlineMethod })}
-                    options={[
+                  options={[
                       { value: "within_days_of_completion", label: "Within a number of days" },
                       { value: "by_day_of_following_month", label: "By a day of the next month" },
-                      { value: "whichever_earlier", label: "Whichever is earlier" },
+                    { value: "whichever_earlier", label: "Whichever is earlier" },
                       { value: "absolute_max_days", label: "Within a maximum number of days" },
-                    ]}
-                  />
-                </HrOrgField>
+                  ]}
+                />
+              </HrOrgField>
                 {r.deadlineMethod === "within_days_of_completion" || r.deadlineMethod === "whichever_earlier" ? (
                   <HrOrgField label="Within (days)">
                     <Num value={r.withinDays} onChange={(n) => updateRule(r.id, { withinDays: n })} />
-                  </HrOrgField>
+              </HrOrgField>
                 ) : null}
                 {r.deadlineMethod === "by_day_of_following_month" || r.deadlineMethod === "whichever_earlier" ? (
                   <HrOrgField label="Day of next month">
                     <Num value={r.followingMonthDay} onChange={(n) => updateRule(r.id, { followingMonthDay: n })} />
-                  </HrOrgField>
+              </HrOrgField>
                 ) : null}
                 {r.deadlineMethod === "absolute_max_days" ? (
                   <HrOrgField label="Maximum days">
                     <Num value={r.absoluteMaxDays} onChange={(n) => updateRule(r.id, { absoluteMaxDays: n })} />
-                  </HrOrgField>
+              </HrOrgField>
                 ) : null}
               </div>
             ) : null}
@@ -2263,13 +2263,13 @@ function ClaimsSection({ p, set, readOnly }: { p: TravelPolicy; set: SetPolicy; 
               <ToggleRow label="Prior approval required" checked={r.priorApprovalRequired} disabled={readOnly} onChange={(v) => updateRule(r.id, { priorApprovalRequired: v })} />
             </div>
             <HrOrgField label="If a claim falls outside these rules">
-              <Combo
-                value={r.exceptionHandling}
-                disabled={readOnly}
+                <Combo
+                  value={r.exceptionHandling}
+                  disabled={readOnly}
                 onChange={(v) => updateRule(r.id, { exceptionHandling: v as OverLimitAction })}
                 options={OVER_LIMIT_OPTIONS}
-              />
-            </HrOrgField>
+                />
+              </HrOrgField>
           </div>
         ))}
         {!readOnly ? (
@@ -2380,9 +2380,9 @@ function ApprovalExceptionsSection({ p, set, readOnly }: { p: TravelPolicy; set:
           const steps = ch.steps.filter(Boolean);
           if (!steps.length) return null;
           return (
-            <p key={ch.id} className="text-xs">
+          <p key={ch.id} className="text-xs">
               <span className="font-medium">{ch.name}:</span> {steps.map(approverLabel).join(" → ")}
-            </p>
+          </p>
           );
         })}
       </SectionCard>
@@ -2705,14 +2705,14 @@ function SummarySection({ p }: { p: TravelPolicy }) {
             />
           </HrOrgField>
           {mode === "employee" ? (
-            <HrOrgField label="Employee">
-              <Combo
-                value={empId}
-                onChange={setEmpId}
+          <HrOrgField label="Employee">
+            <Combo
+              value={empId}
+              onChange={setEmpId}
                 options={allEmployees.map((e) => ({ value: String(e.id), label: `${e.employeeName} · ${e.designation}` }))}
-                placeholder="Employee"
-              />
-            </HrOrgField>
+              placeholder="Employee"
+            />
+          </HrOrgField>
           ) : (
             <HrOrgField label="Designation">
               <Combo
@@ -2751,8 +2751,8 @@ function SummarySection({ p }: { p: TravelPolicy }) {
           </HrOrgField>
           {travelKind === "ex_hq" ? (
             <HrOrgField label="Distance (KM one-way)">
-              <Input value={distance} onChange={(e) => setDistance(e.target.value)} className="h-8 text-xs" />
-            </HrOrgField>
+            <Input value={distance} onChange={(e) => setDistance(e.target.value)} className="h-8 text-xs" />
+          </HrOrgField>
           ) : null}
           <HrOrgField label="Vehicle (optional)">
             <Combo
@@ -2772,7 +2772,7 @@ function SummarySection({ p }: { p: TravelPolicy }) {
           <p className="text-xs text-muted-foreground">Select a designation or employee to preview.</p>
         ) : preview && "error" in preview ? (
           <p className="text-xs text-red-600">{preview.error}</p>
-        ) : preview ? (
+            ) : preview ? (
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-xs">
             <Stat label="Policy" value={preview.policyName} />
             <Stat
@@ -2810,8 +2810,8 @@ function SummarySection({ p }: { p: TravelPolicy }) {
             <Stat label="KM Rate" value={preview.kmRate != null ? `₹${preview.kmRate}/km` : "—"} />
             <Stat label="Prior Approval" value={preview.priorApproval || preview.context.priorApprovalRequired ? "Required" : "Not required"} />
             <Stat label="Hotel Bill" value={preview.billRequiredHotel ? "Required" : "Not required"} />
-          </div>
-        ) : null}
+              </div>
+            ) : null}
       </SectionCard>
     </div>
   );

@@ -3,13 +3,14 @@
 import React, { memo, Suspense, useMemo } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { Loader2, Lock } from "lucide-react";
+import { ArrowLeft, Loader2, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   buildSettingsSidebarLinks,
   isSettingsMenuItemActive,
   type SettingsSidebarLink,
 } from "../settings/_components/settings-catalog";
+import { HR_MODULE_ENTRY_HREF } from "@/lib/hr/hr-nav";
 import { HrSidebarModuleHeader } from "./HrSidebarModuleHeader";
 import { useHrSidebar } from "./HrSidebarContext";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -78,7 +79,7 @@ const SettingsNavLink = memo(function SettingsNavLink({
     <Link
       href={item.href!}
       scroll={false}
-      prefetch
+      prefetch={false}
       aria-current={active ? "page" : undefined}
       aria-disabled={isPending && !active ? true : undefined}
       aria-label={collapsed ? item.label : undefined}
@@ -143,13 +144,14 @@ function SettingsSidebarNav({ collapsed }: { collapsed: boolean }) {
   );
 }
 
-/** Settings-only left rail — full IA from settings catalog (not duplicated on Overview). */
+/** Settings-only left rail — full IA from settings catalog (replaces module accordion). */
 export const HrSettingsSidebar = memo(function HrSettingsSidebar({
   collapsed,
 }: {
   collapsed: boolean;
 }) {
   const { toggleCollapsed } = useHrSidebar();
+  const pending = useNavigationPendingOptional();
 
   return (
     <div className="flex flex-col h-full min-h-0 overflow-hidden">
@@ -159,6 +161,38 @@ export const HrSettingsSidebar = memo(function HrSettingsSidebar({
           collapsed={collapsed}
           onToggleCollapse={toggleCollapsed}
         />
+        {!collapsed && (
+          <Link
+            href={HR_MODULE_ENTRY_HREF}
+            scroll={false}
+            prefetch={false}
+            onClick={(e) => pending?.navigateTo(HR_MODULE_ENTRY_HREF, "HR Modules", e)}
+            className="mx-2.5 mt-1.5 mb-0.5 flex items-center gap-1.5 px-2 py-1.5 rounded-[10px] text-[11px] font-medium text-muted-foreground hover:text-brand-700 hover:bg-brand-50/60 transition-colors"
+          >
+            <ArrowLeft className="w-3.5 h-3.5 shrink-0" aria-hidden />
+            HR Modules
+          </Link>
+        )}
+        {collapsed && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Link
+                href={HR_MODULE_ENTRY_HREF}
+                scroll={false}
+                prefetch={false}
+                aria-label="Back to HR Modules"
+                onClick={(e) => pending?.navigateTo(HR_MODULE_ENTRY_HREF, "HR Modules", e)}
+                className="hr-sidebar-nav-item is-collapsed mx-auto mb-1"
+              >
+                <ArrowLeft className="w-4 h-4 text-muted-foreground" />
+                <span>Back</span>
+              </Link>
+            </TooltipTrigger>
+            <TooltipContent side="right" className="text-xs">
+              HR Modules
+            </TooltipContent>
+          </Tooltip>
+        )}
       </div>
       <Suspense
         fallback={

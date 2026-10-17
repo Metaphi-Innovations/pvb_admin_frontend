@@ -29,7 +29,7 @@ export default function RequestsPageClient() {
     <TooltipProvider delayDuration={200}>
       <HrPageShell
         title="Leave Requests"
-        description="HR leave approval inbox for all employees. Apply leave from Employee Profile → Leave & Balance."
+        description="Review and manage employee leave requests. Apply leave from Employee Profile → Leave & Balance."
         icon={ClipboardList}
         breadcrumbs={hrBreadcrumb({ label: "Requests" }, { label: "Leave Requests" })}
         badge={

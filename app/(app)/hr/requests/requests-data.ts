@@ -27,6 +27,7 @@ import {
   OPTIONAL_LEAVE_TYPE_NAME,
   optionalHolidayKey,
   registerLeavePendingResolver,
+  resolveEmployeeOptionalHolidays,
   type LeaveAdjustAgainst,
   type LeaveApproveCheck,
 } from "@/app/(app)/hr/leave/leave-balance-data";
@@ -488,6 +489,54 @@ export type LeaveSubmitResult =
 export const OPTIONAL_HOLIDAY_INVALID_DATE_MSG =
   "Selected date is not available as an Optional Holiday for your applicable Holiday Calendar.";
 
+export const OPTIONAL_HOLIDAY_PAST_DATE_MSG =
+  "Optional Leave can only be applied for upcoming Optional Holidays (past holiday dates are not allowed).";
+
+export const OPTIONAL_HOLIDAY_NOT_RECORDED = "Holiday not recorded";
+
+/**
+ * Display helper for Optional Leave — prefers stored snapshot, then key lookup,
+ * then a unique calendar match by date. Does not mutate the request.
+ */
+export function resolveOptionalHolidayDisplay(rec: LeaveRequestRecord): {
+  name: string;
+  date: string;
+  recorded: boolean;
+} {
+  const date = (rec.fromDate || "").slice(0, 10);
+  if (rec.leaveType !== OPTIONAL_LEAVE_TYPE_NAME) {
+    return { name: "", date: "", recorded: false };
+  }
+  const stored = (rec.optionalHolidayName || "").trim();
+  if (stored) {
+    return { name: stored, date, recorded: true };
+  }
+  if (rec.optionalHolidayKey) {
+    const byKey = findOptionalHolidayByKey(
+      rec.employeeId,
+      rec.employeeCode,
+      rec.optionalHolidayKey,
+      rec.branch,
+    );
+    if (byKey?.name) {
+      return { name: byKey.name, date: byKey.date || date, recorded: true };
+    }
+  }
+  if (date) {
+    const year = Number(date.slice(0, 4)) || new Date().getFullYear();
+    const matches = resolveEmployeeOptionalHolidays(
+      rec.employeeId,
+      rec.employeeCode,
+      year,
+      rec.branch,
+    ).filter((h) => h.date === date);
+    if (matches.length === 1) {
+      return { name: matches[0].name, date, recorded: true };
+    }
+  }
+  return { name: OPTIONAL_HOLIDAY_NOT_RECORDED, date, recorded: false };
+}
+
 /**
  * Validate a leave application without creating a request.
  * Shared by Employee Profile and future mobile Leave.
@@ -525,6 +574,9 @@ export function validateLeaveApplication(
     }
     if (from !== holiday.date || to !== holiday.date) {
       return { ok: false, error: OPTIONAL_HOLIDAY_INVALID_DATE_MSG };
+    }
+    if (holiday.date < todayStr()) {
+      return { ok: false, error: OPTIONAL_HOLIDAY_PAST_DATE_MSG };
     }
   } else {
     if (!from || !to) {
@@ -589,15 +641,16 @@ export function submitLeaveRequest(input: LeaveSubmitInput): LeaveSubmitResult {
     status: "pending",
     adjustedAgainst: "",
     optionalHolidayKey: input.optionalHolidayKey ?? "",
-    optionalHolidayName:
-      input.leaveType === OPTIONAL_LEAVE_TYPE_NAME && input.optionalHolidayKey
-        ? findOptionalHolidayByKey(
-            input.employeeId,
-            input.employeeCode,
-            input.optionalHolidayKey,
-            input.branch,
-          )?.name ?? ""
-        : "",
+    optionalHolidayName: (() => {
+      if (input.leaveType !== OPTIONAL_LEAVE_TYPE_NAME || !input.optionalHolidayKey) return "";
+      const hit = findOptionalHolidayByKey(
+        input.employeeId,
+        input.employeeCode,
+        input.optionalHolidayKey,
+        input.branch,
+      );
+      return hit?.name?.trim() || "";
+    })(),
     optionalHolidayId: "",
     availableBalance: balance?.remaining ?? 0,
   });

@@ -8,7 +8,6 @@ import {
   UserCog,
   ClipboardList,
   FileCheck,
-  ListChecks,
   Sparkles,
   Timer,
   CalendarDays,
@@ -20,13 +19,14 @@ import {
   Wallet,
   FileText,
   Plane,
-  Receipt,
   Landmark,
   Scale,
   Bell,
   Mail,
   LayoutDashboard,
+  Database,
 } from "lucide-react";
+import { isHrDemoWorkspaceEnabled } from "@/app/(app)/hr/demo/demo-workspace-constants";
 
 export type SettingsItemStatus = "available" | "coming_soon";
 
@@ -166,7 +166,7 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         description: "Working hours and grace",
         href: "/hr/settings/attendance/shift-setup",
         icon: Timer,
-        status: "available", // unlocked — live Shift Setup master
+        status: "available",
       },
       {
         id: "holiday-cal",
@@ -189,7 +189,7 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
   },
   {
     id: "leave",
-    label: "Leave and Holiday Settings",
+    label: "Leave Settings",
     description: "Leave types and policies.",
     icon: Leaf,
     items: [
@@ -207,14 +207,6 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         description: "Eligibility and carry-forward",
         href: "/hr/settings/leave/leave-policies",
         icon: ScrollText,
-        status: "available",
-      },
-      {
-        id: "leave-holiday",
-        label: "Holiday Calendar",
-        description: "Optional holiday dates (Attendance)",
-        href: "/hr/settings/attendance/holiday-calendar",
-        icon: CalendarDays,
         status: "available",
       },
     ],
@@ -269,24 +261,17 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
   },
   {
     id: "reimbursement",
-    label: "Reimbursement Settings",
-    description: "Central Travel Policy plus non-travel expense categories.",
+    label: "Travel & Expense Settings",
+    description: "Central Travel Policy for entitlements and claim rules.",
     icon: Plane,
     items: [
       {
         id: "travel-policy",
         label: "Travel Policy",
-        description: "Sales Force Travel Policy — entitlements, city class, KM, exclusions and claim rules",
+        description: "Travel entitlements, city class, KM, exclusions and claim rules",
         href: "/hr/settings/reimbursement/travel-policy",
         icon: Plane,
         status: "available",
-      },
-      {
-        id: "expense-cats",
-        label: "Expense Categories",
-        description: "Non-travel claim types (mobile, medical, office, other)",
-        icon: Receipt,
-        status: "coming_soon",
       },
     ],
   },
@@ -344,7 +329,6 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         icon: Scale,
         status: "available",
       },
-      { id: "declaration-cats", label: "Declaration Categories", description: "Investment sections", icon: ListChecks, status: "coming_soon" },
       {
         id: "tds",
         label: "TDS Settings",
@@ -353,7 +337,6 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         icon: Calculator,
         status: "available",
       },
-      { id: "form16", label: "Form 16 Configuration", description: "Form 16 Part B setup", icon: FileText, status: "coming_soon" },
     ],
   },
   {
@@ -370,7 +353,6 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         icon: FileText,
         status: "available",
       },
-      { id: "issue-rules", label: "Issue Rules", description: "When letters can be issued", icon: Shield, status: "coming_soon" },
     ],
   },
   {
@@ -389,7 +371,29 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
       },
     ],
   },
+  {
+    id: "tools",
+    label: "Tools",
+    description: "Demo and development utilities. Not for production client data.",
+    icon: Database,
+    items: [
+      {
+        id: "demo-workspace",
+        label: "Demo Workspace",
+        description: "Safe manual seed / reset of synthetic HR demo data",
+        href: "/hr/settings/demo-workspace",
+        icon: Database,
+        status: "available",
+      },
+    ],
+  },
 ];
+
+/** Settings groups visible in the current environment (Tools/Demo gated). */
+export function getVisibleSettingsGroups(): SettingsGroup[] {
+  const demoEnabled = isHrDemoWorkspaceEnabled();
+  return SETTINGS_GROUPS.filter((g) => (g.id === "tools" ? demoEnabled : true));
+}
 
 /** Flat sidebar links: Overview + all category items (section labels between groups). */
 export function buildSettingsSidebarLinks(): SettingsSidebarLink[] {
@@ -402,17 +406,36 @@ export function buildSettingsSidebarLinks(): SettingsSidebarLink[] {
   };
 
   const items: SettingsSidebarLink[] = [overview];
+  const groups = getVisibleSettingsGroups();
 
-  for (const group of SETTINGS_GROUPS) {
-    group.items.forEach((item, index) => {
-      const unlocked = item.status === "available" && !!item.href;
+  // Surface Demo Workspace near the top in allowed environments (long Settings rail otherwise hides Tools).
+  if (isHrDemoWorkspaceEnabled()) {
+    items.push({
+      id: "tools-demo-workspace-quick",
+      label: "Demo Workspace",
+      href: "/hr/settings/demo-workspace",
+      icon: Database,
+      sectionLabel: "Tools",
+      status: "available",
+    });
+  }
+
+  for (const group of groups) {
+    // Phase 1: only surface available settings — hide coming_soon from HR sidebar
+    const availableItems = group.items.filter((i) => i.status === "available" && !!i.href);
+    // Skip duplicate Demo Workspace entry already pinned above
+    const filtered =
+      group.id === "tools"
+        ? availableItems.filter((i) => i.id !== "demo-workspace")
+        : availableItems;
+    filtered.forEach((item, index) => {
       items.push({
         id: `${group.id}-${item.id}`,
         label: item.label,
-        href: unlocked ? item.href : undefined,
+        href: item.href,
         icon: item.icon,
-        sectionLabel: index === 0 ? group.label : undefined,
-        status: unlocked ? "available" : "coming_soon",
+        sectionLabel: index === 0 && group.id !== "tools" ? group.label : undefined,
+        status: "available",
       });
     });
   }
@@ -421,16 +444,17 @@ export function buildSettingsSidebarLinks(): SettingsSidebarLink[] {
 }
 
 export function getSettingsProgress() {
-  const all = SETTINGS_GROUPS.flatMap((g) => g.items);
+  const groups = getVisibleSettingsGroups();
+  const all = groups.flatMap((g) => g.items);
   const available = all.filter((i) => i.status === "available").length;
-  const categoriesReady = SETTINGS_GROUPS.filter((g) =>
+  const categoriesReady = groups.filter((g) =>
     g.items.some((i) => i.status === "available"),
   ).length;
   return {
     availableCount: available,
     totalCount: all.length,
     categoriesReady,
-    categoriesTotal: SETTINGS_GROUPS.length,
+    categoriesTotal: groups.length,
   };
 }
 

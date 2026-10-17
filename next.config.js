@@ -35,8 +35,8 @@ const nextConfig = {
       { source: "/hr/masters/tada-policy", destination: "/hr/sales-force-policy", permanent: false },
       { source: "/hr/masters/monthly-target", destination: "/hr/sales-force-policy", permanent: false },
       { source: "/hr/tada-config", destination: "/hr/sales-force-policy", permanent: false },
-      { source: "/hr/attendance/sync", destination: "/hr/attendance", permanent: false },
-      { source: "/hr/attendance/reports", destination: "/hr/attendance", permanent: false },
+      // Attendance Sync remains reachable by direct URL for compatibility; not in HR nav.
+      // Do NOT redirect /hr/attendance/reports — Reports page must open.
       { source: "/accounts/transactions/sales", destination: "/accounts/transactions/invoices", permanent: false },
       { source: "/accounts/transactions/sales-return", destination: "/accounts/transactions/credit-notes", permanent: false },
       { source: "/accounts/transactions/purchase-return", destination: "/accounts/transactions/debit-notes", permanent: false },

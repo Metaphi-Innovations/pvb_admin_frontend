@@ -35,6 +35,7 @@ import {
 import { getAvailableLeaveTypes } from "@/app/(app)/hr/settings/leave-data";
 import {
   getLeaveRequestsForEmployee,
+  resolveOptionalHolidayDisplay,
   submitLeaveRequest,
   type LeaveRequestRecord,
 } from "@/app/(app)/hr/requests/requests-data";
@@ -1068,7 +1069,14 @@ export function LeaveBalanceProfileSection({ employee }: { employee: HrEmployee 
                       key={r.id}
                       className="border-b border-border/60 last:border-0 hover:bg-muted/20"
                     >
-                      <td className="px-3 py-2 font-medium whitespace-nowrap">{r.leaveType}</td>
+                      <td className="px-3 py-2 font-medium">
+                        <span className="whitespace-nowrap">{r.leaveType}</span>
+                        {r.leaveType === OPTIONAL_LEAVE_TYPE_NAME ? (
+                          <p className="text-[10px] text-muted-foreground mt-0.5 truncate max-w-[140px]">
+                            {resolveOptionalHolidayDisplay(r).name}
+                          </p>
+                        ) : null}
+                      </td>
                       <td className="px-3 py-2 whitespace-nowrap">{formatDateDisplay(r.fromDate)}</td>
                       <td className="px-3 py-2 whitespace-nowrap">{formatDateDisplay(r.toDate)}</td>
                       <td className="px-3 py-2 text-right tabular-nums">{r.days}</td>
@@ -1102,7 +1110,7 @@ export function LeaveBalanceProfileSection({ employee }: { employee: HrEmployee 
           <SheetHeader>
             <SheetTitle>Leave Application</SheetTitle>
             <SheetDescription>
-              {viewRec ? `${viewRec.leaveType} Â· read-only` : ""}
+              {viewRec ? `${viewRec.leaveType} · read-only` : ""}
             </SheetDescription>
           </SheetHeader>
           {viewRec && (
@@ -1140,11 +1148,14 @@ export function LeaveBalanceProfileSection({ employee }: { employee: HrEmployee 
                       : "—"}
                   </p>
                 </div>
-                {viewRec.optionalHolidayName ? (
+                {viewRec.leaveType === OPTIONAL_LEAVE_TYPE_NAME ? (
                   <div className="col-span-2">
                     <p className="text-muted-foreground">Optional Holiday</p>
                     <p className="font-medium">
-                      {viewRec.optionalHolidayName} Â· {formatDateDisplay(viewRec.fromDate)}
+                      {resolveOptionalHolidayDisplay(viewRec).name} ·{" "}
+                      {formatDateDisplay(
+                        resolveOptionalHolidayDisplay(viewRec).date || viewRec.fromDate,
+                      )}
                     </p>
                   </div>
                 ) : null}

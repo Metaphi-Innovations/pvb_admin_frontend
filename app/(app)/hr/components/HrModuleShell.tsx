@@ -34,8 +34,8 @@ function HrNavigationOverlay() {
 }
 
 /**
- * HR module shell — left contextual rail + main content (Settings, Employees, etc.).
- * Sections may opt out via `showContextualSidebar: false` on HrNavGroup; Employees keeps the rail.
+ * HR module shell — persistent left rail on every /hr/* route + main content.
+ * Settings routes swap the rail to the Settings catalog (with Back to HR Modules).
  */
 export const HrModuleShell = memo(function HrModuleShell({
   children,

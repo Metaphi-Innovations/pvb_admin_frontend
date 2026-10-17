@@ -3,35 +3,29 @@ import {
   CalendarCheck,
   CalendarDays,
   ClipboardList,
-  Settings2,
   Settings,
-  Building2,
-  GitBranch,
-  Network,
-  BadgeCheck,
   Users,
-  UserCog,
   UserRound,
   FileText,
-  Target,
-  Leaf,
   ScrollText,
   Wallet,
   LogOut,
-  Bell,
   Plane,
   Radio,
   LayoutDashboard,
   FileCheck2,
+  History,
 } from "lucide-react";
 
 export type HrNavGroupId =
-  | "attendance"
-  | "reimbursements"
-  | "requests"
-  | "settings"
   | "people"
-  | "masters";
+  | "attendance"
+  | "requests"
+  | "reimbursements"
+  | "payroll"
+  | "letters"
+  | "offboarding"
+  | "settings";
 
 export interface HrNavLink {
   label: string;
@@ -47,13 +41,10 @@ export interface HrNavGroup {
   description: string;
   icon: LucideIcon;
   items: HrNavLink[];
-  /**
-   * When false, HrModuleShell omits the left contextual rail for this section
-   * (content uses full module width). Default true.
-   * Employees uses horizontal workspace tabs instead of a single-item sidebar.
-   */
-  showContextualSidebar?: boolean;
 }
+
+/** Default entry when opening HR from the top navbar. */
+export const HR_MODULE_ENTRY_HREF = "/hr/employees";
 
 export interface HrBreadcrumbItem {
   label: string;
@@ -61,14 +52,17 @@ export interface HrBreadcrumbItem {
 }
 
 /**
- * Contextual left-rail groups for the HR module.
- * Top navbar selects the parent; this rail shows only the active group’s links.
- *
- * Configuration masters live under Settings only.
- * Legacy policy/claims routes are remapped (see ROUTE_PREFIXES) so they do not
- * reappear as separate left-nav groups.
+ * Canonical HR module navigation — used by the persistent left sidebar
+ * and (compact) top HR entry links. Settings deep-nav uses settings-catalog.
  */
 export const HR_NAV_GROUPS: HrNavGroup[] = [
+  {
+    id: "people",
+    label: "Employees",
+    description: "Manage employee records and profiles",
+    icon: Users,
+    items: [{ label: "Employee Directory", href: "/hr/employees", icon: Users }],
+  },
   {
     id: "attendance",
     label: "Attendance",
@@ -79,73 +73,85 @@ export const HR_NAV_GROUPS: HrNavGroup[] = [
       { label: "Live Attendance", href: "/hr/attendance/live", icon: Radio },
       { label: "Daily Attendance", href: "/hr/attendance/daily", icon: CalendarDays },
       { label: "Employee Attendance", href: "/hr/attendance/employees", icon: UserRound },
-      { label: "Attendance Roster", href: "/hr/attendance/roster", icon: Users },
+      { label: "Company Roster", href: "/hr/attendance/roster", icon: Users },
       { label: "Attendance Reports", href: "/hr/attendance/reports", icon: FileText },
-      { label: "Attendance Sync", href: "/hr/attendance/sync", icon: Settings2 },
-    ],
-  },
-  {
-    id: "reimbursements",
-    label: "Reimbursements",
-    description: "Travel and expense claim approval",
-    icon: Wallet,
-    items: [
-      { label: "Reimbursements", href: "/hr/reimbursements", icon: Wallet },
-      { label: "Travel Requests", href: "/hr/travel-requests", icon: Plane },
     ],
   },
   {
     id: "requests",
     label: "Requests",
-    description: "Temporary leave approval inbox",
+    description: "Review and manage employee leave requests.",
     icon: ClipboardList,
+    items: [{ label: "Leave Requests", href: "/hr/requests", icon: ClipboardList }],
+  },
+  {
+    id: "reimbursements",
+    label: "Travel & Expenses",
+    description: "Travel requests and expense claim review",
+    icon: Wallet,
     items: [
-      { label: "Leave Requests", href: "/hr/requests", icon: ClipboardList },
+      { label: "Travel Requests", href: "/hr/travel-requests", icon: Plane },
+      { label: "Reimbursements / Claims", href: "/hr/reimbursements", icon: Wallet },
     ],
+  },
+  {
+    id: "payroll",
+    label: "Payroll",
+    description: "Payroll runs, payslips, and Form 16",
+    icon: Wallet,
+    items: [
+      { label: "Payroll", href: "/hr/payroll", icon: Wallet },
+      { label: "Payroll History", href: "/hr/payroll/history", icon: History },
+      { label: "Payslips", href: "/hr/payroll/payslips", icon: FileText },
+      { label: "Form 16", href: "/hr/payroll/form-16", icon: FileCheck2 },
+    ],
+  },
+  {
+    id: "letters",
+    label: "HR Letters",
+    description: "Issue and manage HR letters",
+    icon: ScrollText,
+    items: [{ label: "HR Letters", href: "/hr/hr-letters", icon: ScrollText }],
+  },
+  {
+    id: "offboarding",
+    label: "Offboarding",
+    description: "Resignations, clearance, and exits",
+    icon: LogOut,
+    items: [{ label: "Offboarding", href: "/hr/offboarding", icon: LogOut }],
   },
   {
     id: "settings",
     label: "Settings",
     description: "Organization and HR configuration",
     icon: Settings,
-    /** Full Settings IA is rendered by HrSettingsSidebar from settings-catalog. */
-    items: [
-      { label: "Overview", href: "/hr/settings", icon: Settings },
-      { label: "Company Profile", href: "/hr/settings/organization/company", icon: Building2 },
-      { label: "Branches", href: "/hr/settings/organization/branches", icon: GitBranch },
-      { label: "Departments", href: "/hr/settings/organization/departments", icon: Network },
-      { label: "Designations", href: "/hr/settings/organization/designations", icon: BadgeCheck },
-      { label: "Employee Types", href: "/hr/settings/organization/employee-types", icon: Users },
-      { label: "Employment Statuses", href: "/hr/settings/organization/employment-statuses", icon: UserCog },
-      { label: "Leave Types", href: "/hr/settings/leave/leave-types", icon: Leaf },
-      { label: "Leave Policies", href: "/hr/settings/leave/leave-policies", icon: ScrollText },
-    ],
-  },
-  {
-    id: "people",
-    label: "Employees",
-    description: "Manage employee records and profiles",
-    icon: Users,
-    items: [
-      { label: "Employee Directory", href: "/hr/employees", icon: Users },
-      { label: "Payroll", href: "/hr/payroll", icon: Wallet },
-      { label: "Form 16", href: "/hr/payroll/form-16", icon: FileCheck2 },
-      { label: "HR Letters", href: "/hr/hr-letters", icon: ScrollText },
-      { label: "Offboarding", href: "/hr/offboarding", icon: LogOut },
-      { label: "Notifications", href: "/hr/notifications", icon: Bell },
-    ],
-  },
-  {
-    id: "masters",
-    label: "Masters",
-    description: "Legacy operational masters",
-    icon: Target,
-    items: [
-      { label: "Monthly Targets", href: "/hr/masters/monthly-target", icon: Target },
-      // TA/DA Policy (Legacy) removed from nav — route /hr/masters/tada-policy preserved
-    ],
+    /** Leaf in module rail; Settings catalog replaces this rail inside /hr/settings/*. */
+    items: [{ label: "Settings", href: "/hr/settings", icon: Settings }],
   },
 ];
+
+/** First child href — used when opening a module from the sidebar header. */
+export function getHrGroupLandingHref(group: HrNavGroup): string {
+  return group.items[0]?.href ?? HR_MODULE_ENTRY_HREF;
+}
+
+/**
+ * Expandable groups show children under a collapsible header.
+ * Leaf modules (label matches sole child) are single clickable rows.
+ */
+export function hrGroupIsExpandable(group: HrNavGroup): boolean {
+  if (group.items.length === 0) return false;
+  if (group.items.length > 1) return true;
+  return group.items[0].label !== group.label;
+}
+
+/** Flat top-nav entry links derived from the same canonical groups (no nested submenus). */
+export function getHrTopNavChildren(): { label: string; href: string }[] {
+  return HR_NAV_GROUPS.map((g) => ({
+    label: g.label,
+    href: getHrGroupLandingHref(g),
+  }));
+}
 
 /**
  * Legacy routes remap into operational/settings groups so left nav does not
@@ -153,21 +159,21 @@ export const HR_NAV_GROUPS: HrNavGroup[] = [
  */
 const ROUTE_PREFIXES: { prefix: string; id: HrNavGroupId }[] = [
   { prefix: "/hr/settings", id: "settings" },
-  { prefix: "/hr/notifications", id: "people" },
-  // Legacy SF policy → Settings shell (Travel Policy is canonical)
+  // Inbox preserved; config stays under Settings — use settings shell for deep link
+  { prefix: "/hr/notifications", id: "settings" },
   { prefix: "/hr/sales-force-policy", id: "settings" },
   { prefix: "/hr/reimbursements", id: "reimbursements" },
   { prefix: "/hr/travel-requests", id: "reimbursements" },
-  // Legacy TA/DA claims → Reimbursements shell (route + store preserved)
   { prefix: "/hr/claims", id: "reimbursements" },
   { prefix: "/hr/requests", id: "requests" },
   { prefix: "/hr/sales-force-attendance", id: "attendance" },
   { prefix: "/hr/attendance", id: "attendance" },
-  { prefix: "/hr/payroll", id: "people" },
-  { prefix: "/hr/hr-letters", id: "people" },
-  { prefix: "/hr/offboarding", id: "people" },
+  { prefix: "/hr/payroll", id: "payroll" },
+  { prefix: "/hr/hr-letters", id: "letters" },
+  { prefix: "/hr/offboarding", id: "offboarding" },
   { prefix: "/hr/employees", id: "people" },
-  { prefix: "/hr/masters", id: "masters" },
+  // Legacy masters — no HR nav group; park under settings shell
+  { prefix: "/hr/masters", id: "settings" },
 ];
 
 export function resolveHrNavGroupId(pathname: string): HrNavGroupId {
@@ -182,12 +188,15 @@ export function getHrNavGroup(id: HrNavGroupId): HrNavGroup {
   return HR_NAV_GROUPS.find((g) => g.id === id) ?? HR_NAV_GROUPS[0];
 }
 
-/** Whether this HR section renders the left contextual sidebar. */
-export function hrSectionShowsContextualSidebar(id: HrNavGroupId): boolean {
-  return getHrNavGroup(id).showContextualSidebar !== false;
+/**
+ * Persistent HR sidebar is always shown on /hr/* routes.
+ * Settings uses the Settings catalog view instead of the module accordion.
+ */
+export function hrSectionShowsContextualSidebar(_id: HrNavGroupId): boolean {
+  return true;
 }
 
-/** Active link detection — operational routes only (config tabs removed from Attendance). */
+/** Active link detection — operational routes only. */
 export function isHrNavActive(pathname: string, href: string, search = ""): boolean {
   const [base, query] = href.split("?");
   const path = pathname.replace(/\/$/, "") || pathname;
@@ -203,15 +212,12 @@ export function isHrNavActive(pathname: string, href: string, search = ""): bool
     return true;
   }
 
-  // Exact match for settings home; prefix for nested routes
   if (baseNorm === "/hr/settings") {
     return path === "/hr/settings";
   }
   if (baseNorm === "/hr/sales-force-attendance") {
-    // Legacy SF route redirects to dashboard — keep highlight on Dashboard when redirected
     return path === baseNorm || path === "/hr/attendance/dashboard";
   }
-  // Employee Directory — list, create, profile, and edit
   if (baseNorm === "/hr/employees") {
     return path === "/hr/employees" || path.startsWith("/hr/employees/");
   }
@@ -221,8 +227,20 @@ export function isHrNavActive(pathname: string, href: string, search = ""): bool
   if (baseNorm === "/hr/payroll/form-16") {
     return path === "/hr/payroll/form-16" || path.startsWith("/hr/payroll/form-16/");
   }
+  if (baseNorm === "/hr/payroll/history") {
+    return path === "/hr/payroll/history" || path.startsWith("/hr/payroll/history/");
+  }
+  if (baseNorm === "/hr/payroll/payslips") {
+    return path === "/hr/payroll/payslips" || path.startsWith("/hr/payroll/payslips/");
+  }
   if (baseNorm === "/hr/payroll") {
-    if (path.startsWith("/hr/payroll/form-16")) return false;
+    if (
+      path.startsWith("/hr/payroll/form-16") ||
+      path.startsWith("/hr/payroll/history") ||
+      path.startsWith("/hr/payroll/payslips")
+    ) {
+      return false;
+    }
     return path === "/hr/payroll" || path.startsWith("/hr/payroll/");
   }
   if (baseNorm === "/hr/offboarding") {
@@ -239,7 +257,6 @@ export function isHrNavActive(pathname: string, href: string, search = ""): bool
     return path === "/employee/claims" || path.startsWith("/employee/claims/");
   }
   if (baseNorm === "/hr/reimbursements") {
-    // Do not highlight Reimbursements when on legacy TA/DA claim routes
     if (path.startsWith("/hr/claims")) return false;
     return path === "/hr/reimbursements" || path.startsWith("/hr/reimbursements/");
   }
@@ -299,7 +316,6 @@ export function isHrNavActive(pathname: string, href: string, search = ""): bool
 export function resolveHrNavLabel(href: string): string {
   if (href.startsWith("/hr/settings")) {
     try {
-      // Lazy path parse without importing settings catalog into every consumer cycle
       if (href === "/hr/settings" || href === "/hr/settings/") return "Overview";
       const map: Record<string, string> = {
         "/hr/settings/organization/company": "Company Profile",
@@ -347,5 +363,5 @@ export function resolveHrNavLabel(href: string): string {
 }
 
 export function hrBreadcrumb(...crumbs: HrBreadcrumbItem[]): HrBreadcrumbItem[] {
-  return [{ label: "HR", href: "/hr/attendance/dashboard" }, ...crumbs];
+  return [{ label: "HR", href: HR_MODULE_ENTRY_HREF }, ...crumbs];
 }

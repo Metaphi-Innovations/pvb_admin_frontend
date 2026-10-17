@@ -5,6 +5,7 @@
  */
 
 import { BRANCH_OPTIONS } from "@/lib/hr/config";
+import { policyToday } from "@/lib/hr/policy-common";
 import {
   getActiveLeaveTypeNames,
   getAssignedLeavePolicy,
@@ -273,12 +274,13 @@ export function getAvailableOptionalHolidaysForEmployee(
   year?: number,
   branchSlug?: string,
 ): OptionalHolidayRow[] {
+  const today = policyToday();
   return resolveEmployeeOptionalHolidays(
     employeeId,
     employeeCode,
     year ?? currentCalendarYear(),
     branchSlug,
-  ).filter((h) => h.status === "available");
+  ).filter((h) => h.status === "available" && h.date.slice(0, 10) >= today);
 }
 
 export function isEligibleOptionalHolidayDate(
@@ -287,9 +289,11 @@ export function isEligibleOptionalHolidayDate(
   isoDate: string,
   branchSlug?: string,
 ): boolean {
-  const year = Number(isoDate.slice(0, 4)) || currentCalendarYear();
+  const date = isoDate.slice(0, 10);
+  if (date < policyToday()) return false;
+  const year = Number(date.slice(0, 4)) || currentCalendarYear();
   return resolveEmployeeOptionalHolidays(employeeId, employeeCode, year, branchSlug).some(
-    (h) => h.date === isoDate.slice(0, 10) && h.status === "available",
+    (h) => h.date === date && h.status === "available",
   );
 }
 

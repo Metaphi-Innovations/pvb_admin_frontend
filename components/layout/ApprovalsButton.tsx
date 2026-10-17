@@ -15,7 +15,7 @@ const OTHER_PENDING_APPROVALS = [
   { label: "Purchase Orders", count: 4, href: "/procurement/purchase-orders" },
   { label: "TA/DA Claims", count: 5, href: "/dashboard" },
   { label: "Attendance Regularization", count: 3, href: "/dashboard" },
-  { label: "Expense Claims", count: 7, href: "/hr/requests" },
+  { label: "Expense Claims", count: 7, href: "/hr/reimbursements" },
   { label: "Leave Requests", count: 2, href: "/hr/requests" },
 ];
 

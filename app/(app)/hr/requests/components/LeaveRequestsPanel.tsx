@@ -50,6 +50,7 @@ import {
   getLeaveTypeFilterOptions,
   isPartialLeaveApproval,
   rejectLeaveRequest,
+  resolveOptionalHolidayDisplay,
   REQUEST_BRANCH_OPTIONS,
   REQUEST_DEPARTMENT_OPTIONS,
   type LeaveApprovedPortion,
@@ -66,10 +67,33 @@ import {
 function matchesSearch(rec: LeaveRequestRecord, q: string): boolean {
   if (!q.trim()) return true;
   const t = q.trim().toLowerCase();
+  const opt = resolveOptionalHolidayDisplay(rec);
   return (
     rec.employeeName.toLowerCase().includes(t) ||
     rec.employeeCode.toLowerCase().includes(t) ||
-    rec.reason.toLowerCase().includes(t)
+    rec.reason.toLowerCase().includes(t) ||
+    opt.name.toLowerCase().includes(t)
+  );
+}
+
+function LeaveTypeCell({ rec }: { rec: LeaveRequestRecord }) {
+  if (rec.leaveType !== OPTIONAL_LEAVE_TYPE_NAME) {
+    return <span className="whitespace-nowrap">{rec.leaveType}</span>;
+  }
+  const opt = resolveOptionalHolidayDisplay(rec);
+  return (
+    <div className="min-w-0 max-w-[160px]">
+      <p className="font-medium whitespace-nowrap">{rec.leaveType}</p>
+      <p
+        className={cn(
+          "text-[10px] leading-tight truncate mt-0.5",
+          opt.recorded ? "text-muted-foreground" : "text-amber-700",
+        )}
+        title={opt.name}
+      >
+        {opt.name}
+      </p>
+    </div>
   );
 }
 
@@ -576,7 +600,9 @@ export function LeaveRequestsPanel({
                         <p className="font-medium whitespace-nowrap">{r.employeeName}</p>
                         <p className="font-mono text-[10px] text-brand-700">{r.employeeCode}</p>
                       </td>
-                      <td className="px-3 py-2 whitespace-nowrap">{r.leaveType}</td>
+                      <td className="px-3 py-2">
+                        <LeaveTypeCell rec={r} />
+                      </td>
                       <td className="px-3 py-2 whitespace-nowrap">{durationLabel(r)}</td>
                       <td className="px-3 py-2 tabular-nums">{formatLeaveDays(r.days)}</td>
                       {mode === "pending" && (
@@ -715,6 +741,22 @@ export function LeaveRequestsPanel({
                 </div>
               )}
 
+              {viewRec.leaveType === OPTIONAL_LEAVE_TYPE_NAME ? (
+                <>
+                  <div className="border-t border-border/70" />
+                  <div className="grid grid-cols-2 gap-3">
+                    <DrawerSummaryCol label="Optional Holiday">
+                      {resolveOptionalHolidayDisplay(viewRec).name}
+                    </DrawerSummaryCol>
+                    <DrawerSummaryCol label="Holiday Date">
+                      {formatDateDisplay(
+                        resolveOptionalHolidayDisplay(viewRec).date || viewRec.fromDate,
+                      )}
+                    </DrawerSummaryCol>
+                  </div>
+                </>
+              ) : null}
+
               {viewEntitlementBalances.length > 0 ? (
                 <>
                   <div className="border-t border-border/70" />
@@ -829,6 +871,23 @@ export function LeaveRequestsPanel({
                 </p>
                 <p className="text-foreground font-medium">{durationLabel(approveRec)}</p>
               </div>
+
+              {approveRec.leaveType === OPTIONAL_LEAVE_TYPE_NAME ? (
+                <div className="rounded-[12px] border border-brand-200 bg-brand-50/60 px-3 py-2.5 space-y-1">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-brand-800">
+                    Optional Leave
+                  </p>
+                  <p className="text-sm font-semibold text-foreground">
+                    Holiday: {resolveOptionalHolidayDisplay(approveRec).name}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Date:{" "}
+                    {formatDateDisplay(
+                      resolveOptionalHolidayDisplay(approveRec).date || approveRec.fromDate,
+                    )}
+                  </p>
+                </div>
+              ) : null}
 
               <div className="grid grid-cols-3 gap-2 text-center border border-border rounded-[12px] divide-x divide-border overflow-hidden">
                 <div className="py-2.5 px-1">
