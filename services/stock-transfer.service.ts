@@ -379,6 +379,9 @@ export function mapBackendStockTransfer(raw: any): StockTransfer {
       Array.isArray(raw.packing_lists) && raw.packing_lists.length > 0
         ? raw.packing_lists[0].packing_list_id
         : undefined,
+    hasPackingList:
+      raw.has_packing_list === true ||
+      (Array.isArray(raw.packing_lists) && raw.packing_lists.length > 0),
     packingLists: Array.isArray(raw.packing_lists)
       ? raw.packing_lists.map((pl: any) => ({
           packingListId: asString(pl.packing_list_id),

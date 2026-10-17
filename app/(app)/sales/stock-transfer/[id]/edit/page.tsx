@@ -9,6 +9,7 @@ import { Save, CheckCircle2, XCircle } from "lucide-react";
 import StockTransferForm from "../../components/StockTransferForm";
 import {
   type StockTransferFormValues,
+  canEditTransfer,
   validateStockTransferForm,
 } from "../../stock-transfer-data";
 import { useProductsDropdown } from "@/hooks/sales/use-sales-orders";
@@ -54,22 +55,28 @@ export default function EditStockTransferPage() {
   }, [productData]);
 
   useEffect(() => {
-    if (transfer) {
-      setForm({
-        transferDate: transfer.transferDate,
-        deliveryDate: transfer.deliveryDate,
-        sourceWarehouseId: transfer.sourceWarehouseId as any,
-        targetWarehouseId: transfer.targetWarehouseId as any,
-        requestedBy: transfer.requestedBy || "",
-        reasonPurpose: transfer.reasonPurpose || "",
-        transportDetails: transfer.transportDetails || "",
-        remarks: transfer.remarks || "",
-        status: transfer.status,
-        lineItems: transfer.lineItems,
-        additionalExpenses: transfer.additionalExpenses || [],
-      });
+    if (!transfer) return;
+
+    if (!canEditTransfer(transfer)) {
+      setToast({ msg: "This stock transfer cannot be edited.", type: "error" });
+      setTimeout(() => router.push("/sales/stock-transfer"), 1200);
+      return;
     }
-  }, [transfer]);
+
+    setForm({
+      transferDate: transfer.transferDate,
+      deliveryDate: transfer.deliveryDate,
+      sourceWarehouseId: transfer.sourceWarehouseId as any,
+      targetWarehouseId: transfer.targetWarehouseId as any,
+      requestedBy: transfer.requestedBy || "",
+      reasonPurpose: transfer.reasonPurpose || "",
+      transportDetails: transfer.transportDetails || "",
+      remarks: transfer.remarks || "",
+      status: transfer.status,
+      lineItems: transfer.lineItems,
+      additionalExpenses: transfer.additionalExpenses || [],
+    });
+  }, [transfer, router]);
 
   useEffect(() => {
     if (!toast) return;
