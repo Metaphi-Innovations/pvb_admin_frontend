@@ -667,7 +667,16 @@ export function DispatchListing({ selectedWarehouse = "All" }: DispatchListingPr
         // TODO: re-enable when delivery confirmation fields are stored
         // setDeliveryForm({ deliveryDate: new Date().toISOString().split("T")[0], receiverName: "", remarks: "" });
       },
-      hide: (row) => row.status === "DELIVERED" || row.status === "CLOSED" || row.status === "CANCELLED",
+      // Delivery Done after Invoice Generated (Normal Sales / Sample / Stock Transfer).
+      // Purchase Return has no Sales Invoice — allow until terminal status.
+      hide: (row) => {
+        const status = String(row.status || "").trim().toUpperCase();
+        if (status === "DELIVERED" || status === "CLOSED" || status === "CANCELLED") {
+          return true;
+        }
+        if (status === "INVOICE_GENERATED") return false;
+        return String(row.source_type || "").trim().toLowerCase() !== "purchase_return";
+      },
     },
   ];
 

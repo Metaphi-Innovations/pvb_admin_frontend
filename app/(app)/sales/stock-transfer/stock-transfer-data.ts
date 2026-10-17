@@ -89,6 +89,8 @@ export interface StockTransfer {
   updatedDate: string;
   packingListId?: number | string;
   packingListNumber?: string;
+  /** True when an active packing list exists (from API list/detail). */
+  hasPackingList?: boolean;
   packingLists?: Array<{
     packingListId: string;
     packingNumber: string;
@@ -547,10 +549,39 @@ export function buildTransferFromForm(
   };
 }
 
+const PACKED_OR_BEYOND_FULFILLMENT_STATUSES: string[] = [
+  "Partially Packed",
+  "Fully Packed",
+  "Partially Dispatched",
+  "Fully Dispatched",
+  "FULLY_DISPATCHED",
+  "DELIVERED",
+  "delivered",
+  "dispatched",
+];
+
+/** True once any packing list exists (or fulfillment shows packing has begun). */
+export function hasPackingListGenerated(transfer: StockTransfer): boolean {
+  if (transfer.hasPackingList === true) return true;
+  if (transfer.packingListId || transfer.packingListNumber) return true;
+  if ((transfer.packingLists?.length ?? 0) > 0) return true;
+  const lines = transfer.lineItems ?? [];
+  if (lines.some((l) => Number(l.generatedBaseQty || 0) > 1e-9)) return true;
+  const fulfillment = (transfer.fulfillmentStatus || "PENDING").toString();
+  if (fulfillment.toUpperCase() === "PENDING") return false;
+  if (fulfillment === "Ready For Packing") return true;
+  if (PACKED_OR_BEYOND_FULFILLMENT_STATUSES.includes(fulfillment)) return true;
+  if (fulfillment.toUpperCase() === "CANCELLED") return true;
+  return false;
+}
+
+/** Editable until a packing list is generated (draft / pending / approved). */
 export function canEditTransfer(transfer: StockTransfer): boolean {
   if (transfer.status === "cancelled") return false;
   const status = normalizeTransferStatus(transfer.status);
-  return ["draft", "pending_approval", "confirmed", "rejected"].includes(status);
+  if (status === "cancelled" || status === "rejected") return false;
+  if (hasPackingListGenerated(transfer)) return false;
+  return true;
 }
 
 export function cancelStockTransfer(id: number, reason: string): StockTransfer | { error: string } {

@@ -1311,8 +1311,12 @@ export function mapPrepareItemsToLines(
     const batchSnap = firstBatchSnapshot(
       (item.batch_snapshot || null) as Record<string, unknown> | null,
     );
+    const batchNumber = batchNumberFromSnapshot(batchSnap);
     return {
-      id: item.grn_item_id || `prep-${index}`,
+      // One GRN item can yield multiple batch lines — keep ids unique per row.
+      id: item.grn_item_id
+        ? `${item.grn_item_id}-${batchNumber || index}`
+        : `prep-${index}`,
       productId: null,
       productName:
         snapshotStr(snap, "product_name", "name") || `Item ${index + 1}`,
@@ -1321,7 +1325,7 @@ export function mapPrepareItemsToLines(
         resolveSkuFromProductSnapshot(snap),
       ),
       description: snapshotStr(snap, "hsn_code", "hsn") || "",
-      batchNumber: batchNumberFromSnapshot(batchSnap),
+      batchNumber,
       mfgDate: asDateOnly(batchSnap?.manufacture_date ?? batchSnap?.mfg_date),
       expDate: asDateOnly(batchSnap?.expiry_date ?? batchSnap?.exp_date),
       invoiceQty: asNumber(item.quantity),

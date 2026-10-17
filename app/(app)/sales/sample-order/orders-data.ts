@@ -191,6 +191,8 @@ export interface SalesOrder {
   cancelledDate?: string;
   packingListId?: string | number;
   packingListNumber?: string;
+  /** True when an active packing list exists (from API list/detail). */
+  hasPackingList?: boolean;
   packingLists?: Array<{
     packingListId: string;
     packingNumber: string;
@@ -449,9 +451,38 @@ export function getProductById(id: string): ProductCatalogItem | undefined {
   return (dynamicProducts || []).find((p) => p.id === id);
 }
 
-// Minimal helpers for permission checking:
+const PACKED_OR_BEYOND_FULFILLMENT_STATUSES: string[] = [
+  "Partially Packed",
+  "Fully Packed",
+  "Partially Dispatched",
+  "Fully Dispatched",
+  "FULLY_DISPATCHED",
+  "DELIVERED",
+  "delivered",
+  "dispatched",
+];
+
+/** True once any packing list exists (or fulfillment shows packing has begun). */
+export function hasPackingListGenerated(order: SalesOrder): boolean {
+  if (order.hasPackingList === true) return true;
+  if (order.packingListId || order.packingListNumber) return true;
+  if ((order.packingLists?.length ?? 0) > 0) return true;
+  const lines = order.lineItems ?? [];
+  if (lines.some((l) => Number(l.generatedBaseQty || 0) > 1e-9)) return true;
+  const fulfillment = (order.fulfillmentStatus || "PENDING").toString();
+  if (fulfillment.toUpperCase() === "PENDING") return false;
+  if (fulfillment === "Ready For Packing") return true;
+  if (PACKED_OR_BEYOND_FULFILLMENT_STATUSES.includes(fulfillment)) return true;
+  if (fulfillment.toUpperCase() === "CANCELLED") return true;
+  return false;
+}
+
+/** Editable until a packing list is generated (draft / pending / approved). */
 export function canEditOrder(order: SalesOrder): boolean {
-  return order.status === "draft" || order.status === "pending_approval";
+  const status = (order.status || "").toString().toLowerCase().replace(/\s+/g, "_");
+  if (status === "cancelled" || status === "rejected") return false;
+  if (hasPackingListGenerated(order)) return false;
+  return true;
 }
 
 /** Cancellation is only allowed before any packing list is generated (packing lists deduct stock). */
