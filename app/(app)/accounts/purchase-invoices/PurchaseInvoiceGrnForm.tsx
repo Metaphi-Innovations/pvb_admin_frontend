@@ -71,6 +71,26 @@ function snapshotStr(snapshot: Record<string, unknown> | null | undefined, ...ke
   return "";
 }
 
+function batchNumberFromPrepareItem(
+  item: PrepareGrnInvoiceDto["items"][number],
+): string {
+  const snap = (item.batch_snapshot || null) as Record<string, unknown> | null;
+  if (!snap) return "";
+  const batches = snap.batches;
+  if (Array.isArray(batches) && batches.length > 0) {
+    const first = batches[0];
+    if (first && typeof first === "object") {
+      return snapshotStr(
+        first as Record<string, unknown>,
+        "batch_number",
+        "batchNumber",
+        "batch_no",
+      );
+    }
+  }
+  return snapshotStr(snap, "batch_number", "batchNumber", "batch_no");
+}
+
 function isPreparedInterstate(prepared: PrepareGrnInvoiceDto): boolean {
   const pos = prepared.place_of_supply as
     | { is_interstate?: boolean; isInterstate?: boolean }
@@ -643,20 +663,22 @@ export function PurchaseInvoiceGrnForm({
                 <div className="so-invoice-charges-table-wrap w-full">
                   <table className="so-invoice-table text-xs w-full table-fixed">
                     <colgroup>
-                      <col className="min-w-[180px]" style={{ width: "28%" }} />
-                      <col style={{ width: "8%" }} />
+                      <col className="min-w-[160px]" style={{ width: "22%" }} />
                       <col style={{ width: "12%" }} />
                       <col style={{ width: "7%" }} />
-                      <col style={{ width: "14%" }} />
-                      <col style={{ width: "10%" }} />
-                      <col style={{ width: "10%" }} />
-                      <col style={{ width: "10%" }} />
                       <col style={{ width: "11%" }} />
+                      <col style={{ width: "7%" }} />
+                      <col style={{ width: "12%" }} />
+                      <col style={{ width: "9%" }} />
+                      <col style={{ width: "9%" }} />
+                      <col style={{ width: "9%" }} />
+                      <col style={{ width: "10%" }} />
                     </colgroup>
                     <thead>
                       <tr>
                         {[
                           "Item",
+                          "Batch",
                           "Qty",
                           "Rate",
                           "GST %",
@@ -670,7 +692,7 @@ export function PurchaseInvoiceGrnForm({
                             key={label}
                             className={cn(
                               "px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap",
-                              i === 0 ? "text-left" : "text-right",
+                              i <= 1 ? "text-left" : "text-right",
                             )}
                           >
                             {label}
@@ -681,8 +703,12 @@ export function PurchaseInvoiceGrnForm({
                     <tbody>
                       {items.map((item, idx) => {
                         const split = getItemGstSplit(item, interstate);
+                        const batchNo = batchNumberFromPrepareItem(item);
                         return (
-                          <tr key={item.grn_item_id || idx} className="border-b border-border/40 last:border-0">
+                          <tr
+                            key={`${item.grn_item_id || "item"}-${batchNo || idx}-${idx}`}
+                            className="border-b border-border/40 last:border-0"
+                          >
                             <td className="p-1.5 pr-2 font-medium min-w-0">
                               <span className="block truncate">
                                 {snapshotStr(item.product_snapshot, "product_name", "name") ||
@@ -701,6 +727,9 @@ export function PurchaseInvoiceGrnForm({
                                   </span>
                                 ) : null;
                               })()}
+                            </td>
+                            <td className="p-1.5 pr-2 font-mono text-muted-foreground min-w-0">
+                              <span className="block truncate">{batchNo || "—"}</span>
                             </td>
                             <td className="p-1.5 pr-2 text-right">
                               <InvoiceTableReadonly value={String(Number(item.quantity))} />
