@@ -176,6 +176,7 @@ export function StockTransferQcListing() {
               warehouse: "warehouse__warehouse_name",
               receivedQty: "receivedQty",
               totalReceivedQty: "receivedQty",
+              itemCount: "item_count",
             };
             baseKey = mapping[qcSort.key] || qcSort.key;
           } else {
@@ -189,6 +190,7 @@ export function StockTransferQcListing() {
               inspectionDate: "qcDate",
               receivedQty: "receivedQty",
               totalReceivedQty: "receivedQty",
+              itemCount: "item_count",
             };
             baseKey = mapping[qcSort.key] || qcSort.key;
           }
@@ -362,15 +364,16 @@ export function StockTransferQcListing() {
       ),
     },
     {
-      key: "receivedQty",
-      header: "Received Qty",
+      key: "itemCount",
+      header: "Items",
       sortable: true,
       align: "right",
-      width: "110px",
-      render: (_val, row) => {
-        const totalReceived = row.totalReceivedQty ?? row.items.reduce((sum, it) => sum + it.receivedQty, 0);
-        return <span className="text-xs font-medium tabular-nums">{totalReceived.toLocaleString()}</span>;
-      },
+      width: "90px",
+      render: (_val, row) => (
+        <span className="text-xs font-medium tabular-nums">
+          {(row.itemCount ?? row.items?.length ?? 0).toLocaleString()}
+        </span>
+      ),
     },
     {
       key: "status",

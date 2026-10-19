@@ -169,6 +169,7 @@ function resolveVendorName(payload: any): string {
 
 export function mapBackendRecordToFrontend(item: any): QcRecord {
   const vendorName = resolveVendorName(item);
+  const items = item.items || [];
   return {
     id: item.id,
     qcNo: item.qcNumber,
@@ -184,9 +185,10 @@ export function mapBackendRecordToFrontend(item: any): QcRecord {
     totalAcceptedQty: item.acceptedQty || 0,
     totalRejectedQty: item.rejectedQty || 0,
     totalHoldQty: 0,
+    itemCount: Number(item.itemCount) || items.length || 0,
     status: "completed",
     sourceType: mapSourceType(item.sourceType),
-    items: item.items || [],
+    items,
     isEditable: item.isEditable ?? false,
   };
 }
@@ -219,6 +221,7 @@ export function mapBackendGrnToPendingQc(grn: any): QcRecord {
     totalAcceptedQty: 0,
     totalRejectedQty: 0,
     totalHoldQty: 0,
+    itemCount: Number(grn.itemCount) || qcItems.length || 0,
     status: "pending",
     sourceType: mapSourceType(grn.source_type),
     items: qcItems,
@@ -263,6 +266,7 @@ export function mapBackendQcDetailToFrontend(qc: any): QcRecord {
     totalAcceptedQty: totalAccepted,
     totalRejectedQty: totalRejected,
     totalHoldQty: 0,
+    itemCount: Number(qc.itemCount) || qcItems.length || 0,
     status: "completed",
     sourceType: mapSourceType(qc.source_type || qc.grn?.source_type),
     items: qcItems,
@@ -308,6 +312,7 @@ export function mapBackendGrnToQcRecord(grn: any): QcRecord {
     totalAcceptedQty: 0,
     totalRejectedQty: 0,
     totalHoldQty: 0,
+    itemCount: Number(grn.itemCount) || qcItems.length || 0,
     status: "pending",
     sourceType: mapSourceType(grn.source_type),
     items: qcItems,

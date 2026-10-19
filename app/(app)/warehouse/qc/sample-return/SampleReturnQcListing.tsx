@@ -175,6 +175,7 @@ export function SampleReturnQcListing() {
               vendorName: "customer_name",
               warehouse: "warehouse__warehouse_name",
               totalReceivedQty: "receivedQty",
+              itemCount: "item_count",
             };
             baseKey = mapping[qcSort.key] || qcSort.key;
           } else {
@@ -186,6 +187,7 @@ export function SampleReturnQcListing() {
               vendorName: "vendorName",
               warehouse: "grn__warehouse__warehouse_name",
               totalReceivedQty: "receivedQty",
+              itemCount: "item_count",
             };
             baseKey = mapping[qcSort.key] || qcSort.key;
           }
@@ -338,14 +340,14 @@ export function SampleReturnQcListing() {
       ),
     },
     {
-      key: "totalReceivedQty",
-      header: "Returned Qty",
+      key: "itemCount",
+      header: "Items",
       sortable: true,
       align: "right",
-      width: "110px",
-      render: (val) => (
+      width: "90px",
+      render: (_val, row) => (
         <span className="text-xs font-medium tabular-nums text-foreground">
-          {val != null ? val.toLocaleString() : "—"}
+          {(row.itemCount ?? row.items?.length ?? 0).toLocaleString()}
         </span>
       ),
     },
