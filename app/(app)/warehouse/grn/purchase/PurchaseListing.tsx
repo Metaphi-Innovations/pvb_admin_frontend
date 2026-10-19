@@ -16,16 +16,21 @@ type GrnListingRow = GrnRecord & {
   receivedQty: number;
   acceptedQty: number;
   rejectedQty: number;
+  itemCount: number;
 };
 
 function enrichGrnRow(grn: GrnRecord, qcs: QcRecord[]): GrnListingRow {
   const receivedQty = grn.items.reduce((s, it) => s + (it.receivedQty ?? 0), 0);
+  const batchCount = (grn.batches?.length || 0) > 0
+    ? grn.batches.length
+    : grn.items.length;
   const qc = qcs.find((q) => q.grnNo === grn.grnNo && q.status === "completed");
   return {
     ...grn,
     receivedQty,
     acceptedQty: qc?.totalAcceptedQty ?? 0,
     rejectedQty: qc?.totalRejectedQty ?? 0,
+    itemCount: batchCount,
   };
 }
 
@@ -140,14 +145,14 @@ export function PurchaseListing() {
       render: (_val, row) => <span className="text-xs text-foreground">{row.vendorName}</span>,
     },
     {
-      key: "receivedQty",
-      header: "Received Qty",
+      key: "itemCount",
+      header: "Items",
       sortable: true,
       align: "right",
-      width: "110px",
-      render: (val) => (
+      width: "90px",
+      render: (_val, row) => (
         <span className="text-xs font-medium tabular-nums text-foreground">
-          {val != null ? val.toLocaleString() : "—"}
+          {(row.itemCount ?? row.totalProducts ?? 0).toLocaleString()}
         </span>
       ),
     },

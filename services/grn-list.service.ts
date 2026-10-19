@@ -14,6 +14,8 @@ export interface GrnListItem extends GrnRecord {
   receivedQty: number;
   acceptedQty: number;
   rejectedQty: number;
+  /** Batch count for the Items listing column. */
+  itemCount: number;
 }
 
 export interface GrnListParams {
@@ -155,9 +157,15 @@ function mapListItem(
   const sourceId =
     asString(raw.source_id) || asString(raw.sourceId) || undefined;
 
+  const itemsArr = Array.isArray(raw.items) ? raw.items : [];
+  const batchCountFromItems = itemsArr.reduce((sum, item) => {
+    const record = asRecord(item);
+    const batches = Array.isArray(record.batches) ? record.batches : [];
+    return sum + batches.length;
+  }, 0);
   const itemCount =
     asNumber(raw.itemCount) ||
-    (Array.isArray(raw.items) ? raw.items.length : 0);
+    (batchCountFromItems > 0 ? batchCountFromItems : itemsArr.length);
 
   const stockTransferNo =
     tabContext.sourceType === "STOCK_TRANSFER"
@@ -229,6 +237,7 @@ function mapListItem(
     receivedQty,
     acceptedQty,
     rejectedQty,
+    itemCount,
   };
 }
 

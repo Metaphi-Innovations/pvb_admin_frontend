@@ -58,21 +58,6 @@ export function PackingProductLinesSection({
   const orderedQtyLabel = getPackingQtyLabel(order.sourceDocumentType);
   const isPurchaseReturn = isPurchaseReturnDoc(order);
 
-  const groupedProducts = useMemo(() => {
-    const groups: Record<string, SalesOrderProduct[]> = {};
-    order.products.forEach((p) => {
-      const groupKey = `${p.sku}-${p.quantity_type || "Case"}`;
-      if (!groups[groupKey]) groups[groupKey] = [];
-      groups[groupKey].push(p);
-    });
-    return Object.values(groups)
-      .map((all) => ({
-        all,
-        packable: all.filter(isPackableLine),
-      }))
-      .filter((group) => group.packable.length > 0);
-  }, [order.products]);
-
   return (
     <div className="border-t border-border/80 pt-6 mt-6 space-y-3">
       <div className="flex items-center justify-between gap-3 border-b pb-2">
@@ -100,11 +85,12 @@ export function PackingProductLinesSection({
           </div>
 
           <div className="space-y-3">
-            {groupedProducts.map((group) => (
+            {/* One block per packing-list product (batch line) — do not merge same SKU. */}
+            {packableProducts.map((product) => (
               <PackingProductGroup
-                key={`${group.all[0].sku}-${group.all[0].quantity_type || "Case"}`}
-                allProducts={group.all}
-                packableProducts={group.packable}
+                key={getLineKey(product)}
+                allProducts={[product]}
+                packableProducts={[product]}
                 orderedQtyLabel={orderedQtyLabel}
                 selectedLines={selectedLines}
                 packingQty={packingQty}
@@ -179,12 +165,15 @@ function PackingProductGroup({
                 if (el) el.indeterminate = someGroupSelected && !allGroupSelected;
               }}
               onChange={(e) => handleGroupToggle(e.target.checked)}
-              aria-label={`Select all batches for ${product.product}`}
+              aria-label={`Select ${product.product}${product.batchNumber?.trim() ? ` batch ${product.batchNumber.trim()}` : ""}`}
             />
             <div className="min-w-0">
               <p className="text-sm font-semibold text-foreground truncate">{product.product}</p>
               <p className="text-xs text-muted-foreground font-mono">
                 SKU: {product.sku?.trim() || "—"}
+                {product.batchNumber?.trim()
+                  ? ` · Batch: ${product.batchNumber.trim()}`
+                  : ""}
               </p>
               <p className="text-[11px] text-muted-foreground mt-0.5">
                 {orderedQtyLabel.replace(/ Qty$/i, "")} {totalOrderedQty}

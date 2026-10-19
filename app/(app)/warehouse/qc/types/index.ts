@@ -61,6 +61,8 @@ export interface QcRecord {
   totalAcceptedQty: number;
   totalRejectedQty: number;
   totalHoldQty: number;
+  /** Batch count for the Items listing column. */
+  itemCount?: number;
   status: QcStatus;
   qcResult?: QcResult;
   qcRemarks?: string;

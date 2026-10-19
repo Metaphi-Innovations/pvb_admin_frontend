@@ -46,7 +46,7 @@ function mapToReceivedRow(item: GrnListItem): ReceivedStockTransferGrnRow {
     fromWarehouse: item.fromWarehouse ?? item.vendorName ?? "—",
     toWarehouse: item.toWarehouse ?? item.warehouse,
     dispatchDate: item.dispatchDate ?? item.grnDate,
-    itemCount: item.totalProducts || 0,
+    itemCount: item.itemCount || item.totalProducts || 0,
     receivedQty: item.receivedQty,
     displayStatus: getStockTransferGrnDisplayStatus({
       isPendingTransfer: false,
@@ -380,16 +380,6 @@ export function StockTransferListing() {
         width: "80px",
         render: (_val, row) => (
           <span className="text-xs font-medium tabular-nums">{row.itemCount.toLocaleString()}</span>
-        ),
-      },
-      {
-        key: "receivedQty",
-        header: "Received Qty",
-        sortable: true,
-        align: "right",
-        width: "110px",
-        render: (_val, row) => (
-          <span className="text-xs font-medium tabular-nums">{row.receivedQty.toLocaleString()}</span>
         ),
       },
       {
