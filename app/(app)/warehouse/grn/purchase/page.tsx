@@ -118,14 +118,14 @@ export default function PurchaseListingRoutePage() {
         ),
       },
       {
-        key: "receivedQty",
-        header: "Received Qty",
+        key: "itemCount",
+        header: "Items",
         sortable: true,
         align: "right",
-        width: "110px",
-        render: (val) => (
+        width: "90px",
+        render: (_val, row) => (
           <span className="text-xs font-medium tabular-nums text-foreground">
-            {val != null ? val.toLocaleString() : "—"}
+            {(row.itemCount ?? row.totalProducts ?? 0).toLocaleString()}
           </span>
         ),
       },

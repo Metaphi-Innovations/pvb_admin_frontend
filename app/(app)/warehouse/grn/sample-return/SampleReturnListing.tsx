@@ -101,12 +101,16 @@ export function SampleReturnListing() {
         render: (val) => <span className="text-xs text-foreground">{val}</span>,
       },
       {
-        key: "totalQty",
-        header: "Returned Qty",
+        key: "itemCount",
+        header: "Items",
         sortable: true,
         align: "right",
-        width: "110px",
-        render: (val) => <span className="text-xs font-medium tabular-nums">{val.toLocaleString()}</span>,
+        width: "90px",
+        render: (_val, row) => (
+          <span className="text-xs font-medium tabular-nums">
+            {(row.itemCount ?? row.totalProducts ?? 0).toLocaleString()}
+          </span>
+        ),
       },
       {
         key: "status",
