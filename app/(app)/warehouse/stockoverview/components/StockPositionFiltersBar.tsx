@@ -51,9 +51,18 @@ export function StockPositionFiltersBar({
     const resolved = resolveStockDatePreset(presetId, today, selectedFY, allFYs);
     if (resolved) {
       onChange({ datePreset: presetId, ...resolved });
-    } else {
-      onChange({ datePreset: "custom" });
+      return;
     }
+    // Fallback: still enable custom with selected FY start/end
+    const fyFrom = selectedFY?.startDate
+      ? String(selectedFY.startDate).slice(0, 10)
+      : filters.fromDate;
+    const fyTo = selectedFY?.endDate
+      ? String(selectedFY.endDate).slice(0, 10)
+      : filters.toDate;
+    onChange(
+      applyCustomStockDates(fyFrom || today, fyTo || today),
+    );
   };
 
   const handleFromChange = (fromDate: string) => {

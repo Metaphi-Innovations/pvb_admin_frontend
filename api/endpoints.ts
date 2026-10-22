@@ -633,6 +633,7 @@ export const API_ENDPOINTS = {
       DROPDOWN: "/warehouse/dispatch/dropdown",
       FILTER_DROPDOWN: "/warehouse/dispatch/filter-dropdown",
       CREATE: "/warehouse/dispatch/create",
+      BULK_UPLOAD: "/warehouse/dispatch/bulk-upload",
       DETAILS: (id: string) => `/warehouse/dispatch/${id}`,
       REVERT: (id: string) => `/warehouse/dispatch/${id}/revert`,
       DOWNLOAD_CHALLAN: (id: string) => `/warehouse/dispatch/${id}/download-challan`,
