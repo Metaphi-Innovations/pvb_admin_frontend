@@ -117,7 +117,16 @@ export function resolveStockDatePreset(
   selectedFY: FinancialYear,
   allFYs: FinancialYear[],
 ): Pick<StockPositionFilters, "dateMode" | "asOnDate" | "fromDate" | "toDate"> | null {
-  if (presetId === "custom") return null;
+  if (presetId === "custom") {
+    // Pre-fill From/To with selected FY bounds; user can edit after.
+    const fy = fyIsoRange(selectedFY);
+    return {
+      dateMode: "range",
+      asOnDate: fy.to,
+      fromDate: fy.from,
+      toDate: fy.to,
+    };
+  }
 
   if (presetId === "today") {
     return { dateMode: "single", asOnDate: today, fromDate: today, toDate: today };
