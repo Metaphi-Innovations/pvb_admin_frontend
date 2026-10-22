@@ -19,13 +19,14 @@ import {
 import { axiosInstance } from "@/api/axios";
 import { API_ENDPOINTS } from "@/api/endpoints";
 
+/** Empty placeholders only — never invent bank account numbers on PDFs. */
 const DEFAULT_BANK = {
-  accountName: "ParamVerse Bio Pvt. Ltd.",
-  bankName: "HDFC Bank Ltd.",
-  accountNo: "50200098765432",
-  ifsc: "HDFC0002874",
-  branch: "Aurangabad - MIDC Branch",
-} as const;
+  accountName: "—",
+  bankName: "—",
+  accountNo: "—",
+  ifsc: "—",
+  branch: "—",
+};
 
 const PROFORMA_TERMS =
   "This is a Proforma Invoice issued for a sample order and is for quotation / internal approval purposes only. It is not a tax invoice and does not constitute a demand for payment. GST shown is indicative and will be charged as applicable on the date of actual supply. Goods will be dispatched only after receipt of a confirmed Purchase Order.";
@@ -367,6 +368,7 @@ function buildLineFromSampleItem(
       "",
     ),
     qtyInCase,
+    totalUnits,
     totalQty: displayTotalQty,
     uom: displayUom,
     rate,
@@ -500,7 +502,7 @@ export function mapSampleOrderToProforma(
 
   const warehouseName = asText(
     warehouse.registered_legal_name || warehouse.warehouse_name,
-    "ParamVerse Bio Pvt. Ltd.",
+    "—",
   );
   const billFrom = partyFromRaw(warehouseName, warehouse, {
     address: [asText(warehouse.address, ""), asText(warehouse.address_1, "")]
@@ -509,7 +511,7 @@ export function mapSampleOrderToProforma(
     city: warehouse.city,
     state: warehouse.state,
     pincode: warehouse.pincode,
-    gstin: asText(warehouse.gst_number || warehouse.gstin, "27AAQCP4960M1ZL"),
+    gstin: asText(warehouse.gst_number || warehouse.gstin, ""),
     mobile: warehouse.mobile || warehouse.phone,
     email: warehouse.email,
   });
@@ -586,7 +588,13 @@ export function mapSampleOrderToProforma(
     shipTo: shipping,
     lines,
     hsnSummary: Array.from(hsnMap.values()),
-    bank: { ...DEFAULT_BANK },
+    bank: {
+      accountName: asText(warehouse.account_holder_name, DEFAULT_BANK.accountName),
+      bankName: asText(warehouse.bank_name, DEFAULT_BANK.bankName),
+      accountNo: asText(warehouse.account_number, DEFAULT_BANK.accountNo),
+      ifsc: asText(warehouse.ifsc_code, DEFAULT_BANK.ifsc),
+      branch: asText(warehouse.branch_name, DEFAULT_BANK.branch),
+    },
     narration: (() => {
       const fromNarration = String(order.narration ?? "").trim();
       if (fromNarration) return fromNarration;

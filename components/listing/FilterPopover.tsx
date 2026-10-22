@@ -8,7 +8,7 @@ import {
 } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Filter, X, Search, Check } from "lucide-react";
+import { Filter, X, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ColumnConfig, FilterValue } from "./types";
 
@@ -52,16 +52,6 @@ export function FilterPopover({
     setOpen(false);
   };
 
-  const toggleDropdownValue = (val: string) => {
-    setSelectedDropdownValues((prev) => {
-      const next = prev.includes(val)
-        ? prev.filter((v) => v !== val)
-        : [...prev, val];
-      onChange(next.length > 0 ? next : undefined);
-      return next;
-    });
-  };
-
   const handleClearDropdown = () => {
     setSelectedDropdownValues([]);
     onChange(undefined);
@@ -92,7 +82,7 @@ export function FilterPopover({
       </PopoverTrigger>
       <PopoverContent
         align="start"
-        className="w-60 space-y-3 rounded-xl border border-border bg-white p-3 shadow-lg"
+        className="w-64 space-y-3 rounded-xl border border-border bg-white p-3 shadow-lg"
       >
         <div className="flex items-center justify-between border-b pb-2">
           <span className="text-xs font-semibold text-foreground">
@@ -149,14 +139,22 @@ export function FilterPopover({
         {column.filterType === "dropdown" && (
           <div className="space-y-3">
             <AutocompleteSelect
+              multiple
               options={column.filterOptions || []}
-              value={selectedDropdownValues[0] || ""}
+              value={selectedDropdownValues}
               onChange={(val) => {
-                setSelectedDropdownValues(val ? [val] : []);
+                // Keep selection in local draft only — Apply commits the filter
+                const next = Array.isArray(val)
+                  ? val.map(String).filter(Boolean)
+                  : val
+                    ? [String(val)]
+                    : [];
+                setSelectedDropdownValues(next);
               }}
-              placeholder="Select option..."
+              placeholder="Select options..."
               searchPlaceholder={`Search ${column.header.toLowerCase()}...`}
               className="h-9 rounded-lg border-border bg-white text-xs shadow-sm"
+              popoverClassName="w-[240px] min-w-[240px]"
             />
             <div className="flex items-center justify-end gap-2 pt-1 border-t">
               <Button
@@ -165,7 +163,7 @@ export function FilterPopover({
                 onClick={handleClearDropdown}
                 className="h-7 text-[11px] px-3 font-semibold uppercase tracking-wide border border-border rounded-lg hover:bg-muted text-foreground"
               >
-                Cancel
+                Clear
               </Button>
               <Button
                 size="sm"

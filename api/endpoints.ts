@@ -597,6 +597,8 @@ export const API_ENDPOINTS = {
       DAILY_LOG_LIST: "/warehouse/stock-overview/daily-log/list",
       DAILY_LOG_EXPORT: "/warehouse/stock-overview/daily-log/export",
       DAILY_LOG_SUMMARY: "/warehouse/stock-overview/daily-log/summary",
+      BATCH_MOVEMENTS_LIST: "/warehouse/stock-overview/batch-movements/list",
+      BATCH_MOVEMENTS_EXPORT: "/warehouse/stock-overview/batch-movements/export",
     },
     REORDER_LEVEL: {
       LIST: "/warehouse/reorder-level/list",
