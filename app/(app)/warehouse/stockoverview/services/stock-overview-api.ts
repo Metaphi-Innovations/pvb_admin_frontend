@@ -191,6 +191,38 @@ export type DailyLogSummary = {
   closingStockValue: number;
 };
 
+export type BatchMovementListRow = {
+  id: string;
+  movement_at: string;
+  direction: "IN" | "OUT" | string;
+  transaction_type: string;
+  movement_type: string;
+  order_type: string;
+  document_no: string;
+  order_no: string;
+  party_name: string;
+  product_id: string;
+  product_code: string;
+  product_name: string;
+  sku: string;
+  batch_no: string;
+  warehouse_id: string;
+  warehouse_name: string;
+  qty: number;
+  /** Case/ledger lines rolled into this grouped row. */
+  case_count: number;
+  before_qty: number;
+  after_qty: number;
+  source_module: string;
+  case_id: string | null;
+};
+
+export type BatchMovementSummary = {
+  totalMovements: number;
+  inwardQty: number;
+  outwardQty: number;
+};
+
 type ListBaseParams = {
   page: number;
   page_size: number;
@@ -428,14 +460,20 @@ function buildQuery(params: Record<string, string | undefined>): string {
   return query.toString();
 }
 
-function scalarFilterValue(value: unknown): string | undefined {
+/** Preserve multi-select arrays; collapse empty / invalid values. */
+function filterFieldValue(value: unknown): string | string[] | undefined {
   if (value === undefined || value === null || value === "") return undefined;
   if (Array.isArray(value)) {
-    const first = value[0];
-    return first === undefined || first === null || first === "" ? undefined : String(first);
+    const values = value
+      .map((v) => (v == null ? "" : String(v).trim()))
+      .filter(Boolean);
+    if (values.length === 0) return undefined;
+    if (values.length === 1) return values[0];
+    return values;
   }
   if (typeof value === "object" && value !== null && "fromDate" in value) return undefined;
-  return String(value);
+  const single = String(value).trim();
+  return single || undefined;
 }
 
 /** Map UI filter keys → API body.filters keys expected by Stock Overview APIs. */
@@ -445,7 +483,7 @@ export function buildStockOverviewFilters(filters: FilterState | undefined): Rec
 
   Object.entries(filters).forEach(([key, raw]) => {
     if (key === "search") return;
-    const value = scalarFilterValue(raw);
+    const value = filterFieldValue(raw);
     if (value === undefined) return;
 
     if (key === "product" || key === "product_name" || key === "productName") mapped.product_name = value;
@@ -462,6 +500,13 @@ export function buildStockOverviewFilters(filters: FilterState | undefined): Rec
     else if (key === "scientific_name" || key === "scientificName") mapped.scientific_name = value;
     else if (key === "category") mapped.category = value;
     else if (key === "customer" || key === "customer_name") mapped.customer_name = value;
+    else if (key === "party" || key === "party_name") mapped.party_name = value;
+    else if (key === "direction") mapped.direction = value;
+    else if (key === "order_type" || key === "orderType") mapped.order_type = value;
+    else if (key === "movement_type" || key === "movementType") mapped.movement_type = value;
+    else if (key === "order_no" || key === "orderNo") mapped.order_no = value;
+    else if (key === "document_no" || key === "documentNo") mapped.document_no = value;
+    else if (key === "sku") mapped.sku = value;
     else if (key === "return_no" || key === "returnNo" || key === "salesReturnNo" || key === "sampleReturnNo") {
       mapped.return_no = value;
     }
@@ -545,6 +590,22 @@ export function toStockOrdering(key: string, direction: "asc" | "desc" | "none")
     day_out: "day_out",
     closingQty: "closing_qty",
     closing_qty: "closing_qty",
+    movementAt: "movement_at",
+    movement_at: "movement_at",
+    direction: "direction",
+    movementType: "movement_type",
+    movement_type: "movement_type",
+    orderType: "order_type",
+    order_type: "order_type",
+    documentNo: "document_no",
+    document_no: "document_no",
+    orderNo: "order_no",
+    order_no: "order_no",
+    partyName: "party_name",
+    party_name: "party_name",
+    qty: "qty",
+    caseCount: "case_count",
+    case_count: "case_count",
   };
   const field = map[key] || key;
   return direction === "desc" ? `-${field}` : field;
@@ -1030,6 +1091,89 @@ export const StockOverviewApi = {
       { responseType: "blob", timeout: 120000 },
     );
     await downloadExportBlob(response, "daily_log.xlsx");
+  },
+
+  async listBatchMovements(params: DailyLogListParams): Promise<{
+    items: BatchMovementListRow[];
+    total: number;
+    summary: BatchMovementSummary;
+    filter_options: Record<string, Array<{ label: string; value: string }>>;
+  }> {
+    const warehouseId = params.warehouse_id && params.warehouse_id !== "All" ? params.warehouse_id : "all";
+    const productId = params.product_id && params.product_id !== "all" ? params.product_id : "all";
+    const query = buildQuery({
+      page: String(params.page),
+      page_size: String(params.page_size),
+      search: params.search || "",
+      ordering: params.ordering || "",
+      warehouse_id: warehouseId,
+      product_id: productId,
+      period: params.period || "",
+      from_date: params.from_date || "",
+      to_date: params.to_date || "",
+    });
+    const response = await axiosInstance.post(
+      `${API_ENDPOINTS.WAREHOUSE.STOCK_OVERVIEW.BATCH_MOVEMENTS_LIST}?${query}`,
+      {
+        warehouse_id: warehouseId,
+        product_id: productId,
+        filters: buildStockOverviewFilters(params.filters),
+      },
+      { signal: params.signal },
+    );
+    const payload = response.data as Record<string, unknown>;
+    const { items, total } = parseListResponse<BatchMovementListRow>(payload);
+    const summaryRaw = (payload.summary ?? {}) as Record<string, unknown>;
+    const rawOptions = (payload.filter_options ?? {}) as Record<string, unknown>;
+    const filter_options: Record<string, Array<{ label: string; value: string }>> = {};
+    Object.entries(rawOptions).forEach(([key, val]) => {
+      if (!Array.isArray(val)) return;
+      filter_options[key] = val
+        .map((row) => {
+          if (!row || typeof row !== "object") return null;
+          const rec = row as Record<string, unknown>;
+          const value = asString(rec.value ?? rec.label).trim();
+          if (!value) return null;
+          return { label: asString(rec.label || value).trim() || value, value };
+        })
+        .filter((x): x is { label: string; value: string } => Boolean(x));
+    });
+    return {
+      items,
+      total,
+      summary: {
+        totalMovements: toNumber(summaryRaw.totalMovements),
+        inwardQty: toNumber(summaryRaw.inwardQty),
+        outwardQty: toNumber(summaryRaw.outwardQty),
+      },
+      filter_options,
+    };
+  },
+
+  async exportBatchMovements(
+    params: Omit<DailyLogListParams, "page" | "page_size" | "signal">,
+  ): Promise<void> {
+    const warehouseId = params.warehouse_id && params.warehouse_id !== "All" ? params.warehouse_id : "all";
+    const productId = params.product_id && params.product_id !== "all" ? params.product_id : "all";
+    const query = buildQuery({
+      search: params.search || "",
+      ordering: params.ordering || "",
+      warehouse_id: warehouseId,
+      product_id: productId,
+      period: params.period || "",
+      from_date: params.from_date || "",
+      to_date: params.to_date || "",
+    });
+    const response = await axiosInstance.post(
+      `${API_ENDPOINTS.WAREHOUSE.STOCK_OVERVIEW.BATCH_MOVEMENTS_EXPORT}?${query}`,
+      {
+        warehouse_id: warehouseId,
+        product_id: productId,
+        filters: buildStockOverviewFilters(params.filters),
+      },
+      { responseType: "blob", timeout: 120000 },
+    );
+    await downloadExportBlob(response, "batch_movements.xlsx");
   },
 
   async exportInventory(params: Omit<ListBaseParams, "page" | "page_size" | "signal">): Promise<void> {

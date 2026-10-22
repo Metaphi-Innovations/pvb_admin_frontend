@@ -118,8 +118,8 @@ export function GoodsTransportStatutorySection({
   value,
   onChange,
   hideDistance = false,
-  /** Sales Order keeps doc fields required; Stock Transfer only requires mode + distance. */
-  requireTransportDocs = true,
+  /** Kept for callers; transport fields are all optional on Sales Invoice. */
+  requireTransportDocs = false,
 }: {
   value: GoodsTransportStatutoryState;
   onChange: (patch: Partial<GoodsTransportStatutoryState>) => void;
@@ -128,6 +128,7 @@ export function GoodsTransportStatutorySection({
   requireTransportDocs?: boolean;
 }) {
   const set = (patch: Partial<GoodsTransportStatutoryState>) => onChange(patch);
+  void requireTransportDocs;
 
   return (
     <div className="so-transport-layout space-y-1.5">
@@ -137,7 +138,7 @@ export function GoodsTransportStatutorySection({
           hideDistance ? "so-transport-grid--docs" : "so-transport-grid--5",
         )}
       >
-        <Field label="Transport Mode" required>
+        <Field label="Transport Mode">
           <Select
             value={value.transportMode || undefined}
             onValueChange={(v) => set({ transportMode: v })}
@@ -177,7 +178,7 @@ export function GoodsTransportStatutorySection({
           />
         </Field>
         {!hideDistance ? (
-          <Field label="Distance (KM)" required>
+          <Field label="Distance (KM)">
             <CtrlInput
               type="number"
               value={value.distanceKm}
@@ -212,14 +213,14 @@ export function GoodsTransportStatutorySection({
             aria-label="LR Date"
           />
         </Field>
-        <Field label="Transport Doc No." className="so-span-1" required={requireTransportDocs}>
+        <Field label="Transport Doc No." className="so-span-1">
           <CtrlInput
             value={value.transportDocNo}
             onChange={(v) => set({ transportDocNo: v })}
             placeholder="Transport document no."
           />
         </Field>
-        <Field label="Transport Doc Date" className="so-span-1" required={requireTransportDocs}>
+        <Field label="Transport Doc Date" className="so-span-1">
           <AccountsDateInput
             className="h-8 text-xs w-full"
             value={value.transportDocDate}

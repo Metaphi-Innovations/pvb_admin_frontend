@@ -30,13 +30,22 @@ interface PdfPartyBlock {
 const DEFAULT_TI_DECLARATION =
   "Goods once sold will not be taken back or exchanged. All disputes subject to Aurangabad jurisdiction only. We declare that this invoice shows the actual price of the goods described and that all particulars are true and correct.";
 
-const DEFAULT_BANK = {
-  accountName: "ParamVerse Bio Pvt. Ltd.",
-  bankName: "HDFC Bank Ltd.",
-  accountNo: "50200098765432",
-  ifsc: "HDFC0002874",
-  branch: "Aurangabad - MIDC Branch",
-} as const;
+export interface TaxInvoiceBankDetails {
+  accountName: string;
+  bankName: string;
+  accountNo: string;
+  ifsc: string;
+  branch: string;
+}
+
+/** Empty placeholders only — never invent bank account numbers on PDFs. */
+const DEFAULT_BANK: TaxInvoiceBankDetails = {
+  accountName: "—",
+  bankName: "—",
+  accountNo: "—",
+  ifsc: "—",
+  branch: "—",
+};
 
 export interface TaxInvoiceLineItem {
   sr: number;
@@ -46,6 +55,7 @@ export interface TaxInvoiceLineItem {
   sku: string;
   hsnCode: string;
   qtyInCase: number;
+  totalUnits: number;
   totalQty: number;
   uom: string;
   rate: number;
@@ -104,7 +114,7 @@ export interface TaxInvoiceViewModel {
   shipTo: PdfPartyBlock;
   lines: TaxInvoiceLineItem[];
   hsnSummary: TaxInvoiceHsnSummaryRow[];
-  bank: typeof DEFAULT_BANK;
+  bank: TaxInvoiceBankDetails;
   /** From sales_invoice.narration, fallback remarks. Empty when absent. */
   narration: string;
   terms: string;
@@ -189,7 +199,7 @@ function formatDisplayDate(value: unknown): string {
 function stateCodeFromGstin(gstin: string): string {
   const digits = String(gstin || "").replace(/\s/g, "");
   if (digits.length >= 2 && /^\d{2}/.test(digits)) return digits.slice(0, 2);
-  return "27";
+  return "";
 }
 
 function partyFromRaw(
@@ -212,7 +222,14 @@ function partyFromRaw(
     .filter(Boolean)
     .join(", ")
     .replace(", –", " –");
-  const gstin = asText(raw.gstin ?? raw.gstin_no ?? fallbacks.gstin, "");
+  const gstin = asText(
+    raw.gstin ?? raw.gstin_no ?? raw.gst_number ?? raw.gstin_number ?? fallbacks.gstin,
+    "",
+  );
+  const pan = asText(
+    raw.pan ?? raw.pan_no ?? raw.pan_number ?? fallbacks.pan,
+    "",
+  );
   const stateCode = stateCodeFromGstin(gstin);
   const mobile = asText(raw.mobile ?? raw.mobile_no ?? fallbacks.mobile, "");
   const email = asText(raw.email ?? fallbacks.email, "");
@@ -220,12 +237,17 @@ function partyFromRaw(
   const lines: string[] = [];
   if (address) lines.push(address);
   if (cityStatePin) lines.push(cityStatePin);
-  if (gstin) lines.push(`GSTIN ${gstin}  State Code ${stateCode}`);
+  const taxIds = [
+    gstin ? `GSTIN : ${gstin}` : "",
+    stateCode ? `State Code : ${stateCode}` : "",
+    pan ? `PAN : ${pan}` : "",
+  ].filter(Boolean);
+  if (taxIds.length) lines.push(taxIds.join("; "));
   if (mobile || email) {
     lines.push(
-      [mobile ? `Mobile ${mobile}` : "", email ? `Email ${email}` : ""]
+      [mobile ? `Mobile : ${mobile}` : "", email ? `Email : ${email}` : ""]
         .filter(Boolean)
-        .join("  "),
+        .join("; "),
     );
   }
   return { name: asText(name, "—"), lines };
@@ -285,10 +307,10 @@ export function mapDispatchToTaxInvoice(
     billTo.gstin || customer.gstin_no || snapshot.gstin_no,
     "",
   );
-  const warehouseState = asText(warehouse.state, "Maharashtra");
+  const warehouseState = asText(warehouse.state, "");
   const customerState = asText(
     shipTo.state || billTo.state || customer.state || snapshot.state,
-    "Maharashtra",
+    "",
   );
   const interstate =
     warehouseState.toLowerCase() !== customerState.toLowerCase() ||
@@ -442,6 +464,7 @@ export function mapDispatchToTaxInvoice(
         "",
       ),
       qtyInCase,
+      totalUnits,
       totalQty: displayTotalQty,
       uom: displayUom,
       rate,
@@ -479,6 +502,7 @@ export function mapDispatchToTaxInvoice(
         "",
       ),
       qtyInCase: 0,
+      totalUnits: 1,
       totalQty: 1,
       uom: "—",
       rate: toNumber(charge.amount),
@@ -558,10 +582,7 @@ export function mapDispatchToTaxInvoice(
     ? toNumber(salesInvoice.round_off_amount)
     : round2(derivedGrand - derivedBeforeRound);
 
-  const warehouseName = asText(
-    warehouse.warehouse_name,
-    "ParamVerse Bio Pvt. Ltd.",
-  );
+  const warehouseName = asText(warehouse.warehouse_name, "—");
   const billFrom = partyFromRaw(warehouseName, warehouse, {
     address: [asText(warehouse.address, ""), asText(warehouse.address_1, "")]
       .filter(Boolean)
@@ -569,9 +590,9 @@ export function mapDispatchToTaxInvoice(
     city: warehouse.city,
     state: warehouse.state,
     pincode: warehouse.pincode,
-    gstin: "27AAQCP4960M1ZL",
+    gstin: asText(warehouse.gst_number ?? warehouse.gstin, ""),
     mobile: warehouse.mobile || warehouse.phone,
-    email: warehouse.email || "sales@paramversebio.com",
+    email: warehouse.email,
   });
 
   const billing = partyFromRaw(customerName, billTo, {
@@ -666,7 +687,13 @@ export function mapDispatchToTaxInvoice(
     shipTo: shipping,
     lines,
     hsnSummary: Array.from(hsnMap.values()),
-    bank: { ...DEFAULT_BANK },
+    bank: {
+      accountName: asText(warehouse.account_holder_name, DEFAULT_BANK.accountName),
+      bankName: asText(warehouse.bank_name, DEFAULT_BANK.bankName),
+      accountNo: asText(warehouse.account_number, DEFAULT_BANK.accountNo),
+      ifsc: asText(warehouse.ifsc_code, DEFAULT_BANK.ifsc),
+      branch: asText(warehouse.branch_name, DEFAULT_BANK.branch),
+    },
     narration: (() => {
       const fromNarration = String(salesInvoice.narration ?? "").trim();
       if (fromNarration) return fromNarration;
@@ -750,41 +777,38 @@ function companyMetaHtml(data: TaxInvoiceViewModel): string {
 }
 
 function buildItemsTotalsRowHtml(options: {
-  useIgst: boolean;
   totalCases: number;
+  totalUnits: number;
   totalQty: number;
   uom: string;
   gross: string;
   discAmt: string;
   taxable: string;
-  cgstOrIgst: string;
-  sgst: string;
   total: string;
   /** Extra blank cell after SKU (Sales Person column on proforma). */
   salesPersonColumn?: boolean;
 }): string {
-  // Sr | Code | Name | SKU | [Sales Person] | HSN | Qty of Case | Total Qty | Rate | Gross | Disc% | Disc Amt | Taxable | GST% | Tax | [SGST] | Total
-  const sgstCell = options.useIgst
-    ? ""
-    : `<td class="pv-r pv-num">${escapeHtml(options.sgst)}</td>`;
+  // Sr+Code (merged) | Name | SKU | [TM] | HSN | Cases | Units | Qty | Rate | Gross | Disc% | Disc Amt | Taxable | GST% | Total
   const salesPersonCell = options.salesPersonColumn ? "<td>&nbsp;</td>" : "";
   return `<tr class="pv-totals-row">
-    <td><strong>Totals</strong></td>
-    <td>&nbsp;</td>
+    <td colspan="2"><strong>Totals</strong></td>
     <td>&nbsp;</td>
     <td>&nbsp;</td>
     ${salesPersonCell}
     <td>&nbsp;</td>
-    <td class="pv-r pv-num ti-tot-qty">Grand Total Qty of Case:<br/>${escapeHtml(formatNumber(options.totalCases))}</td>
-    <td class="pv-r pv-num ti-tot-qty">Grand Total Qty:<br/>${escapeHtml(formatNumber(options.totalQty))} ${escapeHtml(options.uom)}</td>
+    <td class="pv-r pv-num ti-tot-qty">${escapeHtml(formatNumber(options.totalCases))}</td>
+    <td class="pv-r pv-num ti-tot-qty">${escapeHtml(formatNumber(options.totalUnits))}</td>
+    <td class="pv-r pv-num ti-tot-qty">${
+      options.totalQty > 0
+        ? `${escapeHtml(formatNumber(options.totalQty))}${options.uom ? ` ${escapeHtml(options.uom)}` : ""}`
+        : "—"
+    }</td>
     <td>&nbsp;</td>
     <td class="pv-r pv-num">${escapeHtml(options.gross)}</td>
     <td>&nbsp;</td>
     <td class="pv-r pv-num">${escapeHtml(options.discAmt)}</td>
     <td class="pv-r pv-num">${escapeHtml(options.taxable)}</td>
     <td>&nbsp;</td>
-    <td class="pv-r pv-num">${escapeHtml(options.cgstOrIgst)}</td>
-    ${sgstCell}
     <td class="pv-r pv-num"><strong>${escapeHtml(options.total)}</strong></td>
   </tr>`;
 }
@@ -803,65 +827,43 @@ export function buildTaxInvoiceHtml(
   const partyMode = options?.partyMode || "bill_ship";
   const isProforma = options?.layout === "proforma";
   const useIgst = data.interstate || data.lines.some((l) => l.igst > 0);
-  const qrSrc =
-    data.qrDataUrl ||
-    `https://api.qrserver.com/v1/create-qr-code/?size=80x80&margin=0&data=${encodeURIComponent(
-      asText(data.irn, "") !== "—" && asText(data.irn, "")
-        ? data.irn
-        : asText(data.invoiceNo, "TAX-INVOICE"),
-    )}`;
 
+  // Portrait widths: short headers + tight % so line table fits A4 (~200mm printable).
   const finalColumns: PdfTableColumn[] = isProforma
     ? [
-        { key: "sr", header: "Sr", width: "2.2%", align: "center" },
-        { key: "productCode", header: "Product Code", width: "6.5%", nowrap: true },
-        { key: "productName", header: "Product Name", width: "14%" },
-        { key: "sku", header: "SKU", width: "6%", nowrap: true },
-        { key: "salesPerson", header: "Sales Person (TM)", width: "7%", nowrap: true },
-        { key: "hsn", header: "HSN", width: "4%", align: "center", nowrap: true },
-        { key: "qtyCase", header: "Qty of Case", width: "4.5%", numeric: true },
-        { key: "totalQty", header: "Total Qty (Kg/Ltr)", width: "6.5%", numeric: true },
-        { key: "rate", header: "Rate Per Unit", width: "5.5%", numeric: true },
-        { key: "gross", header: "Gross Amt", width: "6%", numeric: true },
-        { key: "discPct", header: "Disc %", width: "3.5%", numeric: true },
+        { key: "sr", header: "Sr", width: "2%", align: "center" },
+        { key: "productCode", header: "Code", width: "5%", nowrap: true },
+        { key: "productName", header: "Product", width: "13%" },
+        { key: "sku", header: "SKU", width: "4%", nowrap: true },
+        { key: "salesPerson", header: "TM", width: "5.5%", nowrap: true },
+        { key: "hsn", header: "HSN", width: "4.5%", align: "center", nowrap: true },
+        { key: "qtyCase", header: "Cases", width: "4%", numeric: true },
+        { key: "totalUnits", header: "Units", width: "4.5%", numeric: true },
+        { key: "totalQty", header: "Qty Kg/Ltr", width: "6%", numeric: true },
+        { key: "rate", header: "Rate", width: "5.5%", numeric: true },
+        { key: "gross", header: "Gross", width: "6%", numeric: true },
+        { key: "discPct", header: "Disc%", width: "3.5%", numeric: true },
         { key: "discAmt", header: "Disc Amt", width: "5%", numeric: true },
-        { key: "taxable", header: "Taxable Val", width: "6%", numeric: true },
-        { key: "gstPct", header: "GST %", width: "3.5%", numeric: true },
-        {
-          key: "cgst",
-          header: useIgst ? "IGST" : "CGST",
-          width: "5%",
-          numeric: true,
-        },
-        ...(useIgst
-          ? []
-          : [{ key: "sgst", header: "SGST", width: "5%", numeric: true } as PdfTableColumn]),
-        { key: "total", header: "Total", width: "6%", numeric: true },
+        { key: "taxable", header: "Taxable", width: "6%", numeric: true },
+        { key: "gstPct", header: "GST%", width: "3.5%", numeric: true },
+        { key: "total", header: "Total", width: "6.5%", numeric: true },
       ]
     : [
         { key: "sr", header: "Sr", width: "2.5%", align: "center" },
-        { key: "productCode", header: "Product Code", width: "7%", nowrap: true },
-        { key: "productName", header: "Product Name", width: "16%" },
-        { key: "sku", header: "SKU", width: "7%", nowrap: true },
-        { key: "hsn", header: "HSN", width: "4.5%", align: "center", nowrap: true },
-        { key: "qtyCase", header: "Qty of Case", width: "5%", numeric: true },
-        { key: "totalQty", header: "Total Qty (Kg/Ltr)", width: "7%", numeric: true },
-        { key: "rate", header: "Rate Per Unit", width: "6%", numeric: true },
-        { key: "gross", header: "Gross Amt", width: "6.5%", numeric: true },
-        { key: "discPct", header: "Disc %", width: "4%", numeric: true },
-        { key: "discAmt", header: "Disc Amt", width: "5.5%", numeric: true },
-        { key: "taxable", header: "Taxable Val", width: "6.5%", numeric: true },
-        { key: "gstPct", header: "GST %", width: "4%", numeric: true },
-        {
-          key: "cgst",
-          header: useIgst ? "IGST" : "CGST",
-          width: "5.5%",
-          numeric: true,
-        },
-        ...(useIgst
-          ? []
-          : [{ key: "sgst", header: "SGST", width: "5.5%", numeric: true } as PdfTableColumn]),
-        { key: "total", header: "Total", width: "6.5%", numeric: true },
+        { key: "productCode", header: "Code", width: "6%", nowrap: true },
+        { key: "productName", header: "Product", width: "14%" },
+        { key: "sku", header: "SKU", width: "4%", nowrap: true },
+        { key: "hsn", header: "HSN", width: "8%", align: "center", nowrap: true },
+        { key: "qtyCase", header: "Cases", width: "5%", numeric: true },
+        { key: "totalUnits", header: "Units", width: "5.5%", numeric: true },
+        { key: "totalQty", header: "Qty Kg/Ltr", width: "7.5%", numeric: true },
+        { key: "rate", header: "Rate", width: "7%", numeric: true },
+        { key: "gross", header: "Gross", width: "8.5%", numeric: true },
+        { key: "discPct", header: "Disc%", width: "4%", numeric: true },
+        { key: "discAmt", header: "Disc Amt", width: "6.5%", numeric: true },
+        { key: "taxable", header: "Taxable", width: "8.5%", numeric: true },
+        { key: "gstPct", header: "GST%", width: "4%", numeric: true },
+        { key: "total", header: "Total", width: "9%", numeric: true },
       ];
 
   const finalRows: PdfTableRow[] = data.lines.map((line) => {
@@ -875,6 +877,7 @@ export function buildTaxInvoiceHtml(
         salesPerson: data.salesPerson,
         hsn: line.hsnCode,
         qtyCase: isCharge ? "—" : formatNumber(line.qtyInCase),
+        totalUnits: isCharge ? "—" : formatNumber(line.totalUnits),
         totalQty: isCharge
           ? "—"
           : line.totalQty > 0 && line.uom && line.uom !== "—"
@@ -886,16 +889,17 @@ export function buildTaxInvoiceHtml(
         discAmt: isCharge ? "—" : formatCurrency(line.discAmt),
         taxable: formatCurrency(line.taxableValue),
         gstPct: pctLabel(line.gstPct),
-        cgst: formatCurrency(useIgst ? line.igst : line.cgst),
-        sgst: formatCurrency(line.sgst),
         total: formatCurrency(line.total),
       },
       htmlCells: {
-        productName: `<strong>${escapeHtml(line.productName)}</strong>${
+        productName: `<div class="ti-pname">${escapeHtml(line.productName)}</div>${
           line.batchLine
-            ? `<span class="sub">${escapeHtml(line.batchLine)}</span>`
+            ? `<span class="sub">${escapeHtml(line.batchLine).replace(/ \| /g, "<br/>")}</span>`
             : ""
         }`,
+        hsn: line.hsnCode
+          ? `<span class="ti-hsn-code">${escapeHtml(line.hsnCode)}</span>`
+          : "—",
         total: `<strong>${escapeHtml(formatCurrency(line.total))}</strong>`,
       },
     };
@@ -905,8 +909,15 @@ export function buildTaxInvoiceHtml(
     (l) => l.productCode !== "—" || l.uom !== "—",
   );
   const totalCases = productLines.reduce((s, l) => s + l.qtyInCase, 0);
+  const totalUnitsSum = productLines.reduce((s, l) => s + l.totalUnits, 0);
   const totalQty = productLines.reduce((s, l) => s + l.totalQty, 0);
-  const uom = productLines[0]?.uom || data.lines[0]?.uom || "Units";
+  const uom =
+    productLines.find((l) => l.totalQty > 0 && (l.uom === "Kg" || l.uom === "Ltr"))?.uom ||
+    productLines.find((l) => l.uom === "Kg" || l.uom === "Ltr")?.uom ||
+    (totalQty > 0 ? "Kg" : "");
+  const linesGrossTotal = round2(data.lines.reduce((s, l) => s + l.grossAmt, 0));
+  const linesDiscTotal = round2(data.lines.reduce((s, l) => s + l.discAmt, 0));
+  const linesTaxableTotal = round2(data.lines.reduce((s, l) => s + l.taxableValue, 0));
   const linesTotal = round2(data.lines.reduce((s, l) => s + l.total, 0));
   const b = blankCell();
 
@@ -916,15 +927,13 @@ export function buildTaxInvoiceHtml(
   }).replace(
     "</tbody>",
     `${buildItemsTotalsRowHtml({
-      useIgst,
       totalCases,
+      totalUnits: totalUnitsSum,
       totalQty,
       uom,
-      gross: formatCurrency(data.summary.grossAmount),
-      discAmt: formatCurrency(data.summary.discount),
-      taxable: formatCurrency(data.summary.taxableValue),
-      cgstOrIgst: formatCurrency(useIgst ? data.summary.igst : data.summary.cgst),
-      sgst: formatCurrency(data.summary.sgst),
+      gross: formatCurrency(linesGrossTotal),
+      discAmt: formatCurrency(linesDiscTotal),
+      taxable: formatCurrency(linesTaxableTotal),
       total: formatCurrency(linesTotal),
       salesPersonColumn: isProforma,
     })}</tbody>`,
@@ -1065,9 +1074,6 @@ export function buildTaxInvoiceHtml(
             metaFieldHtml("E-Way Bill No.", data.ewayBillNo, { dotted: true }),
             metaFieldHtml("E-Way Bill Expiry Date", data.ewayBillExpiry, { dotted: true }),
           ].join("")}</div>
-          <div class="ti-qr">
-            <img src="${escapeSrcAttr(qrSrc)}" alt="E-Invoice QR" width="30" height="30" />
-          </div>
         </div>
         <div class="ti-irn">
           ${metaFieldHtml("IRN", data.irn, { dotted: true, wide: true })}
@@ -1188,7 +1194,8 @@ export function buildTaxInvoiceHtml(
     title: " ",
     bodyHtml,
     extraCss: `
-      @page { size: A4 landscape; margin: 7mm; }
+      /* Portrait A4 — compact columns so the line table fits print width */
+      @page { size: A4 portrait; margin: 5mm; }
 
       :root {
         --ti-band: #edf2fa;
@@ -1200,7 +1207,7 @@ export function buildTaxInvoiceHtml(
         --ti-muted: #4b5563;
       }
 
-      body { font-size: 7.5px; color: var(--ti-text); }
+      body { font-size: 10px !important; line-height: 1.25 !important; color: var(--ti-text); }
       .pv-header, .pv-section-title { display: none !important; }
 
       .ti-header {
@@ -1236,7 +1243,7 @@ export function buildTaxInvoiceHtml(
         line-height: 1.15;
       }
       .ti-company-name {
-        font-size: 12.5px;
+        font-size: 14px !important;
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.2px;
@@ -1246,14 +1253,12 @@ export function buildTaxInvoiceHtml(
       }
       .ti-muted {
         color: var(--ti-muted);
-        font-size: 6.2px;
-        line-height: 1.2;
+        font-size: 8.5px !important;
+        line-height: 1.25;
         margin: 1px 0 0;
         padding: 0;
       }
-      .ti-company-meta {
-        margin-top: 1px !important;
-      }
+      .ti-company-meta { margin-top: 1px !important; }
       .ti-company-meta .ti-meta-pair .k {
         font-weight: 400;
         color: var(--ti-muted);
@@ -1267,7 +1272,7 @@ export function buildTaxInvoiceHtml(
         align-self: end;
       }
       .ti-doc-title {
-        font-size: 15px;
+        font-size: 16px !important;
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.4px;
@@ -1279,29 +1284,29 @@ export function buildTaxInvoiceHtml(
         border: 1px solid #b8c0cc;
         border-radius: 999px;
         padding: 2px 9px;
-        font-size: 6.5px;
+        font-size: 8.5px !important;
         font-weight: 600;
         color: #374151;
         text-transform: none;
       }
 
       .ti-lbl {
-        font-size: 5.8px;
+        font-size: 8px !important;
         color: var(--ti-label);
         text-transform: uppercase;
         font-weight: 700;
         letter-spacing: 0.25px;
       }
       .ti-val {
-        font-size: 7.6px;
+        font-size: 10px !important;
         font-weight: 700;
         color: var(--ti-text);
         margin-top: 2px;
-        min-height: 10px;
+        min-height: 12px;
       }
       .ti-val.dotted {
         border-bottom: 1px dashed #9aa3b2;
-        min-height: 12px;
+        min-height: 14px;
         margin-top: 5px;
       }
       .ti-meta-row {
@@ -1313,7 +1318,29 @@ export function buildTaxInvoiceHtml(
       .ti-meta-row.cols-6 { grid-template-columns: repeat(6, 1fr); }
       .ti-meta-row.cols-5 { grid-template-columns: repeat(5, 1fr); }
       .ti-meta-row.cols-4 { grid-template-columns: repeat(4, 1fr); }
+      .ti-meta-row.cols-3 { grid-template-columns: repeat(3, 1fr); }
+      .ti-meta-row.cols-2 { grid-template-columns: 1fr 1fr; }
       .ti-field.wide { grid-column: 1 / -1; }
+
+      .ti-cn-meta {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 4px 16px;
+        align-items: start;
+      }
+      .ti-cn-meta-left {
+        display: grid;
+        gap: 4px;
+      }
+      .ti-cn-ref-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px 16px;
+      }
+      .ti-cn-ref-col {
+        display: grid;
+        gap: 4px;
+      }
 
       .ti-dash {
         border: none;
@@ -1328,25 +1355,11 @@ export function buildTaxInvoiceHtml(
 
       .ti-einvoice { margin: 2px 0 0; }
       .ti-einvoice-top {
-        display: grid;
-        grid-template-columns: 1fr 32px;
-        gap: 10px;
-        align-items: start;
-        max-width: 62%;
-      }
-      .ti-qr {
-        width: 30px;
-        height: 30px;
-        margin-top: 2px;
-      }
-      .ti-qr img {
-        width: 30px !important;
-        height: 30px !important;
         display: block;
-        border: none;
+        max-width: 100%;
       }
-      .ti-irn { margin-top: 4px; max-width: 78%; }
-      .ti-irn .ti-val { font-size: 7px; word-break: break-all; }
+      .ti-irn { margin-top: 4px; max-width: 100%; }
+      .ti-irn .ti-val { font-size: 9px !important; word-break: break-all; }
 
       .ti-parties {
         display: grid;
@@ -1354,9 +1367,7 @@ export function buildTaxInvoiceHtml(
         gap: 6px;
         margin: 6px 0 8px;
       }
-      .ti-parties.cols-2 {
-        grid-template-columns: 1fr 1fr;
-      }
+      .ti-parties.cols-2 { grid-template-columns: 1fr 1fr; }
       .ti-party {
         border: 1px solid var(--ti-border);
         min-height: 78px;
@@ -1365,7 +1376,7 @@ export function buildTaxInvoiceHtml(
       .ti-party-h {
         background: var(--ti-band);
         color: var(--ti-band-text);
-        font-size: 6.8px;
+        font-size: 9px !important;
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.3px;
@@ -1375,54 +1386,108 @@ export function buildTaxInvoiceHtml(
       .ti-party-b { padding: 5px 7px; }
       .ti-party .name {
         font-weight: 700;
-        font-size: 8px;
+        font-size: 10.5px !important;
         margin: 0 0 2px;
       }
       .ti-party p {
         margin: 0 0 1px;
-        font-size: 6.8px;
+        font-size: 9px !important;
         line-height: 1.35;
         color: #2a2a2a;
       }
 
       .ti-items table.pv-table {
         width: 100%;
-        font-size: 6.2px;
+        table-layout: fixed !important;
+        font-size: 9px !important;
         border-collapse: collapse;
       }
       .ti-items table.pv-table th {
         background: var(--ti-band) !important;
         color: var(--ti-band-text) !important;
         border: 1px solid #b7c2d4 !important;
-        font-size: 5.6px !important;
+        font-size: 7.5px !important;
         padding: 3px 2px !important;
         white-space: normal !important;
         line-height: 1.15;
+        word-break: break-word;
+        overflow-wrap: anywhere;
+        hyphens: auto;
       }
       .ti-items table.pv-table td {
         border: 1px solid #d5dae3 !important;
-        padding: 2px 2px !important;
+        padding: 3px 2px !important;
         vertical-align: top;
+        font-size: 8.5px !important;
+        word-break: break-word;
+        overflow-wrap: anywhere;
+      }
+      .ti-items table.pv-table td.pv-num,
+      .ti-items table.pv-table td.pv-r {
+        white-space: nowrap !important;
+        overflow: hidden;
+        text-overflow: clip;
+        font-size: 8px !important;
+        padding: 3px 2px !important;
+      }
+      .ti-items table.pv-table td.pv-nowrap {
+        white-space: nowrap !important;
+        overflow: visible;
+      }
+      .ti-items table.pv-table td.pv-c {
+        text-align: center;
+        vertical-align: middle;
+      }
+      .ti-items .ti-pname {
+        font-size: 9px !important;
+        font-weight: 700;
+        line-height: 1.2;
+        color: #111111;
+        word-break: break-word;
+        overflow-wrap: anywhere;
+      }
+      .ti-items .sub {
+        display: block;
+        font-size: 9px !important;
+        color: #1a1a1a;
+        font-weight: 500;
+        margin-top: 2px;
+        line-height: 1.35;
+        word-break: break-word;
+        overflow-wrap: anywhere;
+      }
+      .ti-items .ti-hsn-code {
+        display: inline-block;
+        font-size: 8px !important;
+        font-weight: 600;
+        letter-spacing: 0;
+        white-space: nowrap;
+        line-height: 1.2;
       }
       .ti-items .pv-totals-row td {
         background: #f3f5f8 !important;
         font-weight: 700;
         white-space: nowrap;
-        font-size: 6.2px;
+        overflow: hidden;
+        font-size: 8px !important;
         vertical-align: middle;
       }
       .ti-items .pv-totals-row td.ti-tot-qty {
         white-space: normal !important;
-        font-size: 5.6px;
-        line-height: 1.25;
+        overflow: hidden !important;
+        word-break: break-word;
+        overflow-wrap: anywhere;
+        font-size: 7.5px !important;
+        line-height: 1.2;
         text-align: right;
       }
-      .ti-items .sub {
+      .ti-items .pv-totals-row td.ti-tot-qty .ti-tot-lbl {
         display: block;
-        font-size: 5.6px;
-        color: #6b7280;
-        font-weight: 400;
-        margin-top: 1px;
+        font-size: 6.5px !important;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.2px;
+        color: #4b5563;
       }
 
       .ti-lower {
@@ -1441,7 +1506,7 @@ export function buildTaxInvoiceHtml(
       .ti-hsn-title {
         background: var(--ti-band);
         color: var(--ti-band-text);
-        font-size: 6.8px;
+        font-size: 9px !important;
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.3px;
@@ -1457,7 +1522,7 @@ export function buildTaxInvoiceHtml(
       .ti-hsn table.pv-table {
         width: 100% !important;
         table-layout: fixed !important;
-        font-size: 6.4px;
+        font-size: 8.5px !important;
         border-collapse: collapse;
       }
       .ti-hsn table.pv-table th {
@@ -1465,7 +1530,7 @@ export function buildTaxInvoiceHtml(
         color: var(--ti-band-text) !important;
         border: none !important;
         border-bottom: 1px solid var(--ti-line) !important;
-        font-size: 5.8px !important;
+        font-size: 8px !important;
         text-align: left !important;
         padding: 3px 5px !important;
       }
@@ -1476,6 +1541,7 @@ export function buildTaxInvoiceHtml(
         border: none !important;
         border-bottom: 1px solid var(--ti-line) !important;
         padding: 2px 5px !important;
+        font-size: 8.5px !important;
       }
       .ti-hsn .pv-totals-row td {
         background: transparent !important;
@@ -1490,7 +1556,7 @@ export function buildTaxInvoiceHtml(
       .ti-panel-h {
         background: var(--ti-band);
         color: var(--ti-band-text);
-        font-size: 6.8px;
+        font-size: 9px !important;
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.3px;
@@ -1501,7 +1567,7 @@ export function buildTaxInvoiceHtml(
       .ti-panel-b.ti-bank-body { padding: 4px 7px; }
       .ti-panel-b.ti-narration-body {
         padding: 4px 7px;
-        font-size: 6.8px;
+        font-size: 9px !important;
         line-height: 1.4;
         color: #262626;
         font-weight: 400;
@@ -1516,14 +1582,14 @@ export function buildTaxInvoiceHtml(
       }
       .ti-bank-grid .span-2 { grid-column: 1 / -1; }
       .ti-kv .k {
-        font-size: 5.8px;
+        font-size: 7.5px !important;
         color: var(--ti-label);
         text-transform: uppercase;
         font-weight: 700;
         letter-spacing: 0.2px;
       }
       .ti-kv .v {
-        font-size: 7.4px;
+        font-size: 9.5px !important;
         font-weight: 700;
         margin-top: 1px;
         color: var(--ti-text);
@@ -1543,11 +1609,11 @@ export function buildTaxInvoiceHtml(
       .ti-bank-grid .ti-kv-inline .k::after { content: ":"; }
       .ti-bank-grid .ti-kv-inline .v {
         margin-top: 0;
-        font-size: 7px;
+        font-size: 9px !important;
         min-width: 0;
       }
       .ti-terms {
-        font-size: 6.6px;
+        font-size: 8.5px !important;
         line-height: 1.4;
         color: #262626;
         font-weight: 400;
@@ -1566,24 +1632,24 @@ export function buildTaxInvoiceHtml(
       .ti-summary-wrap .pv-summary td {
         border-bottom: 1px solid #eceff3;
         padding: 2px 0;
-        font-size: 7.2px;
+        font-size: 9.5px !important;
       }
       .ti-summary-wrap .pv-summary tr:last-child td {
         border-bottom: none;
         background: #e8edf5 !important;
         font-weight: 700;
-        font-size: 9px;
+        font-size: 11.5px !important;
         padding: 5px 6px;
       }
       .ti-words-lbl {
-        font-size: 5.8px;
+        font-size: 7.5px !important;
         font-weight: 700;
         text-transform: uppercase;
         color: var(--ti-label);
         letter-spacing: 0.25px;
       }
       .ti-words-val {
-        font-size: 7.4px;
+        font-size: 9.5px !important;
         font-weight: 700;
         margin-top: 2px;
         line-height: 1.35;
@@ -1593,13 +1659,14 @@ export function buildTaxInvoiceHtml(
         text-align: right;
       }
       .ti-sign .pv-sign-company {
-        font-size: 7.2px;
+        font-size: 9.5px !important;
         color: var(--ti-text);
       }
       .ti-sign .pv-sign-gap { height: 34px; }
       .ti-sign .pv-sign-label {
         color: var(--ti-label);
         border-top: 1px solid #b8c0cc;
+        font-size: 9px !important;
       }
 
       .ti-accept {
@@ -1607,12 +1674,8 @@ export function buildTaxInvoiceHtml(
         border: 1px solid var(--ti-border);
         overflow: hidden;
       }
-      .ti-accept .ti-panel-h {
-        border-bottom: 1px solid var(--ti-border);
-      }
-      .ti-accept-body {
-        padding: 10px 12px 6px;
-      }
+      .ti-accept .ti-panel-h { border-bottom: 1px solid var(--ti-border); }
+      .ti-accept-body { padding: 10px 12px 6px; }
       .ti-accept-cols {
         display: grid;
         grid-template-columns: repeat(4, 1fr);
@@ -1624,7 +1687,7 @@ export function buildTaxInvoiceHtml(
       }
       .ti-accept-col .lbl {
         text-align: center;
-        font-size: 5.8px;
+        font-size: 7.5px !important;
         font-weight: 700;
         text-transform: uppercase;
         color: var(--ti-label);
@@ -1635,47 +1698,19 @@ export function buildTaxInvoiceHtml(
         margin-top: 6px;
         border-top: none;
         color: #374151;
-        font-size: 6.2px;
+        font-size: 8px !important;
       }
     `,
   });
-}
-
-export async function loadQrDataUrl(text: string): Promise<string | undefined> {
-  if (typeof window === "undefined") return undefined;
-  const payload = String(text || "").trim() || "TAX-INVOICE";
-  try {
-    const response = await fetch(
-      `https://api.qrserver.com/v1/create-qr-code/?size=80x80&margin=0&data=${encodeURIComponent(payload)}`,
-    );
-    if (!response.ok) return undefined;
-    const blob = await response.blob();
-    return await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result || ""));
-      reader.onerror = () => reject(reader.error);
-      reader.readAsDataURL(blob);
-    });
-  } catch {
-    return undefined;
-  }
 }
 
 export async function openEditableTaxInvoicePreview(
   data: TaxInvoiceViewModel,
 ): Promise<void> {
   const logoSrc = data.logoSrc || (await loadNavbarLogoDataUrl());
-  const qrSeed =
-    asText(data.irn, "") !== "—" && asText(data.irn, "")
-      ? data.irn
-      : asText(data.invoiceNo, "TAX-INVOICE");
-  const qrDataUrl = data.qrDataUrl || (await loadQrDataUrl(qrSeed));
   await openEditablePdfPreview({
     title: "Tax Invoice PDF Preview",
-    initialData: { ...data, logoSrc, qrDataUrl } as unknown as Record<
-      string,
-      unknown
-    >,
+    initialData: { ...data, logoSrc } as unknown as Record<string, unknown>,
     renderHtml: (edited) =>
       buildTaxInvoiceHtml(edited as unknown as TaxInvoiceViewModel),
     printButtonLabel: "Download Tax Invoice PDF",

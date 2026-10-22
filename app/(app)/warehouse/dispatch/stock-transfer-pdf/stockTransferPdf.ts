@@ -3,7 +3,6 @@
 import {
   buildTaxInvoiceHtml,
   mapDispatchToTaxInvoice,
-  loadQrDataUrl,
   type TaxInvoiceViewModel,
 } from "../tax-invoice-pdf/taxInvoicePdf";
 import {
@@ -23,7 +22,7 @@ function readRecord(value: unknown): Record<string, unknown> {
 function stateCodeFromGstin(gstin: string): string {
   const digits = String(gstin || "").replace(/\s/g, "");
   if (digits.length >= 2 && /^\d{2}/.test(digits)) return digits.slice(0, 2);
-  return "27";
+  return "";
 }
 
 function warehouseBranchCode(wh: Record<string, unknown>): string {
@@ -243,21 +242,9 @@ export async function openEditableStockTransferPreview(
   data: TaxInvoiceViewModel,
 ): Promise<void> {
   const logoSrc = data.logoSrc || (await loadNavbarLogoDataUrl());
-  // Embed QR as data URL so Puppeteer PDF keeps it (external image URLs often fail)
-  const qrSeed =
-    asText(data.irn, "") !== "—" && asText(data.irn, "")
-      ? data.irn
-      : asText(
-          data.invoiceNo || data.salesOrderNo,
-          "STOCK-TRANSFER",
-        );
-  const qrDataUrl = data.qrDataUrl || (await loadQrDataUrl(qrSeed));
   await openEditablePdfPreview({
     title: "Stock Transfer PDF Preview",
-    initialData: { ...data, logoSrc, qrDataUrl } as unknown as Record<
-      string,
-      unknown
-    >,
+    initialData: { ...data, logoSrc } as unknown as Record<string, unknown>,
     renderHtml: (edited) =>
       buildStockTransferHtml(edited as unknown as TaxInvoiceViewModel),
     printButtonLabel: "Download Stock Transfer PDF",

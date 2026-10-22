@@ -2,7 +2,7 @@
 
 import React, { useCallback, useState, useEffect } from "react";
 import {
-  Boxes, ClipboardList, Package, RotateCcw, Reply, XCircle,
+  Boxes, ClipboardList, ListTree, Package, RotateCcw, Reply, XCircle,
   // Scale,
 } from "lucide-react";
 import { TabsContent } from "@/components/ui/tabs";
@@ -11,6 +11,7 @@ import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
 // import { Button } from "@/components/ui/button";
 import { MiniKPICard } from "@/components/ui/KPICard";
 import { DailyLogsTab } from "./components/DailyLogsTab";
+import { BatchMovementsTab } from "./components/BatchMovementsTab";
 // import { StockAdjustmentDialog } from "./components/StockAdjustmentDialog";
 import { QcPassedListing } from "./qc-passed/QcPassedListing";
 import { SalesReturnStockListing } from "./sales-return/SalesReturnStockListing";
@@ -57,7 +58,8 @@ export default function StockOverviewPage() {
   }, []);
 
   useEffect(() => {
-    if (activeTab === "daily-logs") return;
+    // Self-contained tabs (own filters/KPIs) — skip header summary fetch
+    if (activeTab === "daily-logs" || activeTab === "batch-movements") return;
     if (!selectedWarehouse) {
       setSummary(EMPTY_SUMMARY);
       return;
@@ -77,7 +79,10 @@ export default function StockOverviewPage() {
     };
   }, [selectedWarehouse, activeTab, summaryNonce]);
 
-  const showWarehouseFilter = activeTab !== "daily-logs";
+  const showWarehouseFilter =
+    activeTab !== "daily-logs" && activeTab !== "batch-movements";
+  const showHeaderSummary =
+    activeTab !== "daily-logs" && activeTab !== "batch-movements";
   const warehouseId = selectedWarehouse || undefined;
 
   return (
@@ -85,7 +90,7 @@ export default function StockOverviewPage() {
       title="Stock Overview"
       titleIcon={Boxes}
       metrics={
-        activeTab === "daily-logs" ? null : (
+        !showHeaderSummary ? null : (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             <MiniKPICard label="Inventory Qty" value={summary.inventoryQty.toLocaleString()} icon={Package} accent />
             <MiniKPICard label="Sales Return Stock" value={summary.salesReturnStock.toLocaleString()} icon={RotateCcw} />
@@ -96,6 +101,7 @@ export default function StockOverviewPage() {
       }
       tabs={[
         { value: "daily-logs", label: "Daily Logs", icon: ClipboardList },
+        { value: "batch-movements", label: "Batch Movements", icon: ListTree },
         { value: "inventory", label: "Inventory", icon: Package },
         { value: "sales-return", label: "Sales Return Stock", icon: RotateCcw },
         { value: "sample-return", label: "Sample Return Stock", icon: Reply },
@@ -141,6 +147,10 @@ export default function StockOverviewPage() {
     >
       <TabsContent value="daily-logs" className="mt-0 outline-none">
         <DailyLogsTab />
+      </TabsContent>
+
+      <TabsContent value="batch-movements" className="mt-0 outline-none">
+        <BatchMovementsTab />
       </TabsContent>
 
       <TabsContent value="inventory" className="mt-0 outline-none">

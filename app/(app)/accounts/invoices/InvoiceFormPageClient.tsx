@@ -2175,26 +2175,8 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
         return;
       }
       if (!asDraft) {
-        if (!transport.transportMode.trim()) {
-          setError("Transport Mode is required.");
-          return;
-        }
-        if (!transport.vehicleNo.trim() && !transport.transporterName.trim()) {
-          setError("Enter Vehicle No. or Transporter Name.");
-          return;
-        }
-        if (!transport.distanceKm.trim() || Number(transport.distanceKm) <= 0) {
-          setError("Distance (KM) is required.");
-          return;
-        }
-        if (!transport.transportDocNo.trim()) {
-          setError("Transport Document No. is required.");
-          return;
-        }
-        if (!transport.transportDocDate.trim()) {
-          setError("Transport Document Date is required.");
-          return;
-        }
+        // Transport / transporter fields are optional at Sales Invoice generation.
+        // Only validate consistency when related values are provided.
         if (
           transport.lrDate.trim() &&
           transport.transportDocDate.trim() &&
@@ -2237,14 +2219,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
         return;
       }
       if (!asDraft) {
-        if (!transport.transportMode.trim()) {
-          setError("Transport Mode is required.");
-          return;
-        }
-        if (!transport.distanceKm.trim() || Number(transport.distanceKm) < 0) {
-          setError("Distance (KM) is required.");
-          return;
-        }
+        // Transport / transporter fields are optional at Stock Transfer invoice generation.
         if (
           transport.lrDate.trim() &&
           transport.transportDocDate.trim() &&
@@ -3286,9 +3261,8 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
                 </li>
               </ul>
               <p>
-                Transport Mode and Distance (KM) are required here. Other transport
-                fields are optional on the invoice; fill them when needed for EWB
-                generation.
+                All transport / transporter fields are optional on the invoice.
+                Fill them when needed for E-Way Bill generation.
               </p>
             </div>
           </VoucherFormSectionCard>
