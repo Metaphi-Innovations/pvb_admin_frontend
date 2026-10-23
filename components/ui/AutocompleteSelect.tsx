@@ -55,6 +55,8 @@ interface AutocompleteSelectProps {
    * Useful for long names that may still truncate in the list or trigger.
    */
   showLabelTooltip?: boolean;
+  /** When true, option labels wrap instead of truncating to one line. */
+  wrapLabels?: boolean;
   renderTriggerLabel?: (selectedOptions: AutocompleteOption | AutocompleteOption[]) => React.ReactNode;
   onBlur?: () => void;
   "aria-invalid"?: boolean;
@@ -80,6 +82,7 @@ export function AutocompleteSelect({
   className,
   popoverClassName,
   showLabelTooltip = false,
+  wrapLabels = false,
   renderTriggerLabel,
   onBlur,
   "aria-invalid": ariaInvalid,
@@ -438,9 +441,25 @@ export function AutocompleteSelect({
                       </span>
                     )}
                     <span className="flex-1 text-foreground min-w-0">
-                      <span className="block truncate">{opt.label}</span>
+                      <span
+                        className={cn(
+                          "block",
+                          wrapLabels
+                            ? "whitespace-normal break-words"
+                            : "truncate",
+                        )}
+                      >
+                        {opt.label}
+                      </span>
                       {opt.sublabel && (
-                        <span className="block text-[10px] text-muted-foreground truncate">
+                        <span
+                          className={cn(
+                            "block text-[10px] text-muted-foreground",
+                            wrapLabels
+                              ? "whitespace-normal break-words"
+                              : "truncate",
+                          )}
+                        >
                           {opt.sublabel}
                         </span>
                       )}
