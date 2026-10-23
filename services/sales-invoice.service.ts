@@ -250,6 +250,23 @@ export type GenerateEwayBillResult = {
   eway_bill_qr_code?: string | null;
 };
 
+export type CancelEwayBillResult = {
+  already_cancelled: boolean;
+  sales_invoice_id: string;
+  invoice_number?: string;
+  irn_number?: string | null;
+  eway_bill_number?: string | null;
+  eway_bill_date?: string | Date | null;
+  eway_bill_valid_upto?: string | Date | null;
+  eway_bill_status?: string | null;
+  eway_bill_qr_code?: string | null;
+};
+
+export type CancelEwayBillInput = {
+  cancelRsnCode: 1 | 2 | 3 | 4;
+  cancelRmrk?: string;
+};
+
 export type PreviewEwayBillResult = {
   already_generated: boolean;
   flow: "by_irn" | "standalone";
@@ -1633,6 +1650,29 @@ export const SalesInvoiceService = {
         extractErrorMessage(
           error,
           "Failed to generate E-Way Bill for sales invoice.",
+        ),
+      );
+    }
+  },
+
+  async cancelEwayBill(
+    id: string,
+    input: CancelEwayBillInput,
+  ): Promise<CancelEwayBillResult> {
+    try {
+      const response = await axiosInstance.post(
+        API_ENDPOINTS.ACCOUNTS.SALES_INVOICE.CANCEL_EWAY_BILL(id),
+        {
+          cancelRsnCode: input.cancelRsnCode,
+          cancelRmrk: input.cancelRmrk,
+        },
+      );
+      return unwrapData(response) as CancelEwayBillResult;
+    } catch (error) {
+      throw new Error(
+        extractErrorMessage(
+          error,
+          "Failed to cancel E-Way Bill for sales invoice.",
         ),
       );
     }

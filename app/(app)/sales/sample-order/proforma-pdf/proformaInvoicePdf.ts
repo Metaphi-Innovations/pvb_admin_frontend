@@ -424,12 +424,14 @@ export function mapSampleOrderToProforma(
     "",
   );
 
-  const warehouseState = asText(warehouse.state, "Maharashtra");
+  const warehouseState = asText(warehouse.state, "");
   const customerState = asText(
     shipTo.state || billTo.state || customer.state || snapshot.state,
-    "Maharashtra",
+    "",
   );
   const interstate =
+    Boolean(warehouseState) &&
+    Boolean(customerState) &&
     warehouseState.toLowerCase() !== customerState.toLowerCase();
 
   const items = (Array.isArray(order.items) ? order.items : []) as any[];

@@ -21,6 +21,13 @@ interface FilterPopoverProps {
   onOpen?: () => void;
 }
 
+function toSelectedList(value: FilterValue | undefined): string[] {
+  if (value == null || value === "") return [];
+  if (Array.isArray(value)) return value.map(String).filter(Boolean);
+  if (typeof value === "string") return value.trim() ? [value.trim()] : [];
+  return [];
+}
+
 export function FilterPopover({
   column,
   value,
@@ -32,12 +39,13 @@ export function FilterPopover({
   const [selectedDropdownValues, setSelectedDropdownValues] = useState<
     string[]
   >([]);
+  const multi = Boolean(column.filterMultiple);
 
   useEffect(() => {
     if (column.filterType === "text") {
       setTempText((value as string) || "");
     } else if (column.filterType === "dropdown") {
-      setSelectedDropdownValues((value as string[]) || []);
+      setSelectedDropdownValues(toSelectedList(value));
     }
   }, [value, column.filterType]);
 
@@ -82,7 +90,10 @@ export function FilterPopover({
       </PopoverTrigger>
       <PopoverContent
         align="start"
-        className="w-64 space-y-3 rounded-xl border border-border bg-white p-3 shadow-lg"
+        className={cn(
+          "space-y-3 rounded-xl border border-border bg-white p-3 shadow-lg",
+          multi ? "w-64" : "w-60",
+        )}
       >
         <div className="flex items-center justify-between border-b pb-2">
           <span className="text-xs font-semibold text-foreground">
@@ -138,24 +149,36 @@ export function FilterPopover({
 
         {column.filterType === "dropdown" && (
           <div className="space-y-3">
-            <AutocompleteSelect
-              multiple
-              options={column.filterOptions || []}
-              value={selectedDropdownValues}
-              onChange={(val) => {
-                // Keep selection in local draft only — Apply commits the filter
-                const next = Array.isArray(val)
-                  ? val.map(String).filter(Boolean)
-                  : val
-                    ? [String(val)]
-                    : [];
-                setSelectedDropdownValues(next);
-              }}
-              placeholder="Select options..."
-              searchPlaceholder={`Search ${column.header.toLowerCase()}...`}
-              className="h-9 rounded-lg border-border bg-white text-xs shadow-sm"
-              popoverClassName="w-[240px] min-w-[240px]"
-            />
+            {multi ? (
+              <AutocompleteSelect
+                multiple
+                options={column.filterOptions || []}
+                value={selectedDropdownValues}
+                onChange={(val) => {
+                  const next = Array.isArray(val)
+                    ? val.map(String).filter(Boolean)
+                    : val
+                      ? [String(val)]
+                      : [];
+                  setSelectedDropdownValues(next);
+                }}
+                placeholder="Select options..."
+                searchPlaceholder={`Search ${column.header.toLowerCase()}...`}
+                className="h-9 rounded-lg border-border bg-white text-xs shadow-sm"
+                popoverClassName="w-[240px] min-w-[240px]"
+              />
+            ) : (
+              <AutocompleteSelect
+                options={column.filterOptions || []}
+                value={selectedDropdownValues[0] || ""}
+                onChange={(val) => {
+                  setSelectedDropdownValues(val ? [String(val)] : []);
+                }}
+                placeholder="Select option..."
+                searchPlaceholder={`Search ${column.header.toLowerCase()}...`}
+                className="h-9 rounded-lg border-border bg-white text-xs shadow-sm"
+              />
+            )}
             <div className="flex items-center justify-end gap-2 pt-1 border-t">
               <Button
                 variant="ghost"
@@ -163,7 +186,7 @@ export function FilterPopover({
                 onClick={handleClearDropdown}
                 className="h-7 text-[11px] px-3 font-semibold uppercase tracking-wide border border-border rounded-lg hover:bg-muted text-foreground"
               >
-                Clear
+                {multi ? "Clear" : "Cancel"}
               </Button>
               <Button
                 size="sm"
