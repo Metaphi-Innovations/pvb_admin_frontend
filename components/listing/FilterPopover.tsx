@@ -40,6 +40,9 @@ export function FilterPopover({
     string[]
   >([]);
   const multi = Boolean(column.filterMultiple);
+  const filterWidthClass = column.filterPopoverClassName;
+  const optionsPopoverClass =
+    filterWidthClass || (multi ? "w-[240px] min-w-[240px]" : undefined);
 
   useEffect(() => {
     if (column.filterType === "text") {
@@ -92,7 +95,7 @@ export function FilterPopover({
         align="start"
         className={cn(
           "space-y-3 rounded-xl border border-border bg-white p-3 shadow-lg",
-          multi ? "w-64" : "w-60",
+          filterWidthClass || (multi ? "w-64" : "w-60"),
         )}
       >
         <div className="flex items-center justify-between border-b pb-2">
@@ -165,7 +168,9 @@ export function FilterPopover({
                 placeholder="Select options..."
                 searchPlaceholder={`Search ${column.header.toLowerCase()}...`}
                 className="h-9 rounded-lg border-border bg-white text-xs shadow-sm"
-                popoverClassName="w-[240px] min-w-[240px]"
+                popoverClassName={optionsPopoverClass}
+                showLabelTooltip={Boolean(filterWidthClass)}
+                wrapLabels={Boolean(column.filterWrapOptions)}
               />
             ) : (
               <AutocompleteSelect
@@ -177,6 +182,9 @@ export function FilterPopover({
                 placeholder="Select option..."
                 searchPlaceholder={`Search ${column.header.toLowerCase()}...`}
                 className="h-9 rounded-lg border-border bg-white text-xs shadow-sm"
+                popoverClassName={optionsPopoverClass}
+                showLabelTooltip={Boolean(filterWidthClass)}
+                wrapLabels={Boolean(column.filterWrapOptions)}
               />
             )}
             <div className="flex items-center justify-end gap-2 pt-1 border-t">

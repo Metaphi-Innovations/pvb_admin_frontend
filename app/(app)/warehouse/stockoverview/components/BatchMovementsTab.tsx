@@ -417,7 +417,8 @@ export function BatchMovementsTab() {
         filterType: "dropdown",
         filterMultiple: true,
         filterOptions: opts("party_name"),
-        width: "180px",
+        width: "220px",
+        wrap: true,
       },
       {
         key: "product_code",
@@ -479,7 +480,10 @@ export function BatchMovementsTab() {
         filterType: "dropdown",
         filterMultiple: true,
         filterOptions: opts("warehouse_name"),
-        width: "180px",
+        filterPopoverClassName: "w-[420px]",
+        filterWrapOptions: true,
+        width: "280px",
+        truncate: false,
       },
       {
         key: "case_count",
