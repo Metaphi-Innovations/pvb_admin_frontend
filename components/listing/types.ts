@@ -11,6 +11,10 @@ export interface ColumnConfig<T = any> {
   filterOptions?: { label: string; value: string }[]; // For dropdown filters
   /** When true, dropdown filter allows selecting multiple values. Default: single-select. */
   filterMultiple?: boolean;
+  /** Optional width/class for the filter popover (e.g. long warehouse names). */
+  filterPopoverClassName?: string;
+  /** When true, filter option labels wrap so full text is visible. */
+  filterWrapOptions?: boolean;
   auditUserOptions?: { label: string; value: string }[]; // For audit user picker
   sticky?: boolean; // e.g. for actions
   width?: string;
@@ -21,6 +25,8 @@ export interface ColumnConfig<T = any> {
    * false for right-aligned columns (amounts/qty) and status/actions/audit.
    */
   truncate?: boolean;
+  /** When true, cell text wraps instead of staying on one line (implies no truncate). */
+  wrap?: boolean;
   /** Optional explicit tooltip text; defaults to the cell's text content. */
   tooltipText?: (value: any, row: T, index: number) => string | null | undefined;
   render?: (value: any, row: T, index: number) => React.ReactNode;

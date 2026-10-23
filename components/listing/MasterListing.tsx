@@ -308,12 +308,14 @@ export function MasterListing<T = any>({
                         const cellVal = (row as any)[col.key];
                         const isSticky = col.sticky;
                         // Truncate long text by default; keep amounts/dates/status fully visible.
-                        const shouldTruncate = listingShouldTruncate({
-                          truncate: col.truncate,
-                          align: col.align,
-                          filterType: col.filterType,
-                          key: col.key,
-                        });
+                        const shouldTruncate = col.wrap
+                          ? false
+                          : listingShouldTruncate({
+                              truncate: col.truncate,
+                              align: col.align,
+                              filterType: col.filterType,
+                              key: col.key,
+                            });
 
                         const rawContent = col.render ? (
                           col.render(cellVal, row, index)
@@ -340,7 +342,10 @@ export function MasterListing<T = any>({
                               truncate: shouldTruncate,
                             })}
                             className={cn(
-                              "px-4 py-2.5 text-xs text-foreground whitespace-nowrap",
+                              "px-4 py-2.5 text-xs text-foreground",
+                              col.wrap
+                                ? "whitespace-normal break-words align-top"
+                                : "whitespace-nowrap",
                               shouldTruncate && "overflow-hidden",
                               col.align === "center" && "text-center",
                               col.align === "right" && "text-right",
