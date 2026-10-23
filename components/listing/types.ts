@@ -9,6 +9,8 @@ export interface ColumnConfig<T = any> {
   filterable?: boolean;
   filterType?: FilterType;
   filterOptions?: { label: string; value: string }[]; // For dropdown filters
+  /** When true, dropdown filter allows selecting multiple values. Default: single-select. */
+  filterMultiple?: boolean;
   auditUserOptions?: { label: string; value: string }[]; // For audit user picker
   sticky?: boolean; // e.g. for actions
   width?: string;

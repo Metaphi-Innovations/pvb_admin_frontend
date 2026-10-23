@@ -90,6 +90,7 @@ export function InvoiceViewStatutorySection({
   canAct,
   onGenerateEInvoice,
   onGenerateEway,
+  onCancelEway,
   eInvoiceBusy,
   ewayBusy,
 }: {
@@ -98,6 +99,7 @@ export function InvoiceViewStatutorySection({
   canAct: boolean;
   onGenerateEInvoice: () => void;
   onGenerateEway: () => void;
+  onCancelEway?: () => void;
   eInvoiceBusy?: boolean;
   ewayBusy?: boolean;
 }) {
@@ -111,8 +113,18 @@ export function InvoiceViewStatutorySection({
   const einv = eInvoiceLabel(record.eInvoiceApplicable, eInvStatus);
   const eway = ewayLabel(ewayStatus);
 
-  // Backend chooses EWB-by-IRN vs standalone when IRN is absent.
-  const showGenerateEway = canAct && ewayStatus === "not_generated";
+  // Generate when none exists, or after a prior cancel. Never while active generated/manual.
+  const showGenerateEway =
+    canAct &&
+    (ewayStatus === "not_generated" ||
+      ewayStatus === "cancelled" ||
+      ewayStatus === "failed" ||
+      ewayStatus === "stale");
+  const showCancelEway =
+    canAct &&
+    Boolean(onCancelEway) &&
+    (ewayStatus === "generated" || ewayStatus === "manual") &&
+    Boolean(record.ewayBillNo?.trim());
   const showGenerateIRN =
     canAct && eInvApplicable && eInvStatus === "not_generated";
 
@@ -188,18 +200,34 @@ export function InvoiceViewStatutorySection({
               </span>
             </p>
           </div>
-          {showGenerateEway ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-8 text-xs shrink-0"
-              disabled={ewayBusy}
-              onClick={onGenerateEway}
-            >
-              Generate E-Way Bill
-            </Button>
-          ) : null}
+          <div className="flex shrink-0 items-center gap-2">
+            {showGenerateEway ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs"
+                disabled={ewayBusy}
+                onClick={onGenerateEway}
+              >
+                {ewayStatus === "cancelled"
+                  ? "Generate New E-Way Bill"
+                  : "Generate E-Way Bill"}
+              </Button>
+            ) : null}
+            {showCancelEway ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs text-destructive border-destructive/40 hover:bg-destructive/5"
+                disabled={ewayBusy}
+                onClick={onCancelEway}
+              >
+                Cancel E-Way Bill
+              </Button>
+            ) : null}
+          </div>
         </div>
       </div>
 
