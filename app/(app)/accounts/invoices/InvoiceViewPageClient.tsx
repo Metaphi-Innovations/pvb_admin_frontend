@@ -26,6 +26,7 @@ import { formatSchemeRupee } from "@/app/(app)/masters/scheme/product-near-expir
 import {
   SalesInvoiceService,
   mapSalesInvoiceDetailToRecord,
+  type CancelEwayBillInput,
   type PreviewEwayBillResult,
 } from "@/services/sales-invoice.service";
 import { useBankAccountOptions } from "@/hooks/accounts/use-bank-accounts-list";
@@ -37,6 +38,7 @@ import {
 import { GoodsInvoiceAdditionalChargesEditor } from "./components/GoodsInvoiceAdditionalChargesEditor";
 import { InvoiceViewStatutorySection } from "./components/InvoiceViewStatutorySection";
 import { EwayBillPreviewDialog } from "./components/EwayBillPreviewDialog";
+import { EwayBillCancelDialog } from "./components/EwayBillCancelDialog";
 import { downloadInvoicePdf } from "./invoice-pdf";
 import {
   openProformaInvoicePreview,
@@ -713,6 +715,7 @@ export default function InvoiceViewPageClient({
   const [ewayPreview, setEwayPreview] = useState<PreviewEwayBillResult | null>(
     null,
   );
+  const [ewayCancelOpen, setEwayCancelOpen] = useState(false);
 
   const listHref = useMemo(
     () =>
@@ -933,6 +936,32 @@ export default function InvoiceViewPageClient({
     } catch (e) {
       showToast(
         e instanceof Error ? e.message : "Failed to generate E-Way Bill.",
+        "error",
+      );
+    } finally {
+      setEwayBusy(false);
+    }
+  };
+
+  const handleConfirmCancelEway = async (input: CancelEwayBillInput) => {
+    if (!record?.salesInvoiceId || ewayBusy) return;
+    setEwayBusy(true);
+    try {
+      const result = await SalesInvoiceService.cancelEwayBill(
+        String(record.salesInvoiceId),
+        input,
+      );
+      showToast(
+        result.already_cancelled
+          ? "E-Way Bill was already cancelled for this invoice."
+          : "E-Way Bill cancelled successfully.",
+        "success",
+      );
+      setEwayCancelOpen(false);
+      await refresh();
+    } catch (e) {
+      showToast(
+        e instanceof Error ? e.message : "Failed to cancel E-Way Bill.",
         "error",
       );
     } finally {
@@ -1264,6 +1293,7 @@ export default function InvoiceViewPageClient({
                 canAct={canGenerateStatutory}
                 onGenerateEInvoice={() => void handleGenerateIRN()}
                 onGenerateEway={() => void handleOpenEwayPreview()}
+                onCancelEway={() => setEwayCancelOpen(true)}
                 eInvoiceBusy={eInvoiceBusy}
                 ewayBusy={ewayBusy || ewayPreviewLoading}
               />
@@ -1376,6 +1406,17 @@ export default function InvoiceViewPageClient({
         loading={ewayPreviewLoading}
         generating={ewayBusy}
         onConfirmGenerate={handleConfirmGenerateEway}
+      />
+
+      <EwayBillCancelDialog
+        open={ewayCancelOpen}
+        onClose={() => {
+          if (ewayBusy) return;
+          setEwayCancelOpen(false);
+        }}
+        ewayBillNo={record?.ewayBillNo}
+        cancelling={ewayBusy}
+        onConfirmCancel={(input) => void handleConfirmCancelEway(input)}
       />
     </div>
   );

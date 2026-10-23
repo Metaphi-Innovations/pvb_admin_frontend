@@ -5,6 +5,7 @@ import { RecordDetailPage } from "@/components/record-detail";
 import { Truck, Package, Building, User, Calendar, FileText } from "lucide-react";
 import { useParams } from "next/navigation";
 import {
+  cancelDispatchEwayBill,
   generateDispatchEwayBill,
   getDispatchById,
   previewDispatchEwayBill,
@@ -17,7 +18,11 @@ import {
 import { showToast } from "@/lib/toast";
 import { Button } from "@/components/ui/button";
 import { EwayBillPreviewDialog } from "@/app/(app)/accounts/invoices/components/EwayBillPreviewDialog";
-import type { PreviewEwayBillResult } from "@/services/sales-invoice.service";
+import { EwayBillCancelDialog } from "@/app/(app)/accounts/invoices/components/EwayBillCancelDialog";
+import type {
+  CancelEwayBillInput,
+  PreviewEwayBillResult,
+} from "@/services/sales-invoice.service";
 
 function normalizeGstin(value: unknown): string {
   return String(value ?? "")
@@ -49,6 +54,7 @@ export default function ViewDispatchPage() {
   const [ewayPreviewOpen, setEwayPreviewOpen] = useState(false);
   const [ewayPreviewLoading, setEwayPreviewLoading] = useState(false);
   const [ewayBusy, setEwayBusy] = useState(false);
+  const [ewayCancelOpen, setEwayCancelOpen] = useState(false);
   const [ewayPreview, setEwayPreview] =
     useState<DispatchPreviewEwayBillResult | null>(null);
 
@@ -88,14 +94,29 @@ export default function ViewDispatchPage() {
   }, [isStockTransfer, record]);
 
   const ewayNumber = String(record?.eway_bill_number || "").trim();
+  const ewayStatus = String(record?.eway_bill_status || "")
+    .trim()
+    .toLowerCase();
+  const hasActiveEway =
+    Boolean(ewayNumber) &&
+    ewayStatus !== "cancelled" &&
+    ewayStatus !== "canceled";
+  const dispatchStatusAllowsEway =
+    record?.status === "Ready for Dispatch" ||
+    record?.status === "DISPATCHED" ||
+    record?.status === "DELIVERED";
   const canGenerateEway =
     isStockTransfer &&
     sameGstin &&
     !hasSalesInvoice &&
-    !ewayNumber &&
-    (record?.status === "Ready for Dispatch" ||
-      record?.status === "DISPATCHED" ||
-      record?.status === "DELIVERED");
+    !hasActiveEway &&
+    dispatchStatusAllowsEway;
+  const canCancelEway =
+    isStockTransfer &&
+    sameGstin &&
+    !hasSalesInvoice &&
+    hasActiveEway &&
+    dispatchStatusAllowsEway;
 
   const showEwaySection =
     isStockTransfer && sameGstin && !hasSalesInvoice;
@@ -142,6 +163,29 @@ export default function ViewDispatchPage() {
     } catch (e) {
       showToast(
         e instanceof Error ? e.message : "Failed to generate E-Way Bill.",
+        "error",
+      );
+    } finally {
+      setEwayBusy(false);
+    }
+  };
+
+  const handleConfirmCancelEway = async (input: CancelEwayBillInput) => {
+    if (!id || ewayBusy) return;
+    setEwayBusy(true);
+    try {
+      const result = await cancelDispatchEwayBill(id, input);
+      showToast(
+        result.already_cancelled
+          ? "E-Way Bill was already cancelled for this Dispatch."
+          : "E-Way Bill cancelled successfully.",
+        "success",
+      );
+      setEwayCancelOpen(false);
+      await refresh();
+    } catch (e) {
+      showToast(
+        e instanceof Error ? e.message : "Failed to cancel E-Way Bill.",
         "error",
       );
     } finally {
@@ -322,16 +366,33 @@ export default function ViewDispatchPage() {
                 <h2 className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-1.5">
                   <FileText className="w-4 h-4 text-brand-600" /> E-Way Bill
                 </h2>
-                {canGenerateEway ? (
-                  <Button
-                    size="sm"
-                    className="h-8 text-xs"
-                    disabled={ewayBusy || ewayPreviewLoading}
-                    onClick={() => void handleOpenEwayPreview()}
-                  >
-                    {ewayPreviewLoading ? "Preparing…" : "Generate E-Way Bill"}
-                  </Button>
-                ) : null}
+                <div className="flex flex-wrap items-center gap-2">
+                  {canGenerateEway ? (
+                    <Button
+                      size="sm"
+                      className="h-8 text-xs"
+                      disabled={ewayBusy || ewayPreviewLoading}
+                      onClick={() => void handleOpenEwayPreview()}
+                    >
+                      {ewayPreviewLoading
+                        ? "Preparing…"
+                        : ewayStatus === "cancelled" || ewayStatus === "canceled"
+                          ? "Generate New E-Way Bill"
+                          : "Generate E-Way Bill"}
+                    </Button>
+                  ) : null}
+                  {canCancelEway ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-8 text-xs text-destructive border-destructive/40 hover:bg-destructive/5"
+                      disabled={ewayBusy}
+                      onClick={() => setEwayCancelOpen(true)}
+                    >
+                      Cancel E-Way Bill
+                    </Button>
+                  ) : null}
+                </div>
               </div>
               {ewayNumber ? (
                 <div className="grid gap-4 sm:grid-cols-[1fr_auto]">
@@ -459,6 +520,17 @@ export default function ViewDispatchPage() {
         loading={ewayPreviewLoading}
         generating={ewayBusy}
         onConfirmGenerate={handleConfirmGenerateEway}
+      />
+
+      <EwayBillCancelDialog
+        open={ewayCancelOpen}
+        onClose={() => {
+          if (ewayBusy) return;
+          setEwayCancelOpen(false);
+        }}
+        ewayBillNo={ewayNumber || null}
+        cancelling={ewayBusy}
+        onConfirmCancel={(input) => void handleConfirmCancelEway(input)}
       />
     </>
   );

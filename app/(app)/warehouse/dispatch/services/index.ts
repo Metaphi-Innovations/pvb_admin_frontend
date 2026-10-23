@@ -233,6 +233,18 @@ export type DispatchGenerateEwayBillResult = {
   eway_bill_qr_code?: string | null;
 };
 
+export type DispatchCancelEwayBillResult = {
+  already_cancelled: boolean;
+  dispatch_id: string;
+  dispatch_number?: string | null;
+  challan_number?: string | null;
+  eway_bill_number?: string | null;
+  eway_bill_date?: string | Date | null;
+  eway_bill_valid_upto?: string | Date | null;
+  eway_bill_status?: string | null;
+  eway_bill_qr_code?: string | null;
+};
+
 export async function previewDispatchEwayBill(
   id: string,
 ): Promise<DispatchPreviewEwayBillResult> {
@@ -264,6 +276,29 @@ export async function generateDispatchEwayBill(
       extractDispatchErrorMessage(
         error,
         "Failed to generate E-Way Bill for Dispatch.",
+      ),
+    );
+  }
+}
+
+export async function cancelDispatchEwayBill(
+  id: string,
+  input: { cancelRsnCode: 1 | 2 | 3 | 4; cancelRmrk?: string },
+): Promise<DispatchCancelEwayBillResult> {
+  try {
+    const response = await api.post(
+      API_ENDPOINTS.WAREHOUSE.DISPATCH.CANCEL_EWAY_BILL(id),
+      {
+        cancelRsnCode: input.cancelRsnCode,
+        cancelRmrk: input.cancelRmrk,
+      },
+    );
+    return response.data?.data as DispatchCancelEwayBillResult;
+  } catch (error) {
+    throw new Error(
+      extractDispatchErrorMessage(
+        error,
+        "Failed to cancel E-Way Bill for Dispatch.",
       ),
     );
   }

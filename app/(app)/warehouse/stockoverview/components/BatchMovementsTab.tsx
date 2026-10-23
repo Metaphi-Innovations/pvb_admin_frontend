@@ -337,6 +337,7 @@ export function BatchMovementsTab() {
         sortable: true,
         filterable: true,
         filterType: "dropdown",
+        filterMultiple: true,
         filterOptions: opts("direction"),
         width: "100px",
         render: (v) => {
@@ -366,6 +367,7 @@ export function BatchMovementsTab() {
         sortable: true,
         filterable: true,
         filterType: "dropdown",
+        filterMultiple: true,
         filterOptions: opts("movement_type"),
         width: "180px",
       },
@@ -375,6 +377,7 @@ export function BatchMovementsTab() {
         sortable: true,
         filterable: true,
         filterType: "dropdown",
+        filterMultiple: true,
         filterOptions: opts("order_type"),
         width: "140px",
       },
@@ -384,6 +387,7 @@ export function BatchMovementsTab() {
         sortable: true,
         filterable: true,
         filterType: "dropdown",
+        filterMultiple: true,
         filterOptions: opts("document_no"),
         width: "140px",
         render: (v) => (
@@ -398,6 +402,7 @@ export function BatchMovementsTab() {
         sortable: true,
         filterable: true,
         filterType: "dropdown",
+        filterMultiple: true,
         filterOptions: opts("order_no"),
         width: "140px",
         render: (v) => (
@@ -410,6 +415,7 @@ export function BatchMovementsTab() {
         sortable: true,
         filterable: true,
         filterType: "dropdown",
+        filterMultiple: true,
         filterOptions: opts("party_name"),
         width: "180px",
       },
@@ -419,6 +425,7 @@ export function BatchMovementsTab() {
         sortable: true,
         filterable: true,
         filterType: "dropdown",
+        filterMultiple: true,
         filterOptions: opts("product_code"),
         width: "120px",
         render: (v) => (
@@ -433,6 +440,7 @@ export function BatchMovementsTab() {
         sortable: true,
         filterable: true,
         filterType: "dropdown",
+        filterMultiple: true,
         filterOptions: opts("product_name"),
       },
       {
@@ -441,6 +449,7 @@ export function BatchMovementsTab() {
         sortable: true,
         filterable: true,
         filterType: "dropdown",
+        filterMultiple: true,
         filterOptions: opts("sku"),
         width: "110px",
         render: (v) => (
@@ -453,6 +462,7 @@ export function BatchMovementsTab() {
         sortable: true,
         filterable: true,
         filterType: "dropdown",
+        filterMultiple: true,
         filterOptions: opts("batch_no"),
         width: "120px",
         render: (v) => (
@@ -467,6 +477,7 @@ export function BatchMovementsTab() {
         sortable: true,
         filterable: true,
         filterType: "dropdown",
+        filterMultiple: true,
         filterOptions: opts("warehouse_name"),
         width: "180px",
       },
