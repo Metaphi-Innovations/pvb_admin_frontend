@@ -116,6 +116,11 @@ import {
 } from "./invoices-data";
 import { formatINR, INVOICES_LIST_PATH, invoicesListHrefForSourceType, safeInternalReturnPath } from "./invoice-utils";
 import { showToast } from "@/lib/toast";
+import {
+  customerLicenseFieldsFromApi,
+  showCustomerLicenseToasts,
+} from "@/lib/masters/customer-license-alerts";
+import { SalesOrderService } from "@/services/sales-order.service";
 import { dispatchAccountsDataChanged } from "@/lib/accounts/accounts-data-events";
 import { cn } from "@/lib/utils";
 import { useFormDirtySnapshot } from "@/lib/accounts/use-form-dirty-snapshot";
@@ -360,6 +365,8 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
 
   const statutoryFingerprintRef = useRef<string | null>(null);
   const dispatchTotalsReadyRef = useRef(false);
+  /** Tracks which customer we already showed licence toasts for (once per selection). */
+  const licenseToastCustomerIdRef = useRef<string | null>(null);
 
   const searchParams = useSearchParams();
   const routeSourceType = searchParams.get("sourceType");
@@ -800,7 +807,10 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     setCustomerId(id);
     if (!customer) {
       setCustomerFields(null);
-      if (customerChanged) clearDispatchLinkedFields();
+      if (customerChanged) {
+        licenseToastCustomerIdRef.current = null;
+        clearDispatchLinkedFields();
+      }
       return;
     }
     applyCustomerTransactionFields(customerMasterToTransactionFields(customer));
@@ -815,6 +825,43 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     }
     if (customerChanged) clearDispatchLinkedFields();
   };
+
+  // Licence status toasts once per customer selection on invoice forms.
+  useEffect(() => {
+    if (!customerId) {
+      licenseToastCustomerIdRef.current = null;
+      return;
+    }
+    // Prefer UUID customer master ids for the details API.
+    const looksLikeUuid =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        String(customerId),
+      );
+    if (!looksLikeUuid) return;
+    const customerKey = String(customerId);
+    if (licenseToastCustomerIdRef.current === customerKey) return;
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const details = await SalesOrderService.getCustomerDetails(customerKey);
+        if (cancelled) return;
+        licenseToastCustomerIdRef.current = customerKey;
+        const fields = customerLicenseFieldsFromApi(details);
+        if (fields) {
+          fields.customerName =
+            fields.customerName || customerName || customerFields?.customerName || "";
+          showCustomerLicenseToasts(fields);
+        }
+      } catch {
+        // Silent: licence alerts are advisory; form must still work if details fail.
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [customerId, customerName, customerFields?.customerName]);
 
   const onDispatchSelect = useCallback(
     (dispatchId: string, row: PendingDispatchInvoiceRow | null) => {

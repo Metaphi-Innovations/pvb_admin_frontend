@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useMemo } from "react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import {
@@ -11,13 +11,17 @@ import {
   type Customer,
   type CustomerStatus,
   CUSTOMER_TYPE_LABELS,
-  PAYMENT_TERMS_OPTIONS,
   formatMobile,
   formatCreditLimit,
   getActiveGSTMasters,
   getActiveTDSMasters,
 } from "@/app/(app)/masters/customers/customer-data";
 import { formatTdsSummary } from "@/app/(app)/masters/tds/tds-data";
+import { formatPartyPaymentTerms } from "@/lib/masters/payment-terms";
+import {
+  ComplianceCertificationsGrid,
+  type ComplianceGridValues,
+} from "@/components/masters/erp/ComplianceCertificationsGrid";
 
 const STATUS_CFG: Record<CustomerStatus, { bg: string; text: string; dot: string; label: string }> = {
   active: { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500", label: "Active" },
@@ -26,45 +30,80 @@ const STATUS_CFG: Record<CustomerStatus, { bg: string; text: string; dot: string
   blocked: { bg: "bg-red-50", text: "text-red-700", dot: "bg-red-400", label: "Blocked" },
 };
 
-function InfoRow({ label, value, mono }: { label: string; value?: string | number; mono?: boolean }) {
+function InfoRow({ label, value, mono }: { label: string; value?: string | number | null; mono?: boolean }) {
+  const display =
+    value !== undefined && value !== null && String(value).trim() !== ""
+      ? String(value)
+      : "—";
   return (
     <div className="flex items-start justify-between gap-4 py-1.5 border-b border-border/50 last:border-0">
       <span className="text-[11px] text-muted-foreground flex-shrink-0 w-28">{label}</span>
-      <span className={cn("text-xs font-medium text-foreground text-right flex-1 min-w-0", mono && "font-mono")}>
-        {value !== undefined && value !== "" ? value : "—"}
+      <span className={cn("text-xs font-medium text-foreground text-right flex-1 min-w-0 break-words", mono && "font-mono")}>
+        {display}
       </span>
     </div>
   );
 }
 
-function Block({ title, children }: { title: string; children: React.ReactNode }) {
+function Block({ title, children, className }: { title: string; children: React.ReactNode; className?: string }) {
   return (
-    <div>
+    <div className={className}>
       <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">{title}</p>
       <div className="rounded-lg border border-border bg-muted/10 px-3 py-0.5">{children}</div>
     </div>
   );
 }
 
+type CustomerInfoModel = Customer & { tdsSectionLabel?: string };
+
 interface CustomerInfoDialogProps {
-  customer: Customer | null;
+  customer: CustomerInfoModel | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
 export default function CustomerInfoDialog({ customer, open, onOpenChange }: CustomerInfoDialogProps) {
+  const complianceValues = useMemo<ComplianceGridValues | null>(() => {
+    if (!customer) return null;
+    return {
+      msmeRegistered: !!customer.msmeRegistered,
+      msmeNumber: customer.msmeNumber || "",
+      msmeValidityDate: customer.msmeValidityDate || "",
+      fssaiRegistered: !!customer.fssaiRegistered,
+      fssai: customer.fssai || "",
+      fssaiValidityDate: customer.fssaiValidityDate || "",
+      cibRegistered: !!customer.cibRegistered,
+      cibRegn: customer.cibRegn || "",
+      cibValidityDate: customer.cibValidityDate || "",
+      fcoRegistered: !!customer.fcoRegistered,
+      fcoRegn: customer.fcoRegn || "",
+      fcoValidityDate: customer.fcoValidityDate || "",
+    };
+  }, [customer]);
+
   if (!customer) return null;
 
   const gst = getActiveGSTMasters().find(g => g.id === customer.gstMasterId);
   const tds = getActiveTDSMasters().find(t => t.id === customer.tdsMasterId);
-  const payLabel =
-    PAYMENT_TERMS_OPTIONS.find(p => p.value === customer.paymentTerms)?.label ?? customer.paymentTerms;
-  const st = STATUS_CFG[customer.status];
+  const typeLabel =
+    CUSTOMER_TYPE_LABELS[customer.customerType] ||
+    customer.customerType ||
+    undefined;
+  const payLabel = formatPartyPaymentTerms(customer);
+  const gstCodeLabel = customer.gstCategory
+    ? customer.gstCategory
+    : gst
+      ? `${gst.gstId} (${gst.gstPercentage}%)`
+      : undefined;
+  const tdsLabel = tds
+    ? `${formatTdsSummary(tds)} — ${tds.sectionName}`
+    : customer.tdsSectionLabel || undefined;
+  const st = STATUS_CFG[customer.status] ?? STATUS_CFG.active;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl w-[calc(100vw-2rem)] p-0 gap-0 overflow-hidden">
-        <DialogHeader className="px-4 pt-4 pb-3 border-b border-border">
+      <DialogContent className="max-w-4xl w-[calc(100vw-2rem)] p-0 gap-0 overflow-hidden max-h-[90vh] flex flex-col">
+        <DialogHeader className="px-4 pt-4 pb-3 border-b border-border flex-shrink-0">
           <div className="flex items-start gap-2 pr-6">
             <div className="flex-1 min-w-0">
               <DialogTitle className="text-sm font-semibold leading-tight truncate">
@@ -87,28 +126,23 @@ export default function CustomerInfoDialog({ customer, open, onOpenChange }: Cus
           </div>
         </DialogHeader>
 
-        <div className="px-5 py-4 grid grid-cols-2 gap-4">
+        <div className="px-5 py-4 grid grid-cols-2 gap-4 overflow-y-auto min-h-0">
           <Block title="Contact">
-            <InfoRow label="Type" value={CUSTOMER_TYPE_LABELS[customer.customerType]} />
+            <InfoRow label="Type" value={typeLabel} />
             <InfoRow label="Mobile" value={formatMobile(customer.countryCode, customer.mobile)} mono />
             <InfoRow label="Email" value={customer.email} />
           </Block>
 
           <Block title="Sales & Credit">
             <InfoRow label="Salesman" value={customer.salesManName} />
-            <InfoRow label="Credit Limit" value={formatCreditLimit(customer.creditLimit)} />
-            <InfoRow label="Payment Terms" value={payLabel} />
-            <InfoRow
-              label="Interest Rate"
-              value={customer.interestRate ? `${customer.interestRate}%` : undefined}
-            />
+            <InfoRow label="Credit Limit" value={formatCreditLimit(customer.creditLimit ?? 0)} />
+            <InfoRow label="Payment Terms" value={payLabel === "—" ? undefined : payLabel} />
           </Block>
 
           <Block title="Address">
             <InfoRow label="Address" value={customer.address} />
             <InfoRow label="State" value={customer.stateName} />
             <InfoRow label="District" value={customer.districtName} />
-            <InfoRow label="Territory" value={customer.territoryName} />
             <InfoRow label="Pin Code" value={customer.pincode} mono />
           </Block>
 
@@ -117,22 +151,27 @@ export default function CustomerInfoDialog({ customer, open, onOpenChange }: Cus
             {customer.gstApplicable && (
               <>
                 <InfoRow label="GSTIN" value={customer.gstin} mono />
-                <InfoRow
-                  label="GST Code"
-                  value={gst ? `${gst.gstId} (${gst.gstPercentage}%)` : undefined}
-                  mono
-                />
+                <InfoRow label="GST Code" value={gstCodeLabel} mono />
               </>
             )}
             <InfoRow label="TDS Applicable" value={customer.tdsApplicable ? "Yes" : "No"} />
             {customer.tdsApplicable && (
-              <InfoRow
-                label="TDS Section"
-                value={tds ? `${formatTdsSummary(tds)} — ${tds.sectionName}` : undefined}
-                mono
-              />
+              <InfoRow label="TDS Section" value={tdsLabel} mono />
             )}
           </Block>
+
+          {complianceValues && (
+            <Block title="Compliance & Certifications" className="col-span-2">
+              <div className="py-2">
+                <ComplianceCertificationsGrid
+                  values={complianceValues}
+                  onChange={() => {}}
+                  readOnly
+                  showValidityDates
+                />
+              </div>
+            </Block>
+          )}
 
           {customer.status === "blocked" && customer.blockReason && (
             <p className="col-span-2 text-[11px] text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
@@ -141,7 +180,7 @@ export default function CustomerInfoDialog({ customer, open, onOpenChange }: Cus
           )}
         </div>
 
-        <div className="px-4 py-3 border-t border-border bg-muted/20 flex justify-end gap-2">
+        <div className="px-4 py-3 border-t border-border bg-muted/20 flex justify-end gap-2 flex-shrink-0">
           <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => onOpenChange(false)}>
             Close
           </Button>
@@ -155,5 +194,3 @@ export default function CustomerInfoDialog({ customer, open, onOpenChange }: Cus
     </Dialog>
   );
 }
-
-
