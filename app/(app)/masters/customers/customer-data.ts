@@ -2332,9 +2332,11 @@ export function getActiveSalesEmployees(): Employee[] {
 	return loadEmployees().filter((e) => e.status === "active");
 }
 
-export function formatMobile(countryCode: string, mobile: string): string {
-	if (!mobile) return "—";
-	return `${countryCode} ${mobile}`;
+export function formatMobile(countryCode: string | null | undefined, mobile: string | null | undefined): string {
+	const phone = (mobile ?? "").trim();
+	if (!phone) return "—";
+	const code = (countryCode ?? "").trim();
+	return code ? `${code} ${phone}` : phone;
 }
 
 export function formatCreditLimit(n: number): string {

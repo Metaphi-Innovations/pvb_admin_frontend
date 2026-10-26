@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,8 +27,10 @@ import AdditionalExpensesEditor from "./AdditionalExpensesEditor";
 import CustomerInfoDialog from "./CustomerInfoDialog";
 import BillToShipToSection from "./BillToShipToSection";
 import {
+	enrichCustomerFromApiDetails,
 	getCustomerAddressesForSalesOrder,
 	getDefaultBillShipAddressIds,
+	resolveSalesManIdFromCustomerDetails,
 } from "../sales-order-address-utils";
 import { useCustomerDetails, useWarehousesDropdown } from "@/hooks/sales/use-sales-orders";
 import { useProductsWithWarehouseStock, withLatestLineStock } from "@/hooks/sales/use-warehouse-stock";
@@ -52,6 +54,7 @@ import {
 	resolveSezLutSupply,
 } from "@/lib/settings/gst-tax-config";
 import { calculateCustomerCreditSummary } from "@/lib/sales/customer-credit-limit";
+import { showCustomerLicenseToasts } from "@/lib/masters/customer-license-alerts";
 
 import CreditLimitSummaryCard from "./CreditLimitSummaryCard";
 
@@ -345,6 +348,15 @@ export default function SalesOrderForm({
 	);
 	const { data: backendWarehousesData } = useWarehousesDropdown();
 
+	/** Tracks which customer we already autofilled salesman for (avoids clobbering edit/split load). */
+	const autofilledSalesManCustomerIdRef = useRef<string | null>(null);
+	/** Tracks which customer we already showed licence toasts for (once per selection). */
+	const licenseToastCustomerIdRef = useRef<string | null>(null);
+	const formRef = useRef(form);
+	formRef.current = form;
+	const onChangeRef = useRef(onChange);
+	onChangeRef.current = onChange;
+
 	const warehouses = useMemo(() => {
 		return (backendWarehousesData || []).map((w: any) => ({
 			id: w.warehouse_id,
@@ -384,43 +396,7 @@ export default function SalesOrderForm({
 	const selectedCustomer = useMemo(() => {
 		const base = customers.find((c) => String(c.id) === String(form.customerId)) ?? null;
 		if (!base) return null;
-		if (customerDetails) {
-			const branches = (customerDetails.branches || []).map((b: any, index: number) => ({
-				branchName: b.branch_name,
-				isMain: b.is_main_branch,
-				billingAddress: {
-					address: `${b.billing_address_line_1 || ""} ${b.billing_address_line_2 || ""}`.trim(),
-					city: b.billing_city || "",
-					state: b.billing_state || "",
-					pincode: b.billing_pincode || "",
-					gstin: customerDetails.gstin_no || "",
-				},
-				shippingAddress: {
-					address: `${b.shipping_address_line_1 || ""} ${b.shipping_address_line_2 || ""}`.trim(),
-					city: b.shipping_city || "",
-					state: b.shipping_state || "",
-					pincode: b.shipping_pincode || "",
-					gstin: customerDetails.gstin_no || "",
-				},
-			}));
-			const mainBranch = branches.find((br: any) => br.isMain) || branches[0] || null;
-			const stateName = mainBranch?.billingAddress.state || base.stateName || "";
-			return {
-				...base,
-				branches,
-				stateName,
-				mobile: customerDetails.mobile_no || base.mobile,
-				email: customerDetails.email || base.email,
-				gstApplicable: customerDetails.gst_applicable ?? base.gstApplicable,
-				gstin: customerDetails.gstin_no || base.gstin,
-				registeredLegalName: customerDetails.registered_legal_name || base.registeredLegalName,
-				registeredAddress: customerDetails.registered_gst_address || base.registeredAddress,
-				pan: customerDetails.pan_no || base.pan,
-				creditLimit: Number(customerDetails.credit_limit ?? base.creditLimit),
-				creditDays: Number(customerDetails.credit_days ?? base.creditDays),
-			};
-		}
-		return base;
+		return enrichCustomerFromApiDetails(base, customerDetails);
 	}, [customers, form.customerId, customerDetails]);
 
 	const customerAddresses = useMemo(
@@ -476,6 +452,47 @@ export default function SalesOrderForm({
 		});
 		// eslint-disable-next-line react-hooks/exhaustive-deps -- auto-select when customer addresses load
 	}, [selectedCustomer?.id, customerAddresses.length]);
+
+	// Edit/split: seed ref so the first customer-details load does not overwrite the order's salesman.
+	useEffect(() => {
+		if (mode === "add") return;
+		if (!form.customerId) return;
+		if (autofilledSalesManCustomerIdRef.current !== null) return;
+		autofilledSalesManCustomerIdRef.current = String(form.customerId);
+	}, [mode, form.customerId]);
+
+	// Autofill salesman from Customer Master after customer is selected (create, or customer change on edit).
+	// Deferred slightly so concurrent address autofill is not overwritten by a stale form spread.
+	useEffect(() => {
+		if (!form.customerId || !customerDetails) return;
+		const customerKey = String(form.customerId);
+		if (autofilledSalesManCustomerIdRef.current === customerKey) return;
+
+		const salesManId = resolveSalesManIdFromCustomerDetails(customerDetails);
+		autofilledSalesManCustomerIdRef.current = customerKey;
+		if (!salesManId) return;
+		if (String(formRef.current.salesManId ?? "") === salesManId) return;
+
+		const timer = window.setTimeout(() => {
+			if (String(formRef.current.customerId ?? "") !== customerKey) return;
+			if (String(formRef.current.salesManId ?? "") === salesManId) return;
+			onChangeRef.current({ ...formRef.current, salesManId });
+		}, 0);
+		return () => window.clearTimeout(timer);
+	}, [form.customerId, customerDetails]);
+
+	// Licence status toasts once per customer selection (after details load).
+	useEffect(() => {
+		if (!form.customerId) {
+			licenseToastCustomerIdRef.current = null;
+			return;
+		}
+		if (!customerDetails || !selectedCustomer) return;
+		const customerKey = String(form.customerId);
+		if (licenseToastCustomerIdRef.current === customerKey) return;
+		licenseToastCustomerIdRef.current = customerKey;
+		showCustomerLicenseToasts(selectedCustomer);
+	}, [form.customerId, customerDetails, selectedCustomer]);
 
 	const pricingContext = useMemo((): SalesOrderPricingContext | null => {
 		const activeState = shipToAddress?.state ?? selectedCustomer?.stateName;

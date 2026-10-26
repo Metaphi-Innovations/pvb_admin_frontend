@@ -87,6 +87,15 @@ function formatRegistrationInput(id: RowId, value: string): string {
 	return value;
 }
 
+/** Display expiry as dd-mm-yyyy for view mode (avoids faded native date placeholders). */
+function formatExpiryDisplay(value: string): string {
+	const raw = value.trim();
+	if (!raw) return "—";
+	const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+	if (iso) return `${iso[3]}-${iso[2]}-${iso[1]}`;
+	return raw;
+}
+
 export function ComplianceCertificationsGrid({
 	values,
 	onChange,
@@ -138,6 +147,11 @@ export function ComplianceCertificationsGrid({
 		? "grid-cols-[72px_64px_minmax(260px,1fr)_minmax(140px,160px)]"
 		: "grid-cols-[72px_64px_minmax(0,1fr)]";
 
+	const viewFieldClass = cn(
+		"bg-background text-foreground border-border cursor-default shadow-none",
+		"focus-visible:ring-0 focus-visible:ring-offset-0",
+	);
+
 	return (
 		<div className="overflow-hidden rounded border border-border/80 text-xs">
 			<div
@@ -169,6 +183,7 @@ export function ComplianceCertificationsGrid({
 				const validityErr = row.validityErrorKey
 					? errors[row.validityErrorKey]
 					: undefined;
+				const viewNumber = numberVal?.trim() ? numberVal : "—";
 				return (
 					<div
 						key={row.label}
@@ -181,23 +196,26 @@ export function ComplianceCertificationsGrid({
 						<span className="pt-1.5 text-[11px] font-semibold text-foreground">
 							{row.label}
 						</span>
-						<div className="flex justify-center pt-1">
+						<div className={cn("flex justify-center pt-1", readOnly && "pointer-events-none")}>
 							<ListingStatusToggle
 								active={enabled}
 								onChange={(active) =>
 									!readOnly &&
 									setToggle(row.toggleKey, row.numberKey, row.validityKey, active)
 								}
-								disabled={readOnly}
+								// Keep full opacity in view mode — interaction blocked via pointer-events / onChange guard.
+								disabled={false}
 							/>
 						</div>
 						<div className={cn(ERP.field, "min-w-0")}>
 							<Input
-								value={numberVal}
+								value={readOnly ? viewNumber : numberVal}
 								onChange={(e) => setNumber(row.id, row.numberKey, e.target.value)}
 								onBlur={() => enabled && onFieldBlur?.(row.errorKey)}
-								disabled={readOnly || !enabled}
+								readOnly={readOnly}
+								disabled={!readOnly && !enabled}
 								placeholder={enabled ? row.placeholder : "—"}
+								tabIndex={readOnly ? -1 : undefined}
 								inputMode={row.id === "fssai" ? "numeric" : "text"}
 								maxLength={row.id === "fssai" ? 14 : row.id === "msme" ? 19 : undefined}
 								className={cn(
@@ -205,40 +223,52 @@ export function ComplianceCertificationsGrid({
 									showValidityDates && "min-w-0 w-full",
 									row.id === "msme" && "font-mono uppercase",
 									row.id === "fssai" && "font-mono",
-									!enabled && "bg-muted/40 text-muted-foreground",
-									err && enabled && "border-red-400",
+									readOnly
+										? viewFieldClass
+										: !enabled && "bg-muted/40 text-muted-foreground",
+									err && enabled && !readOnly && "border-red-400",
 								)}
 							/>
-							{enabled && row.helperText && !err && (
+							{!readOnly && enabled && row.helperText && !err && (
 								<p className="text-[10px] leading-tight text-muted-foreground">
 									{row.helperText}
 								</p>
 							)}
-							{err && enabled && (
+							{!readOnly && err && enabled && (
 								<p className="text-[10px] text-red-500 leading-tight">{err}</p>
 							)}
 						</div>
 						{showValidityDates && row.validityKey ? (
 							<div className={cn(ERP.field, "min-w-0")}>
-								<Input
-									type="date"
-									value={validityVal}
-									onChange={(e) =>
-										onChange({ ...values, [row.validityKey!]: e.target.value })
-									}
-									onBlur={() =>
-										enabled &&
-										row.validityErrorKey &&
-										onFieldBlur?.(row.validityErrorKey)
-									}
-									disabled={readOnly || !enabled}
-									className={cn(
-										ERP.input,
-										!enabled && "bg-muted/40 text-muted-foreground",
-										validityErr && enabled && "border-red-400",
-									)}
-								/>
-								{validityErr && enabled && (
+								{readOnly ? (
+									<Input
+										type="text"
+										value={formatExpiryDisplay(validityVal)}
+										readOnly
+										tabIndex={-1}
+										className={cn(ERP.input, viewFieldClass)}
+									/>
+								) : (
+									<Input
+										type="date"
+										value={validityVal}
+										onChange={(e) =>
+											onChange({ ...values, [row.validityKey!]: e.target.value })
+										}
+										onBlur={() =>
+											enabled &&
+											row.validityErrorKey &&
+											onFieldBlur?.(row.validityErrorKey)
+										}
+										disabled={!enabled}
+										className={cn(
+											ERP.input,
+											!enabled && "bg-muted/40 text-muted-foreground",
+											validityErr && enabled && "border-red-400",
+										)}
+									/>
+								)}
+								{!readOnly && validityErr && enabled && (
 									<p className="text-[10px] text-red-500 leading-tight">
 										{validityErr}
 									</p>

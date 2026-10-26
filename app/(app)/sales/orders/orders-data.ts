@@ -1882,13 +1882,14 @@ export function canDownloadPackingList(order: SalesOrder): boolean {
 
 export interface SalesOrderFormValues {
   orderDate: string;
-  customerId: number | null;
-  salesManId: number | null;
+  customerId: number | string | null;
+  /** UUID from user master at runtime; numeric only in legacy mock data. */
+  salesManId: number | string | null;
   deliveryDate: string;
   status: OrderStatus;
   lineItems: SalesOrderLineItem[];
   additionalExpenses: SalesOrderAdditionalExpense[];
-  warehouseId?: number | null;
+  warehouseId?: number | string | null;
   warehouseName?: string;
   billToAddressId?: string;
   shipToAddressId?: string;

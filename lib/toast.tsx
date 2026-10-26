@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export type AppToastType = "error" | "success" | "info";
+export type AppToastType = "error" | "success" | "info" | "warning";
 
 export interface AppToast {
   id: number;
@@ -31,7 +31,8 @@ export function AppToaster() {
   useEffect(() => {
     setMounted(true);
     const listener: Listener = (toast) => {
-      setToasts((prev) => [...prev.slice(-4), toast]);
+      // Keep enough slots for multi-licence alerts on customer select.
+      setToasts((prev) => [...prev.slice(-7), toast]);
     };
     listeners.push(listener);
     return () => {
@@ -46,7 +47,7 @@ export function AppToaster() {
   useEffect(() => {
     if (!toasts.length) return;
     const timers = toasts.map((t) =>
-      window.setTimeout(() => dismiss(t.id), 5000),
+      window.setTimeout(() => dismiss(t.id), t.type === "warning" || t.type === "error" ? 7000 : 5000),
     );
     return () => timers.forEach(clearTimeout);
   }, [toasts, dismiss]);
@@ -63,6 +64,7 @@ export function AppToaster() {
             toast.type === "success" && "bg-emerald-600",
             toast.type === "error" && "bg-red-600",
             toast.type === "info" && "bg-navy-700",
+            toast.type === "warning" && "bg-amber-600",
           )}
           role="status"
         >
