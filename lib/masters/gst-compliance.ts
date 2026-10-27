@@ -73,6 +73,74 @@ export function deriveGstRegistered(
 	return !!gstin?.trim();
 }
 
+/**
+ * Map Customer Master / prepare-dispatch API fields onto invoice form GST state.
+ * Prefer `gst_applicable` + `registration_type` (backend) over legacy `gst_treatment`.
+ * Never default missing treatment to "registered" — that blocks Non-GST customers.
+ */
+export function resolveCustomerGstPrefill(customer: {
+	gst_applicable?: boolean | null;
+	gstApplicable?: boolean | null;
+	registration_type?: string | null;
+	gst_category?: string | null;
+	gstCategory?: string | null;
+	gst_treatment?: string | null;
+	gstin_no?: string | null;
+	gstin?: string | null;
+}): {
+	customerGst: string;
+	customerGstCategory: string;
+	gstTreatment: string;
+} {
+	const gstin = String(customer.gstin_no || customer.gstin || "").trim();
+	const registrationType = String(
+		customer.registration_type ||
+			customer.gst_category ||
+			customer.gstCategory ||
+			customer.gst_treatment ||
+			"",
+	).trim();
+	const registrationTypeNorm = registrationType.toLowerCase();
+
+	// Explicit Non-GST / unregistered always wins (do not require GSTIN).
+	if (registrationTypeNorm === GST_CATEGORY_UNREGISTERED) {
+		return {
+			customerGst: "",
+			customerGstCategory: GST_CATEGORY_UNREGISTERED,
+			gstTreatment: GST_CATEGORY_UNREGISTERED,
+		};
+	}
+
+	const explicitApplicable = customer.gst_applicable ?? customer.gstApplicable;
+	if (explicitApplicable === false) {
+		return {
+			customerGst: "",
+			customerGstCategory: GST_CATEGORY_UNREGISTERED,
+			gstTreatment: GST_CATEGORY_UNREGISTERED,
+		};
+	}
+
+	const registered = deriveGstRegistered(
+		typeof explicitApplicable === "boolean" ? explicitApplicable : undefined,
+		gstin,
+		registrationType || undefined,
+	);
+
+	const customerGstCategory =
+		registrationTypeNorm ||
+		(registered ? GST_REGISTRATION_TYPE_DEFAULT : GST_CATEGORY_UNREGISTERED);
+
+	return {
+		customerGst: registered ? gstin : "",
+		customerGstCategory,
+		gstTreatment: registered
+			? customerGstCategory === GST_REGISTRATION_TYPE_DEFAULT
+				? "registered"
+				: customerGstCategory
+			: GST_CATEGORY_UNREGISTERED,
+	};
+}
+
 export function buildGstCategory(
 	gstRegistered: boolean,
 	registrationType: string,

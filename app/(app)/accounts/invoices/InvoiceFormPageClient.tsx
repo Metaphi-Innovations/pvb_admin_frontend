@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
 	isSezGstCategory,
 	getSezSupplyTypeLabel,
+	resolveCustomerGstPrefill,
 } from "@/lib/masters/gst-compliance";
 import {
 	LUT_SUPPLY_DECLARATION,
@@ -965,7 +966,16 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
             customerName,
             customerMobile: String(customer.mobile_no || customer.mobile || ""),
             customerEmail: String(customer.email || ""),
-            customerGst: String(customer.gstin_no || customer.gstin || ""),
+            ...(() => {
+              const gst = resolveCustomerGstPrefill(
+                customer as Record<string, unknown>,
+              );
+              return {
+                customerGst: gst.customerGst,
+                customerGstCategory: gst.customerGstCategory,
+                gstTreatment: gst.gstTreatment,
+              };
+            })(),
             billingAddress: String(
               billing.full_address || billing.address || customer.registered_gst_address || "",
             ),
@@ -976,7 +986,6 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
             contactPerson: String(customer.contact_person || ""),
             placeOfSupply: placeOfSupplyValue,
             state: placeOfSupplyValue || customerState,
-            gstTreatment: String(customer.gst_treatment || "registered"),
             receivableLedger: customerName,
             billFrom: warehouseName,
             billTo: customerName,
@@ -1223,15 +1232,22 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
             customerName: isSTDispatch ? destWhName : customerName,
             customerMobile: String(customer.mobile_no || customer.mobile || ""),
             customerEmail: String(customer.email || ""),
-            customerGst: isSTDispatch ? destWhGstin : String(customer.gstin_no || customer.gstin || ""),
-            customerGstCategory: customer.gst_category || customer.gstCategory,
+            ...(() => {
+              const gst = resolveCustomerGstPrefill(
+                customer as Record<string, unknown>,
+              );
+              return {
+                customerGst: isSTDispatch ? destWhGstin : gst.customerGst,
+                customerGstCategory: gst.customerGstCategory,
+                gstTreatment: gst.gstTreatment,
+              };
+            })(),
             billingAddress: billingAddressText,
             shippingAddress: shippingAddressText,
             pan: String(customer.pan_no || customer.pan || ""),
             contactPerson: String(customer.contact_person || ""),
             placeOfSupply: isSTDispatch ? destWhState : placeOfSupplyValue,
             state: isSTDispatch ? destWhState : (placeOfSupplyValue || customerState),
-            gstTreatment: String(customer.gst_treatment || customer.gstCategory || "registered"),
             receivableLedger: isSTDispatch ? destWhName : customerName,
             billFrom: sourceWhName,
             billTo: isSTDispatch ? destWhName : customerName,
@@ -2121,11 +2137,18 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     if (!placeOfSupply.trim()) {
       return "Place of Supply is required. Check customer / ship-to state.";
     }
-    if (
-      (gstTreatment === "registered" || customerGstCategory === "regular") &&
-      !customerGst.trim()
-    ) {
-      return "Customer GSTIN is required for registered customers.";
+    {
+      const treatment = gstTreatment.trim().toLowerCase();
+      const category = customerGstCategory.trim().toLowerCase();
+      const isUnregistered =
+        treatment === "unregistered" || category === "unregistered";
+      if (
+        !isUnregistered &&
+        (treatment === "registered" || category === "regular") &&
+        !customerGst.trim()
+      ) {
+        return "Customer GSTIN is required for registered customers.";
+      }
     }
     const validLines = lines.filter((l) => l.productName || l.productId);
     if (validLines.length === 0) return "Add at least one product line.";
@@ -2239,12 +2262,19 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
         setError("Place of Supply is required. Check customer / ship-to state.");
         return;
       }
-      if (
-        (gstTreatment === "registered" || customerGstCategory === "regular") &&
-        !customerGst.trim()
-      ) {
-        setError("Customer GSTIN is required for registered customers.");
-        return;
+      {
+        const treatment = gstTreatment.trim().toLowerCase();
+        const category = customerGstCategory.trim().toLowerCase();
+        const isUnregistered =
+          treatment === "unregistered" || category === "unregistered";
+        if (
+          !isUnregistered &&
+          (treatment === "registered" || category === "regular") &&
+          !customerGst.trim()
+        ) {
+          setError("Customer GSTIN is required for registered customers.");
+          return;
+        }
       }
       if (!asDraft) {
         // Transport / transporter fields are optional at Sales Invoice generation.
