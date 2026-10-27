@@ -9,12 +9,14 @@ export const SHORT_CLOSE_ELIGIBLE_STATUSES: POListStatus[] = [
   "partially_received",
 ];
 
-/** Post-approval statuses that can be Closed (not Cancelled). */
+/**
+ * Post-approval statuses that can be Closed (not Cancelled).
+ * Excludes partially_received / received — those mean a GRN was already taken;
+ * use Short Close for remaining qty instead.
+ */
 export const CLOSE_ELIGIBLE_STATUSES: POListStatus[] = [
   "approved",
   "invoice_uploaded",
-  "partially_received",
-  "received",
 ];
 
 /** Pre-fulfillment statuses that can be Cancelled (not Closed). */
@@ -65,8 +67,24 @@ export function canShortClosePO(po: PurchaseOrder): boolean {
   return getPOQtySummary(po).pendingQty > 0;
 }
 
+/** True when any GRN / received qty exists against the PO. */
+export function poHasGrnTaken(po: PurchaseOrder): boolean {
+  if (po.status === "partially_received" || po.status === "received") {
+    return true;
+  }
+  if (getPOQtySummary(po).receivedQty > 0) return true;
+  return po.lines.some(
+    (line) => (line.receivedQty ?? 0) > 0 || (line.receivedBaseQty ?? 0) > 0,
+  );
+}
+
+/**
+ * Close PO only when status allows it and no GRN has been taken yet.
+ * Once receipt exists, Short Close covers remaining open qty.
+ */
 export function canClosePO(po: PurchaseOrder): boolean {
-  return canClosePOStatus(po.status);
+  if (!canClosePOStatus(po.status)) return false;
+  return !poHasGrnTaken(po);
 }
 
 export function canCancelPO(po: PurchaseOrder): boolean {
