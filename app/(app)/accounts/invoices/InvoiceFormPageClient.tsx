@@ -86,6 +86,7 @@ import {
   readTransportDistanceKm,
   readWarehouseGstin,
   resolvePreparePlaceOfSupply,
+  resolvePreparePlaceOfSupplyInterstate,
   toDispatchLineItemOverride,
   type DispatchInvoiceTotalsPreview,
   type PrepareDispatchInvoiceDto,
@@ -161,7 +162,7 @@ import {
   type SalesInvoiceSourceType,
 } from "@/lib/accounts/invoice-type";
 import { splitInvoiceGst } from "@/lib/accounts/invoice-gst-breakup";
-import { inferInterstateFromPlaceOfSupply } from "@/lib/accounts/gst-accounting";
+import { resolveSalesInterstateDisplay } from "@/lib/accounts/gst-accounting";
 import "./sales-order-invoice-form-compact.css";
 import "./stock-transfer-invoice-form-compact.css";
 import "./sample-order-invoice-form-compact.css";
@@ -880,6 +881,10 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
         setAdditionalExpenses([]);
         setError(null);
         setSchemeSettlementEntries([]);
+        setBackendPlaceOfSupplyInterstate(null);
+        setBackendTotals(null);
+        setSourceWarehouseState("");
+        setDestinationWarehouseState("");
         return;
       }
 
@@ -1011,6 +1016,11 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
           } as unknown as SalesInvoicePrefill);
 
           setSourceWarehouseId(warehouseUuid || null);
+          setBackendPlaceOfSupplyInterstate(
+            resolvePreparePlaceOfSupplyInterstate(
+              pos as Record<string, unknown> | null,
+            ),
+          );
 
           setTransport((prev) => ({
             ...prev,
@@ -1265,13 +1275,11 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
           setStockTransferRecordId(
             isSTDispatch ? (stData?.stock_transfer_id ?? null) : null,
           );
-          const posInterstate = (pos as { isInterstate?: boolean; is_interstate?: boolean })
-            .isInterstate;
-          const posInterstateSnake = (pos as { is_interstate?: boolean }).is_interstate;
+          const posInterstate = resolvePreparePlaceOfSupplyInterstate(
+            pos as Record<string, unknown> | null,
+          );
           if (typeof posInterstate === "boolean") {
             setBackendPlaceOfSupplyInterstate(posInterstate);
-          } else if (typeof posInterstateSnake === "boolean") {
-            setBackendPlaceOfSupplyInterstate(posInterstateSnake);
           } else if (isSTDispatch) {
             // Different-GSTIN create path forces IGST; align preview when POS flag absent.
             const gstinClass = classifyStockTransferByGstin({
@@ -1416,6 +1424,9 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     setPlaceOfSupply(rec.placeOfSupply ?? "");
     setStateName(rec.state ?? "");
     setGstTreatment(rec.gstTreatment ?? "");
+    setBackendPlaceOfSupplyInterstate(
+      typeof rec.interstate === "boolean" ? rec.interstate : null,
+    );
     setReceivableLedger(rec.receivableLedger ?? rec.customerName);
     if (c) {
       applyCustomerTransactionFields(customerMasterToTransactionFields(c));
@@ -1724,11 +1735,25 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
         backendCgstAmount: backendTotals ? Number(backendTotals.cgst_amount) : null,
       });
     }
-    if (/igst/i.test(gstTreatment)) return true;
-    return inferInterstateFromPlaceOfSupply(placeOfSupply);
+    // Compare Place of Supply to issuing warehouse state (not hardcoded Maharashtra).
+    return resolveSalesInterstateDisplay({
+      placeOfSupply:
+        placeOfSupply || destinationWarehouseState || stateName || "",
+      supplierState: sourceWarehouseState || "",
+      supplierGstin: sourceWarehouseGstin || "",
+      customerGstin: customerGst || destinationWarehouseGstin || "",
+      backendIsInterstate: backendPlaceOfSupplyInterstate,
+      gstTreatment,
+    });
   }, [
     gstTreatment,
     placeOfSupply,
+    stateName,
+    sourceWarehouseState,
+    destinationWarehouseState,
+    sourceWarehouseGstin,
+    destinationWarehouseGstin,
+    customerGst,
     invoiceType,
     isStockTransferGeneration,
     stockTransferGstinClass,

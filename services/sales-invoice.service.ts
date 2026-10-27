@@ -666,6 +666,25 @@ export function resolvePreparePlaceOfSupply(
   );
 }
 
+/** Backend Place of Supply interstate flag from prepare-dispatch (camel or snake). */
+export function resolvePreparePlaceOfSupplyInterstate(
+  pos: Record<string, unknown> | null | undefined,
+): boolean | null {
+  if (!pos) return null;
+  const snap = (pos.placeOfSupplySnapshot ||
+    pos.place_of_supply_snapshot) as Record<string, unknown> | undefined;
+  const candidates = [
+    pos.isInterstate,
+    pos.is_interstate,
+    snap?.is_interstate,
+    snap?.isInterstate,
+  ];
+  for (const value of candidates) {
+    if (typeof value === "boolean") return value;
+  }
+  return null;
+}
+
 export function mapPrepareDispatchItemsToLineItems(
   items: PrepareDispatchInvoiceDto["items"],
   dispatchNumber: string,
