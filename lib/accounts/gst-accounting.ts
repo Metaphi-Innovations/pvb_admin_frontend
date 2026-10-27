@@ -167,12 +167,139 @@ export function aggregateLineGstByRate(
     }));
 }
 
+/** Normalize state labels/abbreviations to GST state codes (aligned with backend getStateCode). */
+const GST_STATE_ALIASES: Record<string, string> = {
+  mh: "27",
+  maharashtra: "27",
+  ka: "29",
+  karnataka: "29",
+  tn: "33",
+  "tamil nadu": "33",
+  dl: "07",
+  delhi: "07",
+  gj: "24",
+  gujarat: "24",
+  up: "09",
+  "uttar pradesh": "09",
+  wb: "19",
+  "west bengal": "19",
+  ts: "36",
+  telangana: "36",
+  ap: "37",
+  "andhra pradesh": "37",
+  kl: "32",
+  kerala: "32",
+  rj: "08",
+  rajasthan: "08",
+  mp: "23",
+  "madhya pradesh": "23",
+  hr: "06",
+  haryana: "06",
+  pb: "03",
+  punjab: "03",
+  goa: "30",
+  ga: "30",
+  cg: "22",
+  chhattisgarh: "22",
+  "chattisgarh": "22",
+};
+
+function normalizeStateKey(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** Resolve GST state code from state name/code or GSTIN prefix. */
+export function resolveGstStateCode(
+  stateOrCode?: string | null,
+  gstin?: string | null,
+): string | null {
+  const fromGstin = (gstin || "").trim().toUpperCase();
+  if (/^\d{2}[A-Z0-9]{13}$/.test(fromGstin) || /^\d{2}/.test(fromGstin)) {
+    const code = fromGstin.slice(0, 2);
+    if (/^\d{2}$/.test(code)) return code;
+  }
+
+  const raw = (stateOrCode || "").trim();
+  if (!raw) return null;
+  if (/^\d{1,2}$/.test(raw)) return raw.padStart(2, "0");
+
+  const key = normalizeStateKey(raw);
+  if (GST_STATE_ALIASES[key]) return GST_STATE_ALIASES[key];
+
+  // Prefix match for full names only: "Madhya Pradesh, India"
+  for (const [alias, code] of Object.entries(GST_STATE_ALIASES)) {
+    if (alias.length < 3) continue;
+    if (key.startsWith(`${alias} `) || key.startsWith(alias)) return code;
+  }
+  return null;
+}
+
+/**
+ * Interstate when Place of Supply state differs from supplier/bill-from state.
+ * Pass the issuing warehouse/company state as `companyState` — do not rely on a
+ * hardcoded Maharashtra default for multi-state warehouses.
+ */
 export function inferInterstateFromPlaceOfSupply(
   placeOfSupply: string | undefined,
   companyState = "Maharashtra",
+  options?: {
+    placeOfSupplyGstin?: string | null;
+    companyGstin?: string | null;
+  },
 ): boolean {
-  if (!placeOfSupply?.trim()) return false;
-  return placeOfSupply.trim().toLowerCase() !== companyState.trim().toLowerCase();
+  if (!placeOfSupply?.trim() && !options?.placeOfSupplyGstin?.trim()) return false;
+
+  const posCode = resolveGstStateCode(
+    placeOfSupply,
+    options?.placeOfSupplyGstin,
+  );
+  const supplierCode = resolveGstStateCode(
+    companyState,
+    options?.companyGstin,
+  );
+
+  if (posCode && supplierCode) {
+    return posCode !== supplierCode;
+  }
+
+  // Fallback: case-insensitive label compare when codes cannot be resolved.
+  if (!placeOfSupply?.trim() || !companyState?.trim()) return false;
+  return (
+    normalizeStateKey(placeOfSupply) !== normalizeStateKey(companyState)
+  );
+}
+
+/**
+ * Preferred resolver for invoice UI: backend POS flag first, then state/GSTIN compare.
+ */
+export function resolveSalesInterstateDisplay(params: {
+  placeOfSupply?: string | null;
+  supplierState?: string | null;
+  supplierGstin?: string | null;
+  customerGstin?: string | null;
+  backendIsInterstate?: boolean | null;
+  gstTreatment?: string | null;
+}): boolean {
+  if (params.gstTreatment && /igst|interstate/i.test(params.gstTreatment)) {
+    return true;
+  }
+  if (typeof params.backendIsInterstate === "boolean") {
+    return params.backendIsInterstate;
+  }
+  const supplierState = (params.supplierState || "").trim();
+  return inferInterstateFromPlaceOfSupply(
+    params.placeOfSupply || undefined,
+    supplierState || "Maharashtra",
+    {
+      placeOfSupplyGstin: params.customerGstin,
+      companyGstin: params.supplierGstin,
+    },
+  );
 }
 
 export interface GstPostingLineSpec {

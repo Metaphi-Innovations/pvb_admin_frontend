@@ -51,7 +51,7 @@ import {
   type BankAccountPrintDetails,
   type WarehouseMappedBankAccountSelectOption,
 } from "@/components/accounts/WarehouseMappedBankAccountSelect";
-import { inferInterstateFromPlaceOfSupply } from "@/lib/accounts/gst-accounting";
+import { resolveSalesInterstateDisplay } from "@/lib/accounts/gst-accounting";
 import { splitInvoiceGst } from "@/lib/accounts/invoice-gst-breakup";
 import { formatINR } from "@/app/(app)/accounts/invoices/invoice-utils";
 import { roundMoney } from "@/lib/accounts/money-format";
@@ -209,8 +209,15 @@ export default function ServiceInvoiceFormPageClient() {
     return warehouseData.map((w: Record<string, unknown>) => ({
       id: String(w.warehouse_id ?? ""),
       name: String(w.warehouse_name ?? w.name ?? ""),
+      state: String(w.state ?? w.warehouse_state ?? ""),
+      gstin: String(w.gst_number ?? w.gstin ?? w.gstin_no ?? ""),
     }));
   }, [warehouseData]);
+
+  const selectedWarehouse = useMemo(
+    () => warehouses.find((w) => w.id === warehouseId) ?? null,
+    [warehouses, warehouseId],
+  );
 
   const sacOptions = useMemo(
     () => hsnDropdown.filter((h) => h.codeType === "SAC"),
@@ -225,8 +232,14 @@ export default function ServiceInvoiceFormPageClient() {
   }, [invoiceDate, creditDays]);
 
   const interstate = useMemo(
-    () => inferInterstateFromPlaceOfSupply(placeOfSupply),
-    [placeOfSupply],
+    () =>
+      resolveSalesInterstateDisplay({
+        placeOfSupply,
+        supplierState: selectedWarehouse?.state || "",
+        supplierGstin: selectedWarehouse?.gstin || "",
+        customerGstin: customerGst || "",
+      }),
+    [placeOfSupply, selectedWarehouse, customerGst],
   );
 
   const lineTotals = useMemo(() => calculateInvoiceTotals(lines), [lines]);
