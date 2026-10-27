@@ -17,11 +17,24 @@ import { inferInterstateFromPlaceOfSupply } from "@/lib/accounts/gst-accounting"
 export function isInterstateGst(
   gstTreatment?: string,
   placeOfSupply?: string,
+  /** @deprecated Unused legacy arg (was never bill-from). Prefer options.companyState. */
   _state?: string,
+  options?: {
+    companyState?: string | null;
+    placeOfSupplyGstin?: string | null;
+    companyGstin?: string | null;
+  },
 ): boolean {
   if (gstTreatment && /igst|interstate/i.test(gstTreatment)) return true;
-  // Bill From (company) state vs Place of Supply — do not use customer state as bill-from.
-  return inferInterstateFromPlaceOfSupply(placeOfSupply);
+  // Prefer explicit bill-from/warehouse state when callers have it.
+  return inferInterstateFromPlaceOfSupply(
+    placeOfSupply,
+    options?.companyState?.trim() || "Maharashtra",
+    {
+      placeOfSupplyGstin: options?.placeOfSupplyGstin,
+      companyGstin: options?.companyGstin,
+    },
+  );
 }
 
 /** Split total GST into CGST/SGST (intrastate) or IGST (interstate). */
