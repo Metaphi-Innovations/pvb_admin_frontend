@@ -321,9 +321,14 @@ export const API_ENDPOINTS = {
       EXPORT: "/sales/sales-order/export",
       CREATE: "/sales/sales-order/create",
       DETAILS: (id: string) => `/sales/sales-order/${id}`,
+      PREVIEW: (id: string) => `/sales/sales-order/${id}/preview`,
+      PDF: (id: string) => `/sales/sales-order/${id}/pdf`,
+      EMAIL_PREVIEW: (id: string) => `/sales/sales-order/${id}/email-preview`,
+      SEND_EMAIL: (id: string) => `/sales/sales-order/${id}/send-email`,
       UPDATE: (id: string) => `/sales/sales-order/update/${id}`,
       APPROVE_REJECT: (id: string) => `/sales/sales-order/${id}/approve-reject`,
       CANCEL: (id: string) => `/sales/sales-order/${id}/cancel`,
+      SHORT_CLOSE: (id: string) => `/sales/sales-order/${id}/short-close`,
       SPLIT: (id: string) => `/sales/sales-order/${id}/split`,
     },
     STOCK_TRANSFER: {
@@ -339,6 +344,8 @@ export const API_ENDPOINTS = {
       UPDATE: (id: string) => `/sales/stock-transfer/update/${id}`,
       UPDATE_STATUS: (id: string) => `/sales/stock-transfer/${id}/status`,
       DOWNLOAD_NOTE: (id: string) => `/sales/stock-transfer/${id}/download-note`,
+      EMAIL_PREVIEW: (id: string) => `/sales/stock-transfer/${id}/email-preview`,
+      SEND_EMAIL: (id: string) => `/sales/stock-transfer/${id}/send-email`,
     },
     SAMPLE_ORDER: {
       NEXT_NUMBER: "/sales/sample-order/next-number",
@@ -351,6 +358,8 @@ export const API_ENDPOINTS = {
       UPDATE: (id: string) => `/sales/sample-order/update/${id}`,
       UPDATE_STATUS: (id: string) => `/sales/sample-order/${id}/status`,
       DOWNLOAD_NOTE: (id: string) => `/sales/sample-order/${id}/download-note`,
+      EMAIL_PREVIEW: (id: string) => `/sales/sample-order/${id}/email-preview`,
+      SEND_EMAIL: (id: string) => `/sales/sample-order/${id}/send-email`,
       ALLOCATE_PFI: (id: string) => `/sales/sample-order/${id}/allocate-pfi`,
     },
     SALES_RETURN: {

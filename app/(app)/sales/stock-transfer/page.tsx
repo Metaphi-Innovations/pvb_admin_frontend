@@ -28,6 +28,7 @@ import {
   FileText,
   Package,
   Download,
+  Mail,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ListingContainer } from "@/components/layout/ListingContainer";
@@ -55,6 +56,7 @@ import {
 import { StockTransferService } from "@/services/stock-transfer.service";
 import { openPackingListPdfById } from "@/app/(app)/sales/orders/pl-pdf/packingListPdfGenerator";
 import { PackingListDownloadDialog, type PackingListDownloadOption } from "@/app/(app)/sales/shared/PackingListDownloadDialog";
+import { SendStockTransferEmailModal } from "./components/SendStockTransferEmailModal";
 
 const STATUS_CFG: Record<string, { bg: string; text: string; dot: string }> = {
   draft: { bg: "bg-slate-100", text: "text-slate-600", dot: "bg-slate-400" },
@@ -112,6 +114,7 @@ export default function StockTransferPage() {
   const [cancelTransfer, setCancelTransfer] = useState<StockTransfer | null>(null);
   const [plDownloadOpen, setPlDownloadOpen] = useState(false);
   const [plDownloadOptions, setPlDownloadOptions] = useState<PackingListDownloadOption[]>([]);
+  const [sendEmailId, setSendEmailId] = useState<string | null>(null);
 
   useEffect(() => {
     const tab = searchParams.get("tab");
@@ -474,7 +477,24 @@ export default function StockTransferPage() {
                 !canDownloadNote(row) ? "text-muted-foreground/50 cursor-not-allowed" : "text-foreground hover:bg-muted/60"
               )}
             >
-              <FileText className="w-3.5 h-3.5 mr-2" /> Download Note
+              <FileText className="w-3.5 h-3.5 mr-2" /> Download PDF
+            </button>
+            <button
+              type="button"
+              disabled={
+                String(row.status || "").toUpperCase() === "DRAFT" ||
+                String(row.status || "").toUpperCase() === "CANCELLED"
+              }
+              onClick={() => setSendEmailId(String(row.id))}
+              className={cn(
+                "flex items-center gap-2 w-full px-2 py-1.5 text-xs transition-colors rounded-sm",
+                String(row.status || "").toUpperCase() === "DRAFT" ||
+                  String(row.status || "").toUpperCase() === "CANCELLED"
+                  ? "text-muted-foreground/50 cursor-not-allowed"
+                  : "text-foreground hover:bg-muted/60",
+              )}
+            >
+              <Mail className="w-3.5 h-3.5 mr-2" /> Send Email
             </button>
             <button
               type="button"
@@ -628,6 +648,20 @@ export default function StockTransferPage() {
                 : "Failed to download Packing List.";
             setToast({ msg: message, type: "error" });
           }
+        }}
+      />
+
+      <SendStockTransferEmailModal
+        open={Boolean(sendEmailId)}
+        onOpenChange={(open) => {
+          if (!open) setSendEmailId(null);
+        }}
+        stockTransferId={sendEmailId}
+        onSent={(result) => {
+          setToast({
+            msg: `Stock Transfer ${result.transferNo} emailed to ${result.to}.`,
+            type: "success",
+          });
         }}
       />
 

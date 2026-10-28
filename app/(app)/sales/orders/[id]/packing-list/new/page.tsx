@@ -128,7 +128,9 @@ export default function NewPackingListPage() {
 
           let remaining = Math.max(
             0,
-            Number(line.quantity || 0) - Number(line.generatedBaseQty || 0),
+            Number(line.quantity || 0) -
+              Number(line.generatedBaseQty || 0) -
+              Number(line.shortClosedBaseQty || 0),
           );
           if (remaining <= 0) continue;
 

@@ -63,21 +63,14 @@ function dateLabelFor(filters: StockPositionFilters): string {
   return filters.asOnDate || filters.toDate || "";
 }
 
-function formatDateTime(value: string | null | undefined): string {
+/** Document dates (packing / GRN / return) — date-only, no TZ shift. */
+function formatMovementDate(value: string | null | undefined): string {
   if (!value) return "—";
   const raw = String(value);
-  if (/^\d{4}-\d{2}-\d{2}/.test(raw)) {
-    const d = new Date(raw);
-    if (Number.isNaN(d.getTime())) return raw.slice(0, 10);
-    return d.toLocaleString("en-IN", {
-      year: "numeric",
-      month: "short",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  }
-  return raw;
+  if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10);
+  const parsed = new Date(raw.includes("T") ? raw : `${raw}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return "—";
+  return parsed.toISOString().slice(0, 10);
 }
 
 function formatQty(value: number): string {
@@ -327,7 +320,7 @@ export function BatchMovementsTab() {
         width: "160px",
         render: (v) => (
           <span className="text-xs tabular-nums text-muted-foreground whitespace-nowrap">
-            {formatDateTime(v as string)}
+            {formatMovementDate(v as string)}
           </span>
         ),
       },

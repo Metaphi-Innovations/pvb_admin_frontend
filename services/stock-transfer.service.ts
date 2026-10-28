@@ -627,6 +627,50 @@ export const StockTransferService = {
     return response.data;
   },
 
+  async fetchEmailPreviewById(
+    id: string,
+    signal?: AbortSignal,
+  ): Promise<StockTransferEmailPreview> {
+    const response = await axiosInstance.get(
+      API_ENDPOINTS.SALES.STOCK_TRANSFER.EMAIL_PREVIEW(id),
+      { signal },
+    );
+    const data = ((response.data as Record<string, unknown>)?.data ||
+      {}) as Record<string, unknown>;
+    return {
+      to: asString(data.to) || null,
+      subject: asString(data.subject),
+      text: asString(data.text),
+      html: asString(data.html),
+      recipientName: asString(data.recipient_name),
+      fromWarehouse: asString(data.from_warehouse),
+      toWarehouse: asString(data.to_warehouse),
+      transferNo: asString(data.transfer_no),
+      transferDate: asString(data.transfer_date),
+      attachmentFileName: asString(data.attachment_file_name),
+      transferStatus: asString(data.transfer_status) || null,
+      canSend: Boolean(data.can_send),
+      missingReason: asString(data.missing_reason) || undefined,
+    };
+  },
+
+  async sendEmailById(
+    id: string,
+    options?: { to?: string; signal?: AbortSignal },
+  ): Promise<{ to: string; transferNo: string }> {
+    const response = await axiosInstance.post(
+      API_ENDPOINTS.SALES.STOCK_TRANSFER.SEND_EMAIL(id),
+      options?.to ? { to: options.to } : {},
+      { signal: options?.signal },
+    );
+    const data = ((response.data as Record<string, unknown>)?.data ||
+      {}) as Record<string, unknown>;
+    return {
+      to: asString(data.to),
+      transferNo: asString(data.transfer_no),
+    };
+  },
+
   async getSummary(signal?: AbortSignal): Promise<{
     total: number;
     draft: number;
@@ -638,4 +682,20 @@ export const StockTransferService = {
     const response = await axiosInstance.get(API_ENDPOINTS.SALES.STOCK_TRANSFER.SUMMARY, { signal });
     return response.data?.data;
   },
+};
+
+export type StockTransferEmailPreview = {
+  to: string | null;
+  subject: string;
+  text: string;
+  html: string;
+  recipientName: string;
+  fromWarehouse: string;
+  toWarehouse: string;
+  transferNo: string;
+  transferDate: string;
+  attachmentFileName: string;
+  transferStatus: string | null;
+  canSend: boolean;
+  missingReason?: string;
 };
