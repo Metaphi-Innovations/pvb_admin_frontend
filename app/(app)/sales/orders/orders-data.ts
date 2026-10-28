@@ -11,6 +11,7 @@ import {
 import { loadEmployees, type Employee } from "@/app/(app)/user-management/employee/employee-data";
 import { loadWarehouses } from "@/app/(app)/masters/warehouse/warehouse-data";
 import { getCustomerAddressesForSalesOrder } from "./sales-order-address-utils";
+import { isSalesOrderShortCloseEnabled } from "./so-short-close-flag";
 import { resolveSezLutSupply } from "@/lib/settings/gst-tax-config";
 
 /** Orders above this amount require approval on submit (not draft). */
@@ -33,8 +34,38 @@ export type FulfillmentStatus =
   | "Fully Packed"
   | "Partially Dispatched"
   | "Fully Dispatched"
+  | "Short_Closed"
   | "CANCELLED"
   | string;
+
+export type ShortCloseReason =
+  | "customer_cancelled_balance"
+  | "stock_unavailable"
+  | "requirement_reduced"
+  | "alternate_order"
+  | "management_decision"
+  | "other";
+
+export const SHORT_CLOSE_REASONS: { value: ShortCloseReason; label: string }[] = [
+  { value: "customer_cancelled_balance", label: "Customer Cancelled Balance" },
+  { value: "stock_unavailable", label: "Stock Unavailable" },
+  { value: "requirement_reduced", label: "Requirement Reduced" },
+  { value: "alternate_order", label: "Alternate Order Used" },
+  { value: "management_decision", label: "Management Decision" },
+  { value: "other", label: "Other" },
+];
+
+export function shortCloseReasonLabel(reason: ShortCloseReason): string {
+  return SHORT_CLOSE_REASONS.find((r) => r.value === reason)?.label ?? reason;
+}
+
+export interface SOShortCloseInfo {
+  closeType: "short_close";
+  reason: string;
+  remarks: string;
+  shortClosedBy: string;
+  shortClosedDate: string;
+}
 
 export type PackingStatus =
   | "draft"
@@ -81,6 +112,8 @@ export const FULFILLMENT_STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: "Fully Packed", label: "Fully Packed" },
   { value: "Partially Dispatched", label: "Partially Dispatched" },
   { value: "Fully Dispatched", label: "Fully Dispatched" },
+  { value: "Short_Closed", label: "Short Closed" },
+  { value: "CANCELLED", label: "Cancelled" },
 ];
 
 export interface ProductCatalogItem {
@@ -116,6 +149,8 @@ export interface SalesOrderLineItem {
   quantity: number;
   /** Qty already included in generated Packing Lists (base units). */
   generatedBaseQty?: number;
+  /** Qty written off via Short Close (base units). */
+  shortClosedBaseQty?: number;
   /** Dealer price (DP) from Pricing Master */
   dealerPrice: number;
   /** Unit price used for line totals — equals dealerPrice before scheme discount */
@@ -227,6 +262,8 @@ export interface SalesOrder {
   cancellationReason?: string;
   cancelledBy?: string;
   cancelledDate?: string;
+  /** Short close audit */
+  shortClose?: SOShortCloseInfo;
   /** Packing list reference */
   packingListId?: number | string;
   packingListNumber?: string;
@@ -1772,15 +1809,27 @@ export function hasPackingListGenerated(order: SalesOrder): boolean {
 /** Editable until a packing list is generated (draft / pending / approved). */
 export function canEditOrder(order: SalesOrder): boolean {
   if (isOrderCancelled(order)) return false;
+  const fulfillment = (order.fulfillmentStatus || "PENDING").toString();
+  if (fulfillment === "Short_Closed" || fulfillment.toUpperCase() === "CANCELLED") return false;
   const status = (order.status || "").toString().toLowerCase().replace(/\s+/g, "_");
   if (status === "rejected" || status === "cancelled") return false;
   if (hasPackingListGenerated(order)) return false;
   return true;
 }
 
+/** Qty on a line not yet packed or short-closed — the only qty that can be split / short-closed. */
+export function getRemainingPackingQty(line: SalesOrderLineItem): number {
+  return Math.max(
+    0,
+    (line.quantity || 0) -
+      Number(line.generatedBaseQty || 0) -
+      Number(line.shortClosedBaseQty || 0),
+  );
+}
+
 /** Qty on a line not yet included in any packing list — the only qty that can be split off. */
 export function getSplittableQty(line: SalesOrderLineItem): number {
-  return Math.max(0, (line.quantity || 0) - Number(line.generatedBaseQty || 0));
+  return getRemainingPackingQty(line);
 }
 
 /** Resize a line to `quantity`, scaling tax and flat discount proportionally. */
@@ -1815,6 +1864,7 @@ export function canSplitOrder(order: SalesOrder): boolean {
     "DELIVERED",
     "delivered",
     "dispatched",
+    "Short_Closed",
     "CANCELLED",
   ];
   if (blocked.includes(fulfillment)) return false;
@@ -1829,8 +1879,38 @@ export function canSplitOrder(order: SalesOrder): boolean {
 export function canCancelOrder(order: SalesOrder): boolean {
   if (isOrderCancelled(order)) return false;
   const fulfillment = (order.fulfillmentStatus || "PENDING").toString();
+  if (fulfillment === "Short_Closed") return false;
   if (fulfillment.toUpperCase() !== "PENDING") return false;
   return !(order.packingListId || order.packingListNumber || (order.packingLists?.length ?? 0) > 0);
+}
+
+/**
+ * Short close writes off ALL remaining packing qty.
+ * Allowed when approved, not terminal, and at least one line still has remaining qty.
+ * Also gated by NEXT_PUBLIC_ENABLE_SO_SHORT_CLOSE.
+ */
+export function canShortCloseOrder(order: SalesOrder): boolean {
+  if (!isSalesOrderShortCloseEnabled()) return false;
+  if (isOrderCancelled(order)) return false;
+  const approvalOk =
+    order.status === "APPROVED" ||
+    order.status === "approved";
+  if (!approvalOk) return false;
+
+  const fulfillment = (order.fulfillmentStatus || "PENDING").toString();
+  const blocked = [
+    "Short_Closed",
+    "Fully Dispatched",
+    "FULLY_DISPATCHED",
+    "CANCELLED",
+    "cancelled",
+  ];
+  if (blocked.includes(fulfillment)) return false;
+
+  const hydrated = hydrateOrderLineItems(order);
+  const lines = hydrated.lineItems ?? [];
+  if (lines.length === 0) return false;
+  return lines.some((l) => Boolean(l.productId) && getRemainingPackingQty(l) > 1e-9);
 }
 
 export function canDownloadPI(order: SalesOrder): boolean {
@@ -1851,6 +1931,7 @@ export function canGeneratePackingList(order: SalesOrder): boolean {
     "FULLY_DISPATCHED",
     "DELIVERED",
     "delivered",
+    "Short_Closed",
     "CANCELLED",
     "cancelled",
   ];
@@ -1861,8 +1942,7 @@ export function canGeneratePackingList(order: SalesOrder): boolean {
   if (lines.length > 0) {
     return lines.some((l) => {
       if (!l.productId || !(l.quantity > 0)) return false;
-      const generated = Number(l.generatedBaseQty || 0);
-      return l.quantity - generated > 1e-9;
+      return getRemainingPackingQty(l) > 1e-9;
     });
   }
 

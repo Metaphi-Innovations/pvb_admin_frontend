@@ -354,4 +354,76 @@ export const SampleOrderService = {
     });
     return response.data;
   },
+
+  async downloadPdfById(id: string): Promise<void> {
+    const blob = await this.downloadNote(id);
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `sample-order-${id}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+  },
+
+  async fetchEmailPreviewById(
+    id: string,
+    signal?: AbortSignal,
+  ): Promise<SampleOrderEmailPreview> {
+    const response = await axiosInstance.get(
+      API_ENDPOINTS.SALES.SAMPLE_ORDER.EMAIL_PREVIEW(id),
+      { signal },
+    );
+    const data = ((response.data as Record<string, unknown>)?.data ||
+      {}) as Record<string, unknown>;
+    return {
+      to: asString(data.to) || null,
+      subject: asString(data.subject),
+      text: asString(data.text),
+      html: asString(data.html),
+      customerName: asString(data.customer_name),
+      contactPerson: asString(data.contact_person),
+      orderNo: asString(data.order_no),
+      orderDate: asString(data.order_date),
+      orderAmount: asString(data.order_amount),
+      attachmentFileName: asString(data.attachment_file_name),
+      orderStatus: asString(data.order_status) || null,
+      canSend: Boolean(data.can_send),
+      missingReason: asString(data.missing_reason) || undefined,
+    };
+  },
+
+  async sendEmailById(
+    id: string,
+    options?: { to?: string; signal?: AbortSignal },
+  ): Promise<{ to: string; orderNo: string }> {
+    const response = await axiosInstance.post(
+      API_ENDPOINTS.SALES.SAMPLE_ORDER.SEND_EMAIL(id),
+      options?.to ? { to: options.to } : {},
+      { signal: options?.signal },
+    );
+    const data = ((response.data as Record<string, unknown>)?.data ||
+      {}) as Record<string, unknown>;
+    return {
+      to: asString(data.to),
+      orderNo: asString(data.order_no),
+    };
+  },
+};
+
+export type SampleOrderEmailPreview = {
+  to: string | null;
+  subject: string;
+  text: string;
+  html: string;
+  customerName: string;
+  contactPerson: string;
+  orderNo: string;
+  orderDate: string;
+  orderAmount: string;
+  attachmentFileName: string;
+  orderStatus: string | null;
+  canSend: boolean;
+  missingReason?: string;
 };

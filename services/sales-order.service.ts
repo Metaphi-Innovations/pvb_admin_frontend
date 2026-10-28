@@ -1,10 +1,52 @@
 import { axiosInstance } from "@/api/axios";
 import { API_ENDPOINTS } from "@/api/endpoints";
+import { openEditablePdfPreview } from "@/lib/pdf/paramverse";
 import { calculateOrderTotalsSummary, isProductDiscountSchemeApplied, normalizeLineDiscountType, resolveTaxSupplyType, syncManualLineDiscount } from "@/app/(app)/sales/orders/orders-data";
 import type { SalesOrder, SalesOrderLineItem, SalesOrderAdditionalExpense } from "@/app/(app)/sales/orders/orders-data";
 import type { SalesOrderFormValues } from "@/app/(app)/sales/orders/components/SalesOrderForm";
 import { getCustomerAddressesForSalesOrder } from "@/app/(app)/sales/orders/sales-order-address-utils";
 import { resolveSezLutSupply } from "@/lib/settings/gst-tax-config";
+
+export type SalesOrderEmailPreview = {
+  to: string | null;
+  subject: string;
+  text: string;
+  html: string;
+  customerName: string;
+  contactPerson: string;
+  soNo: string;
+  soDate: string;
+  soAmount: string;
+  attachmentFileName: string;
+  soStatus: string | null;
+  canSend: boolean;
+  missingReason?: string;
+};
+
+function triggerBlobDownload(blob: Blob, fileName: string): void {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = fileName;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
+function fileNameFromDisposition(
+  header: string | undefined,
+  fallback: string,
+): string {
+  if (!header) return fallback;
+  const match = /filename\*?=(?:UTF-8'')?["']?([^"';]+)/i.exec(header);
+  if (!match?.[1]) return fallback;
+  try {
+    return decodeURIComponent(match[1].trim());
+  } catch {
+    return match[1].trim() || fallback;
+  }
+}
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -198,6 +240,7 @@ function mapBackendLineItem(raw: Record<string, unknown>, idx: number): SalesOrd
     packSize,
     quantity,
     generatedBaseQty: asNumber(raw.generated_base_qty),
+    shortClosedBaseQty: asNumber(raw.short_closed_base_qty),
     dealerPrice: unitPrice,
     unitPrice,
     discountType,
@@ -318,6 +361,18 @@ export function mapBackendSalesOrder(raw: Record<string, unknown>): SalesOrder {
           status: asString(pl.status),
         }))
       : undefined,
+    shortClose:
+      asString(raw.fulfillment_status) === "Short_Closed" ||
+      Boolean(raw.short_closed_at) ||
+      Boolean(raw.short_close_reason || raw.short_close_remarks)
+        ? {
+            closeType: "short_close" as const,
+            reason: asString(raw.short_close_reason),
+            remarks: asString(raw.short_close_remarks),
+            shortClosedBy: toDisplayName(raw.short_closed_by_user),
+            shortClosedDate: asDateOnly(raw.short_closed_at),
+          }
+        : undefined,
   };
 }
 
@@ -556,6 +611,20 @@ export const SalesOrderService = {
     return mapBackendSalesOrder(response.data?.data || {});
   },
 
+  async shortClose(
+    id: string | number,
+    input: { shortCloseReason?: string; shortCloseRemarks: string },
+  ): Promise<SalesOrder> {
+    const response = await axiosInstance.post(
+      API_ENDPOINTS.SALES.SALES_ORDER.SHORT_CLOSE(String(id)),
+      {
+        short_close_reason: input.shortCloseReason || null,
+        short_close_remarks: input.shortCloseRemarks,
+      },
+    );
+    return mapBackendSalesOrder(response.data?.data || {});
+  },
+
   async getFilterDropdown(fieldName: string, activeTab?: string, signal?: AbortSignal): Promise<any[]> {
     const queryParams = new URLSearchParams();
     queryParams.set("field_name", fieldName);
@@ -735,5 +804,100 @@ export const SalesOrderService = {
     }
     const response = await axiosInstance.get(url);
     return response.data?.data || [];
+  },
+
+  async fetchPdfPreviewById(
+    id: string,
+    signal?: AbortSignal,
+  ): Promise<{ html: string; fileName: string }> {
+    const response = await axiosInstance.get(
+      API_ENDPOINTS.SALES.SALES_ORDER.PREVIEW(id),
+      {
+        signal,
+        params: { _ts: Date.now() },
+        headers: { "Cache-Control": "no-cache", Pragma: "no-cache" },
+      },
+    );
+    const data = (response.data as Record<string, any>)?.data || {};
+    return {
+      html: String(data.html || ""),
+      fileName: String(data.fileName || "sales-order.pdf"),
+    };
+  },
+
+  async downloadPdfFileById(id: string, signal?: AbortSignal): Promise<void> {
+    const response = await axiosInstance.get(
+      API_ENDPOINTS.SALES.SALES_ORDER.PDF(id),
+      { responseType: "blob", signal },
+    );
+    const blob = response.data as Blob;
+    const fileName = fileNameFromDisposition(
+      response.headers?.["content-disposition"] as string | undefined,
+      "sales-order.pdf",
+    );
+    triggerBlobDownload(blob, fileName);
+  },
+
+  async downloadPdfById(
+    id: string,
+    options?: { signal?: AbortSignal },
+  ): Promise<void> {
+    const { html, fileName } = await this.fetchPdfPreviewById(id, options?.signal);
+    if (!html.trim()) {
+      throw new Error("Empty Sales Order preview received from server.");
+    }
+    await openEditablePdfPreview({
+      title: "Sales Order PDF Preview",
+      initialData: { html },
+      renderHtml: (data) => String(data.html || ""),
+      enableDirectPreviewEditing: false,
+      printButtonLabel: "Download SO PDF",
+      outputFileName: fileName,
+      onDownload: () => this.downloadPdfFileById(id, options?.signal),
+    });
+  },
+
+  async fetchEmailPreviewById(
+    id: string,
+    signal?: AbortSignal,
+  ): Promise<SalesOrderEmailPreview> {
+    const response = await axiosInstance.get(
+      API_ENDPOINTS.SALES.SALES_ORDER.EMAIL_PREVIEW(id),
+      { signal },
+    );
+    const data = ((response.data as Record<string, unknown>)?.data ||
+      {}) as Record<string, unknown>;
+    return {
+      to: asString(data.to) || null,
+      subject: asString(data.subject),
+      text: asString(data.text),
+      html: asString(data.html),
+      customerName: asString(data.customer_name),
+      contactPerson: asString(data.contact_person),
+      soNo: asString(data.so_no),
+      soDate: asString(data.so_date),
+      soAmount: asString(data.so_amount),
+      attachmentFileName: asString(data.attachment_file_name),
+      soStatus: asString(data.so_status) || null,
+      canSend: Boolean(data.can_send),
+      missingReason: asString(data.missing_reason) || undefined,
+    };
+  },
+
+  async sendEmailById(
+    id: string,
+    options?: { to?: string; signal?: AbortSignal },
+  ): Promise<{ to: string; soNo: string }> {
+    const response = await axiosInstance.post(
+      API_ENDPOINTS.SALES.SALES_ORDER.SEND_EMAIL(id),
+      options?.to ? { to: options.to } : {},
+      { signal: options?.signal },
+    );
+    const data = ((response.data as Record<string, unknown>)?.data ||
+      {}) as Record<string, unknown>;
+    return {
+      to: asString(data.to),
+      soNo: asString(data.so_no),
+    };
   },
 };

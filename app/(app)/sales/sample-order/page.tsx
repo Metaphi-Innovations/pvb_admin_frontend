@@ -16,6 +16,8 @@ import {
   Plus,
   Download,
   MoreVertical,
+  FileText,
+  Mail,
   ChevronDown,
   ChevronsUpDown,
   Eye,
@@ -64,6 +66,8 @@ import { useSampleOrders, useUpdateSampleOrderStatus, useSampleOrderFilterOption
 import { mapFrontendStatusToBackend, SampleOrderService } from "@/services/sample-order.service";
 import { openPackingListPdfById } from "@/app/(app)/sales/orders/pl-pdf/packingListPdfGenerator";
 import { PackingListDownloadDialog, type PackingListDownloadOption } from "@/app/(app)/sales/shared/PackingListDownloadDialog";
+import { SendSampleOrderEmailModal } from "./components/SendSampleOrderEmailModal";
+import { getErrorMessage } from "@/lib/masters/master-query-errors";
 
 const STATUS_CFG: Record<string, { bg: string; text: string; dot: string }> = {
   draft: { bg: "bg-slate-100", text: "text-slate-600", dot: "bg-slate-400" },
@@ -228,6 +232,8 @@ export default function SalesOrdersPage() {
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
   const [plDownloadOpen, setPlDownloadOpen] = useState(false);
   const [plDownloadOptions, setPlDownloadOptions] = useState<PackingListDownloadOption[]>([]);
+  const [downloadingPdfId, setDownloadingPdfId] = useState<string | null>(null);
+  const [sendEmailId, setSendEmailId] = useState<string | null>(null);
 
   useEffect(() => {
     setIsMounted(true);
@@ -558,6 +564,10 @@ export default function SalesOrdersPage() {
         const cancellable = canCancelOrder(hydrated);
         const packingAllowed = canGeneratePackingList(hydrated);
         const packingDownloadAllowed = canDownloadPackingList(hydrated);
+        const statusUpper = String(hydrated.status || "").toUpperCase();
+        const canSendEmail =
+          statusUpper !== "DRAFT" && statusUpper !== "CANCELLED";
+        const isDownloadingPdf = downloadingPdfId === String(hydrated.id);
 
         return isApprovalTab ? (
           <div className="flex items-center justify-end gap-1">
@@ -673,6 +683,49 @@ export default function SalesOrdersPage() {
                 )}
               >
                 <Download className="w-3.5 h-3.5 mr-2 shrink-0" /> Download Packing List
+              </button>
+              <DropdownMenuSeparator />
+              <button
+                type="button"
+                disabled={isDownloadingPdf}
+                onClick={() => {
+                  void (async () => {
+                    try {
+                      setDownloadingPdfId(String(hydrated.id));
+                      await SampleOrderService.downloadPdfById(String(hydrated.id));
+                      setToast({ msg: "Sample Order PDF downloaded.", type: "success" });
+                    } catch (e: unknown) {
+                      setToast({
+                        msg: getErrorMessage(e, "Failed to download Sample Order PDF."),
+                        type: "error",
+                      });
+                    } finally {
+                      setDownloadingPdfId(null);
+                    }
+                  })();
+                }}
+                className={cn(
+                  "flex items-center gap-2 w-full px-2 py-1.5 text-xs transition-colors rounded-sm whitespace-nowrap",
+                  isDownloadingPdf
+                    ? "text-muted-foreground/50 cursor-not-allowed"
+                    : "text-foreground hover:bg-muted/60",
+                )}
+              >
+                <FileText className="w-3.5 h-3.5 mr-2 shrink-0" />
+                {isDownloadingPdf ? "Preparing PDF…" : "Download PDF"}
+              </button>
+              <button
+                type="button"
+                disabled={!canSendEmail}
+                onClick={() => setSendEmailId(String(hydrated.id))}
+                className={cn(
+                  "flex items-center gap-2 w-full px-2 py-1.5 text-xs transition-colors rounded-sm whitespace-nowrap",
+                  !canSendEmail
+                    ? "text-muted-foreground/50 cursor-not-allowed"
+                    : "text-foreground hover:bg-muted/60",
+                )}
+              >
+                <Mail className="w-3.5 h-3.5 mr-2 shrink-0" /> Send Email
               </button>
               <DropdownMenuSeparator />
               <button
@@ -811,6 +864,20 @@ export default function SalesOrdersPage() {
                 : "Failed to download Packing List.";
             setToast({ msg: message, type: "error" });
           }
+        }}
+      />
+
+      <SendSampleOrderEmailModal
+        open={Boolean(sendEmailId)}
+        onOpenChange={(open) => {
+          if (!open) setSendEmailId(null);
+        }}
+        sampleOrderId={sendEmailId}
+        onSent={(result) => {
+          setToast({
+            msg: `Sample Order ${result.orderNo} emailed to ${result.to}.`,
+            type: "success",
+          });
         }}
       />
 

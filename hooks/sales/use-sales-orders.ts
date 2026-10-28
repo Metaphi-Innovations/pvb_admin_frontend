@@ -163,6 +163,27 @@ export function useCancelSalesOrder() {
   });
 }
 
+export function useShortCloseSalesOrder() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      shortCloseReason,
+      shortCloseRemarks,
+    }: {
+      id: string | number;
+      shortCloseReason?: string;
+      shortCloseRemarks: string;
+    }) => SalesOrderService.shortClose(id, { shortCloseReason, shortCloseRemarks }),
+    onSuccess: async (_data, variables) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: salesOrderKeys.lists() }),
+        queryClient.invalidateQueries({ queryKey: salesOrderKeys.detail(variables.id) }),
+      ]);
+    },
+  });
+}
+
 export function useSplitSalesOrder() {
   const queryClient = useQueryClient();
   return useMutation({
