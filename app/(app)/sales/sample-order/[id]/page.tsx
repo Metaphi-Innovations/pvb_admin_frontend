@@ -16,6 +16,8 @@ import {
   ListOrdered,
   Activity,
   Download,
+  FileText,
+  Mail,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -28,7 +30,10 @@ import {
 import CancelOrderDialog from "../components/CancelOrderDialog";
 import ApproveOrderDialog from "../components/ApproveOrderDialog";
 import RejectOrderDialog from "../components/RejectOrderDialog";
+import { SendSampleOrderEmailModal } from "../components/SendSampleOrderEmailModal";
 import { getPackingListById, PACKING_LIST_STATUS_LABELS } from "../packing-list-data";
+import { SampleOrderService } from "@/services/sample-order.service";
+import { getErrorMessage } from "@/lib/masters/master-query-errors";
 import {
   type SalesOrder,
   type OrderStatus,
@@ -84,6 +89,8 @@ export default function ViewSalesOrderPage() {
   const [rejectOpen, setRejectOpen] = useState(false);
   const [plDownloadOpen, setPlDownloadOpen] = useState(false);
   const [plDownloadOptions, setPlDownloadOptions] = useState<PackingListDownloadOption[]>([]);
+  const [sendEmailOpen, setSendEmailOpen] = useState(false);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
 
   const { data: rawOrder, isLoading, refetch } = useSampleOrder(id);
   const { data: billingCustomer } = useCustomer(rawOrder?.customerId ? String(rawOrder.customerId) : null);
@@ -251,6 +258,34 @@ export default function ViewSalesOrderPage() {
         setPlDownloadOptions(opts);
         setPlDownloadOpen(true);
       },
+    });
+    quickActions.push({
+      label: downloadingPdf ? "Preparing PDF…" : "Download PDF",
+      icon: FileText,
+      disabled: downloadingPdf,
+      onClick: () => {
+        void (async () => {
+          try {
+            setDownloadingPdf(true);
+            await SampleOrderService.downloadPdfById(String(order.id));
+            showToast("Sample Order PDF downloaded.", "success");
+          } catch (e: unknown) {
+            showToast(
+              getErrorMessage(e, "Failed to download Sample Order PDF."),
+              "error",
+            );
+          } finally {
+            setDownloadingPdf(false);
+          }
+        })();
+      },
+    });
+    const statusUpper = String(order.status || "").toUpperCase();
+    quickActions.push({
+      label: "Send Email",
+      icon: Mail,
+      disabled: statusUpper === "DRAFT" || statusUpper === "CANCELLED",
+      onClick: () => setSendEmailOpen(true),
     });
   }
 
@@ -551,6 +586,15 @@ export default function ViewSalesOrderPage() {
                 : "Failed to download Packing List.";
             window.alert(message);
           }
+        }}
+      />
+
+      <SendSampleOrderEmailModal
+        open={sendEmailOpen}
+        onOpenChange={setSendEmailOpen}
+        sampleOrderId={String(order.id)}
+        onSent={(result) => {
+          showToast(`Sample Order ${result.orderNo} emailed to ${result.to}.`, "success");
         }}
       />
 

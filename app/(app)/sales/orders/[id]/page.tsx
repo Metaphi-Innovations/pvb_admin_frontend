@@ -17,6 +17,9 @@ import {
   ListOrdered,
   Activity,
   Download,
+  FileText,
+  Mail,
+  Scissors,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -27,8 +30,11 @@ import {
   type RecordDetailTab,
 } from "@/components/record-detail";
 import CancelOrderDialog from "../components/CancelOrderDialog";
+import ShortCloseSOModal from "../components/ShortCloseSOModal";
+import { isSalesOrderShortCloseEnabled } from "../so-short-close-flag";
 import ApproveOrderDialog from "../components/ApproveOrderDialog";
 import RejectOrderDialog from "../components/RejectOrderDialog";
+import { SendSOEmailModal } from "../components/SendSOEmailModal";
 import {
   openPackingListPdfById,
 } from "../pl-pdf/packingListPdfGenerator";
@@ -43,6 +49,7 @@ import {
   canEditOrder,
   canSplitOrder,
   canCancelOrder,
+  canShortCloseOrder,
   canGeneratePackingList,
   canDownloadPackingList,
   canApproveOrder,
@@ -58,6 +65,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { useSalesOrder, useApproveRejectSalesOrder, useCancelSalesOrder } from "@/hooks/sales/use-sales-orders";
 import { useWarehouseStock, formatLineStock } from "@/hooks/sales/use-warehouse-stock";
+import { SalesOrderService } from "@/services/sales-order.service";
+import { getErrorMessage } from "@/lib/masters/master-query-errors";
 
 function orderStatusVariant(status: OrderStatus): "active" | "inactive" | "draft" | "blocked" | "neutral" {
   if (["approved", "confirmed", "APPROVED"].includes(status)) return "active";
@@ -87,9 +96,15 @@ export default function ViewSalesOrderPage() {
   const [activeTab, setActiveTab] = useState("overview");
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
   const [cancelOpen, setCancelOpen] = useState(false);
+  const [shortCloseOpen, setShortCloseOpen] = useState(
+    () =>
+      isSalesOrderShortCloseEnabled() && searchParams.get("shortClose") === "1",
+  );
   const [approveOpen, setApproveOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [plDownloadOpen, setPlDownloadOpen] = useState(false);
+  const [sendEmailOpen, setSendEmailOpen] = useState(false);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
 
   const approveRejectMutation = useApproveRejectSalesOrder();
 
@@ -129,8 +144,12 @@ export default function ViewSalesOrderPage() {
   const editable = canEditOrder(order);
   const splittable = canSplitOrder(order);
   const cancellable = canCancelOrder(order);
+  const shortCloseable = canShortCloseOrder(order);
   const packingAllowed = canGeneratePackingList(order);
   const packingDownloadAllowed = canDownloadPackingList(order);
+  const statusUpper = String(order.status || "").toUpperCase();
+  const canSendEmail =
+    statusUpper !== "DRAFT" && statusUpper !== "CANCELLED";
   const showApprovalActions = approvalMode && canApproveOrder(order);
   const approvalStatus = resolveApprovalStatus(order);
 
@@ -174,6 +193,35 @@ export default function ViewSalesOrderPage() {
   }
   if (!approvalMode) {
     quickActions.push({
+      label: downloadingPdf ? "Preparing PDF…" : "Download PDF",
+      icon: FileText,
+      disabled: downloadingPdf,
+      onClick: () => {
+        void (async () => {
+          try {
+            setDownloadingPdf(true);
+            await SalesOrderService.downloadPdfById(String(order.id));
+            showToast("Sales Order PDF ready to download.", "success");
+          } catch (e: unknown) {
+            showToast(
+              getErrorMessage(e, "Failed to download Sales Order PDF."),
+              "error",
+            );
+          } finally {
+            setDownloadingPdf(false);
+          }
+        })();
+      },
+    });
+    quickActions.push({
+      label: "Send Email",
+      icon: Mail,
+      disabled: !canSendEmail,
+      onClick: () => setSendEmailOpen(true),
+    });
+  }
+  if (!approvalMode) {
+    quickActions.push({
       label: "Download Packing List",
       icon: Download,
       disabled: !packingDownloadAllowed,
@@ -208,6 +256,13 @@ export default function ViewSalesOrderPage() {
       label: "Split Order",
       icon: Split,
       onClick: () => router.push(`/sales/orders/${order.id}/split`),
+    });
+  }
+  if (!approvalMode && shortCloseable) {
+    quickActions.push({
+      label: "Short Close",
+      icon: Scissors,
+      onClick: () => setShortCloseOpen(true),
     });
   }
   if (!approvalMode && cancellable) {
@@ -364,6 +419,15 @@ export default function ViewSalesOrderPage() {
               {order.status === "cancelled" && (
                 <RecordSectionCard title="Cancellation" accent="orange">
                   <RecordKvRow label="Remarks" value={order.remarks} isLast />
+                </RecordSectionCard>
+              )}
+
+              {order.shortClose && (
+                <RecordSectionCard title="Short Close" accent="purple">
+                  <RecordKvRow label="Reason" value={order.shortClose.reason || "—"} />
+                  <RecordKvRow label="Remarks" value={order.shortClose.remarks || "—"} />
+                  <RecordKvRow label="Short Closed By" value={order.shortClose.shortClosedBy || "—"} />
+                  <RecordKvRow label="Short Closed Date" value={order.shortClose.shortClosedDate || "—"} isLast />
                 </RecordSectionCard>
               )}
 
@@ -579,6 +643,19 @@ export default function ViewSalesOrderPage() {
         />
       )}
 
+      {shortCloseOpen && (
+        <ShortCloseSOModal
+          order={order}
+          open={shortCloseOpen}
+          onClose={() => setShortCloseOpen(false)}
+          onSuccess={() => {
+            setShortCloseOpen(false);
+            void refetch();
+            showToast("Sales order short closed successfully.");
+          }}
+        />
+      )}
+
       {approveOpen && (
         <ApproveOrderDialog
           order={order}
@@ -624,6 +701,15 @@ export default function ViewSalesOrderPage() {
                 : "Failed to download Packing List.";
             window.alert(message);
           }
+        }}
+      />
+
+      <SendSOEmailModal
+        open={sendEmailOpen}
+        onOpenChange={setSendEmailOpen}
+        salesOrderId={String(order.id)}
+        onSent={(result) => {
+          showToast(`Sales Order ${result.soNo} emailed to ${result.to}.`, "success");
         }}
       />
 

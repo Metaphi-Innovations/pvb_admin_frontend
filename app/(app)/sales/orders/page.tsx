@@ -25,12 +25,16 @@ import {
   Split,
   Package,
   XCircle,
+  FileText,
+  Mail,
+  Scissors,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ListingContainer } from "@/components/layout/ListingContainer";
 import { MasterListing } from "@/components/listing/MasterListing";
 import type { ColumnConfig, FilterState, SortState } from "@/components/listing/types";
 import CancelOrderDialog from "./components/CancelOrderDialog";
+import { SendSOEmailModal } from "./components/SendSOEmailModal";
 import { SalesReturnTab } from "./components/SalesReturnTab";
 import { getSalesReturnRecords } from "./sales-return-data";
 import {
@@ -45,13 +49,16 @@ import {
   canEditOrder,
   canSplitOrder,
   canCancelOrder,
+  canShortCloseOrder,
   canGeneratePackingList,
   canDownloadPackingList,
   hydrateOrderLineItems,
   FULFILLMENT_STATUS_OPTIONS,
 } from "./orders-data";
+import { isSalesOrderShortCloseEnabled } from "./so-short-close-flag";
 import { useSalesOrders, useCancelSalesOrder, useSalesOrderFilterOptions } from "@/hooks/sales/use-sales-orders";
 import { SalesOrderService } from "@/services/sales-order.service";
+import { getErrorMessage } from "@/lib/masters/master-query-errors";
 
 const STATUS_CFG: Record<string, { bg: string; text: string; dot: string }> = {
   draft: { bg: "bg-slate-100", text: "text-slate-600", dot: "bg-slate-400" },
@@ -66,6 +73,7 @@ const STATUS_CFG: Record<string, { bg: string; text: string; dot: string }> = {
   fully_packed: { bg: "bg-sky-50", text: "text-sky-800", dot: "bg-sky-600" },
   partially_dispatched: { bg: "bg-violet-50", text: "text-violet-700", dot: "bg-violet-500" },
   fully_dispatched: { bg: "bg-amber-50", text: "text-amber-700", dot: "bg-amber-400" },
+  short_closed: { bg: "bg-purple-50", text: "text-purple-700", dot: "bg-purple-500" },
 };
 
 const STATUS_OPTIONS = [
@@ -114,6 +122,8 @@ export default function SalesOrdersPage() {
   const [plDownloadOptions, setPlDownloadOptions] = useState<PackingListDownloadOption[]>([]);
   const [salesReturnCount, setSalesReturnCount] = useState(0);
   const [cancelOrder, setCancelOrder] = useState<SalesOrder | null>(null);
+  const [downloadingSoId, setDownloadingSoId] = useState<string | null>(null);
+  const [sendEmailSoId, setSendEmailSoId] = useState<string | null>(null);
 
   const { data: customerFilterRaw } = useSalesOrderFilterOptions("customer__customer_name", activeTab);
   const { data: soNumberFilterRaw } = useSalesOrderFilterOptions("so_number", activeTab);
@@ -382,8 +392,13 @@ export default function SalesOrdersPage() {
         const editable = canEditOrder(hydrated);
         const splittable = canSplitOrder(hydrated);
         const cancellable = canCancelOrder(hydrated);
+        const shortCloseable = canShortCloseOrder(hydrated);
         const packingAllowed = canGeneratePackingList(hydrated);
         const packingDownloadAllowed = canDownloadPackingList(hydrated);
+        const statusUpper = String(hydrated.status || "").toUpperCase();
+        const canSendEmail =
+          statusUpper !== "DRAFT" && statusUpper !== "CANCELLED";
+        const isDownloadingPdf = downloadingSoId === String(hydrated.id);
 
         return isApprovalTab ? (
           <button
@@ -489,6 +504,64 @@ export default function SalesOrdersPage() {
                 <Download className="w-3.5 h-3.5 mr-2" /> Download Packing List
               </button>
               <DropdownMenuSeparator />
+              <button
+                type="button"
+                disabled={isDownloadingPdf}
+                onClick={() => {
+                  void (async () => {
+                    try {
+                      setDownloadingSoId(String(hydrated.id));
+                      await SalesOrderService.downloadPdfById(String(hydrated.id));
+                      setToast({ msg: "Sales Order PDF ready to download.", type: "success" });
+                    } catch (e: unknown) {
+                      setToast({
+                        msg: getErrorMessage(e, "Failed to download Sales Order PDF."),
+                        type: "error",
+                      });
+                    } finally {
+                      setDownloadingSoId(null);
+                    }
+                  })();
+                }}
+                className={cn(
+                  "flex items-center gap-2 w-full px-2 py-1.5 text-xs transition-colors rounded-sm",
+                  isDownloadingPdf
+                    ? "text-muted-foreground/50 cursor-not-allowed"
+                    : "text-foreground hover:bg-muted/60",
+                )}
+              >
+                <FileText className="w-3.5 h-3.5 mr-2" />
+                {isDownloadingPdf ? "Preparing PDF…" : "Download PDF"}
+              </button>
+              <button
+                type="button"
+                disabled={!canSendEmail}
+                onClick={() => setSendEmailSoId(String(hydrated.id))}
+                className={cn(
+                  "flex items-center gap-2 w-full px-2 py-1.5 text-xs transition-colors rounded-sm",
+                  !canSendEmail
+                    ? "text-muted-foreground/50 cursor-not-allowed"
+                    : "text-foreground hover:bg-muted/60",
+                )}
+              >
+                <Mail className="w-3.5 h-3.5 mr-2" /> Send Email
+              </button>
+              <DropdownMenuSeparator />
+              {isSalesOrderShortCloseEnabled() && (
+                <button
+                  type="button"
+                  disabled={!shortCloseable}
+                  onClick={() => router.push(`/sales/orders/${row.id}?shortClose=1`)}
+                  className={cn(
+                    "flex items-center gap-2 w-full px-2 py-1.5 text-xs transition-colors rounded-sm",
+                    !shortCloseable
+                      ? "text-muted-foreground/50 cursor-not-allowed"
+                      : "text-foreground hover:bg-muted/60",
+                  )}
+                >
+                  <Scissors className="w-3.5 h-3.5 mr-2" /> Short Close
+                </button>
+              )}
               <button
                 type="button"
                 disabled={!cancellable}
@@ -606,6 +679,20 @@ export default function SalesOrdersPage() {
                 : "Failed to download Packing List.";
             setToast({ msg: message, type: "error" });
           }
+        }}
+      />
+
+      <SendSOEmailModal
+        open={Boolean(sendEmailSoId)}
+        onOpenChange={(open) => {
+          if (!open) setSendEmailSoId(null);
+        }}
+        salesOrderId={sendEmailSoId}
+        onSent={(result) => {
+          setToast({
+            msg: `Sales Order ${result.soNo} emailed to ${result.to}.`,
+            type: "success",
+          });
         }}
       />
 

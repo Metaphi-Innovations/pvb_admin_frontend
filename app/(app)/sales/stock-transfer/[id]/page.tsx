@@ -11,12 +11,15 @@ import {
   Activity,
   IndianRupee,
   Package,
+  FileText,
+  Mail,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   RecordDetailPage,
   RecordSectionCard,
   RecordKvRow,
+  type RecordDetailSidebarProps,
   type RecordDetailTab,
 } from "@/components/record-detail";
 import {
@@ -27,6 +30,9 @@ import { formatFulfillmentStatus } from "@/app/(app)/sales/orders/orders-data";
 import { getProductById, calculateOrderTotalsSummary } from "@/app/(app)/sales/orders/orders-data";
 import { useStockTransfer } from "@/hooks/sales/use-stock-transfers";
 import { useWarehouseStock, formatLineStock } from "@/hooks/sales/use-warehouse-stock";
+import { StockTransferService } from "@/services/stock-transfer.service";
+import { getErrorMessage } from "@/lib/masters/master-query-errors";
+import { SendStockTransferEmailModal } from "../components/SendStockTransferEmailModal";
 
 function transferStatusVariant(status: TransferStatus): "active" | "inactive" | "draft" | "blocked" | "neutral" {
   if (status === "approved" || status === "confirmed" || status === "received") return "active";
@@ -42,6 +48,8 @@ export default function ViewStockTransferPage() {
 
   const [activeTab, setActiveTab] = useState("overview");
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
+  const [sendEmailOpen, setSendEmailOpen] = useState(false);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
 
   const { data: transfer, isLoading, isError } = useStockTransfer(id);
   const stockQuery = useWarehouseStock(transfer?.sourceWarehouseId);
@@ -80,6 +88,57 @@ export default function ViewStockTransferPage() {
 
   const formatRupee = (n: number) =>
     `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+  const statusUpper = String(transfer.status || "").toUpperCase();
+  const canSendEmail = statusUpper !== "DRAFT" && statusUpper !== "CANCELLED";
+
+  const quickActions: RecordDetailSidebarProps["quickActions"] = [
+    {
+      label: downloadingPdf ? "Preparing PDF…" : "Download PDF",
+      icon: FileText,
+      disabled: downloadingPdf,
+      onClick: () => {
+        void (async () => {
+          try {
+            setDownloadingPdf(true);
+            const blob = await StockTransferService.downloadNote(String(transfer.id));
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `stock-transfer-${transfer.transferNumber}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            window.URL.revokeObjectURL(url);
+            setToast({ msg: "Stock Transfer PDF downloaded.", type: "success" });
+          } catch (e: unknown) {
+            setToast({
+              msg: getErrorMessage(e, "Failed to download Stock Transfer PDF."),
+              type: "error",
+            });
+          } finally {
+            setDownloadingPdf(false);
+          }
+        })();
+      },
+    },
+    {
+      label: "Send Email",
+      icon: Mail,
+      disabled: !canSendEmail,
+      onClick: () => setSendEmailOpen(true),
+    },
+  ];
+
+  const sidebar: RecordDetailSidebarProps = {
+    quickActions,
+    summary: [
+      { label: "From", value: transfer.sourceWarehouseName || "—" },
+      { label: "To", value: transfer.targetWarehouseName || "—" },
+      { label: "Transfer Date", value: transfer.transferDate },
+      { label: "Grand Total", value: formatRupee(totals.grandTotal), highlight: true },
+    ],
+  };
 
   const tabs: RecordDetailTab[] = [
     { value: "overview", label: "Overview" },
@@ -122,6 +181,7 @@ export default function ViewStockTransferPage() {
         tabs={tabs}
         activeTab={activeTab}
         onTabChange={setActiveTab}
+        sidebar={sidebar}
       >
         {activeTab === "overview" && (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -368,6 +428,18 @@ export default function ViewStockTransferPage() {
           </div>
         )}
       </RecordDetailPage>
+
+      <SendStockTransferEmailModal
+        open={sendEmailOpen}
+        onOpenChange={setSendEmailOpen}
+        stockTransferId={String(transfer.id)}
+        onSent={(result) => {
+          setToast({
+            msg: `Stock Transfer ${result.transferNo} emailed to ${result.to}.`,
+            type: "success",
+          });
+        }}
+      />
 
       {toast && (
         <div
