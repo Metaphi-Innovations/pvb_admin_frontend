@@ -23,20 +23,27 @@ const TD = "px-3 py-2.5 align-middle text-xs";
 
 /**
  * Flat horizontal packing-done lines:
- * Product | Batch | Mfg | Expiry | Available/Order | Packed Total | Update
+ * Product | Batch | Mfg | Expiry | Available/Order | Packed Total | Action
  */
 export function PackingDoneEditLinesTable({
   products,
   qtyLabel,
   onUpdateBatch,
+  onRemoveBatch,
+  removeDisabledReason,
 }: {
   products: PackedProduct[];
   qtyLabel: string;
   onUpdateBatch: (product: PackedProduct) => void;
+  onRemoveBatch?: (product: PackedProduct) => void;
+  /** When set, Remove stays disabled and shows this as title tooltip. */
+  removeDisabledReason?: string | null;
 }) {
   if (!products?.length) {
     return <p className="text-xs text-muted-foreground py-4">No packed lines found.</p>;
   }
+
+  const canRemoveAny = Boolean(onRemoveBatch) && products.length > 1 && !removeDisabledReason;
 
   return (
     <div className="border border-border rounded-xl overflow-hidden shadow-sm">
@@ -50,7 +57,7 @@ export function PackingDoneEditLinesTable({
               <th className={TH}>Expiry Date</th>
               <th className={TH_RIGHT}>{qtyLabel}</th>
               <th className={TH_RIGHT}>Packed Qty</th>
-              <th className={`${TH} text-center w-28`}>Action</th>
+              <th className={`${TH} text-center w-40`}>Action</th>
             </tr>
           </thead>
           <tbody>
@@ -60,6 +67,11 @@ export function PackingDoneEditLinesTable({
                 p.draftKey ||
                 `${p.packingDoneProductId || p.lineId || sku}-${p.batchNumber || idx}`;
               const canUpdate = Boolean(p.packingDoneProductId || p.draftKey);
+              const canRemoveThis =
+                Boolean(onRemoveBatch) &&
+                canUpdate &&
+                (p.isDraft || products.length > 1) &&
+                !removeDisabledReason;
               return (
                 <tr
                   key={key}
@@ -93,16 +105,36 @@ export function PackingDoneEditLinesTable({
                     />
                   </td>
                   <td className={`${TD} text-center`}>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-7 px-2.5 text-[11px]"
-                      disabled={!canUpdate}
-                      onClick={() => onUpdateBatch(p)}
-                    >
-                      Update
-                    </Button>
+                    <div className="inline-flex items-center justify-center gap-1.5">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 px-2.5 text-[11px]"
+                        disabled={!canUpdate}
+                        onClick={() => onUpdateBatch(p)}
+                      >
+                        Update
+                      </Button>
+                      {onRemoveBatch ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-7 px-2.5 text-[11px] text-red-700 border-red-200 hover:bg-red-50 hover:text-red-800"
+                          disabled={!canRemoveThis}
+                          title={
+                            removeDisabledReason ||
+                            (!canRemoveAny && !p.isDraft
+                              ? "Cannot remove the last packed line. Revert packing done instead."
+                              : "Remove this packed line")
+                          }
+                          onClick={() => onRemoveBatch(p)}
+                        >
+                          Remove
+                        </Button>
+                      ) : null}
+                    </div>
                   </td>
                 </tr>
               );

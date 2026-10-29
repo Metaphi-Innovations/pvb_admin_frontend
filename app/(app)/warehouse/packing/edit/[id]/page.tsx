@@ -15,6 +15,7 @@ import {
   Check,
 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { axiosInstance } from "@/api/axios";
 import { PackingDoneService } from "@/services/packing-done.service";
 import {
   PackedProduct,
@@ -39,6 +40,16 @@ import {
 import { resolvePackingReturnTo } from "../../lib/packing-list-nav";
 import { showToast as showGlobalToast } from "@/lib/toast";
 
+async function postPackingDoneBatchRemove(
+  packingDoneId: string,
+  packingDoneProductId: string,
+) {
+  await axiosInstance.post(
+    `/warehouse/packing-done/${encodeURIComponent(packingDoneId)}/batch-remove`,
+    { packing_done_product_id: packingDoneProductId },
+  );
+}
+
 type PendingSwapOp = {
   kind: "swap";
   packingDoneProductId: string;
@@ -56,7 +67,12 @@ type PendingAddOp = {
   quantity_type?: string;
 };
 
-type PendingOp = PendingSwapOp | PendingAddOp;
+type PendingRemoveOp = {
+  kind: "remove";
+  packingDoneProductId: string;
+};
+
+type PendingOp = PendingSwapOp | PendingAddOp | PendingRemoveOp;
 
 function newDraftKey() {
   return `draft-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -122,7 +138,7 @@ export default function EditPackingDonePage({ params }: { params: { id: string }
 
   const hasUnsavedChanges = pendingOps.length > 0;
 
-  /** Adjust remaining for staged add / qty-change swaps so UI max stays correct. */
+  /** Adjust remaining for staged add / remove / qty-change swaps so UI max stays correct. */
   const sourceItems = useMemo(() => {
     const reservedBySource = new Map<string, number>();
     for (const op of pendingOps) {
@@ -130,6 +146,19 @@ export default function EditPackingDonePage({ params }: { params: { id: string }
         reservedBySource.set(
           op.source_item_id,
           (reservedBySource.get(op.source_item_id) || 0) + op.base_qty,
+        );
+        continue;
+      }
+      if (op.kind === "remove") {
+        const baseline = packing?.products.find(
+          (p) => p.packingDoneProductId === op.packingDoneProductId,
+        );
+        if (!baseline?.sourceItemId) continue;
+        // Removing frees remaining qty for Add.
+        reservedBySource.set(
+          baseline.sourceItemId,
+          (reservedBySource.get(baseline.sourceItemId) || 0) -
+            Number(baseline.packedBaseQty || 0),
         );
         continue;
       }
@@ -301,6 +330,78 @@ export default function EditPackingDonePage({ params }: { params: { id: string }
     showToast("Item staged. Click Save to apply.", "success");
   };
 
+  const handleRemoveLine = (product: PackedProduct) => {
+    if (!canEdit) {
+      showToast("This packing done cannot be batch-edited.", "error");
+      return;
+    }
+
+    // Unsaved add — drop locally without an API remove.
+    if (product.draftKey) {
+      setDraftProducts((prev) => prev.filter((row) => row.draftKey !== product.draftKey));
+      setPendingOps((prev) =>
+        prev.filter((op) => !(op.kind === "add" && op.draftKey === product.draftKey)),
+      );
+      showToast("Unsaved line removed.", "success");
+      return;
+    }
+
+    if (!product.packingDoneProductId) {
+      showToast("Missing packing line reference.", "error");
+      return;
+    }
+
+    const persistedStillVisible = draftProducts.filter(
+      (row) => row.packingDoneProductId && row.packingDoneProductId !== product.packingDoneProductId,
+    ).length;
+    const draftStillVisible = draftProducts.filter(
+      (row) => row.draftKey && !row.packingDoneProductId,
+    ).length;
+    // After this remove, at least one persisted line must remain for Save
+    // (draft-only adds are not yet on the server).
+    if (persistedStillVisible < 1 && draftStillVisible === 0) {
+      showToast(
+        "Cannot remove the last packed line. Revert the Packing Done record instead.",
+        "error",
+      );
+      return;
+    }
+    if (persistedStillVisible < 1) {
+      showToast(
+        "Cannot remove the last saved packed line while unsaved adds are pending. Save adds first, or revert packing done.",
+        "error",
+      );
+      return;
+    }
+
+    setDraftProducts((prev) =>
+      prev.filter((row) => row.packingDoneProductId !== product.packingDoneProductId),
+    );
+    setPendingOps((prev) => {
+      const withoutSwap = prev.filter(
+        (op) =>
+          !(
+            op.kind === "swap" &&
+            op.packingDoneProductId === product.packingDoneProductId
+          ),
+      );
+      const alreadyQueued = withoutSwap.some(
+        (op) =>
+          op.kind === "remove" &&
+          op.packingDoneProductId === product.packingDoneProductId,
+      );
+      if (alreadyQueued) return withoutSwap;
+      return [
+        ...withoutSwap,
+        {
+          kind: "remove" as const,
+          packingDoneProductId: product.packingDoneProductId!,
+        },
+      ];
+    });
+    showToast("Removal staged. Click Save to apply.", "success");
+  };
+
   const handleSaveAll = async () => {
     if (!packing || pendingOps.length === 0) {
       showToast("No changes to save.", "error");
@@ -309,8 +410,17 @@ export default function EditPackingDonePage({ params }: { params: { id: string }
 
     setSaving(true);
     try {
-      for (const op of pendingOps) {
-        if (op.kind === "swap") {
+      // Removes first so inventory / SO remaining is free before adds/swaps.
+      const orderedOps = [
+        ...pendingOps.filter((op) => op.kind === "remove"),
+        ...pendingOps.filter((op) => op.kind === "swap"),
+        ...pendingOps.filter((op) => op.kind === "add"),
+      ];
+
+      for (const op of orderedOps) {
+        if (op.kind === "remove") {
+          await postPackingDoneBatchRemove(packing.id, op.packingDoneProductId);
+        } else if (op.kind === "swap") {
           await PackingDoneService.swapBatch(packing.id, {
             packing_done_product_id: op.packingDoneProductId,
             available_inventory_id: op.available_inventory_id,
@@ -533,6 +643,7 @@ export default function EditPackingDonePage({ params }: { params: { id: string }
                 setBatchDialogProduct(product);
                 setBatchDialogMode("swap");
               }}
+              onRemoveBatch={canEdit ? handleRemoveLine : undefined}
             />
           </div>
         </div>
