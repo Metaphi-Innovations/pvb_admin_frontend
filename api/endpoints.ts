@@ -672,6 +672,8 @@ export const API_ENDPOINTS = {
       UPDATE: (id: string) => `/warehouse/packing-done/update/${id}`,
       BATCH_SWAP: (id: string) => `/warehouse/packing-done/${id}/batch-swap`,
       BATCH_ADD: (id: string) => `/warehouse/packing-done/${id}/batch-add`,
+      /** Remove one packed product line (inventory + packing list sync). */
+      BATCH_REMOVE: (id: string) => `/warehouse/packing-done/${id}/batch-remove`,
       REVERT: (id: string) => `/warehouse/packing-done/revert/${id}`,
     },
     GRN: {

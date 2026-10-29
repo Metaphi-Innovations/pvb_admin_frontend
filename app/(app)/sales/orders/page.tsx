@@ -278,10 +278,33 @@ export default function SalesOrdersPage() {
     apiFilters: { status: "REJECTED" },
   });
 
+  // KPI cards must use full-dataset totals, not the current page rows.
+  const { data: approvedCountData } = useSalesOrders({
+    page: 1,
+    pageSize: 1,
+    search: searchVal,
+    apiFilters: { status: "APPROVED" },
+  });
+  const { data: partiallyDispatchedCountData } = useSalesOrders({
+    page: 1,
+    pageSize: 1,
+    search: searchVal,
+    apiFilters: { fulfillment_status: "Partially Dispatched" },
+  });
+  const { data: fullyDispatchedCountData } = useSalesOrders({
+    page: 1,
+    pageSize: 1,
+    search: searchVal,
+    apiFilters: { fulfillment_status: "Fully Dispatched" },
+  });
+
   const allCount = allCountData?.total ?? 0;
   const draftCount = draftCountData?.total ?? 0;
   const approvalCount = approvalCountData?.total ?? 0;
   const rejectedCount = rejectedCountData?.total ?? 0;
+  const approvedCount = approvedCountData?.total ?? 0;
+  const partiallyDispatchedCount = partiallyDispatchedCountData?.total ?? 0;
+  const fullyDispatchedCount = fullyDispatchedCountData?.total ?? 0;
 
   const cancelMutation = useCancelSalesOrder();
 
@@ -606,10 +629,10 @@ export default function SalesOrdersPage() {
       metrics={
         <div className="grid grid-cols-4 gap-3">
           {[
-            { label: "Total Orders", value: totalRecords, icon: ShoppingBag, accent: true },
-            { label: "Approved", value: orders.filter((o) => o.status === "approved" || o.status === "APPROVED").length, icon: CheckCircle2 },
-            { label: "Partially Dispatched", value: orders.filter((o) => o.fulfillmentStatus === "Partially Dispatched").length, icon: TrendingUp },
-            { label: "Fully Dispatched", value: orders.filter((o) => o.fulfillmentStatus === "Fully Dispatched").length, icon: CheckCircle2 },
+            { label: "Total Orders", value: allCount, icon: ShoppingBag, accent: true },
+            { label: "Approved", value: approvedCount, icon: CheckCircle2 },
+            { label: "Partially Dispatched", value: partiallyDispatchedCount, icon: TrendingUp },
+            { label: "Fully Dispatched", value: fullyDispatchedCount, icon: CheckCircle2 },
           ].map(({ label, value, icon: Icon, accent }) => (
             <div key={label} className="bg-white rounded-xl border border-border p-2 flex items-center gap-3">
               <div
