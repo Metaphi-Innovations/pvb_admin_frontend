@@ -35,6 +35,8 @@ import {
   isStockTransferDoc,
 } from "../../lib/packing-document-labels";
 import { resolvePackingReturnTo } from "../../lib/packing-list-nav";
+import { showToast } from "@/lib/toast";
+import { axiosInstance } from "@/api/axios";
 
 function packingStatusVariant(status: string): "active" | "inactive" | "draft" | "blocked" | "neutral" {
   const s = status.toLowerCase();
@@ -396,6 +398,40 @@ export default function ViewPackingDetailsPage({ params }: { params: { id: strin
                   onUpdateBatch={(product) => {
                     setBatchDialogProduct(product);
                     setBatchDialogMode("swap");
+                  }}
+                  onRemoveBatch={async (product) => {
+                    if (!product.packingDoneProductId) {
+                      showToast("Missing packing line reference.", "error");
+                      return;
+                    }
+                    if ((rowData.products ?? []).length <= 1) {
+                      showToast(
+                        "Cannot remove the last packed line. Revert the Packing Done record instead.",
+                        "error",
+                      );
+                      return;
+                    }
+                    try {
+                      await axiosInstance.post(
+                        `/warehouse/packing-done/${encodeURIComponent(rowData.id)}/batch-remove`,
+                        { packing_done_product_id: product.packingDoneProductId },
+                      );
+                      const next = await PackingDoneService.getById(rowData.id);
+                      setUnionRecord({ type: "packing", data: next });
+                      try {
+                        setRemainingItems(await loadPackingDoneRemainingItems(next));
+                      } catch {
+                        setRemainingItems([]);
+                      }
+                      showToast("Packed line removed.", "success");
+                    } catch (err: any) {
+                      showToast(
+                        err?.response?.data?.message ||
+                          err?.message ||
+                          "Failed to remove packed line.",
+                        "error",
+                      );
+                    }
                   }}
                 />
               ) : (

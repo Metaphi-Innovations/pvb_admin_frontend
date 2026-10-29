@@ -606,25 +606,29 @@ export interface POVendorInvoiceView {
 
 export function mapInvoicesFromDetail(raw: Record<string, unknown>): POVendorInvoiceView[] {
   const invoices = Array.isArray(raw.invoices) ? raw.invoices : [];
-  return invoices.map((item, idx) => {
-    const row = (item ?? {}) as Record<string, unknown>;
-    const urls = Array.isArray(row.invoice_attachment_urls)
-      ? row.invoice_attachment_urls.map((u) => asString(u)).filter(Boolean)
-      : [];
-    return {
-      id: asString(row.purchase_order_invoice_id) || `inv-${idx}`,
-      vendorInvoiceNo: asString(row.supplier_invoice_no),
-      invoiceDate: asDateOnly(row.supplier_invoice_date),
-      subtotal: asNumber(row.invoice_amount),
-      taxAmount: asNumber(row.gst_amount),
-      grandTotal: asNumber(row.total_invoice_amount),
-      remarks: asString(row.remarks),
-      attachmentUrls: urls,
-      createdBy: toDisplayName(row.created_by_user),
-      createdAt: asString(row.created_at),
-      updatedAt: asString(row.updated_at),
-    };
-  });
+  return invoices
+    .map((item, idx) => {
+      const row = (item ?? {}) as Record<string, unknown>;
+      // Orphan PO-direct uploads have no GRN link; only GRN-uploaded invoices are shown.
+      if (!asString(row.grn_id).trim()) return null;
+      const urls = Array.isArray(row.invoice_attachment_urls)
+        ? row.invoice_attachment_urls.map((u) => asString(u)).filter(Boolean)
+        : [];
+      return {
+        id: asString(row.purchase_order_invoice_id) || `inv-${idx}`,
+        vendorInvoiceNo: asString(row.supplier_invoice_no),
+        invoiceDate: asDateOnly(row.supplier_invoice_date),
+        subtotal: asNumber(row.invoice_amount),
+        taxAmount: asNumber(row.gst_amount),
+        grandTotal: asNumber(row.total_invoice_amount),
+        remarks: asString(row.remarks),
+        attachmentUrls: urls,
+        createdBy: toDisplayName(row.created_by_user),
+        createdAt: asString(row.created_at),
+        updatedAt: asString(row.updated_at),
+      };
+    })
+    .filter((inv): inv is POVendorInvoiceView => inv != null);
 }
 
 function buildWriteBody(
@@ -1060,7 +1064,7 @@ export const PurchaseOrderService = {
     assertSuccess(response.data as Record<string, unknown>, "Failed to create follow-up.");
   },
 
-  async uploadInvoice(input: {
+  async uploadInvoice(_input: {
     purchaseOrderId: string;
     supplierInvoiceNo: string;
     supplierInvoiceDate: string;
@@ -1070,23 +1074,10 @@ export const PurchaseOrderService = {
     remarks?: string;
     file?: File | null;
   }): Promise<void> {
-    const formData = new FormData();
-    formData.append("purchase_order_id", input.purchaseOrderId);
-    formData.append("supplier_invoice_no", input.supplierInvoiceNo);
-    formData.append("supplier_invoice_date", input.supplierInvoiceDate);
-    formData.append("invoice_amount", String(input.invoiceAmount));
-    formData.append("gst_amount", String(input.gstAmount));
-    formData.append("total_invoice_amount", String(input.totalInvoiceAmount));
-    formData.append("remarks", input.remarks ?? "");
-    if (input.file) {
-      formData.append("invoiceAttachments[0]", input.file);
-    }
-    const response = await axiosInstance.post(
-      API_ENDPOINTS.PROCUREMENT.PURCHASE_ORDER.INVOICE_UPLOAD,
-      formData,
-      { headers: { "Content-Type": "multipart/form-data" } },
+    // Kept for call-site compatibility; PO-direct upload is disabled (GRN-only).
+    throw new Error(
+      "Supplier invoices can only be uploaded from GRN. Upload is not allowed from Purchase Order.",
     );
-    assertSuccess(response.data as Record<string, unknown>, "Failed to upload invoice.");
   },
 
   async shortClose(input: {

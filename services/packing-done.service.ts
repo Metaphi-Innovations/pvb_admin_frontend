@@ -571,4 +571,15 @@ export const PackingDoneService = {
     );
     return response.data;
   },
+
+  async removeBatch(
+    id: string,
+    payload: { packing_done_product_id: string },
+  ): Promise<any> {
+    const response = await axiosInstance.post(
+      `/warehouse/packing-done/${encodeURIComponent(id)}/batch-remove`,
+      payload,
+    );
+    return response.data;
+  },
 };
