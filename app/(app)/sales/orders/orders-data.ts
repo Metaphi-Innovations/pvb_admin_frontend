@@ -11,7 +11,6 @@ import {
 import { loadEmployees, type Employee } from "@/app/(app)/user-management/employee/employee-data";
 import { loadWarehouses } from "@/app/(app)/masters/warehouse/warehouse-data";
 import { getCustomerAddressesForSalesOrder } from "./sales-order-address-utils";
-import { isSalesOrderShortCloseEnabled } from "./so-short-close-flag";
 import { resolveSezLutSupply } from "@/lib/settings/gst-tax-config";
 
 /** Orders above this amount require approval on submit (not draft). */
@@ -151,6 +150,8 @@ export interface SalesOrderLineItem {
   generatedBaseQty?: number;
   /** Qty written off via Short Close (base units). */
   shortClosedBaseQty?: number;
+  /** Qty already on an active sales invoice (base units). */
+  invoicedBaseQty?: number;
   /** Dealer price (DP) from Pricing Master */
   dealerPrice: number;
   /** Unit price used for line totals — equals dealerPrice before scheme discount */
@@ -264,6 +265,11 @@ export interface SalesOrder {
   cancelledDate?: string;
   /** Short close audit */
   shortClose?: SOShortCloseInfo;
+  /**
+   * When set, packing/dispatch is still in process (not delivered/invoiced).
+   * Short close stays available; UI shows this warning and Confirm stays disabled.
+   */
+  shortCloseInFlightMessage?: string | null;
   /** Packing list reference */
   packingListId?: number | string;
   packingListNumber?: string;
@@ -1827,6 +1833,19 @@ export function getRemainingPackingQty(line: SalesOrderLineItem): number {
   );
 }
 
+/**
+ * Qty not yet on an invoice (includes free + packing/dispatch in-process).
+ * Used for Short Close display while process is ongoing.
+ */
+export function getNotInvoicedRemainQty(line: SalesOrderLineItem): number {
+  return Math.max(
+    0,
+    (line.quantity || 0) -
+      Number(line.invoicedBaseQty || 0) -
+      Number(line.shortClosedBaseQty || 0),
+  );
+}
+
 /** Qty on a line not yet included in any packing list — the only qty that can be split off. */
 export function getSplittableQty(line: SalesOrderLineItem): number {
   return getRemainingPackingQty(line);
@@ -1885,12 +1904,13 @@ export function canCancelOrder(order: SalesOrder): boolean {
 }
 
 /**
- * Short close writes off ALL remaining packing qty.
- * Allowed when approved, not terminal, and at least one line still has remaining qty.
- * Also gated by NEXT_PUBLIC_ENABLE_SO_SHORT_CLOSE.
+ * Whether Short Close can be opened (not whether confirm is allowed).
+ * Enabled when:
+ * - there is remaining qty not yet packed (can short-close those items), OR
+ * - packing/dispatch is still in process (open to show warning; confirm disabled)
+ * Disabled when everything is already delivered/invoiced and nothing remains.
  */
 export function canShortCloseOrder(order: SalesOrder): boolean {
-  if (!isSalesOrderShortCloseEnabled()) return false;
   if (isOrderCancelled(order)) return false;
   const approvalOk =
     order.status === "APPROVED" ||
@@ -1900,8 +1920,6 @@ export function canShortCloseOrder(order: SalesOrder): boolean {
   const fulfillment = (order.fulfillmentStatus || "PENDING").toString();
   const blocked = [
     "Short_Closed",
-    "Fully Dispatched",
-    "FULLY_DISPATCHED",
     "CANCELLED",
     "cancelled",
   ];
@@ -1909,8 +1927,15 @@ export function canShortCloseOrder(order: SalesOrder): boolean {
 
   const hydrated = hydrateOrderLineItems(order);
   const lines = hydrated.lineItems ?? [];
-  if (lines.length === 0) return false;
-  return lines.some((l) => Boolean(l.productId) && getRemainingPackingQty(l) > 1e-9);
+  const hasRemaining = lines.some(
+    (l) => Boolean(l.productId) && getRemainingPackingQty(l) > 1e-9,
+  );
+  if (hasRemaining) return true;
+
+  // In-process (not delivered/invoiced) — open only to show warning.
+  if (String(order.shortCloseInFlightMessage || "").trim()) return true;
+
+  return false;
 }
 
 export function canDownloadPI(order: SalesOrder): boolean {

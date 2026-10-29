@@ -343,9 +343,13 @@ export default function TransferNewPackingListPage() {
 
           if (visibleAllocations.length === 0) {
             return (
-              <div key={line.lineItemId} className="border border-red-200 rounded-xl overflow-hidden shadow-sm bg-red-50 p-4 mt-4">
-                <p className="text-sm font-semibold text-red-700">{line.productName}</p>
-                <p className="text-[11px] text-red-500 font-semibold py-1">No batch cartons available in source warehouse</p>
+              <div key={line.lineItemId} className="border border-amber-300 rounded-xl overflow-hidden shadow-sm bg-amber-50 p-4 mt-4">
+                <p className="text-sm font-semibold text-amber-950">{line.productName}</p>
+                <p className="text-xs text-muted-foreground font-mono">{line.productCode}</p>
+                <p className="mt-1.5 text-xs font-semibold text-amber-800 flex items-center gap-1.5">
+                  <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                  Stock is not available.
+                </p>
               </div>
             );
           }

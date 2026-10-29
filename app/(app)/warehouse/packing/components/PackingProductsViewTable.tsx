@@ -1,6 +1,7 @@
 "use client";
 
 import { ProductSkuCell } from "@/app/(app)/warehouse/grn/shared/components/ProductSkuCell";
+import { Button } from "@/components/ui/button";
 import { PackingStackedQty } from "./PackingStackedQty";
 import type { PackedProduct, SalesOrderProduct } from "../types";
 
@@ -25,10 +26,14 @@ export function PackingProductsViewTable({
   products,
   qtyLabel,
   showPending,
+  canEditBatches,
+  onUpdateBatch,
 }: {
   products: PackingViewLine[];
   qtyLabel: string;
   showPending?: boolean;
+  canEditBatches?: boolean;
+  onUpdateBatch?: (product: PackedProduct) => void;
 }) {
   if (!products?.length) {
     return <p className="text-xs text-muted-foreground py-4">No products found.</p>;
@@ -47,6 +52,7 @@ export function PackingProductsViewTable({
               <th className={TH_RIGHT}>{qtyLabel}</th>
               <th className={TH_RIGHT}>Packed Qty</th>
               {showPending ? <th className={TH_RIGHT}>Pending Qty</th> : null}
+              {canEditBatches ? <th className={`${TH} text-center`}>Action</th> : null}
             </tr>
           </thead>
           <tbody>
@@ -58,7 +64,9 @@ export function PackingProductsViewTable({
               );
               const pendingBase =
                 "pendingBaseQty" in p ? Number(p.pendingBaseQty ?? 0) : 0;
-              const key = `${sku}-${p.batchNumber || idx}-${("lineId" in p && p.lineId) || idx}`;
+              const packingDoneProductId =
+                "packingDoneProductId" in p ? p.packingDoneProductId : undefined;
+              const key = `${sku}-${p.batchNumber || idx}-${("lineId" in p && p.lineId) || idx}-${packingDoneProductId || ""}`;
 
               return (
                 <tr key={key} className="border-b border-border/60 hover:bg-muted/5">
@@ -79,6 +87,20 @@ export function PackingProductsViewTable({
                   {showPending ? (
                     <td className={TD}>
                       <PackingStackedQty baseQty={pendingBase} line={p} emphasize />
+                    </td>
+                  ) : null}
+                  {canEditBatches ? (
+                    <td className={`${TD} text-center`}>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 px-2 text-[11px]"
+                        disabled={!packingDoneProductId || !onUpdateBatch}
+                        onClick={() => onUpdateBatch?.(p as PackedProduct)}
+                      >
+                        Update
+                      </Button>
                     </td>
                   ) : null}
                 </tr>
