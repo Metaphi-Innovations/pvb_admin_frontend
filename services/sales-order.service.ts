@@ -241,6 +241,7 @@ function mapBackendLineItem(raw: Record<string, unknown>, idx: number): SalesOrd
     quantity,
     generatedBaseQty: asNumber(raw.generated_base_qty),
     shortClosedBaseQty: asNumber(raw.short_closed_base_qty),
+    invoicedBaseQty: asNumber(raw.invoiced_base_qty),
     dealerPrice: unitPrice,
     unitPrice,
     discountType,
@@ -373,6 +374,7 @@ export function mapBackendSalesOrder(raw: Record<string, unknown>): SalesOrder {
             shortClosedDate: asDateOnly(raw.short_closed_at),
           }
         : undefined,
+    shortCloseInFlightMessage: asString(raw.short_close_in_flight_message) || null,
   };
 }
 

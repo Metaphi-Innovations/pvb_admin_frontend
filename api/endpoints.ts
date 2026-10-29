@@ -670,6 +670,8 @@ export const API_ENDPOINTS = {
       CREATE: "/warehouse/packing-done/create",
       DETAILS: (id: string) => `/warehouse/packing-done/details/${id}`,
       UPDATE: (id: string) => `/warehouse/packing-done/update/${id}`,
+      BATCH_SWAP: (id: string) => `/warehouse/packing-done/${id}/batch-swap`,
+      BATCH_ADD: (id: string) => `/warehouse/packing-done/${id}/batch-add`,
       REVERT: (id: string) => `/warehouse/packing-done/revert/${id}`,
     },
     GRN: {

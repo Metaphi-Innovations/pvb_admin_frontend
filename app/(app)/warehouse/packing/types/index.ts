@@ -56,10 +56,13 @@ export interface PackedProduct {
   product: string;
   sku: string;
   productCode?: string;
+  productId?: string;
   ordered_cases: number;
   packedQty: number;
   orderBaseQty: number;
   packedBaseQty: number;
+  /** Pending qty still on the linked packing-list product (units). */
+  pendingBaseQty?: number;
   packSize: number;
   batchNumber?: string;
   grnNo?: string;
@@ -72,6 +75,12 @@ export interface PackedProduct {
   batchAllocations?: PackedBatchAllocation[];
   nearExpirySchemeEligible?: boolean;
   lineId?: string;
+  packingDoneProductId?: string;
+  sourceItemId?: string;
+  availableInventoryId?: string;
+  /** Local-only key for staged (unsaved) add rows. */
+  draftKey?: string;
+  isDraft?: boolean;
 }
 
 export interface PackingNearExpirySchemeEntry {
@@ -112,8 +121,11 @@ export interface PackingRecord {
   packedBy: string;
   status: "Packed" | "Dispatched" | "Cancelled" | "Ready For Dispatch" | "Available for Dispatch";
   warehouse: string;
+  warehouseId?: string;
   products: PackedProduct[];
   nearExpirySchemes?: PackingNearExpirySchemeEntry[];
+  sourceId?: string;
+  sourceTypeRaw?: string;
   sourceDocumentType?: "Sales Order" | "Stock Transfer" | "Sample Order" | "Purchase Return";
   sourceDocumentNo?: string;
   sourceWarehouse?: string;
@@ -125,7 +137,53 @@ export interface PackingRecord {
   initiatedBy?: string;
   returnRemarks?: string;
   orderAmount?: number;
+  canEditBatches?: boolean;
 }
+
+/** Source-document item meta for Packing Done Add / Update qty validation. */
+export interface PackingDoneRemainingItem {
+  sourceItemId: string;
+  productId: string;
+  productName: string;
+  sku: string;
+  productCode?: string;
+  /** Full ordered qty on the SO/Sample/ST line (units). */
+  orderBaseQty: number;
+  /** Qty not yet on any packing list (units). */
+  remainingBaseQty: number;
+  packSize: number;
+  quantityType?: string;
+  productSnapshot?: Record<string, unknown>;
+}
+
+/** Staged batch selection returned by the edit dialog (not persisted until Save). */
+export interface PackingDoneBatchDraftSelection {
+  availableInventoryId: string;
+  batchNumber: string;
+  expiryDate?: string;
+  mfgDate?: string;
+}
+
+export type PackingDoneDraftChange =
+  | {
+      mode: "swap";
+      /** Existing persisted packing-done product id, if any. */
+      packingDoneProductId?: string;
+      /** Local draft row key for unsaved add lines. */
+      draftKey?: string;
+      quantityType?: string;
+      /** New packed qty in base units. */
+      baseQty: number;
+      batch: PackingDoneBatchDraftSelection;
+    }
+  | {
+      mode: "add";
+      sourceItemId: string;
+      baseQty: number;
+      quantityType?: string;
+      remainingItem: PackingDoneRemainingItem;
+      batch: PackingDoneBatchDraftSelection;
+    };
 
 export type PackingRecordUnion =
   | { type: "order"; data: SalesOrderRecord }
