@@ -1,7 +1,7 @@
 import type { PackingRecord, SalesOrderRecord } from "../types";
 
 type PackingDocRecord = Pick<
-  SalesOrderRecord,
+  SalesOrderRecord | PackingRecord,
   | "sourceDocumentType"
   | "salesOrderNo"
   | "sourceDocumentNo"
@@ -9,8 +9,6 @@ type PackingDocRecord = Pick<
   | "targetWarehouse"
   | "sourceWarehouse"
   | "warehouse"
-  | "orderDate"
-  | "deliveryDate"
 >;
 
 export function isPurchaseReturnDoc(

@@ -31,7 +31,6 @@ import {
 } from "@/components/record-detail";
 import CancelOrderDialog from "../components/CancelOrderDialog";
 import ShortCloseSOModal from "../components/ShortCloseSOModal";
-import { isSalesOrderShortCloseEnabled } from "../so-short-close-flag";
 import ApproveOrderDialog from "../components/ApproveOrderDialog";
 import RejectOrderDialog from "../components/RejectOrderDialog";
 import { SendSOEmailModal } from "../components/SendSOEmailModal";
@@ -96,10 +95,7 @@ export default function ViewSalesOrderPage() {
   const [activeTab, setActiveTab] = useState("overview");
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
   const [cancelOpen, setCancelOpen] = useState(false);
-  const [shortCloseOpen, setShortCloseOpen] = useState(
-    () =>
-      isSalesOrderShortCloseEnabled() && searchParams.get("shortClose") === "1",
-  );
+  const [shortCloseOpen, setShortCloseOpen] = useState(false);
   const [approveOpen, setApproveOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [plDownloadOpen, setPlDownloadOpen] = useState(false);

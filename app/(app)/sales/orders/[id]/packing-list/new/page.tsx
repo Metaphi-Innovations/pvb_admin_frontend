@@ -384,26 +384,53 @@ export default function NewPackingListPage() {
 
         {loadingBatches && <p className="text-xs text-muted-foreground">Loading available batches…</p>}
 
+        {!loadingBatches &&
+          warehouseCode &&
+          lines.some(
+            (line) =>
+              line.allocations.length === 0 ||
+              line.allocations.every((a) => Number(a.availableBaseQty || 0) <= 0),
+          ) && (
+            <div className="p-3 bg-amber-50 border border-amber-200 text-amber-900 rounded-lg text-sm flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 flex-shrink-0 text-amber-600" />
+              <p>Stock is not available for one or more products in this warehouse.</p>
+            </div>
+          )}
+
         {!loadingBatches && warehouseCode && lines.map(line => {
           const visibleAllocations = line.allocations;
-
-          if (visibleAllocations.length === 0) return null;
+          const totalAvailable = visibleAllocations.reduce(
+            (sum, a) => sum + Number(a.availableBaseQty || 0),
+            0,
+          );
+          const stockUnavailable = visibleAllocations.length === 0 || totalAvailable <= 0;
 
           const allocated = line.allocations.reduce((sum, a) => {
             const isChecked = !!checkedAllocations[`${line.lineItemId}-${a.cartonId}`];
             return sum + (isChecked ? a.allocatedBaseQty : 0);
           }, 0);
           const remainingCap = line.remainingBaseQty ?? line.orderedBaseQty;
-          const insufficient = allocated < remainingCap && allocated === 0;
+          const insufficient = allocated < remainingCap;
           const isExpanded = !!expandedSections[line.lineItemId];
           const selectedCount = line.allocations.filter(a => !!checkedAllocations[`${line.lineItemId}-${a.cartonId}`]).length;
 
           return (
-            <div key={line.lineItemId} className="border border-border rounded-xl overflow-hidden shadow-sm">
+            <div
+              key={line.lineItemId}
+              className={cn(
+                "border rounded-xl overflow-hidden shadow-sm",
+                stockUnavailable ? "border-amber-300" : "border-border",
+              )}
+            >
               <button
                 type="button"
                 onClick={() => setExpandedSections(prev => ({ ...prev, [line.lineItemId]: !isExpanded }))}
-                className="w-full px-4 py-3 bg-muted/30 border-b border-border text-left hover:bg-muted/40 transition-colors"
+                className={cn(
+                  "w-full px-4 py-3 border-b text-left transition-colors",
+                  stockUnavailable
+                    ? "bg-amber-50/60 border-amber-200 hover:bg-amber-50"
+                    : "bg-muted/30 border-border hover:bg-muted/40",
+                )}
               >
                 <div className="flex items-center justify-between gap-2">
                   <div>
@@ -414,6 +441,12 @@ export default function NewPackingListPage() {
                       {" · "}Generated {line.generatedBaseQty ?? 0}
                       {" · "}Remaining {remainingCap}
                     </p>
+                    {stockUnavailable ? (
+                      <p className="mt-1.5 text-xs font-semibold text-amber-800 flex items-center gap-1.5">
+                        <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                        Stock is not available.
+                      </p>
+                    ) : null}
                   </div>
                   <div className="flex items-center gap-4">
                     <StackedQtyHeaderPair
@@ -436,6 +469,12 @@ export default function NewPackingListPage() {
 
               {isExpanded && (
                 <div className="overflow-x-auto bg-white">
+                  {stockUnavailable ? (
+                    <div className="p-4 text-xs font-semibold text-amber-800 bg-amber-50/50 flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                      Stock is not available.
+                    </div>
+                  ) : (
                   <table className="w-full min-w-[1040px]">
                     <thead>
                       <tr className="bg-muted/10 border-b border-border">
@@ -515,6 +554,7 @@ export default function NewPackingListPage() {
                       })}
                     </tbody>
                   </table>
+                  )}
                 </div>
               )}
             </div>

@@ -430,6 +430,12 @@ export default function NewSampleOrderPackingListPage() {
                       {" · "}Generated {line.generatedBaseQty ?? 0}
                       {" · "}Remaining {remainingCap}
                     </p>
+                    {visibleAllocations.length === 0 ? (
+                      <p className="mt-1.5 text-xs font-semibold text-amber-800 flex items-center gap-1.5">
+                        <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                        Stock is not available.
+                      </p>
+                    ) : null}
                   </div>
                   <div className="flex items-center gap-4">
                     <StackedQtyHeaderPair
@@ -453,9 +459,9 @@ export default function NewSampleOrderPackingListPage() {
               {isExpanded && (
                 <div className="overflow-x-auto bg-white border-t border-border">
                   {visibleAllocations.length === 0 ? (
-                    <div className="p-4 text-xs font-semibold text-amber-600 bg-amber-50/50 flex items-center gap-2">
+                    <div className="p-4 text-xs font-semibold text-amber-800 bg-amber-50/50 flex items-center gap-2">
                       <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                      No sellable batches available for this product in the selected warehouse.
+                      Stock is not available.
                     </div>
                   ) : (
                     <table className="w-full min-w-[1040px]">

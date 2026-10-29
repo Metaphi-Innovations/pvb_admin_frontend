@@ -174,6 +174,18 @@ function mapDetailToPackingRecord(raw: any): PackingRecord {
     asString(raw.packing_list?.customer_snapshot?.customer_name) ||
     "";
 
+  const warehouseId =
+    asString(raw.warehouse_id) ||
+    asString(raw.warehouse?.warehouse_id) ||
+    asString(raw.packing_list?.warehouse?.warehouse_id) ||
+    undefined;
+  const status = asString(raw.status) as PackingRecord["status"];
+  const canEditBatches =
+    !isPurchaseReturn &&
+    status !== "Dispatched" &&
+    status !== "Cancelled" &&
+    (status === "Available for Dispatch" || status === "Ready For Dispatch" || status === "Packed");
+
   return {
     id: raw.packing_done_id,
     packingListId:
@@ -199,8 +211,12 @@ function mapDetailToPackingRecord(raw: any): PackingRecord {
       ? `${raw.packed_by_user.first_name || ""} ${raw.packed_by_user.last_name || ""}`.trim() ||
         raw.packed_by_user.username
       : "System",
-    status: raw.status as any,
+    status,
     warehouse,
+    warehouseId,
+    canEditBatches,
+    sourceId: asString(raw.source_id) || undefined,
+    sourceTypeRaw: asString(raw.source_type) || undefined,
     sourceDocumentType: sourceDocType as any,
     sourceDocumentNo,
     sourceWarehouse,
@@ -225,6 +241,9 @@ function mapDetailToPackingRecord(raw: any): PackingRecord {
       const packedBaseQty = Number(p.packed_base_qty ?? p.base_qty ?? 0);
       const orderBaseQty = Number(
         p.order_base_qty ?? p.packing_list_product?.order_base_qty ?? 0,
+      );
+      const pendingBaseQty = Number(
+        p.pending_base_qty ?? p.packing_list_product?.pending_base_qty ?? 0,
       );
       const batchSnapshot =
         p.batch_snapshot && typeof p.batch_snapshot === "object"
@@ -251,6 +270,10 @@ function mapDetailToPackingRecord(raw: any): PackingRecord {
         asString(batchSnapshot.grnNumber) ||
         asString(batchSnapshot.grn_number) ||
         "";
+      const availableInventoryId =
+        asString(batchSnapshot.available_inventory_id) ||
+        asString(batchSnapshot.inventory_detail_id) ||
+        "";
 
       const orderedDisplay = isPurchaseReturn
         ? orderBaseQty
@@ -263,13 +286,18 @@ function mapDetailToPackingRecord(raw: any): PackingRecord {
         product: display.productName || "Unknown",
         sku: display.sku,
         productCode: display.productCode || display.sku,
+        productId: asString(p.product_id) || asString(p.product?.product_id) || undefined,
         ordered_cases: orderedDisplay,
         packedQty: packedDisplay,
         orderBaseQty,
         packedBaseQty,
+        pendingBaseQty,
         packSize,
         productSnapshot: display.productSnapshot,
         lineId: p.packing_list_product_id,
+        packingDoneProductId: asString(p.packing_done_product_id) || undefined,
+        sourceItemId: asString(p.source_item_id) || undefined,
+        availableInventoryId: availableInventoryId || undefined,
         batchNumber: batchNumber || undefined,
         expDate: expDate || undefined,
         mfgDate: mfgDate || undefined,
@@ -509,5 +537,38 @@ export const PackingDoneService = {
       API_ENDPOINTS.WAREHOUSE.PACKING_DONE.REVERT(id)
     );
     return response.data;
-  }
+  },
+
+  async swapBatch(
+    id: string,
+    payload: {
+      packing_done_product_id: string;
+      available_inventory_id: string;
+      quantity_type?: string;
+      base_qty?: number;
+    },
+  ): Promise<any> {
+    const response = await axiosInstance.put(
+      API_ENDPOINTS.WAREHOUSE.PACKING_DONE.BATCH_SWAP(id),
+      payload,
+    );
+    return response.data;
+  },
+
+  async addBatch(
+    id: string,
+    payload: {
+      source_item_id: string;
+      available_inventory_id: string;
+      base_qty: number;
+      quantity_type?: string;
+      remarks?: string;
+    },
+  ): Promise<any> {
+    const response = await axiosInstance.post(
+      API_ENDPOINTS.WAREHOUSE.PACKING_DONE.BATCH_ADD(id),
+      payload,
+    );
+    return response.data;
+  },
 };

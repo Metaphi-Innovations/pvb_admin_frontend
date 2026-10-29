@@ -34,6 +34,7 @@ import { ListingContainer } from "@/components/layout/ListingContainer";
 import { MasterListing } from "@/components/listing/MasterListing";
 import type { ColumnConfig, FilterState, SortState } from "@/components/listing/types";
 import CancelOrderDialog from "./components/CancelOrderDialog";
+import ShortCloseSOModal from "./components/ShortCloseSOModal";
 import { SendSOEmailModal } from "./components/SendSOEmailModal";
 import { SalesReturnTab } from "./components/SalesReturnTab";
 import { getSalesReturnRecords } from "./sales-return-data";
@@ -55,7 +56,6 @@ import {
   hydrateOrderLineItems,
   FULFILLMENT_STATUS_OPTIONS,
 } from "./orders-data";
-import { isSalesOrderShortCloseEnabled } from "./so-short-close-flag";
 import { useSalesOrders, useCancelSalesOrder, useSalesOrderFilterOptions } from "@/hooks/sales/use-sales-orders";
 import { SalesOrderService } from "@/services/sales-order.service";
 import { getErrorMessage } from "@/lib/masters/master-query-errors";
@@ -122,6 +122,8 @@ export default function SalesOrdersPage() {
   const [plDownloadOptions, setPlDownloadOptions] = useState<PackingListDownloadOption[]>([]);
   const [salesReturnCount, setSalesReturnCount] = useState(0);
   const [cancelOrder, setCancelOrder] = useState<SalesOrder | null>(null);
+  const [shortCloseOrder, setShortCloseOrder] = useState<SalesOrder | null>(null);
+  const [shortCloseLoadingId, setShortCloseLoadingId] = useState<string | null>(null);
   const [downloadingSoId, setDownloadingSoId] = useState<string | null>(null);
   const [sendEmailSoId, setSendEmailSoId] = useState<string | null>(null);
 
@@ -287,6 +289,23 @@ export default function SalesOrdersPage() {
     refetch();
     setCancelOrder(null);
     setToast({ msg: "Sales order cancelled successfully.", type: "success" });
+  };
+
+  const openShortClose = async (orderId: string) => {
+    setShortCloseLoadingId(orderId);
+    try {
+      // Load full order details for the modal (list rows may omit line items).
+      const detail = await SalesOrderService.getById(orderId);
+      setShortCloseOrder(detail);
+    } catch (e) {
+      console.error("Failed to open short close:", e);
+      setToast({
+        msg: getErrorMessage(e, "Failed to open Short Close."),
+        type: "error",
+      });
+    } finally {
+      setShortCloseLoadingId(null);
+    }
   };
 
   const handleTabChange = (tab: string) => {
@@ -547,19 +566,19 @@ export default function SalesOrdersPage() {
                 <Mail className="w-3.5 h-3.5 mr-2" /> Send Email
               </button>
               <DropdownMenuSeparator />
-              {isSalesOrderShortCloseEnabled() && (
+              {shortCloseable && (
                 <button
                   type="button"
-                  disabled={!shortCloseable}
-                  onClick={() => router.push(`/sales/orders/${row.id}?shortClose=1`)}
+                  disabled={shortCloseLoadingId === String(row.id)}
+                  onClick={() => void openShortClose(String(row.id))}
                   className={cn(
-                    "flex items-center gap-2 w-full px-2 py-1.5 text-xs transition-colors rounded-sm",
-                    !shortCloseable
-                      ? "text-muted-foreground/50 cursor-not-allowed"
-                      : "text-foreground hover:bg-muted/60",
+                    "flex items-center gap-2 w-full px-2 py-1.5 text-xs transition-colors rounded-sm text-foreground hover:bg-muted/60",
+                    shortCloseLoadingId === String(row.id) &&
+                      "text-muted-foreground/50 cursor-not-allowed",
                   )}
                 >
-                  <Scissors className="w-3.5 h-3.5 mr-2" /> Short Close
+                  <Scissors className="w-3.5 h-3.5 mr-2" />
+                  {shortCloseLoadingId === String(row.id) ? "Opening…" : "Short Close"}
                 </button>
               )}
               <button
@@ -660,6 +679,19 @@ export default function SalesOrdersPage() {
           open={!!cancelOrder}
           onClose={() => setCancelOrder(null)}
           onSuccess={handleCancelSuccess}
+        />
+      )}
+
+      {shortCloseOrder && (
+        <ShortCloseSOModal
+          order={shortCloseOrder}
+          open={!!shortCloseOrder}
+          onClose={() => setShortCloseOrder(null)}
+          onSuccess={() => {
+            setShortCloseOrder(null);
+            refetch();
+            setToast({ msg: "Sales order short closed successfully.", type: "success" });
+          }}
         />
       )}
 

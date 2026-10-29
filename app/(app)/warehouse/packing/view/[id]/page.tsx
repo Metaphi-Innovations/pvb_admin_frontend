@@ -5,14 +5,22 @@ import { RecordDetailPage } from "@/components/record-detail";
 import { Button } from "@/components/ui/button";
 import {
   Calendar, Building, AlertCircle,
-  Package, FileText, ClipboardCheck, User
+  Package, FileText, ClipboardCheck, User, Plus
 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { PackingListService } from "@/services/packing-list.service";
 import { PackingDoneService } from "@/services/packing-done.service";
 import { STATUS_BADGE_CONFIG } from "../../constants";
-import { PackingRecordUnion } from "../../types";
+import {
+  PackedProduct,
+  PackingDoneRemainingItem,
+  PackingRecord,
+  PackingRecordUnion,
+} from "../../types";
 import { PackingProductsViewTable } from "../../components/PackingProductsViewTable";
+import { PackingDoneEditLinesTable } from "../../components/PackingDoneEditLinesTable";
+import { EditPackingDoneBatchDialog } from "../../components/EditPackingDoneBatchDialog";
+import { loadPackingDoneRemainingItems } from "../../lib/packing-done-remaining-items";
 import {
   getPackingDateLabel,
   getPackingDocumentNo,
@@ -42,6 +50,9 @@ export default function ViewPackingDetailsPage({ params }: { params: { id: strin
   const [unionRecord, setUnionRecord] = useState<PackingRecordUnion | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [batchDialogMode, setBatchDialogMode] = useState<"swap" | "add" | null>(null);
+  const [batchDialogProduct, setBatchDialogProduct] = useState<PackedProduct | null>(null);
+  const [remainingItems, setRemainingItems] = useState<PackingDoneRemainingItem[]>([]);
 
   const fallbackListHref = resolvePackingReturnTo(
     searchParams,
@@ -58,6 +69,15 @@ export default function ViewPackingDetailsPage({ params }: { params: { id: strin
         const pd = await PackingDoneService.getById(params.id);
         if (active) {
           setUnionRecord({ type: "packing", data: pd });
+          if (pd.canEditBatches) {
+            try {
+              setRemainingItems(await loadPackingDoneRemainingItems(pd));
+            } catch {
+              setRemainingItems([]);
+            }
+          } else {
+            setRemainingItems([]);
+          }
           setLoading(false);
         }
       } catch (err) {
@@ -348,18 +368,70 @@ export default function ViewPackingDetailsPage({ params }: { params: { id: strin
 
             {/* Packed Products Grid */}
             <div className="bg-white rounded-xl border border-border p-5 shadow-sm space-y-4">
-              <h2 className="text-xs font-bold text-foreground uppercase tracking-wider border-b pb-2 flex items-center gap-1.5">
-                <Package className="w-4 h-4 text-brand-600" />
-                Packed Products Details
-              </h2>
-              <PackingProductsViewTable
-                products={rowData.products ?? []}
-                qtyLabel={qtyLabel}
-              />
+              <div className="flex items-center justify-between gap-3 border-b pb-2">
+                <h2 className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-1.5">
+                  <Package className="w-4 h-4 text-brand-600" />
+                  Packed Products Details
+                </h2>
+                {rowData.canEditBatches ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2 text-[11px] gap-1"
+                    onClick={() => {
+                      setBatchDialogProduct(null);
+                      setBatchDialogMode("add");
+                    }}
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Add Batch
+                  </Button>
+                ) : null}
+              </div>
+              {rowData.canEditBatches ? (
+                <PackingDoneEditLinesTable
+                  products={rowData.products ?? []}
+                  qtyLabel={qtyLabel}
+                  onUpdateBatch={(product) => {
+                    setBatchDialogProduct(product);
+                    setBatchDialogMode("swap");
+                  }}
+                />
+              ) : (
+                <PackingProductsViewTable
+                  products={rowData.products ?? []}
+                  qtyLabel={qtyLabel}
+                />
+              )}
             </div>
           </div>
         )}
       </div>
+
+      {type === "packing" && batchDialogMode && rowData.canEditBatches ? (
+        <EditPackingDoneBatchDialog
+          open={Boolean(batchDialogMode)}
+          mode={batchDialogMode}
+          packing={rowData as PackingRecord}
+          product={batchDialogProduct}
+          remainingItems={remainingItems}
+          onClose={() => {
+            setBatchDialogMode(null);
+            setBatchDialogProduct(null);
+          }}
+          onSuccess={async (updated) => {
+            setUnionRecord({ type: "packing", data: updated });
+            setBatchDialogMode(null);
+            setBatchDialogProduct(null);
+            try {
+              setRemainingItems(await loadPackingDoneRemainingItems(updated));
+            } catch {
+              setRemainingItems([]);
+            }
+          }}
+        />
+      ) : null}
     </RecordDetailPage>
   );
 }
