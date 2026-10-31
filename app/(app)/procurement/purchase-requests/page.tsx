@@ -9,7 +9,6 @@ import {
   ColumnConfig,
   FilterState,
   SortState,
-  DEFAULT_MASTER_LIST_SORT,
 } from "@/components/listing/types";
 import {
   DropdownMenu,
@@ -57,12 +56,16 @@ import {
   getPRPoStatusLabel,
   getPRStatusLabel,
   PR_LIST_TAB_STATUSES,
-  type PRListStatus,
 } from "@/lib/procurement/pr-status";
 import { detailToFormValues } from "@/services/purchase-request.service";
 import { PurchaseRequestService } from "@/services/purchase-request.service";
+import {
+  usePrListingState,
+  type PrListingState,
+  type PrListingVisibleTabId,
+} from "./pr-listing-state-context";
 
-type TabId = "all" | PRListStatus;
+type TabId = PrListingVisibleTabId;
 
 const TABS: { value: TabId; label: string }[] = [
   { value: "all", label: "All" },
@@ -136,7 +139,12 @@ function StatusPill({ status }: { status: string }) {
 
 export default function PurchaseRequestsPage() {
   const router = useRouter();
-  const [tab, setTab] = useState<TabId>("all");
+  const {
+    activeTab: tab,
+    setActiveTab: setTab,
+    listingByTab,
+    setListingByTab,
+  } = usePrListingState();
   const [toast, setToast] = useState<{
     msg: string;
     type: "success" | "error";
@@ -148,11 +156,44 @@ export default function PurchaseRequestsPage() {
   const [approvalTarget, setApprovalTarget] =
     useState<PurchaseRequestListItem | null>(null);
 
-  const [filters, setFilters] = useState<FilterState>({});
-  const { debouncedFilters, debouncedSearch } = useDebouncedFilters(filters);
-  const [sort, setSort] = useState<SortState>(DEFAULT_MASTER_LIST_SORT);
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const { filters, sort, page, pageSize } = listingByTab[tab];
+
+  const updateListing = (
+    key: PrListingVisibleTabId,
+    updater: (prev: PrListingState) => PrListingState,
+  ) => {
+    setListingByTab((prev) => ({
+      ...prev,
+      [key]: updater(prev[key]),
+    }));
+  };
+
+  const setFilters = (next: FilterState) => {
+    updateListing(tab, (prev) => ({ ...prev, filters: next, page: 1 }));
+  };
+  const setSort = (next: SortState) => {
+    updateListing(tab, (prev) => ({ ...prev, sort: next, page: 1 }));
+  };
+  const setPage = (next: number) => {
+    updateListing(tab, (prev) => ({ ...prev, page: next }));
+  };
+  const setPageSize = (next: number) => {
+    updateListing(tab, (prev) => ({ ...prev, pageSize: next, page: 1 }));
+  };
+
+  // Separate debounce per tab so switching tabs does not briefly apply the previous tab's filters.
+  const allDebounced = useDebouncedFilters(listingByTab.all.filters);
+  const draftDebounced = useDebouncedFilters(listingByTab.draft.filters);
+  const approvedDebounced = useDebouncedFilters(listingByTab.approved.filters);
+  const rejectedDebounced = useDebouncedFilters(listingByTab.rejected.filters);
+  const { debouncedFilters, debouncedSearch } =
+    tab === "draft"
+      ? draftDebounced
+      : tab === "approved"
+        ? approvedDebounced
+        : tab === "rejected"
+          ? rejectedDebounced
+          : allDebounced;
   const { handleOpenFilter, isFilterOpen } = useLazyFilterColumns();
 
   useFlashToast(setToast);
@@ -234,20 +275,6 @@ export default function PurchaseRequestsPage() {
       ).sort(),
     [records],
   );
-
-  useEffect(() => {
-    setPage(1);
-  }, [debouncedSearch, apiFilters, pageSize, tab]);
-
-  useEffect(() => {
-    setFilters({});
-    setSort(DEFAULT_MASTER_LIST_SORT);
-    setPage(1);
-  }, [tab]);
-
-  useEffect(() => {
-    setPage(1);
-  }, [sort.key, sort.direction]);
 
   useEffect(() => {
     if (!toast) return;

@@ -66,6 +66,10 @@ import {
   type PendingInvoiceListRow,
   type PendingInvoiceTabId,
 } from "./pending-invoice-tab-data";
+import {
+  usePendingInvoiceListingState,
+  type PendingInvoiceTabCache,
+} from "./pending-invoice-listing-state-context";
 import { pendingInvoicesService } from "@/services/pending-invoices.service";
 import { FinancialYearApiService } from "@/services/financial-year.service";
 import { WarehouseService } from "@/services/warehouse.service";
@@ -74,46 +78,7 @@ import { useDebouncedValue } from "@/app/(app)/accounts/reports/pl/pl-hooks";
 import "./pending-invoices-compact.css";
 
 const PENDING_EXPORT_PAGE_SIZE = 100;
-type TabCache = {
-  loaded: boolean;
-  loading: boolean;
-  error: string | null;
-  rows: PendingInvoiceListRow[];
-  search: string;
-  page: number;
-  pageSize: number;
-  sortKey: string;
-  sortDir: "asc" | "desc";
-  total: number;
-  columnFilters: Record<string, any>;
-  preset: DateRangePresetId;
-  dateFrom: string;
-  dateTo: string;
-  financialYearId: string;
-  branches: string[];
-};
-
-function createEmptyTabCache(): TabCache {
-  const { from, to } = resolveDateRangePreset("this_year");
-  return {
-    loaded: false,
-    loading: false,
-    error: null,
-    rows: [],
-    search: "",
-    page: 1,
-    pageSize: 25,
-    sortKey: "dispatchDate",
-    sortDir: "desc",
-    total: 0,
-    columnFilters: {},
-    preset: "this_year",
-    dateFrom: from,
-    dateTo: to,
-    financialYearId: "all",
-    branches: [],
-  };
-}
+type TabCache = PendingInvoiceTabCache;
 
 function applyToolbarFilters(
   rows: PendingInvoiceListRow[],
@@ -450,8 +415,10 @@ function SortSync({
 
   useEffect(() => {
     if (!ctx) return;
-    if (ctx.sortKey && (ctx.sortKey !== sortKey || ctx.sortDir !== sortDir)) {
-      onSortChange(ctx.sortKey, ctx.sortDir ?? "asc");
+    const nextKey = ctx.sortKey || "";
+    const nextDir = ctx.sortDir ?? "asc";
+    if (nextKey !== sortKey || (nextKey !== "" && nextDir !== sortDir)) {
+      onSortChange(nextKey, nextDir);
     }
   }, [ctx?.sortKey, ctx?.sortDir, sortKey, sortDir, onSortChange]);
 
@@ -830,12 +797,8 @@ export default function PendingTaxInvoicesClient() {
   const searchParams = useSearchParams();
   const activeTab =
     parsePendingInvoiceTabParam(searchParams.get("tab")) ?? "sales_order";
-
-  const [tabState, setTabState] = useState<Record<PendingInvoiceTabId, TabCache>>({
-    sales_order: createEmptyTabCache(),
-    stock_transfer: createEmptyTabCache(),
-    // sample_order: createEmptyTabCache(),
-  });
+  const { tabState, setTabState, filterEpoch, setFilterEpoch } =
+    usePendingInvoiceListingState();
 
   const active = tabState[activeTab];
 
@@ -884,12 +847,20 @@ export default function PendingTaxInvoicesClient() {
   const [searchText, setSearchText] = useState("");
   const debouncedSearchText = useDebouncedValue(searchText, 300);
   const preloadedRef = useRef(false);
+  const searchHydratingRef = useRef(false);
 
   useEffect(() => {
+    searchHydratingRef.current = true;
     setSearchText(tabState[activeTab].search);
   }, [activeTab]);
 
   useEffect(() => {
+    if (searchHydratingRef.current) {
+      if (debouncedSearchText === searchText) {
+        searchHydratingRef.current = false;
+      }
+      return;
+    }
     setTabState((prev) => {
       if (prev[activeTab].search === debouncedSearchText) return prev;
       return {
@@ -897,7 +868,7 @@ export default function PendingTaxInvoicesClient() {
         [activeTab]: { ...prev[activeTab], search: debouncedSearchText, page: 1 },
       };
     });
-  }, [debouncedSearchText, activeTab]);
+  }, [debouncedSearchText, activeTab, searchText]);
 
   const fetchTab = useCallback(async (
     tab: PendingInvoiceTabId,
@@ -1277,7 +1248,6 @@ export default function PendingTaxInvoicesClient() {
     [activeTab],
   );
 
-  const [filterEpoch, setFilterEpoch] = useState(0);
 
   const clearFilters = useCallback(() => {
     const { from, to } = resolveDateRangePreset("this_year");
@@ -1293,7 +1263,7 @@ export default function PendingTaxInvoicesClient() {
         dateFrom: from,
         dateTo: to,
         columnFilters: {},
-        sortKey: "dispatchDate",
+        sortKey: "",
         sortDir: "desc",
       },
     }));
@@ -1392,8 +1362,11 @@ export default function PendingTaxInvoicesClient() {
         rows={toolbarRows}
         getCellValue={getCellValue}
         columnConfig={columnConfig}
-        defaultSortKey={active.sortKey}
-        defaultSortDir={active.sortDir}
+        defaultSortKey={active.sortKey || "dispatchDate"}
+        defaultSortDir={active.sortDir || "desc"}
+        initialColumnFilters={active.columnFilters as Record<string, any>}
+        initialSortKey={active.sortKey || null}
+        initialSortDir={active.sortDir || "desc"}
       >
         <SortSync
           sortKey={active.sortKey}

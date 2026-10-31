@@ -339,7 +339,13 @@ export default function LoginPage() {
         sessionStorage.removeItem(FY_PENDING_KEY);
       }
       console.error("Login integration error:", err);
-      setPwError(err?.message || err?.error || "An unexpected error occurred.");
+      const apiMessage =
+        err?.error ||
+        err?.message ||
+        err?.response?.data?.error ||
+        err?.response?.data?.message ||
+        "An unexpected error occurred.";
+      setPwError(apiMessage);
     } finally {
       setLoading(false);
     }

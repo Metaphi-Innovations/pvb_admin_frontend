@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { MasterListing } from "@/components/listing/MasterListing";
+import { warehouseColumnLayout } from "@/components/listing/long-name-column";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
 import {
   Eye, Pencil, RotateCcw, FileText, CheckCircle2, Mail,
@@ -38,6 +39,7 @@ import {
   resolveDispatchApiSourceType,
   type DispatchSourceTab,
 } from "./services";
+import { useDispatchListingState } from "./dispatch-listing-state-context";
 import {
   openDeliveryChallanPreviewForDispatch,
 } from "./dc-pdf/deliveryChallanPdf";
@@ -158,23 +160,48 @@ interface DispatchListingProps {
   selectedWarehouse?: string;
 }
 
+function parseDispatchSourceTab(value: string | null | undefined): DispatchSourceTab | null {
+  if (
+    value === "sample" ||
+    value === "stock_transfer" ||
+    value === "purchase_return" ||
+    value === "sales_order"
+  ) {
+    return value;
+  }
+  return null;
+}
+
 export function DispatchListing({ selectedWarehouse = "All" }: DispatchListingProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
+  const {
+    activeSubTab,
+    setActiveSubTab,
+    getListing,
+    setListing,
+  } = useDispatchListingState();
 
-  // Table state for Dispatches
-  const [filters, setFilters] = useState<FilterState>({});
-  const [sort, setSort] = useState<SortState>({ key: "", direction: "none" });
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
-  const [subTab, setSubTab] = useState<DispatchSourceTab>(() => {
-    const tab = searchParams?.get("tab");
-    if (tab === "sample" || tab === "stock_transfer" || tab === "purchase_return" || tab === "sales_order") {
-      return tab;
+  const subTab = activeSubTab;
+  const {
+    filters,
+    sort,
+    page,
+    pageSize,
+  } = getListing(subTab);
+
+  // Sync URL ↔ remembered source tab (restore after create/view/edit).
+  useEffect(() => {
+    const fromUrl = parseDispatchSourceTab(searchParams?.get("tab"));
+    if (fromUrl) {
+      if (fromUrl !== activeSubTab) setActiveSubTab(fromUrl);
+      return;
     }
-    return "sales_order";
-  });
+    const params = new URLSearchParams(searchParams?.toString() || "");
+    params.set("tab", activeSubTab);
+    router.replace(`?${params.toString()}`, { scroll: false });
+  }, [activeSubTab, router, searchParams, setActiveSubTab]);
 
   // Modal states
   const [revertTarget, setRevertTarget] = useState<any>(null);
@@ -200,11 +227,9 @@ export function DispatchListing({ selectedWarehouse = "All" }: DispatchListingPr
 
   const loadedFiltersRef = useRef<Set<string>>(new Set());
 
-  // Reset page / filter caches when tab or warehouse changes
+  // Clear dropdown caches when tab or warehouse changes; listing filters stay
+  // in module context (per source tab).
   useEffect(() => {
-    setPage(1);
-    setFilters({});
-    setSort({ key: "", direction: "none" });
     setData([]);
     setTotalRecords(0);
     setLoading(true);
@@ -249,15 +274,33 @@ export function DispatchListing({ selectedWarehouse = "All" }: DispatchListingPr
     }
   }, [FILTER_FIELD_MAP, subTab, selectedWarehouse]);
 
-  const handleFilterChange = useCallback((next: FilterState) => {
-    setFilters(next);
-    setPage(1);
-  }, []);
+  const handleFilterChange = useCallback(
+    (next: FilterState) => {
+      setListing(subTab, (prev) => ({ ...prev, filters: next, page: 1 }));
+    },
+    [setListing, subTab],
+  );
 
-  const handleSortChange = useCallback((next: SortState) => {
-    setSort(next);
-    setPage(1);
-  }, []);
+  const handleSortChange = useCallback(
+    (next: SortState) => {
+      setListing(subTab, (prev) => ({ ...prev, sort: next, page: 1 }));
+    },
+    [setListing, subTab],
+  );
+
+  const setPage = useCallback(
+    (next: number) => {
+      setListing(subTab, (prev) => ({ ...prev, page: next }));
+    },
+    [setListing, subTab],
+  );
+
+  const setPageSize = useCallback(
+    (next: number) => {
+      setListing(subTab, (prev) => ({ ...prev, pageSize: next, page: 1 }));
+    },
+    [setListing, subTab],
+  );
 
   const fetchData = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
@@ -426,8 +469,7 @@ export function DispatchListing({ selectedWarehouse = "All" }: DispatchListingPr
         filterable: true,
         filterType: "dropdown",
         filterOptions: sourceWarehouseOptions,
-        width: "260px",
-        truncate: true,
+        ...warehouseColumnLayout,
         tooltipText: (_: unknown, row: DispatchRecord) => {
           const value = resolveDispatchSourceWarehouseLabel(row);
           return value || null;
@@ -710,15 +752,17 @@ export function DispatchListing({ selectedWarehouse = "All" }: DispatchListingPr
     <div className="space-y-4">
       <Tabs
         value={subTab}
-        onValueChange={(val: any) => {
-          setSubTab(val);
+        onValueChange={(val: string) => {
+          const next = parseDispatchSourceTab(val);
+          if (!next) return;
+          setActiveSubTab(next);
           // Clear immediately so the previous tab's rows never flash under the new tab
           // while the reset effect / fetch run.
           setData([]);
           setTotalRecords(0);
           setLoading(true);
           const params = new URLSearchParams(searchParams?.toString() || "");
-          params.set("tab", val);
+          params.set("tab", next);
           router.replace(`?${params.toString()}`, { scroll: false });
         }}
         className="w-full"

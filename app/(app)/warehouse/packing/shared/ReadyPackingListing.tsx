@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MasterListing } from "@/components/listing/MasterListing";
+import { warehouseColumnLayout } from "@/components/listing/long-name-column";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
 import { /* Eye, */ PlusCircle, RotateCcw } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -22,14 +23,15 @@ import {
   resolveWarehouseOrderType,
   ORDER_TYPE_BADGE_CONFIG,
   formatWarehouseOrderAmount,
-  type OrderTypeFilterTab,
 } from "@/app/(app)/warehouse/lib/order-document-type";
 import { getPackingListOrderNoHeader } from "../lib/packing-document-labels";
 import {
   buildPackingCreateHref,
   buildPackingListHref,
   packingListPathForSource,
+  type PackingSourceTab,
 } from "../lib/packing-list-nav";
+import { usePackingListingState } from "../packing-listing-state-context";
 import {
   PackingListService,
   buildPackingListApiFilters,
@@ -37,8 +39,6 @@ import {
   type PackingListListItem,
   type PackingListFilterField,
 } from "@/services/packing-list.service";
-
-type PackingSourceTab = Exclude<OrderTypeFilterTab, "all">;
 
 interface ReadyPackingListingProps {
   sourceFilter: PackingSourceTab;
@@ -72,6 +72,17 @@ export function ReadyPackingListing({ sourceFilter }: ReadyPackingListingProps) 
   const router = useRouter();
   const searchParams = useSearchParams();
   const selectedWarehouse = searchParams.get("warehouse") || "All";
+  const { getListing, setListing, setStatusForSource } = usePackingListingState();
+  const {
+    filters,
+    sort,
+    page,
+    pageSize,
+  } = getListing(sourceFilter, "ready-for-packing");
+
+  useEffect(() => {
+    setStatusForSource(sourceFilter, "ready-for-packing");
+  }, [sourceFilter, setStatusForSource]);
 
   const listReturnTo = useMemo(
     () =>
@@ -83,11 +94,6 @@ export function ReadyPackingListing({ sourceFilter }: ReadyPackingListingProps) 
     [sourceFilter, selectedWarehouse, searchParams],
   );
 
-  // API parameters state
-  const [filters, setFilters] = useState<FilterState>({});
-  const [sort, setSort] = useState<SortState>({ key: "", direction: "none" });
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
   const [refreshKey, setRefreshKey] = useState(0);
 
   // Dynamic filter options state
@@ -105,11 +111,9 @@ export function ReadyPackingListing({ sourceFilter }: ReadyPackingListingProps) 
   // Track which filter columns have already been loaded
   const loadedFiltersRef = useRef<Set<string>>(new Set());
 
-  // Reset page / filter caches when source tab or warehouse changes
+  // Clear dropdown caches when source tab or warehouse changes; listing filters
+  // stay in module context (per source × Ready status).
   useEffect(() => {
-    setPage(1);
-    setFilters({});
-    setSort({ key: "", direction: "none" });
     setItems([]);
     setTotal(0);
     setLoading(true);
@@ -143,15 +147,48 @@ export function ReadyPackingListing({ sourceFilter }: ReadyPackingListingProps) 
     }
   }, [FILTER_FIELD_MAP, sourceFilter]);
 
-  const handleFilterChange = useCallback((next: FilterState) => {
-    setFilters(next);
-    setPage(1);
-  }, []);
+  const handleFilterChange = useCallback(
+    (next: FilterState) => {
+      setListing(sourceFilter, "ready-for-packing", (prev) => ({
+        ...prev,
+        filters: next,
+        page: 1,
+      }));
+    },
+    [setListing, sourceFilter],
+  );
 
-  const handleSortChange = useCallback((next: SortState) => {
-    setSort(next);
-    setPage(1);
-  }, []);
+  const handleSortChange = useCallback(
+    (next: SortState) => {
+      setListing(sourceFilter, "ready-for-packing", (prev) => ({
+        ...prev,
+        sort: next,
+        page: 1,
+      }));
+    },
+    [setListing, sourceFilter],
+  );
+
+  const setPage = useCallback(
+    (next: number) => {
+      setListing(sourceFilter, "ready-for-packing", (prev) => ({
+        ...prev,
+        page: next,
+      }));
+    },
+    [setListing, sourceFilter],
+  );
+
+  const setPageSize = useCallback(
+    (next: number) => {
+      setListing(sourceFilter, "ready-for-packing", (prev) => ({
+        ...prev,
+        pageSize: next,
+        page: 1,
+      }));
+    },
+    [setListing, sourceFilter],
+  );
 
   // Fetch list data from backend
   useEffect(() => {
@@ -259,7 +296,7 @@ export function ReadyPackingListing({ sourceFilter }: ReadyPackingListingProps) 
         filterable: true,
         filterType: "dropdown",
         filterOptions: warehouseOptions,
-        width: "260px",
+        ...warehouseColumnLayout,
         render: (_: unknown, row: PackingListListItem) => {
           const label =
             sourceFilter === "stock_transfer"

@@ -10,7 +10,6 @@ import {
 import { StockPositionFiltersBar } from "./StockPositionFiltersBar";
 import { MasterListing } from "@/components/listing/MasterListing";
 import { ColumnConfig, FilterState, SortState } from "@/components/listing/types";
-import { useAppliedListFilters } from "@/lib/masters/use-applied-list-filters";
 import { MiniKPICard } from "@/components/ui/KPICard";
 import {
   BatchMovementListRow,
@@ -18,6 +17,7 @@ import {
   StockOverviewApi,
   toStockOrdering,
 } from "../services/stock-overview-api";
+import { useStockOverviewListingState } from "../stock-overview-listing-state-context";
 
 const EMPTY_SUMMARY: BatchMovementSummary = {
   totalMovements: 0,
@@ -135,48 +135,67 @@ function resolveFilterOptions(
 }
 
 export function BatchMovementsTab() {
-  const [today, setToday] = useState("");
-  const [draftFilters, setDraftFilters] = useState<StockPositionFilters>(
-    DEFAULT_STOCK_POSITION_FILTERS,
-  );
-  const [appliedTopFilters, setAppliedTopFilters] = useState<StockPositionFilters>(
-    DEFAULT_STOCK_POSITION_FILTERS,
-  );
+  const { today, getPeriodListing, setPeriodListing } =
+    useStockOverviewListingState();
   const {
-    draftFilters: draftColFilters,
-    setDraftFilters: setDraftColFilters,
-    appliedFilters: appliedColFilters,
-    applyFilters: applyColFilters,
-    resetFilters: resetColFilters,
-  } = useAppliedListFilters();
+    filters: appliedColFilters,
+    sort,
+    page,
+    pageSize,
+    draftTopFilters: draftFilters,
+    appliedTopFilters,
+  } = getPeriodListing("batch-movements");
 
   const [records, setRecords] = useState<BatchMovementListRow[]>([]);
   const [summary, setSummary] = useState<BatchMovementSummary>(EMPTY_SUMMARY);
   const [totalRecords, setTotalRecords] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
-  const [sort, setSort] = useState<SortState>({ key: "movement_at", direction: "desc" });
   const [listNonce, setListNonce] = useState(0);
   const [exporting, setExporting] = useState(false);
   const [filterOptions, setFilterOptions] = useState<
     Record<string, Array<{ label: string; value: string }>>
   >({});
 
-  useEffect(() => {
-    const t = masterToday();
-    setToday(t);
-    const initial = {
-      ...DEFAULT_STOCK_POSITION_FILTERS,
-      datePreset: "today",
-      asOnDate: t,
-      fromDate: t,
-      toDate: t,
-    };
-    setDraftFilters(initial);
-    setAppliedTopFilters(initial);
-  }, []);
+  const setDraftFilters = useCallback(
+    (next: StockPositionFilters | ((prev: StockPositionFilters) => StockPositionFilters)) => {
+      setPeriodListing("batch-movements", (prev) => ({
+        ...prev,
+        draftTopFilters:
+          typeof next === "function" ? next(prev.draftTopFilters) : next,
+      }));
+    },
+    [setPeriodListing],
+  );
+
+  const setPage = useCallback(
+    (next: number) => {
+      setPeriodListing("batch-movements", (prev) => ({ ...prev, page: next }));
+    },
+    [setPeriodListing],
+  );
+
+  const setPageSize = useCallback(
+    (next: number) => {
+      setPeriodListing("batch-movements", (prev) => ({
+        ...prev,
+        pageSize: next,
+        page: 1,
+      }));
+    },
+    [setPeriodListing],
+  );
+
+  const setSort = useCallback(
+    (next: SortState) => {
+      setPeriodListing("batch-movements", (prev) => ({
+        ...prev,
+        sort: next,
+        page: 1,
+      }));
+    },
+    [setPeriodListing],
+  );
 
   useEffect(() => {
     if (!today) return;
@@ -239,42 +258,54 @@ export function BatchMovementsTab() {
   ]);
 
   const handleApplyTopFilters = useCallback(() => {
-    setAppliedTopFilters(draftFilters);
-    setPage(1);
-  }, [draftFilters]);
+    setPeriodListing("batch-movements", (prev) => ({
+      ...prev,
+      appliedTopFilters: prev.draftTopFilters,
+      page: 1,
+    }));
+  }, [setPeriodListing]);
 
   const handleResetTopFilters = useCallback(() => {
     const t = today || masterToday();
     const next = {
       ...DEFAULT_STOCK_POSITION_FILTERS,
-      datePreset: "today",
+      datePreset: "today" as const,
+      dateMode: "single" as const,
       asOnDate: t,
       fromDate: t,
       toDate: t,
     };
-    setDraftFilters(next);
-    setAppliedTopFilters(next);
-    resetColFilters();
-    setSort({ key: "movement_at", direction: "desc" });
-    setPage(1);
+    setPeriodListing("batch-movements", (prev) => ({
+      ...prev,
+      draftTopFilters: next,
+      appliedTopFilters: next,
+      filters: {},
+      sort: { key: "movement_at", direction: "desc" },
+      page: 1,
+    }));
     setListNonce((n) => n + 1);
-  }, [today, resetColFilters]);
+  }, [today, setPeriodListing]);
 
   const handleColFilterChange = useCallback(
     (next: FilterState) => {
       const cleared = Object.keys(next).length === 0;
       if (cleared) {
-        resetColFilters();
-        setSort({ key: "movement_at", direction: "desc" });
-        setPage(1);
+        setPeriodListing("batch-movements", (prev) => ({
+          ...prev,
+          filters: {},
+          sort: { key: "movement_at", direction: "desc" },
+          page: 1,
+        }));
         setListNonce((n) => n + 1);
         return;
       }
-      setDraftColFilters(next);
-      applyColFilters(next);
-      setPage(1);
+      setPeriodListing("batch-movements", (prev) => ({
+        ...prev,
+        filters: next,
+        page: 1,
+      }));
     },
-    [applyColFilters, resetColFilters, setDraftColFilters],
+    [setPeriodListing],
   );
 
   const handleExport = useCallback(() => {
@@ -551,7 +582,7 @@ export function BatchMovementsTab() {
         onFilterChange={handleColFilterChange}
         emptyMessage="No batch movements for the selected period."
         searchPlaceholder="Search product, batch, or document..."
-        currentFilters={draftColFilters}
+        currentFilters={appliedColFilters}
         currentSort={sort}
       />
     </div>

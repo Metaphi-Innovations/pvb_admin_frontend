@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { MasterListing } from "@/components/listing/MasterListing";
 import type { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
@@ -64,12 +64,30 @@ function mapBackendReturnToFrontend(item: any): SampleReturnRecord {
   };
 }
 
-export function SampleReturnTab({ onCountChange }: { onCountChange?: (count: number) => void }) {
+export type SampleReturnTabProps = {
+  onCountChange?: (count: number) => void;
+  filters: FilterState;
+  onFiltersChange: (filters: FilterState) => void;
+  sort: SortState;
+  onSortChange: (sort: SortState) => void;
+  page: number;
+  onPageChange: (page: number) => void;
+  pageSize: number;
+  onPageSizeChange: (pageSize: number) => void;
+};
+
+export function SampleReturnTab({
+  onCountChange,
+  filters: returnFilters,
+  onFiltersChange: setReturnFilters,
+  sort: returnSort,
+  onSortChange: setReturnSort,
+  page: returnPage,
+  onPageChange: setReturnPage,
+  pageSize: returnPageSize,
+  onPageSizeChange: setReturnPageSize,
+}: SampleReturnTabProps) {
   const router = useRouter();
-  const [returnFilters, setReturnFilters] = useState<FilterState>({});
-  const [returnSort, setReturnSort] = useState<SortState>({ key: "", direction: "none" });
-  const [returnPage, setReturnPage] = useState(1);
-  const [returnPageSize, setReturnPageSize] = useState(25);
 
   const { data: customerFilterRaw } = useSampleReturnFilterOptions("customer__customer_name");
   
@@ -213,6 +231,7 @@ export function SampleReturnTab({ onCountChange }: { onCountChange?: (count: num
       searchPlaceholder="Search return number, dispatch number, customer..."
       currentFilters={returnFilters}
       currentSort={returnSort}
+      loading={isLoading}
     />
   );
 }

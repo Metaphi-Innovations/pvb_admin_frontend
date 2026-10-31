@@ -115,11 +115,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     async (credentials: LoginRequest) => {
       const response = await AuthService.login(credentials);
       if (!response.success || !response.data) {
+        const detail =
+          response.error || response.message || "Login failed";
         throw {
           status: response.status || 400,
           success: false,
-          message: response.message || response.error || "Login failed",
-          error: response.error,
+          message: detail,
+          error: detail,
         };
       }
 

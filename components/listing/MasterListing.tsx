@@ -14,7 +14,20 @@ import { Pagination } from "./Pagination";
 import { EmptyState } from "./EmptyState";
 import { LoadingState } from "./LoadingState";
 import { ListingTruncateCell } from "./ListingTruncateCell";
-import { listingBodyCellStyle, listingHeaderCellStyle, listingShouldTruncate } from "./headerColumnStyle";
+import {
+  listingBodyCellStyle,
+  listingHeaderCellStyle,
+  listingShouldTruncate,
+} from "./headerColumnStyle";
+import {
+  isWarehouseColumnKey,
+  WAREHOUSE_COLUMN_WIDTH,
+} from "./long-name-column";
+
+function resolveListingColumnWidth(col: { key: string; width?: string }): string | undefined {
+  if (isWarehouseColumnKey(col.key)) return WAREHOUSE_COLUMN_WIDTH;
+  return col.width;
+}
 
 export function MasterListing<T = any>({
   columns,
@@ -193,13 +206,14 @@ export function MasterListing<T = any>({
                 {columns.map((col) => {
                   const isSorted = sortState.key === col.key;
                   const isSticky = col.sticky;
-                  
+                  const columnWidth = resolveListingColumnWidth(col);
+
                   return (
                     <th
                       key={col.key}
                       onClick={() => col.sortable && handleSort(col.key)}
                       style={listingHeaderCellStyle({
-                        width: col.width,
+                        width: columnWidth,
                         header: col.header,
                         sortable: col.sortable,
                         filterable: col.filterable,
@@ -307,8 +321,11 @@ export function MasterListing<T = any>({
                       {columns.map((col) => {
                         const cellVal = (row as any)[col.key];
                         const isSticky = col.sticky;
-                        // Truncate long text by default; keep amounts/dates/status fully visible.
-                        const shouldTruncate = col.wrap
+                        const columnWidth = resolveListingColumnWidth(col);
+                        const shouldWrap =
+                          col.wrap ?? isWarehouseColumnKey(col.key);
+                        // Truncate long text by default; keep amounts/dates/status/warehouse fully visible.
+                        const shouldTruncate = shouldWrap
                           ? false
                           : listingShouldTruncate({
                               truncate: col.truncate,
@@ -338,12 +355,12 @@ export function MasterListing<T = any>({
                           <td
                             key={col.key}
                             style={listingBodyCellStyle({
-                              width: col.width,
+                              width: columnWidth,
                               truncate: shouldTruncate,
                             })}
                             className={cn(
                               "px-4 py-2.5 text-xs text-foreground",
-                              col.wrap
+                              shouldWrap
                                 ? "whitespace-normal break-words align-top"
                                 : "whitespace-nowrap",
                               shouldTruncate && "overflow-hidden",

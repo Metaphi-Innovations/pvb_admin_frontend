@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Eye } from "lucide-react";
@@ -41,8 +41,8 @@ function toInventoryQtyMeta(row: InventoryListRow): QtyStackMeta {
 }
 
 function inventoryViewHref(productId: string, warehouseId?: string) {
-  if (!warehouseId) return `/warehouse/stockoverview/view/${productId}`;
-  return `/warehouse/stockoverview/view/${productId}?warehouse_id=${encodeURIComponent(warehouseId)}`;
+  if (!warehouseId) return `/warehouse/stock-overview/view/${productId}`;
+  return `/warehouse/stock-overview/view/${productId}?warehouse_id=${encodeURIComponent(warehouseId)}`;
 }
 
 export function QcPassedListing({
@@ -62,7 +62,7 @@ export function QcPassedListing({
     handlePageSizeChange,
     handleFilterChange,
     listNonce,
-  } = useStockOverviewListFilters();
+  } = useStockOverviewListFilters("inventory");
   const [records, setRecords] = useState<InventoryListRow[]>([]);
   const [totalRecords, setTotalRecords] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -71,7 +71,10 @@ export function QcPassedListing({
   const [loadingFilters, setLoadingFilters] = useState<Set<string>>(new Set());
   const [exporting, setExporting] = useState(false);
 
+  const prevWarehouseRef = useRef(warehouseId);
   useEffect(() => {
+    if (prevWarehouseRef.current === warehouseId) return;
+    prevWarehouseRef.current = warehouseId;
     setPage(1);
   }, [warehouseId, setPage]);
 

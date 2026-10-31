@@ -65,6 +65,7 @@ import { AccountsToast, useAccountsToast } from "@/components/accounts/AccountsT
 import { Calculator } from "lucide-react";
 import { TurnoverSchemeCalculationModal } from "./TurnoverSchemeCalculationModal";
 import { isTurnoverSchemeEnabled } from "../turnover-scheme-flag";
+import { useCreditNoteListingState } from "@/app/(app)/accounts/transactions/credit-notes/credit-note-listing-state-context";
 
 /* Toolbar Source options — restore with ReportMoreFilters when needed.
 const SOURCE_FILTER_OPTIONS: { value: Exclude<PendingSourceFilter, "all">; label: string }[] = [
@@ -94,6 +95,42 @@ function statusBadgeClass(status: string): string {
     default:
       return "bg-slate-100 text-slate-600";
   }
+}
+
+function PendingNotesSortSync({
+  sortKey,
+  sortDir,
+  columnFilters,
+  onSortChange,
+  onFilterChange,
+}: {
+  sortKey: string;
+  sortDir: "asc" | "desc";
+  columnFilters: Record<string, unknown>;
+  onSortChange: (sortKey: string, sortDir: "asc" | "desc") => void;
+  onFilterChange: (filters: Record<string, unknown>) => void;
+}) {
+  const ctx = useAccountsColumnFilterContext();
+
+  useEffect(() => {
+    if (!ctx) return;
+    const nextKey = ctx.sortKey || "";
+    const nextDir = ctx.sortDir ?? "asc";
+    if (nextKey !== sortKey || (nextKey !== "" && nextDir !== sortDir)) {
+      onSortChange(nextKey, nextDir);
+    }
+  }, [ctx?.sortKey, ctx?.sortDir, sortKey, sortDir, onSortChange]);
+
+  useEffect(() => {
+    if (!ctx) return;
+    const ctxFiltersStr = JSON.stringify(ctx.columnFilters || {});
+    const propFiltersStr = JSON.stringify(columnFilters || {});
+    if (ctxFiltersStr !== propFiltersStr) {
+      onFilterChange(ctx.columnFilters || {});
+    }
+  }, [ctx?.columnFilters, columnFilters, onFilterChange]);
+
+  return null;
 }
 
 function PendingCreditNotesTable({
@@ -344,11 +381,50 @@ export function PendingCreditNotesPanel({
 }) {
   const router = useRouter();
   const { toast, showToast, dismissToast } = useAccountsToast();
+  const {
+    pending: listing,
+    setPending: setListing,
+    pendingFilterEpoch,
+  } = useCreditNoteListingState();
+  const search = listing.search;
+  const sourceFilter = listing.sourceFilter;
+  const page = listing.page;
+  const pageSize = listing.pageSize;
+  const setSearch = useCallback(
+    (value: string) => {
+      setListing((prev) =>
+        prev.search === value ? prev : { ...prev, search: value },
+      );
+    },
+    [setListing],
+  );
+  const setPage = useCallback(
+    (next: number) => {
+      setListing((prev) => (prev.page === next ? prev : { ...prev, page: next }));
+    },
+    [setListing],
+  );
+  const setPageSize = useCallback(
+    (next: number) => {
+      setListing((prev) =>
+        prev.pageSize === next ? prev : { ...prev, pageSize: next, page: 1 },
+      );
+    },
+    [setListing],
+  );
+  const handleSortChange = useCallback(
+    (sortKey: string, sortDir: "asc" | "desc") => {
+      setListing((prev) => ({ ...prev, sortKey, sortDir, page: 1 }));
+    },
+    [setListing],
+  );
+  const handleColumnFilterChange = useCallback(
+    (columnFilters: Record<string, unknown>) => {
+      setListing((prev) => ({ ...prev, columnFilters, page: 1 }));
+    },
+    [setListing],
+  );
   const [rows, setRows] = useState<PendingCreditNoteRow[]>([]);
-  const [search, setSearch] = useState("");
-  const [sourceFilter, setSourceFilter] = useState<string>("all");
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
   const [loading, setLoading] = useState(true);
   const [turnoverModalOpen, setTurnoverModalOpen] = useState(false);
 
@@ -444,7 +520,9 @@ export function PendingCreditNotesPanel({
 
   useEffect(() => {
     setPage(1);
-  }, [search, sourceFilter, pageSize]);
+  }, [search, sourceFilter, pageSize, setPage]);
+
+  const fallbackSortKey = schemeFocused ? "eligibleDate" : "referenceNo";
 
   return (
     <>
@@ -499,12 +577,23 @@ export function PendingCreditNotesPanel({
         }
       >
         <AccountsColumnFilterProvider
+          key={`pending-${pendingFilterEpoch}-${schemeFocused ? "scheme" : "all"}`}
           rows={toolbarFiltered}
           getCellValue={getCellValue}
           columnConfig={columnConfig}
-          defaultSortKey={schemeFocused ? "eligibleDate" : "referenceNo"}
+          defaultSortKey={fallbackSortKey}
           defaultSortDir="desc"
+          initialColumnFilters={listing.columnFilters as Record<string, any>}
+          initialSortKey={listing.sortKey || null}
+          initialSortDir={listing.sortDir || "desc"}
         >
+          <PendingNotesSortSync
+            sortKey={listing.sortKey}
+            sortDir={listing.sortDir}
+            columnFilters={listing.columnFilters}
+            onSortChange={handleSortChange}
+            onFilterChange={handleColumnFilterChange}
+          />
           <PendingCreditNotesTable
             toolbarFiltered={toolbarFiltered}
             page={page}

@@ -7,26 +7,30 @@ import { DonePackingListing } from "./DonePackingListing";
 import {
   buildPackingListHref,
   getPackingStatusTab,
+  type PackingSourceTab,
   type PackingStatusTab,
 } from "../lib/packing-list-nav";
-
-type PackingSourceTab = "sales" | "sample" | "stock_transfer" | "purchase_return";
+import { usePackingListingState } from "../packing-listing-state-context";
 
 export function PackingListing({ sourceFilter }: { sourceFilter: PackingSourceTab }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const { setStatusForSource } = usePackingListingState();
   const [activeTab, setActiveTab] = useState<PackingStatusTab>(() =>
     getPackingStatusTab(searchParams),
   );
 
   useEffect(() => {
-    setActiveTab(getPackingStatusTab(searchParams));
-  }, [searchParams]);
+    const fromUrl = getPackingStatusTab(searchParams);
+    setActiveTab(fromUrl);
+    setStatusForSource(sourceFilter, fromUrl);
+  }, [searchParams, sourceFilter, setStatusForSource]);
 
   const handleTabChange = useCallback(
     (tab: PackingStatusTab) => {
       setActiveTab(tab);
+      setStatusForSource(sourceFilter, tab);
       router.replace(
         buildPackingListHref(pathname, {
           tab,
@@ -34,7 +38,7 @@ export function PackingListing({ sourceFilter }: { sourceFilter: PackingSourceTa
         }),
       );
     },
-    [pathname, router, searchParams],
+    [pathname, router, searchParams, setStatusForSource, sourceFilter],
   );
 
   return (

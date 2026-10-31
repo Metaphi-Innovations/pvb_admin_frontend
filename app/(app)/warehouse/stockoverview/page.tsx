@@ -18,6 +18,10 @@ import { SalesReturnStockListing } from "./sales-return/SalesReturnStockListing"
 import { SampleReturnStockListing } from "./sample-return/SampleReturnStockListing";
 import { RejectedListing } from "./rejected/RejectedListing";
 import { StockOverviewApi, type StockOverviewSummary } from "./services/stock-overview-api";
+import {
+  isStockOverviewListTab,
+  useStockOverviewListingState,
+} from "./stock-overview-listing-state-context";
 
 const EMPTY_SUMMARY: StockOverviewSummary = {
   inventoryQty: 0,
@@ -27,8 +31,12 @@ const EMPTY_SUMMARY: StockOverviewSummary = {
 };
 
 export default function StockOverviewPage() {
-  const [activeTab, setActiveTab] = useState("daily-logs");
-  const [selectedWarehouse, setSelectedWarehouse] = useState("");
+  const {
+    activeTab,
+    setActiveTab,
+    selectedWarehouse,
+    setSelectedWarehouse,
+  } = useStockOverviewListingState();
   const [warehouseOptions, setWarehouseOptions] = useState<Array<{ label: string; value: string }>>([]);
   const [summary, setSummary] = useState<StockOverviewSummary>(EMPTY_SUMMARY);
   const [summaryNonce, setSummaryNonce] = useState(0);
@@ -55,7 +63,7 @@ export default function StockOverviewPage() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [setSelectedWarehouse]);
 
   useEffect(() => {
     // Self-contained tabs (own filters/KPIs) — skip header summary fetch
@@ -108,7 +116,10 @@ export default function StockOverviewPage() {
         { value: "rejected", label: "Rejected Inventory", icon: XCircle },
       ]}
       activeTab={activeTab}
-      onTabChange={setActiveTab}
+      onTabChange={(val) => {
+        if (!isStockOverviewListTab(val)) return;
+        setActiveTab(val);
+      }}
       actions={
         showWarehouseFilter ? (
           <div className="flex items-center gap-2">
@@ -132,14 +143,15 @@ export default function StockOverviewPage() {
               options={warehouseOptions}
               value={selectedWarehouse}
               onChange={(value) => {
-                setSelectedWarehouse(value);
+                const next = Array.isArray(value) ? value[0] || "" : String(value ?? "");
+                setSelectedWarehouse(next);
                 refreshSummary();
               }}
               placeholder="Select warehouse..."
               searchPlaceholder="Search warehouse..."
               showLabelTooltip
-              className="h-9 w-[260px] max-w-[min(260px,50vw)] text-xs rounded-lg border-border bg-white focus:ring-1 focus:ring-brand-500"
-              popoverClassName="w-[min(300px,calc(100vw-2rem))] min-w-[260px]"
+              className="h-9 w-[300px] max-w-[min(300px,50vw)] text-xs rounded-lg border-border bg-white focus:ring-1 focus:ring-brand-500"
+              popoverClassName="w-[min(300px,calc(100vw-2rem))] min-w-[280px]"
             />
           </div>
         ) : null

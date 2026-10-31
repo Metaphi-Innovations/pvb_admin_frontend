@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { MasterListing } from "@/components/listing/MasterListing";
@@ -52,20 +52,33 @@ function StatusPill({ status }: { status: PurchaseReturn["status"] }) {
   );
 }
 
-export function PurchaseReturnListing() {
+export type PurchaseReturnListingProps = {
+  filters: FilterState;
+  onFiltersChange: (filters: FilterState) => void;
+  sort: SortState;
+  onSortChange: (sort: SortState) => void;
+  page: number;
+  onPageChange: (page: number) => void;
+  pageSize: number;
+  onPageSizeChange: (pageSize: number) => void;
+};
+
+export function PurchaseReturnListing({
+  filters,
+  onFiltersChange,
+  sort,
+  onSortChange,
+  page,
+  onPageChange,
+  pageSize,
+  onPageSizeChange,
+}: PurchaseReturnListingProps) {
   const router = useRouter();
   const [toast, setToast] = useState<{
     msg: string;
     type: "success" | "error";
   } | null>(null);
-  const [filters, setFilters] = useState<FilterState>({});
   const { debouncedFilters, debouncedSearch } = useDebouncedFilters(filters);
-  const [sort, setSort] = useState<SortState>({
-    key: "",
-    direction: "none",
-  });
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
   const { handleOpenFilter, isFilterOpen } = useLazyFilterColumns();
 
   useFlashToast(setToast);
@@ -125,14 +138,6 @@ export function PurchaseReturnListing() {
     () => initiatedByOptionsQuery.data ?? [],
     [initiatedByOptionsQuery.data],
   );
-
-  useEffect(() => {
-    setPage(1);
-  }, [debouncedSearch, apiFilters, pageSize]);
-
-  useEffect(() => {
-    setPage(1);
-  }, [sort.key, sort.direction]);
 
   const records = listQuery.data?.items ?? [];
   const totalRecords = listQuery.data?.total ?? 0;
@@ -305,10 +310,10 @@ export function PurchaseReturnListing() {
         totalRecords={totalRecords}
         page={page}
         pageSize={pageSize}
-        onPageChange={setPage}
-        onPageSizeChange={setPageSize}
-        onSortChange={setSort}
-        onFilterChange={setFilters}
+        onPageChange={onPageChange}
+        onPageSizeChange={onPageSizeChange}
+        onSortChange={onSortChange}
+        onFilterChange={onFiltersChange}
         onOpenFilter={handleOpenFilter}
         emptyMessage="purchase returns"
         searchPlaceholder="Search return no., PO no., supplier…"

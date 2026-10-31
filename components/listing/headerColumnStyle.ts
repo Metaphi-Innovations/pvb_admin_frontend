@@ -75,6 +75,9 @@ export function listingBodyCellStyle(opts: {
 const NO_TRUNCATE_KEY =
   /(^|_)(validity|validFrom|validTo|startDate|endDate|fromDate|toDate|date)(_|$)/i;
 
+/** Warehouse names should stay fully visible in listing cells. */
+const WAREHOUSE_KEY = /warehouse/i;
+
 /**
  * Default truncate behavior for listing columns.
  * Long free-text truncates with tooltip; amounts, dates, status widgets stay full.
@@ -90,5 +93,6 @@ export function listingShouldTruncate(opts: {
   if (opts.filterType === "audit" || opts.filterType === "date") return false;
   if (["status", "actions"].includes(opts.key)) return false;
   if (NO_TRUNCATE_KEY.test(opts.key)) return false;
+  if (WAREHOUSE_KEY.test(opts.key)) return false;
   return true;
 }

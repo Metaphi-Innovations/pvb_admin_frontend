@@ -15,6 +15,9 @@ import {
   getQcStatusTab,
   type QcStatusTab,
 } from "../shared/qc-list-nav";
+import { useQcListingState } from "../qc-listing-state-context";
+import { exportQcListingExcel } from "../shared/qc-excel-export";
+import { showToast } from "@/lib/toast";
 
 type QcPurchaseRow = QcRecord;
 
@@ -28,15 +31,42 @@ export function PurchaseQcListing() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const activeTab = getQcStatusTab(searchParams);
+  const { getListing, setListing, setStatusForSource } = useQcListingState();
+  const {
+    filters: qcFilters,
+    sort: qcSort,
+    page: qcPage,
+    pageSize: qcPageSize,
+  } = getListing("purchase", activeTab);
 
-  const [qcFilters, setQcFilters] = useState<FilterState>({});
-  const [qcSort, setQcSort] = useState<SortState>({ key: "", direction: "none" });
-  const [qcPage, setQcPage] = useState(1);
-  const [qcPageSize, setQcPageSize] = useState(10);
+  useEffect(() => {
+    setStatusForSource("purchase", activeTab);
+  }, [activeTab, setStatusForSource]);
 
   const [apiQcList, setApiQcList] = useState<QcRecord[]>([]);
   const [apiTotal, setApiTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
+
+  const handleExport = useCallback(async () => {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      await exportQcListingExcel({
+        source: "purchase",
+        statusTab: activeTab,
+        filters: qcFilters,
+        sort: qcSort,
+      });
+    } catch (err) {
+      showToast(
+        err instanceof Error ? err.message : "Failed to export QC list.",
+        "error",
+      );
+    } finally {
+      setExporting(false);
+    }
+  }, [exporting, activeTab, qcFilters, qcSort]);
 
   const [qcNoOptions, setQcNoOptions] = useState<{ label: string; value: string }[]>([]);
   const [grnNoOptions, setGrnNoOptions] = useState<{ label: string; value: string }[]>([]);
@@ -52,20 +82,51 @@ export function PurchaseQcListing() {
 
   const setActiveTab = useCallback(
     (tab: QcStatusTab) => {
+      setStatusForSource("purchase", tab);
       router.replace(buildQcListHref(pathname, { qcStatus: tab, searchParams }));
     },
-    [router, pathname, searchParams],
+    [router, pathname, searchParams, setStatusForSource],
   );
 
-  const handleFilterChange = useCallback((filters: FilterState) => {
-    setQcFilters(filters);
-    setQcPage(1);
-  }, []);
+  const handleFilterChange = useCallback(
+    (filters: FilterState) => {
+      setListing("purchase", activeTab, (prev) => ({
+        ...prev,
+        filters,
+        page: 1,
+      }));
+    },
+    [activeTab, setListing],
+  );
 
-  const handleSortChange = useCallback((sort: SortState) => {
-    setQcSort(sort);
-    setQcPage(1);
-  }, []);
+  const handleSortChange = useCallback(
+    (sort: SortState) => {
+      setListing("purchase", activeTab, (prev) => ({
+        ...prev,
+        sort,
+        page: 1,
+      }));
+    },
+    [activeTab, setListing],
+  );
+
+  const setQcPage = useCallback(
+    (page: number) => {
+      setListing("purchase", activeTab, (prev) => ({ ...prev, page }));
+    },
+    [activeTab, setListing],
+  );
+
+  const setQcPageSize = useCallback(
+    (pageSize: number) => {
+      setListing("purchase", activeTab, (prev) => ({
+        ...prev,
+        pageSize,
+        page: 1,
+      }));
+    },
+    [activeTab, setListing],
+  );
 
   const handleOpenFilter = async (columnKey: string) => {
     if (loadedFiltersRef.current.has(columnKey)) return;
@@ -131,10 +192,8 @@ export function PurchaseQcListing() {
   };
 
   useEffect(() => {
-    setQcPage(1);
+    // Status tab change: keep per-tab filters; only reset dropdown caches / rows.
     setApiQcList([]);
-    setQcFilters({});
-    setQcSort({ key: "", direction: "none" });
     loadedFiltersRef.current.clear();
     setQcNoOptions([]);
     setGrnNoOptions([]);
@@ -439,10 +498,7 @@ export function PurchaseQcListing() {
         page={qcPage}
         pageSize={qcPageSize}
         onPageChange={setQcPage}
-        onPageSizeChange={(size) => {
-          setQcPageSize(size);
-          setQcPage(1);
-        }}
+        onPageSizeChange={setQcPageSize}
         currentFilters={qcFilters}
         onFilterChange={handleFilterChange}
         currentSort={qcSort}
@@ -450,6 +506,7 @@ export function PurchaseQcListing() {
         onOpenFilter={handleOpenFilter}
         searchPlaceholder="Search QC or GRN..."
         loading={isLoading}
+        onExport={() => void handleExport()}
       />
     </div>
   );

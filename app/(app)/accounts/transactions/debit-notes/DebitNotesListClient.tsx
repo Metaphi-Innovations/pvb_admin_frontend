@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type SetStateAction,
+} from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
@@ -34,7 +41,6 @@ import {
   AccountsTablePagination,
   AccountsListingFilterCard,
 } from "@/components/accounts/AccountsTableListing";
-import { useReportDateRange } from "@/components/accounts/ReportFilters";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { noteWorkflowStatusToBadge } from "@/lib/accounts/accounts-status-badges";
 import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
@@ -56,7 +62,6 @@ import {
   NOTES_STATUS_FILTER_OPTIONS,
   NOTES_STATUS_TABS,
   type NotesListingFilterState,
-  resetNotesListingFilters,
   uniqueOptionsFromValues,
 } from "../../components/notes-listing-shared";
 import type { ReportMultiSelectOption } from "@/lib/accounts/report-multi-filter-utils";
@@ -69,6 +74,7 @@ import {
   formatINR,
   parseDebitNotesModuleTab,
   parseDebitNotesStatusTab,
+  type DebitNotesStatusTabId,
   withReturnTo,
 } from "../../debit-notes/note-utils";
 import {
@@ -82,6 +88,10 @@ import { showToast } from "@/lib/toast";
 import { usePermissions } from "@/lib/auth/permissions-context";
 import { canCreate, canEdit } from "@/lib/auth/permissions";
 import { useDebouncedValue } from "@/app/(app)/accounts/reports/pl/pl-hooks";
+import {
+  createDefaultDebitNoteRecordsListingState,
+  useDebitNoteListingState,
+} from "./debit-note-listing-state-context";
 
 const LIST_PATH = DEBIT_NOTES_LIST_PATH;
 
@@ -130,6 +140,42 @@ function getRowActions(status: string, approvalRequired: boolean): string[] {
     return ["view", "cancel"];
   }
   return ["view"];
+}
+
+function NotesSortSync({
+  sortKey,
+  sortDir,
+  columnFilters,
+  onSortChange,
+  onFilterChange,
+}: {
+  sortKey: string;
+  sortDir: "asc" | "desc";
+  columnFilters: Record<string, unknown>;
+  onSortChange: (sortKey: string, sortDir: "asc" | "desc") => void;
+  onFilterChange: (filters: Record<string, unknown>) => void;
+}) {
+  const ctx = useAccountsColumnFilterContext();
+
+  useEffect(() => {
+    if (!ctx) return;
+    const nextKey = ctx.sortKey || "";
+    const nextDir = ctx.sortDir ?? "asc";
+    if (nextKey !== sortKey || (nextKey !== "" && nextDir !== sortDir)) {
+      onSortChange(nextKey, nextDir);
+    }
+  }, [ctx?.sortKey, ctx?.sortDir, sortKey, sortDir, onSortChange]);
+
+  useEffect(() => {
+    if (!ctx) return;
+    const ctxFiltersStr = JSON.stringify(ctx.columnFilters || {});
+    const propFiltersStr = JSON.stringify(columnFilters || {});
+    if (ctxFiltersStr !== propFiltersStr) {
+      onFilterChange(ctx.columnFilters || {});
+    }
+  }, [ctx?.columnFilters, columnFilters, onFilterChange]);
+
+  return null;
 }
 
 function DebitNotesRecordsTable({
@@ -331,24 +377,82 @@ export default function DebitNotesListClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const mounted = useClientMounted();
-  const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_year");
   const { permissions } = usePermissions();
+  const {
+    records: listing,
+    setRecords: setListing,
+    recordsFilterEpoch,
+    setRecordsFilterEpoch,
+  } = useDebitNoteListingState();
 
   const hasCreatePermission = useMemo(() => canCreate(permissions, "accounts", "debit_note"), [permissions]);
   const hasUpdatePermission = useMemo(() => canEdit(permissions, "accounts", "debit_note"), [permissions]);
 
   const moduleTab =
     parseDebitNotesModuleTab(searchParams.get("tab")) ?? "pending";
-  const statusTab =
+  const urlStatusTab =
     parseDebitNotesStatusTab(searchParams.get("status")) ?? "all";
+  const statusTab = listing.statusTab;
   const listReturnHref = debitNotesListHref(moduleTab, statusTab);
 
-  const [filters, setFilters] = useState<NotesListingFilterState>(() => ({
-    ...resetNotesListingFilters("this_year"),
-    dateFrom,
-    dateTo,
-    preset,
-  }));
+  const filters = listing.filters;
+  const page = listing.page;
+  const pageSize = listing.pageSize;
+  const wasRecordsRef = useRef(moduleTab === "records");
+  const deepLinkedStatusRef = useRef(false);
+
+  // Deep link: adopt ?status= once on first records view.
+  useEffect(() => {
+    if (deepLinkedStatusRef.current) return;
+    if (moduleTab !== "records") return;
+    deepLinkedStatusRef.current = true;
+    if (urlStatusTab === listing.statusTab) return;
+    setListing((prev) => ({ ...prev, statusTab: urlStatusTab, page: 1 }));
+  }, [moduleTab, urlStatusTab, listing.statusTab, setListing]);
+
+  // Pending → All: restore secondary status into the URL from persisted listing state.
+  useEffect(() => {
+    const wasRecords = wasRecordsRef.current;
+    wasRecordsRef.current = moduleTab === "records";
+    if (moduleTab !== "records" || wasRecords) return;
+    if (urlStatusTab === listing.statusTab) return;
+    router.replace(debitNotesListHref("records", listing.statusTab), {
+      scroll: false,
+    });
+  }, [moduleTab, urlStatusTab, listing.statusTab, router]);
+  const setFilters = useCallback(
+    (updater: SetStateAction<NotesListingFilterState>) => {
+      setListing((prev) => {
+        const nextFilters =
+          typeof updater === "function" ? updater(prev.filters) : updater;
+        if (nextFilters === prev.filters) return prev;
+        return { ...prev, filters: nextFilters };
+      });
+    },
+    [setListing],
+  );
+  const setPage = useCallback(
+    (next: SetStateAction<number>) => {
+      setListing((prev) => {
+        const pageValue = typeof next === "function" ? next(prev.page) : next;
+        if (pageValue === prev.page) return prev;
+        return { ...prev, page: pageValue };
+      });
+    },
+    [setListing],
+  );
+  const setPageSize = useCallback(
+    (next: SetStateAction<number>) => {
+      setListing((prev) => {
+        const pageSizeValue =
+          typeof next === "function" ? next(prev.pageSize) : next;
+        if (pageSizeValue === prev.pageSize) return prev;
+        return { ...prev, pageSize: pageSizeValue, page: 1 };
+      });
+    },
+    [setListing],
+  );
+
   const [records, setRecords] = useState<DebitNoteRecord[]>([]);
   const [totalRecords, setTotalRecords] = useState(0);
   const [statusCounts, setStatusCounts] = useState<Record<string, number>>({
@@ -362,8 +466,6 @@ export default function DebitNotesListClient() {
   const [error, setError] = useState<string | null>(null);
   const [pendingCount, setPendingCount] = useState(0);
   const [cancelTarget, setCancelTarget] = useState<DebitNoteRecord | null>(null);
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
   const [exporting, setExporting] = useState(false);
   const [approvalRequired, setApprovalRequired] = useState(true);
 
@@ -414,7 +516,6 @@ export default function DebitNotesListClient() {
         voucherNo: filters.voucherNo.trim(),
         dateFrom: filters.dateFrom,
         dateTo: filters.dateTo,
-        statusTab,
       }),
     [
       debouncedSearch,
@@ -425,7 +526,6 @@ export default function DebitNotesListClient() {
       filters.voucherNo,
       filters.dateFrom,
       filters.dateTo,
-      statusTab,
     ],
   );
 
@@ -471,20 +571,15 @@ export default function DebitNotesListClient() {
           })
           .filter((v): v is "DIRECT" | "PURCHASE_RETURN" => v != null);
 
-        let statusParam: string | undefined;
+        // Load all statuses so secondary tabs can filter client-side with stable counts.
         const moreFilterStatus = mapNotesStatusFilterToApi(filters.status);
-        if (moreFilterStatus) {
-          statusParam = moreFilterStatus;
-        } else if (statusTab !== "all") {
-          statusParam = statusTab.toUpperCase();
-        }
 
         const baseQuery = {
           search: debouncedSearch.trim() || undefined,
           supplier_ids: selectedSupplierIds.length ? selectedSupplierIds : undefined,
           warehouse_ids: selectedWarehouseIds.length ? selectedWarehouseIds : undefined,
           source_types: sourceTypes.length ? sourceTypes : undefined,
-          status: statusParam as any,
+          status: moreFilterStatus as any,
           dn_number: filters.voucherNo.trim() || undefined,
           from_date: filters.dateFrom || undefined,
           to_date: filters.dateTo || undefined,
@@ -514,23 +609,21 @@ export default function DebitNotesListClient() {
         const mappedRecords = allItems.map(mapDebitNoteToRecord);
         setRecords(mappedRecords);
         setTotalRecords(mappedRecords.length);
-        if (statusTab === "all") {
-          const nextCounts: Record<string, number> = {
-            all: mappedRecords.length,
-            draft: 0,
-            posted: 0,
-            cancelled: 0,
-            reversed: 0,
-          };
-          mappedRecords.forEach((r) => {
-            const st = String(r.status || "").toLowerCase();
-            if (st === "draft") nextCounts.draft += 1;
-            else if (st === "posted" || st === "approved") nextCounts.posted += 1;
-            else if (st === "cancelled") nextCounts.cancelled += 1;
-            else if (st === "reversed") nextCounts.reversed += 1;
-          });
-          setStatusCounts(nextCounts);
-        }
+        const nextCounts: Record<string, number> = {
+          all: mappedRecords.length,
+          draft: 0,
+          posted: 0,
+          cancelled: 0,
+          reversed: 0,
+        };
+        mappedRecords.forEach((r) => {
+          const st = String(r.status || "").toLowerCase();
+          if (st === "draft") nextCounts.draft += 1;
+          else if (st === "posted" || st === "approved") nextCounts.posted += 1;
+          else if (st === "cancelled") nextCounts.cancelled += 1;
+          else if (st === "reversed") nextCounts.reversed += 1;
+        });
+        setStatusCounts(nextCounts);
       } catch (e: any) {
         if (cancelled) return;
         setError(e.message || "Failed to load Debit Notes.");
@@ -571,146 +664,55 @@ export default function DebitNotesListClient() {
     };
   }, [mounted, listRefreshTick]);
 
-  // Fetch status distribution counts based on active date/party/branch/search filters (independent of statusTab)
-  useEffect(() => {
-    if (!mounted) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const selectedSupplierIds = supplierList
-          .filter((s) => filters.parties.includes(s.supplier_name))
-          .map((s) => s.supplier_id)
-          .filter(Boolean);
-
-        const selectedWarehouseIds = warehouseList
-          .filter((w) => filters.branches.includes(w.warehouse_name))
-          .map((w) => w.warehouse_id)
-          .filter(Boolean);
-
-        const sourceTypes = filters.sources
-          .map((label) => {
-            if (label === "Direct") return "DIRECT" as const;
-            if (label === "Purchase Return") return "PURCHASE_RETURN" as const;
-            return null;
-          })
-          .filter((v): v is "DIRECT" | "PURCHASE_RETURN" => v != null);
-
-        const res = await DebitNoteService.list({
-          page: 1,
-          page_size: 100,
-          search: debouncedSearch.trim() || undefined,
-          supplier_ids: selectedSupplierIds.length ? selectedSupplierIds : undefined,
-          warehouse_ids: selectedWarehouseIds.length ? selectedWarehouseIds : undefined,
-          source_types: sourceTypes.length ? sourceTypes : undefined,
-          dn_number: filters.voucherNo.trim() || undefined,
-          from_date: filters.dateFrom || undefined,
-          to_date: filters.dateTo || undefined,
-        });
-
-        if (cancelled) return;
-
-        const nextCounts: Record<string, number> = {
-          all: res.pagination?.total ?? res.items.length,
-          draft: 0,
-          posted: 0,
-          cancelled: 0,
-          reversed: 0,
-        };
-
-        (res.items || []).forEach((item: any) => {
-          const st = String(item.status || "").toLowerCase();
-          if (st === "draft") nextCounts.draft += 1;
-          else if (st === "posted" || st === "approved") nextCounts.posted += 1;
-          else if (st === "cancelled") nextCounts.cancelled += 1;
-          else if (st === "reversed") nextCounts.reversed += 1;
-        });
-
-        setStatusCounts(nextCounts);
-      } catch {}
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    mounted,
-    listRefreshTick,
-    filters.dateFrom,
-    filters.dateTo,
-    filters.parties,
-    filters.branches,
-    filters.sources,
-    filters.voucherNo,
-    debouncedSearch,
-    supplierList,
-    warehouseList,
-  ]);
-
   const refreshRecords = useCallback(() => {
     setManualRefreshTick((t) => t + 1);
   }, []);
 
   useEffect(() => {
-    setFilters((prev) => {
-      if (
-        prev.dateFrom === dateFrom &&
-        prev.dateTo === dateTo &&
-        prev.preset === preset
-      ) {
-        return prev;
-      }
-      return { ...prev, dateFrom, dateTo, preset };
-    });
-  }, [dateFrom, dateTo, preset]);
-
-  useEffect(() => {
     const qs = searchParams.toString();
     if (!hasDocumentsListingFilters(qs)) return;
     const parsed = parseDocumentsListingFiltersFromSearch(qs);
-    if (parsed.dateFrom) {
-      setDateFrom(parsed.dateFrom);
-      setPreset("custom");
+    if (parsed.dateFrom || parsed.dateTo || parsed.branch) {
+      setFilters((prev) => ({
+        ...prev,
+        ...(parsed.dateFrom
+          ? { dateFrom: parsed.dateFrom, preset: "custom" as const }
+          : {}),
+        ...(parsed.dateTo
+          ? { dateTo: parsed.dateTo, preset: "custom" as const }
+          : {}),
+        ...(parsed.branch ? { branches: [parsed.branch] } : {}),
+      }));
     }
-    if (parsed.dateTo) {
-      setDateTo(parsed.dateTo);
-      setPreset("custom");
-    }
-    if (parsed.branch) setFilters((prev) => ({ ...prev, branches: [parsed.branch!] }));
     if (moduleTab !== "records") {
       const params = new URLSearchParams(searchParams.toString());
       params.set("tab", "records");
       router.replace(`${LIST_PATH}?${params.toString()}`, { scroll: false });
     }
-  }, [searchParams, setDateFrom, setDateTo, setPreset, moduleTab, router]);
+  }, [searchParams, setFilters, moduleTab, router]);
 
   const handleModuleTabChange = useCallback(
     (tab: string) => {
       router.push(
-        debitNotesListHref(tab, tab === "records" ? statusTab : null),
+        debitNotesListHref(tab, tab === "records" ? listing.statusTab : null),
         { scroll: false },
       );
     },
-    [router, statusTab],
+    [router, listing.statusTab],
   );
 
   const handleStatusTabChange = useCallback(
     (tab: string) => {
-      setPage(1);
-      router.push(debitNotesListHref("records", tab), { scroll: false });
+      const next = (parseDebitNotesStatusTab(tab) ?? "all") as DebitNotesStatusTabId;
+      setListing((prev) =>
+        prev.statusTab === next && prev.page === 1
+          ? prev
+          : { ...prev, statusTab: next, page: 1 },
+      );
+      router.push(debitNotesListHref("records", next), { scroll: false });
     },
-    [router],
+    [router, setListing],
   );
-
-  // Tab counts (since we paginate, let's keep counts mapped or static tab headers)
-  const counts = useMemo(() => {
-    // Return standard dummy or dynamic values from currently loaded list for header tabs
-    const initialCounts = { all: totalRecords, draft: 0, pending_approval: 0, approved: 0, posted: 0, cancelled: 0, reversed: 0 };
-    records.forEach((r) => {
-      if (r.status in initialCounts) {
-        (initialCounts as any)[r.status] += 1;
-      }
-    });
-    return initialCounts;
-  }, [records, totalRecords]);
 
   const branchOptions = useMemo(
     () => uniqueOptionsFromValues(warehouseList.map((w) => w.warehouse_name)),
@@ -726,12 +728,26 @@ export default function DebitNotesListClient() {
   ];
 
   const toolbarFiltered = useMemo(() => {
+    let list = records;
+    if (statusTab === "draft") {
+      list = list.filter((r) => String(r.status || "").toUpperCase() === "DRAFT");
+    } else if (statusTab === "posted") {
+      list = list.filter((r) => {
+        const st = String(r.status || "").toUpperCase();
+        return st === "POSTED" || st === "APPROVED";
+      });
+    } else if (statusTab === "cancelled") {
+      list = list.filter((r) => String(r.status || "").toUpperCase() === "CANCELLED");
+    } else if (statusTab === "reversed") {
+      list = list.filter((r) => String(r.status || "").toUpperCase() === "REVERSED");
+    }
+
     const apiStatus = mapNotesStatusFilterToApi(filters.status);
-    if (!apiStatus) return records;
-    return records.filter(
+    if (!apiStatus) return list;
+    return list.filter(
       (r) => String(r.status || "").toUpperCase() === apiStatus,
     );
-  }, [records, filters.status]);
+  }, [records, filters.status, statusTab]);
 
   const getCellValue = useCallback((row: DebitNoteRecord, key: string) => {
     if (key === "source") return DEBIT_NOTE_SOURCE_LABELS[row.source] ?? "—";
@@ -773,14 +789,24 @@ export default function DebitNotesListClient() {
   };
 
   const handleResetFilters = () => {
-    setPage(1);
-    const reset = resetNotesListingFilters("this_year");
-    setPreset(reset.preset);
-    setDateFrom(reset.dateFrom);
-    setDateTo(reset.dateTo);
-    setFilters(reset);
+    setListing(createDefaultDebitNoteRecordsListingState());
+    setRecordsFilterEpoch((n) => n + 1);
     router.push(debitNotesListHref("records", "all"), { scroll: false });
   };
+
+  const handleSortChange = useCallback(
+    (sortKey: string, sortDir: "asc" | "desc") => {
+      setListing((prev) => ({ ...prev, sortKey, sortDir, page: 1 }));
+    },
+    [setListing],
+  );
+
+  const handleColumnFilterChange = useCallback(
+    (columnFilters: Record<string, unknown>) => {
+      setListing((prev) => ({ ...prev, columnFilters, page: 1 }));
+    },
+    [setListing],
+  );
 
   const handleHeaderRefresh = () => {
     setManualRefreshTick((t) => t + 1);
@@ -825,12 +851,23 @@ export default function DebitNotesListClient() {
             />
           ) : (
             <AccountsColumnFilterProvider
+              key={`records-${recordsFilterEpoch}`}
               rows={toolbarFiltered}
               getCellValue={getCellValue}
               columnConfig={columnConfig}
               defaultSortKey="debitNoteDate"
               defaultSortDir="desc"
+              initialColumnFilters={listing.columnFilters as Record<string, any>}
+              initialSortKey={listing.sortKey || null}
+              initialSortDir={listing.sortDir || "desc"}
             >
+              <NotesSortSync
+                sortKey={listing.sortKey}
+                sortDir={listing.sortDir}
+                columnFilters={listing.columnFilters}
+                onSortChange={handleSortChange}
+                onFilterChange={handleColumnFilterChange}
+              />
               <AccountsTableListing
                 subheader={
                   <SectionTabs

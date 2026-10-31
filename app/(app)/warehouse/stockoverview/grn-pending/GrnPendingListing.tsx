@@ -86,7 +86,7 @@ export function GrnPendingListing({ grnPendingForWarehouse }: GrnPendingListingP
       filterType: "text",
       width: "130px",
       render: (val, row) => (
-        <Link href={`/warehouse/stockoverview/view/${row.id}`} className="block group/name">
+        <Link href={`/warehouse/stock-overview/view/${row.id}`} className="block group/name">
           <span className="font-mono text-xs font-semibold text-brand-700 group-hover/name:text-brand-800">{row.grnNo}</span>
         </Link>
       ),
@@ -174,7 +174,7 @@ export function GrnPendingListing({ grnPendingForWarehouse }: GrnPendingListingP
       label: "View Details",
       action: "view",
       icon: Eye,
-      onClick: (row) => router.push(`/warehouse/stockoverview/view/${row.id}`),
+      onClick: (row) => router.push(`/warehouse/stock-overview/view/${row.id}`),
     },
     {
       label: "Generate QC",

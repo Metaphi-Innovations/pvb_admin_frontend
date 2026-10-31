@@ -245,7 +245,10 @@ export function NotesListingFilterBar({
       ) : null}
       <ReportFilterResetButton
         showOnlyWhenActive
-        active={notesListingFiltersActive(filters)}
+        active={notesListingFiltersActive(
+          filters,
+          resetNotesListingFilters("this_year"),
+        )}
         onClick={onReset}
       />
     </ReportFilterRow>

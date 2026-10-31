@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { MasterListing } from "@/components/listing/MasterListing";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
 import { Eye, FileCheck2, Pencil } from "lucide-react";
@@ -10,15 +10,30 @@ import { getGrnTabApiContext } from "@/lib/warehouse/grn-list-config";
 import { GRN_STATUS_CONFIG } from "@/lib/warehouse/grn-status";
 import { useGrnLazyFilters, useGrnListData } from "../shared/useGrnListData";
 import type { GrnListItem } from "@/services/grn-list.service";
+import { useGrnListingState } from "../grn-listing-state-context";
+import { exportSampleReturnGrnExcel } from "../shared/grn-excel-export";
+import { showToast } from "@/lib/toast";
 
 const SAMPLE_RETURN_TAB_CONTEXT = getGrnTabApiContext("sample_return");
 
 export function SampleReturnListing() {
   const router = useRouter();
-  const [filters, setFilters] = useState<FilterState>({});
-  const [sort, setSort] = useState<SortState>({ key: "", direction: "none" });
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const { sampleReturnListing, setSampleReturnListing } = useGrnListingState();
+  const { filters, sort, page, pageSize } = sampleReturnListing;
+
+  const setFilters = (next: FilterState) => {
+    setSampleReturnListing((prev) => ({ ...prev, filters: next, page: 1 }));
+  };
+  const setSort = (next: SortState) => {
+    setSampleReturnListing((prev) => ({ ...prev, sort: next, page: 1 }));
+  };
+  const setPage = (next: number) => {
+    setSampleReturnListing((prev) => ({ ...prev, page: next }));
+  };
+  const setPageSize = (next: number) => {
+    setSampleReturnListing((prev) => ({ ...prev, pageSize: next, page: 1 }));
+  };
+
   const { handleOpenFilter, getFilterOptionsForColumn } = useGrnLazyFilters(
     SAMPLE_RETURN_TAB_CONTEXT.sourceType,
   );
@@ -31,13 +46,21 @@ export function SampleReturnListing() {
     pageSize,
   });
 
-  useEffect(() => {
-    setPage(1);
-  }, [filters, pageSize]);
-
-  useEffect(() => {
-    setPage(1);
-  }, [sort.key, sort.direction]);
+  const [exporting, setExporting] = useState(false);
+  const handleExport = useCallback(async () => {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      await exportSampleReturnGrnExcel({ filters, sort });
+    } catch (err) {
+      showToast(
+        err instanceof Error ? err.message : "Failed to export Sample Return GRNs.",
+        "error",
+      );
+    } finally {
+      setExporting(false);
+    }
+  }, [exporting, filters, sort]);
 
   const columns: ColumnConfig<GrnListItem>[] = useMemo(
     () => [
@@ -183,12 +206,15 @@ export function SampleReturnListing() {
         onPageSizeChange={setPageSize}
         onFilterChange={setFilters}
         onSortChange={setSort}
+        currentFilters={filters}
+        currentSort={sort}
         actions={actions}
         emptyMessage="No Sample Return GRNs found"
         searchPlaceholder="Search by GRN No, Sample Return No, Customer..."
         addLabel="Create Sample Return GRN"
         onAdd={() => router.push("/warehouse/grn/sample-return/create")}
         onOpenFilter={handleOpenFilter}
+        onExport={() => void handleExport()}
       />
     </div>
   );

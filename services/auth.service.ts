@@ -99,24 +99,34 @@ export const AuthService = {
   },
 
   async login(credentials: LoginRequest): Promise<LoginResponse> {
-    const response = await axiosInstance.post<LoginResponse>(
-      API_ENDPOINTS.AUTH.LOGIN,
-      credentials,
-    );
+    try {
+      const response = await axiosInstance.post<LoginResponse>(
+        API_ENDPOINTS.AUTH.LOGIN,
+        credentials,
+      );
 
-    const data = response.data;
+      const data = response.data;
 
-    if (data.success && data.data) {
-      AuthService.setTokens(data.data.access, data.data.refresh);
-      AuthService.setUserData({
-        user_id: data.data.user_id,
-        email: data.data.email,
-        username: data.data.username,
-        user_type: data.data.user_type,
-      });
+      if (data.success && data.data) {
+        AuthService.setTokens(data.data.access, data.data.refresh);
+        AuthService.setUserData({
+          user_id: data.data.user_id,
+          email: data.data.email,
+          username: data.data.username,
+          user_type: data.data.user_type,
+        });
+      }
+
+      return data;
+    } catch (err: unknown) {
+      // Surface API body on 4xx (e.g. Field User blocked from ERP) instead of generic axios text.
+      const data = (err as { response?: { data?: LoginResponse } })?.response
+        ?.data;
+      if (data && typeof data === "object") {
+        return data;
+      }
+      throw err;
     }
-
-    return data;
   },
 
   async logout(options?: { redirect?: boolean }): Promise<void> {

@@ -11,6 +11,11 @@ import {
   type PurchaseInvoiceListTabId,
 } from "./purchase-invoice-nav";
 import {
+  usePurchaseInvoiceListingState,
+  type PurchaseNatureFilter,
+  type PurchaseSourceTypeFilter,
+} from "./purchase-invoice-listing-state-context";
+import {
   AccountsEditAction,
   AccountsMoreActions,
   AccountsTableActionCell,
@@ -52,10 +57,10 @@ import {
   ReportDateRangeFilter,
   ReportFilterRow,
   ReportFilterResetButton,
-  useReportDateRange,
   ACCOUNTS_FILTER_LABEL_CLASS,
   ACCOUNTS_FILTER_SELECT_CLASS,
 } from "@/components/accounts/ReportFilters";
+import type { DateRangePresetId } from "@/lib/accounts/report-date-presets";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { accountsListingFiltersActive } from "@/lib/accounts/use-accounts-listing-reset";
 import {
@@ -77,7 +82,7 @@ import { useLazyFilterColumns } from "@/lib/masters/use-lazy-filter-columns";
 import { formatMoney } from "@/lib/accounts/money-format";
 import { formatDisplayDate, toIsoDateOnly } from "@/lib/accounts/date-display";
 import { cn } from "@/lib/utils";
-import { PURCHASE_SOURCE_TYPE_LABELS, type PurchaseNature, type PurchaseSourceType } from "./purchase-invoice-types";
+import { PURCHASE_SOURCE_TYPE_LABELS, type PurchaseSourceType } from "./purchase-invoice-types";
 import {
   PurchaseInvoiceService,
   mapPurchaseInvoiceListDto,
@@ -115,8 +120,7 @@ function mapDropdownOptions(
 }
 
 type Tab = PurchaseInvoiceListTabId;
-type SourceTypeFilter = "all" | PurchaseSourceType;
-type PurchaseNatureFilter = "all" | "inventory" | PurchaseNature;
+type SourceTypeFilter = PurchaseSourceTypeFilter;
 
 const LISTING_DEFAULT_PRESET = "this_year" as const;
 const PURCHASE_INVOICE_DATE_PRESETS = [
@@ -735,8 +739,8 @@ function PurchaseInvoicesTabBody({
   setSourceTypeFilter: (v: SourceTypeFilter) => void;
   purchaseNatureFilter: PurchaseNatureFilter;
   setPurchaseNatureFilter: (v: PurchaseNatureFilter) => void;
-  preset: ReturnType<typeof useReportDateRange>["preset"];
-  setPreset: ReturnType<typeof useReportDateRange>["setPreset"];
+  preset: DateRangePresetId;
+  setPreset: (v: DateRangePresetId) => void;
   dateFrom: string;
   setDateFrom: (v: string) => void;
   dateTo: string;
@@ -963,22 +967,92 @@ function GrnPendingTabBody({
 export default function PurchaseInvoiceListClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const tab =
+  const tabFromUrl =
     parsePurchaseInvoiceTabParam(searchParams.get("tab")) ?? "invoices";
+  const {
+    setActiveTab,
+    invoicesTab,
+    setInvoicesTab,
+    grnTab,
+    setGrnTab,
+  } = usePurchaseInvoiceListingState();
+  const tab = tabFromUrl;
+  useEffect(() => {
+    setActiveTab(tabFromUrl);
+  }, [tabFromUrl, setActiveTab]);
   const listReturnHref = purchaseInvoicesListHref(tab);
   const { selectedFY } = useFY();
   const fyReady = useIsFinancialYearReady();
-  const [search, setSearch] = useState("");
+  const {
+    search,
+    sourceTypeFilter,
+    purchaseNatureFilter,
+    page,
+    pageSize,
+    sortKey: invoiceSortKey,
+    sortDir: invoiceSortDir,
+    columnFilters: invoiceColumnFilters,
+    preset,
+    dateFrom,
+    dateTo,
+  } = invoicesTab;
+  const setSearch = useCallback(
+    (next: string) => setInvoicesTab((prev) => ({ ...prev, search: next })),
+    [setInvoicesTab],
+  );
+  const setSourceTypeFilter = useCallback(
+    (next: SourceTypeFilter) =>
+      setInvoicesTab((prev) => ({ ...prev, sourceTypeFilter: next, page: 1 })),
+    [setInvoicesTab],
+  );
+  const setPurchaseNatureFilter = useCallback(
+    (next: PurchaseNatureFilter) =>
+      setInvoicesTab((prev) => ({
+        ...prev,
+        purchaseNatureFilter: next,
+        page: 1,
+      })),
+    [setInvoicesTab],
+  );
+  const setPage = useCallback(
+    (next: number) => setInvoicesTab((prev) => ({ ...prev, page: next })),
+    [setInvoicesTab],
+  );
+  const setPageSize = useCallback(
+    (next: number) =>
+      setInvoicesTab((prev) => ({ ...prev, pageSize: next, page: 1 })),
+    [setInvoicesTab],
+  );
+  const setInvoiceSortKey = useCallback(
+    (next: string) => setInvoicesTab((prev) => ({ ...prev, sortKey: next })),
+    [setInvoicesTab],
+  );
+  const setInvoiceSortDir = useCallback(
+    (next: "asc" | "desc") =>
+      setInvoicesTab((prev) => ({ ...prev, sortDir: next })),
+    [setInvoicesTab],
+  );
+  const setInvoiceColumnFilters = useCallback(
+    (next: Record<string, unknown>) =>
+      setInvoicesTab((prev) => ({ ...prev, columnFilters: next, page: 1 })),
+    [setInvoicesTab],
+  );
+  const setPreset = useCallback(
+    (next: typeof preset) =>
+      setInvoicesTab((prev) => ({ ...prev, preset: next })),
+    [setInvoicesTab],
+  );
+  const setDateFrom = useCallback(
+    (next: string) =>
+      setInvoicesTab((prev) => ({ ...prev, dateFrom: next, page: 1 })),
+    [setInvoicesTab],
+  );
+  const setDateTo = useCallback(
+    (next: string) =>
+      setInvoicesTab((prev) => ({ ...prev, dateTo: next, page: 1 })),
+    [setInvoicesTab],
+  );
   const debouncedSearch = useDebouncedValue(search, 300);
-  const [sourceTypeFilter, setSourceTypeFilter] = useState<SourceTypeFilter>("all");
-  const [purchaseNatureFilter, setPurchaseNatureFilter] = useState<PurchaseNatureFilter>("all");
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
-  const [invoiceSortKey, setInvoiceSortKey] = useState("");
-  const [invoiceSortDir, setInvoiceSortDir] = useState<"asc" | "desc">("asc");
-  const [invoiceColumnFilters, setInvoiceColumnFilters] = useState<Record<string, unknown>>({});
-  const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } =
-    useReportDateRange(LISTING_DEFAULT_PRESET);
   const sectionRefresh = useAccountsSectionRefresh("purchase-invoices", {
     apiListing: true,
   });
@@ -1016,13 +1090,42 @@ export default function PurchaseInvoiceListClient() {
   /** Invalidates in-flight tab-badge requests so a stale 0 cannot overwrite a good count. */
   const badgeRequestIdRef = useRef(0);
 
-  const [grnSearch, setGrnSearch] = useState("");
+  const {
+    search: grnSearch,
+    page: grnPage,
+    pageSize: grnPageSize,
+    sortKey: grnSortKey,
+    sortDir: grnSortDir,
+    columnFilters: grnColumnFilters,
+  } = grnTab;
+  const setGrnSearch = useCallback(
+    (next: string) => setGrnTab((prev) => ({ ...prev, search: next })),
+    [setGrnTab],
+  );
   const debouncedGrnSearch = useDebouncedValue(grnSearch, 300);
-  const [grnPage, setGrnPage] = useState(1);
-  const [grnPageSize, setGrnPageSize] = useState(25);
-  const [grnSortKey, setGrnSortKey] = useState("");
-  const [grnSortDir, setGrnSortDir] = useState<"asc" | "desc">("asc");
-  const [grnColumnFilters, setGrnColumnFilters] = useState<Record<string, unknown>>({});
+  const setGrnPage = useCallback(
+    (next: number) => setGrnTab((prev) => ({ ...prev, page: next })),
+    [setGrnTab],
+  );
+  const setGrnPageSize = useCallback(
+    (next: number) =>
+      setGrnTab((prev) => ({ ...prev, pageSize: next, page: 1 })),
+    [setGrnTab],
+  );
+  const setGrnSortKey = useCallback(
+    (next: string) => setGrnTab((prev) => ({ ...prev, sortKey: next })),
+    [setGrnTab],
+  );
+  const setGrnSortDir = useCallback(
+    (next: "asc" | "desc") =>
+      setGrnTab((prev) => ({ ...prev, sortDir: next })),
+    [setGrnTab],
+  );
+  const setGrnColumnFilters = useCallback(
+    (next: Record<string, unknown>) =>
+      setGrnTab((prev) => ({ ...prev, columnFilters: next, page: 1 })),
+    [setGrnTab],
+  );
   /** Server-only filter payload (toolbar Purchase Nature). Excel column filters stay client-side. */
   const invoiceServerFiltersKey = useMemo(() => {
     if (purchaseNatureFilter === "all") return "{}";
@@ -1613,6 +1716,11 @@ export default function PurchaseInvoiceListClient() {
               rows={invoices}
               getCellValue={getInvoiceCellValue}
               columnConfig={invoiceColumnConfig}
+              defaultSortKey={invoiceSortKey || null}
+              defaultSortDir={invoiceSortDir}
+              initialColumnFilters={invoiceColumnFilters as Record<string, any>}
+              initialSortKey={invoiceSortKey || null}
+              initialSortDir={invoiceSortDir}
             >
               <div className="flex flex-col flex-1 min-h-0 h-full">
                 <GrnSortSync
@@ -1665,6 +1773,11 @@ export default function PurchaseInvoiceListClient() {
               rows={pendingGrns}
               getCellValue={getGrnCellValue}
               columnConfig={grnColumnConfig}
+              defaultSortKey={grnSortKey || null}
+              defaultSortDir={grnSortDir}
+              initialColumnFilters={grnColumnFilters as Record<string, any>}
+              initialSortKey={grnSortKey || null}
+              initialSortDir={grnSortDir}
             >
               <div className="flex flex-col flex-1 min-h-0 h-full">
                 <GrnSortSync

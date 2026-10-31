@@ -1,7 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from "react";
-import Link from "next/link";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   DropdownMenu,
@@ -59,6 +58,13 @@ import {
 import { useSalesOrders, useCancelSalesOrder, useSalesOrderFilterOptions } from "@/hooks/sales/use-sales-orders";
 import { SalesOrderService } from "@/services/sales-order.service";
 import { getErrorMessage } from "@/lib/masters/master-query-errors";
+import {
+  parseSoListTabParam,
+  useSoListingState,
+  type SoListTabId,
+  type SoListingState,
+  type SoModuleTabId,
+} from "./so-listing-state-context";
 
 const STATUS_CFG: Record<string, { bg: string; text: string; dot: string }> = {
   draft: { bg: "bg-slate-100", text: "text-slate-600", dot: "bg-slate-400" },
@@ -84,7 +90,7 @@ const STATUS_OPTIONS = [
   { label: "Cancelled", value: "CANCELLED" },
 ];
 
-type OrderListTab = "all" | "draft" | "pending_approval" | "rejected" | "sales_return";
+type OrderListTab = SoModuleTabId;
 
 function StatusPill({ status }: { status: string }) {
   const key = status.toLowerCase().replace(/\s+/g, "_");
@@ -112,11 +118,45 @@ function FulfillmentPill({ status }: { status?: string | null }) {
 export default function SalesOrdersPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [activeTab, setActiveTab] = useState<OrderListTab>("all");
-  const [filters, setFilters] = useState<FilterState>({});
-  const [sort, setSort] = useState<SortState>({ key: "", direction: "none" });
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
+  const {
+    activeTab,
+    setActiveTab,
+    soListingByTab,
+    setSoListingByTab,
+    returnListing,
+    setReturnListing,
+  } = useSoListingState();
+  const lastSoTabKeyRef = useRef<SoListTabId>("all");
+  const isSoTab = activeTab !== "sales_return";
+  if (isSoTab) {
+    lastSoTabKeyRef.current = activeTab;
+  }
+  const soTabKey: SoListTabId = isSoTab ? activeTab : lastSoTabKeyRef.current;
+  const { filters, sort, page, pageSize } = soListingByTab[soTabKey];
+
+  const updateSoListing = (
+    key: SoListTabId,
+    updater: (prev: SoListingState) => SoListingState,
+  ) => {
+    setSoListingByTab((prev) => ({
+      ...prev,
+      [key]: updater(prev[key]),
+    }));
+  };
+
+  const setFilters = (next: FilterState) => {
+    updateSoListing(soTabKey, (prev) => ({ ...prev, filters: next, page: 1 }));
+  };
+  const setSort = (next: SortState) => {
+    updateSoListing(soTabKey, (prev) => ({ ...prev, sort: next, page: 1 }));
+  };
+  const setPage = (next: number) => {
+    updateSoListing(soTabKey, (prev) => ({ ...prev, page: next }));
+  };
+  const setPageSize = (next: number) => {
+    updateSoListing(soTabKey, (prev) => ({ ...prev, pageSize: next, page: 1 }));
+  };
+
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
   const [plDownloadOpen, setPlDownloadOpen] = useState(false);
   const [plDownloadOptions, setPlDownloadOptions] = useState<PackingListDownloadOption[]>([]);
@@ -127,9 +167,9 @@ export default function SalesOrdersPage() {
   const [downloadingSoId, setDownloadingSoId] = useState<string | null>(null);
   const [sendEmailSoId, setSendEmailSoId] = useState<string | null>(null);
 
-  const { data: customerFilterRaw } = useSalesOrderFilterOptions("customer__customer_name", activeTab);
-  const { data: soNumberFilterRaw } = useSalesOrderFilterOptions("so_number", activeTab);
-  const { data: statusFilterRaw } = useSalesOrderFilterOptions("status", activeTab);
+  const { data: customerFilterRaw } = useSalesOrderFilterOptions("customer__customer_name", soTabKey);
+  const { data: soNumberFilterRaw } = useSalesOrderFilterOptions("so_number", soTabKey);
+  const { data: statusFilterRaw } = useSalesOrderFilterOptions("status", soTabKey);
 
   const customerOptions = useMemo(() => {
     return (customerFilterRaw || []).map((item: any) => ({
@@ -161,24 +201,21 @@ export default function SalesOrdersPage() {
   }, []);
 
   useEffect(() => {
-    const tab = searchParams.get("tab");
-    if (tab === "all" || tab === "draft" || tab === "pending_approval" || tab === "rejected" || tab === "sales_return") {
-      setActiveTab(tab as OrderListTab);
+    const parsed = parseSoListTabParam(searchParams.get("tab"));
+    if (parsed) {
+      setActiveTab(parsed);
     }
+    // No ?tab= (e.g. back from SO view): keep module-scoped activeTab as-is.
     const toastType = searchParams.get("toast");
     if (toastType === "approved") setToast({ msg: "Sales order approved successfully.", type: "success" });
     if (toastType === "rejected") setToast({ msg: "Sales order rejected successfully.", type: "success" });
-  }, [searchParams]);
+  }, [searchParams, setActiveTab]);
 
   useEffect(() => {
     if (!toast) return;
     const t = setTimeout(() => setToast(null), 3200);
     return () => clearTimeout(t);
   }, [toast]);
-
-  useEffect(() => {
-    setPage(1);
-  }, [activeTab, filters, pageSize]);
 
   // Construct ordering query param
   const ordering = useMemo(() => {
@@ -199,8 +236,8 @@ export default function SalesOrdersPage() {
   // Construct filters payload
   const apiFilters = useMemo(() => {
     const backendFilters: Record<string, any> = {};
-    if (activeTab && activeTab !== "all" && activeTab !== "sales_return") {
-      backendFilters.status = activeTab.toUpperCase();
+    if (soTabKey !== "all") {
+      backendFilters.status = soTabKey.toUpperCase();
     }
 
     if (filters.soNumber && Array.isArray(filters.soNumber) && filters.soNumber.length > 0) {
@@ -236,7 +273,7 @@ export default function SalesOrdersPage() {
     }
 
     return backendFilters;
-  }, [activeTab, filters]);
+  }, [soTabKey, filters]);
 
   const searchVal = (filters.search as string) || "";
 
@@ -333,7 +370,6 @@ export default function SalesOrdersPage() {
 
   const handleTabChange = (tab: string) => {
     setActiveTab(tab as OrderListTab);
-    setPage(1);
     router.replace(`/sales/orders?tab=${tab}`, { scroll: false });
   };
 
@@ -659,7 +695,29 @@ export default function SalesOrdersPage() {
       onTabChange={handleTabChange}
     >
       {activeTab === "sales_return" ? (
-        <SalesReturnTab onCountChange={setSalesReturnCount} />
+        <SalesReturnTab
+          onCountChange={setSalesReturnCount}
+          filters={returnListing.filters}
+          onFiltersChange={(next) =>
+            setReturnListing((prev) => ({ ...prev, filters: next, page: 1 }))
+          }
+          sort={returnListing.sort}
+          onSortChange={(next) =>
+            setReturnListing((prev) => ({ ...prev, sort: next, page: 1 }))
+          }
+          page={returnListing.page}
+          onPageChange={(next) =>
+            setReturnListing((prev) => ({ ...prev, page: next }))
+          }
+          pageSize={returnListing.pageSize}
+          onPageSizeChange={(next) =>
+            setReturnListing((prev) => ({
+              ...prev,
+              pageSize: next,
+              page: 1,
+            }))
+          }
+        />
       ) : (
         <div>
           <MasterListing<SalesOrder>

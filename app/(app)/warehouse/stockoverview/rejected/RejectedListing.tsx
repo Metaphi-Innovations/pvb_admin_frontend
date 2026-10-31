@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { MasterListing } from "@/components/listing/MasterListing";
 import { ColumnConfig, ActionItemConfig } from "@/components/listing/types";
 import { Eye } from "lucide-react";
@@ -57,7 +57,7 @@ export function RejectedListing({ warehouseId, onFiltersApplied }: RejectedListi
     handlePageSizeChange,
     handleFilterChange,
     listNonce,
-  } = useStockOverviewListFilters();
+  } = useStockOverviewListFilters("rejected");
   const [records, setRecords] = useState<RejectedListRow[]>([]);
   const [totalRecords, setTotalRecords] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -66,7 +66,10 @@ export function RejectedListing({ warehouseId, onFiltersApplied }: RejectedListi
   const [loadingFilters, setLoadingFilters] = useState<Set<string>>(new Set());
   const [exporting, setExporting] = useState(false);
 
+  const prevWarehouseRef = useRef(warehouseId);
   useEffect(() => {
+    if (prevWarehouseRef.current === warehouseId) return;
+    prevWarehouseRef.current = warehouseId;
     setPage(1);
   }, [warehouseId, setPage]);
 
@@ -152,7 +155,7 @@ export function RejectedListing({ warehouseId, onFiltersApplied }: RejectedListi
       filterType: "dropdown",
       filterOptions: filterOptions.product_name || [],
       render: (_val, row) => (
-        <Link href={`/warehouse/stockoverview/view/${row.id}?type=rejected`} className="block group/name">
+        <Link href={`/warehouse/stock-overview/view/${row.id}?type=rejected`} className="block group/name">
           <span className="text-xs font-semibold text-foreground group-hover/name:text-brand-700">{row.product_name}</span>
         </Link>
       ),
@@ -298,7 +301,7 @@ export function RejectedListing({ warehouseId, onFiltersApplied }: RejectedListi
       label: "View Details",
       action: "view",
       icon: Eye,
-      onClick: (row) => router.push(`/warehouse/stockoverview/view/${row.id}?type=rejected`),
+      onClick: (row) => router.push(`/warehouse/stock-overview/view/${row.id}?type=rejected`),
     },
   ];
 

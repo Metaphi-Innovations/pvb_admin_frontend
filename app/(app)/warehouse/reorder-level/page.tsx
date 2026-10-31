@@ -15,13 +15,21 @@ import {
   ALL_WAREHOUSE_FILTER_OPTION,
   ALL_WAREHOUSE_FILTER_VALUE,
 } from "./constants";
+import {
+  isReorderListTab,
+  useReorderListingState,
+} from "./reorder-listing-state-context";
 
 import { WarehouseWiseListing } from "./warehouse-wise/WarehouseWiseListing";
 import { ProductOverviewListing } from "./product-overview/ProductOverviewListing";
 
 export default function ReorderLevelPage() {
-  const [activeTab, setActiveTab] = useState("warehouse-wise");
-  const [selectedWarehouse, setSelectedWarehouse] = useState(ALL_WAREHOUSE_FILTER_VALUE);
+  const {
+    activeTab,
+    setActiveTab,
+    selectedWarehouse,
+    setSelectedWarehouse,
+  } = useReorderListingState();
   const [warehouseOptions, setWarehouseOptions] = useState<Array<{ value: string; label: string }>>([
     ALL_WAREHOUSE_FILTER_OPTION,
   ]);
@@ -43,7 +51,7 @@ export default function ReorderLevelPage() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [setSelectedWarehouse]);
 
   useEffect(() => {
     let active = true;
@@ -86,7 +94,10 @@ export default function ReorderLevelPage() {
         { value: "product-overview", label: "Product Overview", icon: Layers }
       ]}
       activeTab={activeTab}
-      onTabChange={setActiveTab}
+      onTabChange={(val) => {
+        if (!isReorderListTab(val)) return;
+        setActiveTab(val);
+      }}
       actions={
         activeTab === "warehouse-wise" ? (
           <div className="flex items-center gap-2">

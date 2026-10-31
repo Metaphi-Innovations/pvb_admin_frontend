@@ -4,6 +4,8 @@ import { API_ENDPOINTS } from "@/api/endpoints";
 export type SiNumberParams = {
   warehouseId?: string | null;
   state?: string | null;
+  /** STOCK_TRANSFER → ST/ series; omit for normal SI/ */
+  invoiceType?: string | null;
 };
 
 export const SalesInvoiceNumberService = {
@@ -14,6 +16,7 @@ export const SalesInvoiceNumberService = {
         params: {
           ...(params.warehouseId ? { warehouse_id: params.warehouseId } : {}),
           ...(params.state ? { state: params.state } : {}),
+          ...(params.invoiceType ? { invoice_type: params.invoiceType } : {}),
         },
         headers: { "Cache-Control": "no-cache" },
       },
@@ -35,6 +38,7 @@ export const SalesInvoiceNumberService = {
       {
         ...(params.warehouseId ? { warehouse_id: params.warehouseId } : {}),
         ...(params.state ? { state: params.state } : {}),
+        ...(params.invoiceType ? { invoice_type: params.invoiceType } : {}),
       },
     );
     const data = response.data?.data ?? {};
