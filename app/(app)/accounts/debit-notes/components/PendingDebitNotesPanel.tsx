@@ -41,6 +41,7 @@ import { formatDisplayDate, toIsoDateOnly } from "@/lib/accounts/date-display";
 import { DebitNoteService } from "@/services/debit-note.service";
 import { showToast } from "@/lib/toast";
 import { useDebouncedValue } from "@/app/(app)/accounts/reports/pl/pl-hooks";
+import { useDebitNoteListingState } from "@/app/(app)/accounts/transactions/debit-notes/debit-note-listing-state-context";
 
 interface PendingDebitNoteRow {
   returnId: string;
@@ -104,6 +105,42 @@ function mapPendingApiRow(raw: any): PendingDebitNoteRow {
         : gstFromSplit,
     totalAmount: parseFloat(raw.eligible_dn_amount || "0"),
   };
+}
+
+function PendingNotesSortSync({
+  sortKey,
+  sortDir,
+  columnFilters,
+  onSortChange,
+  onFilterChange,
+}: {
+  sortKey: string;
+  sortDir: "asc" | "desc";
+  columnFilters: Record<string, unknown>;
+  onSortChange: (sortKey: string, sortDir: "asc" | "desc") => void;
+  onFilterChange: (filters: Record<string, unknown>) => void;
+}) {
+  const ctx = useAccountsColumnFilterContext();
+
+  useEffect(() => {
+    if (!ctx) return;
+    const nextKey = ctx.sortKey || "";
+    const nextDir = ctx.sortDir ?? "asc";
+    if (nextKey !== sortKey || (nextKey !== "" && nextDir !== sortDir)) {
+      onSortChange(nextKey, nextDir);
+    }
+  }, [ctx?.sortKey, ctx?.sortDir, sortKey, sortDir, onSortChange]);
+
+  useEffect(() => {
+    if (!ctx) return;
+    const ctxFiltersStr = JSON.stringify(ctx.columnFilters || {});
+    const propFiltersStr = JSON.stringify(columnFilters || {});
+    if (ctxFiltersStr !== propFiltersStr) {
+      onFilterChange(ctx.columnFilters || {});
+    }
+  }, [ctx?.columnFilters, columnFilters, onFilterChange]);
+
+  return null;
 }
 
 function PendingDebitNotesTable({
@@ -271,14 +308,66 @@ export function PendingDebitNotesPanel({
   refreshTick?: number;
 }) {
   const router = useRouter();
+  const {
+    pending: listing,
+    setPending: setListing,
+    pendingFilterEpoch,
+  } = useDebitNoteListingState();
+  const search = listing.search;
+  const page = listing.page;
+  const pageSize = listing.pageSize;
+  const setSearch = useCallback(
+    (value: string) => {
+      setListing((prev) =>
+        prev.search === value ? prev : { ...prev, search: value },
+      );
+    },
+    [setListing],
+  );
+  const setPage = useCallback(
+    (next: number) => {
+      setListing((prev) => (prev.page === next ? prev : { ...prev, page: next }));
+    },
+    [setListing],
+  );
+  const setPageSize = useCallback(
+    (next: number) => {
+      setListing((prev) =>
+        prev.pageSize === next ? prev : { ...prev, pageSize: next, page: 1 },
+      );
+    },
+    [setListing],
+  );
+  const handleSortChange = useCallback(
+    (sortKey: string, sortDir: "asc" | "desc") => {
+      setListing((prev) => ({ ...prev, sortKey, sortDir, page: 1 }));
+    },
+    [setListing],
+  );
+  const handleColumnFilterChange = useCallback(
+    (columnFilters: Record<string, unknown>) => {
+      setListing((prev) => ({ ...prev, columnFilters, page: 1 }));
+    },
+    [setListing],
+  );
   const [rows, setRows] = useState<PendingDebitNoteRow[]>([]);
   const [loading, setLoading] = useState(false);
-  const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
   const debouncedSearch = useDebouncedValue(search, 300);
+  const searchHydratingRef = useRef(false);
+  const prevSearchRef = useRef(search);
   const onCountChangeRef = useRef(onCountChange);
   onCountChangeRef.current = onCountChange;
+
+  // Avoid writing a stale debounced search into listing when returning to this tab.
+  useEffect(() => {
+    if (prevSearchRef.current !== search) {
+      searchHydratingRef.current = true;
+      prevSearchRef.current = search;
+    }
+    if (searchHydratingRef.current && debouncedSearch === search) {
+      searchHydratingRef.current = false;
+    }
+  }, [search, debouncedSearch]);
 
   useEffect(() => {
     let cancelled = false;
@@ -310,8 +399,9 @@ export function PendingDebitNotesPanel({
   }, [refreshTick]);
 
   useEffect(() => {
+    if (searchHydratingRef.current) return;
     setPage(1);
-  }, [debouncedSearch, pageSize]);
+  }, [debouncedSearch, pageSize, setPage]);
 
   const toolbarFiltered = useMemo(() => {
     const q = debouncedSearch.trim().toLowerCase();
@@ -364,12 +454,23 @@ export function PendingDebitNotesPanel({
       }
     >
       <AccountsColumnFilterProvider
+        key={`pending-${pendingFilterEpoch}`}
         rows={toolbarFiltered}
         getCellValue={getCellValue}
         columnConfig={columnConfig}
         defaultSortKey="returnDate"
         defaultSortDir="desc"
+        initialColumnFilters={listing.columnFilters as Record<string, any>}
+        initialSortKey={listing.sortKey || null}
+        initialSortDir={listing.sortDir || "desc"}
       >
+        <PendingNotesSortSync
+          sortKey={listing.sortKey}
+          sortDir={listing.sortDir}
+          columnFilters={listing.columnFilters}
+          onSortChange={handleSortChange}
+          onFilterChange={handleColumnFilterChange}
+        />
         <PendingDebitNotesTable
           loading={loading}
           toolbarFiltered={toolbarFiltered}

@@ -26,6 +26,7 @@ import {
 } from "../../components/SalesReturnProductForm";
 import {
   enrichDispatchForReturn,
+  resolveReturnUnitRateFromDispatchItem,
 } from "../../sales-return-utils";
 import type { DispatchRecord } from "@/app/(app)/warehouse/dispatch/types";
 
@@ -54,13 +55,8 @@ function mapBackendDispatchToFrontend(backendDispatch: any): DispatchRecord {
     const baseQty = Number(item.dispatched_base_qty || 0);
     const cases = baseQty / unitPerPacking;
     
-    const unitRate = Number(
-      item.unit_rate ??
-      item.unit_price ??
-      item.product_snapshot?.unit_price ??
-      item.product?.unit_price ??
-      0
-    );
+    // Match SO line total (discount + GST), not list unit_price alone.
+    const unitRate = resolveReturnUnitRateFromDispatchItem(item);
 
     return {
       product: item.product?.product_name || "Unknown Product",

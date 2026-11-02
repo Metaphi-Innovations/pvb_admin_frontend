@@ -1,6 +1,6 @@
 "use client";
 
-import React, { Suspense, useEffect, useMemo, useState } from "react";
+import React, { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { ListingContainer } from "@/components/layout/ListingContainer";
@@ -32,6 +32,8 @@ import { FollowUpListingCell } from "./components/VendorFollowUpPanel";
 import { InvoiceListingCell } from "./components/POVendorInvoiceSection";
 import { ThreeWayMatchListingCell } from "./components/ThreeWayMatchListingCell";
 import { SendPOEmailModal } from "./components/SendPOEmailModal";
+import { ShortClosePOModal } from "./components/ShortClosePOModal";
+import { shortCloseReasonLabel } from "./po-qty";
 import { useFlashToast } from "../hooks/useFlashToast";
 import { formatListingDate } from "../components/listing/ListingCells";
 import {
@@ -54,6 +56,7 @@ import {
   usePurchaseOrderFilterDropdown,
   usePurchaseOrderList,
   usePurchaseOrderSummary,
+  useShortClosePurchaseOrder,
 } from "@/hooks/procurement";
 import { useDebouncedFilters } from "@/lib/masters/use-debounced-filters";
 import { useLazyFilterColumns } from "@/lib/masters/use-lazy-filter-columns";
@@ -84,8 +87,14 @@ import {
 } from "./po-actions";
 import { EMPTY_PO_BILLING } from "./po-address-utils";
 import { purchaseReturnRoutes } from "../purchase-returns/purchase-return-utils";
+import {
+  usePoListingState,
+  type PoListTabId,
+  type PoListingState,
+  type PoModuleTabId,
+} from "./po-listing-state-context";
 
-type TabId = "all" | "draft" | "po_return";
+type TabId = PoModuleTabId;
 // Approval / Rejected tabs — temporarily hidden
 // | "pending_approval" | "rejected"
 
@@ -131,14 +140,22 @@ function StatusPill({ status }: { status: string }) {
 export default function PurchaseOrdersPageClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [tab, setTab] = useState<TabId>("all");
+  const {
+    activeTab: tab,
+    setActiveTab: setTab,
+    poListingByTab,
+    setPoListingByTab,
+    returnListing,
+    setReturnListing,
+  } = usePoListingState();
 
   React.useEffect(() => {
     const t = searchParams.get("tab");
     if (t && ["all", "draft", "po_return"].includes(t)) {
       setTab(t as TabId);
     }
-  }, [searchParams]);
+    // No ?tab= (e.g. back from PO view): keep module-scoped activeTab as-is.
+  }, [searchParams, setTab]);
 
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
   const [modalPoId, setModalPoId] = useState<string | null>(null);
@@ -146,23 +163,59 @@ export default function PurchaseOrdersPageClient() {
   const [followUpOpen, setFollowUpOpen] = useState(false);
   const [actionConfirmOpen, setActionConfirmOpen] = useState(false);
   const [actionConfirmType, setActionConfirmType] = useState<POActionConfirmType>("close");
+  const [shortCloseOpen, setShortCloseOpen] = useState(false);
+  const [shortClosePo, setShortClosePo] = useState<PurchaseOrder | null>(null);
+  const [shortCloseLoadingId, setShortCloseLoadingId] = useState<string | null>(null);
   const [modalFollowups, setModalFollowups] = useState<POFollowUpEntry[]>([]);
   const [downloadingPoId, setDownloadingPoId] = useState<string | null>(null);
   const [sendEmailPoId, setSendEmailPoId] = useState<string | null>(null);
   const [sendEmailOpen, setSendEmailOpen] = useState(false);
 
-  const [filters, setFilters] = useState<FilterState>({});
-  const { debouncedFilters, debouncedSearch, isDebouncing } = useDebouncedFilters(filters);
-  const [sort, setSort] = useState<SortState>({ key: "", direction: "none" });
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const lastPoTabKeyRef = useRef<PoListTabId>("all");
+
+  const isPoTab = tab === "all" || tab === "draft";
+  const isDraftTab = tab === "draft";
+  if (isPoTab) {
+    lastPoTabKeyRef.current = tab;
+  }
+  const poTabKey: PoListTabId = isPoTab ? tab : lastPoTabKeyRef.current;
+  const { filters, sort, page, pageSize } = poListingByTab[poTabKey];
+
+  const updatePoListing = (
+    key: PoListTabId,
+    updater: (prev: PoListingState) => PoListingState,
+  ) => {
+    setPoListingByTab((prev) => ({
+      ...prev,
+      [key]: updater(prev[key]),
+    }));
+  };
+
+  const setFilters = (next: FilterState) => {
+    updatePoListing(poTabKey, (prev) => ({ ...prev, filters: next, page: 1 }));
+  };
+  const setSort = (next: SortState) => {
+    updatePoListing(poTabKey, (prev) => ({ ...prev, sort: next, page: 1 }));
+  };
+  const setPage = (next: number) => {
+    updatePoListing(poTabKey, (prev) => ({ ...prev, page: next }));
+  };
+  const setPageSize = (next: number) => {
+    updatePoListing(poTabKey, (prev) => ({ ...prev, pageSize: next, page: 1 }));
+  };
+
+  // Separate debounce state per PO tab so switching tabs does not briefly apply the previous tab's filters.
+  const allDebounced = useDebouncedFilters(poListingByTab.all.filters);
+  const draftDebounced = useDebouncedFilters(poListingByTab.draft.filters);
+  const { debouncedFilters, debouncedSearch, isDebouncing } =
+    poTabKey === "draft" ? draftDebounced : allDebounced;
   const { handleOpenFilter, isFilterOpen } = useLazyFilterColumns();
 
   useFlashToast(setToast);
 
   const apiFilters = useMemo(
-    () => buildPurchaseOrderApiFilters(debouncedFilters, tab),
-    [debouncedFilters, tab],
+    () => buildPurchaseOrderApiFilters(debouncedFilters, poTabKey),
+    [debouncedFilters, poTabKey],
   );
 
   const ordering = useMemo(
@@ -180,9 +233,6 @@ export default function PurchaseOrdersPageClient() {
     }),
     [page, pageSize, debouncedSearch, ordering, apiFilters],
   );
-
-  const isPoTab = tab !== "po_return";
-  const isDraftTab = tab === "draft";
   const filterScope = {
     excludeDraft: isPoTab && !isDraftTab,
     poStatus: isDraftTab ? "Draft" : undefined,
@@ -206,6 +256,7 @@ export default function PurchaseOrdersPageClient() {
   const followupMutation = useCreatePOFollowup();
   const closeMutation = useClosePurchaseOrder();
   const cancelMutation = useCancelPurchaseOrder();
+  const shortCloseMutation = useShortClosePurchaseOrder();
   const actionSubmitting = closeMutation.isPending || cancelMutation.isPending;
 
   /** Prefer full detail; fall back to list-row stub so the popup opens immediately. */
@@ -275,6 +326,8 @@ export default function PurchaseOrdersPageClient() {
   const closeModals = () => {
     setFollowUpOpen(false);
     setActionConfirmOpen(false);
+    setShortCloseOpen(false);
+    setShortClosePo(null);
     setModalPoId(null);
     setModalListItem(null);
     setModalFollowups([]);
@@ -284,6 +337,8 @@ export default function PurchaseOrdersPageClient() {
     setModalPoId(row.id);
     setModalListItem(row);
     setActionConfirmOpen(false);
+    setShortCloseOpen(false);
+    setShortClosePo(null);
     setFollowUpOpen(true);
   };
 
@@ -291,8 +346,29 @@ export default function PurchaseOrdersPageClient() {
     setModalPoId(row.id);
     setModalListItem(row);
     setFollowUpOpen(false);
+    setShortCloseOpen(false);
+    setShortClosePo(null);
     setActionConfirmType(action);
     setActionConfirmOpen(true);
+  };
+
+  const openShortCloseModal = async (row: PurchaseOrderListItem) => {
+    setShortCloseLoadingId(row.id);
+    setFollowUpOpen(false);
+    setActionConfirmOpen(false);
+    try {
+      // Load full PO detail for the modal (list rows omit line items).
+      const detail = await PurchaseOrderService.getById(row.id);
+      setShortClosePo(detail);
+      setShortCloseOpen(true);
+    } catch (error) {
+      setToast({
+        msg: getErrorMessage(error, "Failed to open Short Close."),
+        type: "error",
+      });
+    } finally {
+      setShortCloseLoadingId(null);
+    }
   };
 
   const handleActionConfirm = () => {
@@ -380,20 +456,6 @@ export default function PurchaseOrdersPageClient() {
     closedPo: summary?.closedPo ?? 0,
     totalPoValue: summary?.totalPoValue ?? 0,
   }), [summary]);
-
-  useEffect(() => {
-    setPage(1);
-  }, [debouncedSearch, apiFilters, pageSize, tab]);
-
-  useEffect(() => {
-    setFilters({});
-    setSort({ key: "", direction: "none" });
-    setPage(1);
-  }, [tab]);
-
-  useEffect(() => {
-    setPage(1);
-  }, [sort.key, sort.direction]);
 
   useEffect(() => {
     if (!toast) return;
@@ -628,10 +690,15 @@ export default function PurchaseOrdersPageClient() {
             {canShortClosePOStatus(row.status) && (
               <button
                 type="button"
-                onClick={() => router.push(`/procurement/purchase-orders/${row.id}?shortClose=1`)}
-                className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted/60 transition-colors rounded-sm"
+                disabled={shortCloseLoadingId === row.id}
+                onClick={() => void openShortCloseModal(row)}
+                className={cn(
+                  "flex items-center gap-2 w-full px-2 py-1.5 text-xs text-foreground hover:bg-muted/60 transition-colors rounded-sm",
+                  shortCloseLoadingId === row.id && "text-muted-foreground/50 cursor-not-allowed",
+                )}
               >
-                <Scissors className="w-3.5 h-3.5" /> Short Close PO
+                <Scissors className="w-3.5 h-3.5" />
+                {shortCloseLoadingId === row.id ? "Opening…" : "Short Close PO"}
               </button>
             )}
             {canClosePOStatus(row.status) && (
@@ -687,7 +754,28 @@ export default function PurchaseOrdersPageClient() {
     >
       {tab === "po_return" ? (
         <Suspense fallback={<div className="p-4 text-sm text-muted-foreground">Loading…</div>}>
-          <PurchaseReturnListing />
+          <PurchaseReturnListing
+            filters={returnListing.filters}
+            onFiltersChange={(next) =>
+              setReturnListing((prev) => ({ ...prev, filters: next, page: 1 }))
+            }
+            sort={returnListing.sort}
+            onSortChange={(next) =>
+              setReturnListing((prev) => ({ ...prev, sort: next, page: 1 }))
+            }
+            page={returnListing.page}
+            onPageChange={(next) =>
+              setReturnListing((prev) => ({ ...prev, page: next }))
+            }
+            pageSize={returnListing.pageSize}
+            onPageSizeChange={(next) =>
+              setReturnListing((prev) => ({
+                ...prev,
+                pageSize: next,
+                page: 1,
+              }))
+            }
+          />
         </Suspense>
       ) : (
         <>
@@ -767,6 +855,42 @@ export default function PurchaseOrdersPageClient() {
           onConfirm={handleActionConfirm}
         />
       )}
+
+      <ShortClosePOModal
+        open={shortCloseOpen}
+        onOpenChange={(open) => {
+          if (shortCloseMutation.isPending) return;
+          if (!open) closeModals();
+          else setShortCloseOpen(true);
+        }}
+        po={shortClosePo}
+        submitting={shortCloseMutation.isPending}
+        onConfirm={(payload) => {
+          if (!shortClosePo) return;
+          shortCloseMutation.mutate(
+            {
+              purchaseOrderId: shortClosePo.id,
+              shortCloseReason: shortCloseReasonLabel(payload.reason),
+              shortCloseRemarks: payload.remarks,
+              products: payload.products,
+            },
+            {
+              onSuccess: () => {
+                closeModals();
+                setToast({ msg: "PO short closed.", type: "success" });
+                void listQuery.refetch();
+                void summaryQuery.refetch();
+              },
+              onError: (error) => {
+                setToast({
+                  msg: getErrorMessage(error, "Failed to short close PO."),
+                  type: "error",
+                });
+              },
+            },
+          );
+        }}
+      />
 
       <SendPOEmailModal
         open={sendEmailOpen}

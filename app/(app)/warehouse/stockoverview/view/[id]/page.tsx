@@ -42,7 +42,7 @@ function batchMovableQty(row: {
   );
 }
 
-const LIST_HREF = "/warehouse/stockoverview";
+const LIST_HREF = "/warehouse/stock-overview";
 
 function stockStatusVariant(status: string): "active" | "inactive" | "draft" | "blocked" | "neutral" {
   const s = status.toLowerCase();

@@ -57,6 +57,12 @@ import { StockTransferService } from "@/services/stock-transfer.service";
 import { openPackingListPdfById } from "@/app/(app)/sales/orders/pl-pdf/packingListPdfGenerator";
 import { PackingListDownloadDialog, type PackingListDownloadOption } from "@/app/(app)/sales/shared/PackingListDownloadDialog";
 import { SendStockTransferEmailModal } from "./components/SendStockTransferEmailModal";
+import {
+  parseStListTabParam,
+  useStListingState,
+  type StListingState,
+  type StModuleTabId,
+} from "./st-listing-state-context";
 
 const STATUS_CFG: Record<string, { bg: string; text: string; dot: string }> = {
   draft: { bg: "bg-slate-100", text: "text-slate-600", dot: "bg-slate-400" },
@@ -105,11 +111,41 @@ function FulfillmentPill({ status }: { status?: string | null }) {
 export default function StockTransferPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [activeTab, setActiveTab] = useState<string>("all");
-  const [filters, setFilters] = useState<FilterState>({});
-  const [sort, setSort] = useState<SortState>({ key: "", direction: "none" });
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
+  const {
+    activeTab,
+    setActiveTab,
+    listingByTab,
+    setListingByTab,
+  } = useStListingState();
+  const { filters, sort, page, pageSize } = listingByTab[activeTab];
+
+  const updateListing = (
+    key: StModuleTabId,
+    updater: (prev: StListingState) => StListingState,
+  ) => {
+    setListingByTab((prev) => ({
+      ...prev,
+      [key]: updater(prev[key]),
+    }));
+  };
+
+  const setFilters = (next: FilterState) => {
+    updateListing(activeTab, (prev) => ({ ...prev, filters: next, page: 1 }));
+  };
+  const setSort = (next: SortState) => {
+    updateListing(activeTab, (prev) => ({ ...prev, sort: next, page: 1 }));
+  };
+  const setPage = (next: number) => {
+    updateListing(activeTab, (prev) => ({ ...prev, page: next }));
+  };
+  const setPageSize = (next: number) => {
+    updateListing(activeTab, (prev) => ({
+      ...prev,
+      pageSize: next,
+      page: 1,
+    }));
+  };
+
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
   const [cancelTransfer, setCancelTransfer] = useState<StockTransfer | null>(null);
   const [plDownloadOpen, setPlDownloadOpen] = useState(false);
@@ -117,21 +153,18 @@ export default function StockTransferPage() {
   const [sendEmailId, setSendEmailId] = useState<string | null>(null);
 
   useEffect(() => {
-    const tab = searchParams.get("tab");
-    if (tab) {
-      setActiveTab(tab);
+    const parsed = parseStListTabParam(searchParams.get("tab"));
+    if (parsed) {
+      setActiveTab(parsed);
     }
-  }, [searchParams]);
+    // No ?tab= (e.g. back from transfer view): keep module-scoped activeTab as-is.
+  }, [searchParams, setActiveTab]);
 
   useEffect(() => {
     if (!toast) return;
     const t = setTimeout(() => setToast(null), 3200);
     return () => clearTimeout(t);
   }, [toast]);
-
-  useEffect(() => {
-    setPage(1);
-  }, [activeTab, filters, pageSize]);
 
   // Construct ordering query param
   const ordering = useMemo(() => {
@@ -154,7 +187,7 @@ export default function StockTransferPage() {
   // Construct filters payload
   const apiFilters = useMemo(() => {
     const f: Record<string, any> = {};
-    if (activeTab && activeTab !== "all") {
+    if (activeTab !== "all") {
       if (activeTab === "pending") {
         f.status = "SUBMITTED";
       } else if (activeTab === "approved") {
@@ -218,7 +251,7 @@ export default function StockTransferPage() {
     if (activeTab === "pending") return "SUBMITTED";
     if (activeTab === "approved") return "APPROVED";
     if (activeTab === "rejected") return "CANCELLED";
-    return activeTab.toUpperCase();
+    return undefined;
   }, [activeTab]);
 
   const { data: sourceWhFilterRaw } = useStockTransferFilterOptions("from_warehouse__warehouse_name", filterStatus);
@@ -335,10 +368,10 @@ export default function StockTransferPage() {
   };
 
   const handleTabChange = (tab: string) => {
-    setActiveTab(tab);
-    setFilters({});
-    setPage(1);
-    router.replace(`/sales/stock-transfer?tab=${tab}`, { scroll: false });
+    const parsed = parseStListTabParam(tab);
+    if (!parsed) return;
+    setActiveTab(parsed);
+    router.replace(`/sales/stock-transfer?tab=${parsed}`, { scroll: false });
   };
 
   const columns: ColumnConfig<StockTransfer>[] = [

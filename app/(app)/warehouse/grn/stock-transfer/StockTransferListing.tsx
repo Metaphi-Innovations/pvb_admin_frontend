@@ -2,7 +2,12 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MasterListing } from "@/components/listing/MasterListing";
-import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
+import {
+  ColumnConfig,
+  FilterState,
+  SortState,
+  ActionItemConfig,
+} from "@/components/listing/types";
 import { Eye, FileCheck2, FilePlus2, Pencil } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -22,6 +27,12 @@ import {
   PENDING_ST_FILTER_FIELD_MAP,
   type PendingStockTransferDispatchRow,
 } from "./stock-transfer-grn-utils";
+import { useGrnListingState } from "../grn-listing-state-context";
+import {
+  exportStockTransferPendingExcel,
+  exportStockTransferReceivedExcel,
+} from "../shared/grn-excel-export";
+import { showToast } from "@/lib/toast";
 
 type ReceivedStockTransferGrnRow = {
   id: string;
@@ -58,13 +69,48 @@ function mapToReceivedRow(item: GrnListItem): ReceivedStockTransferGrnRow {
 
 export function StockTransferListing() {
   const router = useRouter();
-  const [subTab, setSubTab] = useState<"pending" | "received">("pending");
+  const {
+    stockTransferSubTab: subTab,
+    setStockTransferSubTab: setSubTab,
+    stockTransferPendingListing,
+    setStockTransferPendingListing,
+    stockTransferReceivedListing,
+    setStockTransferReceivedListing,
+  } = useGrnListingState();
 
   // ── Pending (Dispatch) state ───────────────────────────────────────────
-  const [pendingFilters, setPendingFilters] = useState<FilterState>({});
-  const [pendingSort, setPendingSort] = useState<SortState>({ key: "", direction: "none" });
-  const [pendingPage, setPendingPage] = useState(1);
-  const [pendingPageSize, setPendingPageSize] = useState(10);
+  const {
+    filters: pendingFilters,
+    sort: pendingSort,
+    page: pendingPage,
+    pageSize: pendingPageSize,
+  } = stockTransferPendingListing;
+
+  const setPendingFilters = (next: FilterState) => {
+    setStockTransferPendingListing((prev) => ({
+      ...prev,
+      filters: next,
+      page: 1,
+    }));
+  };
+  const setPendingSort = (next: SortState) => {
+    setStockTransferPendingListing((prev) => ({
+      ...prev,
+      sort: next,
+      page: 1,
+    }));
+  };
+  const setPendingPage = (next: number) => {
+    setStockTransferPendingListing((prev) => ({ ...prev, page: next }));
+  };
+  const setPendingPageSize = (next: number) => {
+    setStockTransferPendingListing((prev) => ({
+      ...prev,
+      pageSize: next,
+      page: 1,
+    }));
+  };
+
   const [pendingRows, setPendingRows] = useState<PendingStockTransferDispatchRow[]>([]);
   const [pendingTotal, setPendingTotal] = useState(0);
   const [pendingLoading, setPendingLoading] = useState(false);
@@ -81,10 +127,37 @@ export function StockTransferListing() {
   } = useDebouncedFilters(pendingFilters);
 
   // ── Received (GRN) state ───────────────────────────────────────────────
-  const [grnFilters, setGrnFilters] = useState<FilterState>({});
-  const [grnSort, setGrnSort] = useState<SortState>({ key: "", direction: "none" });
-  const [grnPage, setGrnPage] = useState(1);
-  const [grnPageSize, setGrnPageSize] = useState(10);
+  const {
+    filters: grnFilters,
+    sort: grnSort,
+    page: grnPage,
+    pageSize: grnPageSize,
+  } = stockTransferReceivedListing;
+
+  const setGrnFilters = (next: FilterState) => {
+    setStockTransferReceivedListing((prev) => ({
+      ...prev,
+      filters: next,
+      page: 1,
+    }));
+  };
+  const setGrnSort = (next: SortState) => {
+    setStockTransferReceivedListing((prev) => ({
+      ...prev,
+      sort: next,
+      page: 1,
+    }));
+  };
+  const setGrnPage = (next: number) => {
+    setStockTransferReceivedListing((prev) => ({ ...prev, page: next }));
+  };
+  const setGrnPageSize = (next: number) => {
+    setStockTransferReceivedListing((prev) => ({
+      ...prev,
+      pageSize: next,
+      page: 1,
+    }));
+  };
 
   const receivedTabContext = useMemo(() => getStockTransferReceivedApiContext(), []);
   const { handleOpenFilter: handleOpenReceivedFilter, getFilterOptionsForColumn } =
@@ -105,6 +178,34 @@ export function StockTransferListing() {
   });
 
   const receivedRows = useMemo(() => grnItems.map(mapToReceivedRow), [grnItems]);
+
+  const [exporting, setExporting] = useState(false);
+  const handleExport = useCallback(async () => {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      if (subTab === "pending") {
+        await exportStockTransferPendingExcel({
+          filters: pendingFilters,
+          sort: pendingSort,
+        });
+      } else {
+        await exportStockTransferReceivedExcel({
+          filters: grnFilters,
+          sort: grnSort,
+        });
+      }
+    } catch (err) {
+      showToast(
+        err instanceof Error
+          ? err.message
+          : "Failed to export Stock Transfer GRNs.",
+        "error",
+      );
+    } finally {
+      setExporting(false);
+    }
+  }, [exporting, subTab, pendingFilters, pendingSort, grnFilters, grnSort]);
 
   const loadPending = useCallback(async () => {
     setPendingLoading(true);
@@ -164,22 +265,6 @@ export function StockTransferListing() {
       void loadPending();
     }
   }, [subTab, loadPending]);
-
-  useEffect(() => {
-    setPendingPage(1);
-  }, [pendingFilters, pendingPageSize]);
-
-  useEffect(() => {
-    setPendingPage(1);
-  }, [pendingSort.key, pendingSort.direction]);
-
-  useEffect(() => {
-    setGrnPage(1);
-  }, [grnFilters, grnPageSize]);
-
-  useEffect(() => {
-    setGrnPage(1);
-  }, [grnSort.key, grnSort.direction]);
 
   const handleOpenReceivedColumnFilter = useCallback(
     (columnKey: string) => {
@@ -497,10 +582,13 @@ export function StockTransferListing() {
             onPageSizeChange={setPendingPageSize}
             onFilterChange={setPendingFilters}
             onSortChange={setPendingSort}
+            currentFilters={pendingFilters}
+            currentSort={pendingSort}
             onOpenFilter={handleOpenPendingFilter}
             actions={pendingActions}
             emptyMessage="No pending stock transfer dispatches found"
             searchPlaceholder="Search dispatch / stock transfer..."
+            onExport={() => void handleExport()}
           />
         </div>
       ) : (
@@ -521,10 +609,13 @@ export function StockTransferListing() {
             onPageSizeChange={setGrnPageSize}
             onFilterChange={setGrnFilters}
             onSortChange={setGrnSort}
+            currentFilters={grnFilters}
+            currentSort={grnSort}
             onOpenFilter={handleOpenReceivedColumnFilter}
             actions={receivedActions}
             emptyMessage="No received stock transfer GRNs found"
             searchPlaceholder="Search stock transfer GRN..."
+            onExport={() => void handleExport()}
           />
         </div>
       )}

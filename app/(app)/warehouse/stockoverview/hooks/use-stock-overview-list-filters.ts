@@ -2,63 +2,100 @@
 
 import { useCallback, useState } from "react";
 import type { FilterState, SortState } from "@/components/listing/types";
-import { useAppliedListFilters } from "@/lib/masters/use-applied-list-filters";
+import {
+  createDefaultSimpleListingState,
+  useStockOverviewListingState,
+  type StockOverviewSimpleTab,
+} from "../stock-overview-listing-state-context";
 
 const DEFAULT_SORT: SortState = { key: "", direction: "none" };
 
 /**
- * Stock Overview list filter helpers:
- * - Draft UI state vs applied request state
+ * Stock Overview list filter helpers backed by module listing context:
+ * - Persists filters/sort/page across tabs and view until leaving the module
  * - Clear All resets filters/search/sort/page and forces list reload
  */
-export function useStockOverviewListFilters() {
-  const {
-    draftFilters,
-    setDraftFilters,
-    appliedFilters,
-    applyFilters,
-    resetFilters,
-  } = useAppliedListFilters();
-
-  const [sort, setSort] = useState<SortState>(DEFAULT_SORT);
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+export function useStockOverviewListFilters(tab: StockOverviewSimpleTab) {
+  const { getSimpleListing, setSimpleListing } = useStockOverviewListingState();
+  const { filters, sort, page, pageSize } = getSimpleListing(tab);
   const [listNonce, setListNonce] = useState(0);
+
+  const setSort = useCallback(
+    (next: SortState) => {
+      setSimpleListing(tab, (prev) => ({ ...prev, sort: next, page: 1 }));
+    },
+    [setSimpleListing, tab],
+  );
+
+  const setPage = useCallback(
+    (next: number) => {
+      setSimpleListing(tab, (prev) => ({ ...prev, page: next }));
+    },
+    [setSimpleListing, tab],
+  );
+
+  const handlePageSizeChange = useCallback(
+    (size: number) => {
+      setSimpleListing(tab, (prev) => ({
+        ...prev,
+        pageSize: size,
+        page: 1,
+      }));
+    },
+    [setSimpleListing, tab],
+  );
 
   const handleFilterChange = useCallback(
     (next: FilterState) => {
       const cleared = Object.keys(next).length === 0;
       if (cleared) {
-        resetFilters();
-        setSort(DEFAULT_SORT);
-        setPage(1);
+        const defaults = createDefaultSimpleListingState(pageSize);
+        setSimpleListing(tab, {
+          ...defaults,
+          pageSize,
+          sort: DEFAULT_SORT,
+        });
         setListNonce((n) => n + 1);
         return;
       }
-      setDraftFilters(next);
-      applyFilters(next);
-      setPage(1);
+      setSimpleListing(tab, (prev) => ({
+        ...prev,
+        filters: next,
+        page: 1,
+      }));
     },
-    [applyFilters, resetFilters, setDraftFilters],
+    [pageSize, setSimpleListing, tab],
   );
 
-  const handlePageSizeChange = useCallback((size: number) => {
-    setPageSize(size);
-    setPage(1);
-  }, []);
+  const resetFilters = useCallback(() => {
+    setSimpleListing(tab, (prev) => ({
+      ...prev,
+      filters: {},
+      page: 1,
+    }));
+  }, [setSimpleListing, tab]);
 
   return {
-    draftFilters,
-    setDraftFilters,
-    appliedFilters,
-    applyFilters,
+    draftFilters: filters,
+    setDraftFilters: (next: FilterState) => {
+      setSimpleListing(tab, (prev) => ({ ...prev, filters: next }));
+    },
+    appliedFilters: filters,
+    applyFilters: (next?: FilterState) => {
+      if (next === undefined) return;
+      setSimpleListing(tab, (prev) => ({
+        ...prev,
+        filters: next,
+        page: 1,
+      }));
+    },
     resetFilters,
     sort,
     setSort,
     page,
     setPage,
     pageSize,
-    setPageSize,
+    setPageSize: handlePageSizeChange,
     handlePageSizeChange,
     handleFilterChange,
     listNonce,

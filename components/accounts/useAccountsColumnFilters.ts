@@ -22,6 +22,11 @@ export interface UseAccountsColumnFiltersOptions<T> {
   columnConfig?: AccountsColumnFilterConfig;
   defaultSortKey?: string | null;
   defaultSortDir?: "asc" | "desc";
+  /** Seed filters when the provider mounts (e.g. tab remount with persisted listing state). */
+  initialColumnFilters?: AccountsColumnFilters;
+  /** Seed user sort when the provider mounts. Null/undefined = default listing order. */
+  initialSortKey?: string | null;
+  initialSortDir?: "asc" | "desc";
 }
 
 export function useAccountsColumnFilters<T>({
@@ -31,11 +36,18 @@ export function useAccountsColumnFilters<T>({
   columnConfig = {},
   defaultSortKey = null,
   defaultSortDir = "desc",
+  initialColumnFilters,
+  initialSortKey = null,
+  initialSortDir,
 }: UseAccountsColumnFiltersOptions<T>) {
-  const [columnFilters, setColumnFilters] = useState<AccountsColumnFilters>({});
+  const [columnFilters, setColumnFilters] = useState<AccountsColumnFilters>(
+    () => initialColumnFilters ?? {},
+  );
   /** User-applied sort only. Null = default listing order (no column chevron). */
-  const [sortKey, setSortKey] = useState<string | null>(null);
-  const [sortDir, setSortDir] = useState<"asc" | "desc">(defaultSortDir);
+  const [sortKey, setSortKey] = useState<string | null>(() => initialSortKey ?? null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">(
+    () => initialSortDir ?? defaultSortDir,
+  );
 
   const setColumnFilter = useCallback((key: string, value: AccountsColumnFilters[string]) => {
     setColumnFilters((prev) => {

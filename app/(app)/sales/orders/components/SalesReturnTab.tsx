@@ -49,12 +49,30 @@ function mapBackendReturnToFrontend(item: any): SalesReturnRecord {
   };
 }
 
-export function SalesReturnTab({ onCountChange }: { onCountChange?: (count: number) => void }) {
+export type SalesReturnTabProps = {
+  onCountChange?: (count: number) => void;
+  filters: FilterState;
+  onFiltersChange: (filters: FilterState) => void;
+  sort: SortState;
+  onSortChange: (sort: SortState) => void;
+  page: number;
+  onPageChange: (page: number) => void;
+  pageSize: number;
+  onPageSizeChange: (pageSize: number) => void;
+};
+
+export function SalesReturnTab({
+  onCountChange,
+  filters: returnFilters,
+  onFiltersChange: setReturnFilters,
+  sort: returnSort,
+  onSortChange: setReturnSort,
+  page: returnPage,
+  onPageChange: setReturnPage,
+  pageSize: returnPageSize,
+  onPageSizeChange: setReturnPageSize,
+}: SalesReturnTabProps) {
   const router = useRouter();
-  const [returnFilters, setReturnFilters] = useState<FilterState>({});
-  const [returnSort, setReturnSort] = useState<SortState>({ key: "", direction: "none" });
-  const [returnPage, setReturnPage] = useState(1);
-  const [returnPageSize, setReturnPageSize] = useState(25);
   
   const [salesReturns, setSalesReturns] = useState<SalesReturnRecord[]>([]);
   const [totalRecords, setTotalRecords] = useState(0);
@@ -218,6 +236,7 @@ export function SalesReturnTab({ onCountChange }: { onCountChange?: (count: numb
       searchPlaceholder="Search return number, dispatch number, customer..."
       currentFilters={returnFilters}
       currentSort={returnSort}
+      loading={loading}
     />
   );
 }

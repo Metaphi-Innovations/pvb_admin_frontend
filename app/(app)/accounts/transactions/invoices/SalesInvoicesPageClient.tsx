@@ -37,7 +37,6 @@ import {
   ReportMoreFilters,
   ReportSearchFilter,
   ReportToDateFilter,
-  useReportDateRange,
 } from "@/components/accounts/ReportFilters";
 import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
 import { MoneyAmount } from "@/components/accounts/MoneyAmount";
@@ -69,7 +68,7 @@ import {
 import { loadFinancialYears } from "@/app/(app)/accounts/masters/masters-data";
 import { FinancialYearApiService } from "@/services/financial-year.service";
 import { WarehouseService } from "@/services/warehouse.service";
-import { resolveDateRangePreset } from "@/lib/accounts/report-date-presets";
+import { resolveDateRangePreset, type DateRangePresetId } from "@/lib/accounts/report-date-presets";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { accountsDataService } from "@/lib/accounts/accounts-data-service";
 import {
@@ -88,6 +87,10 @@ import {
   type SalesInvoiceListRow,
   type SalesInvoiceTabId,
 } from "./sales-invoice-tab-data";
+import {
+  useSalesInvoiceListingState,
+  type SalesInvoiceTabCache,
+} from "./sales-invoice-listing-state-context";
 import {
   SalesInvoiceService,
   mapSalesInvoiceDetailToRecord,
@@ -112,27 +115,7 @@ import {
 } from "./sales-invoice-statutory";
 import "./sales-invoices-compact.css";
 
-type TabCache = {
-  loaded: boolean;
-  loading: boolean;
-  error: string | null;
-  rows: SalesInvoiceListRow[];
-  search: string;
-  page: number;
-  pageSize: number;
-};
-
-function createEmptyTabCache(): TabCache {
-  return {
-    loaded: false,
-    loading: false,
-    error: null,
-    rows: [],
-    search: "",
-    page: 1,
-    pageSize: 25,
-  };
-}
+type TabCache = SalesInvoiceTabCache;
 
 function applyToolbarFilters(
   rows: SalesInvoiceListRow[],
@@ -977,6 +960,42 @@ function SalesInvoicesTable({
   );
 }
 
+function SalesInvoiceSortSync({
+  sortKey,
+  sortDir,
+  columnFilters,
+  onSortChange,
+  onFilterChange,
+}: {
+  sortKey: string;
+  sortDir: "asc" | "desc";
+  columnFilters: Record<string, unknown>;
+  onSortChange: (sortKey: string, sortDir: "asc" | "desc") => void;
+  onFilterChange: (filters: Record<string, unknown>) => void;
+}) {
+  const ctx = useAccountsColumnFilterContext();
+
+  useEffect(() => {
+    if (!ctx) return;
+    const nextKey = ctx.sortKey || "";
+    const nextDir = ctx.sortDir ?? "asc";
+    if (nextKey !== sortKey || (nextKey !== "" && nextDir !== sortDir)) {
+      onSortChange(nextKey, nextDir);
+    }
+  }, [ctx?.sortKey, ctx?.sortDir, sortKey, sortDir, onSortChange]);
+
+  useEffect(() => {
+    if (!ctx) return;
+    const ctxFiltersStr = JSON.stringify(ctx.columnFilters || {});
+    const propFiltersStr = JSON.stringify(columnFilters || {});
+    if (ctxFiltersStr !== propFiltersStr) {
+      onFilterChange(ctx.columnFilters || {});
+    }
+  }, [ctx?.columnFilters, columnFilters, onFilterChange]);
+
+  return null;
+}
+
 export default function SalesInvoicesPageClient() {
   const mounted = useClientMounted();
   const router = useRouter();
@@ -984,10 +1003,45 @@ export default function SalesInvoicesPageClient() {
   const activeTab =
     parseSalesInvoiceTabParam(searchParams.get("tab")) ?? "all";
   const listReturnHref = invoicesListHref(activeTab);
-  const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } =
-    useReportDateRange("this_year");
-  const [financialYearId, setFinancialYearId] = useState("all");
-  const [branches, setBranches] = useState<string[]>([]);
+  const {
+    tabState,
+    setTabState,
+    toolbar,
+    setToolbar,
+    filterEpoch,
+    setFilterEpoch,
+  } = useSalesInvoiceListingState();
+  const { preset, dateFrom, dateTo, financialYearId, branches } = toolbar;
+  const setPreset = useCallback(
+    (next: typeof preset) => {
+      setToolbar((prev) => ({ ...prev, preset: next }));
+    },
+    [setToolbar],
+  );
+  const setDateFrom = useCallback(
+    (next: string) => {
+      setToolbar((prev) => ({ ...prev, dateFrom: next }));
+    },
+    [setToolbar],
+  );
+  const setDateTo = useCallback(
+    (next: string) => {
+      setToolbar((prev) => ({ ...prev, dateTo: next }));
+    },
+    [setToolbar],
+  );
+  const setFinancialYearId = useCallback(
+    (next: string) => {
+      setToolbar((prev) => ({ ...prev, financialYearId: next }));
+    },
+    [setToolbar],
+  );
+  const setBranches = useCallback(
+    (next: string[]) => {
+      setToolbar((prev) => ({ ...prev, branches: next }));
+    },
+    [setToolbar],
+  );
   const [warehouseIdByName, setWarehouseIdByName] = useState<Map<string, string>>(
     () => new Map(),
   );
@@ -995,13 +1049,6 @@ export default function SalesInvoicesPageClient() {
   const [sendEmailInvoiceId, setSendEmailInvoiceId] = useState<string | null>(null);
   const [sendEmailOpen, setSendEmailOpen] = useState(false);
 
-  const [tabState, setTabState] = useState<Record<SalesInvoiceTabId, TabCache>>({
-    all: createEmptyTabCache(),
-    sales_order: createEmptyTabCache(),
-    stock_transfer: createEmptyTabCache(),
-    sample_order: createEmptyTabCache(),
-    service: createEmptyTabCache(),
-  });
   const tabStateRef = useRef(tabState);
   tabStateRef.current = tabState;
 
@@ -1200,12 +1247,17 @@ export default function SalesInvoicesPageClient() {
     [setDateFrom, setDateTo, setPreset],
   );
 
-  const [filterEpoch, setFilterEpoch] = useState(0);
-
   const clearFilters = useCallback(() => {
     setTabState((prev) => ({
       ...prev,
-      [activeTab]: { ...prev[activeTab], search: "", page: 1 },
+      [activeTab]: {
+        ...prev[activeTab],
+        search: "",
+        page: 1,
+        sortKey: "",
+        sortDir: "desc",
+        columnFilters: {},
+      },
     }));
     setFinancialYearId("all");
     setBranches([]);
@@ -1214,7 +1266,16 @@ export default function SalesInvoicesPageClient() {
     setDateFrom(from);
     setDateTo(to);
     setFilterEpoch((n) => n + 1);
-  }, [activeTab, setDateFrom, setDateTo, setPreset]);
+  }, [
+    activeTab,
+    setBranches,
+    setDateFrom,
+    setDateTo,
+    setFinancialYearId,
+    setFilterEpoch,
+    setPreset,
+    setTabState,
+  ]);
 
   const hasToolbarFilters =
     Boolean(active.search.trim()) ||
@@ -1280,7 +1341,7 @@ export default function SalesInvoicesPageClient() {
     setActivePage(1);
   }, [active.search, dateFrom, dateTo, financialYearId, branches, active.pageSize, setActivePage]);
 
-  const handlePresetChange = (value: ReturnType<typeof useReportDateRange>["preset"]) => {
+  const handlePresetChange = (value: DateRangePresetId) => {
     setPreset(value);
     if (value !== "custom") {
       const { from, to } = resolveDateRangePreset(value);
@@ -1396,9 +1457,38 @@ export default function SalesInvoicesPageClient() {
         rows={toolbarRows}
         getCellValue={getCellValue}
         columnConfig={columnConfig}
-        defaultSortKey="invoiceDate"
-        defaultSortDir="desc"
+        defaultSortKey={active.sortKey || "invoiceDate"}
+        defaultSortDir={active.sortDir || "desc"}
+        initialColumnFilters={active.columnFilters as Record<string, any>}
+        initialSortKey={active.sortKey || null}
+        initialSortDir={active.sortDir || "desc"}
       >
+        <SalesInvoiceSortSync
+          sortKey={active.sortKey}
+          sortDir={active.sortDir}
+          columnFilters={active.columnFilters}
+          onSortChange={(key, dir) =>
+            setTabState((prev) => ({
+              ...prev,
+              [activeTab]: {
+                ...prev[activeTab],
+                sortKey: key,
+                sortDir: dir,
+                page: 1,
+              },
+            }))
+          }
+          onFilterChange={(filters) =>
+            setTabState((prev) => ({
+              ...prev,
+              [activeTab]: {
+                ...prev[activeTab],
+                columnFilters: filters,
+                page: 1,
+              },
+            }))
+          }
+        />
         <AccountsPageShell
           breadcrumbs={accountsBreadcrumb("Transactions", "Sales Invoice")}
           title="Sales Invoices"

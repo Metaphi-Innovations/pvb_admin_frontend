@@ -1783,8 +1783,8 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     [additionalExpenses, interstateGst],
   );
 
-  // Preview SI number from DocumentSequence (create only).
-  // Stock Transfer: number follows source warehouse (issuer), not Place of Supply (destination).
+  // Preview SI / ST invoice number from DocumentSequence (create only).
+  // Stock Transfer: ST/ series; number follows source warehouse (issuer), not Place of Supply.
   useEffect(() => {
     if (isEdit) return;
     let cancelled = false;
@@ -1792,12 +1792,16 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
       isStockTransferGeneration || invoiceType === "stock_transfer";
     const params = stMode
       ? sourceWarehouseId
-        ? { warehouseId: sourceWarehouseId }
+        ? {
+            warehouseId: sourceWarehouseId,
+            invoiceType: "STOCK_TRANSFER",
+          }
         : {
             state:
               sourceWarehouseState.trim() ||
               stateName.trim() ||
               "Maharashtra",
+            invoiceType: "STOCK_TRANSFER",
           }
       : {
           state: stateName.trim() || placeOfSupply.trim() || "Maharashtra",
