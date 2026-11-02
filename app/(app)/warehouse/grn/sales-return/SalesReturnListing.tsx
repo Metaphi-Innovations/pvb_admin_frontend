@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { MasterListing } from "@/components/listing/MasterListing";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
 import { Eye, FileCheck2, Pencil } from "lucide-react";
@@ -10,15 +10,30 @@ import { getGrnTabApiContext } from "@/lib/warehouse/grn-list-config";
 import { GRN_STATUS_CONFIG } from "@/lib/warehouse/grn-status";
 import { useGrnLazyFilters, useGrnListData } from "../shared/useGrnListData";
 import type { GrnListItem } from "@/services/grn-list.service";
+import { useGrnListingState } from "../grn-listing-state-context";
+import { exportSalesReturnGrnExcel } from "../shared/grn-excel-export";
+import { showToast } from "@/lib/toast";
 
 const SALES_RETURN_TAB_CONTEXT = getGrnTabApiContext("sales_return");
 
 export function SalesReturnListing() {
   const router = useRouter();
-  const [filters, setFilters] = useState<FilterState>({});
-  const [sort, setSort] = useState<SortState>({ key: "", direction: "none" });
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const { salesReturnListing, setSalesReturnListing } = useGrnListingState();
+  const { filters, sort, page, pageSize } = salesReturnListing;
+
+  const setFilters = (next: FilterState) => {
+    setSalesReturnListing((prev) => ({ ...prev, filters: next, page: 1 }));
+  };
+  const setSort = (next: SortState) => {
+    setSalesReturnListing((prev) => ({ ...prev, sort: next, page: 1 }));
+  };
+  const setPage = (next: number) => {
+    setSalesReturnListing((prev) => ({ ...prev, page: next }));
+  };
+  const setPageSize = (next: number) => {
+    setSalesReturnListing((prev) => ({ ...prev, pageSize: next, page: 1 }));
+  };
+
   const { handleOpenFilter, getFilterOptionsForColumn } = useGrnLazyFilters(
     SALES_RETURN_TAB_CONTEXT.sourceType,
   );
@@ -31,13 +46,21 @@ export function SalesReturnListing() {
     pageSize,
   });
 
-  useEffect(() => {
-    setPage(1);
-  }, [filters, pageSize]);
-
-  useEffect(() => {
-    setPage(1);
-  }, [sort.key, sort.direction]);
+  const [exporting, setExporting] = useState(false);
+  const handleExport = useCallback(async () => {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      await exportSalesReturnGrnExcel({ filters, sort });
+    } catch (err) {
+      showToast(
+        err instanceof Error ? err.message : "Failed to export Sales Return GRNs.",
+        "error",
+      );
+    } finally {
+      setExporting(false);
+    }
+  }, [exporting, filters, sort]);
 
   const columns: ColumnConfig<GrnListItem>[] = useMemo(
     () => [
@@ -183,12 +206,15 @@ export function SalesReturnListing() {
         onPageSizeChange={setPageSize}
         onFilterChange={setFilters}
         onSortChange={setSort}
+        currentFilters={filters}
+        currentSort={sort}
         actions={actions}
         emptyMessage="No Sales Return GRNs found"
         searchPlaceholder="Search by GRN No, Sales Return No, Customer..."
         addLabel="Create Sales Return GRN"
         onAdd={() => router.push("/warehouse/grn/sales-return/create")}
         onOpenFilter={handleOpenFilter}
+        onExport={() => void handleExport()}
       />
     </div>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Ban } from "lucide-react";
 import { MasterListing } from "@/components/listing/MasterListing";
 import { ActionItemConfig, ColumnConfig } from "@/components/listing/types";
@@ -66,7 +66,7 @@ export function SalesReturnStockListing({ warehouseId, onFiltersApplied }: Sales
     handleFilterChange,
     listNonce,
     bumpListNonce,
-  } = useStockOverviewListFilters();
+  } = useStockOverviewListFilters("sales-return");
   const [records, setRecords] = useState<ReturnStockListRow[]>([]);
   const [totalRecords, setTotalRecords] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -76,7 +76,10 @@ export function SalesReturnStockListing({ warehouseId, onFiltersApplied }: Sales
   const [moveTarget, setMoveTarget] = useState<MoveToRejectedTarget | null>(null);
   const [exporting, setExporting] = useState(false);
 
+  const prevWarehouseRef = useRef(warehouseId);
   useEffect(() => {
+    if (prevWarehouseRef.current === warehouseId) return;
+    prevWarehouseRef.current = warehouseId;
     setPage(1);
   }, [warehouseId, setPage]);
 

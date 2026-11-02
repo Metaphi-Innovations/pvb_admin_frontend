@@ -7,7 +7,6 @@ import { StockPositionFiltersBar } from "./StockPositionFiltersBar";
 import { StockPositionKpiRow } from "./StockPositionKpiRow";
 import { MasterListing } from "@/components/listing/MasterListing";
 import { ColumnConfig, FilterState, SortState } from "@/components/listing/types";
-import { useAppliedListFilters } from "@/lib/masters/use-applied-list-filters";
 import { ProductDropdownService } from "@/services/product-dropdown.service";
 import { HsnListService } from "@/services/hsn-list.service";
 import {
@@ -19,6 +18,7 @@ import {
 import { DAILY_LOG_STATUS_OPTIONS, STATUS_BADGE_CONFIG } from "../constants";
 import { formatMoney } from "@/lib/accounts/money-format";
 import { StackedQtyDisplay, type QtyStackMeta } from "@/app/(app)/sales/shared/StackedQtyDisplay";
+import { useStockOverviewListingState } from "../stock-overview-listing-state-context";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -146,16 +146,16 @@ function dateLabelFor(filters: StockPositionFilters): string {
 }
 
 export function DailyLogsTab() {
-  const [today, setToday] = useState("");
-  const [draftFilters, setDraftFilters] = useState<StockPositionFilters>(DEFAULT_STOCK_POSITION_FILTERS);
-  const [appliedTopFilters, setAppliedTopFilters] = useState<StockPositionFilters>(DEFAULT_STOCK_POSITION_FILTERS);
+  const { today, getPeriodListing, setPeriodListing } =
+    useStockOverviewListingState();
   const {
-    draftFilters: draftColFilters,
-    setDraftFilters: setDraftColFilters,
-    appliedFilters: appliedColFilters,
-    applyFilters: applyColFilters,
-    resetFilters: resetColFilters,
-  } = useAppliedListFilters();
+    filters: appliedColFilters,
+    sort,
+    page,
+    pageSize,
+    draftTopFilters: draftFilters,
+    appliedTopFilters,
+  } = getPeriodListing("daily-logs");
 
   const [productMetaOptions, setProductMetaOptions] = useState<{
     productCode: Array<{ label: string; value: string }>;
@@ -175,25 +175,48 @@ export function DailyLogsTab() {
   const [totalRecords, setTotalRecords] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
-  const [sort, setSort] = useState<SortState>({ key: "", direction: "none" });
   const [listNonce, setListNonce] = useState(0);
   const [exporting, setExporting] = useState(false);
 
-  useEffect(() => {
-    const t = masterToday();
-    setToday(t);
-    const initial = {
-      ...DEFAULT_STOCK_POSITION_FILTERS,
-      datePreset: "today",
-      asOnDate: t,
-      fromDate: t,
-      toDate: t,
-    };
-    setDraftFilters(initial);
-    setAppliedTopFilters(initial);
-  }, []);
+  const setDraftFilters = useCallback(
+    (next: StockPositionFilters | ((prev: StockPositionFilters) => StockPositionFilters)) => {
+      setPeriodListing("daily-logs", (prev) => ({
+        ...prev,
+        draftTopFilters:
+          typeof next === "function" ? next(prev.draftTopFilters) : next,
+      }));
+    },
+    [setPeriodListing],
+  );
+
+  const setPage = useCallback(
+    (next: number) => {
+      setPeriodListing("daily-logs", (prev) => ({ ...prev, page: next }));
+    },
+    [setPeriodListing],
+  );
+
+  const setPageSize = useCallback(
+    (next: number) => {
+      setPeriodListing("daily-logs", (prev) => ({
+        ...prev,
+        pageSize: next,
+        page: 1,
+      }));
+    },
+    [setPeriodListing],
+  );
+
+  const setSort = useCallback(
+    (next: SortState) => {
+      setPeriodListing("daily-logs", (prev) => ({
+        ...prev,
+        sort: next,
+        page: 1,
+      }));
+    },
+    [setPeriodListing],
+  );
 
   useEffect(() => {
     let mounted = true;
@@ -286,42 +309,54 @@ export function DailyLogsTab() {
   }, [appliedTopFilters, appliedColFilters, page, pageSize, sort.key, sort.direction, today, listNonce]);
 
   const handleApplyTopFilters = useCallback(() => {
-    setAppliedTopFilters(draftFilters);
-    setPage(1);
-  }, [draftFilters]);
+    setPeriodListing("daily-logs", (prev) => ({
+      ...prev,
+      appliedTopFilters: prev.draftTopFilters,
+      page: 1,
+    }));
+  }, [setPeriodListing]);
 
   const handleResetTopFilters = useCallback(() => {
     const t = today || masterToday();
     const next = {
       ...DEFAULT_STOCK_POSITION_FILTERS,
-      datePreset: "today",
+      datePreset: "today" as const,
+      dateMode: "single" as const,
       asOnDate: t,
       fromDate: t,
       toDate: t,
     };
-    setDraftFilters(next);
-    setAppliedTopFilters(next);
-    resetColFilters();
-    setSort({ key: "", direction: "none" });
-    setPage(1);
+    setPeriodListing("daily-logs", (prev) => ({
+      ...prev,
+      draftTopFilters: next,
+      appliedTopFilters: next,
+      filters: {},
+      sort: { key: "", direction: "none" },
+      page: 1,
+    }));
     setListNonce((n) => n + 1);
-  }, [today, resetColFilters]);
+  }, [today, setPeriodListing]);
 
   const handleColFilterChange = useCallback(
     (next: FilterState) => {
       const cleared = Object.keys(next).length === 0;
       if (cleared) {
-        resetColFilters();
-        setSort({ key: "", direction: "none" });
-        setPage(1);
+        setPeriodListing("daily-logs", (prev) => ({
+          ...prev,
+          filters: {},
+          sort: { key: "", direction: "none" },
+          page: 1,
+        }));
         setListNonce((n) => n + 1);
         return;
       }
-      setDraftColFilters(next);
-      applyColFilters(next);
-      setPage(1);
+      setPeriodListing("daily-logs", (prev) => ({
+        ...prev,
+        filters: next,
+        page: 1,
+      }));
     },
-    [applyColFilters, resetColFilters, setDraftColFilters],
+    [setPeriodListing],
   );
 
   const handleOpenFilter = (columnKey: string) => {
@@ -620,7 +655,7 @@ export function DailyLogsTab() {
         onFilterChange={handleColFilterChange}
         emptyMessage=""
         searchPlaceholder="Search product or batch..."
-        currentFilters={draftColFilters}
+        currentFilters={appliedColFilters}
         currentSort={sort}
         onOpenFilter={handleOpenFilter}
       />

@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { MasterListing } from "@/components/listing/MasterListing";
-import { ColumnConfig, SortState, ActionItemConfig } from "@/components/listing/types";
+import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
 import { Eye, Pencil, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -14,8 +14,8 @@ import { ReorderLevel } from "../types";
 import Link from "next/link";
 import { ReorderLevelService, toOrdering } from "../services";
 import { ListingStatusToggle } from "@/components/listing";
-import { useAppliedListFilters } from "@/lib/masters/use-applied-list-filters";
 import { ALL_WAREHOUSE_FILTER_VALUE } from "../constants";
+import { useReorderListingState } from "../reorder-listing-state-context";
 
 const STOCK_STATUS_OPTIONS = [
   { label: "In Stock", value: "in stock" },
@@ -48,28 +48,72 @@ function StatusBadge({ status }: { status: string }) {
 
 export function WarehouseWiseListing({ selectedWarehouseId }: WarehouseWiseListingProps) {
   const router = useRouter();
+  const { getListing, setListing } = useReorderListingState();
   const {
-    draftFilters,
-    setDraftFilters,
-    appliedFilters,
-    applyFilters,
-  } = useAppliedListFilters();
+    filters,
+    sort,
+    page,
+    pageSize,
+  } = getListing("warehouse-wise");
   const [records, setRecords] = useState<ReorderLevel[]>([]);
   const [totalRecords, setTotalRecords] = useState(0);
   const [loading, setLoading] = useState(false);
 
-  const [sort, setSort] = useState<SortState>({ key: "updatedDate", direction: "desc" });
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
   const [deleteTarget, setDeleteTarget] = useState<ReorderLevel | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [filterOptions, setFilterOptions] = useState<Record<string, Array<{ label: string; value: string }>>>({});
   const [loadingFilters, setLoadingFilters] = useState<Set<string>>(new Set());
 
+  const setPage = useCallback(
+    (next: number) => {
+      setListing("warehouse-wise", (prev) => ({ ...prev, page: next }));
+    },
+    [setListing],
+  );
+
+  const setPageSize = useCallback(
+    (next: number) => {
+      setListing("warehouse-wise", (prev) => ({
+        ...prev,
+        pageSize: next,
+        page: 1,
+      }));
+    },
+    [setListing],
+  );
+
+  const handleSortChange = useCallback(
+    (next: SortState) => {
+      setListing("warehouse-wise", (prev) => ({
+        ...prev,
+        sort: next,
+        page: 1,
+      }));
+    },
+    [setListing],
+  );
+
+  const handleFilterChange = useCallback(
+    (next: FilterState) => {
+      setListing("warehouse-wise", (prev) => ({
+        ...prev,
+        filters: next,
+        page: 1,
+      }));
+    },
+    [setListing],
+  );
+
+  const warehouseEffectReady = useRef(false);
   useEffect(() => {
-    setPage(1);
     setFilterOptions({});
-  }, [selectedWarehouseId]);
+    // Skip the initial mount so returning from create/view/edit keeps page.
+    if (!warehouseEffectReady.current) {
+      warehouseEffectReady.current = true;
+      return;
+    }
+    setListing("warehouse-wise", (prev) => ({ ...prev, page: 1 }));
+  }, [selectedWarehouseId, setListing]);
 
   useEffect(() => {
     const warehouseId = resolveWarehouseId(selectedWarehouseId);
@@ -80,11 +124,11 @@ export function WarehouseWiseListing({ selectedWarehouseId }: WarehouseWiseListi
     ReorderLevelService.list({
       page,
       pageSize,
-      search: String(appliedFilters.search ?? ""),
+      search: String(filters.search ?? ""),
       ordering: toOrdering(sort.key, sort.direction),
       reorder_type: "WAREHOUSE",
       warehouse_id: warehouseId,
-      filters: appliedFilters,
+      filters,
       signal: controller.signal,
     })
       .then((result) => {
@@ -100,7 +144,7 @@ export function WarehouseWiseListing({ selectedWarehouseId }: WarehouseWiseListi
       });
 
     return () => controller.abort();
-  }, [page, pageSize, sort.key, sort.direction, appliedFilters, selectedWarehouseId]);
+  }, [page, pageSize, sort.key, sort.direction, filters, selectedWarehouseId]);
 
   const numCol = (key: string, header: string, w = "120px"): ColumnConfig<ReorderLevel> => ({
     key: key as keyof ReorderLevel,
@@ -262,28 +306,24 @@ export function WarehouseWiseListing({ selectedWarehouseId }: WarehouseWiseListi
         pageSize={pageSize}
         onPageChange={setPage}
         onPageSizeChange={setPageSize}
-        onSortChange={setSort}
-        onFilterChange={(next) => {
-          setDraftFilters(next);
-          applyFilters(next);
-          setPage(1);
-        }}
+        onSortChange={handleSortChange}
+        onFilterChange={handleFilterChange}
         actions={actions}
         onAdd={() => router.push(createHref)}
         addLabel="Set Reorder Level"
         emptyMessage=""
         searchPlaceholder="Search product or code..."
-        currentFilters={draftFilters}
+        currentFilters={filters}
         currentSort={sort}
         onOpenFilter={handleOpenFilter}
         onExport={() =>
           ReorderLevelService.export({
-            search: String(appliedFilters.search ?? ""),
+            search: String(filters.search ?? ""),
             ordering: toOrdering(sort.key, sort.direction),
             reorder_type: "WAREHOUSE",
             warehouse_id: resolveWarehouseId(selectedWarehouseId),
             export_type: "excel",
-            filters: appliedFilters,
+            filters,
           })
         }
       />

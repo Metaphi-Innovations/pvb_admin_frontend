@@ -5,15 +5,33 @@ import { ClipboardCheck } from "lucide-react";
 import { getQcRecords } from "../mock-data";
 import { QcRecord } from "../types";
 import { ListingContainer } from "@/components/layout/ListingContainer";
-import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { computeQcListingKpis } from "./qc-listing-kpis";
 import { QcListingKpiRow } from "./components/QcListingKpiRow";
 import { QcService } from "@/services/qc.service";
+import { buildQcListHref, type QcListSource } from "./qc-list-nav";
+import { useQcListingState } from "../qc-listing-state-context";
+
+function pathnameToQcSource(pathname: string): QcListSource {
+  if (pathname.includes("/warehouse/qc/stock-transfer")) return "stock-transfer";
+  if (pathname.includes("/warehouse/qc/sales-return")) return "sales-return";
+  if (pathname.includes("/warehouse/qc/sample-return")) return "sample-return";
+  return "purchase";
+}
+
+function isQcListSource(value: string): value is QcListSource {
+  return (
+    value === "purchase" ||
+    value === "stock-transfer" ||
+    value === "sales-return" ||
+    value === "sample-return"
+  );
+}
 
 export function QcListingLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const searchParams = useSearchParams();
+  const { getStatusForSource } = useQcListingState();
 
   const [qcList, setQcList] = useState<QcRecord[]>([]);
 
@@ -33,13 +51,7 @@ export function QcListingLayout({ children }: { children: React.ReactNode }) {
       });
   }, [pathname]);
 
-  const activeTab = pathname.includes("/warehouse/qc/stock-transfer")
-    ? "stock-transfer"
-    : pathname.includes("/warehouse/qc/sales-return")
-      ? "sales-return"
-      : pathname.includes("/warehouse/qc/sample-return")
-        ? "sample-return"
-        : "purchase";
+  const activeTab = pathnameToQcSource(pathname);
 
   const qcListingKpis = useMemo(() => computeQcListingKpis(qcList), [qcList]);
 
@@ -55,11 +67,13 @@ export function QcListingLayout({ children }: { children: React.ReactNode }) {
       ]}
       activeTab={activeTab}
       onTabChange={(val) => {
-        const params = new URLSearchParams();
-        const qcStatus = searchParams.get("qcStatus");
-        if (qcStatus) params.set("qcStatus", qcStatus);
-        const qs = params.toString();
-        router.push(`/warehouse/qc/${val}${qs ? `?${qs}` : ""}`);
+        if (!isQcListSource(val)) return;
+        // Each source keeps its own Pending/Completed selection.
+        router.push(
+          buildQcListHref(`/warehouse/qc/${val}`, {
+            qcStatus: getStatusForSource(val),
+          }),
+        );
       }}
       metrics={<QcListingKpiRow kpis={qcListingKpis} />}
     >

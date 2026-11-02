@@ -27,6 +27,8 @@ export type SalesInvoiceBackendStatus =
 export type SiNumberParams = {
   warehouseId?: string | null;
   state?: string | null;
+  /** STOCK_TRANSFER → ST/ series; omit for normal SI/ */
+  invoiceType?: string | null;
 };
 
 export type ListSalesInvoicesQuery = {
@@ -1435,6 +1437,7 @@ export const SalesInvoiceService = {
         params: {
           ...(params.warehouseId ? { warehouse_id: params.warehouseId } : {}),
           ...(params.state ? { state: params.state } : {}),
+          ...(params.invoiceType ? { invoice_type: params.invoiceType } : {}),
         },
         headers: { "Cache-Control": "no-cache" },
       },
@@ -1452,6 +1455,7 @@ export const SalesInvoiceService = {
       {
         ...(params.warehouseId ? { warehouse_id: params.warehouseId } : {}),
         ...(params.state ? { state: params.state } : {}),
+        ...(params.invoiceType ? { invoice_type: params.invoiceType } : {}),
       },
     );
     const data = (unwrapData(response) ?? {}) as Record<string, unknown>;

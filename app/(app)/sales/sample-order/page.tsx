@@ -1,7 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from "react";
-import Link from "next/link";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   DropdownMenu,
@@ -68,6 +67,13 @@ import { openPackingListPdfById } from "@/app/(app)/sales/orders/pl-pdf/packingL
 import { PackingListDownloadDialog, type PackingListDownloadOption } from "@/app/(app)/sales/shared/PackingListDownloadDialog";
 import { SendSampleOrderEmailModal } from "./components/SendSampleOrderEmailModal";
 import { getErrorMessage } from "@/lib/masters/master-query-errors";
+import {
+  parseSampleListTabParam,
+  useSampleListingState,
+  type SampleListTabId,
+  type SampleListingState,
+  type SampleModuleTabId,
+} from "./sample-listing-state-context";
 
 const STATUS_CFG: Record<string, { bg: string; text: string; dot: string }> = {
   draft: { bg: "bg-slate-100", text: "text-slate-600", dot: "bg-slate-400" },
@@ -83,7 +89,7 @@ const STATUS_CFG: Record<string, { bg: string; text: string; dot: string }> = {
 
 const FILTER_STATUSES: OrderStatus[] = [...ORDER_STATUS_OPTIONS.map((o) => o.value)];
 
-type OrderListTab = "all" | "draft" | "pending_approval" | "rejected" | "sales_return";
+type OrderListTab = SampleModuleTabId;
 
 interface SalesReturnRecord {
   id: number;
@@ -223,12 +229,52 @@ function ActionButton({
 export default function SalesOrdersPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const {
+    activeTab,
+    setActiveTab,
+    listingByTab,
+    setListingByTab,
+    returnListing,
+    setReturnListing,
+  } = useSampleListingState();
+  const lastSampleTabKeyRef = useRef<SampleListTabId>("all");
+  const isSampleTab = activeTab !== "sales_return";
+  if (isSampleTab) {
+    lastSampleTabKeyRef.current = activeTab;
+  }
+  const sampleTabKey: SampleListTabId = isSampleTab
+    ? activeTab
+    : lastSampleTabKeyRef.current;
+  const { filters, sort, page, pageSize } = listingByTab[sampleTabKey];
+
+  const updateListing = (
+    key: SampleListTabId,
+    updater: (prev: SampleListingState) => SampleListingState,
+  ) => {
+    setListingByTab((prev) => ({
+      ...prev,
+      [key]: updater(prev[key]),
+    }));
+  };
+
+  const setFilters = (next: FilterState) => {
+    updateListing(sampleTabKey, (prev) => ({ ...prev, filters: next, page: 1 }));
+  };
+  const setSort = (next: SortState) => {
+    updateListing(sampleTabKey, (prev) => ({ ...prev, sort: next, page: 1 }));
+  };
+  const setPage = (next: number) => {
+    updateListing(sampleTabKey, (prev) => ({ ...prev, page: next }));
+  };
+  const setPageSize = (next: number) => {
+    updateListing(sampleTabKey, (prev) => ({
+      ...prev,
+      pageSize: next,
+      page: 1,
+    }));
+  };
+
   const [isMounted, setIsMounted] = useState(false);
-  const [activeTab, setActiveTab] = useState<OrderListTab>("all");
-  const [filters, setFilters] = useState<FilterState>({});
-  const [sort, setSort] = useState<SortState>({ key: "", direction: "none" });
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
   const [plDownloadOpen, setPlDownloadOpen] = useState(false);
   const [plDownloadOptions, setPlDownloadOptions] = useState<PackingListDownloadOption[]>([]);
@@ -257,8 +303,8 @@ export default function SalesOrdersPage() {
 
   const apiFilters = useMemo(() => {
     const f: Record<string, any> = {};
-    if (activeTab && activeTab !== "all" && activeTab !== "sales_return") {
-      f.status = mapFrontendStatusToBackend(activeTab);
+    if (sampleTabKey !== "all") {
+      f.status = mapFrontendStatusToBackend(sampleTabKey);
     }
     if (filters.status && Array.isArray(filters.status) && filters.status.length > 0) {
       f.status = filters.status.map((s) => mapFrontendStatusToBackend(String(s)));
@@ -281,7 +327,7 @@ export default function SalesOrdersPage() {
       f.salesperson = { username: filters.customerName };
     }
     return f;
-  }, [filters, activeTab]);
+  }, [filters, sampleTabKey]);
 
   const SORT_KEY_TO_ORDERING: Record<string, string> = {
     soNumber: "order_no",
@@ -367,28 +413,21 @@ export default function SalesOrdersPage() {
   const totalPages = Math.max(1, Math.ceil(totalRecords / pageSize));
 
   useEffect(() => {
-    const tab = searchParams.get("tab");
-    if (tab === "approval") {
-      setActiveTab("pending_approval");
-    } else if (tab === "all" || tab === "draft" || tab === "pending_approval" || tab === "rejected" || tab === "sales_return") {
-      setActiveTab(tab as OrderListTab);
+    const parsed = parseSampleListTabParam(searchParams.get("tab"));
+    if (parsed) {
+      setActiveTab(parsed);
     }
+    // No ?tab= (e.g. back from sample view): keep module-scoped activeTab as-is.
     const toastType = searchParams.get("toast");
     if (toastType === "approved") setToast({ msg: "Sample Order approved successfully.", type: "success" });
     if (toastType === "rejected") setToast({ msg: "Sample Order rejected successfully.", type: "success" });
-  }, [searchParams]);
+  }, [searchParams, setActiveTab]);
 
   useEffect(() => {
     if (!toast) return;
     const t = setTimeout(() => setToast(null), 3200);
     return () => clearTimeout(t);
   }, [toast]);
-
-  useEffect(() => {
-    setPage(1);
-  }, [activeTab, filters, pageSize]);
-
-
 
   const kpi = {
     total: allCountData?.total ?? 0,
@@ -417,7 +456,6 @@ export default function SalesOrdersPage() {
 
   const handleTabChange = (tab: string) => {
     setActiveTab(tab as OrderListTab);
-    setPage(1);
     router.replace(`/sales/sample-order?tab=${tab}`, { scroll: false });
   };
 
@@ -783,7 +821,28 @@ export default function SalesOrdersPage() {
       onTabChange={handleTabChange}
     >
       {activeTab === "sales_return" ? (
-        <SampleReturnTab />
+        <SampleReturnTab
+          filters={returnListing.filters}
+          onFiltersChange={(next) =>
+            setReturnListing((prev) => ({ ...prev, filters: next, page: 1 }))
+          }
+          sort={returnListing.sort}
+          onSortChange={(next) =>
+            setReturnListing((prev) => ({ ...prev, sort: next, page: 1 }))
+          }
+          page={returnListing.page}
+          onPageChange={(next) =>
+            setReturnListing((prev) => ({ ...prev, page: next }))
+          }
+          pageSize={returnListing.pageSize}
+          onPageSizeChange={(next) =>
+            setReturnListing((prev) => ({
+              ...prev,
+              pageSize: next,
+              page: 1,
+            }))
+          }
+        />
       ) : (
         <div>
           <MasterListing<SalesOrder>

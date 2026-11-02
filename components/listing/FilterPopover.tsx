@@ -11,8 +11,12 @@ import { Input } from "@/components/ui/input";
 import { Filter, X, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ColumnConfig, FilterValue } from "./types";
-
 import { AutocompleteSelect } from "@/components/ui/AutocompleteSelect";
+import {
+  isLongNameFilterColumn,
+  LONG_NAME_FILTER_POPOVER_CLASS,
+  needsWideFilterPopover,
+} from "./long-name-column";
 
 interface FilterPopoverProps {
   column: ColumnConfig;
@@ -40,9 +44,15 @@ export function FilterPopover({
     string[]
   >([]);
   const multi = Boolean(column.filterMultiple);
-  const filterWidthClass = column.filterPopoverClassName;
+  const wideFilter = needsWideFilterPopover(column);
+  const filterWidthClass =
+    column.filterPopoverClassName ||
+    (wideFilter ? LONG_NAME_FILTER_POPOVER_CLASS : undefined);
   const optionsPopoverClass =
     filterWidthClass || (multi ? "w-[240px] min-w-[240px]" : undefined);
+  const wrapFilterLabels =
+    column.filterWrapOptions ??
+    isLongNameFilterColumn(column.key, column.header);
 
   useEffect(() => {
     if (column.filterType === "text") {
@@ -170,7 +180,7 @@ export function FilterPopover({
                 className="h-9 rounded-lg border-border bg-white text-xs shadow-sm"
                 popoverClassName={optionsPopoverClass}
                 showLabelTooltip={Boolean(filterWidthClass)}
-                wrapLabels={Boolean(column.filterWrapOptions)}
+                wrapLabels={wrapFilterLabels}
               />
             ) : (
               <AutocompleteSelect
@@ -184,7 +194,7 @@ export function FilterPopover({
                 className="h-9 rounded-lg border-border bg-white text-xs shadow-sm"
                 popoverClassName={optionsPopoverClass}
                 showLabelTooltip={Boolean(filterWidthClass)}
-                wrapLabels={Boolean(column.filterWrapOptions)}
+                wrapLabels={wrapFilterLabels}
               />
             )}
             <div className="flex items-center justify-end gap-2 pt-1 border-t">

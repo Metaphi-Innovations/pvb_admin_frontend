@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { MasterListing } from "@/components/listing/MasterListing";
-import { ColumnConfig, SortState, ActionItemConfig } from "@/components/listing/types";
+import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
 import { Eye, Pencil, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -14,7 +14,7 @@ import { ReorderLevel } from "../types";
 import Link from "next/link";
 import { ReorderLevelService, toOrdering } from "../services";
 import { ListingStatusToggle } from "@/components/listing";
-import { useAppliedListFilters } from "@/lib/masters/use-applied-list-filters";
+import { useReorderListingState } from "../reorder-listing-state-context";
 
 const STOCK_STATUS_OPTIONS = [
   { label: "In Stock", value: "in stock" },
@@ -35,15 +35,13 @@ function StatusBadge({ status }: { status: string }) {
 
 export function ProductOverviewListing() {
   const router = useRouter();
+  const { getListing, setListing } = useReorderListingState();
   const {
-    draftFilters,
-    setDraftFilters,
-    appliedFilters,
-    applyFilters,
-  } = useAppliedListFilters();
-  const [sort, setSort] = useState<SortState>({ key: "updatedDate", direction: "desc" });
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+    filters,
+    sort,
+    page,
+    pageSize,
+  } = getListing("product-overview");
   const [records, setRecords] = useState<ReorderLevel[]>([]);
   const [totalRecords, setTotalRecords] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -52,6 +50,46 @@ export function ProductOverviewListing() {
   const [filterOptions, setFilterOptions] = useState<Record<string, Array<{ label: string; value: string }>>>({});
   const [loadingFilters, setLoadingFilters] = useState<Set<string>>(new Set());
 
+  const setPage = useCallback(
+    (next: number) => {
+      setListing("product-overview", (prev) => ({ ...prev, page: next }));
+    },
+    [setListing],
+  );
+
+  const setPageSize = useCallback(
+    (next: number) => {
+      setListing("product-overview", (prev) => ({
+        ...prev,
+        pageSize: next,
+        page: 1,
+      }));
+    },
+    [setListing],
+  );
+
+  const handleSortChange = useCallback(
+    (next: SortState) => {
+      setListing("product-overview", (prev) => ({
+        ...prev,
+        sort: next,
+        page: 1,
+      }));
+    },
+    [setListing],
+  );
+
+  const handleFilterChange = useCallback(
+    (next: FilterState) => {
+      setListing("product-overview", (prev) => ({
+        ...prev,
+        filters: next,
+        page: 1,
+      }));
+    },
+    [setListing],
+  );
+
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
@@ -59,10 +97,10 @@ export function ProductOverviewListing() {
     ReorderLevelService.list({
       page,
       pageSize,
-      search: String(appliedFilters.search ?? ""),
+      search: String(filters.search ?? ""),
       ordering: toOrdering(sort.key, sort.direction),
       reorder_type: "OVERALL",
-      filters: appliedFilters,
+      filters,
       signal: controller.signal,
     })
       .then((result) => {
@@ -78,7 +116,7 @@ export function ProductOverviewListing() {
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [page, pageSize, sort.key, sort.direction, appliedFilters]);
+  }, [page, pageSize, sort.key, sort.direction, filters]);
 
   const numCol = (key: string, header: string, w = "120px"): ColumnConfig<ReorderLevel> => ({
     key: key as keyof ReorderLevel,
@@ -227,27 +265,23 @@ export function ProductOverviewListing() {
         pageSize={pageSize}
         onPageChange={setPage}
         onPageSizeChange={setPageSize}
-        onSortChange={setSort}
-        onFilterChange={(next) => {
-          setDraftFilters(next);
-          applyFilters(next);
-          setPage(1);
-        }}
+        onSortChange={handleSortChange}
+        onFilterChange={handleFilterChange}
         actions={actions}
         onAdd={() => router.push("/warehouse/reorder-level/create?from=overview")}
         addLabel="Set Reorder Level"
         emptyMessage=""
         searchPlaceholder="Search product or code..."
-        currentFilters={draftFilters}
+        currentFilters={filters}
         currentSort={sort}
         onOpenFilter={handleOpenFilter}
         onExport={() =>
           ReorderLevelService.export({
-            search: String(appliedFilters.search ?? ""),
+            search: String(filters.search ?? ""),
             ordering: toOrdering(sort.key, sort.direction),
             reorder_type: "OVERALL",
             export_type: "excel",
-            filters: appliedFilters,
+            filters,
           })
         }
       />

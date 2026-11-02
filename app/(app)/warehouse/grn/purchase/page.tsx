@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { MasterListing } from "@/components/listing/MasterListing";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
 import { Eye, FileCheck2, Pencil } from "lucide-react";
@@ -11,15 +11,35 @@ import { getGrnTabApiContext } from "@/lib/warehouse/grn-list-config";
 import { GRN_STATUS_CONFIG } from "@/lib/warehouse/grn-status";
 import { useGrnLazyFilters, useGrnListData } from "../shared/useGrnListData";
 import type { GrnListItem } from "@/services/grn-list.service";
+import { useGrnListingState } from "../grn-listing-state-context";
+import { exportPurchaseGrnExcel } from "../shared/grn-excel-export";
+import { showToast } from "@/lib/toast";
 
 const PURCHASE_TAB_CONTEXT = getGrnTabApiContext("purchase");
 
 export default function PurchaseListingRoutePage() {
   const router = useRouter();
-  const [grnFilters, setGrnFilters] = useState<FilterState>({});
-  const [grnSort, setGrnSort] = useState<SortState>({ key: "", direction: "none" });
-  const [grnPage, setGrnPage] = useState(1);
-  const [grnPageSize, setGrnPageSize] = useState(10);
+  const { purchaseListing, setPurchaseListing } = useGrnListingState();
+  const {
+    filters: grnFilters,
+    sort: grnSort,
+    page: grnPage,
+    pageSize: grnPageSize,
+  } = purchaseListing;
+
+  const setGrnFilters = (next: FilterState) => {
+    setPurchaseListing((prev) => ({ ...prev, filters: next, page: 1 }));
+  };
+  const setGrnSort = (next: SortState) => {
+    setPurchaseListing((prev) => ({ ...prev, sort: next, page: 1 }));
+  };
+  const setGrnPage = (next: number) => {
+    setPurchaseListing((prev) => ({ ...prev, page: next }));
+  };
+  const setGrnPageSize = (next: number) => {
+    setPurchaseListing((prev) => ({ ...prev, pageSize: next, page: 1 }));
+  };
+
   const { handleOpenFilter, getFilterOptionsForColumn } = useGrnLazyFilters(
     PURCHASE_TAB_CONTEXT.sourceType,
   );
@@ -32,13 +52,21 @@ export default function PurchaseListingRoutePage() {
     pageSize: grnPageSize,
   });
 
-  useEffect(() => {
-    setGrnPage(1);
-  }, [grnFilters, grnPageSize]);
-
-  useEffect(() => {
-    setGrnPage(1);
-  }, [grnSort.key, grnSort.direction]);
+  const [exporting, setExporting] = useState(false);
+  const handleExport = useCallback(async () => {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      await exportPurchaseGrnExcel({ filters: grnFilters, sort: grnSort });
+    } catch (err) {
+      showToast(
+        err instanceof Error ? err.message : "Failed to export Purchase GRNs.",
+        "error",
+      );
+    } finally {
+      setExporting(false);
+    }
+  }, [exporting, grnFilters, grnSort]);
 
   const grnColumns: ColumnConfig<GrnListItem>[] = useMemo(
     () => [
@@ -220,12 +248,15 @@ export default function PurchaseListingRoutePage() {
         onPageSizeChange={setGrnPageSize}
         onFilterChange={setGrnFilters}
         onSortChange={setGrnSort}
+        currentFilters={grnFilters}
+        currentSort={grnSort}
         actions={grnActions}
         emptyMessage="No GRNs found"
         searchPlaceholder="Search by GRN No, PO No, Supplier..."
         addLabel="Create Purchase GRN"
         onAdd={() => router.push("/warehouse/grn/purchase/create")}
         onOpenFilter={handleOpenFilter}
+        onExport={() => void handleExport()}
       />
     </GrnListingLayout>
   );

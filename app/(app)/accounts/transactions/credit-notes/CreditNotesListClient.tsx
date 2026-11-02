@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type SetStateAction,
+} from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import {
@@ -36,7 +43,6 @@ import {
   AccountsTablePagination,
   AccountsListingFilterCard,
 } from "@/components/accounts/AccountsTableListing";
-import { useReportDateRange } from "@/components/accounts/ReportFilters";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
 import { formatDisplayDate, toIsoDateOnly } from "@/lib/accounts/date-display";
@@ -62,7 +68,6 @@ import {
   NOTES_STATUS_FILTER_OPTIONS,
   NOTES_STATUS_TABS,
   type NotesListingFilterState,
-  resetNotesListingFilters,
   uniqueOptionsFromValues,
   matchesMulti,
 } from "../../components/notes-listing-shared";
@@ -80,12 +85,17 @@ import {
   formatINR,
   parseCreditNotesModuleTab,
   parseCreditNotesStatusTab,
+  type CreditNotesStatusTabId,
   withReturnTo,
 } from "../../credit-notes/note-utils";
 import {
   hasDocumentsListingFilters,
   parseDocumentsListingFiltersFromSearch,
 } from "@/lib/accounts/documents-listing-filter-query";
+import {
+  createDefaultCreditNoteRecordsListingState,
+  useCreditNoteListingState,
+} from "./credit-note-listing-state-context";
 
 const LIST_PATH = CREDIT_NOTES_LIST_PATH;
 
@@ -297,6 +307,42 @@ async function exportCreditNoteListRows(rows: CreditNoteListRow[]): Promise<void
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, sheet, "Credit Notes");
   XLSX.writeFile(wb, `credit-notes-${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+
+function NotesSortSync({
+  sortKey,
+  sortDir,
+  columnFilters,
+  onSortChange,
+  onFilterChange,
+}: {
+  sortKey: string;
+  sortDir: "asc" | "desc";
+  columnFilters: Record<string, unknown>;
+  onSortChange: (sortKey: string, sortDir: "asc" | "desc") => void;
+  onFilterChange: (filters: Record<string, unknown>) => void;
+}) {
+  const ctx = useAccountsColumnFilterContext();
+
+  useEffect(() => {
+    if (!ctx) return;
+    const nextKey = ctx.sortKey || "";
+    const nextDir = ctx.sortDir ?? "asc";
+    if (nextKey !== sortKey || (nextKey !== "" && nextDir !== sortDir)) {
+      onSortChange(nextKey, nextDir);
+    }
+  }, [ctx?.sortKey, ctx?.sortDir, sortKey, sortDir, onSortChange]);
+
+  useEffect(() => {
+    if (!ctx) return;
+    const ctxFiltersStr = JSON.stringify(ctx.columnFilters || {});
+    const propFiltersStr = JSON.stringify(columnFilters || {});
+    if (ctxFiltersStr !== propFiltersStr) {
+      onFilterChange(ctx.columnFilters || {});
+    }
+  }, [ctx?.columnFilters, columnFilters, onFilterChange]);
+
+  return null;
 }
 
 function CreditNotesRecordsTable({
@@ -514,28 +560,85 @@ export default function CreditNotesListClient() {
   const searchParams = useSearchParams();
   const mounted = useClientMounted();
   const { toast, showToast, dismissToast } = useAccountsToast();
-  const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_year");
+  const {
+    records: listing,
+    setRecords: setListing,
+    recordsFilterEpoch,
+    setRecordsFilterEpoch,
+  } = useCreditNoteListingState();
 
   const moduleTab =
     parseCreditNotesModuleTab(searchParams.get("tab")) ?? "pending";
-  const statusTab =
+  const urlStatusTab =
     parseCreditNotesStatusTab(searchParams.get("status")) ?? "all";
+  const statusTab = listing.statusTab;
   const listReturnHref = creditNotesListHref(moduleTab, statusTab);
 
-  const [filters, setFilters] = useState<NotesListingFilterState>(() => ({
-    ...resetNotesListingFilters("this_year"),
-    dateFrom,
-    dateTo,
-    preset,
-  }));
+  const filters = listing.filters;
+  const page = listing.page;
+  const pageSize = listing.pageSize;
+  const wasRecordsRef = useRef(moduleTab === "records");
+  const deepLinkedStatusRef = useRef(false);
+
+  // Deep link: adopt ?status= once on first records view.
+  useEffect(() => {
+    if (deepLinkedStatusRef.current) return;
+    if (moduleTab !== "records") return;
+    deepLinkedStatusRef.current = true;
+    if (urlStatusTab === listing.statusTab) return;
+    setListing((prev) => ({ ...prev, statusTab: urlStatusTab, page: 1 }));
+  }, [moduleTab, urlStatusTab, listing.statusTab, setListing]);
+
+  // Pending → All: restore secondary status into the URL from persisted listing state.
+  useEffect(() => {
+    const wasRecords = wasRecordsRef.current;
+    wasRecordsRef.current = moduleTab === "records";
+    if (moduleTab !== "records" || wasRecords) return;
+    if (urlStatusTab === listing.statusTab) return;
+    router.replace(creditNotesListHref("records", listing.statusTab), {
+      scroll: false,
+    });
+  }, [moduleTab, urlStatusTab, listing.statusTab, router]);
+
+  const setFilters = useCallback(
+    (updater: SetStateAction<NotesListingFilterState>) => {
+      setListing((prev) => {
+        const nextFilters =
+          typeof updater === "function" ? updater(prev.filters) : updater;
+        if (nextFilters === prev.filters) return prev;
+        return { ...prev, filters: nextFilters };
+      });
+    },
+    [setListing],
+  );
+  const setPage = useCallback(
+    (next: SetStateAction<number>) => {
+      setListing((prev) => {
+        const pageValue = typeof next === "function" ? next(prev.page) : next;
+        if (pageValue === prev.page) return prev;
+        return { ...prev, page: pageValue };
+      });
+    },
+    [setListing],
+  );
+  const setPageSize = useCallback(
+    (next: SetStateAction<number>) => {
+      setListing((prev) => {
+        const pageSizeValue =
+          typeof next === "function" ? next(prev.pageSize) : next;
+        if (pageSizeValue === prev.pageSize) return prev;
+        return { ...prev, pageSize: pageSizeValue, page: 1 };
+      });
+    },
+    [setListing],
+  );
+
   const [records, setRecords] = useState<CreditNoteListRow[]>([]);
   const [pendingCount, setPendingCount] = useState(0);
   const [cancelTarget, setCancelTarget] = useState<CreditNoteListRow | null>(null);
   const [reverseTarget, setReverseTarget] = useState<CreditNoteListRow | null>(null);
   const [reverseBusy, setReverseBusy] = useState(false);
   const reverseBusyRef = useRef(false);
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
   const [exporting, setExporting] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -544,12 +647,8 @@ export default function CreditNotesListClient() {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const apiStatus =
-        statusTab !== "all"
-          ? statusTab === "posted"
-            ? "POSTED"
-            : statusTab.toUpperCase()
-          : mapUiStatusToApi(filters.status);
+      // Load all statuses so secondary tab counts stay correct; status tabs filter client-side.
+      const apiStatus = mapUiStatusToApi(filters.status);
       const sourceType =
         filters.sources.length === 1
           ? Object.entries(CN_SOURCE_LABELS).find(
@@ -596,7 +695,7 @@ export default function CreditNotesListClient() {
     } finally {
       setLoading(false);
     }
-  }, [showToast, statusTab, filters.search, filters.status, filters.sources, filters.dateFrom, filters.dateTo, filters.voucherNo]);
+  }, [showToast, filters.search, filters.status, filters.sources, filters.dateFrom, filters.dateTo, filters.voucherNo]);
 
   useEffect(() => {
     if (!mounted) return;
@@ -604,46 +703,50 @@ export default function CreditNotesListClient() {
   }, [mounted, refresh, sectionRefresh]);
 
   useEffect(() => {
-    setFilters((prev) => ({ ...prev, dateFrom, dateTo, preset }));
-  }, [dateFrom, dateTo, preset]);
-
-  useEffect(() => {
     const qs = searchParams.toString();
     if (!hasDocumentsListingFilters(qs)) return;
     const parsed = parseDocumentsListingFiltersFromSearch(qs);
-    if (parsed.dateFrom) {
-      setDateFrom(parsed.dateFrom);
-      setPreset("custom");
+    if (parsed.dateFrom || parsed.dateTo || parsed.branch) {
+      setFilters((prev) => ({
+        ...prev,
+        ...(parsed.dateFrom
+          ? { dateFrom: parsed.dateFrom, preset: "custom" as const }
+          : {}),
+        ...(parsed.dateTo
+          ? { dateTo: parsed.dateTo, preset: "custom" as const }
+          : {}),
+        ...(parsed.branch ? { branches: [parsed.branch] } : {}),
+      }));
     }
-    if (parsed.dateTo) {
-      setDateTo(parsed.dateTo);
-      setPreset("custom");
-    }
-    if (parsed.branch) setFilters((prev) => ({ ...prev, branches: [parsed.branch!] }));
     if (moduleTab !== "records") {
       const params = new URLSearchParams(searchParams.toString());
       params.set("tab", "records");
       router.replace(`${LIST_PATH}?${params.toString()}`, { scroll: false });
     }
-  }, [searchParams, setDateFrom, setDateTo, setPreset, moduleTab, router]);
+  }, [searchParams, setFilters, moduleTab, router]);
 
   const handleModuleTabChange = useCallback(
     (tab: string) => {
       router.push(
-        creditNotesListHref(tab, tab === "records" ? statusTab : null),
+        creditNotesListHref(tab, tab === "records" ? listing.statusTab : null),
         { scroll: false },
       );
       if (tab === "pending") void refresh();
     },
-    [router, statusTab, refresh],
+    [router, listing.statusTab, refresh],
   );
 
   const handleStatusTabChange = useCallback(
     (tab: string) => {
-      setPage(1);
-      router.push(creditNotesListHref("records", tab), { scroll: false });
+      const next = (parseCreditNotesStatusTab(tab) ?? "all") as CreditNotesStatusTabId;
+      setListing((prev) =>
+        prev.statusTab === next && prev.page === 1
+          ? prev
+          : { ...prev, statusTab: next, page: 1 },
+      );
+      router.push(creditNotesListHref("records", next), { scroll: false });
     },
-    [router],
+    [router, setListing],
   );
 
   const counts = useMemo(() => computeTabCounts(records, filters), [records, filters]);
@@ -705,13 +808,24 @@ export default function CreditNotesListClient() {
   };
 
   const handleResetFilters = () => {
-    const reset = resetNotesListingFilters("this_year");
-    setPreset(reset.preset);
-    setDateFrom(reset.dateFrom);
-    setDateTo(reset.dateTo);
-    setFilters(reset);
+    setListing(createDefaultCreditNoteRecordsListingState());
+    setRecordsFilterEpoch((n) => n + 1);
     router.push(creditNotesListHref("records", "all"), { scroll: false });
   };
+
+  const handleSortChange = useCallback(
+    (sortKey: string, sortDir: "asc" | "desc") => {
+      setListing((prev) => ({ ...prev, sortKey, sortDir, page: 1 }));
+    },
+    [setListing],
+  );
+
+  const handleColumnFilterChange = useCallback(
+    (columnFilters: Record<string, unknown>) => {
+      setListing((prev) => ({ ...prev, columnFilters, page: 1 }));
+    },
+    [setListing],
+  );
 
   const handleView = (row: CreditNoteListRow) => {
     router.push(
@@ -756,12 +870,23 @@ export default function CreditNotesListClient() {
             <PendingCreditNotesPanel onCountChange={setPendingCount} />
           ) : (
             <AccountsColumnFilterProvider
+              key={`records-${recordsFilterEpoch}`}
               rows={toolbarFiltered}
               getCellValue={getCellValue}
               columnConfig={columnConfig}
               defaultSortKey="creditNoteDate"
               defaultSortDir="desc"
+              initialColumnFilters={listing.columnFilters as Record<string, any>}
+              initialSortKey={listing.sortKey || null}
+              initialSortDir={listing.sortDir || "desc"}
             >
+              <NotesSortSync
+                sortKey={listing.sortKey}
+                sortDir={listing.sortDir}
+                columnFilters={listing.columnFilters}
+                onSortChange={handleSortChange}
+                onFilterChange={handleColumnFilterChange}
+              />
               <AccountsTableListing
                 subheader={
                   <SectionTabs
