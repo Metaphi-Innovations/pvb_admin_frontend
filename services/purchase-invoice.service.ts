@@ -177,6 +177,8 @@ export type AdditionalChargeInput = {
   charge_source: "ORDER" | "INVOICE";
   /** Optional — legacy / source master link only. */
   additional_charge_id?: string | null;
+  /** ADD (default) or DEDUCT (invoice-level discount). */
+  charge_effect?: "ADD" | "DEDUCT";
 };
 
 export type CreateFromGrnPayload = {
@@ -1262,6 +1264,11 @@ export function mapPurchaseInvoiceDetailToRecord(
           undefined,
         gstApplicable: Boolean(c.gst_applicable) || derivedGstPct > 0,
         gstPct: derivedGstPct,
+        chargeEffect:
+          asString(c.charge_effect || snap.charge_effect || snap.chargeEffect)
+            .toUpperCase() === "DEDUCT"
+            ? ("DEDUCT" as const)
+            : ("ADD" as const),
       };
     }),
     productAmount: taxable,

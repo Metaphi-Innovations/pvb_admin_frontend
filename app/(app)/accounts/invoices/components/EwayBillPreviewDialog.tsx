@@ -54,6 +54,11 @@ export function EwayBillPreviewDialog({
   const [showJson, setShowJson] = useState(false);
   const busy = Boolean(loading || generating);
   const summary = preview?.summary;
+  const partAOnly =
+    String(summary?.part_a_only ?? "").trim().toLowerCase() === "yes";
+  const generationNote = summary?.generation_note
+    ? String(summary.generation_note)
+    : null;
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && !busy && onClose()}>
@@ -110,10 +115,25 @@ export function EwayBillPreviewDialog({
                 </p>
               </div>
 
+              {partAOnly ? (
+                <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2">
+                  <p className="text-xs font-medium text-foreground">
+                    Part A only
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-muted-foreground">
+                    {generationNote ||
+                      "Vehicle / transport mode are left blank. The transporter updates Part B later on the e-Way Bill portal."}
+                  </p>
+                </div>
+              ) : null}
+
               <div className="rounded-md border border-border/50 px-3 py-1">
                 {summary
                   ? Object.entries(summary)
-                      .filter(([key]) => key !== "flow_label")
+                      .filter(
+                        ([key]) =>
+                          key !== "flow_label" && key !== "generation_note",
+                      )
                       .map(([key, value]) => (
                         <SummaryRow
                           key={key}

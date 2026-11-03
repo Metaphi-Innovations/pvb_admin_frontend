@@ -1623,6 +1623,8 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
       taxAmount,
       productSubtotal: lineTotals.subtotal,
       expenseTaxable: expenseTotals.taxableAmount,
+      expenseAddTaxable: expenseTotals.addTaxableAmount,
+      expenseDeductTaxable: expenseTotals.deductTaxableAmount,
       expenseGst: expenseTotals.gstAmount,
       roundOff: autoRoundOff,
       grandTotal,
@@ -2520,7 +2522,8 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
       ? dispatchTotalsPreview.grossAmount
       : totals.productSubtotal;
   const summaryDiscountAmount = totals.discountTotal;
-  const summaryAdditionalCharges = totals.expenseTaxable;
+  const summaryAdditionalCharges = totals.expenseAddTaxable;
+  const summaryAdditionalDiscount = totals.expenseDeductTaxable;
   const summaryTaxableAmount = Math.max(
     0,
     totals.productSubtotal - totals.discountTotal + totals.expenseTaxable,
@@ -3141,6 +3144,14 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
                     <span className="so-summary-label">Additional Charges</span>
                     <span className="so-summary-value">{formatINR(summaryAdditionalCharges)}</span>
                   </div>
+                  {summaryAdditionalDiscount > 0 ? (
+                    <div className="flex items-center justify-between gap-4 py-0.5">
+                      <span className="so-summary-label">Additional Discount</span>
+                      <span className="so-summary-value">
+                        −{formatINR(summaryAdditionalDiscount)}
+                      </span>
+                    </div>
+                  ) : null}
                   <div className="flex items-center justify-between gap-4 py-0.5">
                     <span className="so-summary-label">Taxable Value</span>
                     <span className="so-summary-value">{formatINR(summaryTaxableAmount)}</span>
@@ -3189,6 +3200,14 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
                     <span className="so-summary-label">Additional Charges</span>
                     <span className="so-summary-value">{formatINR(summaryAdditionalCharges)}</span>
                   </div>
+                  {summaryAdditionalDiscount > 0 ? (
+                    <div className="flex items-center justify-between gap-4 py-0.5">
+                      <span className="so-summary-label">Additional Discount</span>
+                      <span className="so-summary-value">
+                        −{formatINR(summaryAdditionalDiscount)}
+                      </span>
+                    </div>
+                  ) : null}
                   <div className="flex items-center justify-between gap-4 py-0.5">
                     <span className="so-summary-label">Taxable Amount</span>
                     <span className="so-summary-value">{formatINR(summaryTaxableAmount)}</span>
@@ -3238,6 +3257,14 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
                   <span className="text-muted-foreground">Additional Charges</span>
                   <span className="font-medium tabular-nums">
                     {formatINR(summaryAdditionalCharges)}
+                  </span>
+                </div>
+              )}
+              {summaryAdditionalDiscount > 0 && (
+                <div className="flex items-center justify-between gap-4 py-0.5">
+                  <span className="text-muted-foreground">Additional Discount</span>
+                  <span className="font-medium tabular-nums">
+                    −{formatINR(summaryAdditionalDiscount)}
                   </span>
                 </div>
               )}
@@ -3301,6 +3328,14 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
                   <span className="text-muted-foreground">Additional Charges</span>
                   <span className="font-medium tabular-nums">
                     {formatINR(summaryAdditionalCharges)}
+                  </span>
+                </div>
+              )}
+              {summaryAdditionalDiscount > 0 && (
+                <div className="flex items-center justify-between gap-4 py-0.5">
+                  <span className="text-muted-foreground">Additional Discount</span>
+                  <span className="font-medium tabular-nums">
+                    −{formatINR(summaryAdditionalDiscount)}
                   </span>
                 </div>
               )}

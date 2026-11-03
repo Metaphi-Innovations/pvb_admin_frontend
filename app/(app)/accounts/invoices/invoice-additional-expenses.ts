@@ -135,6 +135,9 @@ export type InvoiceExpenseOrigin = "sales_order" | "stock_transfer" | "manual" |
 
 export type InvoiceChargeSource = "ORDER" | "INVOICE";
 
+/** ADD increases invoice; DEDUCT reduces (invoice-level discount). */
+export type InvoiceChargeEffect = "ADD" | "DEDUCT";
+
 export interface InvoiceAdditionalExpense {
 	id: string;
 	/** Free-text Particular (charge_name). Not bound to Additional Charge Master. */
@@ -147,7 +150,7 @@ export interface InvoiceAdditionalExpense {
 	chargeMasterId?: string | null;
 	/** Charge Master code (legacy). */
 	chargeCode?: string | null;
-	/** User-selected COA ledger (Income or Expense). */
+	/** User-selected COA ledger (Income or Expense). Prefer Discount Allowed for DEDUCT. */
 	coaLedgerId?: number | string | null;
 	coaLedgerName?: string;
 	coaLedgerCode?: string;
@@ -158,6 +161,8 @@ export interface InvoiceAdditionalExpense {
 	chargeSource?: InvoiceChargeSource;
 	/** Prefetched from Sales Order / PO — may be edited (ledger/HSN required). */
 	origin?: InvoiceExpenseOrigin;
+	/** Defaults to ADD. DEDUCT = discount / deduction (no GST). */
+	chargeEffect?: InvoiceChargeEffect;
 }
 
 /** Payload shape shared by Sales / Purchase invoice create APIs. */
@@ -172,6 +177,7 @@ export type InvoiceAdditionalChargePayload = {
 	remarks?: string | null;
 	charge_source: InvoiceChargeSource;
 	additional_charge_id?: string | null;
+	charge_effect?: InvoiceChargeEffect;
 };
 
 export type SuggestedAdditionalChargeLike = {
@@ -266,12 +272,15 @@ export interface InvoiceAdditionalExpenseCalc {
 }
 
 export interface InvoiceAdditionalExpensesTotals {
+	/** Net contribution to invoice (ADD positive, DEDUCT negative). */
 	taxableAmount: number;
 	gstAmount: number;
 	cgst: number;
 	sgst: number;
 	igst: number;
 	totalAmount: number;
+	addTaxableAmount: number;
+	deductTaxableAmount: number;
 }
 
 export function createEmptyAdditionalExpense(
@@ -293,7 +302,14 @@ export function createEmptyAdditionalExpense(
 		hsnCode: null,
 		chargeSource: origin === "manual" ? "INVOICE" : "ORDER",
 		origin,
+		chargeEffect: "ADD",
 	};
+}
+
+export function normalizeInvoiceChargeEffect(
+	value: unknown,
+): InvoiceChargeEffect {
+	return String(value ?? "").trim().toUpperCase() === "DEDUCT" ? "DEDUCT" : "ADD";
 }
 
 function asSuggestedNumber(value: string | number | null | undefined): number {
@@ -347,6 +363,7 @@ export function mapSuggestedAdditionalChargesToExpenses(
 			hsnCode,
 			chargeSource: "ORDER",
 			origin,
+			chargeEffect: "ADD",
 		};
 	});
 }
@@ -374,7 +391,9 @@ export function toAdditionalChargePayload(
 			? "ORDER"
 			: fallbackSource);
 
-	const gstApplicable = Boolean(row.gstApplicable);
+	const chargeEffect = normalizeInvoiceChargeEffect(row.chargeEffect);
+	const gstApplicable =
+		chargeEffect === "DEDUCT" ? false : Boolean(row.gstApplicable);
 	return {
 		charge_name: particular,
 		ledger_id: ledgerId,
@@ -385,6 +404,7 @@ export function toAdditionalChargePayload(
 		remarks: row.remarks?.trim() || null,
 		charge_source: source,
 		additional_charge_id: row.chargeMasterId || null,
+		charge_effect: chargeEffect,
 	};
 }
 
@@ -398,11 +418,16 @@ export function toAdditionalChargePayloadList(
 }
 
 export function calcAdditionalExpenseRow(
-	row: Pick<InvoiceAdditionalExpense, "amount" | "gstApplicable" | "gstPct">,
+	row: Pick<
+		InvoiceAdditionalExpense,
+		"amount" | "gstApplicable" | "gstPct" | "chargeEffect"
+	>,
 	interstate = false,
 ): InvoiceAdditionalExpenseCalc {
 	const amount = roundMoney(Math.max(0, row.amount));
-	const gstPct = row.gstApplicable ? Math.max(0, row.gstPct) : 0;
+	const isDeduct = normalizeInvoiceChargeEffect(row.chargeEffect) === "DEDUCT";
+	const gstPct =
+		!isDeduct && row.gstApplicable ? Math.max(0, row.gstPct) : 0;
 	const gstAmount =
 		gstPct > 0 ? roundMoney((amount * gstPct) / 100) : 0;
 	const totalAmount = roundMoney(amount + gstAmount);
@@ -427,16 +452,26 @@ export function calcAdditionalExpensesTotals(
 	let sgst = 0;
 	let igst = 0;
 	let totalAmount = 0;
+	let addTaxableAmount = 0;
+	let deductTaxableAmount = 0;
 
 	for (const row of rows) {
 		if (!row.expenseHead?.trim() && row.amount <= 0) continue;
 		const calc = calcAdditionalExpenseRow(row, interstate);
-		taxableAmount += calc.amount;
-		gstAmount += calc.gstAmount;
-		cgst += calc.cgst;
-		sgst += calc.sgst;
-		igst += calc.igst;
-		totalAmount += calc.totalAmount;
+		const isDeduct =
+			normalizeInvoiceChargeEffect(row.chargeEffect) === "DEDUCT";
+		const sign = isDeduct ? -1 : 1;
+		if (isDeduct) {
+			deductTaxableAmount += calc.amount;
+		} else {
+			addTaxableAmount += calc.amount;
+		}
+		taxableAmount += sign * calc.amount;
+		gstAmount += sign * calc.gstAmount;
+		cgst += sign * calc.cgst;
+		sgst += sign * calc.sgst;
+		igst += sign * calc.igst;
+		totalAmount += sign * calc.totalAmount;
 	}
 
 	return {
@@ -446,6 +481,8 @@ export function calcAdditionalExpensesTotals(
 		sgst: roundMoney(sgst),
 		igst: roundMoney(igst),
 		totalAmount: roundMoney(totalAmount),
+		addTaxableAmount: roundMoney(addTaxableAmount),
+		deductTaxableAmount: roundMoney(deductTaxableAmount),
 	};
 }
 

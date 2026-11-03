@@ -65,6 +65,8 @@ export type AdditionalChargeInput = {
   charge_source: "ORDER" | "INVOICE";
   /** Optional — legacy / source master link only. */
   additional_charge_id?: string | null;
+  /** ADD (default) or DEDUCT (invoice-level discount). */
+  charge_effect?: "ADD" | "DEDUCT";
 };
 
 export type DispatchLineItemOverride = {
@@ -1129,13 +1131,20 @@ function mapBackendAdditionalCharge(
     undefined;
   const chargeSourceRaw = asString(raw.charge_source).toUpperCase();
   const isOrder = chargeSourceRaw === "ORDER";
+  const effectRaw = asString(
+    raw.charge_effect || snap.charge_effect || snap.chargeEffect,
+  ).toUpperCase();
+  const chargeEffect = effectRaw === "DEDUCT" ? ("DEDUCT" as const) : ("ADD" as const);
 
   return {
     id: asString(raw.sales_invoice_additional_charge_id || raw.id || `chg-${idx}`),
     expenseHead: chargeName,
     amount: asNumber(raw.amount ?? raw.taxable_amount),
-    gstApplicable: Boolean(raw.gst_applicable) || gstPct > 0,
-    gstPct,
+    gstApplicable:
+      chargeEffect === "DEDUCT"
+        ? false
+        : Boolean(raw.gst_applicable) || gstPct > 0,
+    gstPct: chargeEffect === "DEDUCT" ? 0 : gstPct,
     remarks: asString(raw.remarks) || "",
     origin: isOrder ? "sales_order" : "manual",
     chargeSource: isOrder ? "ORDER" : "INVOICE",
@@ -1145,6 +1154,7 @@ function mapBackendAdditionalCharge(
     coaLedgerCode: ledgerCode,
     hsnId: hsnId || undefined,
     hsnCode: hsnCode || undefined,
+    chargeEffect,
   };
 }
 
