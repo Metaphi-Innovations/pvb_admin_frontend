@@ -171,20 +171,30 @@ export function PurchaseInvoiceDirectForm({
             : [emptyDirectLine(defaultItc)],
         );
         setAdditionalExpenses(
-          (record.additionalCharges || []).map((c) => ({
-            ...createEmptyAdditionalExpense("manual"),
-            id: c.uid || createEmptyAdditionalExpense().id,
-            expenseHead: c.chargeName || "",
-            amount: c.amount || 0,
-            gstApplicable: Boolean(c.gstApplicable) || (c.gstPct || 0) > 0,
-            gstPct: c.gstPct || 0,
-            remarks: c.remarks || "",
-            coaLedgerId: c.ledgerId || null,
-            coaLedgerName: c.ledgerName || "",
-            hsnId: c.hsnId || null,
-            hsnCode: c.hsnCode || null,
-            chargeSource: "INVOICE" as const,
-          })),
+          (record.additionalCharges || []).map((c) => {
+            const chargeEffect =
+              (c as { chargeEffect?: string }).chargeEffect === "DEDUCT"
+                ? ("DEDUCT" as const)
+                : ("ADD" as const);
+            return {
+              ...createEmptyAdditionalExpense("manual"),
+              id: c.uid || createEmptyAdditionalExpense().id,
+              expenseHead: c.chargeName || "",
+              amount: c.amount || 0,
+              gstApplicable:
+                chargeEffect === "DEDUCT"
+                  ? false
+                  : Boolean(c.gstApplicable) || (c.gstPct || 0) > 0,
+              gstPct: chargeEffect === "DEDUCT" ? 0 : c.gstPct || 0,
+              remarks: c.remarks || "",
+              coaLedgerId: c.ledgerId || null,
+              coaLedgerName: c.ledgerName || "",
+              hsnId: c.hsnId || null,
+              hsnCode: c.hsnCode || null,
+              chargeSource: "INVOICE" as const,
+              chargeEffect,
+            };
+          }),
         );
       } catch (e) {
         if (cancelled) return;
