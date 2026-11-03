@@ -25,7 +25,9 @@ import { useHsnDropdown } from "@/hooks/masters/use-hsn";
 import {
   calcAdditionalExpenseRow,
   createEmptyAdditionalExpense,
+  normalizeInvoiceChargeEffect,
   type InvoiceAdditionalExpense,
+  type InvoiceChargeEffect,
 } from "../invoice-additional-expenses";
 import { formatINR } from "../invoice-utils";
 
@@ -87,7 +89,9 @@ const ChargeRow = memo(function ChargeRow({
     ? "border-b border-border/40 last:border-0"
     : "border-b border-border/40 last:border-b-0";
   const cellClass = invoiceTable ? "p-1.5 align-middle" : "px-1.5 py-1.5 align-middle";
-  const gstOn = Boolean(row.gstApplicable);
+  const chargeEffect = normalizeInvoiceChargeEffect(row.chargeEffect);
+  const isDeduct = chargeEffect === "DEDUCT";
+  const gstOn = !isDeduct && Boolean(row.gstApplicable);
 
   const renderComputed = (value: string, opts?: { muted?: boolean; strong?: boolean }) => {
     if (invoiceTable) {
@@ -110,7 +114,7 @@ const ChargeRow = memo(function ChargeRow({
       <td className={cn(cellClass, "min-w-[180px] w-[200px]")}>
         <Input
           className="h-8 text-xs"
-          placeholder="e.g. Freight"
+          placeholder={isDeduct ? "e.g. Special Discount" : "e.g. Freight"}
           disabled={disabled}
           value={row.expenseHead}
           onChange={(e) => onUpdate(row.id, { expenseHead: e.target.value })}
@@ -118,6 +122,22 @@ const ChargeRow = memo(function ChargeRow({
         {row.origin === "sales_order" || row.origin === "purchase_order" ? (
           <p className="so-product-meta mt-0.5">From {row.origin === "sales_order" ? "Sales Order" : "Purchase Order"}</p>
         ) : null}
+      </td>
+      <td className={cn(cellClass, "min-w-[110px] w-[120px]")}>
+        <select
+          className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs"
+          disabled={disabled}
+          value={chargeEffect}
+          onChange={(e) =>
+            onUpdate(row.id, {
+              chargeEffect: e.target.value as InvoiceChargeEffect,
+            })
+          }
+          aria-label="Charge type"
+        >
+          <option value="ADD">Charge</option>
+          <option value="DEDUCT">Discount</option>
+        </select>
       </td>
       <td className={cn(cellClass, "min-w-[240px] w-[260px]")}>
         <GenericLedgerHierarchySelect
@@ -131,7 +151,7 @@ const ChargeRow = memo(function ChargeRow({
           }
           disabled={disabled}
           compact
-          placeholder="Select ledger…"
+          placeholder={isDeduct ? "Discount Allowed…" : "Select ledger…"}
           className="h-8 text-xs text-left"
           query={{ status: "ACTIVE" }}
           allowedPrimaryHeadCodes={[...CHARGE_LEDGER_HEADS]}
@@ -155,8 +175,8 @@ const ChargeRow = memo(function ChargeRow({
       <td className={cn(cellClass, "min-w-[72px] w-[80px]")}>
         <div className="flex items-center justify-center h-8">
           <Switch
-            checked={row.gstApplicable}
-            disabled={disabled}
+            checked={gstOn}
+            disabled={disabled || isDeduct}
             onCheckedChange={(gstApplicable) => onUpdate(row.id, { gstApplicable })}
           />
         </div>
@@ -311,6 +331,7 @@ function GoodsInvoiceAdditionalChargesEditorInner({
   const gstHeaders = interstate ? ["IGST"] : ["CGST", "SGST"];
   const headers: string[] = [
     "Particular",
+    "Type",
     "Additional Charges Ledger",
     "Amount",
     "GST",
@@ -323,6 +344,7 @@ function GoodsInvoiceAdditionalChargesEditorInner({
 
   const colClassByHeader: Record<string, string> = {
     Particular: "min-w-[180px] w-[200px]",
+    Type: "min-w-[110px] w-[120px]",
     "Additional Charges Ledger": "min-w-[240px] w-[260px]",
     Amount: "min-w-[120px] w-[130px]",
     GST: "min-w-[72px] w-[80px]",
@@ -341,7 +363,15 @@ function GoodsInvoiceAdditionalChargesEditorInner({
         prev.map((row) => {
           if (row.id !== id) return row;
           const next = { ...row, ...patch };
-          if (patch.gstApplicable === false) {
+          if (
+            patch.chargeEffect === "DEDUCT" ||
+            normalizeInvoiceChargeEffect(next.chargeEffect) === "DEDUCT"
+          ) {
+            next.gstApplicable = false;
+            next.gstPct = 0;
+            next.hsnId = null;
+            next.hsnCode = null;
+          } else if (patch.gstApplicable === false) {
             next.gstPct = 0;
           } else if (patch.gstApplicable === true && next.gstPct <= 0) {
             const fromHsn = hsnOptions.find((o) => o.value === next.hsnId);
@@ -390,7 +420,7 @@ function GoodsInvoiceAdditionalChargesEditorInner({
             invoiceTable
               ? "so-invoice-table so-invoice-charges-table text-xs w-full"
               : "w-full text-xs",
-            showGstColumns ? "min-w-[1480px]" : "min-w-[900px]",
+            showGstColumns ? "min-w-[1600px]" : "min-w-[1020px]",
           )}
         >
           <thead className={invoiceTable ? undefined : "border-b border-border/60 bg-muted/20"}>
@@ -481,7 +511,11 @@ export function validateGoodsAdditionalCharges(
     if (!(row.amount > 0)) {
       return `Enter a valid amount for "${particular}".`;
     }
-    if (row.gstApplicable) {
+    const isDeduct = normalizeInvoiceChargeEffect(row.chargeEffect) === "DEDUCT";
+    if (isDeduct && row.gstApplicable) {
+      return `GST cannot be applied on discount / deduction "${particular}".`;
+    }
+    if (!isDeduct && row.gstApplicable) {
       if (!hasHsn) {
         return `Select HSN for "${particular}" when GST Applicable is Yes.`;
       }

@@ -262,7 +262,8 @@ export default function ServiceInvoiceFormPageClient() {
   const gstSplit = useMemo(() => splitInvoiceGst(taxAmount, interstate), [taxAmount, interstate]);
   const summaryGrossAmount = lineTotals.subtotal;
   const summaryDiscountAmount = lineTotals.discountTotal;
-  const summaryAdditionalCharges = expenseTotals.taxableAmount;
+  const summaryAdditionalCharges = expenseTotals.addTaxableAmount;
+  const summaryAdditionalDiscount = expenseTotals.deductTaxableAmount;
   const summaryTaxableAmount =
     Math.round(
       (lineTotals.subtotal - lineTotals.discountTotal + expenseTotals.taxableAmount) * 100,
@@ -929,6 +930,14 @@ export default function ServiceInvoiceFormPageClient() {
                   <span className="so-summary-label">Additional Charges</span>
                   <span className="so-summary-value">{formatINR(summaryAdditionalCharges)}</span>
                 </div>
+                {summaryAdditionalDiscount > 0 ? (
+                  <div className="flex items-center justify-between gap-4 py-0.5">
+                    <span className="so-summary-label">Additional Discount</span>
+                    <span className="so-summary-value">
+                      −{formatINR(summaryAdditionalDiscount)}
+                    </span>
+                  </div>
+                ) : null}
                 <div className="flex items-center justify-between gap-4 py-0.5">
                   <span className="so-summary-label">Taxable Amount</span>
                   <span className="so-summary-value">{formatINR(summaryTaxableAmount)}</span>
