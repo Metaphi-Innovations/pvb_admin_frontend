@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { FormContainer } from "@/components/layout/FormContainer";
@@ -14,9 +14,6 @@ import {
 	type ProductCatalogItem,
 	canEditOrder,
 	orderToFormValues,
-	getCustomersForTransactionDropdown,
-	getSalesmenForOrders,
-	loadProductCatalog,
 	setDynamicProducts,
 } from "../../orders-data";
 import { setDynamicPricingRecords, mapProductPricingDropdownRecords } from "@/app/(app)/masters/pricing/pricing-data";
@@ -29,11 +26,29 @@ import CreditLimitExceededDialog from "../../components/CreditLimitExceededDialo
 import {
 	useSalesOrder,
 	useUpdateSalesOrder,
+	useNextSoNumber,
 	useCustomersDropdown,
 	useSalesmenDropdown,
 	useProductsDropdown,
 	useProductPricingDropdown,
 } from "@/hooks/sales/use-sales-orders";
+
+function extractSoStateCode(soNumber?: string | null): string | null {
+	if (!soNumber) return null;
+	const match = soNumber.trim().match(/^SO\/(\d{1,2})\//i);
+	return match ? match[1].padStart(2, "0") : null;
+}
+
+/** Keep serial/FY; only replace the GST state segment. */
+function rewriteSoStateCode(
+	soNumber: string,
+	newStateCode: string,
+): string | null {
+	const match = soNumber.trim().match(/^SO\/(\d{1,2})\/(\d{4})\/(\d+)$/i);
+	if (!match) return null;
+	const state = newStateCode.padStart(2, "0");
+	return `SO/${state}/${match[2]}/${match[3]}`;
+}
 
 export default function EditSalesOrderPage() {
 	const params = useParams();
@@ -43,7 +58,6 @@ export default function EditSalesOrderPage() {
 	const [customers, setCustomers] = useState<Customer[]>([]);
 	const [salesmen, setSalesmen] = useState<Employee[]>([]);
 	const [products, setProducts] = useState<ProductCatalogItem[]>([]);
-	const [orderNumber, setOrderNumber] = useState("");
 	const [form, setForm] = useState<SalesOrderFormValues | null>(null);
 	const [auditInfo, setAuditInfo] = useState<{
 		createdBy: string;
@@ -63,6 +77,41 @@ export default function EditSalesOrderPage() {
 
 	const { data: order, isLoading } = useSalesOrder(id);
 	const updateMutation = useUpdateSalesOrder();
+
+	const originalWarehouseId = order?.warehouseId
+		? String(order.warehouseId)
+		: null;
+	const currentWarehouseId = form?.warehouseId
+		? String(form.warehouseId)
+		: null;
+	const warehouseChanged = Boolean(
+		originalWarehouseId &&
+			currentWarehouseId &&
+			originalWarehouseId !== currentWarehouseId,
+	);
+
+	const { data: nextOrderNumber, isLoading: loadingOrderNumber } =
+		useNextSoNumber(form?.warehouseId, Boolean(form?.warehouseId && warehouseChanged));
+
+	const orderNumber = useMemo(() => {
+		const original = order?.soNumber || "";
+		if (!warehouseChanged) return original;
+		if (loadingOrderNumber) return "…";
+		if (!nextOrderNumber) return original;
+
+		const originalState = extractSoStateCode(original);
+		const nextState = extractSoStateCode(nextOrderNumber);
+		if (!originalState || !nextState || originalState === nextState) {
+			return original;
+		}
+		// Shared FY serial stays the same; only the state code changes.
+		return rewriteSoStateCode(original, nextState) || original;
+	}, [
+		order?.soNumber,
+		warehouseChanged,
+		loadingOrderNumber,
+		nextOrderNumber,
+	]);
 
 	const { data: customerData } = useCustomersDropdown();
 	const { data: salesmanData } = useSalesmenDropdown();
@@ -150,7 +199,6 @@ export default function EditSalesOrderPage() {
 			return;
 		}
 
-		setOrderNumber(order.soNumber);
 		setForm(orderToFormValues(order));
 		setAuditInfo({
 			createdBy: order.createdBy,
@@ -168,6 +216,14 @@ export default function EditSalesOrderPage() {
 
 	const handleSave = (asDraft: boolean) => {
 		if (!form || !order) return;
+
+		if (!orderNumber || orderNumber === "…") {
+			setToast({
+				msg: "Sales order number is still loading. Please wait.",
+				type: "error",
+			});
+			return;
+		}
 
 		const e = validateSalesOrderForm(form);
 		setErrors(e);
@@ -255,7 +311,7 @@ export default function EditSalesOrderPage() {
 						size='sm'
 						className='h-8 text-xs gap-1.5 bg-brand-600 hover:bg-brand-700 text-white'
 						onClick={() => handleSave(false)}
-						disabled={updateMutation.isPending}
+						disabled={updateMutation.isPending || orderNumber === "…"}
 					>
 						<Save className='w-3.5 h-3.5' /> Submit Sales Order
 					</Button>
@@ -272,6 +328,7 @@ export default function EditSalesOrderPage() {
 				salesmen={salesmen}
 				products={products}
 				showStatus
+				originalOrder={order}
 				auditInfo={auditInfo ?? undefined}
 				excludeOrderId={Number(order?.id) || undefined}
 			/>
