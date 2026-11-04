@@ -833,6 +833,9 @@ export default function InvoiceViewPageClient({
     record.otherCharges,
   );
   const expenseTotals = calcAdditionalExpensesTotals(expenses);
+  const summaryAdditionalCharges = expenseTotals.addTaxableAmount;
+  const summaryAdditionalDiscount = expenseTotals.deductTaxableAmount;
+  const allowAdditionalDiscount = isSalesOrderView;
 
   const productGross = record.lineItems.reduce((s, l) => {
     const { base } = calcLineAmounts(l);
@@ -1335,6 +1338,7 @@ export default function InvoiceViewPageClient({
                 disabled
                 interstate={interstate}
                 tableVariant="invoice"
+                allowAdditionalDiscount={allowAdditionalDiscount}
               />
             </VoucherFormSectionCard>
           ) : null}
@@ -1352,7 +1356,32 @@ export default function InvoiceViewPageClient({
                 {!isStockTransferView ? (
                   <SummaryRow label="Discount" value={formatINR(displayDiscount)} />
                 ) : null}
-                <SummaryRow label="Taxable Amount" value={formatINR(gst.taxableValue)} />
+                {summaryAdditionalCharges > 0 ? (
+                  <SummaryRow
+                    label="Additional Charges"
+                    value={formatINR(summaryAdditionalCharges)}
+                  />
+                ) : null}
+                {summaryAdditionalDiscount > 0 ? (
+                  <SummaryRow
+                    label="Additional Discount"
+                    value={`−${formatINR(summaryAdditionalDiscount)}`}
+                  />
+                ) : null}
+                <SummaryRow
+                  label="Taxable Amount"
+                  value={formatINR(
+                    Math.max(
+                      0,
+                      Math.round(
+                        ((productGross || record.subtotal) -
+                          displayDiscount +
+                          expenseTotals.taxableAmount) *
+                          100,
+                      ) / 100,
+                    ),
+                  )}
+                />
                 {interstate ? (
                   <SummaryRow label="Output IGST" value={formatMoneyOrDash(gst.igst)} />
                 ) : (
@@ -1360,12 +1389,6 @@ export default function InvoiceViewPageClient({
                     <SummaryRow label="Output CGST" value={formatMoneyOrDash(gst.cgst)} />
                     <SummaryRow label="Output SGST" value={formatMoneyOrDash(gst.sgst)} />
                   </>
-                )}
-                {(expenseTotals.taxableAmount > 0 || expenses.length > 0) && (
-                  <SummaryRow
-                    label="Additional Charges"
-                    value={formatINR(expenseTotals.taxableAmount)}
-                  />
                 )}
                 <SummaryRow label="Round Off" value={formatSignedRoundOff(roundOff)} />
                 <SummaryRow label="Grand Total" value={formatINR(gst.invoiceTotal)} grand />

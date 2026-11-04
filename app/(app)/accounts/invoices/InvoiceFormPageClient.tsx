@@ -148,6 +148,7 @@ import {
   deriveLegacyChargeFields,
   mapSuggestedAdditionalChargesToExpenses,
   resolveInvoiceAdditionalExpenses,
+  scaleLineGstAfterAdditionalDiscount,
   toAdditionalChargePayloadList,
   type InvoiceAdditionalExpense,
 } from "./invoice-additional-expenses";
@@ -1602,19 +1603,23 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
   );
 
   const totals = useMemo(() => {
+    const lineTaxable = Math.round(
+      (lineTotals.subtotal - lineTotals.discountTotal) * 100,
+    ) / 100;
+    // GST after additional discount on product taxable; ADD-charge GST unchanged.
+    const scaledLineGst = scaleLineGstAfterAdditionalDiscount(
+      lineTaxable,
+      lineTotals.taxAmount,
+      expenseTotals.deductTaxableAmount,
+    );
     const taxAmount =
-      Math.round((lineTotals.taxAmount + expenseTotals.gstAmount) * 100) / 100;
+      Math.round((scaledLineGst + expenseTotals.gstAmount) * 100) / 100;
     const subtotal =
       Math.round((lineTotals.subtotal + expenseTotals.taxableAmount) * 100) / 100;
+    const taxableAfterCharges =
+      Math.round((lineTaxable + expenseTotals.taxableAmount) * 100) / 100;
     const unrounded =
-      Math.round(
-        (lineTotals.subtotal -
-          lineTotals.discountTotal +
-          lineTotals.taxAmount +
-          expenseTotals.taxableAmount +
-          expenseTotals.gstAmount) *
-          100,
-      ) / 100;
+      Math.round((taxableAfterCharges + taxAmount) * 100) / 100;
     const autoRoundOff = computeAutomaticRoundOff(unrounded);
     const grandTotal = Math.round((unrounded + autoRoundOff) * 100) / 100;
     return {
@@ -1778,12 +1783,6 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     backendPlaceOfSupplyInterstate,
     backendTotals,
   ]);
-
-  // Charge GST split needs interstate after ST GSTIN classification is known.
-  const expenseGstSplit = useMemo(
-    () => calcAdditionalExpensesTotals(additionalExpenses, interstateGst),
-    [additionalExpenses, interstateGst],
-  );
 
   // Preview SI / ST invoice number from DocumentSequence (create only).
   // Stock Transfer: ST/ series; number follows source warehouse (issuer), not Place of Supply.
@@ -2025,12 +2024,8 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
       };
     }
     if (useLocalDispatchSummary || !dispatchTotalsPreview) {
-      const productSplit = splitInvoiceGst(lineTotals.taxAmount, interstateGst);
-      return {
-        cgst: Math.round((productSplit.cgst + expenseGstSplit.cgst) * 100) / 100,
-        sgst: Math.round((productSplit.sgst + expenseGstSplit.sgst) * 100) / 100,
-        igst: Math.round((productSplit.igst + expenseGstSplit.igst) * 100) / 100,
-      };
+      // Prefer header tax (already scaled after additional discount).
+      return splitInvoiceGst(totals.taxAmount, interstateGst);
     }
     return splitInvoiceGst(totals.taxAmount, interstateGst);
   }, [
@@ -2038,10 +2033,6 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     useLocalDispatchSummary,
     dispatchTotalsPreview,
     totals.taxAmount,
-    lineTotals.taxAmount,
-    expenseGstSplit.cgst,
-    expenseGstSplit.sgst,
-    expenseGstSplit.igst,
     interstateGst,
   ]);
 
@@ -2167,7 +2158,12 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     if (missingProduct && !sourceDispatchId) {
       return `Product mapping missing for "${missingProduct.productName || "line item"}".`;
     }
-    const chargeErr = validateGoodsAdditionalCharges(additionalExpenses);
+    const chargeErr = validateGoodsAdditionalCharges(additionalExpenses, {
+      allowAdditionalDiscount:
+        !isStockTransferGeneration &&
+        invoiceType !== "stock_transfer" &&
+        !isSampleOrderGeneration,
+    });
     if (chargeErr) return chargeErr;
     return null;
   }, [
@@ -2181,6 +2177,9 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     lines,
     additionalExpenses,
     sourceDispatchId,
+    isStockTransferGeneration,
+    isSampleOrderGeneration,
+    invoiceType,
   ]);
 
   const validateStockTransferInvoiceCore = useCallback((): string | null => {
@@ -2208,7 +2207,9 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
     }
     const cpErr = validateStockTransferCostPrices(lines);
     if (cpErr) return cpErr;
-    const chargeErr = validateGoodsAdditionalCharges(additionalExpenses);
+    const chargeErr = validateGoodsAdditionalCharges(additionalExpenses, {
+      allowAdditionalDiscount: false,
+    });
     if (chargeErr) return chargeErr;
     return null;
   }, [
@@ -2298,7 +2299,9 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
           return;
         }
       }
-      const chargeErr = validateGoodsAdditionalCharges(additionalExpenses);
+      const chargeErr = validateGoodsAdditionalCharges(additionalExpenses, {
+        allowAdditionalDiscount: true,
+      });
       if (chargeErr) {
         setError(chargeErr);
         return;
@@ -2310,7 +2313,9 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
       sourceType !== "stock_transfer"
     ) {
       // Manual Sales Invoice — same Additional Charges validation as dispatch-generated.
-      const chargeErr = validateGoodsAdditionalCharges(additionalExpenses);
+      const chargeErr = validateGoodsAdditionalCharges(additionalExpenses, {
+        allowAdditionalDiscount: true,
+      });
       if (chargeErr) {
         setError(chargeErr);
         return;
@@ -2420,6 +2425,7 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
           round_off_amount: roundOff,
           line_item_overrides: lineItemOverrides.length > 0 ? lineItemOverrides : undefined,
           selected_cn_scheme_id: selectedCnSchemeId || undefined,
+          bank_account_id: bankAccountId || undefined,
         });
 
         // Always land on Sales Invoice Listing (not Pending returnTo / invoice detail).
@@ -3008,6 +3014,11 @@ export default function InvoiceFormPageClient({ invoiceId }: { invoiceId?: numbe
             interstate={interstateGst}
             tableVariant={compactGen && (soGen || stGen) ? "invoice" : "default"}
             hideAddButton={Boolean(compactGen && (soGen || stGen))}
+            allowAdditionalDiscount={
+              !isStockTransferGeneration &&
+              invoiceType !== "stock_transfer" &&
+              !isSampleOrderGeneration
+            }
             onBindAddRow={(fn) => {
               addChargeRowRef.current = fn;
             }}

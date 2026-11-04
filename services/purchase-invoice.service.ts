@@ -385,6 +385,8 @@ export type PrepareGrnInvoiceDto = {
     purchase_order_id: string;
     po_no: string | null;
     po_status?: string | null;
+    payment_type?: string | null;
+    credit_days?: number | string | null;
   } | null;
   supplier: {
     supplier_id: string;
@@ -392,6 +394,12 @@ export type PrepareGrnInvoiceDto = {
     supplier_name?: string | null;
     state?: string | null;
     gstin_number?: string | null;
+    payment_type?: string | null;
+    credit_days?: number | string | null;
+    bank_accounts?: Array<{
+      payment_type?: string | null;
+      credit_days?: number | string | null;
+    }>;
   };
   warehouse: {
     warehouse_id: string;
@@ -533,6 +541,77 @@ function daysBetweenIso(fromIso: string, toIso: string): number | null {
   const to = new Date(`${toIso.slice(0, 10)}T00:00:00`);
   if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) return null;
   return Math.round((to.getTime() - from.getTime()) / 86_400_000);
+}
+
+/** Invoice date + supplier credit days → due date (YYYY-MM-DD). */
+export function computePurchaseInvoiceDueDate(
+  baseDate: string,
+  creditDays: number,
+): string {
+  const raw = String(baseDate || "").trim().slice(0, 10);
+  if (!raw) return "";
+  const d = new Date(`${raw}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return "";
+  const days =
+    Number.isFinite(creditDays) && creditDays > 0 ? Math.trunc(creditDays) : 0;
+  d.setDate(d.getDate() + days);
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+/**
+ * Credit days from supplier banking terms (Supplier master).
+ * Uses the primary bank account's credit_days when payment is credit / Net N.
+ * Immediate / COD / Advance → 0 (due date = base date).
+ */
+export function resolveSupplierCreditDays(input?: {
+  payment_type?: string | null;
+  credit_days?: number | string | null;
+  bank_accounts?: Array<{
+    payment_type?: string | null;
+    credit_days?: number | string | null;
+    is_primary?: boolean;
+  }> | null;
+  bankAccounts?: Array<{
+    payment_type?: string | null;
+    credit_days?: number | string | null;
+    is_primary?: boolean;
+  }> | null;
+} | null): number {
+  if (!input) return 0;
+  const accounts = input.bank_accounts || input.bankAccounts || [];
+  const primary =
+    accounts.find((a) => a?.is_primary) ||
+    accounts[0] ||
+    null;
+  const paymentType = String(
+    primary?.payment_type ?? input.payment_type ?? "",
+  )
+    .trim()
+    .toLowerCase();
+  const rawDays = primary?.credit_days ?? input.credit_days;
+  const days =
+    rawDays != null && rawDays !== "" && Number.isFinite(Number(rawDays))
+      ? Math.max(0, Math.trunc(Number(rawDays)))
+      : 0;
+
+  if (
+    paymentType === "immediate" ||
+    paymentType === "cod" ||
+    paymentType === "advance" ||
+    paymentType.startsWith("advance") ||
+    paymentType === "net-0"
+  ) {
+    return 0;
+  }
+  if (paymentType.startsWith("net-")) {
+    const m = paymentType.match(/^net-(\d+)$/);
+    if (m) return Math.max(0, Number(m[1]));
+  }
+  // Credit / Net / blank payment type: use supplier credit_days from master.
+  return days;
 }
 
 function formatPiPaymentTerms(paymentType?: string | null, creditDays?: number | null): string {

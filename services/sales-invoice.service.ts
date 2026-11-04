@@ -130,6 +130,8 @@ export type CreateFromDispatchPayload = {
   line_item_overrides?: DispatchLineItemOverride[];
   /** Near Expiry / Special — when set, automatic schemes are skipped. */
   selected_cn_scheme_id?: string | null;
+  /** Bank account printed on Tax Invoice PDF. */
+  bank_account_id?: string | null;
 };
 
 export type DirectServiceItemInput = {
@@ -155,6 +157,8 @@ export type CreateDirectServicePayload = {
   items: DirectServiceItemInput[];
   additional_charges?: AdditionalChargeInput[];
   round_off_amount?: number | string | null;
+  /** Bank account printed on invoice PDF. */
+  bank_account_id?: string | null;
 };
 
 export type CancelSalesInvoicePayload = {
@@ -457,6 +461,15 @@ export type SalesInvoiceDetailDto = SalesInvoiceListDto & {
   applied_cn_scheme_snapshot?: Record<string, unknown> | null;
   exclude_from_turnover_discount?: boolean;
   exclude_from_cash_discount?: boolean;
+  bank_account_id?: string | null;
+  bank_account_snapshot?: {
+    bank_account_id?: string | null;
+    bank_name?: string | null;
+    account_holder_name?: string | null;
+    account_number?: string | null;
+    ifsc_code?: string | null;
+    branch_name?: string | null;
+  } | null;
 };
 
 export type PrepareDispatchInvoiceDto = {
@@ -1132,7 +1145,10 @@ function mapBackendAdditionalCharge(
   const chargeSourceRaw = asString(raw.charge_source).toUpperCase();
   const isOrder = chargeSourceRaw === "ORDER";
   const effectRaw = asString(
-    raw.charge_effect || snap.charge_effect || snap.chargeEffect,
+    raw.charge_effect ||
+      snap.charge_effect ||
+      snap.chargeEffect ||
+      (raw as { chargeEffect?: unknown }).chargeEffect,
   ).toUpperCase();
   const chargeEffect = effectRaw === "DEDUCT" ? ("DEDUCT" as const) : ("ADD" as const);
 
@@ -1422,6 +1438,21 @@ export function mapSalesInvoiceDetailToRecord(
       undefined,
     appliedCnScheme,
     productDiscountTurnoverEligible: !Boolean(dto.exclude_from_turnover_discount),
+    bankAccountId: asString(dto.bank_account_id) || null,
+    bankAccountPrint: (() => {
+      const snap = dto.bank_account_snapshot;
+      if (!snap) return null;
+      const bankName = asString(snap.bank_name);
+      const accountNumber = asString(snap.account_number);
+      const ifsc = asString(snap.ifsc_code);
+      if (!bankName && !accountNumber && !ifsc) return null;
+      return {
+        bankName: bankName || "—",
+        accountNumber: accountNumber || "—",
+        ifsc: ifsc || "—",
+        branchName: asString(snap.branch_name) || "—",
+      };
+    })(),
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     createdBy: "",
