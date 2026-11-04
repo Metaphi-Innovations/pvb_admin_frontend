@@ -91,8 +91,10 @@ export function InvoiceViewStatutorySection({
   onGenerateEInvoice,
   onGenerateEway,
   onCancelEway,
+  onDownloadEway,
   eInvoiceBusy,
   ewayBusy,
+  ewayDownloadBusy,
 }: {
   record: InvoiceRecord;
   /** POSTED invoices only — hide generate when cancelled/reversed. */
@@ -100,8 +102,10 @@ export function InvoiceViewStatutorySection({
   onGenerateEInvoice: () => void;
   onGenerateEway: () => void;
   onCancelEway?: () => void;
+  onDownloadEway?: () => void;
   eInvoiceBusy?: boolean;
   ewayBusy?: boolean;
+  ewayDownloadBusy?: boolean;
 }) {
   const [detailsOpen, setDetailsOpen] = useState(true);
 
@@ -123,6 +127,10 @@ export function InvoiceViewStatutorySection({
   const showCancelEway =
     canAct &&
     Boolean(onCancelEway) &&
+    (ewayStatus === "generated" || ewayStatus === "manual") &&
+    Boolean(record.ewayBillNo?.trim());
+  const showDownloadEway =
+    Boolean(onDownloadEway) &&
     (ewayStatus === "generated" || ewayStatus === "manual") &&
     Boolean(record.ewayBillNo?.trim());
   const showGenerateIRN =
@@ -200,7 +208,7 @@ export function InvoiceViewStatutorySection({
               </span>
             </p>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
             {showGenerateEway ? (
               <Button
                 type="button"
@@ -215,13 +223,25 @@ export function InvoiceViewStatutorySection({
                   : "Generate E-Way Bill"}
               </Button>
             ) : null}
+            {showDownloadEway ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs"
+                disabled={ewayBusy || ewayDownloadBusy}
+                onClick={onDownloadEway}
+              >
+                {ewayDownloadBusy ? "Downloading…" : "Download E-Way Bill"}
+              </Button>
+            ) : null}
             {showCancelEway ? (
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 className="h-8 text-xs text-destructive border-destructive/40 hover:bg-destructive/5"
-                disabled={ewayBusy}
+                disabled={ewayBusy || ewayDownloadBusy}
                 onClick={onCancelEway}
               >
                 Cancel E-Way Bill

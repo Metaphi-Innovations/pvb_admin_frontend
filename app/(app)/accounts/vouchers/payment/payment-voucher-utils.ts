@@ -595,7 +595,9 @@ export function electronicModes(): PaymentBankTransactionMode[] {
 }
 
 export function validatePaymentForm(form: PaymentFormState): string | null {
-  if (!form.voucher_date) return "Voucher date is required.";
+  if (!form.transaction_date && !form.voucher_date) {
+    return "Transaction Date is required.";
+  }
   if (!form.warehouse_id) return "Branch / Warehouse is required.";
   if (!form.transaction_mode) return "Mode of payment is required.";
   if (!form.cash_bank_ledger_id) return "Cash / Bank account is required.";
@@ -821,7 +823,9 @@ export function buildCreatePayload(form: PaymentFormState): CreatePaymentVoucher
   }
 
   return {
-    voucher_date: form.voucher_date || todayDateInput(),
+    // Prefer the date the user edited (Transaction Date); fall back to voucher_date.
+    voucher_date:
+      form.transaction_date || form.voucher_date || todayDateInput(),
     warehouse_id: form.warehouse_id,
     party_kind: form.party_kind,
     customer_id: form.party_kind === "CUSTOMER_REFUND" ? form.customer_id : null,
@@ -853,7 +857,8 @@ export function buildCreatePayload(form: PaymentFormState): CreatePaymentVoucher
 export function buildUpdatePayload(form: PaymentFormState): UpdatePaymentVoucherPayload {
   return {
     ...buildCreatePayload(form),
-    voucher_date: form.voucher_date || todayDateInput(),
+    voucher_date:
+      form.transaction_date || form.voucher_date || todayDateInput(),
     existing_attachments: form.persistedAttachments,
   };
 }
