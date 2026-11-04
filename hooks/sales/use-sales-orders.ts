@@ -130,6 +130,9 @@ export function useUpdateSalesOrder() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: salesOrderKeys.lists() }),
         queryClient.invalidateQueries({ queryKey: salesOrderKeys.detail(variables.id) }),
+        queryClient.invalidateQueries({
+          queryKey: [...salesOrderKeys.all, "next-so-number"],
+        }),
       ]);
     },
   });

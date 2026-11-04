@@ -18,10 +18,6 @@ import {
 	formatCustomerDropdownSublabel,
 } from "@/lib/masters/entity-display";
 import type { Employee } from "@/app/(app)/user-management/employee/employee-data";
-import {
-	loadWarehouses,
-	type WarehouseMaster,
-} from "@/app/(app)/masters/warehouse/warehouse-data";
 import ProductLinesEditor from "./ProductLinesEditor";
 import AdditionalExpensesEditor from "./AdditionalExpensesEditor";
 import CustomerInfoDialog from "./CustomerInfoDialog";
@@ -59,6 +55,15 @@ import { showCustomerLicenseToasts } from "@/lib/masters/customer-license-alerts
 import CreditLimitSummaryCard from "./CreditLimitSummaryCard";
 
 export type { SalesOrderFormValues };
+
+/** Lightweight warehouse row used by the SO form dropdown (API-mapped). */
+type SalesOrderWarehouseOption = {
+	id: string | number;
+	name: string;
+	code?: string;
+	status?: string;
+	state?: string;
+};
 
 function SearchableDropdown<T extends { id: number | string }>({
 	label,
@@ -281,9 +286,40 @@ export function validateSalesOrderForm(
 	if (form.lineItems.length === 0) e.lineItems = "Add at least one product";
 	else {
 		const invalid = form.lineItems.some((l) => !l.productId || l.quantity <= 0);
-		if (invalid)
+		if (invalid) {
 			e.lineItems =
 				"Each line must have a product and quantity greater than zero";
+		} else {
+			// Aggregate qty per product (Case + Piece lines) against warehouse stock.
+			const demand = new Map<
+				string,
+				{ name: string; qty: number; stock: number }
+			>();
+			for (const line of form.lineItems) {
+				if (!line.productId || line.quantity <= 0) continue;
+				const key = String(line.productId);
+				const existing = demand.get(key);
+				if (existing) {
+					existing.qty += line.quantity;
+					existing.stock = Math.min(existing.stock, Number(line.availableStock || 0));
+				} else {
+					demand.set(key, {
+						name: line.productName || line.productCode || "Product",
+						qty: line.quantity,
+						stock: Number(line.availableStock || 0),
+					});
+				}
+			}
+			const short = Array.from(demand.values()).find(
+				(row) => row.qty > row.stock + 1e-9,
+			);
+			if (short) {
+				e.lineItems =
+					short.stock <= 0
+						? `${short.name} has no stock in the selected warehouse.`
+						: `${short.name}: ordered qty (${short.qty}) exceeds available stock (${short.stock}) in the selected warehouse.`;
+			}
+		}
 	}
 	return e;
 }
@@ -357,14 +393,16 @@ export default function SalesOrderForm({
 	const onChangeRef = useRef(onChange);
 	onChangeRef.current = onChange;
 
-	const warehouses = useMemo(() => {
-		return (backendWarehousesData || []).map((w: any) => ({
-			id: w.warehouse_id,
-			name: w.warehouse_name,
-			code: w.warehouse_code,
-			status: w.status?.toLowerCase() || "active",
-			state: w.state || "",
-		})).filter((w) => w.status === "active") as any;
+	const warehouses = useMemo((): SalesOrderWarehouseOption[] => {
+		return (backendWarehousesData || [])
+			.map((w: any): SalesOrderWarehouseOption => ({
+				id: w.warehouse_id,
+				name: w.warehouse_name,
+				code: w.warehouse_code,
+				status: w.status?.toLowerCase() || "active",
+				state: w.state || "",
+			}))
+			.filter((w) => w.status === "active");
 	}, [backendWarehousesData]);
 
 	// Create form: default to any active Maharashtra warehouse once the list loads.
@@ -373,7 +411,7 @@ export default function SalesOrderForm({
 		if (form.warehouseId) return;
 		if (!warehouses.length) return;
 		const maharashtraWarehouse = warehouses.find(
-			(w: any) =>
+			(w) =>
 				String(w.state || "")
 					.trim()
 					.toLowerCase() === "maharashtra",
@@ -689,25 +727,33 @@ export default function SalesOrderForm({
 					</div>
 
 					<div className='space-y-1 col-span-2 md:col-span-3 lg:col-span-4'>
-						<SearchableDropdown<WarehouseMaster>
+						<SearchableDropdown<SalesOrderWarehouseOption>
 							label='Source Warehouse'
 							required
 							value={form.warehouseId ?? null}
 							onChange={(id) => {
-							const hadProducts = form.lineItems.some((l) => l.productId);
-							const updatedForm: typeof form = {
-								...form,
-								warehouseId: id,
-								// Clear products when warehouse changes
-								lineItems: hadProducts ? [] : form.lineItems,
-							};
-							onChange(updatedForm);
-						}}
+								const nextWarehouse = warehouses.find(
+									(w) => String(w.id) === String(id ?? ""),
+								);
+								const hadProducts = form.lineItems.some((l) => l.productId);
+								// Edit: keep products/qty and refresh stock for the new warehouse.
+								// Add/split: clear products when warehouse changes (previous behavior).
+								onChange({
+									...form,
+									warehouseId: id,
+									warehouseName: nextWarehouse?.name ?? "",
+									...(mode === "edit"
+										? {}
+										: {
+												lineItems: hadProducts ? [] : form.lineItems,
+											}),
+								});
+							}}
 							options={warehouses}
 							placeholder='Select source warehouse…'
 							error={errors.warehouseId}
-							getLabel={(w: any) => w.name}
-							getSublabel={(w: any) => w.state}
+							getLabel={(w) => w.name}
+							getSublabel={(w) => w.state || ""}
 						/>
 					</div>
 				</div>

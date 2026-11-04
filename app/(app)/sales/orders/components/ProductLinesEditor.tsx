@@ -952,9 +952,12 @@ export default function ProductLinesEditor({
 									<span
 										className={cn(
 											"text-xs font-medium tabular-nums",
-											line.availableStock === 0
-												? "text-amber-600"
-												: "text-foreground",
+											line.productId != null &&
+												line.quantity > Number(line.availableStock || 0)
+												? "text-red-600"
+												: line.availableStock === 0
+													? "text-amber-600"
+													: "text-foreground",
 										)}
 									>
 										{line.productId != null ? line.availableStock : "0"}
