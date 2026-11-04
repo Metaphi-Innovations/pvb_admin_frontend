@@ -40,6 +40,8 @@ import { VOUCHER_INPUT_CLASS } from "@/components/accounts/voucher-simple-form-u
 import { PURCHASE_SOURCE_TYPE_LABELS, type PurchaseSourceType } from "./purchase-invoice-types";
 import {
   PurchaseInvoiceService,
+  computePurchaseInvoiceDueDate,
+  resolveSupplierCreditDays,
   type AdditionalChargeInput,
   type EligibleGrnDto,
   type PrepareGrnInvoiceDto,
@@ -280,6 +282,7 @@ export function PurchaseInvoiceGrnForm({
   const [vendorInvoiceNo, setVendorInvoiceNo] = useState("");
   const [supplierInvoiceDate, setSupplierInvoiceDate] = useState("");
   const [dueDate, setDueDate] = useState("");
+  const [creditDays, setCreditDays] = useState(0);
   const [remarks, setRemarks] = useState("");
   const [attachment, setAttachment] = useState<File | null>(null);
   const [additionalExpenses, setAdditionalExpenses] = useState<InvoiceAdditionalExpense[]>([]);
@@ -300,9 +303,19 @@ export function PurchaseInvoiceGrnForm({
     );
     setAdditionalExpenses([createEmptyAdditionalExpense()]);
     setVendorInvoiceNo(data.supplier_invoice.supplier_invoice_number || "");
-    setSupplierInvoiceDate(formatDateInput(data.supplier_invoice.supplier_invoice_date));
-    setInvoiceDate(formatDateInput(data.grn.grn_date) || todayIsoDate());
-    setDueDate("");
+    const nextSupplierInvoiceDate = formatDateInput(
+      data.supplier_invoice.supplier_invoice_date,
+    );
+    setSupplierInvoiceDate(nextSupplierInvoiceDate);
+    const nextInvoiceDate =
+      formatDateInput(data.grn.grn_date) || todayIsoDate();
+    setInvoiceDate(nextInvoiceDate);
+    // Supplier master credit days only (terms set while creating the supplier).
+    const nextCreditDays = resolveSupplierCreditDays(data.supplier);
+    setCreditDays(nextCreditDays);
+    // Due date is based on Supplier Invoice Date when present, else Invoice Date.
+    const dueBase = nextSupplierInvoiceDate || nextInvoiceDate;
+    setDueDate(computePurchaseInvoiceDueDate(dueBase, nextCreditDays));
     setShowGrnSelector(false);
     setSelectedGrn(
       fallback ?? {
@@ -345,6 +358,14 @@ export function PurchaseInvoiceGrnForm({
       cancelled = true;
     };
   }, []);
+
+  // Keep due date in sync with Supplier Invoice Date (fallback: Invoice Date) + supplier credit days.
+  useEffect(() => {
+    if (!prepared) return;
+    const dueBase = supplierInvoiceDate || invoiceDate;
+    if (!dueBase) return;
+    setDueDate(computePurchaseInvoiceDueDate(dueBase, creditDays));
+  }, [supplierInvoiceDate, invoiceDate, creditDays, prepared]);
 
   async function handleGrnSelect(grn: EligibleGrnDto) {
     setError("");
@@ -573,6 +594,7 @@ export function PurchaseInvoiceGrnForm({
                       setVendorInvoiceNo("");
                       setSupplierInvoiceDate("");
                       setDueDate("");
+                      setCreditDays(0);
                       setAttachment(null);
                       setAdditionalExpenses([]);
                       setPoOriginExpenses([]);
@@ -847,6 +869,7 @@ export function PurchaseInvoiceGrnForm({
                   interstate={interstate}
                   tableVariant="invoice"
                   hideAddButton
+                  allowAdditionalDiscount={false}
                   onBindAddRow={(fn) => {
                     addChargeRowRef.current = fn;
                   }}

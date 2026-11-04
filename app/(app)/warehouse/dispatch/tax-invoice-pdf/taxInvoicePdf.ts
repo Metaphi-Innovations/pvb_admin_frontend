@@ -687,13 +687,40 @@ export function mapDispatchToTaxInvoice(
     shipTo: shipping,
     lines,
     hsnSummary: Array.from(hsnMap.values()),
-    bank: {
-      accountName: asText(warehouse.account_holder_name, DEFAULT_BANK.accountName),
-      bankName: asText(warehouse.bank_name, DEFAULT_BANK.bankName),
-      accountNo: asText(warehouse.account_number, DEFAULT_BANK.accountNo),
-      ifsc: asText(warehouse.ifsc_code, DEFAULT_BANK.ifsc),
-      branch: asText(warehouse.branch_name, DEFAULT_BANK.branch),
-    },
+    bank: (() => {
+      // Prefer bank selected/stored on Sales Invoice; fall back to warehouse bank fields.
+      const selectedBank = readRecord(salesInvoice.bank_account_snapshot);
+      const hasSelected =
+        Boolean(asText(selectedBank.account_holder_name, "")) ||
+        Boolean(asText(selectedBank.bank_name, "")) ||
+        Boolean(asText(selectedBank.account_number, "")) ||
+        Boolean(asText(selectedBank.ifsc_code, ""));
+      if (hasSelected) {
+        return {
+          accountName: asText(
+            selectedBank.account_holder_name,
+            DEFAULT_BANK.accountName,
+          ),
+          bankName: asText(selectedBank.bank_name, DEFAULT_BANK.bankName),
+          accountNo: asText(
+            selectedBank.account_number,
+            DEFAULT_BANK.accountNo,
+          ),
+          ifsc: asText(selectedBank.ifsc_code, DEFAULT_BANK.ifsc),
+          branch: asText(selectedBank.branch_name, DEFAULT_BANK.branch),
+        };
+      }
+      return {
+        accountName: asText(
+          warehouse.account_holder_name,
+          DEFAULT_BANK.accountName,
+        ),
+        bankName: asText(warehouse.bank_name, DEFAULT_BANK.bankName),
+        accountNo: asText(warehouse.account_number, DEFAULT_BANK.accountNo),
+        ifsc: asText(warehouse.ifsc_code, DEFAULT_BANK.ifsc),
+        branch: asText(warehouse.branch_name, DEFAULT_BANK.branch),
+      };
+    })(),
     narration: (() => {
       const fromNarration = String(salesInvoice.narration ?? "").trim();
       if (fromNarration) return fromNarration;

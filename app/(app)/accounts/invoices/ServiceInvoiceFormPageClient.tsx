@@ -74,6 +74,7 @@ import {
 import { ServiceInvoiceLineLedgerSelect } from "@/app/(app)/accounts/invoices/components/ServiceInvoiceLineLedgerSelect";
 import {
   calcAdditionalExpensesTotals,
+  scaleLineGstAfterAdditionalDiscount,
   createEmptyAdditionalExpense,
   toAdditionalChargePayloadList,
   type InvoiceAdditionalExpense,
@@ -247,16 +248,18 @@ export default function ServiceInvoiceFormPageClient() {
     () => calcAdditionalExpensesTotals(additionalExpenses),
     [additionalExpenses],
   );
-  const taxAmount = Math.round((lineTotals.taxAmount + expenseTotals.gstAmount) * 100) / 100;
+  const lineTaxable =
+    Math.round((lineTotals.subtotal - lineTotals.discountTotal) * 100) / 100;
+  const scaledLineGst = scaleLineGstAfterAdditionalDiscount(
+    lineTaxable,
+    lineTotals.taxAmount,
+    expenseTotals.deductTaxableAmount,
+  );
+  const taxAmount =
+    Math.round((scaledLineGst + expenseTotals.gstAmount) * 100) / 100;
   const unroundedInvoice =
-    Math.round(
-      (lineTotals.subtotal -
-        lineTotals.discountTotal +
-        lineTotals.taxAmount +
-        expenseTotals.taxableAmount +
-        expenseTotals.gstAmount) *
-        100,
-    ) / 100;
+    Math.round((lineTaxable + expenseTotals.taxableAmount + taxAmount) * 100) /
+    100;
   const roundOff = computeAutomaticRoundOff(unroundedInvoice);
   const grandTotal = Math.round((unroundedInvoice + roundOff) * 100) / 100;
   const gstSplit = useMemo(() => splitInvoiceGst(taxAmount, interstate), [taxAmount, interstate]);
@@ -533,6 +536,7 @@ export default function ServiceInvoiceFormPageClient() {
         }),
         additional_charges: charges.length > 0 ? charges : undefined,
         round_off_amount: roundOff,
+        bank_account_id: bankAccountId || undefined,
       });
 
       dispatchAccountsDataChanged("sales-invoices");
@@ -899,6 +903,7 @@ export default function ServiceInvoiceFormPageClient() {
               interstate={interstate}
               tableVariant="invoice"
               hideAddButton
+              allowAdditionalDiscount={false}
               onBindAddRow={(fn) => {
                 addChargeRowRef.current = fn;
               }}

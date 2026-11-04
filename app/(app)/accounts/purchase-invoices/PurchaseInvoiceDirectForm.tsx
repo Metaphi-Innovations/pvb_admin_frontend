@@ -27,7 +27,9 @@ import { useGstDropdown } from "@/hooks/masters/use-gst";
 import { cn } from "@/lib/utils";
 import {
   PurchaseInvoiceService,
+  computePurchaseInvoiceDueDate,
   mapPurchaseInvoiceDetailToRecord,
+  resolveSupplierCreditDays,
 } from "@/services/purchase-invoice.service";
 import { useFY, setStoredFYId, getStoredFYId } from "@/lib/fy-store";
 import {
@@ -132,6 +134,7 @@ export function PurchaseInvoiceDirectForm({
 
   const { data: supplierDetail } = useSupplier(supplierId || null);
   const { data: warehouseDetail } = useWarehouse(warehouseId || null);
+  const autoFillDueDateRef = useRef(!isEdit);
 
   useEffect(() => {
     if (!invoiceId) {
@@ -250,6 +253,27 @@ export function PurchaseInvoiceDirectForm({
       setPlaceOfSupply(stateFromGstin(supplierGstin));
     }
   }, [supplierDetail]);
+
+  // Auto-fill due date from supplier credit days (create flow, or after user changes supplier/date).
+  useEffect(() => {
+    if (hydrating || !autoFillDueDateRef.current) return;
+    if (!invoiceDate || !supplierId || !supplierDetail) return;
+    const days = resolveSupplierCreditDays(
+      supplierDetail as {
+        payment_type?: string | null;
+        credit_days?: number | string | null;
+        bankAccounts?: Array<{
+          payment_type?: string | null;
+          credit_days?: number | string | null;
+        }>;
+        bank_accounts?: Array<{
+          payment_type?: string | null;
+          credit_days?: number | string | null;
+        }>;
+      },
+    );
+    setDueDate(computePurchaseInvoiceDueDate(invoiceDate, days));
+  }, [supplierDetail, supplierId, invoiceDate, hydrating]);
 
   const warehouseLocationOk = useMemo(() => {
     if (!warehouseId) return true;
@@ -545,6 +569,7 @@ export function PurchaseInvoiceDirectForm({
                     supplierId={supplierId}
                     onSupplierSelect={(id) => {
                       autoFillPlaceOfSupplyRef.current = true;
+                      autoFillDueDateRef.current = true;
                       setSupplierId(id);
                     }}
                     className={INVOICE_DETAIL_SELECT_CLASS}
@@ -677,6 +702,7 @@ export function PurchaseInvoiceDirectForm({
               interstate={interstate}
               tableVariant="invoice"
               hideAddButton
+              allowAdditionalDiscount={false}
               onBindAddRow={(fn) => {
                 addChargeRowRef.current = fn;
               }}
