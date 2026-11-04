@@ -821,7 +821,7 @@ export function buildCreatePayload(form: PaymentFormState): CreatePaymentVoucher
   }
 
   return {
-    voucher_date: todayDateInput(),
+    voucher_date: form.voucher_date || todayDateInput(),
     warehouse_id: form.warehouse_id,
     party_kind: form.party_kind,
     customer_id: form.party_kind === "CUSTOMER_REFUND" ? form.customer_id : null,
