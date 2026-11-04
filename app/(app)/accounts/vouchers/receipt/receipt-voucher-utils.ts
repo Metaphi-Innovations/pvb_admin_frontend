@@ -662,7 +662,9 @@ export function electronicModes(): BankTransactionMode[] {
 }
 
 export function validateReceiptForm(form: ReceiptFormState): string | null {
-  if (!form.voucher_date) return "Voucher date is required.";
+  if (!form.transaction_date && !form.voucher_date) {
+    return "Transaction Date is required.";
+  }
   if (!form.warehouse_id) return "Branch / Warehouse is required.";
   if (!form.transaction_mode) return "Mode of receipt is required.";
   if (!form.cash_bank_ledger_id) return "Cash / Bank account is required.";
@@ -881,7 +883,9 @@ export function buildCreatePayload(form: ReceiptFormState): CreateReceiptVoucher
   });
 
   return {
-    voucher_date: form.voucher_date || todayDateInput(),
+    // Prefer the date the user edited (Transaction Date); fall back to voucher_date.
+    voucher_date:
+      form.transaction_date || form.voucher_date || todayDateInput(),
     warehouse_id: form.warehouse_id,
     party_kind: form.party_kind,
     customer_id: form.party_kind === "CUSTOMER" ? form.customer_id : null,
@@ -915,7 +919,8 @@ export function buildCreatePayload(form: ReceiptFormState): CreateReceiptVoucher
 export function buildUpdatePayload(form: ReceiptFormState): UpdateReceiptVoucherPayload {
   return {
     ...buildCreatePayload(form),
-    voucher_date: form.voucher_date || todayDateInput(),
+    voucher_date:
+      form.transaction_date || form.voucher_date || todayDateInput(),
     existing_attachments: form.persistedAttachments,
   };
 }

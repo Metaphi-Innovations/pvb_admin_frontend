@@ -19,6 +19,7 @@ import { showToast } from "@/lib/toast";
 import { Button } from "@/components/ui/button";
 import { EwayBillPreviewDialog } from "@/app/(app)/accounts/invoices/components/EwayBillPreviewDialog";
 import { EwayBillCancelDialog } from "@/app/(app)/accounts/invoices/components/EwayBillCancelDialog";
+import { downloadDispatchEwayBillPdf } from "@/app/(app)/accounts/invoices/eway-bill-official-pdf";
 import type {
   CancelEwayBillInput,
   PreviewEwayBillResult,
@@ -54,6 +55,7 @@ export default function ViewDispatchPage() {
   const [ewayPreviewOpen, setEwayPreviewOpen] = useState(false);
   const [ewayPreviewLoading, setEwayPreviewLoading] = useState(false);
   const [ewayBusy, setEwayBusy] = useState(false);
+  const [ewayDownloadBusy, setEwayDownloadBusy] = useState(false);
   const [ewayCancelOpen, setEwayCancelOpen] = useState(false);
   const [ewayPreview, setEwayPreview] =
     useState<DispatchPreviewEwayBillResult | null>(null);
@@ -120,6 +122,7 @@ export default function ViewDispatchPage() {
 
   const showEwaySection =
     isStockTransfer && sameGstin && !hasSalesInvoice;
+  const canDownloadEway = showEwaySection && hasActiveEway;
 
   const handleOpenEwayPreview = async () => {
     if (!id || ewayBusy || ewayPreviewLoading) return;
@@ -190,6 +193,22 @@ export default function ViewDispatchPage() {
       );
     } finally {
       setEwayBusy(false);
+    }
+  };
+
+  const handleDownloadEway = async () => {
+    if (!id || ewayDownloadBusy) return;
+    setEwayDownloadBusy(true);
+    try {
+      await downloadDispatchEwayBillPdf(id);
+      showToast("E-Way Bill PDF downloaded.", "success");
+    } catch (e) {
+      showToast(
+        e instanceof Error ? e.message : "Failed to download E-Way Bill PDF.",
+        "error",
+      );
+    } finally {
+      setEwayDownloadBusy(false);
     }
   };
 
@@ -381,12 +400,23 @@ export default function ViewDispatchPage() {
                           : "Generate E-Way Bill"}
                     </Button>
                   ) : null}
+                  {canDownloadEway ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-8 text-xs"
+                      disabled={ewayBusy || ewayDownloadBusy}
+                      onClick={() => void handleDownloadEway()}
+                    >
+                      {ewayDownloadBusy ? "Downloading…" : "Download E-Way Bill"}
+                    </Button>
+                  ) : null}
                   {canCancelEway ? (
                     <Button
                       size="sm"
                       variant="outline"
                       className="h-8 text-xs text-destructive border-destructive/40 hover:bg-destructive/5"
-                      disabled={ewayBusy}
+                      disabled={ewayBusy || ewayDownloadBusy}
                       onClick={() => setEwayCancelOpen(true)}
                     >
                       Cancel E-Way Bill

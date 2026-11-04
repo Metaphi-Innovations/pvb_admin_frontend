@@ -39,6 +39,7 @@ import { GoodsInvoiceAdditionalChargesEditor } from "./components/GoodsInvoiceAd
 import { InvoiceViewStatutorySection } from "./components/InvoiceViewStatutorySection";
 import { EwayBillPreviewDialog } from "./components/EwayBillPreviewDialog";
 import { EwayBillCancelDialog } from "./components/EwayBillCancelDialog";
+import { downloadSalesInvoiceEwayBillPdf } from "./eway-bill-official-pdf";
 import { downloadInvoicePdf } from "./invoice-pdf";
 import {
   openProformaInvoicePreview,
@@ -709,6 +710,7 @@ export default function InvoiceViewPageClient({
   const [sendEmailOpen, setSendEmailOpen] = useState(false);
   const [eInvoiceBusy, setEInvoiceBusy] = useState(false);
   const [ewayBusy, setEwayBusy] = useState(false);
+  const [ewayDownloadBusy, setEwayDownloadBusy] = useState(false);
   const [postingDraft, setPostingDraft] = useState(false);
   const [ewayPreviewOpen, setEwayPreviewOpen] = useState(false);
   const [ewayPreviewLoading, setEwayPreviewLoading] = useState(false);
@@ -969,6 +971,22 @@ export default function InvoiceViewPageClient({
       );
     } finally {
       setEwayBusy(false);
+    }
+  };
+
+  const handleDownloadEway = async () => {
+    if (!record?.salesInvoiceId || ewayDownloadBusy) return;
+    setEwayDownloadBusy(true);
+    try {
+      await downloadSalesInvoiceEwayBillPdf(String(record.salesInvoiceId));
+      showToast("E-Way Bill PDF downloaded.", "success");
+    } catch (e) {
+      showToast(
+        e instanceof Error ? e.message : "Failed to download E-Way Bill PDF.",
+        "error",
+      );
+    } finally {
+      setEwayDownloadBusy(false);
     }
   };
 
@@ -1297,8 +1315,10 @@ export default function InvoiceViewPageClient({
                 onGenerateEInvoice={() => void handleGenerateIRN()}
                 onGenerateEway={() => void handleOpenEwayPreview()}
                 onCancelEway={() => setEwayCancelOpen(true)}
+                onDownloadEway={() => void handleDownloadEway()}
                 eInvoiceBusy={eInvoiceBusy}
                 ewayBusy={ewayBusy || ewayPreviewLoading}
+                ewayDownloadBusy={ewayDownloadBusy}
               />
             </VoucherFormSectionCard>
           ) : null}
