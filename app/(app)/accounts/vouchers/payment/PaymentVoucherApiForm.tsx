@@ -893,13 +893,20 @@ export function PaymentVoucherApiForm({
                   </SelectContent>
                 </Select>
               </InvoiceDetailField>
-              <InvoiceDetailField label="Transaction Date">
+              <InvoiceDetailField label="Transaction Date" required>
                 <Input
                   type="date"
                   className={INVOICE_DETAIL_INPUT_CLASS}
-                  value={form.transaction_date}
+                  value={form.transaction_date || form.voucher_date}
                   disabled={!fieldsEditable}
-                  onChange={(e) => patch({ transaction_date: e.target.value })}
+                  onChange={(e) => {
+                    const date = e.target.value;
+                    // Keep voucher_date in sync so GL / posting use this date.
+                    patch({
+                      transaction_date: date,
+                      voucher_date: date || form.voucher_date,
+                    });
+                  }}
                 />
               </InvoiceDetailField>
             </div>
