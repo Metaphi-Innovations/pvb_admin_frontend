@@ -161,7 +161,10 @@ export interface InvoiceAdditionalExpense {
 	chargeSource?: InvoiceChargeSource;
 	/** Prefetched from Sales Order / PO — may be edited (ledger/HSN required). */
 	origin?: InvoiceExpenseOrigin;
-	/** Defaults to ADD. DEDUCT = discount / deduction (no GST). */
+	/**
+	 * Defaults to ADD. DEDUCT = invoice-level additional discount (GST-off on the row).
+	 * Invoice GST is recalculated on taxable after this discount.
+	 */
 	chargeEffect?: InvoiceChargeEffect;
 }
 
@@ -392,6 +395,7 @@ export function toAdditionalChargePayload(
 			: fallbackSource);
 
 	const chargeEffect = normalizeInvoiceChargeEffect(row.chargeEffect);
+	// Additional discount reduces taxable first; GST is recalculated on the net — not on this row.
 	const gstApplicable =
 		chargeEffect === "DEDUCT" ? false : Boolean(row.gstApplicable);
 	return {
@@ -440,6 +444,24 @@ export function calcAdditionalExpenseRow(
 	const cgst = roundMoney(gstAmount / 2);
 	const sgst = roundMoney(gstAmount - cgst);
 	return { amount, gstAmount, cgst, sgst, igst: 0, totalAmount };
+}
+
+/**
+ * Additional discount is GST-off on the charge row. Invoice GST must be
+ * recalculated on product taxable after that discount (same rate mix, scaled).
+ */
+export function scaleLineGstAfterAdditionalDiscount(
+	lineTaxable: number,
+	lineGst: number,
+	additionalDiscount: number,
+): number {
+	const taxable = roundMoney(Math.max(0, lineTaxable));
+	const gst = roundMoney(Math.max(0, lineGst));
+	const deduct = roundMoney(Math.max(0, additionalDiscount));
+	if (deduct <= 0 || taxable <= 0) return gst;
+	const remaining = Math.max(0, taxable - deduct);
+	if (remaining <= 0) return 0;
+	return roundMoney((gst * remaining) / taxable);
 }
 
 export function calcAdditionalExpensesTotals(

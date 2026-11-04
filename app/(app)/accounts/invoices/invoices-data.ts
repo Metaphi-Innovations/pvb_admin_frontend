@@ -13,6 +13,7 @@ import type { PaymentMode } from "../expenses/expense-data";
 import { attachWorkflowOnCreate } from "@/lib/accounts/accounts-workflow-persist";
 import {
 	calcAdditionalExpensesTotals,
+	scaleLineGstAfterAdditionalDiscount,
 	deriveLegacyChargeFields,
 	resolveInvoiceAdditionalExpenses,
 	type InvoiceAdditionalExpense,
@@ -571,18 +572,19 @@ export function normalizeInvoice(rec: InvoiceRecord): InvoiceRecord {
 
 	const subtotal = Math.round((lineTotals.subtotal + expenseTotals.taxableAmount) * 100) / 100;
 	const discountTotal = lineTotals.discountTotal;
+	const lineTaxable =
+		Math.round((lineTotals.subtotal - lineTotals.discountTotal) * 100) / 100;
+	const scaledLineGst = scaleLineGstAfterAdditionalDiscount(
+		lineTaxable,
+		lineTotals.taxAmount,
+		expenseTotals.deductTaxableAmount,
+	);
 	const taxAmount =
-		Math.round((lineTotals.taxAmount + expenseTotals.gstAmount) * 100) / 100;
+		Math.round((scaledLineGst + expenseTotals.gstAmount) * 100) / 100;
 	const chargeDelta =
 		(rec.roundOff ?? 0) - (rec.adjustment ?? 0) + (rec.tdsTcs ?? 0);
 	const grandTotal = Math.round(
-		(lineTotals.subtotal -
-			lineTotals.discountTotal +
-			lineTotals.taxAmount +
-			expenseTotals.taxableAmount +
-			expenseTotals.gstAmount +
-			chargeDelta) *
-			100,
+		(lineTaxable + expenseTotals.taxableAmount + taxAmount + chargeDelta) * 100,
 	) / 100;
 	const amountReceived = rec.collections.reduce((s, c) => s + c.amount, 0);
 	const balanceAmount = Math.max(
