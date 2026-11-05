@@ -42,10 +42,24 @@ export function previewReturnLineTax(item: PurchaseReturnItem) {
   });
 }
 
+/** Prefer the PO line tax split (same as Bill To GST on the PO / PI). */
 export function resolveTaxSupplyForPO(po: PurchaseOrder): TaxSupplyType {
-  const warehouseState = po.state ?? po.shipping?.shipToLocation ?? "";
+  const hasIgst = (po.lines ?? []).some((l) => (l.igstPct ?? 0) > 0);
+  const hasIntra = (po.lines ?? []).some(
+    (l) => (l.cgstPct ?? 0) > 0 || (l.sgstPct ?? 0) > 0,
+  );
+  if (hasIgst && !hasIntra) return "inter";
+  if (hasIntra && !hasIgst) return "intra";
+
   const billToState = po.billing?.state ?? "";
-  return resolveTaxSupplyType(warehouseState, billToState);
+  const supplierHint =
+    (po as PurchaseOrder & { supplierState?: string }).supplierState ?? "";
+  if (billToState && supplierHint) {
+    return resolveTaxSupplyType(billToState, supplierHint);
+  }
+  // Last resort: if Bill To differs from Ship To state, still do not assume inter —
+  // fall back to intra unless PO lines already encoded IGST above.
+  return "intra";
 }
 
 export function resolveBatchPricing(

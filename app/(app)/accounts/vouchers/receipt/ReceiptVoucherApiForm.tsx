@@ -1170,7 +1170,7 @@ export function ReceiptVoucherApiForm({
                       onChange={(e) => patch({ cheque_number: e.target.value })}
                     />
                   </InvoiceDetailField>
-                  <InvoiceDetailField label="Cheque Date" required>
+                  <InvoiceDetailField label="Cheque Date">
                     <Input
                       type="date"
                       className={INVOICE_DETAIL_INPUT_CLASS}
@@ -1183,26 +1183,20 @@ export function ReceiptVoucherApiForm({
               ) : null}
 
               {form.transaction_mode !== "CASH" && form.transaction_mode !== "CHEQUE" ? (
-                <>
-                  <InvoiceDetailField label="UTR Number" required>
-                    <Input
-                      className={INVOICE_DETAIL_INPUT_CLASS}
-                      value={form.utr_number}
-                      disabled={!fieldsEditable}
-                      onChange={(e) => patch({ utr_number: e.target.value })}
-                      placeholder="UTR…"
-                    />
-                  </InvoiceDetailField>
-                  <InvoiceDetailField label="Transaction Reference" required>
-                    <Input
-                      className={INVOICE_DETAIL_INPUT_CLASS}
-                      value={form.transaction_reference}
-                      disabled={!fieldsEditable}
-                      onChange={(e) => patch({ transaction_reference: e.target.value })}
-                      placeholder="Reference…"
-                    />
-                  </InvoiceDetailField>
-                </>
+                <InvoiceDetailField label="UTR / Transaction Ref" required>
+                  <Input
+                    className={INVOICE_DETAIL_INPUT_CLASS}
+                    value={form.utr_number}
+                    disabled={!fieldsEditable}
+                    onChange={(e) =>
+                      patch({
+                        utr_number: e.target.value,
+                        transaction_reference: "",
+                      })
+                    }
+                    placeholder="UTR / Transaction Ref…"
+                  />
+                </InvoiceDetailField>
               ) : null}
             </div>
           </div>

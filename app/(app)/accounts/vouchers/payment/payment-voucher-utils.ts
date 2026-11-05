@@ -305,8 +305,8 @@ export function mapDetailToForm(detail: PaymentVoucherDetail): PaymentFormState 
       "",
     cheque_number: detail.cheque_number || "",
     cheque_date: formatDateInput(detail.cheque_date),
-    utr_number: detail.utr_number || "",
-    transaction_reference: detail.transaction_reference || "",
+    utr_number: detail.utr_number || detail.transaction_reference || "",
+    transaction_reference: "",
     transaction_date:
       formatDateInput(detail.transaction_date) ||
       formatDateInput(detail.instrument_date) ||
@@ -604,11 +604,10 @@ export function validatePaymentForm(form: PaymentFormState): string | null {
 
   if (form.transaction_mode === "CHEQUE") {
     if (!form.cheque_number.trim()) return "Cheque number is required.";
-    if (!form.cheque_date) return "Cheque date is required.";
   }
   if (electronicModes().includes(form.transaction_mode)) {
-    if (!form.utr_number.trim() && !form.transaction_reference.trim()) {
-      return "UTR or transaction reference is required for electronic transfer modes.";
+    if (!form.utr_number.trim()) {
+      return "UTR / Transaction Ref is required for electronic transfer modes.";
     }
   }
 
@@ -638,7 +637,10 @@ export function validatePaymentForm(form: PaymentFormState): string | null {
   ) {
     return "Invoice Settlement + Ledger Entries cannot exceed Gross Amount.";
   }
+  // SUPPLIER only: Gross = Invoice Settlement + Advance + Ledger Entries.
+  // OTHER_LEDGER / CUSTOMER_REFUND use Amount as the party figure directly (no settlement split).
   if (
+    form.party_kind === "SUPPLIER" &&
     preview.gross > 0 &&
     Math.abs(
       preview.totalAllocated +
@@ -838,7 +840,7 @@ export function buildCreatePayload(form: PaymentFormState): CreatePaymentVoucher
       form.transaction_mode === "CHEQUE" ? form.cheque_number.trim() || null : null,
     cheque_date: form.transaction_mode === "CHEQUE" ? form.cheque_date || null : null,
     utr_number: form.utr_number.trim() || null,
-    transaction_reference: form.transaction_reference.trim() || null,
+    transaction_reference: form.utr_number.trim() || null,
     instrument_date:
       form.transaction_mode === "CHEQUE" ? form.cheque_date || null : form.transaction_date || null,
     transaction_date: form.transaction_date || null,

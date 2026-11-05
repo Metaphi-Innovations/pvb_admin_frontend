@@ -272,8 +272,8 @@ export function mapDetailToForm(detail: ContraVoucherDetail): ContraFormState {
     transaction_mode: detail.transaction_mode || "CASH",
     cheque_number: detail.cheque_number || "",
     cheque_date: formatDateInput(detail.cheque_date),
-    utr_number: detail.utr_number || "",
-    transaction_reference: detail.transaction_reference || "",
+    utr_number: detail.utr_number || detail.transaction_reference || "",
+    transaction_reference: "",
     instrument_date: formatDateInput(detail.instrument_date),
     transaction_date: formatDateInput(detail.transaction_date) || todayDateInput(),
     narration: detail.narration || "",
@@ -360,8 +360,8 @@ export function validateContraForm(form: ContraFormState): string | null {
       if (!form.cheque_date) return "Cheque date is required for CHEQUE mode.";
     }
     if (electronicModes().includes(form.transaction_mode)) {
-      if (!form.utr_number.trim() && !form.transaction_reference.trim()) {
-        return "UTR or transaction reference is required for electronic bank transfer modes.";
+      if (!form.utr_number.trim()) {
+        return "UTR / Transaction Ref is required for electronic bank transfer modes.";
       }
     }
   }
@@ -407,7 +407,7 @@ export function buildCreatePayload(form: ContraFormState): CreateContraVoucherPa
         : null,
     utr_number: bankSide ? form.utr_number.trim() || null : null,
     transaction_reference: bankSide
-      ? form.transaction_reference.trim() || null
+      ? form.utr_number.trim() || null
       : null,
     instrument_date: bankSide ? form.instrument_date || null : null,
     transaction_date: bankSide ? form.transaction_date || null : null,

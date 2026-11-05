@@ -115,7 +115,9 @@ export function BankReconTransactionDetailSheet({
               <DetailRow label="Value Date" value={formatDisplayDate(transaction.valueDate)} />
               <DetailRow label="Reconciliation Date" value={formatDisplayDate(transaction.reconciliationDate)} />
               <DetailRow label="Reference Number" value={transaction.reference || "—"} />
-              {transaction.utrNumber ? <DetailRow label="UTR Number" value={transaction.utrNumber} /> : null}
+              {transaction.utrNumber ? (
+                <DetailRow label="UTR / Transaction Ref" value={transaction.utrNumber} />
+              ) : null}
               <DetailRow label="Cheque Number" value={transaction.chequeNo ?? "—"} />
               {transaction.referenceStatus ? (
                 <DetailRow label="Reference Status" value={transaction.referenceStatus} />
