@@ -666,11 +666,25 @@ export function PurchaseOrderForm({
 		return null;
 	}, [form.supplierId, dbSuppliers, dbSupplierDetail]);
 
+	/** GST intra/inter from Bill To state vs supplier — not Ship To warehouse. */
 	const taxSupplyType = useMemo((): TaxSupplyType => {
-		const warehouseState = selectedWarehouse?.state ?? form.state ?? "";
+		const billAddr = findPOAddressById(billToAddresses, form.billToAddressId ?? "");
+		const billToState =
+			billAddr?.state?.trim() ||
+			form.billing?.state?.trim() ||
+			selectedWarehouse?.state ||
+			form.state ||
+			"";
 		const supplierState = selectedSupplier?.state ?? "";
-		return resolveTaxSupplyType(warehouseState, supplierState);
-	}, [selectedWarehouse, selectedSupplier, form.state]);
+		return resolveTaxSupplyType(billToState, supplierState);
+	}, [
+		billToAddresses,
+		form.billToAddressId,
+		form.billing?.state,
+		selectedWarehouse,
+		selectedSupplier,
+		form.state,
+	]);
 
 	useEffect(() => {
 		if (readOnly || !prDetail || !sourcePrIdStr) return;
@@ -800,8 +814,8 @@ export function PurchaseOrderForm({
 		);
 		if (!changed) return;
 		onChange({ ...form, lines: nextLines });
-		// eslint-disable-next-line react-hooks/exhaustive-deps -- re-split GST when supply type changes
-	}, [taxSupplyType, form.warehouseId, selectedSupplier?.state, form.state]);
+		// eslint-disable-next-line react-hooks/exhaustive-deps -- re-split GST when Bill To / supply type changes
+	}, [taxSupplyType, form.billToAddressId, form.billing?.state, selectedSupplier?.state]);
 
 	useEffect(() => {
 		if (!form.additionalCharges?.length) return;
@@ -825,11 +839,21 @@ export function PurchaseOrderForm({
 	) => applyTaxSupplyToPOLines(currentLines, supplyType);
 
 	const onStateChange = (state: string) => {
-		const nextTaxSupplyType = resolveTaxSupplyType(state, selectedSupplier?.state ?? "");
-		const updatedLines = getUpdatedLinesForState(state, form.lines, nextTaxSupplyType);
 		const billStillValid =
 			!!form.billToAddressId &&
 			billToAddresses.some((a) => a.id === form.billToAddressId);
+		const billAddr = billStillValid
+			? findPOAddressById(billToAddresses, form.billToAddressId ?? "")
+			: null;
+		const billToState =
+			billAddr?.state?.trim() ||
+			(billStillValid ? form.billing?.state?.trim() : "") ||
+			state;
+		const nextTaxSupplyType = resolveTaxSupplyType(
+			billToState,
+			selectedSupplier?.state ?? "",
+		);
+		const updatedLines = getUpdatedLinesForState(state, form.lines, nextTaxSupplyType);
 		patch({
 			state,
 			warehouseId: null,
@@ -855,8 +879,6 @@ export function PurchaseOrderForm({
 		const addressStr = wh ? [wh.address, wh.address_1].filter(Boolean).join(", ") : "";
 		const primaryContact = wh?.contacts?.find((c) => c.is_primary) ?? wh?.contacts?.[0];
 		const nextState = wh?.state || form.state || "";
-		const nextTaxSupplyType = resolveTaxSupplyType(nextState, selectedSupplier?.state ?? "");
-		const updatedLines = getUpdatedLinesForState(nextState, form.lines, nextTaxSupplyType);
 
 		const billStillValid =
 			!!form.billToAddressId &&
@@ -866,7 +888,18 @@ export function PurchaseOrderForm({
 			: wh
 				? `bill-wh-${wh.warehouse_id}`
 				: "";
-		const billAddr = findPOAddressById(billToAddresses, nextBillId ?? "");
+		const billAddr =
+			findPOAddressById(billToAddresses, nextBillId ?? "") ??
+			(wh && !billStillValid ? warehouseToPOAddress(wh, "bill") : null);
+		const billToState =
+			billAddr?.state?.trim() ||
+			form.billing?.state?.trim() ||
+			nextState;
+		const nextTaxSupplyType = resolveTaxSupplyType(
+			billToState,
+			selectedSupplier?.state ?? "",
+		);
+		const updatedLines = getUpdatedLinesForState(nextState, form.lines, nextTaxSupplyType);
 
 		patch({
 			warehouseId: wh ? wh.warehouse_id : null,
@@ -875,9 +908,7 @@ export function PurchaseOrderForm({
 			state: nextState,
 			billToAddressId: nextBillId,
 			shipToAddressId: wh ? `ship-wh-${wh.warehouse_id}` : "",
-			billing: billingFromPOAddress(
-				billAddr ?? (wh ? warehouseToPOAddress(wh, "bill") : null),
-			),
+			billing: billingFromPOAddress(billAddr),
 			shipping: wh
 				? {
 						shipToLocation: wh.warehouse_name || "",
@@ -901,9 +932,21 @@ export function PurchaseOrderForm({
 
 	const onBillToChange = (id: string) => {
 		const addr = findPOAddressById(billToAddresses, id);
+		const billing = billingFromPOAddress(addr);
+		const nextTaxSupplyType = resolveTaxSupplyType(
+			billing.state || addr?.state || "",
+			selectedSupplier?.state ?? "",
+		);
+		const updatedLines = applyTaxSupplyToPOLines(form.lines, nextTaxSupplyType);
+		const updatedCharges = (form.additionalCharges ?? []).map((c) => {
+			const totalGst = (c.cgstPct ?? 0) + (c.sgstPct ?? 0) + (c.igstPct ?? 0);
+			return { ...c, ...applyTaxSupplyToRates(totalGst, nextTaxSupplyType) };
+		});
 		patch({
 			billToAddressId: id,
-			billing: billingFromPOAddress(addr),
+			billing,
+			lines: updatedLines,
+			additionalCharges: updatedCharges,
 		});
 	};
 
@@ -944,8 +987,17 @@ export function PurchaseOrderForm({
 				shipToAddresses,
 				localWarehouseId,
 			);
-			const warehouseState = selectedWarehouse?.state ?? form.state ?? "";
-			const nextTaxSupplyType = resolveTaxSupplyType(warehouseState, s.state || "");
+			const billAddr = findPOAddressById(
+				billToAddresses,
+				form.billToAddressId || defaults.billToAddressId,
+			);
+			const billToState =
+				billAddr?.state?.trim() ||
+				form.billing?.state?.trim() ||
+				selectedWarehouse?.state ||
+				form.state ||
+				"";
+			const nextTaxSupplyType = resolveTaxSupplyType(billToState, s.state || "");
 			const updatedLines =
 				form.lines.length > 0
 					? applyTaxSupplyToPOLines(form.lines, nextTaxSupplyType)

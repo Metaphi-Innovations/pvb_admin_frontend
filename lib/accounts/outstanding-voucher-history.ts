@@ -97,8 +97,8 @@ function resolveReference(row: {
   narration?: string | null;
 }): string {
   return (
-    row.transaction_reference?.trim() ||
     row.utr_number?.trim() ||
+    row.transaction_reference?.trim() ||
     row.cheque_number?.trim() ||
     row.narration?.trim() ||
     "—"
