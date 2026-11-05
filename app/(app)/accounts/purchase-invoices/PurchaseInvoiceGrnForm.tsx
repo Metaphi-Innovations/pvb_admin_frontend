@@ -95,7 +95,12 @@ function batchNumberFromPrepareItem(
 
 function isPreparedInterstate(prepared: PrepareGrnInvoiceDto): boolean {
   const pos = prepared.place_of_supply as
-    | { is_interstate?: boolean; isInterstate?: boolean }
+    | {
+        is_interstate?: boolean;
+        isInterstate?: boolean;
+        bill_to_gstin?: string | null;
+        bill_to_state?: string | null;
+      }
     | null
     | undefined;
   if (typeof pos?.is_interstate === "boolean") return pos.is_interstate;
@@ -106,18 +111,24 @@ function isPreparedInterstate(prepared: PrepareGrnInvoiceDto): boolean {
   )
     .trim()
     .toUpperCase();
-  const warehouseGstin = String(
-    (prepared.warehouse as { gst_number?: string | null })?.gst_number || "",
+  const billToGstin = String(
+    pos?.bill_to_gstin ||
+      prepared.bill_to_warehouse?.gst_number ||
+      "",
   )
     .trim()
     .toUpperCase();
-  if (supplierGstin.length >= 2 && warehouseGstin.length >= 2) {
-    return supplierGstin.slice(0, 2) !== warehouseGstin.slice(0, 2);
+  if (supplierGstin.length >= 2 && billToGstin.length >= 2) {
+    return supplierGstin.slice(0, 2) !== billToGstin.slice(0, 2);
   }
 
   const supplierState = (prepared.supplier.state || "").trim().toLowerCase();
-  const warehouseState = (prepared.warehouse.state || "").trim().toLowerCase();
-  if (supplierState && warehouseState) return supplierState !== warehouseState;
+  const billToState = String(
+    pos?.bill_to_state || prepared.bill_to_warehouse?.state || "",
+  )
+    .trim()
+    .toLowerCase();
+  if (supplierState && billToState) return supplierState !== billToState;
   return false;
 }
 
@@ -616,6 +627,35 @@ export function PurchaseInvoiceGrnForm({
 
           {prepared && (
             <>
+              {(prepared.tax_validation?.issues?.length ?? 0) > 0 && (
+                <div
+                  className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950"
+                  role="status"
+                >
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-700" />
+                    <div className="space-y-1">
+                      <p className="font-medium">
+                        Supplier invoice tax check
+                        {prepared.tax_validation?.has_mismatch
+                          ? " — mismatch flagged"
+                          : ""}
+                      </p>
+                      <ul className="list-disc space-y-0.5 pl-4 text-xs">
+                        {(prepared.tax_validation?.issues ?? []).map((issue, idx) => (
+                          <li key={`${issue.code ?? "issue"}-${idx}`}>
+                            {issue.message || issue.code || "Tax validation warning"}
+                          </li>
+                        ))}
+                      </ul>
+                      <p className="text-xs text-amber-800/90">
+                        Portal GST stays based on Bill To. Posting is not blocked — confirm
+                        against the supplier invoice.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
               <VoucherFormSectionCard title="Supplier & Invoice">
                 <div className="space-y-1.5">
                   <div className="so-invoice-details-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">

@@ -408,6 +408,23 @@ export type PrepareGrnInvoiceDto = {
     gst_number?: string | null;
   };
   place_of_supply?: Record<string, unknown> | null;
+  bill_to_warehouse?: {
+    state?: string | null;
+    gst_number?: string | null;
+  } | null;
+  /** Soft warnings only — portal tax stays Bill To–based. */
+  tax_validation?: {
+    expected_classification?: "INTRA" | "INTER" | "UNKNOWN";
+    supplier_classification?: "INTRA" | "INTER" | "UNKNOWN";
+    expected_gst_amount?: string | null;
+    supplier_gst_amount?: string | null;
+    has_mismatch?: boolean;
+    issues?: Array<{
+      code?: string;
+      severity?: string;
+      message?: string;
+    }>;
+  } | null;
   supplier_invoice: {
     supplier_invoice_number?: string | null;
     supplier_invoice_date?: string | null;

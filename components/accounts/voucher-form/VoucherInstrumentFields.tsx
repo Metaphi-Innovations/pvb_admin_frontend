@@ -103,7 +103,7 @@ export function VoucherInstrumentFields({
   return (
     <div className={cn("grid grid-cols-1 sm:grid-cols-2 gap-2 max-w-xl", className)}>
       <VoucherFormField
-        label={kind === "other" ? "Reference Number" : "Transaction Reference / UTR"}
+        label={kind === "other" ? "Reference Number" : "UTR / Transaction Ref"}
         required={kind === "transfer"}
       >
         {readOnly ? (
@@ -113,7 +113,7 @@ export function VoucherInstrumentFields({
             className={VOUCHER_INPUT_CLASS}
             value={values.transactionReference}
             onChange={(e) => onChange({ transactionReference: e.target.value })}
-            placeholder={kind === "other" ? "Reference…" : "UTR / transaction ref…"}
+            placeholder={kind === "other" ? "Reference…" : "UTR / Transaction Ref…"}
           />
         )}
       </VoucherFormField>
