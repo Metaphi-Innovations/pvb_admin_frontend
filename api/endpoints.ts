@@ -691,6 +691,7 @@ export const API_ENDPOINTS = {
       PREVIEW_NUMBER: "/warehouse/grnqc/qc/preview-number",
       CREATE: "/warehouse/grnqc/qc/create",
       UPDATE: (id: string) => `/warehouse/grnqc/qc/${id}`,
+      REVERT: (id: string) => `/warehouse/grnqc/qc/${id}/revert`,
       LIST: "/warehouse/grnqc/qc/list",
       DETAILS: (id: string) => `/warehouse/grnqc/qc/${id}`,
       FILTER_DROPDOWN: "/warehouse/grnqc/qc/filter-dropdown",

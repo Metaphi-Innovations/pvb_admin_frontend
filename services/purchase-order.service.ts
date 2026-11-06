@@ -471,7 +471,11 @@ export function mapDetail(raw: Record<string, unknown>): PurchaseOrder {
     asString(snapshot.supplier_name) ||
     "";
   const supplierGstin =
-    asString(supplier.gstin_number) || asString(snapshot.gst_no) || "";
+    asString(supplier.gstin_number) ||
+    asString(snapshot.gstin_number) ||
+    asString(snapshot.gst_no) ||
+    asString(snapshot.gstin) ||
+    "";
 
   const status = mapBackendStatusToFrontend(raw.po_status);
   const hasInvoice = invoices.length > 0;

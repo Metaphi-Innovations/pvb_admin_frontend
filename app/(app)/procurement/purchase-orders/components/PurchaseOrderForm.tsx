@@ -497,38 +497,6 @@ export function PurchaseOrderForm({
 		if (form.sourcePrId) setForcePrMode(true);
 	}, [form.sourcePrId]);
 
-	const preview = useMemo(
-		() =>
-			recalcPO({
-				id: "preview",
-				poNumber: "",
-				...form,
-				attachments: form.existingAttachments || [],
-				summary: {
-					grossAmount: 0,
-					totalDiscount: 0,
-					productTotal: 0,
-					additionalChargesTotal: 0,
-					taxableValue: 0,
-					totalCgst: 0,
-					totalSgst: 0,
-					totalIgst: 0,
-					otherCharges: 0,
-					grandTotal: 0,
-					amountInWords: "",
-				},
-				status: "draft",
-				createdBy: "",
-				createdDate: "",
-				updatedBy: "",
-				updatedDate: "",
-				approvedBy: "",
-				approvedDate: "",
-				activity: [],
-			}),
-		[form],
-	);
-
 	const patch = (p: Partial<POFormValues>) => onChange({ ...form, ...p });
 
 	const setType = (next: "pr" | "direct") => {
@@ -553,18 +521,12 @@ export function PurchaseOrderForm({
 		});
 	};
 
-	const previewLines = preview.lines;
-
 	const linkedPr: LinkedPurchaseRequest | null = prDetail
 		? { lines: prDetail.lines }
 		: null;
 	const displayPoNo = poNumberLoading && !poNumber
 		? "Generating…"
 		: poNumber || "Auto-generated";
-	const totalGst =
-		preview.summary.totalCgst +
-		preview.summary.totalSgst +
-		preview.summary.totalIgst;
 
 	const stateOptions = useMemo(() => INDIAN_STATES.map((s) => ({ value: s, label: s })), []);
 	/** State-filtered list for the PO warehouse (Ship To) dropdown. */
@@ -666,25 +628,115 @@ export function PurchaseOrderForm({
 		return null;
 	}, [form.supplierId, dbSuppliers, dbSupplierDetail]);
 
-	/** GST intra/inter from Bill To state vs supplier — not Ship To warehouse. */
+	/**
+	 * GST intra/inter from Bill To vs supplier ONLY.
+	 * Do not fall back to Ship To / PO warehouse state — older POs stored Ship To–based
+	 * CGST/SGST/IGST splits, and using Ship To here keeps the view broken (e.g. Bill To
+	 * same-state → CGST/SGST columns while lines still hold IGST amounts = zeros).
+	 */
 	const taxSupplyType = useMemo((): TaxSupplyType => {
 		const billAddr = findPOAddressById(billToAddresses, form.billToAddressId ?? "");
+		const billGstin = (
+			billAddr?.gstin ||
+			form.billing?.gstNumber ||
+			""
+		).trim();
+		const supplierGstin = (form.supplierGstin || "").trim();
+		if (billGstin.length >= 2 && supplierGstin.length >= 2) {
+			return billGstin.slice(0, 2).toUpperCase() === supplierGstin.slice(0, 2).toUpperCase()
+				? "intra"
+				: "inter";
+		}
 		const billToState =
 			billAddr?.state?.trim() ||
 			form.billing?.state?.trim() ||
-			selectedWarehouse?.state ||
-			form.state ||
 			"";
 		const supplierState = selectedSupplier?.state ?? "";
-		return resolveTaxSupplyType(billToState, supplierState);
+		if (billToState && supplierState) {
+			return resolveTaxSupplyType(billToState, supplierState);
+		}
+		// Bill To not resolvable yet: keep columns aligned with stored split (old Ship To data)
+		// instead of guessing from warehouse/Ship To.
+		const hasIgst = form.lines.some((l) => (l.igstPct ?? 0) > 0);
+		const hasCsGst = form.lines.some(
+			(l) => (l.cgstPct ?? 0) > 0 || (l.sgstPct ?? 0) > 0,
+		);
+		if (hasIgst && !hasCsGst) return "inter";
+		return "intra";
 	}, [
 		billToAddresses,
 		form.billToAddressId,
+		form.billing?.gstNumber,
 		form.billing?.state,
-		selectedWarehouse,
+		form.supplierGstin,
+		form.lines,
 		selectedSupplier,
-		form.state,
 	]);
+
+	/**
+	 * Re-split stored line rates to Bill To taxSupplyType for display.
+	 * Pre–Bill To POs often have Ship To IGST (or vice versa) persisted; view must still
+	 * show the Bill To breakup without requiring onChange (view uses a no-op handler).
+	 */
+	const displayLines = useMemo(
+		() => applyTaxSupplyToPOLines(form.lines, taxSupplyType),
+		[form.lines, taxSupplyType],
+	);
+	const displayAdditionalCharges = useMemo(
+		() =>
+			(form.additionalCharges ?? []).map((c) => {
+				const totalGstPct = (c.cgstPct ?? 0) + (c.sgstPct ?? 0) + (c.igstPct ?? 0);
+				if (totalGstPct <= 0) return c;
+				return { ...c, ...applyTaxSupplyToRates(totalGstPct, taxSupplyType) };
+			}),
+		[form.additionalCharges, taxSupplyType],
+	);
+	const displayForm = useMemo(
+		() => ({
+			...form,
+			lines: displayLines,
+			additionalCharges: displayAdditionalCharges,
+		}),
+		[form, displayLines, displayAdditionalCharges],
+	);
+
+	const preview = useMemo(
+		() =>
+			recalcPO({
+				id: "preview",
+				poNumber: "",
+				...displayForm,
+				attachments: form.existingAttachments || [],
+				summary: {
+					grossAmount: 0,
+					totalDiscount: 0,
+					productTotal: 0,
+					additionalChargesTotal: 0,
+					taxableValue: 0,
+					totalCgst: 0,
+					totalSgst: 0,
+					totalIgst: 0,
+					otherCharges: 0,
+					grandTotal: 0,
+					amountInWords: "",
+				},
+				status: "draft",
+				createdBy: "",
+				createdDate: "",
+				updatedBy: "",
+				updatedDate: "",
+				approvedBy: "",
+				approvedDate: "",
+				activity: [],
+			}),
+		[displayForm, form.existingAttachments],
+	);
+
+	const previewLines = preview.lines;
+	const totalGst =
+		preview.summary.totalCgst +
+		preview.summary.totalSgst +
+		preview.summary.totalIgst;
 
 	useEffect(() => {
 		if (readOnly || !prDetail || !sourcePrIdStr) return;
@@ -773,7 +825,8 @@ export function PurchaseOrderForm({
 	}, [dbProducts, form.sourcePrId, readOnly, taxSupplyType]);
 
 	useEffect(() => {
-		if (!form.supplierId) return;
+		// View must keep saved Bill To snapshot — do not default Bill To to Ship To warehouse.
+		if (readOnly || !form.supplierId) return;
 		if (!form.warehouseId) {
 			if (form.shipToAddressId) {
 				onChange({
@@ -801,7 +854,7 @@ export function PurchaseOrderForm({
 			...(billValid ? {} : { billing: billingFromPOAddress(billAddr) }),
 		});
 		// eslint-disable-next-line react-hooks/exhaustive-deps -- auto-select when addresses load
-	}, [form.supplierId, form.warehouseId, billToAddresses.length, shipToAddresses.length]);
+	}, [form.supplierId, form.warehouseId, billToAddresses.length, shipToAddresses.length, readOnly]);
 
 	useEffect(() => {
 		if (form.lines.length === 0) return;
@@ -1285,7 +1338,7 @@ export function PurchaseOrderForm({
 				)}
 
 				<POLineItemsSection
-					form={form}
+					form={displayForm}
 					onChange={onChange}
 					readOnly={readOnly}
 					poType={poType}
@@ -1299,7 +1352,7 @@ export function PurchaseOrderForm({
 
 				<div className="border-t border-border/60 pt-4">
 					<AdditionalChargesEditor
-						charges={form.additionalCharges ?? []}
+						charges={displayAdditionalCharges}
 						onChange={(charges) => patch({ additionalCharges: charges })}
 						readOnly={readOnly}
 						taxSupplyType={taxSupplyType}
