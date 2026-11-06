@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { MasterListing } from "@/components/listing/MasterListing";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
-import { Eye, ClipboardCheck, Edit3 } from "lucide-react";
+import { Eye, ClipboardCheck, Edit3, RotateCcw } from "lucide-react";
 import { QcRecord, QcStatus } from "../types";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import Link from "next/link";
@@ -18,6 +18,7 @@ import {
 import { useQcListingState } from "../qc-listing-state-context";
 import { exportQcListingExcel } from "../shared/qc-excel-export";
 import { showToast } from "@/lib/toast";
+import { QcRevertDialog, useQcRevert } from "../shared/qc-revert";
 
 type QcSalesReturnRow = QcRecord;
 
@@ -47,6 +48,10 @@ export function SalesReturnQcListing() {
   const [apiTotal, setApiTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [listVersion, setListVersion] = useState(0);
+  const refreshList = useCallback(() => setListVersion((v) => v + 1), []);
+  const { revertTarget, setRevertTarget, reverting, confirmRevert } =
+    useQcRevert(refreshList);
 
   const handleExport = useCallback(async () => {
     if (exporting) return;
@@ -303,7 +308,7 @@ export function SalesReturnQcListing() {
     };
 
     fetchQcs();
-  }, [activeTab, qcPage, qcPageSize, qcFilters, qcSort]);
+  }, [activeTab, qcPage, qcPageSize, qcFilters, qcSort, listVersion]);
 
   const displayedData = apiQcList;
   const displayedTotal = apiTotal;
@@ -444,6 +449,14 @@ export function SalesReturnQcListing() {
       hide: (row) => row.status === "pending",
       disabled: (row) => !row.isEditable,
     },
+    {
+      label: "Revert QC",
+      action: "revert",
+      icon: RotateCcw,
+      onClick: (row) => setRevertTarget(row),
+      hide: (row) => row.status === "pending",
+      disabled: (row) => !row.isEditable,
+    },
   ];
 
   return (
@@ -482,6 +495,13 @@ export function SalesReturnQcListing() {
         searchPlaceholder="Search QC or GRN..."
         loading={isLoading}
         onExport={() => void handleExport()}
+      />
+
+      <QcRevertDialog
+        target={revertTarget}
+        loading={reverting}
+        onClose={() => setRevertTarget(null)}
+        onConfirm={() => void confirmRevert()}
       />
     </div>
   );

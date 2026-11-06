@@ -22,6 +22,7 @@ export interface PackingListProductRow {
   sr: number;
   productCode: string;
   productName: string;
+  sku?: string;
   batchNo: string;
   mfgDate: string;
   expiryDate: string;
@@ -112,6 +113,7 @@ function renderProductRows(products: PackingListProductRow[]): string {
   }
   return products
     .map((row) => {
+      const sku = asText(row.sku, "");
       const batch = asText(row.batchNo, "");
       const mfg = asText(row.mfgDate, "");
       const exp = asText(row.expiryDate, "");
@@ -125,7 +127,13 @@ function renderProductRows(products: PackingListProductRow[]): string {
         <td class="pl-c">${row.sr}</td>
         <td class="pl-c pl-nowrap">${escapeHtml(asText(row.productCode, ""))}</td>
         <td class="pl-pname">
-          <div class="pl-pname-main">${escapeHtml(asText(row.productName))}</div>
+          <div class="pl-pname-main">
+            ${escapeHtml(asText(row.productName))}${
+              sku && sku !== "-"
+                ? ` <span class="pl-sku">SKU: ${escapeHtml(sku)}</span>`
+                : ""
+            }
+          </div>
           ${batch && batch !== "-" ? `<div class="pl-pname-sub">Batch No: ${escapeHtml(batch)}</div>` : ""}
           ${dateLine ? `<div class="pl-pname-sub">${dateLine}</div>` : ""}
         </td>
@@ -385,7 +393,15 @@ export function buildPackingListPdfHtml(data: PackingListPdfData): string {
       .pl-table tbody tr:last-child td { border-bottom: none; }
       .pl-pname { text-align: left; vertical-align: top !important; color: #0d0d0d !important; }
       .pl-pname-main { font-weight: 700; font-size: 6.6px; color: #0d0d0d; margin-bottom: 2px; }
-      .pl-pname-sub { font-size: 5.8px; color: ${SUB}; font-weight: 400; line-height: 1.35; }
+      .pl-sku {
+        font-size: 6.2px;
+        font-weight: 700;
+        color: #0d0d0d;
+        white-space: nowrap;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      .pl-pname-sub { font-size: 5.8px; color: #333333; font-weight: 400; line-height: 1.35; }
       .pl-c { text-align: center; }
       .pl-r { text-align: right; }
       .pl-nowrap { white-space: nowrap; }
