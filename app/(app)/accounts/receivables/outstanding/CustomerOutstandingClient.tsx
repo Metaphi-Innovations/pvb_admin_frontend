@@ -1712,12 +1712,14 @@ export default function CustomerOutstandingClient() {
                 partyId: String(g.customerId),
                 partyName: g.customerName,
                 partyCode: g.customerCode,
+                tmName: g.tmName,
                 buckets: g.totals.buckets,
                 totalOutstanding: g.totals.totalOutstanding,
                 notDueAmount: g.totals.notDueAmount,
               }))}
               bucketKeys={ageingBucketKeys}
               partyColumnLabel="Broker"
+              showTmColumn
               balanceSide="Dr"
               partyHref={(row) => `/accounts/receivables/outstanding/${row.partyId}`}
               totalRecords={total}

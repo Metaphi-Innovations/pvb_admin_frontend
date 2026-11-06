@@ -406,6 +406,15 @@ export const QcService = {
     const response = await axiosInstance.put(API_ENDPOINTS.WAREHOUSE.QC.UPDATE(id), payload, { timeout: 120000 });
     return response.data;
   },
+
+  async revert(id: string): Promise<any> {
+    const response = await axiosInstance.post(
+      API_ENDPOINTS.WAREHOUSE.QC.REVERT(id),
+      {},
+      { timeout: 120000 },
+    );
+    return response.data;
+  },
   
   async getPreviewNumber(warehouseId?: string | null): Promise<{ qcNumber: string }> {
     const response = await axiosInstance.get(

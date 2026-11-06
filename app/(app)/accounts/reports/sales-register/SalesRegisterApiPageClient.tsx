@@ -865,7 +865,7 @@ export default function SalesRegisterApiPageClient() {
           </div>
         ) : (
           <>
-            <AccountsTable minWidth={1480}>
+            <AccountsTable minWidth={1760}>
               <AccountsTableHead>
                 <AccountsTableHeadRow>
                   <th className="px-3 py-2.5 text-left text-xs font-semibold whitespace-nowrap w-14">
@@ -903,6 +903,9 @@ export default function SalesRegisterApiPageClient() {
                   </th>
                   <th className="px-3 py-2.5 text-left text-xs font-semibold whitespace-nowrap">
                     Salesperson
+                  </th>
+                  <th className="px-3 py-2.5 text-left text-xs font-semibold whitespace-nowrap min-w-[220px]">
+                    Warehouse / Branch
                   </th>
                   <ServerSortTh
                     label="Taxable Amount"
@@ -956,7 +959,7 @@ export default function SalesRegisterApiPageClient() {
                 <AccountsTableFoot>
                   <AccountsTableRow>
                     <AccountsTableCell
-                      colSpan={8}
+                      colSpan={9}
                       className="font-semibold text-xs text-foreground"
                     >
                       Totals ({summary.invoice_count} invoice
@@ -1109,6 +1112,9 @@ function SalesRegisterRowView({
         title={row.salesperson.name || undefined}
       >
         {row.salesperson.name || "—"}
+      </AccountsTableCell>
+      <AccountsTableCell className="text-xs whitespace-nowrap min-w-[220px]">
+        {row.warehouse?.name || row.branch?.name || "—"}
       </AccountsTableCell>
       <AccountsTableCell align="right" money className={MONEY_AMOUNT_CLASS}>
         {formatMoneyString(row.taxable_value)}

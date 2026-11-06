@@ -107,7 +107,7 @@ export function AgeingGroupedTable({
                     <PartyGroup key={group.customerId}>
                       <tr className="bg-brand-50/70 border-b border-brand-100">
                         <td colSpan={colCount} className="px-3 py-2.5">
-                          <div className="flex items-center gap-2 min-w-0">
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0">
                             <span className="text-[10px] font-bold uppercase tracking-widest text-brand-700 shrink-0">
                               Party:
                             </span>
@@ -120,6 +120,14 @@ export function AgeingGroupedTable({
                             {group.customerCode ? (
                               <span className="text-[11px] font-mono text-muted-foreground shrink-0">
                                 {group.customerCode}
+                              </span>
+                            ) : null}
+                            {group.tmName ? (
+                              <span className="text-[11px] text-muted-foreground shrink-0">
+                                · TM:{" "}
+                                <span className="font-medium text-foreground">
+                                  {group.tmName}
+                                </span>
                               </span>
                             ) : null}
                           </div>

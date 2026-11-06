@@ -11,6 +11,8 @@ export type AgeingPartySummaryRow = {
   partyId: string;
   partyName: string;
   partyCode?: string;
+  /** Customer Sales Man / TM. */
+  tmName?: string;
   buckets: Record<string, number>;
   /** Includes not-due + overdue buckets. */
   totalOutstanding: number;
@@ -36,6 +38,7 @@ export function AgeingPartySummaryTable({
   bucketKeys,
   partyColumnLabel = "Party",
   balanceSide = "Dr",
+  showTmColumn = false,
   partyHref,
   totalRecords,
   loading,
@@ -51,6 +54,8 @@ export function AgeingPartySummaryTable({
   partyColumnLabel?: string;
   /** Receivables default Dr; Payables default Cr. */
   balanceSide?: "Dr" | "Cr";
+  /** Show TM (Sales Man) column — receivables ageing. */
+  showTmColumn?: boolean;
   partyHref?: (row: AgeingPartySummaryRow) => string;
   totalRecords: number;
   loading: boolean;
@@ -61,7 +66,7 @@ export function AgeingPartySummaryTable({
   error?: string | null;
   emptyMessage?: string;
 }) {
-  const minWidth = 620 + bucketKeys.length * 110;
+  const minWidth = (showTmColumn ? 760 : 620) + bucketKeys.length * 110;
 
   const pageTotal = rows.reduce((sum, r) => sum + (r.totalOutstanding || 0), 0);
   const pageNotDueTotal = rows.reduce(
@@ -107,6 +112,11 @@ export function AgeingPartySummaryTable({
                   <th className="px-3 py-2.5 text-left font-semibold text-foreground whitespace-nowrap">
                     {partyColumnLabel}
                   </th>
+                  {showTmColumn ? (
+                    <th className="px-3 py-2.5 text-left font-semibold text-foreground whitespace-nowrap min-w-[140px]">
+                      TM
+                    </th>
+                  ) : null}
                   <th className="px-3 py-2.5 text-right font-semibold text-foreground whitespace-nowrap min-w-[110px]">
                     Not Due
                   </th>
@@ -161,6 +171,11 @@ export function AgeingPartySummaryTable({
                           nameCell
                         )}
                       </td>
+                      {showTmColumn ? (
+                        <td className="px-3 py-2 whitespace-nowrap text-foreground">
+                          {row.tmName?.trim() || "—"}
+                        </td>
+                      ) : null}
                       <td
                         className={cn(
                           "px-3 py-2 text-right whitespace-nowrap tabular-nums",
@@ -198,6 +213,7 @@ export function AgeingPartySummaryTable({
                   <td className="px-3 py-2.5 font-bold text-foreground whitespace-nowrap">
                     Net Total
                   </td>
+                  {showTmColumn ? <td className="px-3 py-2.5" /> : null}
                   <td
                     className={cn(
                       "px-3 py-2.5 text-right whitespace-nowrap tabular-nums font-bold",

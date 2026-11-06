@@ -107,6 +107,8 @@ export interface AgingApiRow {
   customerId: string;
   customerName: string;
   customerCode: string;
+  /** Customer Sales Man / TM. */
+  salesperson?: SalespersonRef;
   totalOutstanding: number;
   buckets: AgingBucketMap;
   notDueAmount?: number;
@@ -374,6 +376,8 @@ export interface ApiCustomerAgeingGroup {
   customerId: string;
   customerName: string;
   customerCode: string;
+  /** Customer Sales Man / TM display name. */
+  tmName?: string;
   invoices: ApiCustomerAgeingInvoiceRow[];
   totals: {
     totalOutstanding: number;
