@@ -22,6 +22,8 @@ export const WEB_SUBMODULE_ALIASES: Record<string, Record<string, string>> = {
     customer_type: "customerCategory",
     customer: "customerMaster",
     customers: "customerMaster",
+    form_o: "formO",
+    "form-o": "formO",
     vendor_type: "supplier_type",
     supplier_master: "supplier",
     vendor_master: "supplier",

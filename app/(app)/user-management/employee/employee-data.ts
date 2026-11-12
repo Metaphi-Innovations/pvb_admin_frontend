@@ -274,6 +274,7 @@ export const PERMISSION_REGISTRY: PermModule[] = [
       { id: "customerMaster", label: "Customer Master", actions: ["view", "create", "edit", "delete"] },
       { id: "document_type", label: "Document Type", actions: ["view", "create", "edit", "delete"] },
       { id: "event_type", label: "Event Type", actions: ["view", "create", "edit", "delete"] },
+      { id: "formO", label: "Form O", actions: ["view", "create", "edit", "delete"] },
       { id: "formulation", label: "Formulation", actions: ["view", "create", "edit", "delete"] },
       { id: "gst", label: "GST", actions: ["view", "create", "edit", "delete"] },
       { id: "pricing", label: "Pricing", actions: ["view", "create", "edit", "delete", "export"] },

@@ -49,9 +49,11 @@ import {
 } from "../customer-data";
 import { useCustomer, useToggleCustomerStatus } from "@/hooks/masters";
 import { readCustomerPermissions } from "../customer-permissions";
+import { useFormOPermissions } from "../../form-o/form-o-permissions";
 import { loadOrders } from "@/app/(app)/sales/orders/orders-data";
 import { formatMoney } from "@/lib/accounts/money-format";
 import { getGstCategoryLabel } from "@/lib/masters/gst-compliance";
+import { CustomerFormOTab } from "../components/CustomerFormOTab";
 
 const STATUS_VARIANT: Record<
   CustomerStatus,
@@ -136,6 +138,7 @@ export default function CustomerDetailPage() {
   const router = useRouter();
   const { id } = useParams<{ id: string }>();
   const [perms, setPerms] = useState(readCustomerPermissions);
+  const formOPerms = useFormOPermissions();
   const [activeTab, setActiveTab] = useState("overview");
   const [confirmDeactivate, setConfirmDeactivate] = useState(false);
   const [previewDoc, setPreviewDoc] = useState<{
@@ -250,6 +253,9 @@ export default function CustomerDetailPage() {
     { value: "tax", label: "Tax & Compliance" },
     { value: "bank", label: "Bank Details" },
     { value: "commercial", label: "Commercial" },
+    ...(formOPerms.canView || formOPerms.canCreate
+      ? [{ value: "form-o", label: "Form O" }]
+      : []),
     { value: "orders", label: "Orders", count: orders.length },
     { value: "activity", label: "Activity" },
   ];
@@ -698,6 +704,14 @@ export default function CustomerDetailPage() {
           </div>
         );
 
+      case "form-o":
+        return (
+          <CustomerFormOTab
+            customerId={customer.customerUuid}
+            fcoExpiryDate={customer.fcoExpiryDate}
+          />
+        );
+
       case "commercial":
         return (
           <div className="space-y-4">
@@ -853,32 +867,46 @@ export default function CustomerDetailPage() {
             : undefined
         }
         toggleDisabled={!canToggle}
-        moreActions={
-          perms.canEdit
+        moreActions={[
+          ...(formOPerms.canCreate
             ? [
-              {
-                label: "Edit Customer",
-                onClick: () => router.push(`/masters/customers/${customer.customerUuid}/edit`),
-              },
-              ...(customer.status === "blocked"
-                ? [
-                  {
-                    label: "Unblock Customer",
-                    onClick: () => updateStatus("active", true),
-                  },
-                ]
-                : []),
-              ...(customer.status === "draft"
-                ? [
-                  {
-                    label: "Mark Active",
-                    onClick: () => updateStatus("active", true),
-                  },
-                ]
-                : []),
-            ]
-            : undefined
-        }
+                {
+                  label: "Generate Form O",
+                  onClick: () =>
+                    router.push(
+                      `/masters/form-o/new?customerId=${customer.customerUuid}`,
+                    ),
+                },
+              ]
+            : []),
+          ...(perms.canEdit
+            ? [
+                {
+                  label: "Edit Customer",
+                  onClick: () =>
+                    router.push(
+                      `/masters/customers/${customer.customerUuid}/edit`,
+                    ),
+                },
+                ...(customer.status === "blocked"
+                  ? [
+                      {
+                        label: "Unblock Customer",
+                        onClick: () => updateStatus("active", true),
+                      },
+                    ]
+                  : []),
+                ...(customer.status === "draft"
+                  ? [
+                      {
+                        label: "Mark Active",
+                        onClick: () => updateStatus("active", true),
+                      },
+                    ]
+                  : []),
+              ]
+            : []),
+        ]}
       >
         {renderTabContent()}
       </RecordDetailPage>

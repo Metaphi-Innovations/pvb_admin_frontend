@@ -41,6 +41,7 @@ import {
   canonicalizePermKeySet,
   revokeKeysForPrefix,
 } from "@/lib/auth/permission-aliases";
+import { getAutoLookupLabels } from "@/lib/auth/permission-dependencies";
 import {
   loadRoles, loadPermissionTemplates, type Role, loadNewPermissionTemplates, type PermissionTemplate
 } from "../../roles/roles-data";
@@ -1111,6 +1112,15 @@ function PermissionsTab({
                     {mod.submodules.map((sub) => {
                       const actions = ALL_WEB_ACTIONS.filter((action) => sub.actions.includes(action));
                       const rowActive = actions.some((action) => activeWebPerms.has(`${mod.id}.${sub.id}.${action}`));
+                      const autoLookupHints = ["create", "edit"]
+                        .filter((action) => activeWebPerms.has(`${mod.id}.${sub.id}.${action}`))
+                        .flatMap((action) => getAutoLookupLabels(mod.id, sub.id, action))
+                        .filter(
+                          (item, index, arr) =>
+                            arr.findIndex(
+                              (x) => x.module === item.module && x.submodule === item.submodule,
+                            ) === index,
+                        );
                       return (
                         <div key={sub.id} className={cn("rounded-xl border border-border bg-white px-4 py-3 transition-colors", rowActive && "bg-brand-50/10 border-brand-100")}>
                           <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
@@ -1130,6 +1140,12 @@ function PermissionsTab({
                               })}
                             </div>
                           </div>
+                          {autoLookupHints.length > 0 && (
+                            <p className="mt-2 text-[9px] text-muted-foreground leading-relaxed">
+                              Auto-includes master dropdowns:{" "}
+                              {autoLookupHints.map((h) => h.label).join(", ")}. Does not grant Masters module access.
+                            </p>
+                          )}
                         </div>
                       );
                     })}
