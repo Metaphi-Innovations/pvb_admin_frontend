@@ -79,6 +79,7 @@ export const NAV_ITEMS: NavItem[] = [
       { label: "CFU", href: "/masters/cfu" },
       { label: "Customer Type", href: "/masters/customer-types" },
       { label: "Customers", href: "/masters/customers" },
+      { label: "Form O", href: "/masters/form-o" },
       { label: "Document Type", href: "/masters/document-types" },
       { label: "Event Type", href: "/masters/event-types" },
       { label: "Form", href: "/masters/formulation" },
