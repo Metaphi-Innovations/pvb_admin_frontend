@@ -14,6 +14,7 @@ import {
   defaultPermissions, defaultSubPerm, defaultMobilePerm,
   roleDefaultPermissions, migratePermissions,
 } from "../../employee/employee-data";
+import { getAutoLookupLabels } from "@/lib/auth/permission-dependencies";
 import { type Role } from "../roles-data";
 
 const ALL_WEB_ACTIONS: WebAction[] = ["view", "create", "edit", "delete", "approve", "export", "import"];
@@ -330,6 +331,15 @@ export default function RolePermissionTemplateSheet({
                             const sp = getSub(mod.id, sub.id);
                             const actions = ALL_WEB_ACTIONS.filter((action) => sub.actions.includes(action));
                             const rowActive = actions.some((action) => Boolean((sp as any)[action]));
+                            const autoLookupHints = ["create", "edit"]
+                              .filter((action) => Boolean((sp as any)[action]))
+                              .flatMap((action) => getAutoLookupLabels(mod.id, sub.id, action))
+                              .filter(
+                                (item, index, arr) =>
+                                  arr.findIndex(
+                                    (x) => x.module === item.module && x.submodule === item.submodule,
+                                  ) === index,
+                              );
                             return (
                               <div
                                 key={sub.id}
@@ -368,6 +378,12 @@ export default function RolePermissionTemplateSheet({
                                     })}
                                   </div>
                                 </div>
+                                {autoLookupHints.length > 0 && (
+                                  <p className="mt-2 text-[9px] text-muted-foreground leading-relaxed">
+                                    Auto-includes master dropdowns:{" "}
+                                    {autoLookupHints.map((h) => h.label).join(", ")}. Does not grant Masters module access.
+                                  </p>
+                                )}
                               </div>
                             );
                           })}

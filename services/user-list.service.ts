@@ -363,12 +363,16 @@ function permissionsFromApiTree(
   ) => {
     if (!tree || typeof tree !== "object") return;
     for (const [mod, subs] of Object.entries(tree as Record<string, unknown>)) {
+      // Backend auto-lookup bookkeeping — not a permission module.
+      if (mod === "__meta") continue;
       if (!subs || typeof subs !== "object") continue;
       for (const [sub, actionsRaw] of Object.entries(subs as Record<string, unknown>)) {
         if (!actionsRaw || typeof actionsRaw !== "object") continue;
         for (const [action, enabled] of Object.entries(actionsRaw as Record<string, unknown>)) {
           if (!enabled) continue;
           const normalized = normalizeAction(action);
+          // Never surface auto-managed lookup flags in the admin matrix.
+          if (normalized === "lookup") continue;
           if (!target[mod]) target[mod] = {};
           if (!target[mod][sub]) {
             target[mod][sub] = isMobile

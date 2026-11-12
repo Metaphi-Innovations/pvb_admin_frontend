@@ -23,7 +23,20 @@ export type PermissionAction =
   | "delete"
   | "approve"
   | "export"
-  | "import";
+  | "import"
+  | "lookup";
+
+/** Actions that unlock module/nav access. `lookup` alone must never open Masters. */
+const MODULE_ACCESS_ACTIONS = new Set([
+  "view",
+  "create",
+  "edit",
+  "update",
+  "delete",
+  "approve",
+  "export",
+  "import",
+]);
 
 function actionMatches(stored: string, requested: string): boolean {
   const a = stored.toLowerCase();
@@ -68,7 +81,16 @@ function getSubmoduleActions(
   return actions && typeof actions === "object" ? actions : null;
 }
 
-/** Module access = at least one submodule has at least one enabled action. */
+function hasModuleAccessAction(actions: Record<string, boolean> | null | undefined): boolean {
+  if (!actions) return false;
+  for (const [key, enabled] of Object.entries(actions)) {
+    if (enabled !== true) continue;
+    if (MODULE_ACCESS_ACTIONS.has(key.toLowerCase())) return true;
+  }
+  return false;
+}
+
+/** Module access = at least one submodule has a non-lookup management action. */
 export function canAccessModule(
   permissions: WebPermissionTree | null | undefined,
   module: string,
@@ -76,23 +98,21 @@ export function canAccessModule(
   const mod = getModuleNode(permissions, module);
   if (!mod) return false;
   for (const actions of Object.values(mod)) {
-    if (actions && Object.values(actions).some(Boolean)) return true;
+    if (hasModuleAccessAction(actions)) return true;
   }
   return false;
 }
 
 /**
- * Submodule access = submodule exists with at least one enabled action.
- * Does NOT imply any specific action (use canView / canCreate / …).
+ * Submodule access = submodule exists with at least one management action.
+ * Lookup-only grants do NOT count (dropdown deps must not open Masters pages).
  */
 export function canAccessSubmodule(
   permissions: WebPermissionTree | null | undefined,
   module: string,
   submodule: string,
 ): boolean {
-  const actions = getSubmoduleActions(permissions, module, submodule);
-  if (!actions) return false;
-  return Object.values(actions).some(Boolean);
+  return hasModuleAccessAction(getSubmoduleActions(permissions, module, submodule));
 }
 
 /** Check a specific action on module + submodule. */
@@ -236,6 +256,8 @@ export function normalizeWebPermissions(raw: unknown): WebPermissionTree {
 
   const out: WebPermissionTree = {};
   for (const [mod, subs] of Object.entries(tree as Record<string, unknown>)) {
+    // Backend stores auto-lookup bookkeeping under __meta — never treat as an app module.
+    if (mod === "__meta") continue;
     if (!subs || typeof subs !== "object" || Array.isArray(subs)) continue;
     const canonicalMod = canonicalizeModuleId(mod);
     if (!out[canonicalMod]) out[canonicalMod] = {};
