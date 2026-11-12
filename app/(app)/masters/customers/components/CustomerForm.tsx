@@ -2028,7 +2028,7 @@ export function CustomerForm({
 								{/* Account Holder Name */}
 								<div className='space-y-1'>
 									<Label className='text-xs font-medium text-foreground'>
-										Account Holder Name <span className='text-red-500'>*</span>
+										Account Holder Name
 									</Label>
 									<Input
 										disabled={readOnly}
@@ -2042,7 +2042,7 @@ export function CustomerForm({
 								{/* Bank Name */}
 								<div className='space-y-1'>
 									<Label className='text-xs font-medium text-foreground'>
-										Bank Name <span className='text-red-500'>*</span>
+										Bank Name
 									</Label>
 									<Input
 										disabled={readOnly}
@@ -2056,7 +2056,7 @@ export function CustomerForm({
 								{/* Branch Name */}
 								<div className='space-y-1'>
 									<Label className='text-xs font-medium text-foreground'>
-										Branch Name <span className='text-red-500'>*</span>
+										Branch Name
 									</Label>
 									<Input
 										disabled={readOnly}
@@ -2070,7 +2070,7 @@ export function CustomerForm({
 								{/* Account Number */}
 								<div className='space-y-1'>
 									<Label className='text-xs font-medium text-foreground'>
-										Account Number <span className='text-red-500'>*</span>
+										Account Number
 									</Label>
 									<Input
 										disabled={readOnly}
@@ -2084,7 +2084,7 @@ export function CustomerForm({
 								{/* Confirm Account Number */}
 								<div className='space-y-1'>
 									<Label className='text-xs font-medium text-foreground'>
-										Confirm Account Number <span className='text-red-500'>*</span>
+										Confirm Account Number
 									</Label>
 									<Input
 										disabled={readOnly}
@@ -2101,7 +2101,7 @@ export function CustomerForm({
 								{/* IFSC Code */}
 								<div className='space-y-1'>
 									<Label className='text-xs font-medium text-foreground'>
-										IFSC Code <span className='text-red-500'>*</span>
+										IFSC Code
 									</Label>
 									<Input
 										disabled={readOnly}
@@ -3323,10 +3323,8 @@ export function validateCustomerForm(
 			advancePercentage: form.advancePercentage,
 		}),
 	);
-	// Bank details validation
-	if (!form.accountHolderName.trim()) {
-		e.accountHolderName = "Account holder name is required";
-	} else if (!validateAccountHolderName(form.accountHolderName)) {
+	// Bank details are optional; validate format only when a value is provided
+	if (form.accountHolderName.trim() && !validateAccountHolderName(form.accountHolderName)) {
 		if (form.accountHolderName.startsWith(" ") || form.accountHolderName.endsWith(" ")) {
 			e.accountHolderName = "Leading or trailing spaces are not allowed";
 		} else if (form.accountHolderName.length < 2 || form.accountHolderName.length > 100) {
@@ -3336,9 +3334,7 @@ export function validateCustomerForm(
 		}
 	}
 
-	if (!form.bankName.trim()) {
-		e.bankName = "Bank name is required";
-	} else if (!validateBankName(form.bankName)) {
+	if (form.bankName.trim() && !validateBankName(form.bankName)) {
 		if (form.bankName.startsWith(" ") || form.bankName.endsWith(" ")) {
 			e.bankName = "Leading or trailing spaces are not allowed";
 		} else if (form.bankName.length < 2 || form.bankName.length > 100) {
@@ -3348,9 +3344,7 @@ export function validateCustomerForm(
 		}
 	}
 
-	if (!form.branch.trim()) {
-		e.branch = "Branch name is required";
-	} else if (!validateBranchName(form.branch)) {
+	if (form.branch.trim() && !validateBranchName(form.branch)) {
 		if (form.branch.startsWith(" ") || form.branch.endsWith(" ")) {
 			e.branch = "Leading or trailing spaces are not allowed";
 		} else if (form.branch.length < 2 || form.branch.length > 100) {
@@ -3360,9 +3354,7 @@ export function validateCustomerForm(
 		}
 	}
 
-	if (!form.accountNumber.trim()) {
-		e.accountNumber = "Account number is required";
-	} else if (!validateAccountNumber(form.accountNumber)) {
+	if (form.accountNumber.trim() && !validateAccountNumber(form.accountNumber)) {
 		if (/\D/.test(form.accountNumber)) {
 			e.accountNumber = "Account number must contain digits only";
 		} else if (form.accountNumber.length < 9 || form.accountNumber.length > 18) {
@@ -3372,23 +3364,21 @@ export function validateCustomerForm(
 		}
 	}
 
-	if (!form.confirmAccountNumber.trim()) {
-		e.confirmAccountNumber = "Confirm account number is required";
-	} else if (!validateAccountNumber(form.confirmAccountNumber)) {
-		if (/\D/.test(form.confirmAccountNumber)) {
-			e.confirmAccountNumber = "Account number must contain digits only";
-		} else if (form.confirmAccountNumber.length < 9 || form.confirmAccountNumber.length > 18) {
-			e.confirmAccountNumber = "Account number must be between 9 and 18 digits";
-		} else {
-			e.confirmAccountNumber = "Enter a valid account number";
+	if (form.confirmAccountNumber.trim()) {
+		if (!validateAccountNumber(form.confirmAccountNumber)) {
+			if (/\D/.test(form.confirmAccountNumber)) {
+				e.confirmAccountNumber = "Account number must contain digits only";
+			} else if (form.confirmAccountNumber.length < 9 || form.confirmAccountNumber.length > 18) {
+				e.confirmAccountNumber = "Account number must be between 9 and 18 digits";
+			} else {
+				e.confirmAccountNumber = "Enter a valid account number";
+			}
+		} else if (form.accountNumber.trim() && form.accountNumber !== form.confirmAccountNumber) {
+			e.confirmAccountNumber = "Account numbers do not match.";
 		}
-	} else if (form.accountNumber && form.accountNumber !== form.confirmAccountNumber) {
-		e.confirmAccountNumber = "Account numbers do not match.";
 	}
 
-	if (!form.ifscCode.trim()) {
-		e.ifscCode = "IFSC code is required";
-	} else if (!validateIFSC(form.ifscCode.trim().toUpperCase())) {
+	if (form.ifscCode.trim() && !validateIFSC(form.ifscCode.trim().toUpperCase())) {
 		e.ifscCode = "Enter a valid 11-character IFSC code.";
 	}
 
