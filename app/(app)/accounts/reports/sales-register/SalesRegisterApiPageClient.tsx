@@ -75,13 +75,14 @@ import type {
   SalesRegisterQueryParams,
   SalesRegisterReportResult,
   SalesRegisterReportStatus,
+  SalesRegisterRowGrain,
   SalesRegisterSortBy,
   SalesRegisterSortOrder,
 } from "@/types/sales-register.types";
 
 const TITLE = "Sales Register";
 const DESCRIPTION =
-  "Posted Sales Tax Invoices with taxable value, CGST/SGST/IGST breakup, and invoice totals. Drafts and other sales documents are excluded.";
+  "Sales Tax Invoices (Posted and Cancelled) with taxable value, CGST/SGST/IGST breakup, and net totals (Posted − Cancelled). Drafts and other sales documents are excluded.";
 
 const GST_TYPE_OPTIONS: { value: string; label: string }[] = [
   { value: "all", label: "All GST types" },
@@ -93,6 +94,19 @@ const STATUS_OPTIONS: { value: "POSTED" | "CANCELLED"; label: string }[] = [
   { value: "POSTED", label: "Posted" },
   { value: "CANCELLED", label: "Cancelled" },
 ];
+
+const DEFAULT_STATUSES: SalesRegisterReportStatus[] = ["POSTED", "CANCELLED"];
+
+const ROW_GRAIN_OPTIONS: { value: SalesRegisterRowGrain; label: string }[] = [
+  { value: "INVOICE", label: "Invoice wise" },
+  { value: "ITEM", label: "Item wise" },
+];
+
+function statusesMatchDefault(values: string[]): boolean {
+  if (values.length !== DEFAULT_STATUSES.length) return false;
+  const set = new Set(values);
+  return DEFAULT_STATUSES.every((s) => set.has(s));
+}
 
 const SORT_FIELD_MAP: Record<string, SalesRegisterSortBy> = {
   invoice_date: "invoice_date",
@@ -146,12 +160,13 @@ export default function SalesRegisterApiPageClient() {
   const [customerIds, setCustomerIds] = useState<string[]>([]);
   const [customerTypeId, setCustomerTypeId] = useState("all");
   const [salespersonIds, setSalespersonIds] = useState<string[]>([]);
-  const [statuses, setStatuses] = useState<string[]>([]);
+  const [statuses, setStatuses] = useState<string[]>([...DEFAULT_STATUSES]);
   const [invoiceTypes, setInvoiceTypes] = useState<string[]>([]);
   const [stateCode, setStateCode] = useState("all");
   const [invoiceNo, setInvoiceNo] = useState("");
   const [debouncedInvoiceNo, setDebouncedInvoiceNo] = useState("");
   const [gstType, setGstType] = useState("all");
+  const [rowGrain, setRowGrain] = useState<SalesRegisterRowGrain>("INVOICE");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [sortBy, setSortBy] = useState<SalesRegisterSortBy>("invoice_date");
@@ -244,6 +259,14 @@ export default function SalesRegisterApiPageClient() {
     setPageSize(filtersConfig.defaults.page_size || 25);
     setSortBy(filtersConfig.defaults.sort_by || "invoice_date");
     setSortOrder(filtersConfig.defaults.sort_order || "desc");
+    setRowGrain(filtersConfig.defaults.row_grain || "INVOICE");
+    const defaultStatuses = (filtersConfig.defaults.statuses ?? []).filter(
+      (s): s is SalesRegisterReportStatus =>
+        s === "POSTED" || s === "CANCELLED",
+    );
+    setStatuses(
+      defaultStatuses.length > 0 ? defaultStatuses : [...DEFAULT_STATUSES],
+    );
     appliedDefaults.current = true;
   }, [filtersConfig, ready, setDateFrom, setDateTo, setPreset]);
 
@@ -317,9 +340,11 @@ export default function SalesRegisterApiPageClient() {
       salesperson_ids: salespersonIds,
       invoice_number: debouncedInvoiceNo || undefined,
       state_code: stateCode !== "all" ? stateCode : undefined,
-      statuses: statusParams.length > 0 ? statusParams : undefined,
+      statuses:
+        statusParams.length > 0 ? statusParams : [...DEFAULT_STATUSES],
       invoice_types: typeParams.length > 0 ? typeParams : undefined,
       gst_type: mapGstType(gstType),
+      row_grain: rowGrain,
       page,
       page_size: pageSize,
       sort_by: sortBy,
@@ -338,6 +363,7 @@ export default function SalesRegisterApiPageClient() {
     invoiceTypes,
     page,
     pageSize,
+    rowGrain,
     salespersonIds,
     sortBy,
     sortOrder,
@@ -362,6 +388,7 @@ export default function SalesRegisterApiPageClient() {
     statuses,
     invoiceTypes,
     gstType,
+    rowGrain,
     pageSize,
   ]);
 
@@ -403,12 +430,19 @@ export default function SalesRegisterApiPageClient() {
     setCustomerIds([]);
     setCustomerTypeId("all");
     setSalespersonIds([]);
-    setStatuses([]);
+    const defaultStatuses = (filtersConfig?.defaults.statuses ?? []).filter(
+      (s): s is SalesRegisterReportStatus =>
+        s === "POSTED" || s === "CANCELLED",
+    );
+    setStatuses(
+      defaultStatuses.length > 0 ? defaultStatuses : [...DEFAULT_STATUSES],
+    );
     setInvoiceTypes([]);
     setStateCode("all");
     setInvoiceNo("");
     setDebouncedInvoiceNo("");
     setGstType("all");
+    setRowGrain(filtersConfig?.defaults.row_grain || "INVOICE");
     setPage(1);
     setSortBy("invoice_date");
     setSortOrder("desc");
@@ -482,17 +516,19 @@ export default function SalesRegisterApiPageClient() {
   const rows = report?.rows ?? [];
   const pagination = report?.pagination;
   const totalRows = pagination?.total_rows ?? 0;
+  const itemWise = rowGrain === "ITEM";
   const hasActiveFilters =
     branchIds.length > 0 ||
     warehouseIds.length > 0 ||
     customerIds.length > 0 ||
     customerTypeId !== "all" ||
     salespersonIds.length > 0 ||
-    statuses.length > 0 ||
+    !statusesMatchDefault(statuses) ||
     invoiceTypes.length > 0 ||
     stateCode !== "all" ||
     Boolean(invoiceNo.trim()) ||
-    gstType !== "all";
+    gstType !== "all" ||
+    rowGrain !== "INVOICE";
 
   const filterSummaryItems = useMemo(() => {
     const items: Array<ReportFilterSummaryItem | null> = [
@@ -540,7 +576,7 @@ export default function SalesRegisterApiPageClient() {
         salespersonOptions,
         () => setSalespersonIds([]),
       ),
-      statuses.length > 0
+      !statusesMatchDefault(statuses)
         ? {
             id: "status",
             label: "Status",
@@ -550,7 +586,7 @@ export default function SalesRegisterApiPageClient() {
                   STATUS_OPTIONS.find((o) => o.value === s)?.label ?? s,
               )
               .join(", "),
-            onRemove: () => setStatuses([]),
+            onRemove: () => setStatuses([...DEFAULT_STATUSES]),
           }
         : null,
       invoiceTypes.length > 0
@@ -586,6 +622,16 @@ export default function SalesRegisterApiPageClient() {
             onRemove: () => setGstType("all"),
           }
         : null,
+      rowGrain !== "INVOICE"
+        ? {
+            id: "rowGrain",
+            label: "View",
+            value:
+              ROW_GRAIN_OPTIONS.find((o) => o.value === rowGrain)?.label ??
+              rowGrain,
+            onRemove: () => setRowGrain("INVOICE"),
+          }
+        : null,
       invoiceNo.trim()
         ? {
             id: "invoiceNo",
@@ -607,6 +653,7 @@ export default function SalesRegisterApiPageClient() {
     invoiceNo,
     invoiceTypeOptions,
     invoiceTypes,
+    rowGrain,
     salespersonIds,
     salespersonOptions,
     stateCode,
@@ -723,7 +770,11 @@ export default function SalesRegisterApiPageClient() {
             />
             <ReportStatusMultiFilter
               values={statuses}
-              onChange={setStatuses}
+              onChange={(next) =>
+                setStatuses(
+                  next.length > 0 ? next : [...DEFAULT_STATUSES],
+                )
+              }
               options={STATUS_OPTIONS}
             />
             <ReportStatusMultiFilter
@@ -742,6 +793,25 @@ export default function SalesRegisterApiPageClient() {
                 </SelectTrigger>
                 <SelectContent>
                   {GST_TYPE_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </ReportFilterField>
+            <ReportFilterField label="View" minWidthClass="min-w-[140px]">
+              <Select
+                value={rowGrain}
+                onValueChange={(value) =>
+                  setRowGrain(value as SalesRegisterRowGrain)
+                }
+              >
+                <SelectTrigger className={cn(filterControlClass, "w-full")}>
+                  <SelectValue placeholder="Invoice wise" />
+                </SelectTrigger>
+                <SelectContent>
+                  {ROW_GRAIN_OPTIONS.map((option) => (
                     <SelectItem key={option.value} value={option.value}>
                       {option.label}
                     </SelectItem>
@@ -809,36 +879,43 @@ export default function SalesRegisterApiPageClient() {
           <AccountsSummaryBar
             items={[
               {
-                label: "Invoices",
-                value: String(summary?.invoice_count ?? 0),
+                label: "Posted",
+                value: String(summary?.posted?.invoice_count ?? 0),
               },
               {
-                label: "Taxable Amount",
-                value: formatMoneyString(summary?.taxable_amount ?? "0"),
+                label: "Cancelled",
+                value: String(summary?.cancelled?.invoice_count ?? 0),
+                warn: (summary?.cancelled?.invoice_count ?? 0) > 0,
               },
               {
-                label: "Total CGST",
-                value: formatMoneyString(summary?.cgst ?? "0"),
+                label: "Net Taxable",
+                value: formatMoneyString(
+                  summary?.net?.taxable_amount ?? summary?.taxable_amount ?? "0",
+                ),
               },
               {
-                label: "Total SGST",
-                value: formatMoneyString(summary?.sgst ?? "0"),
+                label: "Net CGST",
+                value: formatMoneyString(summary?.net?.cgst ?? summary?.cgst ?? "0"),
               },
               {
-                label: "Total IGST",
-                value: formatMoneyString(summary?.igst ?? "0"),
+                label: "Net SGST",
+                value: formatMoneyString(summary?.net?.sgst ?? summary?.sgst ?? "0"),
               },
               {
-                label: "Discount",
-                value: formatMoneyString(summary?.discount ?? "0"),
+                label: "Net IGST",
+                value: formatMoneyString(summary?.net?.igst ?? summary?.igst ?? "0"),
               },
               {
-                label: "Other Charges",
-                value: formatMoneyString(summary?.other_charges ?? "0"),
+                label: "Net Discount",
+                value: formatMoneyString(
+                  summary?.net?.discount ?? summary?.discount ?? "0",
+                ),
               },
               {
-                label: "Invoice Value",
-                value: formatMoneyString(summary?.invoice_value ?? "0"),
+                label: "Net Invoice Value",
+                value: formatMoneyString(
+                  summary?.net?.invoice_value ?? summary?.invoice_value ?? "0",
+                ),
               },
             ]}
           />
@@ -852,7 +929,11 @@ export default function SalesRegisterApiPageClient() {
           <SalesRegisterSkeleton />
         ) : totalRows === 0 && !reportLoading ? (
           <div className="py-10 text-center text-sm text-muted-foreground space-y-2">
-            <p>No Sales Invoices found for the selected filters.</p>
+            <p>
+              {itemWise
+                ? "No sales invoice items found for the selected filters."
+                : "No Sales Invoices found for the selected filters."}
+            </p>
             {hasActiveFilters ? (
               <button
                 type="button"
@@ -865,7 +946,7 @@ export default function SalesRegisterApiPageClient() {
           </div>
         ) : (
           <>
-            <AccountsTable minWidth={1760}>
+            <AccountsTable minWidth={itemWise ? 2200 : 1760}>
               <AccountsTableHead>
                 <AccountsTableHeadRow>
                   <th className="px-3 py-2.5 text-left text-xs font-semibold whitespace-nowrap w-14">
@@ -907,6 +988,28 @@ export default function SalesRegisterApiPageClient() {
                   <th className="px-3 py-2.5 text-left text-xs font-semibold whitespace-nowrap min-w-[220px]">
                     Warehouse / Branch
                   </th>
+                  {itemWise ? (
+                    <>
+                      <th className="px-3 py-2.5 text-left text-xs font-semibold whitespace-nowrap">
+                        Product Code
+                      </th>
+                      <th className="px-3 py-2.5 text-left text-xs font-semibold whitespace-nowrap">
+                        Product Name
+                      </th>
+                      <th className="px-3 py-2.5 text-left text-xs font-semibold whitespace-nowrap">
+                        HSN / SAC
+                      </th>
+                      <th className="px-3 py-2.5 text-right text-xs font-semibold whitespace-nowrap">
+                        Qty
+                      </th>
+                      <th className="px-3 py-2.5 text-left text-xs font-semibold whitespace-nowrap">
+                        UOM
+                      </th>
+                      <th className="px-3 py-2.5 text-right text-xs font-semibold whitespace-nowrap">
+                        Rate
+                      </th>
+                    </>
+                  ) : null}
                   <ServerSortTh
                     label="Taxable Amount"
                     colKey="taxable_value"
@@ -927,20 +1030,24 @@ export default function SalesRegisterApiPageClient() {
                   <th className="px-3 py-2.5 text-right text-xs font-semibold whitespace-nowrap">
                     Discount
                   </th>
-                  <th className="px-3 py-2.5 text-right text-xs font-semibold whitespace-nowrap">
-                    Other Charges
-                  </th>
+                  {itemWise ? null : (
+                    <th className="px-3 py-2.5 text-right text-xs font-semibold whitespace-nowrap">
+                      Other Charges
+                    </th>
+                  )}
                   <ServerSortTh
-                    label="Invoice Total"
+                    label={itemWise ? "Line Total" : "Invoice Total"}
                     colKey="invoice_total"
                     activeKey={activeSortCol}
                     sortDir={sortOrder}
                     onSort={handleSort}
                     align="right"
                   />
-                  <th className="px-3 py-2.5 text-left text-xs font-semibold whitespace-nowrap">
-                    Payment Terms
-                  </th>
+                  {itemWise ? null : (
+                    <th className="px-3 py-2.5 text-left text-xs font-semibold whitespace-nowrap">
+                      Payment Terms
+                    </th>
+                  )}
                   <th className="px-3 py-2.5 text-left text-xs font-semibold whitespace-nowrap">
                     Status
                   </th>
@@ -952,70 +1059,29 @@ export default function SalesRegisterApiPageClient() {
                     key={row.id}
                     row={row}
                     sr={(page - 1) * pageSize + idx + 1}
+                    itemWise={itemWise}
                   />
                 ))}
               </AccountsTableBody>
-              {summary ? (
+              {summary?.posted && summary?.cancelled && summary?.net ? (
                 <AccountsTableFoot>
-                  <AccountsTableRow>
-                    <AccountsTableCell
-                      colSpan={9}
-                      className="font-semibold text-xs text-foreground"
-                    >
-                      Totals ({summary.invoice_count} invoice
-                      {summary.invoice_count === 1 ? "" : "s"})
-                    </AccountsTableCell>
-                    <AccountsTableCell
-                      align="right"
-                      money
-                      className={cn("font-semibold", MONEY_AMOUNT_CLASS)}
-                    >
-                      {formatMoneyString(summary.taxable_amount)}
-                    </AccountsTableCell>
-                    <AccountsTableCell
-                      align="right"
-                      money
-                      className={cn("font-semibold", MONEY_AMOUNT_CLASS)}
-                    >
-                      {formatMoneyString(summary.cgst)}
-                    </AccountsTableCell>
-                    <AccountsTableCell
-                      align="right"
-                      money
-                      className={cn("font-semibold", MONEY_AMOUNT_CLASS)}
-                    >
-                      {formatMoneyString(summary.sgst)}
-                    </AccountsTableCell>
-                    <AccountsTableCell
-                      align="right"
-                      money
-                      className={cn("font-semibold", MONEY_AMOUNT_CLASS)}
-                    >
-                      {formatMoneyString(summary.igst)}
-                    </AccountsTableCell>
-                    <AccountsTableCell
-                      align="right"
-                      money
-                      className={cn("font-semibold", MONEY_AMOUNT_CLASS)}
-                    >
-                      {formatMoneyString(summary.discount)}
-                    </AccountsTableCell>
-                    <AccountsTableCell
-                      align="right"
-                      money
-                      className={cn("font-semibold", MONEY_AMOUNT_CLASS)}
-                    >
-                      {formatMoneyString(summary.other_charges)}
-                    </AccountsTableCell>
-                    <AccountsTableCell
-                      align="right"
-                      money
-                      className={cn("font-semibold", MONEY_AMOUNT_CLASS)}
-                    >
-                      {formatMoneyString(summary.invoice_value)}
-                    </AccountsTableCell>
-                    <AccountsTableCell colSpan={2} />
-                  </AccountsTableRow>
+                  <SummaryFooterRow
+                    label={`Posted (${summary.posted.invoice_count})`}
+                    bucket={summary.posted}
+                    itemWise={itemWise}
+                  />
+                  <SummaryFooterRow
+                    label={`Cancelled (${summary.cancelled.invoice_count})`}
+                    bucket={summary.cancelled}
+                    tone="cancelled"
+                    itemWise={itemWise}
+                  />
+                  <SummaryFooterRow
+                    label={`Net (${summary.net.invoice_count})`}
+                    bucket={summary.net}
+                    tone="net"
+                    itemWise={itemWise}
+                  />
                 </AccountsTableFoot>
               ) : null}
             </AccountsTable>
@@ -1029,7 +1095,7 @@ export default function SalesRegisterApiPageClient() {
                   setPageSize(size);
                   setPage(1);
                 }}
-                recordLabel="invoices"
+                recordLabel={itemWise ? "items" : "invoices"}
               />
             ) : null}
           </>
@@ -1068,24 +1134,130 @@ function ServerSortTh({
   );
 }
 
+function SummaryFooterRow({
+  label,
+  bucket,
+  tone = "default",
+  itemWise = false,
+}: {
+  label: string;
+  bucket: {
+    taxable_amount: string;
+    cgst: string;
+    sgst: string;
+    igst: string;
+    discount: string;
+    other_charges: string;
+    invoice_value: string;
+  };
+  tone?: "default" | "cancelled" | "net";
+  itemWise?: boolean;
+}) {
+  const rowClass =
+    tone === "cancelled"
+      ? "bg-red-50/80 text-red-800"
+      : tone === "net"
+        ? "bg-slate-50"
+        : undefined;
+  return (
+    <AccountsTableRow className={rowClass}>
+      <AccountsTableCell
+        colSpan={itemWise ? 15 : 9}
+        className="font-semibold text-xs text-foreground"
+      >
+        {label}
+      </AccountsTableCell>
+      <AccountsTableCell
+        align="right"
+        money
+        className={cn("font-semibold", MONEY_AMOUNT_CLASS)}
+      >
+        {formatMoneyString(bucket.taxable_amount)}
+      </AccountsTableCell>
+      <AccountsTableCell
+        align="right"
+        money
+        className={cn("font-semibold", MONEY_AMOUNT_CLASS)}
+      >
+        {formatMoneyString(bucket.cgst)}
+      </AccountsTableCell>
+      <AccountsTableCell
+        align="right"
+        money
+        className={cn("font-semibold", MONEY_AMOUNT_CLASS)}
+      >
+        {formatMoneyString(bucket.sgst)}
+      </AccountsTableCell>
+      <AccountsTableCell
+        align="right"
+        money
+        className={cn("font-semibold", MONEY_AMOUNT_CLASS)}
+      >
+        {formatMoneyString(bucket.igst)}
+      </AccountsTableCell>
+      <AccountsTableCell
+        align="right"
+        money
+        className={cn("font-semibold", MONEY_AMOUNT_CLASS)}
+      >
+        {formatMoneyString(bucket.discount)}
+      </AccountsTableCell>
+      {itemWise ? null : (
+        <AccountsTableCell
+          align="right"
+          money
+          className={cn("font-semibold", MONEY_AMOUNT_CLASS)}
+        >
+          {formatMoneyString(bucket.other_charges)}
+        </AccountsTableCell>
+      )}
+      <AccountsTableCell
+        align="right"
+        money
+        className={cn("font-semibold", MONEY_AMOUNT_CLASS)}
+      >
+        {formatMoneyString(bucket.invoice_value)}
+      </AccountsTableCell>
+      <AccountsTableCell colSpan={itemWise ? 1 : 2} />
+    </AccountsTableRow>
+  );
+}
+
 function SalesRegisterRowView({
   row,
   sr,
+  itemWise = false,
 }: {
   row: SalesRegisterApiRow;
   sr: number;
+  itemWise?: boolean;
 }) {
+  const isCancelled = row.invoice_status === "CANCELLED";
+  const invoiceHref = `/accounts/transactions/invoices/${
+    row.item?.sales_invoice_id ?? row.id
+  }`;
   return (
-    <AccountsTableRow className="group">
+    <AccountsTableRow
+      className={cn(
+        "group",
+        isCancelled && "bg-red-50/60 text-red-900/90",
+      )}
+    >
       <AccountsTableCell className="text-xs tabular-nums text-muted-foreground">
         {sr}
       </AccountsTableCell>
       <AccountsTableCell className="text-xs whitespace-nowrap">
         {formatDisplayDate(row.invoice_date, row.invoice_date)}
       </AccountsTableCell>
-      <AccountsTableCell mono className="text-brand-700 font-semibold whitespace-nowrap">
+      <AccountsTableCell
+        mono
+        className={cn(
+          "font-semibold whitespace-nowrap",
+          isCancelled ? "text-red-700 line-through" : "text-brand-700",
+        )}
+      >
         <Link
-          href={`/accounts/transactions/invoices/${row.id}`}
+          href={invoiceHref}
           className="hover:underline"
           onClick={(e) => e.stopPropagation()}
         >
@@ -1116,6 +1288,34 @@ function SalesRegisterRowView({
       <AccountsTableCell className="text-xs whitespace-nowrap min-w-[220px]">
         {row.warehouse?.name || row.branch?.name || "—"}
       </AccountsTableCell>
+      {itemWise ? (
+        <>
+          <AccountsTableCell mono className="text-xs text-brand-700">
+            {row.item?.product.code || "—"}
+          </AccountsTableCell>
+          <AccountsTableCell
+            className="text-xs font-medium max-w-[180px] truncate"
+            title={row.item?.product.name}
+          >
+            {row.item?.product.name || "—"}
+          </AccountsTableCell>
+          <AccountsTableCell mono className="text-xs whitespace-nowrap">
+            {row.item?.hsn_sac || "—"}
+          </AccountsTableCell>
+          <AccountsTableCell
+            align="right"
+            className="text-xs tabular-nums whitespace-nowrap"
+          >
+            {row.item?.quantity || "—"}
+          </AccountsTableCell>
+          <AccountsTableCell className="text-xs whitespace-nowrap">
+            {row.item?.uom || "—"}
+          </AccountsTableCell>
+          <AccountsTableCell align="right" money className={MONEY_AMOUNT_CLASS}>
+            {formatMoneyStringOrDash(row.item?.rate ?? null)}
+          </AccountsTableCell>
+        </>
+      ) : null}
       <AccountsTableCell align="right" money className={MONEY_AMOUNT_CLASS}>
         {formatMoneyString(row.taxable_value)}
       </AccountsTableCell>
@@ -1131,15 +1331,19 @@ function SalesRegisterRowView({
       <AccountsTableCell align="right" money className={MONEY_AMOUNT_CLASS}>
         {formatMoneyStringOrDash(row.discount)}
       </AccountsTableCell>
-      <AccountsTableCell align="right" money className={MONEY_AMOUNT_CLASS}>
-        {formatMoneyStringOrDash(row.other_charges)}
-      </AccountsTableCell>
+      {itemWise ? null : (
+        <AccountsTableCell align="right" money className={MONEY_AMOUNT_CLASS}>
+          {formatMoneyStringOrDash(row.other_charges)}
+        </AccountsTableCell>
+      )}
       <AccountsTableCell align="right" money className={MONEY_AMOUNT_CLASS}>
         {formatMoneyString(row.invoice_total)}
       </AccountsTableCell>
-      <AccountsTableCell className="text-xs whitespace-nowrap">
-        {row.payment_terms || "—"}
-      </AccountsTableCell>
+      {itemWise ? null : (
+        <AccountsTableCell className="text-xs whitespace-nowrap">
+          {row.payment_terms || "—"}
+        </AccountsTableCell>
+      )}
       <AccountsTableCell className="text-xs whitespace-nowrap">
         <StatusBadge status={formatStatusForBadge(row.invoice_status)} />
       </AccountsTableCell>

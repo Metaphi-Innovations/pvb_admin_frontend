@@ -3,7 +3,10 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { formatApiAgeingBucketLabel } from "@/lib/accounts/ageing-breakpoints";
+import {
+  foldNotDueIntoFirstBucket,
+  formatApiAgeingBucketLabel,
+} from "@/lib/accounts/ageing-breakpoints";
 import { formatDisplayDate } from "@/lib/accounts/date-display";
 import { formatMoneyNumber, MONEY_CELL_CLASS } from "@/lib/accounts/money-format";
 import type { ApiCustomerAgeingGroup } from "@/types/receivables.types";
@@ -48,6 +51,7 @@ export function AgeingGroupedTable({
   error?: string | null;
 }) {
   const router = useRouter();
+  // Date, Bill No, Branch, Bill Amt, Received, buckets, Total — Not Due folded into first bucket
   const colCount = 5 + bucketKeys.length + 1;
   const minWidth = 900 + bucketKeys.length * 110;
 
@@ -75,14 +79,14 @@ export function AgeingGroupedTable({
                   <th className="px-3 py-2.5 text-left font-semibold text-foreground whitespace-nowrap">
                     Bill No
                   </th>
+                  <th className="px-3 py-2.5 text-left font-semibold text-foreground whitespace-nowrap min-w-[140px]">
+                    Warehouse/Branch
+                  </th>
                   <th className="px-3 py-2.5 text-right font-semibold text-foreground whitespace-nowrap">
                     Bill Amount
                   </th>
                   <th className="px-3 py-2.5 text-right font-semibold text-foreground whitespace-nowrap">
                     Received
-                  </th>
-                  <th className="px-3 py-2.5 text-right font-semibold text-foreground whitespace-nowrap">
-                    Not Due
                   </th>
                   {bucketKeys.map((key) => (
                     <th
@@ -102,6 +106,11 @@ export function AgeingGroupedTable({
                   const billTotal = sumFromInvoices(group, "originalAmount");
                   const receivedTotal = sumFromInvoices(group, "settledAmount");
                   const lastBucketIndex = bucketKeys.length - 1;
+                  const partyBuckets = foldNotDueIntoFirstBucket(
+                    group.totals.buckets,
+                    group.totals.notDueAmount,
+                    bucketKeys,
+                  );
 
                   return (
                     <PartyGroup key={group.customerId}>
@@ -135,13 +144,18 @@ export function AgeingGroupedTable({
                       </tr>
 
                       {group.invoices.map((inv) => {
+                        const displayBuckets = foldNotDueIntoFirstBucket(
+                          inv.buckets,
+                          inv.notDueAmount,
+                          bucketKeys,
+                        );
                         const oldestBucketAmount =
                           lastBucketIndex >= 0
-                            ? inv.buckets[bucketKeys[lastBucketIndex]!] ?? 0
+                            ? displayBuckets[bucketKeys[lastBucketIndex]!] ?? 0
                             : 0;
                         const lateBucketAmount =
                           lastBucketIndex >= 1
-                            ? inv.buckets[bucketKeys[lastBucketIndex - 1]!] ?? 0
+                            ? displayBuckets[bucketKeys[lastBucketIndex - 1]!] ?? 0
                             : 0;
 
                         return (
@@ -171,17 +185,17 @@ export function AgeingGroupedTable({
                                 {inv.invoiceNumber || "—"}
                               </button>
                             </td>
+                            <td className="px-3 py-2 whitespace-nowrap text-foreground">
+                              {inv.warehouseName?.trim() || "—"}
+                            </td>
                             <td className="px-3 py-2 text-right">
                               <AmountCell amount={inv.originalAmount} />
                             </td>
                             <td className="px-3 py-2 text-right">
                               <AmountCell amount={inv.settledAmount} />
                             </td>
-                            <td className="px-3 py-2 text-right">
-                              <AmountCell amount={inv.notDueAmount} />
-                            </td>
                             {bucketKeys.map((key, index) => {
-                              const amount = inv.buckets[key] ?? 0;
+                              const amount = displayBuckets[key] ?? 0;
                               return (
                                 <td key={key} className="px-3 py-2 text-right">
                                   <AmountCell
@@ -222,20 +236,17 @@ export function AgeingGroupedTable({
                           {group.invoices.length} bill
                           {group.invoices.length === 1 ? "" : "s"}
                         </td>
+                        <td className="px-3 py-2.5 text-muted-foreground">
+                          {group.warehouseName?.trim() || ""}
+                        </td>
                         <td className="px-3 py-2.5 text-right">
                           <AmountCell amount={billTotal} className="font-semibold" />
                         </td>
                         <td className="px-3 py-2.5 text-right">
                           <AmountCell amount={receivedTotal} className="font-semibold" />
                         </td>
-                        <td className="px-3 py-2.5 text-right">
-                          <AmountCell
-                            amount={group.totals.notDueAmount}
-                            className="font-semibold"
-                          />
-                        </td>
                         {bucketKeys.map((key, index) => {
-                          const amount = group.totals.buckets[key] ?? 0;
+                          const amount = partyBuckets[key] ?? 0;
                           return (
                             <td key={key} className="px-3 py-2.5 text-right">
                               <AmountCell

@@ -51,6 +51,28 @@ export function formatApiAgeingBucketLabel(apiKey: string): string {
   return `${apiKey.replace("-", "–")} Days`;
 }
 
+function roundMoneyLocal(value: number): number {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+/**
+ * Presentation helper: fold Not Due into the first ageing bucket (e.g. 0-30)
+ * so the UI/export can hide the Not Due column without changing totals.
+ */
+export function foldNotDueIntoFirstBucket(
+  buckets: Record<string, number> | undefined,
+  notDueAmount: number | undefined,
+  bucketKeys: string[],
+): Record<string, number> {
+  const next: Record<string, number> = { ...(buckets ?? {}) };
+  const firstKey = bucketKeys[0];
+  if (!firstKey) return next;
+  const notDue = Number(notDueAmount) || 0;
+  if (notDue === 0) return next;
+  next[firstKey] = roundMoneyLocal((Number(next[firstKey]) || 0) + notDue);
+  return next;
+}
+
 export function generateAgeingBucketsFromBreakpoints(
   breakpoints: AgeingBreakpoints,
 ): GeneratedAgeingBucket[] {

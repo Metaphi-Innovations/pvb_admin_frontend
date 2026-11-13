@@ -289,36 +289,6 @@ export function validateSalesOrderForm(
 		if (invalid) {
 			e.lineItems =
 				"Each line must have a product and quantity greater than zero";
-		} else {
-			// Aggregate qty per product (Case + Piece lines) against warehouse stock.
-			const demand = new Map<
-				string,
-				{ name: string; qty: number; stock: number }
-			>();
-			for (const line of form.lineItems) {
-				if (!line.productId || line.quantity <= 0) continue;
-				const key = String(line.productId);
-				const existing = demand.get(key);
-				if (existing) {
-					existing.qty += line.quantity;
-					existing.stock = Math.min(existing.stock, Number(line.availableStock || 0));
-				} else {
-					demand.set(key, {
-						name: line.productName || line.productCode || "Product",
-						qty: line.quantity,
-						stock: Number(line.availableStock || 0),
-					});
-				}
-			}
-			const short = Array.from(demand.values()).find(
-				(row) => row.qty > row.stock + 1e-9,
-			);
-			if (short) {
-				e.lineItems =
-					short.stock <= 0
-						? `${short.name} has no stock in the selected warehouse.`
-						: `${short.name}: ordered qty (${short.qty}) exceeds available stock (${short.stock}) in the selected warehouse.`;
-			}
 		}
 	}
 	return e;

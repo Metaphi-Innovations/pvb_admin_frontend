@@ -69,6 +69,8 @@ export interface TaxInvoiceLineItem {
   igst: number;
   total: number;
   interstate: boolean;
+  /** DEDUCT additional-charge row — amount shown in Disc Amt, not Rate/Gross/Taxable. */
+  isAdditionalDiscount?: boolean;
 }
 
 export interface TaxInvoiceHsnSummaryRow {
@@ -255,6 +257,64 @@ function partyFromRaw(
 
 function round2(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100;
+}
+
+function normalizeChargeEffect(value: unknown): "ADD" | "DEDUCT" {
+  return String(value ?? "").trim().toUpperCase() === "DEDUCT" ? "DEDUCT" : "ADD";
+}
+
+function resolveChargeEffect(charge: Record<string, unknown>): "ADD" | "DEDUCT" {
+  const fromField = charge.charge_effect;
+  if (fromField !== undefined && fromField !== null && String(fromField).trim() !== "") {
+    return normalizeChargeEffect(fromField);
+  }
+  const snap = readRecord(charge.additional_charge_snapshot);
+  return normalizeChargeEffect(snap.charge_effect);
+}
+
+function isProductPdfLine(line: TaxInvoiceLineItem): boolean {
+  return !(line.productCode === "—" && line.uom === "—");
+}
+
+function applyAdditionalDiscountToHsnSummary(
+  hsnMap: Map<string, TaxInvoiceHsnSummaryRow>,
+  productLines: TaxInvoiceLineItem[],
+  additionalDiscount: number,
+): void {
+  const deduct = round2(Math.max(0, additionalDiscount));
+  if (deduct <= 0) return;
+
+  const productKeys = new Set(
+    productLines.map((line) => `${line.hsnCode}|${line.gstPct}`),
+  );
+  const productRows = Array.from(hsnMap.entries()).filter(([key]) =>
+    productKeys.has(key),
+  );
+  if (!productRows.length) return;
+
+  const productTaxableTotal = round2(
+    productRows.reduce((sum, [, row]) => sum + row.taxableValue, 0),
+  );
+  if (productTaxableTotal <= 0) return;
+
+  const cappedDeduct = Math.min(deduct, productTaxableTotal);
+  let allocated = 0;
+  for (let i = 0; i < productRows.length; i += 1) {
+    const [, row] = productRows[i]!;
+    const share =
+      i === productRows.length - 1
+        ? round2(cappedDeduct - allocated)
+        : round2((cappedDeduct * row.taxableValue) / productTaxableTotal);
+    allocated = round2(allocated + share);
+    const priorTaxable = row.taxableValue;
+    const nextTaxable = round2(Math.max(0, priorTaxable - share));
+    const taxRatio = priorTaxable > 0 ? nextTaxable / priorTaxable : 0;
+    row.taxableValue = nextTaxable;
+    row.cgst = round2(row.cgst * taxRatio);
+    row.sgst = round2(row.sgst * taxRatio);
+    row.igst = round2(row.igst * taxRatio);
+    row.totalTax = round2(row.cgst + row.sgst + row.igst);
+  }
 }
 
 function deriveSiFallbackFromDispatch(dispatch: any): string {
@@ -486,41 +546,66 @@ export function mapDispatchToTaxInvoice(
     : [];
   for (const rawCharge of invoiceCharges) {
     const charge = readRecord(rawCharge);
-    const gstPct =
-      toNumber(charge.gst_rate) ||
-      toNumber(charge.igst_rate) ||
-      toNumber(charge.cgst_rate) + toNumber(charge.sgst_rate);
+    const isAdditionalDiscount = resolveChargeEffect(charge) === "DEDUCT";
+    const amount = round2(
+      toNumber(charge.amount) || toNumber(charge.taxable_amount),
+    );
+    const gstPct = isAdditionalDiscount
+      ? 0
+      : toNumber(charge.gst_rate) ||
+        toNumber(charge.igst_rate) ||
+        toNumber(charge.cgst_rate) + toNumber(charge.sgst_rate);
     lines.push({
       sr: lines.length + 1,
       productCode: "—",
-      productName: asText(charge.charge_name, "Additional Charge"),
+      productName: asText(
+        charge.charge_name,
+        isAdditionalDiscount ? "Additional Disc" : "Additional Charge",
+      ),
       batchLine: "",
       sku: "—",
-      hsnCode: asText(
-        pick(readRecord(charge.hsn_snapshot), ["hsn_code"]) ||
-          pick(readRecord(charge.additional_charge_snapshot), ["hsn_sac_code"]),
-        "",
-      ),
+      hsnCode: isAdditionalDiscount
+        ? ""
+        : asText(
+            pick(readRecord(charge.hsn_snapshot), ["hsn_code"]) ||
+              pick(readRecord(charge.additional_charge_snapshot), [
+                "hsn_sac_code",
+              ]),
+            "",
+          ),
       qtyInCase: 0,
-      totalUnits: 1,
-      totalQty: 1,
+      totalUnits: isAdditionalDiscount ? 0 : 1,
+      totalQty: isAdditionalDiscount ? 0 : 1,
       uom: "—",
-      rate: toNumber(charge.amount),
-      grossAmt: round2(toNumber(charge.amount)),
+      rate: isAdditionalDiscount ? 0 : amount,
+      grossAmt: isAdditionalDiscount ? 0 : amount,
       discPct: 0,
-      discAmt: 0,
-      taxableValue: toNumber(charge.taxable_amount),
+      discAmt: isAdditionalDiscount ? amount : 0,
+      taxableValue: isAdditionalDiscount
+        ? 0
+        : toNumber(charge.taxable_amount),
       gstPct,
-      cgst: toNumber(charge.cgst_amount),
-      sgst: toNumber(charge.sgst_amount),
-      igst: toNumber(charge.igst_amount),
-      total: toNumber(charge.total_amount),
+      cgst: isAdditionalDiscount ? 0 : toNumber(charge.cgst_amount),
+      sgst: isAdditionalDiscount ? 0 : toNumber(charge.sgst_amount),
+      igst: isAdditionalDiscount ? 0 : toNumber(charge.igst_amount),
+      total: isAdditionalDiscount ? 0 : toNumber(charge.total_amount),
       interstate: interstate || toNumber(charge.igst_amount) > 0,
+      isAdditionalDiscount,
     });
   }
 
+  const productLinesForHsn = lines.filter(isProductPdfLine);
+  const addChargeLines = lines.filter(
+    (line) => !isProductPdfLine(line) && !line.isAdditionalDiscount,
+  );
+  const additionalDiscountTotal = round2(
+    lines
+      .filter((line) => line.isAdditionalDiscount)
+      .reduce((sum, line) => sum + line.discAmt, 0),
+  );
+
   const hsnMap = new Map<string, TaxInvoiceHsnSummaryRow>();
-  for (const line of lines) {
+  const upsertHsn = (line: TaxInvoiceLineItem) => {
     const key = `${line.hsnCode}|${line.gstPct}`;
     const existing = hsnMap.get(key);
     if (!existing) {
@@ -540,7 +625,15 @@ export function mapDispatchToTaxInvoice(
       existing.igst = round2(existing.igst + line.igst);
       existing.totalTax = round2(existing.cgst + existing.sgst + existing.igst);
     }
-  }
+  };
+
+  for (const line of productLinesForHsn) upsertHsn(line);
+  applyAdditionalDiscountToHsnSummary(
+    hsnMap,
+    productLinesForHsn,
+    additionalDiscountTotal,
+  );
+  for (const line of addChargeLines) upsertHsn(line);
 
   const linesGross = round2(lines.reduce((s, l) => s + l.grossAmt, 0));
   const linesDiscount = round2(lines.reduce((s, l) => s + l.discAmt, 0));
@@ -552,7 +645,10 @@ export function mapDispatchToTaxInvoice(
   const additionalChargesFromRows = round2(
     invoiceCharges.reduce((sum: number, rawCharge) => {
       const charge = readRecord(rawCharge);
-      return sum + toNumber(charge.amount);
+      const amount = toNumber(charge.amount);
+      return (
+        sum + (resolveChargeEffect(charge) === "DEDUCT" ? -amount : amount)
+      );
     }, 0),
   );
 
@@ -895,6 +991,11 @@ export function buildTaxInvoiceHtml(
 
   const finalRows: PdfTableRow[] = data.lines.map((line) => {
     const isCharge = line.productCode === "—" && line.uom === "—";
+    const isAdditionalDiscount = Boolean(
+      line.isAdditionalDiscount ||
+        (isCharge && line.discAmt > 0 && line.grossAmt === 0),
+    );
+    const dash = "—";
     return {
       cells: {
         sr: String(line.sr),
@@ -903,20 +1004,28 @@ export function buildTaxInvoiceHtml(
         sku: line.sku,
         salesPerson: data.salesPerson,
         hsn: line.hsnCode,
-        qtyCase: isCharge ? "—" : formatNumber(line.qtyInCase),
-        totalUnits: isCharge ? "—" : formatNumber(line.totalUnits),
+        qtyCase: isCharge ? dash : formatNumber(line.qtyInCase),
+        totalUnits: isCharge ? dash : formatNumber(line.totalUnits),
         totalQty: isCharge
-          ? "—"
+          ? dash
           : line.totalQty > 0 && line.uom && line.uom !== "—"
             ? `${formatNumber(line.totalQty)} ${line.uom}`
-            : "—",
-        rate: formatCurrency(line.rate),
-        gross: formatCurrency(line.grossAmt),
-        discPct: line.discPct ? pctLabel(line.discPct) : "—",
-        discAmt: isCharge ? "—" : formatCurrency(line.discAmt),
-        taxable: formatCurrency(line.taxableValue),
-        gstPct: pctLabel(line.gstPct),
-        total: formatCurrency(line.total),
+            : dash,
+        rate: isAdditionalDiscount ? dash : formatCurrency(line.rate),
+        gross: isAdditionalDiscount ? dash : formatCurrency(line.grossAmt),
+        discPct: line.discPct ? pctLabel(line.discPct) : dash,
+        discAmt: isAdditionalDiscount
+          ? formatCurrency(line.discAmt)
+          : isCharge
+            ? dash
+            : line.discAmt
+              ? formatCurrency(line.discAmt)
+              : dash,
+        taxable: isAdditionalDiscount
+          ? dash
+          : formatCurrency(line.taxableValue),
+        gstPct: isAdditionalDiscount ? dash : pctLabel(line.gstPct),
+        total: isAdditionalDiscount ? dash : formatCurrency(line.total),
       },
       htmlCells: {
         productName: `<div class="ti-pname">${escapeHtml(line.productName)}</div>${
@@ -926,8 +1035,10 @@ export function buildTaxInvoiceHtml(
         }`,
         hsn: line.hsnCode
           ? `<span class="ti-hsn-code">${escapeHtml(line.hsnCode)}</span>`
-          : "—",
-        total: `<strong>${escapeHtml(formatCurrency(line.total))}</strong>`,
+          : dash,
+        total: isAdditionalDiscount
+          ? dash
+          : `<strong>${escapeHtml(formatCurrency(line.total))}</strong>`,
       },
     };
   });

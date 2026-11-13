@@ -34,6 +34,8 @@ export interface ReceivablesPaginationMeta {
 export interface PaginatedReceivablesResponse<T> {
   data: T[];
   pagination: ReceivablesPaginationMeta;
+  /** Ageing API: full-report totals across all pages (not the current page only). */
+  totals?: AgingApiCustomerTotals;
 }
 
 export interface SalespersonRef {
@@ -91,6 +93,8 @@ export interface AgingApiInvoiceRow {
   ageDays?: number | null;
   notDueAmount?: number;
   buckets: AgingBucketMap;
+  warehouseId?: string;
+  warehouseName?: string;
 }
 
 export interface AgingApiCustomerTotals {
@@ -109,6 +113,8 @@ export interface AgingApiRow {
   customerCode: string;
   /** Customer Sales Man / TM. */
   salesperson?: SalespersonRef;
+  warehouseId?: string;
+  warehouseName?: string;
   totalOutstanding: number;
   buckets: AgingBucketMap;
   notDueAmount?: number;
@@ -370,6 +376,8 @@ export interface ApiCustomerAgeingInvoiceRow {
   notDueAmount: number;
   /** Amounts keyed by API bucket labels (e.g. "0-30", "91+"). */
   buckets: Record<string, number>;
+  warehouseId?: string;
+  warehouseName?: string;
 }
 
 export interface ApiCustomerAgeingGroup {
@@ -378,6 +386,8 @@ export interface ApiCustomerAgeingGroup {
   customerCode: string;
   /** Customer Sales Man / TM display name. */
   tmName?: string;
+  warehouseId?: string;
+  warehouseName?: string;
   invoices: ApiCustomerAgeingInvoiceRow[];
   totals: {
     totalOutstanding: number;
