@@ -1,7 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { formatApiAgeingBucketLabel } from "@/lib/accounts/ageing-breakpoints";
+import {
+  foldNotDueIntoFirstBucket as mergeNotDueIntoFirstBucket,
+  formatApiAgeingBucketLabel,
+} from "@/lib/accounts/ageing-breakpoints";
 import { formatMoneyNumber, MONEY_CELL_CLASS } from "@/lib/accounts/money-format";
 import { AccountsTableScroll } from "@/components/accounts/AccountsTable";
 import { AccountsTablePagination } from "@/components/accounts/AccountsTableListing";
@@ -13,6 +16,8 @@ export type AgeingPartySummaryRow = {
   partyCode?: string;
   /** Customer Sales Man / TM. */
   tmName?: string;
+  /** Warehouse / branch display name. */
+  warehouseName?: string;
   buckets: Record<string, number>;
   /** Includes not-due + overdue buckets. */
   totalOutstanding: number;
@@ -39,6 +44,11 @@ export function AgeingPartySummaryTable({
   partyColumnLabel = "Party",
   balanceSide = "Dr",
   showTmColumn = false,
+  showWarehouseColumn = false,
+  /** When true, hide Not Due and add it into the first bucket (debtors client preference). */
+  foldNotDueIntoFirstBucket: foldNotDue = false,
+  /** Full-report totals (all pages). When set, Net Total and % use these instead of page-only sums. */
+  reportTotals,
   partyHref,
   totalRecords,
   loading,
@@ -56,6 +66,14 @@ export function AgeingPartySummaryTable({
   balanceSide?: "Dr" | "Cr";
   /** Show TM (Sales Man) column — receivables ageing. */
   showTmColumn?: boolean;
+  /** Show warehouse/branch column — receivables ageing. */
+  showWarehouseColumn?: boolean;
+  foldNotDueIntoFirstBucket?: boolean;
+  reportTotals?: {
+    totalOutstanding: number;
+    notDueAmount?: number;
+    buckets: Record<string, number>;
+  } | null;
   partyHref?: (row: AgeingPartySummaryRow) => string;
   totalRecords: number;
   loading: boolean;
@@ -66,16 +84,46 @@ export function AgeingPartySummaryTable({
   error?: string | null;
   emptyMessage?: string;
 }) {
-  const minWidth = (showTmColumn ? 760 : 620) + bucketKeys.length * 110;
+  const minWidth =
+    (showTmColumn ? 760 : 620) +
+    (showWarehouseColumn ? 140 : 0) +
+    bucketKeys.length * 110 -
+    (foldNotDue ? 110 : 0);
 
-  const pageTotal = rows.reduce((sum, r) => sum + (r.totalOutstanding || 0), 0);
-  const pageNotDueTotal = rows.reduce(
-    (sum, r) => sum + (Number(r.notDueAmount) || 0),
-    0,
-  );
+  const displayRows = rows.map((row) => ({
+    ...row,
+    buckets: foldNotDue
+      ? mergeNotDueIntoFirstBucket(row.buckets, row.notDueAmount, bucketKeys)
+      : row.buckets,
+  }));
+
+  const pageTotal = displayRows.reduce((sum, r) => sum + (r.totalOutstanding || 0), 0);
+  const pageNotDueTotal = foldNotDue
+    ? 0
+    : displayRows.reduce((sum, r) => sum + (Number(r.notDueAmount) || 0), 0);
   const pageBucketTotals = bucketKeys.map((key) =>
-    rows.reduce((sum, r) => sum + (Number(r.buckets?.[key]) || 0), 0),
+    displayRows.reduce((sum, r) => sum + (Number(r.buckets?.[key]) || 0), 0),
   );
+
+  const reportDisplayBuckets = reportTotals
+    ? foldNotDue
+      ? mergeNotDueIntoFirstBucket(
+          reportTotals.buckets,
+          reportTotals.notDueAmount,
+          bucketKeys,
+        )
+      : reportTotals.buckets
+    : null;
+
+  const netTotal = reportTotals?.totalOutstanding ?? pageTotal;
+  const netNotDueTotal = reportTotals
+    ? foldNotDue
+      ? 0
+      : Number(reportTotals.notDueAmount) || 0
+    : pageNotDueTotal;
+  const netBucketTotals = reportDisplayBuckets
+    ? bucketKeys.map((key) => Number(reportDisplayBuckets[key]) || 0)
+    : pageBucketTotals;
 
   const formatBucketHeader = (key: string) => {
     if (key.endsWith("+")) {
@@ -117,9 +165,16 @@ export function AgeingPartySummaryTable({
                       TM
                     </th>
                   ) : null}
-                  <th className="px-3 py-2.5 text-right font-semibold text-foreground whitespace-nowrap min-w-[110px]">
-                    Not Due
-                  </th>
+                  {showWarehouseColumn ? (
+                    <th className="px-3 py-2.5 text-left font-semibold text-foreground whitespace-nowrap min-w-[140px]">
+                      Warehouse/Branch
+                    </th>
+                  ) : null}
+                  {!foldNotDue ? (
+                    <th className="px-3 py-2.5 text-right font-semibold text-foreground whitespace-nowrap min-w-[110px]">
+                      Not Due
+                    </th>
+                  ) : null}
                   {bucketKeys.map((key) => (
                     <th
                       key={key}
@@ -137,10 +192,10 @@ export function AgeingPartySummaryTable({
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row) => {
+                {displayRows.map((row) => {
                   const pct =
-                    pageTotal > 0
-                      ? Math.round((row.totalOutstanding / pageTotal) * 100)
+                    netTotal > 0
+                      ? Math.round((row.totalOutstanding / netTotal) * 100)
                       : 0;
                   const href = partyHref?.(row);
                   const nameCell = (
@@ -176,14 +231,21 @@ export function AgeingPartySummaryTable({
                           {row.tmName?.trim() || "—"}
                         </td>
                       ) : null}
-                      <td
-                        className={cn(
-                          "px-3 py-2 text-right whitespace-nowrap tabular-nums",
-                          MONEY_CELL_CLASS,
-                        )}
-                      >
-                        {formatDrCr(row.notDueAmount ?? 0, balanceSide)}
-                      </td>
+                      {showWarehouseColumn ? (
+                        <td className="px-3 py-2 whitespace-nowrap text-foreground">
+                          {row.warehouseName?.trim() || "—"}
+                        </td>
+                      ) : null}
+                      {!foldNotDue ? (
+                        <td
+                          className={cn(
+                            "px-3 py-2 text-right whitespace-nowrap tabular-nums",
+                            MONEY_CELL_CLASS,
+                          )}
+                        >
+                          {formatDrCr(row.notDueAmount ?? 0, balanceSide)}
+                        </td>
+                      ) : null}
                       {bucketKeys.map((key) => (
                         <td
                           key={key}
@@ -214,15 +276,18 @@ export function AgeingPartySummaryTable({
                     Net Total
                   </td>
                   {showTmColumn ? <td className="px-3 py-2.5" /> : null}
-                  <td
-                    className={cn(
-                      "px-3 py-2.5 text-right whitespace-nowrap tabular-nums font-bold",
-                      MONEY_CELL_CLASS,
-                    )}
-                  >
-                    {formatDrCr(pageNotDueTotal, balanceSide)}
-                  </td>
-                  {pageBucketTotals.map((amt, i) => (
+                  {showWarehouseColumn ? <td className="px-3 py-2.5" /> : null}
+                  {!foldNotDue ? (
+                    <td
+                      className={cn(
+                        "px-3 py-2.5 text-right whitespace-nowrap tabular-nums font-bold",
+                        MONEY_CELL_CLASS,
+                      )}
+                    >
+                      {formatDrCr(netNotDueTotal, balanceSide)}
+                    </td>
+                  ) : null}
+                  {netBucketTotals.map((amt, i) => (
                     <td
                       key={bucketKeys[i]}
                       className={cn(
@@ -239,10 +304,10 @@ export function AgeingPartySummaryTable({
                       MONEY_CELL_CLASS,
                     )}
                   >
-                    {formatDrCr(pageTotal, balanceSide)}
+                    {formatDrCr(netTotal, balanceSide)}
                   </td>
                   <td className="px-3 py-2.5 text-right whitespace-nowrap tabular-nums font-bold text-muted-foreground">
-                    {pageTotal > 0 ? "100%" : "0%"}
+                    {netTotal > 0 ? "100%" : "0%"}
                   </td>
                 </tr>
               </tbody>

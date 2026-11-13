@@ -14,6 +14,7 @@ import {
   SUMMARY_SORT_KEY_TO_API,
 } from "@/lib/accounts/receivables-api-mappers";
 import type {
+  AgingApiCustomerTotals,
   ApiCollectionFollowUpRow,
   ApiCustomerAgeingGroup,
   ApiCustomerOutstandingRow,
@@ -30,6 +31,8 @@ export interface ReceivablesListingState {
   summaryRows: ApiCustomerOutstandingRow[];
   invoiceRows: ApiInvoiceOutstandingRow[];
   ageingRows: ApiCustomerAgeingGroup[];
+  /** Full-report ageing totals (all pages). */
+  ageingReportTotals: AgingApiCustomerTotals | null;
   collectionRows: ApiCollectionFollowUpRow[];
 }
 
@@ -39,6 +42,7 @@ export function useReceivablesListing(options: {
   search: string;
   customerIds: string[];
   salesperson?: string;
+  warehouseId?: string;
   dueStatus: "all" | "overdue" | "not_due";
   page: number;
   pageSize: number;
@@ -53,6 +57,7 @@ export function useReceivablesListing(options: {
     search,
     customerIds,
     salesperson,
+    warehouseId,
     dueStatus,
     page,
     pageSize,
@@ -70,6 +75,8 @@ export function useReceivablesListing(options: {
   const [summaryRows, setSummaryRows] = useState<ApiCustomerOutstandingRow[]>([]);
   const [invoiceRows, setInvoiceRows] = useState<ApiInvoiceOutstandingRow[]>([]);
   const [ageingRows, setAgeingRows] = useState<ApiCustomerAgeingGroup[]>([]);
+  const [ageingReportTotals, setAgeingReportTotals] =
+    useState<AgingApiCustomerTotals | null>(null);
   const [collectionRows, setCollectionRows] = useState<ApiCollectionFollowUpRow[]>([]);
   const [salespersonIdMap, setSalespersonIdMap] = useState<Record<string, string>>({});
 
@@ -106,11 +113,15 @@ export function useReceivablesListing(options: {
       setLoading(true);
       setError(null);
       try {
+        const resolvedWarehouseId =
+          warehouseId && warehouseId !== "all" ? warehouseId : undefined;
+
         if (view === "summary") {
           const res = await ReceivablesService.getCustomerSummary({
             search: debouncedSearch.trim() || undefined,
             customerIds: selectedCustomerIds,
             salespersonId: resolvedSalespersonId,
+            warehouseId: resolvedWarehouseId,
             asOfDate: asOnDate,
             excludeZeroBalance: true,
             status: dueStatusApi,
@@ -143,6 +154,7 @@ export function useReceivablesListing(options: {
           const res = await ReceivablesService.getInvoices({
             search: debouncedSearch.trim() || undefined,
             customerIds: selectedCustomerIds,
+            warehouseId: resolvedWarehouseId,
             asOfDate: asOnDate,
             status: dueStatusApi,
             page,
@@ -165,6 +177,7 @@ export function useReceivablesListing(options: {
             search: debouncedSearch.trim() || undefined,
             customerIds: selectedCustomerIds,
             salespersonId: resolvedSalespersonId,
+            warehouseId: resolvedWarehouseId,
             asOfDate: asOnDate,
             excludeZeroBalance: true,
             status: dueStatusApi,
@@ -179,9 +192,20 @@ export function useReceivablesListing(options: {
             mapAgingCustomerGroup(row, appliedBreakpoints),
           );
           setAgeingRows(rows);
+          setAgeingReportTotals(
+            res.totals
+              ? {
+                  totalOutstanding: Number(res.totals.totalOutstanding) || 0,
+                  notDueAmount: Number(res.totals.notDueAmount) || 0,
+                  buckets: res.totals.buckets ?? {},
+                }
+              : null,
+          );
           setTotal(res.pagination?.total ?? rows.length);
           return;
         }
+
+        setAgeingReportTotals(null);
 
         const res = await ReceivablesService.getFollowUps({
           search: debouncedSearch.trim() || undefined,
@@ -205,6 +229,7 @@ export function useReceivablesListing(options: {
         setSummaryRows([]);
         setInvoiceRows([]);
         setAgeingRows([]);
+        setAgeingReportTotals(null);
         setCollectionRows([]);
         setTotal(0);
       } finally {
@@ -217,6 +242,7 @@ export function useReceivablesListing(options: {
     debouncedSearch,
     customerIdsKey,
     resolvedSalespersonId,
+    warehouseId,
     dueStatus,
     dueStatusApi,
     asOnDate,
@@ -235,6 +261,7 @@ export function useReceivablesListing(options: {
     summaryRows,
     invoiceRows,
     ageingRows,
+    ageingReportTotals,
     collectionRows,
     resolvedSalespersonId,
   };

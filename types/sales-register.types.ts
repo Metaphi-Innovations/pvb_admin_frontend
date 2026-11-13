@@ -8,6 +8,7 @@ export type SalesRegisterInvoiceType =
 export type SalesRegisterGstType = "CGST_SGST" | "IGST";
 export type SalesRegisterGstTypeFilter = "ALL" | SalesRegisterGstType;
 export type SalesRegisterExportFormat = "EXCEL" | "PDF";
+export type SalesRegisterRowGrain = "INVOICE" | "ITEM";
 export type SalesRegisterSortBy =
   | "invoice_date"
   | "invoice_number"
@@ -15,6 +16,22 @@ export type SalesRegisterSortBy =
   | "taxable_amount"
   | "customer_name";
 export type SalesRegisterSortOrder = "asc" | "desc";
+
+export interface SalesRegisterItemFields {
+  sales_invoice_id: string;
+  sales_invoice_item_id: string;
+  line_number: number;
+  product: {
+    id: string | null;
+    code: string | null;
+    name: string;
+  };
+  hsn_sac: string | null;
+  quantity: string;
+  uom: string | null;
+  rate: string;
+  gst_rate: string;
+}
 
 export interface SalesRegisterApiRow {
   id: string;
@@ -57,9 +74,11 @@ export interface SalesRegisterApiRow {
   posted_voucher_id: string | null;
   posted_voucher_no: string | null;
   customer_ledger_id: string | null;
+  /** Null for invoice grain; populated for item grain. */
+  item?: SalesRegisterItemFields | null;
 }
 
-export interface SalesRegisterSummary {
+export interface SalesRegisterSummaryBucket {
   invoice_count: number;
   taxable_amount: string;
   cgst: string;
@@ -70,16 +89,14 @@ export interface SalesRegisterSummary {
   invoice_value: string;
 }
 
-export interface SalesRegisterPageSummary {
-  invoice_count: number;
-  taxable_amount: string;
-  cgst: string;
-  sgst: string;
-  igst: string;
-  discount: string;
-  other_charges: string;
-  invoice_value: string;
+/** Top-level fields mirror `net` (Posted − Cancelled). */
+export interface SalesRegisterSummary extends SalesRegisterSummaryBucket {
+  posted: SalesRegisterSummaryBucket;
+  cancelled: SalesRegisterSummaryBucket;
+  net: SalesRegisterSummaryBucket;
 }
+
+export type SalesRegisterPageSummary = SalesRegisterSummary;
 
 export interface SalesRegisterPagination {
   page: number;
@@ -108,6 +125,7 @@ export interface SalesRegisterAppliedFilters {
   statuses: SalesRegisterReportStatus[];
   invoice_types: SalesRegisterInvoiceType[];
   gst_type: SalesRegisterGstTypeFilter;
+  row_grain: SalesRegisterRowGrain;
   sort_by: SalesRegisterSortBy;
   sort_order: SalesRegisterSortOrder;
 }
@@ -174,6 +192,7 @@ export interface SalesRegisterFiltersConfig {
     statuses: SalesRegisterReportStatus[];
     invoice_types: SalesRegisterInvoiceType[];
     gst_type: SalesRegisterGstTypeFilter;
+    row_grain?: SalesRegisterRowGrain;
     page: number;
     page_size: number;
     sort_by: SalesRegisterSortBy;
@@ -195,6 +214,7 @@ export interface SalesRegisterQueryParams {
   statuses?: SalesRegisterReportStatus[];
   invoice_types?: SalesRegisterInvoiceType[];
   gst_type?: SalesRegisterGstTypeFilter;
+  row_grain?: SalesRegisterRowGrain;
   page?: number;
   page_size?: number;
   sort_by?: SalesRegisterSortBy;

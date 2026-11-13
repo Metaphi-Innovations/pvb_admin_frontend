@@ -160,6 +160,8 @@ function mapAgingInvoiceRow(
     ageDays: row.ageDays ?? null,
     notDueAmount: moneyAmount(row.notDueAmount),
     buckets: mapBucketAmounts(row.buckets, bucketKeys),
+    warehouseId: row.warehouseId,
+    warehouseName: row.warehouseName?.trim() || undefined,
   };
 }
 
@@ -203,6 +205,8 @@ export function mapAgingCustomerGroup(
     customerName: row.customerName,
     customerCode: row.customerCode,
     tmName: row.salesperson?.name?.trim() || undefined,
+    warehouseId: row.warehouseId,
+    warehouseName: row.warehouseName?.trim() || undefined,
     invoices,
     totals,
     bucketKeys,

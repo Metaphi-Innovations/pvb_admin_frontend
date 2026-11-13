@@ -65,11 +65,13 @@ import {
 import {
   ReportFilterRow,
   ReportAsOnDateFilter,
+  ReportBranchFilter,
   ReportCustomerMultiFilter,
   ReportSalespersonFilter,
   ReportSearchFilter,
   ReportFilterResetButton,
 } from "@/components/accounts/ReportFilters";
+import { WarehouseService } from "@/services/warehouse.service";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import {
   receivableStatusToBadge,
@@ -1149,6 +1151,10 @@ export default function CustomerOutstandingClient() {
   const [search, setSearch] = useState("");
   const [customerIds, setCustomerIds] = useState<string[]>([]);
   const [salesperson, setSalesperson] = useState("all");
+  const [warehouseId, setWarehouseId] = useState("all");
+  const [branchOptions, setBranchOptions] = useState<
+    { id: string; name: string }[]
+  >([]);
   const [dueStatus, setDueStatus] = useState<DueStatusFilter>("all");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
@@ -1274,6 +1280,27 @@ export default function CustomerOutstandingClient() {
     };
   }, [refreshKey]);
 
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const items = await WarehouseService.dropdown();
+        if (cancelled) return;
+        setBranchOptions(
+          items.map((w) => ({
+            id: w.warehouse_id,
+            name: w.warehouse_name,
+          })),
+        );
+      } catch {
+        if (!cancelled) setBranchOptions([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const handleSortChange = useCallback((key: string, dir: "asc" | "desc") => {
     setSortKey(key);
     setSortDir(dir);
@@ -1287,6 +1314,7 @@ export default function CustomerOutstandingClient() {
     summaryRows,
     invoiceRows,
     ageingRows,
+    ageingReportTotals,
     collectionRows,
     resolvedSalespersonId,
   } = useReceivablesListing({
@@ -1295,6 +1323,7 @@ export default function CustomerOutstandingClient() {
     search,
     customerIds,
     salesperson: salesperson !== "all" ? salesperson : undefined,
+    warehouseId: warehouseId !== "all" ? warehouseId : undefined,
     dueStatus,
     page,
     pageSize,
@@ -1329,12 +1358,14 @@ export default function CustomerOutstandingClient() {
     search.trim() !== "" ||
     customerIds.length > 0 ||
     salesperson !== "all" ||
+    warehouseId !== "all" ||
     dueStatus !== "all";
 
   const clearFilters = () => {
     setSearch("");
     setCustomerIds([]);
     setSalesperson("all");
+    setWarehouseId("all");
     setDueStatus("all");
   };
 
@@ -1376,6 +1407,7 @@ export default function CustomerOutstandingClient() {
       search: search.trim() || undefined,
       customerIds: customerIds.length > 0 ? customerIds : undefined,
       salespersonId: resolvedSalespersonId,
+      warehouseId: warehouseId !== "all" ? warehouseId : undefined,
       asOfDate: asOnDate,
       dueStatus,
       excludeZeroBalance: true,
@@ -1390,6 +1422,7 @@ export default function CustomerOutstandingClient() {
     search,
     customerIds,
     resolvedSalespersonId,
+    warehouseId,
     asOnDate,
     dueStatus,
     appliedBreakpoints,
@@ -1594,6 +1627,19 @@ export default function CustomerOutstandingClient() {
                 salespeople={salespersonOptions}
               />
             )}
+            {view !== "collection" && (
+              <ReportBranchFilter
+                value={warehouseId}
+                onChange={(v) => {
+                  setWarehouseId(v);
+                  setPage(1);
+                }}
+                options={branchOptions}
+                label="Warehouse/Branch"
+                placeholder="All warehouses/branches"
+                allLabel="All warehouses/branches"
+              />
+            )}
             {view !== "ageing" && view !== "collection" && (
               <Select
                 value={dueStatus}
@@ -1713,13 +1759,17 @@ export default function CustomerOutstandingClient() {
                 partyName: g.customerName,
                 partyCode: g.customerCode,
                 tmName: g.tmName,
+                warehouseName: g.warehouseName,
                 buckets: g.totals.buckets,
                 totalOutstanding: g.totals.totalOutstanding,
                 notDueAmount: g.totals.notDueAmount,
               }))}
               bucketKeys={ageingBucketKeys}
-              partyColumnLabel="Broker"
+              partyColumnLabel="Customer"
               showTmColumn
+              showWarehouseColumn
+              foldNotDueIntoFirstBucket
+              reportTotals={ageingReportTotals}
               balanceSide="Dr"
               partyHref={(row) => `/accounts/receivables/outstanding/${row.partyId}`}
               totalRecords={total}
