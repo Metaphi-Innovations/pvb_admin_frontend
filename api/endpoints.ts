@@ -714,6 +714,7 @@ export const API_ENDPOINTS = {
   ACCOUNTS: {
     SALES_INVOICE: {
       LIST: "/accounts/sales-invoice",
+      FILTER_DROPDOWN: "/accounts/sales-invoice/filter-dropdown",
       BY_ID: (id: string) => `/accounts/sales-invoice/${id}`,
       CANCEL: (id: string) => `/accounts/sales-invoice/${id}/cancel`,
       GENERATE_IRN: (id: string) => `/accounts/sales-invoice/${id}/generate-irn`,

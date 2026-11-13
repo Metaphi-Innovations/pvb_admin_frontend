@@ -85,10 +85,23 @@ export function AccountsColumnHeader({
   const filterType = filterTypeProp;
   const filterValue = filterValueProp ?? fromCtx?.filterValue;
   const onFilterChange = onFilterChangeProp ?? fromCtx?.onFilterChange;
-  const valueOptions =
-    valueOptionsProp && valueOptionsProp.length > 0
-      ? valueOptionsProp
-      : (fromCtx?.valueOptions ?? valueOptionsProp ?? []);
+  const valueOptions = (() => {
+    const fromProp = valueOptionsProp ?? [];
+    const fromContext = fromCtx?.valueOptions ?? [];
+    if (fromProp.length === 0) return fromContext.length > 0 ? fromContext : fromProp;
+    if (fromContext.length === 0) return fromProp;
+    const merged = new Map<string, ColumnValueOption>();
+    for (const opt of [...fromContext, ...fromProp]) {
+      const value = String(opt?.value ?? "").trim();
+      if (!value) continue;
+      const prev = merged.get(value);
+      merged.set(value, {
+        value,
+        count: Math.max(prev?.count ?? 0, opt.count ?? 0),
+      });
+    }
+    return [...merged.values()];
+  })();
   const statusOptions = statusOptionsProp ?? fromCtx?.statusOptions ?? [];
   const optionLabels = optionLabelsProp ?? fromCtx?.optionLabels ?? {};
 

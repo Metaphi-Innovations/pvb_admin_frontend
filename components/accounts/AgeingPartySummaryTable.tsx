@@ -232,8 +232,13 @@ export function AgeingPartySummaryTable({
                         </td>
                       ) : null}
                       {showWarehouseColumn ? (
-                        <td className="px-3 py-2 whitespace-nowrap text-foreground">
-                          {row.warehouseName?.trim() || "—"}
+                        <td
+                          className="px-3 py-2 text-foreground max-w-[220px]"
+                          title={row.warehouseName?.trim() || undefined}
+                        >
+                          <span className="line-clamp-2 whitespace-normal break-words">
+                            {row.warehouseName?.trim() || "—"}
+                          </span>
                         </td>
                       ) : null}
                       {!foldNotDue ? (

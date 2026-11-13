@@ -1237,11 +1237,15 @@ export function ReportWarehouseMultiFilter({
   onChange,
   options,
   labeledOptions,
+  label = "Warehouse/Branch",
+  allLabel = "All warehouses/branches",
 }: {
   values: string[];
   onChange: (values: string[]) => void;
   options?: string[];
   labeledOptions?: ReportMultiSelectOption[];
+  label?: string;
+  allLabel?: string;
 }) {
   const selectOptions: ReportMultiSelectOption[] =
     labeledOptions ??
@@ -1250,12 +1254,12 @@ export function ReportWarehouseMultiFilter({
       .map((w) => ({ value: w, label: w }));
   return (
     <ReportMultiSelect
-      label="Warehouse"
+      label={label}
       values={values}
       onChange={onChange}
       options={selectOptions}
-      entityName="Warehouse"
-      allLabel="All Warehouses"
+      entityName="Warehouse/Branch"
+      allLabel={allLabel}
       minWidthClass="min-w-[150px]"
     />
   );

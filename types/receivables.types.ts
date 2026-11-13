@@ -224,6 +224,7 @@ export interface CustomerSummaryQuery {
   salespersonId?: string;
   branchId?: string;
   warehouseId?: string;
+  warehouseIds?: string[];
   asOfDate?: string;
   excludeZeroBalance?: boolean;
   status?: string;
@@ -239,6 +240,7 @@ export interface ReceivableInvoicesQuery {
   customerIds?: string[];
   branchId?: string;
   warehouseId?: string;
+  warehouseIds?: string[];
   invoiceDateFrom?: string;
   invoiceDateTo?: string;
   dueDateFrom?: string;
@@ -257,6 +259,7 @@ export interface AgingQuery {
   customerIds?: string[];
   branchId?: string;
   warehouseId?: string;
+  warehouseIds?: string[];
   salespersonId?: string;
   asOfDate?: string;
   excludeZeroBalance?: boolean;
@@ -292,6 +295,7 @@ export interface ReceivablesExportQuery {
   salespersonId?: string;
   branchId?: string;
   warehouseId?: string;
+  warehouseIds?: string[];
   asOfDate?: string;
   excludeZeroBalance?: boolean;
   status?: string;

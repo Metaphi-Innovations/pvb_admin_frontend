@@ -40,6 +40,7 @@ export function SortTh({
   onFilterChange: onFilterChangeProp,
   valueOptions: valueOptionsProp,
   statusOptions: statusOptionsProp,
+  optionLabels: optionLabelsProp,
   onRemoveSort: onRemoveSortProp,
   onFilterOpen,
   optionsLoading,
@@ -59,6 +60,7 @@ export function SortTh({
   onFilterChange?: AccountsColumnHeaderProps["onFilterChange"];
   valueOptions?: AccountsColumnHeaderProps["valueOptions"];
   statusOptions?: string[];
+  optionLabels?: Record<string, string>;
   onRemoveSort?: () => void;
   onFilterOpen?: () => void;
   optionsLoading?: boolean;
@@ -82,13 +84,30 @@ export function SortTh({
       filterType={filterType}
       filterValue={filterValueProp ?? fromCtx?.filterValue}
       onFilterChange={onFilterChangeProp ?? fromCtx?.onFilterChange}
-      valueOptions={
-        valueOptionsProp && valueOptionsProp.length > 0
-          ? valueOptionsProp
-          : fromCtx?.valueOptions
-      }
+      valueOptions={(() => {
+        const fromProp = valueOptionsProp ?? [];
+        const fromContext = fromCtx?.valueOptions ?? [];
+        if (fromProp.length === 0) return fromContext;
+        if (fromContext.length === 0) return fromProp;
+        // Union so explicit options never drop values still present on-screen.
+        const merged = new Map<string, { value: string; count: number }>();
+        for (const opt of [...fromContext, ...fromProp]) {
+          const value = String(opt?.value ?? "").trim();
+          if (!value) continue;
+          const prev = merged.get(value);
+          merged.set(value, {
+            value,
+            count: Math.max(prev?.count ?? 0, opt.count ?? 0),
+          });
+        }
+        return [...merged.values()];
+      })()}
       statusOptions={statusOptionsProp ?? fromCtx?.statusOptions}
-      optionLabels={fromCtx?.optionLabels}
+      optionLabels={
+        optionLabelsProp && Object.keys(optionLabelsProp).length > 0
+          ? { ...(fromCtx?.optionLabels ?? {}), ...optionLabelsProp }
+          : fromCtx?.optionLabels
+      }
       onFilterOpen={onFilterOpen}
       optionsLoading={optionsLoading}
       optionsReady={optionsReady}

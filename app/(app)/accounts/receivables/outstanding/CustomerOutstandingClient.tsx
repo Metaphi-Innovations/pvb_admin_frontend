@@ -66,11 +66,11 @@ import {
 import {
   ReportFilterRow,
   ReportAsOnDateFilter,
-  ReportBranchFilter,
   ReportCustomerMultiFilter,
   ReportSalespersonFilter,
   ReportSearchFilter,
   ReportFilterResetButton,
+  ReportWarehouseMultiFilter,
 } from "@/components/accounts/ReportFilters";
 import { WarehouseService } from "@/services/warehouse.service";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -1152,7 +1152,7 @@ export default function CustomerOutstandingClient() {
   const [search, setSearch] = useState("");
   const [customerIds, setCustomerIds] = useState<string[]>([]);
   const [salesperson, setSalesperson] = useState("all");
-  const [warehouseId, setWarehouseId] = useState("all");
+  const [warehouseIds, setWarehouseIds] = useState<string[]>([]);
   const [branchOptions, setBranchOptions] = useState<
     { id: string; name: string }[]
   >([]);
@@ -1384,7 +1384,7 @@ export default function CustomerOutstandingClient() {
     search,
     customerIds,
     salesperson: salesperson !== "all" ? salesperson : undefined,
-    warehouseId: warehouseId !== "all" ? warehouseId : undefined,
+    warehouseIds: warehouseIds.length > 0 ? warehouseIds : undefined,
     dueStatus,
     page,
     pageSize,
@@ -1409,14 +1409,14 @@ export default function CustomerOutstandingClient() {
     search.trim() !== "" ||
     customerIds.length > 0 ||
     salesperson !== "all" ||
-    warehouseId !== "all" ||
+    warehouseIds.length > 0 ||
     dueStatus !== "all";
 
   const clearFilters = () => {
     setSearch("");
     setCustomerIds([]);
     setSalesperson("all");
-    setWarehouseId("all");
+    setWarehouseIds([]);
     setDueStatus("all");
   };
 
@@ -1458,7 +1458,7 @@ export default function CustomerOutstandingClient() {
       search: search.trim() || undefined,
       customerIds: customerIds.length > 0 ? customerIds : undefined,
       salespersonId: resolvedSalespersonId,
-      warehouseId: warehouseId !== "all" ? warehouseId : undefined,
+      warehouseIds: warehouseIds.length > 0 ? warehouseIds : undefined,
       asOfDate: asOnDate,
       dueStatus,
       excludeZeroBalance: true,
@@ -1473,7 +1473,7 @@ export default function CustomerOutstandingClient() {
     search,
     customerIds,
     resolvedSalespersonId,
-    warehouseId,
+    warehouseIds,
     asOnDate,
     dueStatus,
     appliedBreakpoints,
@@ -1679,16 +1679,16 @@ export default function CustomerOutstandingClient() {
               />
             )}
             {view !== "collection" && (
-              <ReportBranchFilter
-                value={warehouseId}
+              <ReportWarehouseMultiFilter
+                values={warehouseIds}
                 onChange={(v) => {
-                  setWarehouseId(v);
+                  setWarehouseIds(v);
                   setPage(1);
                 }}
-                options={branchOptions}
-                label="Warehouse/Branch"
-                placeholder="All warehouses/branches"
-                allLabel="All warehouses/branches"
+                labeledOptions={branchOptions.map((w) => ({
+                  value: w.id,
+                  label: w.name,
+                }))}
               />
             )}
             {view !== "ageing" && view !== "collection" && (

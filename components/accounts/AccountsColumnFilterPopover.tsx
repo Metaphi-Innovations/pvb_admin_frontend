@@ -122,8 +122,9 @@ export function AccountsColumnFilterPopover({
     return [];
   }, [valueOptions, filterType, statusOptions]);
 
+  // Keep showing existing options while a background fetch runs — only spin when empty.
   const showOptionsLoading =
-    optionsLoading ||
+    (optionsLoading && valueOptions.length === 0) ||
     Boolean(onOpen && open && !optionsReady && valueOptions.length === 0 && filterType !== "boolean");
 
   useEffect(() => {
@@ -135,19 +136,30 @@ export function AccountsColumnFilterPopover({
       // Start unchecked — user must choose values (or Select All) before Apply
       setSelected([]);
     }
-    setSearch("");
+    // Reset search/dates only when the popover opens — not when options reload
+    // mid-search (async facet fetch would otherwise wipe the user's query).
     setDateFrom(value?.dateFrom ?? "");
     setDateTo(value?.dateTo ?? "");
-  }, [open, value, listOptions, showOptionsLoading]);
+  }, [open, value, showOptionsLoading]);
+
+  useEffect(() => {
+    if (!open) setSearch("");
+  }, [open]);
 
   const active = isColumnFilterActive(value);
 
   const filteredOptions = useMemo(() => {
     const q = debouncedSearch.trim().toLowerCase();
     if (!q) return listOptions;
+    // Also match the trailing serial (e.g. "155" → SI/27/2627/00155).
+    const serial = q.replace(/^0+/, "") || q;
     return listOptions.filter((o) => {
-      const display = formatOptionLabel(o.value, filterType, optionLabels);
-      return display.toLowerCase().includes(q) || o.value.toLowerCase().includes(q);
+      const raw = o.value.toLowerCase();
+      const display = formatOptionLabel(o.value, filterType, optionLabels).toLowerCase();
+      if (display.includes(q) || raw.includes(q)) return true;
+      const tail = raw.split("/").pop() ?? raw;
+      const tailNorm = tail.replace(/^0+/, "") || tail;
+      return tail.includes(q) || tailNorm === serial || tailNorm.endsWith(serial);
     });
   }, [listOptions, debouncedSearch, optionLabels, filterType]);
 
