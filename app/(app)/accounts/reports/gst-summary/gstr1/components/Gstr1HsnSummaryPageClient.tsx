@@ -25,7 +25,7 @@ import { FinancialReportHeadCell } from "@/components/accounts/FinancialReportTa
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { buildGstReportHref } from "@/lib/accounts/gst-report-filters";
 import {
-  formatMoneyString,
+  formatSignedMoneyString,
   MONEY_AMOUNT_CLASS,
 } from "@/lib/accounts/money-format";
 import { cn } from "@/lib/utils";
@@ -178,17 +178,17 @@ export function Gstr1HsnSummaryPageClient() {
               />
               <AccountsReportKpiCard
                 label="Taxable Value"
-                value={formatMoneyString(result.summary.taxable_amount)}
+                value={formatSignedMoneyString(result.summary.taxable_amount)}
                 icon={IndianRupee}
               />
               <AccountsReportKpiCard
                 label="Total GST"
-                value={formatMoneyString(result.summary.gst_amount)}
+                value={formatSignedMoneyString(result.summary.gst_amount)}
                 icon={Layers}
               />
               <AccountsReportKpiCard
                 label="Page Taxable"
-                value={formatMoneyString(result.page_summary.taxable_amount)}
+                value={formatSignedMoneyString(result.page_summary.taxable_amount)}
                 icon={Package}
               />
             </AccountsReportKpiGrid>
@@ -246,16 +246,23 @@ export function Gstr1HsnSummaryPageClient() {
                           </AccountsTableCell>
                           <AccountsTableCell
                             align="right"
-                            className="text-xs tabular-nums"
+                            className={cn(
+                              "text-xs tabular-nums",
+                              Number(row.quantity) < 0 && "text-red-700",
+                            )}
                           >
                             {row.quantity}
                           </AccountsTableCell>
                           <AccountsTableCell
                             align="right"
                             money
-                            className={cn("text-xs", MONEY_AMOUNT_CLASS)}
+                            className={cn(
+                              "text-xs",
+                              MONEY_AMOUNT_CLASS,
+                              Number(row.taxable_amount) < 0 && "text-red-700",
+                            )}
                           >
-                            {formatMoneyString(row.taxable_amount)}
+                            {formatSignedMoneyString(row.taxable_amount)}
                           </AccountsTableCell>
                           <AccountsTableCell className="text-xs">
                             {row.gst_rate}%
@@ -265,28 +272,28 @@ export function Gstr1HsnSummaryPageClient() {
                             money
                             className={cn("text-xs", MONEY_AMOUNT_CLASS)}
                           >
-                            {formatMoneyString(row.igst_amount)}
+                            {formatSignedMoneyString(row.igst_amount)}
                           </AccountsTableCell>
                           <AccountsTableCell
                             align="right"
                             money
                             className={cn("text-xs", MONEY_AMOUNT_CLASS)}
                           >
-                            {formatMoneyString(row.cgst_amount)}
+                            {formatSignedMoneyString(row.cgst_amount)}
                           </AccountsTableCell>
                           <AccountsTableCell
                             align="right"
                             money
                             className={cn("text-xs", MONEY_AMOUNT_CLASS)}
                           >
-                            {formatMoneyString(row.sgst_amount)}
+                            {formatSignedMoneyString(row.sgst_amount)}
                           </AccountsTableCell>
                           <AccountsTableCell
                             align="right"
                             money
                             className={cn("text-xs", MONEY_AMOUNT_CLASS)}
                           >
-                            {formatMoneyString(row.gst_amount)}
+                            {formatSignedMoneyString(row.gst_amount)}
                           </AccountsTableCell>
                         </AccountsTableRow>
                       ))
