@@ -202,7 +202,6 @@ export function Gstr1HsnSummaryPageClient() {
                       <FinancialReportHeadCell>
                         Description
                       </FinancialReportHeadCell>
-                      <FinancialReportHeadCell>UQC</FinancialReportHeadCell>
                       <FinancialReportHeadCell align="right">
                         Quantity
                       </FinancialReportHeadCell>
@@ -230,7 +229,7 @@ export function Gstr1HsnSummaryPageClient() {
                     {rows.length === 0 ? (
                       <AccountsTableRow>
                         <AccountsTableCell
-                          colSpan={10}
+                          colSpan={9}
                           className="text-xs text-muted-foreground text-center py-6"
                         >
                           No HSN summary rows for the selected filters.
@@ -244,9 +243,6 @@ export function Gstr1HsnSummaryPageClient() {
                           </AccountsTableCell>
                           <AccountsTableCell className="text-xs">
                             {row.description ?? "—"}
-                          </AccountsTableCell>
-                          <AccountsTableCell className="text-xs">
-                            {row.uqc ?? "—"}
                           </AccountsTableCell>
                           <AccountsTableCell
                             align="right"

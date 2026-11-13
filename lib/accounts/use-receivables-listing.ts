@@ -78,7 +78,6 @@ export function useReceivablesListing(options: {
   const [ageingReportTotals, setAgeingReportTotals] =
     useState<AgingApiCustomerTotals | null>(null);
   const [collectionRows, setCollectionRows] = useState<ApiCollectionFollowUpRow[]>([]);
-  const [salespersonIdMap, setSalespersonIdMap] = useState<Record<string, string>>({});
 
   const sortParams = useMemo(() => {
     const map =
@@ -101,8 +100,9 @@ export function useReceivablesListing(options: {
     return undefined;
   }, [dueStatus]);
 
+  /** `salesperson` is the selected user id (or undefined for All). */
   const resolvedSalespersonId =
-    salesperson && salesperson !== "all" ? salespersonIdMap[salesperson] : undefined;
+    salesperson && salesperson !== "all" ? salesperson : undefined;
 
   const customerIdsKey = customerIds.join(",");
 
@@ -132,15 +132,6 @@ export function useReceivablesListing(options: {
           });
           if (ac.signal.aborted) return;
           const apiRows = res.data ?? [];
-          setSalespersonIdMap((prev) => {
-            const next = { ...prev };
-            for (const row of apiRows) {
-              if (row.salesperson?.id && row.salesperson?.name) {
-                next[row.salesperson.name] = row.salesperson.id;
-              }
-            }
-            return next;
-          });
           let rows = apiRows.map(mapCustomerSummaryRow);
           if (dueStatus === "not_due") {
             rows = rows.filter((r) => r.overdueAmount <= 0.009 && r.outstanding > 0.009);

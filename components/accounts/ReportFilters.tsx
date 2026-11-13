@@ -680,11 +680,17 @@ export function ReportSalespersonFilter({
   value,
   onChange,
   salespeople,
+  options,
 }: {
   value: string;
   onChange: (value: string) => void;
-  salespeople: string[];
+  /** Legacy name-only options. Prefer `options` when filtering by user id. */
+  salespeople?: string[];
+  options?: Array<{ value: string; label: string }>;
 }) {
+  const items =
+    options ??
+    (salespeople ?? []).map((name) => ({ value: name, label: name }));
   return (
     <div className="space-y-0.5 min-w-[160px]">
       <span className={filterLabelClass}>Salesperson</span>
@@ -694,9 +700,9 @@ export function ReportSalespersonFilter({
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="all">All salespeople</SelectItem>
-          {salespeople.map((name) => (
-            <SelectItem key={name} value={name}>
-              {name}
+          {items.map((item) => (
+            <SelectItem key={item.value} value={item.value}>
+              {item.label}
             </SelectItem>
           ))}
         </SelectContent>
