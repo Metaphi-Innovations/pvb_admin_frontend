@@ -109,6 +109,7 @@ export function buildSalesRegisterQueryParams(
     from_date: params.from_date,
     to_date: params.to_date,
     gst_type: params.gst_type ?? "ALL",
+    row_grain: params.row_grain ?? "INVOICE",
     sort_by: params.sort_by ?? "invoice_date",
     sort_order: params.sort_order ?? "desc",
   };
@@ -250,7 +251,9 @@ export const SalesRegisterApiService = {
       await assertExportBlob(blob, contentType);
 
       const ext = payload.format === "PDF" ? "pdf" : "xlsx";
-      const fallback = `Sales_Register_${payload.from_date}_${payload.to_date}.${ext}`;
+      const grainSuffix =
+        payload.row_grain === "ITEM" ? "_ItemWise" : "";
+      const fallback = `Sales_Register${grainSuffix}_${payload.from_date}_${payload.to_date}.${ext}`;
       const filename = filenameFromDisposition(
         response.headers?.["content-disposition"] as string | undefined,
         fallback,

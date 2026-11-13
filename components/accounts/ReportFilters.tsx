@@ -373,10 +373,16 @@ export function ReportBranchFilter({
   value,
   onChange,
   options = REPORT_BRANCH_OPTIONS,
+  label = "Branch",
+  placeholder = "All branches",
+  allLabel = "All branches",
 }: {
   value: string;
   onChange: (value: string) => void;
   options?: readonly ReportBranchOption[];
+  label?: string;
+  placeholder?: string;
+  allLabel?: string;
 }) {
   const selectOptions: ReportMultiSelectOption[] = options.map((opt) =>
     typeof opt === "string"
@@ -386,12 +392,12 @@ export function ReportBranchFilter({
 
   return (
     <ReportSingleSelect
-      label="Branch"
+      label={label}
       value={value === "all" ? "" : value}
       onChange={(next) => onChange(next || "all")}
       options={selectOptions}
-      placeholder="All branches"
-      allLabel="All branches"
+      placeholder={placeholder}
+      allLabel={allLabel}
       allowClear
       minWidthClass="min-w-[200px] w-[220px] max-w-[280px]"
     />
