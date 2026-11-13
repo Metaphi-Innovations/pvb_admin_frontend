@@ -45,6 +45,7 @@ import { AgeingPartySummaryTable } from "@/components/accounts/AgeingPartySummar
 import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
 import { CustomerListService } from "@/services/customer-list.service";
 import { ReceivablesService } from "@/services/receivables.service";
+import { SalesRegisterApiService } from "@/services/sales-register.service";
 import {
   UserListService,
   type UserDropdownItem,
@@ -1155,6 +1156,9 @@ export default function CustomerOutstandingClient() {
   const [branchOptions, setBranchOptions] = useState<
     { id: string; name: string }[]
   >([]);
+  const [salespersonOptions, setSalespersonOptions] = useState<
+    Array<{ value: string; label: string }>
+  >([]);
   const [dueStatus, setDueStatus] = useState<DueStatusFilter>("all");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
@@ -1301,6 +1305,63 @@ export default function CustomerOutstandingClient() {
     };
   }, []);
 
+  // Master salesperson list (not derived from the current page/view rows).
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const config = await SalesRegisterApiService.getFilters();
+        if (cancelled) return;
+        const fromFilters = (config.salespeople ?? []).map((person) => ({
+          value: person.user_id,
+          label: person.name,
+        }));
+        if (fromFilters.length > 0) {
+          setSalespersonOptions(fromFilters);
+          return;
+        }
+        const users = await UserListService.dropdown();
+        if (cancelled) return;
+        setSalespersonOptions(
+          users
+            .map((u) => ({
+              value: u.userId,
+              label:
+                u.label ||
+                [u.firstName, u.lastName].filter(Boolean).join(" ").trim() ||
+                u.username ||
+                u.userId,
+            }))
+            .filter((o) => o.value)
+            .sort((a, b) => a.label.localeCompare(b.label)),
+        );
+      } catch {
+        try {
+          const users = await UserListService.dropdown();
+          if (cancelled) return;
+          setSalespersonOptions(
+            users
+              .map((u) => ({
+                value: u.userId,
+                label:
+                  u.label ||
+                  [u.firstName, u.lastName].filter(Boolean).join(" ").trim() ||
+                  u.username ||
+                  u.userId,
+              }))
+              .filter((o) => o.value)
+              .sort((a, b) => a.label.localeCompare(b.label)),
+          );
+        } catch {
+          if (!cancelled) setSalespersonOptions([]);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const handleSortChange = useCallback((key: string, dir: "asc" | "desc") => {
     setSortKey(key);
     setSortDir(dir);
@@ -1332,16 +1393,6 @@ export default function CustomerOutstandingClient() {
     appliedBreakpoints,
     refreshKey,
   });
-
-  const salespersonOptions = useMemo(() => {
-    const names = new Set<string>();
-    for (const row of summaryRows) {
-      if (row.salesExecutive && row.salesExecutive !== "—") {
-        names.add(row.salesExecutive);
-      }
-    }
-    return [...names].sort((a, b) => a.localeCompare(b));
-  }, [summaryRows]);
 
   const pendingAllocations = useMemo(() => {
     void refreshKey;
@@ -1624,7 +1675,7 @@ export default function CustomerOutstandingClient() {
                   setSalesperson(v);
                   setPage(1);
                 }}
-                salespeople={salespersonOptions}
+                options={salespersonOptions}
               />
             )}
             {view !== "collection" && (

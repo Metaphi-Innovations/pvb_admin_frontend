@@ -31,6 +31,7 @@ export interface SalesRegisterItemFields {
   uom: string | null;
   rate: string;
   gst_rate: string;
+  gross_amount: string;
 }
 
 export interface SalesRegisterApiRow {
@@ -59,6 +60,7 @@ export interface SalesRegisterApiRow {
     id: string;
     name: string;
   };
+  gross_amount: string;
   taxable_value: string;
   cgst: string;
   sgst: string;

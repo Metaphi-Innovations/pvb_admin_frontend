@@ -20,6 +20,7 @@ import {
   AccountsTableCell,
   AccountsTableFoot,
   AccountsTableHead,
+  AccountsTableHeadCell,
   AccountsTableHeadRow,
   AccountsTableRow,
 } from "@/components/accounts/AccountsTable";
@@ -949,9 +950,12 @@ export default function SalesRegisterApiPageClient() {
             <AccountsTable minWidth={itemWise ? 2200 : 1760}>
               <AccountsTableHead>
                 <AccountsTableHeadRow>
-                  <th className="px-3 py-2.5 text-left text-xs font-semibold whitespace-nowrap w-14">
+                  <AccountsTableHeadCell
+                    uppercase
+                    className="w-14 whitespace-nowrap"
+                  >
                     Sr. No.
-                  </th>
+                  </AccountsTableHeadCell>
                   <ServerSortTh
                     label="Invoice Date"
                     colKey="invoice_date"
@@ -966,9 +970,12 @@ export default function SalesRegisterApiPageClient() {
                     sortDir={sortOrder}
                     onSort={handleSort}
                   />
-                  <th className="px-3 py-2.5 text-left text-xs font-semibold whitespace-nowrap">
+                  <AccountsTableHeadCell
+                    uppercase
+                    className="whitespace-nowrap"
+                  >
                     Customer Code
-                  </th>
+                  </AccountsTableHeadCell>
                   <ServerSortTh
                     label="Customer Name"
                     colKey="customer_name"
@@ -976,38 +983,84 @@ export default function SalesRegisterApiPageClient() {
                     sortDir={sortOrder}
                     onSort={handleSort}
                   />
-                  <th className="px-3 py-2.5 text-left text-xs font-semibold whitespace-nowrap">
+                  <AccountsTableHeadCell
+                    uppercase
+                    className="whitespace-nowrap"
+                  >
                     GSTIN
-                  </th>
-                  <th className="px-3 py-2.5 text-left text-xs font-semibold whitespace-nowrap">
+                  </AccountsTableHeadCell>
+                  <AccountsTableHeadCell
+                    uppercase
+                    className="whitespace-nowrap"
+                  >
                     State
-                  </th>
-                  <th className="px-3 py-2.5 text-left text-xs font-semibold whitespace-nowrap">
+                  </AccountsTableHeadCell>
+                  <AccountsTableHeadCell
+                    uppercase
+                    className="whitespace-nowrap"
+                  >
                     Salesperson
-                  </th>
-                  <th className="px-3 py-2.5 text-left text-xs font-semibold whitespace-nowrap min-w-[220px]">
+                  </AccountsTableHeadCell>
+                  <AccountsTableHeadCell
+                    uppercase
+                    className="whitespace-nowrap min-w-[220px]"
+                  >
                     Warehouse / Branch
-                  </th>
+                  </AccountsTableHeadCell>
                   {itemWise ? (
                     <>
-                      <th className="px-3 py-2.5 text-left text-xs font-semibold whitespace-nowrap">
+                      <AccountsTableHeadCell
+                        uppercase
+                        className="whitespace-nowrap"
+                      >
                         Product Code
-                      </th>
-                      <th className="px-3 py-2.5 text-left text-xs font-semibold whitespace-nowrap">
+                      </AccountsTableHeadCell>
+                      <AccountsTableHeadCell
+                        uppercase
+                        className="whitespace-nowrap"
+                      >
                         Product Name
-                      </th>
-                      <th className="px-3 py-2.5 text-left text-xs font-semibold whitespace-nowrap">
+                      </AccountsTableHeadCell>
+                      <AccountsTableHeadCell
+                        uppercase
+                        className="whitespace-nowrap"
+                      >
                         HSN / SAC
-                      </th>
-                      <th className="px-3 py-2.5 text-right text-xs font-semibold whitespace-nowrap">
+                      </AccountsTableHeadCell>
+                      <AccountsTableHeadCell
+                        uppercase
+                        align="right"
+                        className="whitespace-nowrap"
+                      >
                         Qty
-                      </th>
-                      <th className="px-3 py-2.5 text-left text-xs font-semibold whitespace-nowrap">
+                      </AccountsTableHeadCell>
+                      <AccountsTableHeadCell
+                        uppercase
+                        className="whitespace-nowrap"
+                      >
                         UOM
-                      </th>
-                      <th className="px-3 py-2.5 text-right text-xs font-semibold whitespace-nowrap">
+                      </AccountsTableHeadCell>
+                      <AccountsTableHeadCell
+                        uppercase
+                        align="right"
+                        className="whitespace-nowrap"
+                      >
                         Rate
-                      </th>
+                      </AccountsTableHeadCell>
+                      <AccountsTableHeadCell
+                        uppercase
+                        align="right"
+                        className="whitespace-nowrap"
+                      >
+                        Gross Amount
+                      </AccountsTableHeadCell>
+                      <AccountsTableHeadCell
+                        uppercase
+                        align="right"
+                        className="whitespace-nowrap"
+                      >
+                        Discount
+                      </AccountsTableHeadCell>
                     </>
                   ) : null}
                   <ServerSortTh
@@ -1018,22 +1071,44 @@ export default function SalesRegisterApiPageClient() {
                     onSort={handleSort}
                     align="right"
                   />
-                  <th className="px-3 py-2.5 text-right text-xs font-semibold whitespace-nowrap">
+                  <AccountsTableHeadCell
+                    uppercase
+                    align="right"
+                    className="whitespace-nowrap"
+                  >
                     CGST
-                  </th>
-                  <th className="px-3 py-2.5 text-right text-xs font-semibold whitespace-nowrap">
+                  </AccountsTableHeadCell>
+                  <AccountsTableHeadCell
+                    uppercase
+                    align="right"
+                    className="whitespace-nowrap"
+                  >
                     SGST
-                  </th>
-                  <th className="px-3 py-2.5 text-right text-xs font-semibold whitespace-nowrap">
+                  </AccountsTableHeadCell>
+                  <AccountsTableHeadCell
+                    uppercase
+                    align="right"
+                    className="whitespace-nowrap"
+                  >
                     IGST
-                  </th>
-                  <th className="px-3 py-2.5 text-right text-xs font-semibold whitespace-nowrap">
-                    Discount
-                  </th>
+                  </AccountsTableHeadCell>
                   {itemWise ? null : (
-                    <th className="px-3 py-2.5 text-right text-xs font-semibold whitespace-nowrap">
+                    <AccountsTableHeadCell
+                      uppercase
+                      align="right"
+                      className="whitespace-nowrap"
+                    >
+                      Discount
+                    </AccountsTableHeadCell>
+                  )}
+                  {itemWise ? null : (
+                    <AccountsTableHeadCell
+                      uppercase
+                      align="right"
+                      className="whitespace-nowrap"
+                    >
                       Other Charges
-                    </th>
+                    </AccountsTableHeadCell>
                   )}
                   <ServerSortTh
                     label={itemWise ? "Line Total" : "Invoice Total"}
@@ -1044,13 +1119,19 @@ export default function SalesRegisterApiPageClient() {
                     align="right"
                   />
                   {itemWise ? null : (
-                    <th className="px-3 py-2.5 text-left text-xs font-semibold whitespace-nowrap">
+                    <AccountsTableHeadCell
+                      uppercase
+                      className="whitespace-nowrap"
+                    >
                       Payment Terms
-                    </th>
+                    </AccountsTableHeadCell>
                   )}
-                  <th className="px-3 py-2.5 text-left text-xs font-semibold whitespace-nowrap">
+                  <AccountsTableHeadCell
+                    uppercase
+                    className="whitespace-nowrap"
+                  >
                     Status
-                  </th>
+                  </AccountsTableHeadCell>
                 </AccountsTableHeadRow>
               </AccountsTableHead>
               <AccountsTableBody>
@@ -1167,6 +1248,24 @@ function SummaryFooterRow({
       >
         {label}
       </AccountsTableCell>
+      {itemWise ? (
+        <>
+          <AccountsTableCell
+            align="right"
+            money
+            className={cn("font-semibold", MONEY_AMOUNT_CLASS)}
+          >
+            —
+          </AccountsTableCell>
+          <AccountsTableCell
+            align="right"
+            money
+            className={cn("font-semibold", MONEY_AMOUNT_CLASS)}
+          >
+            {formatMoneyString(bucket.discount)}
+          </AccountsTableCell>
+        </>
+      ) : null}
       <AccountsTableCell
         align="right"
         money
@@ -1195,13 +1294,15 @@ function SummaryFooterRow({
       >
         {formatMoneyString(bucket.igst)}
       </AccountsTableCell>
-      <AccountsTableCell
-        align="right"
-        money
-        className={cn("font-semibold", MONEY_AMOUNT_CLASS)}
-      >
-        {formatMoneyString(bucket.discount)}
-      </AccountsTableCell>
+      {itemWise ? null : (
+        <AccountsTableCell
+          align="right"
+          money
+          className={cn("font-semibold", MONEY_AMOUNT_CLASS)}
+        >
+          {formatMoneyString(bucket.discount)}
+        </AccountsTableCell>
+      )}
       {itemWise ? null : (
         <AccountsTableCell
           align="right"
@@ -1309,10 +1410,16 @@ function SalesRegisterRowView({
             {row.item?.quantity || "—"}
           </AccountsTableCell>
           <AccountsTableCell className="text-xs whitespace-nowrap">
-            {row.item?.uom || "—"}
+            units
           </AccountsTableCell>
           <AccountsTableCell align="right" money className={MONEY_AMOUNT_CLASS}>
             {formatMoneyStringOrDash(row.item?.rate ?? null)}
+          </AccountsTableCell>
+          <AccountsTableCell align="right" money className={MONEY_AMOUNT_CLASS}>
+            {formatMoneyString(row.gross_amount)}
+          </AccountsTableCell>
+          <AccountsTableCell align="right" money className={MONEY_AMOUNT_CLASS}>
+            {formatMoneyStringOrDash(row.discount)}
           </AccountsTableCell>
         </>
       ) : null}
@@ -1328,9 +1435,11 @@ function SalesRegisterRowView({
       <AccountsTableCell align="right" money className={MONEY_AMOUNT_CLASS}>
         {formatMoneyStringOrDash(row.igst)}
       </AccountsTableCell>
-      <AccountsTableCell align="right" money className={MONEY_AMOUNT_CLASS}>
-        {formatMoneyStringOrDash(row.discount)}
-      </AccountsTableCell>
+      {itemWise ? null : (
+        <AccountsTableCell align="right" money className={MONEY_AMOUNT_CLASS}>
+          {formatMoneyStringOrDash(row.discount)}
+        </AccountsTableCell>
+      )}
       {itemWise ? null : (
         <AccountsTableCell align="right" money className={MONEY_AMOUNT_CLASS}>
           {formatMoneyStringOrDash(row.other_charges)}

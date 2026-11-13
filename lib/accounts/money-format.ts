@@ -56,11 +56,36 @@ export function formatMoneyNumber(amount: number): string {
   }).format(Math.abs(Number(amount) || 0));
 }
 
+/** Like formatMoneyNumber but keeps a leading minus for negatives. */
+export function formatSignedMoneyNumber(amount: number): string {
+  const n = Number(amount);
+  if (!Number.isFinite(n) || n === 0) return formatMoneyNumber(0);
+  const formatted = formatMoneyNumber(n);
+  return n < 0 ? `-${formatted}` : formatted;
+}
+
 const MONEY_SYMBOL = "₹\u00a0";
 
 /** ₹ 8,50,000.00 — amount only, no Dr/Cr */
 export function formatMoney(amount: number): string {
   return `${MONEY_SYMBOL}${formatMoneyNumber(amount)}`;
+}
+
+/** ₹ -8,50,000.00 when negative (returns / credit notes). */
+export function formatSignedMoney(amount: number): string {
+  return `${MONEY_SYMBOL}${formatSignedMoneyNumber(amount)}`;
+}
+
+/** Backend Decimal / number strings that may be negative. */
+export function formatSignedMoneyString(
+  amount: string | number | null | undefined,
+): string {
+  if (amount === null || amount === undefined || amount === "") {
+    return formatSignedMoney(0);
+  }
+  const n = typeof amount === "number" ? amount : Number(amount);
+  if (!Number.isFinite(n)) return formatSignedMoney(0);
+  return formatSignedMoney(n);
 }
 
 /** ₹ 8,50,000.00 Dr */

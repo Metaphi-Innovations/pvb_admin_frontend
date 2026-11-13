@@ -250,9 +250,10 @@ export interface Gstr1HsnRow {
   id: string;
   hsn_sac_code: string;
   description: string | null;
-  uqc: string | null;
   gst_rate: string;
+  /** Signed: credit-note / returned goods are negative. */
   quantity: string;
+  /** Signed: credit-note / returned goods are negative. */
   taxable_amount: string;
   cgst_amount: string;
   sgst_amount: string;
