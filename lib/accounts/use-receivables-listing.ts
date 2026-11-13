@@ -43,6 +43,7 @@ export function useReceivablesListing(options: {
   customerIds: string[];
   salesperson?: string;
   warehouseId?: string;
+  warehouseIds?: string[];
   dueStatus: "all" | "overdue" | "not_due";
   page: number;
   pageSize: number;
@@ -58,6 +59,7 @@ export function useReceivablesListing(options: {
     customerIds,
     salesperson,
     warehouseId,
+    warehouseIds,
     dueStatus,
     page,
     pageSize,
@@ -105,6 +107,7 @@ export function useReceivablesListing(options: {
     salesperson && salesperson !== "all" ? salesperson : undefined;
 
   const customerIdsKey = customerIds.join(",");
+  const warehouseIdsKey = (warehouseIds ?? []).join(",");
 
   useEffect(() => {
     const ac = new AbortController();
@@ -113,15 +116,19 @@ export function useReceivablesListing(options: {
       setLoading(true);
       setError(null);
       try {
-        const resolvedWarehouseId =
-          warehouseId && warehouseId !== "all" ? warehouseId : undefined;
+        const resolvedWarehouseIds =
+          warehouseIds && warehouseIds.length > 0
+            ? warehouseIds
+            : warehouseId && warehouseId !== "all"
+              ? [warehouseId]
+              : undefined;
 
         if (view === "summary") {
           const res = await ReceivablesService.getCustomerSummary({
             search: debouncedSearch.trim() || undefined,
             customerIds: selectedCustomerIds,
             salespersonId: resolvedSalespersonId,
-            warehouseId: resolvedWarehouseId,
+            warehouseIds: resolvedWarehouseIds,
             asOfDate: asOnDate,
             excludeZeroBalance: true,
             status: dueStatusApi,
@@ -145,7 +152,7 @@ export function useReceivablesListing(options: {
           const res = await ReceivablesService.getInvoices({
             search: debouncedSearch.trim() || undefined,
             customerIds: selectedCustomerIds,
-            warehouseId: resolvedWarehouseId,
+            warehouseIds: resolvedWarehouseIds,
             asOfDate: asOnDate,
             status: dueStatusApi,
             page,
@@ -168,7 +175,7 @@ export function useReceivablesListing(options: {
             search: debouncedSearch.trim() || undefined,
             customerIds: selectedCustomerIds,
             salespersonId: resolvedSalespersonId,
-            warehouseId: resolvedWarehouseId,
+            warehouseIds: resolvedWarehouseIds,
             asOfDate: asOnDate,
             excludeZeroBalance: true,
             status: dueStatusApi,
@@ -234,6 +241,7 @@ export function useReceivablesListing(options: {
     customerIdsKey,
     resolvedSalespersonId,
     warehouseId,
+    warehouseIdsKey,
     dueStatus,
     dueStatusApi,
     asOnDate,
