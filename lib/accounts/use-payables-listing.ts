@@ -12,9 +12,12 @@ import {
   SUMMARY_SORT_KEY_TO_API,
 } from "@/lib/accounts/payables-api-mappers";
 import type {
+  AgingApiReportTotals,
   ApiSupplierBillOutstandingRow,
   ApiVendorAgeingGroup,
   ApiVendorOutstandingRow,
+  BillsApiTotals,
+  SupplierSummaryApiTotals,
 } from "@/types/payables.types";
 import { PayablesService } from "@/services/payables.service";
 
@@ -55,6 +58,12 @@ export function usePayablesListing(options: {
   const [summaryRows, setSummaryRows] = useState<ApiVendorOutstandingRow[]>([]);
   const [billRows, setBillRows] = useState<ApiSupplierBillOutstandingRow[]>([]);
   const [ageingRows, setAgeingRows] = useState<ApiVendorAgeingGroup[]>([]);
+  const [summaryTotals, setSummaryTotals] = useState<SupplierSummaryApiTotals | null>(
+    null,
+  );
+  const [billTotals, setBillTotals] = useState<BillsApiTotals | null>(null);
+  const [ageingReportTotals, setAgeingReportTotals] =
+    useState<AgingApiReportTotals | null>(null);
 
   const sortParams = useMemo(() => {
     const map =
@@ -70,8 +79,8 @@ export function usePayablesListing(options: {
     };
   }, [view, sortKey, sortDir]);
 
-  const dueStatusApi = useMemo(() => {
-    if (dueStatus === "overdue") return "OVERDUE";
+  const dueStatusParam = useMemo(() => {
+    if (dueStatus === "overdue" || dueStatus === "not_due") return dueStatus;
     return undefined;
   }, [dueStatus]);
 
@@ -90,20 +99,26 @@ export function usePayablesListing(options: {
             supplierIds: selectedSupplierIds,
             asOfDate: asOnDate,
             excludeZeroBalance: true,
-            status: dueStatusApi,
+            dueStatus: dueStatusParam,
             page,
             page_size: pageSize,
             sortBy: sortParams.sortBy,
             sortOrder: sortParams.sortOrder,
           });
           if (ac.signal.aborted) return;
-          let rows = (res.data ?? []).map(mapSupplierSummaryRow);
-          if (dueStatus === "not_due") {
-            rows = rows.filter(
-              (r) => r.overdueAmount <= 0.009 && r.outstanding > 0.009,
-            );
-          }
+          const rows = (res.data ?? []).map(mapSupplierSummaryRow);
           setSummaryRows(rows);
+          setSummaryTotals(
+            res.totals && "outstandingAmount" in res.totals && "overdueAmount" in res.totals
+              ? {
+                  outstandingAmount: Number(res.totals.outstandingAmount) || 0,
+                  notDueAmount: Number(res.totals.notDueAmount) || 0,
+                  overdueAmount: Number(res.totals.overdueAmount) || 0,
+                }
+              : null,
+          );
+          setBillTotals(null);
+          setAgeingReportTotals(null);
           setTotal(res.pagination?.total ?? rows.length);
           return;
         }
@@ -113,18 +128,29 @@ export function usePayablesListing(options: {
             search: debouncedSearch.trim() || undefined,
             supplierIds: selectedSupplierIds,
             asOfDate: asOnDate,
-            status: dueStatusApi,
+            dueStatus: dueStatusParam,
             page,
             page_size: pageSize,
             sortBy: sortParams.sortBy,
             sortOrder: sortParams.sortOrder,
           });
           if (ac.signal.aborted) return;
-          let rows = (res.data ?? []).map(mapPayableBillRow);
-          if (dueStatus === "not_due") {
-            rows = rows.filter((r) => r.overdueDays <= 0 && r.outstanding > 0.009);
-          }
+          const rows = (res.data ?? []).map(mapPayableBillRow);
           setBillRows(rows);
+          setBillTotals(
+            res.totals &&
+              "outstandingAmount" in res.totals &&
+              "originalAmount" in res.totals
+              ? {
+                  originalAmount: Number(res.totals.originalAmount) || 0,
+                  paidAmount: Number(res.totals.paidAmount) || 0,
+                  debitNoteAdjustment: Number(res.totals.debitNoteAdjustment) || 0,
+                  outstandingAmount: Number(res.totals.outstandingAmount) || 0,
+                }
+              : null,
+          );
+          setSummaryTotals(null);
+          setAgeingReportTotals(null);
           setTotal(res.pagination?.total ?? rows.length);
           return;
         }
@@ -144,6 +170,17 @@ export function usePayablesListing(options: {
           mapAgingVendorGroup(row, appliedBreakpoints),
         );
         setAgeingRows(rows);
+        setAgeingReportTotals(
+          res.totals && "totalOutstanding" in res.totals
+            ? {
+                totalOutstanding: Number(res.totals.totalOutstanding) || 0,
+                notDueAmount: Number(res.totals.notDueAmount) || 0,
+                buckets: res.totals.buckets ?? {},
+              }
+            : null,
+        );
+        setSummaryTotals(null);
+        setBillTotals(null);
         setTotal(res.pagination?.total ?? rows.length);
       } catch (e) {
         if (ac.signal.aborted) return;
@@ -151,6 +188,9 @@ export function usePayablesListing(options: {
         setSummaryRows([]);
         setBillRows([]);
         setAgeingRows([]);
+        setSummaryTotals(null);
+        setBillTotals(null);
+        setAgeingReportTotals(null);
         setTotal(0);
       } finally {
         if (!ac.signal.aborted) setLoading(false);
@@ -162,7 +202,7 @@ export function usePayablesListing(options: {
     debouncedSearch,
     supplierIdsKey,
     dueStatus,
-    dueStatusApi,
+    dueStatusParam,
     asOnDate,
     page,
     pageSize,
@@ -179,5 +219,8 @@ export function usePayablesListing(options: {
     summaryRows,
     billRows,
     ageingRows,
+    summaryTotals,
+    billTotals,
+    ageingReportTotals,
   };
 }

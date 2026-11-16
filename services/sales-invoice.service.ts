@@ -134,6 +134,39 @@ export type CreateFromDispatchPayload = {
   bank_account_id?: string | null;
 };
 
+/** Post-generation edit of transporter / vehicle / LR fields only. */
+export type UpdateTransportDetailsPayload = {
+  transporter?: string | null;
+  transporter_id?: string | null;
+  transport_mode?: string | null;
+  vehicle_number?: string | null;
+  vehicle_type?: string | null;
+  lr_number?: string | null;
+  lr_date?: string | null;
+  transport_doc_number?: string | null;
+  transport_doc_date?: string | null;
+  approx_distance?: number | string | null;
+};
+
+export type UpdateTransportDetailsResult = {
+  sales_invoice_id: string;
+  invoice_number: string;
+  dispatch: {
+    id: string;
+    transporter?: string | null;
+    transporter_id?: string | null;
+    transport_mode?: string | null;
+    vehicle_number?: string | null;
+    vehicle_type?: string | null;
+    lr_number?: string | null;
+    lr_date?: string | null;
+    transport_doc_number?: string | null;
+    transport_doc_date?: string | null;
+    approx_distance?: number | string | null;
+  };
+  eway_bill_stale_warning?: boolean;
+};
+
 export type DirectServiceItemInput = {
   service_ledger_id: string;
   service_name: string;
@@ -1679,6 +1712,25 @@ export const SalesInvoiceService = {
       return unwrapData(response) as SalesInvoiceDetailDto;
     } catch (error) {
       throw new Error(extractErrorMessage(error, "Failed to load sales invoice."));
+    }
+  },
+
+  async updateTransportDetails(
+    id: string,
+    payload: UpdateTransportDetailsPayload,
+  ): Promise<UpdateTransportDetailsResult> {
+    try {
+      const response = await axiosInstance.patch(
+        API_ENDPOINTS.ACCOUNTS.SALES_INVOICE.UPDATE_TRANSPORT(id),
+        payload,
+      );
+      const data = unwrapData(response);
+      if (!data) throw new Error("Failed to update transporter details.");
+      return data as UpdateTransportDetailsResult;
+    } catch (error) {
+      throw new Error(
+        extractErrorMessage(error, "Failed to update transporter details."),
+      );
     }
   },
 

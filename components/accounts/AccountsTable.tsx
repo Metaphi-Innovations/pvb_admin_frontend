@@ -374,6 +374,7 @@ export function AccountsRichTable<T>({
   getRowKey,
   emptyMessage = "No records found.",
   emptyAction,
+  footer,
   minWidth,
   className,
   onRowClick,
@@ -390,6 +391,7 @@ export function AccountsRichTable<T>({
   getRowKey?: (row: T, index: number) => string | number;
   emptyMessage?: string;
   emptyAction?: React.ReactNode;
+  footer?: React.ReactNode;
   minWidth?: number;
   className?: string;
   onRowClick?: (row: T) => void;
@@ -494,6 +496,7 @@ export function AccountsRichTable<T>({
           ))
         )}
       </AccountsTableBody>
+      {footer ? <AccountsTableFoot>{footer}</AccountsTableFoot> : null}
     </AccountsTable>
   );
 }

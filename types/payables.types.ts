@@ -17,9 +17,30 @@ export interface PayablesPaginationMeta {
   total_pages: number;
 }
 
+export interface SupplierSummaryApiTotals {
+  outstandingAmount: number;
+  notDueAmount: number;
+  overdueAmount: number;
+}
+
+export interface BillsApiTotals {
+  originalAmount: number;
+  paidAmount: number;
+  debitNoteAdjustment: number;
+  outstandingAmount: number;
+}
+
+export interface AgingApiReportTotals {
+  totalOutstanding: number;
+  notDueAmount: number;
+  buckets: AgingBucketMap;
+}
+
 export interface PaginatedPayablesResponse<T> {
   data: T[];
   pagination: PayablesPaginationMeta;
+  /** Full-report totals (all pages) for Net Total footers. */
+  totals?: SupplierSummaryApiTotals | BillsApiTotals | AgingApiReportTotals;
 }
 
 export interface SupplierSummaryApiRow {
@@ -150,6 +171,7 @@ export interface SupplierSummaryQuery {
   asOfDate?: string;
   excludeZeroBalance?: boolean;
   status?: string;
+  dueStatus?: "all" | "overdue" | "not_due";
   page?: number;
   page_size?: number;
   sortBy?: string;
@@ -167,6 +189,7 @@ export interface BillsQuery {
   dueDateFrom?: string;
   dueDateTo?: string;
   status?: string;
+  dueStatus?: "all" | "overdue" | "not_due";
   asOfDate?: string;
   page?: number;
   page_size?: number;
