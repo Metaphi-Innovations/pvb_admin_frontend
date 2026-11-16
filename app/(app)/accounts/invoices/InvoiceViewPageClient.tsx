@@ -9,7 +9,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { ChevronDown, Download, Mail } from "lucide-react";
+import { ChevronDown, Download, Mail, Pencil } from "lucide-react";
 import { showToast } from "@/lib/toast";
 import { dispatchAccountsDataChanged } from "@/lib/accounts/accounts-data-events";
 import { SendSalesInvoiceEmailModal } from "@/app/(app)/accounts/transactions/invoices/SendSalesInvoiceEmailModal";
@@ -28,6 +28,7 @@ import {
   mapSalesInvoiceDetailToRecord,
   type CancelEwayBillInput,
   type PreviewEwayBillResult,
+  type UpdateTransportDetailsPayload,
 } from "@/services/sales-invoice.service";
 import { useBankAccountOptions } from "@/hooks/accounts/use-bank-accounts-list";
 import { bankAccountOptionToPrintDetails } from "@/components/accounts/WarehouseMappedBankAccountSelect";
@@ -39,6 +40,7 @@ import { GoodsInvoiceAdditionalChargesEditor } from "./components/GoodsInvoiceAd
 import { InvoiceViewStatutorySection } from "./components/InvoiceViewStatutorySection";
 import { EwayBillPreviewDialog } from "./components/EwayBillPreviewDialog";
 import { EwayBillCancelDialog } from "./components/EwayBillCancelDialog";
+import { EditTransportDetailsDialog } from "./components/EditTransportDetailsDialog";
 import { downloadSalesInvoiceEwayBillPdf } from "./eway-bill-official-pdf";
 import { downloadInvoicePdf } from "./invoice-pdf";
 import {
@@ -718,6 +720,8 @@ export default function InvoiceViewPageClient({
     null,
   );
   const [ewayCancelOpen, setEwayCancelOpen] = useState(false);
+  const [transportEditOpen, setTransportEditOpen] = useState(false);
+  const [transportSaving, setTransportSaving] = useState(false);
 
   const listHref = useMemo(
     () =>
@@ -865,11 +869,51 @@ export default function InvoiceViewPageClient({
       record.distanceKm,
   );
 
+  const showTransportSection =
+    !isServiceView &&
+    Boolean(record.salesInvoiceId) &&
+    (hasTransport || Boolean(record.sourceDispatchId));
+
+  const canEditTransport =
+    showTransportSection &&
+    record.invoiceStatus !== "cancelled" &&
+    Boolean(record.salesInvoiceId) &&
+    SalesInvoiceService.isUuid(String(record.salesInvoiceId));
+
   const showStatutorySection =
     record.sourceType !== "service" && Boolean(record.salesInvoiceId);
 
   const canGenerateStatutory =
     record.invoiceStatus !== "cancelled" && Boolean(record.salesInvoiceId);
+
+  const handleSaveTransportDetails = async (
+    payload: UpdateTransportDetailsPayload,
+  ) => {
+    if (!record?.salesInvoiceId || transportSaving) return;
+    setTransportSaving(true);
+    try {
+      const result = await SalesInvoiceService.updateTransportDetails(
+        String(record.salesInvoiceId),
+        payload,
+      );
+      showToast("Transporter details updated.", "success");
+      if (result.eway_bill_stale_warning) {
+        showToast(
+          "E-Way Bill is already generated — cancel and regenerate if statutory details must match.",
+          "warning",
+        );
+      }
+      setTransportEditOpen(false);
+      await refresh();
+    } catch (e) {
+      showToast(
+        e instanceof Error ? e.message : "Failed to update transporter details.",
+        "error",
+      );
+    } finally {
+      setTransportSaving(false);
+    }
+  };
 
   const handleGenerateIRN = async () => {
     if (!record?.salesInvoiceId || eInvoiceBusy) return;
@@ -1284,26 +1328,54 @@ export default function InvoiceViewPageClient({
             </div>
           </VoucherFormSectionCard>
 
-          {hasTransport ? (
-            <VoucherFormSectionCard title="Transport Details" highlight>
-              <div className={cn(INVOICE_FORM_GRID_CLASS, "lg:grid-cols-3 xl:grid-cols-5")}>
-                <Field label="Transport Mode" value={record.transportMode} />
-                <Field label="Transporter Name" value={record.transporterName} />
-                <Field label="Transporter ID" value={record.transporterId} />
-                <Field label="Vehicle No." value={record.vehicleNo} />
-                <Field
-                  label="Distance (KM)"
-                  value={
-                    record.distanceKm != null && record.distanceKm > 0
-                      ? String(record.distanceKm)
-                      : ""
-                  }
-                />
-                <Field label="LR / Lorry Receipt No." value={record.lrNo} />
-                <Field label="LR Date" value={formatDisplayDate(record.lrDate)} />
-                <Field label="Transport Doc No." value={record.transportDocNo} />
-                <Field label="Transport Doc Date" value={formatDisplayDate(record.transportDocDate)} />
-              </div>
+          {showTransportSection ? (
+            <VoucherFormSectionCard
+              title="Transport Details"
+              highlight
+              headerActions={
+                canEditTransport ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 gap-1.5 text-xs"
+                    onClick={() => setTransportEditOpen(true)}
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                    Edit transporter
+                  </Button>
+                ) : null
+              }
+            >
+              {hasTransport ? (
+                <div className={cn(INVOICE_FORM_GRID_CLASS, "lg:grid-cols-3 xl:grid-cols-5")}>
+                  <Field label="Transport Mode" value={record.transportMode} />
+                  <Field label="Transporter Name" value={record.transporterName} />
+                  <Field label="Transporter ID" value={record.transporterId} />
+                  <Field label="Vehicle No." value={record.vehicleNo} />
+                  {!isStockTransferView ? (
+                    <Field
+                      label="Distance (KM)"
+                      value={
+                        record.distanceKm != null && record.distanceKm > 0
+                          ? String(record.distanceKm)
+                          : ""
+                      }
+                    />
+                  ) : null}
+                  <Field label="LR / Lorry Receipt No." value={record.lrNo} />
+                  <Field label="LR Date" value={formatDisplayDate(record.lrDate)} />
+                  <Field label="Transport Doc No." value={record.transportDocNo} />
+                  <Field label="Transport Doc Date" value={formatDisplayDate(record.transportDocDate)} />
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  No transporter details yet.
+                  {canEditTransport
+                    ? " Use Edit transporter to add them."
+                    : null}
+                </p>
+              )}
             </VoucherFormSectionCard>
           ) : null}
 
@@ -1461,6 +1533,21 @@ export default function InvoiceViewPageClient({
         cancelling={ewayBusy}
         onConfirmCancel={(input) => void handleConfirmCancelEway(input)}
       />
+
+      {canEditTransport ? (
+        <EditTransportDetailsDialog
+          open={transportEditOpen}
+          onClose={() => {
+            if (transportSaving) return;
+            setTransportEditOpen(false);
+          }}
+          record={record}
+          saving={transportSaving}
+          hideDistance={isStockTransferView}
+          ewayGenerated={record.ewayBillStatus === "generated"}
+          onSave={(payload) => void handleSaveTransportDetails(payload)}
+        />
+      ) : null}
     </div>
   );
 }

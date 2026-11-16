@@ -1,12 +1,16 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { formatApiAgeingBucketLabel } from "@/lib/accounts/ageing-breakpoints";
 import { formatDisplayDate } from "@/lib/accounts/date-display";
 import { formatMoneyNumber, MONEY_CELL_CLASS } from "@/lib/accounts/money-format";
-import type { ApiVendorAgeingGroup } from "@/types/payables.types";
+import type {
+  AgingApiReportTotals,
+  ApiVendorAgeingGroup,
+} from "@/types/payables.types";
 import { AccountsTableScroll } from "@/components/accounts/AccountsTable";
 import { AccountsTablePagination } from "@/components/accounts/AccountsTableListing";
 import { cn } from "@/lib/utils";
@@ -29,6 +33,7 @@ function sumFromBills(
 export function AgeingGroupedTable({
   groups,
   bucketKeys,
+  reportTotals,
   totalRecords,
   loading,
   page,
@@ -39,6 +44,7 @@ export function AgeingGroupedTable({
 }: {
   groups: ApiVendorAgeingGroup[];
   bucketKeys: string[];
+  reportTotals?: AgingApiReportTotals | null;
   totalRecords: number;
   loading: boolean;
   page: number;
@@ -50,6 +56,29 @@ export function AgeingGroupedTable({
   const router = useRouter();
   const colCount = 5 + bucketKeys.length + 1;
   const minWidth = 900 + bucketKeys.length * 110;
+
+  const pageTotals = useMemo(() => {
+    let totalOutstanding = 0;
+    let notDueAmount = 0;
+    let originalAmount = 0;
+    let settledAmount = 0;
+    const buckets: Record<string, number> = {};
+    for (const key of bucketKeys) buckets[key] = 0;
+    for (const group of groups) {
+      totalOutstanding += Number(group.totals.totalOutstanding) || 0;
+      notDueAmount += Number(group.totals.notDueAmount) || 0;
+      originalAmount += sumFromBills(group, "originalAmount");
+      settledAmount += sumFromBills(group, "settledAmount");
+      for (const key of bucketKeys) {
+        buckets[key] = (buckets[key] ?? 0) + (Number(group.totals.buckets[key]) || 0);
+      }
+    }
+    return { totalOutstanding, notDueAmount, originalAmount, settledAmount, buckets };
+  }, [groups, bucketKeys]);
+
+  const netTotal = reportTotals?.totalOutstanding ?? pageTotals.totalOutstanding;
+  const netNotDue = reportTotals?.notDueAmount ?? pageTotals.notDueAmount;
+  const netBuckets = reportTotals?.buckets ?? pageTotals.buckets;
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
@@ -251,6 +280,29 @@ export function AgeingGroupedTable({
                     </PartyGroup>
                   );
                 })}
+                <tr className="bg-brand-50/50 border-t border-border">
+                  <td className="px-3 py-2.5 font-bold text-foreground whitespace-nowrap">
+                    Net Total
+                  </td>
+                  <td className="px-3 py-2.5" />
+                  <td className="px-3 py-2.5 text-right">
+                    <AmountCell amount={pageTotals.originalAmount} className="font-bold" />
+                  </td>
+                  <td className="px-3 py-2.5 text-right">
+                    <AmountCell amount={pageTotals.settledAmount} className="font-bold" />
+                  </td>
+                  <td className="px-3 py-2.5 text-right">
+                    <AmountCell amount={netNotDue} className="font-bold" />
+                  </td>
+                  {bucketKeys.map((key) => (
+                    <td key={key} className="px-3 py-2.5 text-right">
+                      <AmountCell amount={netBuckets[key] ?? 0} className="font-bold" />
+                    </td>
+                  ))}
+                  <td className="px-3 py-2.5 text-right">
+                    <AmountCell amount={netTotal} className="font-bold text-sm" />
+                  </td>
+                </tr>
               </tbody>
             </table>
           </div>

@@ -719,6 +719,8 @@ export const API_ENDPOINTS = {
       LIST: "/accounts/sales-invoice",
       FILTER_DROPDOWN: "/accounts/sales-invoice/filter-dropdown",
       BY_ID: (id: string) => `/accounts/sales-invoice/${id}`,
+      UPDATE_TRANSPORT: (id: string) =>
+        `/accounts/sales-invoice/${id}/transport`,
       CANCEL: (id: string) => `/accounts/sales-invoice/${id}/cancel`,
       GENERATE_IRN: (id: string) => `/accounts/sales-invoice/${id}/generate-irn`,
       PREVIEW_EWAY_BILL: (id: string) =>

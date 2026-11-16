@@ -23,7 +23,9 @@ import type {
   ApiSupplierBillOutstandingRow,
   ApiVendorAgeingGroup,
   ApiVendorOutstandingRow,
+  BillsApiTotals,
   PayablesExportView,
+  SupplierSummaryApiTotals,
 } from "@/types/payables.types";
 import {
   AGING_SORT_KEY_TO_API,
@@ -55,6 +57,8 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { payableStatusToBadge } from "@/lib/accounts/accounts-status-badges";
 import {
   AccountsRichTable,
+  AccountsTableCell,
+  AccountsTableRow,
   AccountsTableScroll,
   type AccountsRichColumnDef,
 } from "@/components/accounts/AccountsTable";
@@ -151,6 +155,7 @@ function PayablesListSortSync({
 
 function SummaryTable({
   rows,
+  reportTotals,
   totalRecords,
   loading,
   page,
@@ -159,6 +164,7 @@ function SummaryTable({
   onPageSizeChange,
 }: {
   rows: ApiVendorOutstandingRow[];
+  reportTotals?: SupplierSummaryApiTotals | null;
   totalRecords: number;
   loading: boolean;
   page: number;
@@ -173,6 +179,23 @@ function SummaryTable({
   useEffect(() => {
     onPageChange(1);
   }, [ctx?.columnFilters, ctx?.sortKey, ctx?.sortDir, onPageChange]);
+
+  const pageTotals = useMemo(
+    () =>
+      visible.reduce(
+        (acc, row) => ({
+          outstanding: acc.outstanding + (Number(row.outstanding) || 0),
+          overdueAmount: acc.overdueAmount + (Number(row.overdueAmount) || 0),
+          notDueAmount: acc.notDueAmount + (Number(row.notDueAmount) || 0),
+        }),
+        { outstanding: 0, overdueAmount: 0, notDueAmount: 0 },
+      ),
+    [visible],
+  );
+
+  const netOutstanding = reportTotals?.outstandingAmount ?? pageTotals.outstanding;
+  const netOverdue = reportTotals?.overdueAmount ?? pageTotals.overdueAmount;
+  const netNotDue = reportTotals?.notDueAmount ?? pageTotals.notDueAmount;
 
   const columns: AccountsRichColumnDef<ApiVendorOutstandingRow>[] = useMemo(
     () => [
@@ -280,6 +303,29 @@ function SummaryTable({
             getRowKey={(r) => r.vendorId}
             emptyMessage="No vendors with outstanding balances."
             onRowClick={(r) => router.push(`/accounts/payables/outstanding/${r.vendorId}`)}
+            footer={
+              visible.length > 0 ? (
+                <AccountsTableRow className="bg-brand-50/50">
+                  <AccountsTableCell className="font-bold text-foreground whitespace-nowrap">
+                    Net Total
+                  </AccountsTableCell>
+                  <AccountsTableCell />
+                  <AccountsTableCell align="right">
+                    <AmountCell amount={netOutstanding} className="font-bold" />
+                  </AccountsTableCell>
+                  <AccountsTableCell align="right">
+                    <AmountCell amount={netOverdue} className="font-bold" />
+                  </AccountsTableCell>
+                  <AccountsTableCell align="right">
+                    <AmountCell amount={netNotDue} className="font-bold" />
+                  </AccountsTableCell>
+                  <AccountsTableCell />
+                  <AccountsTableCell />
+                  <AccountsTableCell />
+                  <AccountsTableCell />
+                </AccountsTableRow>
+              ) : null
+            }
           />
         )}
       </AccountsTableScroll>
@@ -298,6 +344,7 @@ function SummaryTable({
 
 function BillTable({
   rows,
+  reportTotals,
   totalRecords,
   loading,
   page,
@@ -306,6 +353,7 @@ function BillTable({
   onPageSizeChange,
 }: {
   rows: ApiSupplierBillOutstandingRow[];
+  reportTotals?: BillsApiTotals | null;
   totalRecords: number;
   loading: boolean;
   page: number;
@@ -320,6 +368,27 @@ function BillTable({
   useEffect(() => {
     onPageChange(1);
   }, [ctx?.columnFilters, ctx?.sortKey, ctx?.sortDir, onPageChange]);
+
+  const pageTotals = useMemo(
+    () =>
+      visible.reduce(
+        (acc, row) => ({
+          billAmount: acc.billAmount + (Number(row.billAmount) || 0),
+          paidAmount: acc.paidAmount + (Number(row.paidAmount) || 0),
+          debitNoteAdjusted:
+            acc.debitNoteAdjusted + (Number(row.debitNoteAdjusted) || 0),
+          outstanding: acc.outstanding + (Number(row.outstanding) || 0),
+        }),
+        { billAmount: 0, paidAmount: 0, debitNoteAdjusted: 0, outstanding: 0 },
+      ),
+    [visible],
+  );
+
+  const netBillAmount = reportTotals?.originalAmount ?? pageTotals.billAmount;
+  const netPaidAmount = reportTotals?.paidAmount ?? pageTotals.paidAmount;
+  const netDebitNote =
+    reportTotals?.debitNoteAdjustment ?? pageTotals.debitNoteAdjusted;
+  const netOutstanding = reportTotals?.outstandingAmount ?? pageTotals.outstanding;
 
   const columns: AccountsRichColumnDef<ApiSupplierBillOutstandingRow>[] = useMemo(
     () => [
@@ -425,6 +494,32 @@ function BillTable({
               router.push(
                 `/accounts/payables/outstanding/${r.vendorId}?billId=${r.billId}`,
               )
+            }
+            footer={
+              visible.length > 0 ? (
+                <AccountsTableRow className="bg-brand-50/50">
+                  <AccountsTableCell className="font-bold text-foreground whitespace-nowrap">
+                    Net Total
+                  </AccountsTableCell>
+                  <AccountsTableCell />
+                  <AccountsTableCell />
+                  <AccountsTableCell />
+                  <AccountsTableCell align="right">
+                    <AmountCell amount={netBillAmount} className="font-bold" />
+                  </AccountsTableCell>
+                  <AccountsTableCell align="right">
+                    <AmountCell amount={netPaidAmount} className="font-bold" />
+                  </AccountsTableCell>
+                  <AccountsTableCell align="right">
+                    <AmountCell amount={netDebitNote} className="font-bold" />
+                  </AccountsTableCell>
+                  <AccountsTableCell align="right">
+                    <AmountCell amount={netOutstanding} className="font-bold" />
+                  </AccountsTableCell>
+                  <AccountsTableCell />
+                  <AccountsTableCell />
+                </AccountsTableRow>
+              ) : null
             }
           />
         )}
@@ -551,6 +646,9 @@ export default function VendorOutstandingClient() {
     summaryRows,
     billRows,
     ageingRows,
+    summaryTotals,
+    billTotals,
+    ageingReportTotals,
   } = usePayablesListing({
     view,
     asOnDate,
@@ -605,8 +703,7 @@ export default function VendorOutstandingClient() {
       supplierIds: supplierIds.length > 0 ? supplierIds : undefined,
       asOfDate: asOnDate,
       excludeZeroBalance: true,
-      status: dueStatus === "overdue" ? "OVERDUE" : undefined,
-      dueStatus,
+      dueStatus: dueStatus === "all" ? undefined : dueStatus,
       agingBreakpoints: appliedBreakpoints.join(","),
       ageingLayout: view === "ageing" ? ageingSubTab : undefined,
       sortBy: apiSort,
@@ -841,6 +938,7 @@ export default function VendorOutstandingClient() {
           {view === "summary" && (
             <SummaryTable
               rows={summaryRows}
+              reportTotals={summaryTotals}
               totalRecords={total}
               loading={loading}
               page={page}
@@ -855,6 +953,7 @@ export default function VendorOutstandingClient() {
           {view === "bills" && (
             <BillTable
               rows={billRows}
+              reportTotals={billTotals}
               totalRecords={total}
               loading={loading}
               page={page}
@@ -877,9 +976,10 @@ export default function VendorOutstandingClient() {
                 notDueAmount: g.totals.notDueAmount,
               }))}
               bucketKeys={ageingBucketKeys}
-              partyColumnLabel="Broker"
+              partyColumnLabel="Vendor"
               balanceSide="Cr"
               partyHref={(row) => `/accounts/payables/outstanding/${row.partyId}`}
+              reportTotals={ageingReportTotals}
               totalRecords={total}
               loading={loading}
               error={error}
@@ -896,6 +996,7 @@ export default function VendorOutstandingClient() {
             <AgeingGroupedTable
               groups={ageingRows}
               bucketKeys={ageingBucketKeys}
+              reportTotals={ageingReportTotals}
               totalRecords={total}
               loading={loading}
               error={error}
