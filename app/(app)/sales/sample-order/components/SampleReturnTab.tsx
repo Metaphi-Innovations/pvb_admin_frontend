@@ -4,13 +4,19 @@ import React, { useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { MasterListing } from "@/components/listing/MasterListing";
 import type { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
-import { Eye } from "lucide-react";
+import { Eye, RotateCcw } from "lucide-react";
 import { useSampleReturns, useSampleReturnFilterOptions } from "@/hooks/sales/use-return-documents";
+import { SampleReturnService } from "@/services/sample-return.service";
 import {
   type SampleReturnRecord,
   formatReturnAmount,
   getReturnTotalAmount,
 } from "../sample-return-data";
+import {
+  isReturnCancelled,
+  ReturnCancelDialog,
+  useReturnCancel,
+} from "../../shared/return-cancel";
 
 function mapBackendReturnToFrontend(item: any): SampleReturnRecord {
   const products = (item.items || []).map((p: any, index: number) => {
@@ -122,7 +128,7 @@ export function SampleReturnTab({
     return returnSort.direction === "desc" ? `-${backendKey}` : backendKey;
   }, [returnSort]);
 
-  const { data: listData, isLoading } = useSampleReturns({
+  const { data: listData, isLoading, refetch } = useSampleReturns({
     page: returnPage,
     pageSize: returnPageSize,
     search: (returnFilters.search as string) || undefined,
@@ -141,6 +147,18 @@ export function SampleReturnTab({
       onCountChange(totalRecords);
     }
   }, [totalRecords, onCountChange]);
+
+  const { cancelTarget, setCancelTarget, cancelling, confirmCancel } =
+    useReturnCancel({
+      entityLabel: "Sample Return",
+      onSuccess: () => {
+        void refetch();
+      },
+      onCancel: async (id) => {
+        const result = await SampleReturnService.cancel(id);
+        return { returnNumber: result.return_no };
+      },
+    });
 
   const returnColumns: ColumnConfig<SampleReturnRecord>[] = useMemo(() => [
     {
@@ -211,27 +229,48 @@ export function SampleReturnTab({
       icon: Eye,
       onClick: (row) => router.push(`/sales/sample-order/sample-return/${row.id}`),
     },
+    {
+      label: "Cancel Return",
+      action: "cancel",
+      icon: RotateCcw,
+      onClick: (row) =>
+        setCancelTarget({
+          id: row.id,
+          returnNumber: row.returnNumber,
+          status: row.status,
+        }),
+      hide: (row) => isReturnCancelled(row.status),
+    },
   ];
 
   return (
-    <MasterListing<SampleReturnRecord>
-      columns={returnColumns}
-      data={sampleReturnsList}
-      totalRecords={totalRecords}
-      page={returnPage}
-      pageSize={returnPageSize}
-      onPageChange={setReturnPage}
-      onPageSizeChange={setReturnPageSize}
-      onSortChange={setReturnSort}
-      onFilterChange={setReturnFilters}
-      actions={returnActions}
-      onAdd={() => router.push("/sales/sample-order/sample-return/new")}
-      addLabel="Create Sample Return"
-      emptyMessage="sample return records"
-      searchPlaceholder="Search return number, dispatch number, customer..."
-      currentFilters={returnFilters}
-      currentSort={returnSort}
-      loading={isLoading}
-    />
+    <>
+      <MasterListing<SampleReturnRecord>
+        columns={returnColumns}
+        data={sampleReturnsList}
+        totalRecords={totalRecords}
+        page={returnPage}
+        pageSize={returnPageSize}
+        onPageChange={setReturnPage}
+        onPageSizeChange={setReturnPageSize}
+        onSortChange={setReturnSort}
+        onFilterChange={setReturnFilters}
+        actions={returnActions}
+        onAdd={() => router.push("/sales/sample-order/sample-return/new")}
+        addLabel="Create Sample Return"
+        emptyMessage="sample return records"
+        searchPlaceholder="Search return number, dispatch number, customer..."
+        currentFilters={returnFilters}
+        currentSort={returnSort}
+        loading={isLoading}
+      />
+      <ReturnCancelDialog
+        target={cancelTarget}
+        loading={cancelling}
+        entityLabel="Sample Return"
+        onClose={() => setCancelTarget(null)}
+        onConfirm={() => void confirmCancel()}
+      />
+    </>
   );
 }

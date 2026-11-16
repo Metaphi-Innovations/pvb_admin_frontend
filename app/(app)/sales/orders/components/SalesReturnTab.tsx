@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { MasterListing } from "@/components/listing/MasterListing";
 import type { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
-import { Eye } from "lucide-react";
+import { Eye, RotateCcw } from "lucide-react";
 import { SalesReturnService } from "@/services/sales-return.service";
 import {
   type SalesReturnRecord,
@@ -12,6 +12,11 @@ import {
   formatReturnAmount,
   getReturnTotalAmount,
 } from "../sales-return-data";
+import {
+  isReturnCancelled,
+  ReturnCancelDialog,
+  useReturnCancel,
+} from "../../shared/return-cancel";
 
 function mapBackendReturnToFrontend(item: any): SalesReturnRecord {
   const products = (item.items || []).map((p: any, index: number) => {
@@ -149,6 +154,16 @@ export function SalesReturnTab({
     fetchReturns();
   }, [fetchReturns]);
 
+  const { cancelTarget, setCancelTarget, cancelling, confirmCancel } =
+    useReturnCancel({
+      entityLabel: "Sales Return",
+      onSuccess: fetchReturns,
+      onCancel: async (id) => {
+        const result = await SalesReturnService.cancel(id);
+        return { returnNumber: result.return_number };
+      },
+    });
+
   const returnColumns: ColumnConfig<SalesReturnRecord>[] = useMemo(() => [
     {
       key: "returnNumber",
@@ -216,27 +231,48 @@ export function SalesReturnTab({
       icon: Eye,
       onClick: (row) => router.push(`/sales/orders/sales-return/${row.id}`),
     },
+    {
+      label: "Cancel Return",
+      action: "cancel",
+      icon: RotateCcw,
+      onClick: (row) =>
+        setCancelTarget({
+          id: row.id,
+          returnNumber: row.returnNumber,
+          status: row.status,
+        }),
+      hide: (row) => isReturnCancelled(row.status),
+    },
   ];
 
   return (
-    <MasterListing<SalesReturnRecord>
-      columns={returnColumns}
-      data={salesReturns}
-      totalRecords={totalRecords}
-      page={returnPage}
-      pageSize={returnPageSize}
-      onPageChange={setReturnPage}
-      onPageSizeChange={setReturnPageSize}
-      onSortChange={setReturnSort}
-      onFilterChange={setReturnFilters}
-      actions={returnActions}
-      onAdd={() => router.push("/sales/orders/sales-return/new")}
-      addLabel="Create Return"
-      emptyMessage="sales return records"
-      searchPlaceholder="Search return number, dispatch number, customer..."
-      currentFilters={returnFilters}
-      currentSort={returnSort}
-      loading={loading}
-    />
+    <>
+      <MasterListing<SalesReturnRecord>
+        columns={returnColumns}
+        data={salesReturns}
+        totalRecords={totalRecords}
+        page={returnPage}
+        pageSize={returnPageSize}
+        onPageChange={setReturnPage}
+        onPageSizeChange={setReturnPageSize}
+        onSortChange={setReturnSort}
+        onFilterChange={setReturnFilters}
+        actions={returnActions}
+        onAdd={() => router.push("/sales/orders/sales-return/new")}
+        addLabel="Create Return"
+        emptyMessage="sales return records"
+        searchPlaceholder="Search return number, dispatch number, customer..."
+        currentFilters={returnFilters}
+        currentSort={returnSort}
+        loading={loading}
+      />
+      <ReturnCancelDialog
+        target={cancelTarget}
+        loading={cancelling}
+        entityLabel="Sales Return"
+        onClose={() => setCancelTarget(null)}
+        onConfirm={() => void confirmCancel()}
+      />
+    </>
   );
 }

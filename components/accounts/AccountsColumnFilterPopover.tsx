@@ -37,6 +37,37 @@ function formatOptionLabel(
   return value;
 }
 
+/** True when search text appears anywhere in the option (doc no, label, segments, digits). */
+function optionMatchesSearch(
+  value: string,
+  display: string,
+  query: string,
+): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  const raw = value.toLowerCase();
+  const label = display.toLowerCase();
+  if (raw.includes(q) || label.includes(q)) return true;
+
+  // Path segments: "115" matches SI/23/2627/00115 via segment 00115
+  for (const part of raw.split(/[/\s_-]+/)) {
+    if (!part) continue;
+    if (part.includes(q)) return true;
+    const partNorm = part.replace(/^0+/, "") || part;
+    const qNorm = q.replace(/^0+/, "") || q;
+    if (partNorm === qNorm || partNorm.includes(qNorm) || partNorm.endsWith(qNorm)) {
+      return true;
+    }
+  }
+
+  // Digit-only compact form: "115" inside 23262700115
+  const digits = raw.replace(/\D+/g, "");
+  const qDigits = q.replace(/\D+/g, "");
+  if (qDigits && digits.includes(qDigits)) return true;
+
+  return false;
+}
+
 function ValueCheckboxRow({
   label,
   count,
@@ -122,8 +153,9 @@ export function AccountsColumnFilterPopover({
     return [];
   }, [valueOptions, filterType, statusOptions]);
 
+  // Keep showing existing options while a background fetch runs — only spin when empty.
   const showOptionsLoading =
-    optionsLoading ||
+    (optionsLoading && valueOptions.length === 0) ||
     Boolean(onOpen && open && !optionsReady && valueOptions.length === 0 && filterType !== "boolean");
 
   useEffect(() => {
@@ -135,19 +167,25 @@ export function AccountsColumnFilterPopover({
       // Start unchecked — user must choose values (or Select All) before Apply
       setSelected([]);
     }
-    setSearch("");
+    // Reset search/dates only when the popover opens — not when options reload
+    // mid-search (async facet fetch would otherwise wipe the user's query).
     setDateFrom(value?.dateFrom ?? "");
     setDateTo(value?.dateTo ?? "");
-  }, [open, value, listOptions, showOptionsLoading]);
+  }, [open, value, showOptionsLoading]);
+
+  useEffect(() => {
+    if (!open) setSearch("");
+  }, [open]);
 
   const active = isColumnFilterActive(value);
 
   const filteredOptions = useMemo(() => {
-    const q = debouncedSearch.trim().toLowerCase();
+    const q = debouncedSearch.trim();
     if (!q) return listOptions;
+    // No result cap — every distinct loaded value that contains the query is shown.
     return listOptions.filter((o) => {
       const display = formatOptionLabel(o.value, filterType, optionLabels);
-      return display.toLowerCase().includes(q) || o.value.toLowerCase().includes(q);
+      return optionMatchesSearch(o.value, display, q);
     });
   }, [listOptions, debouncedSearch, optionLabels, filterType]);
 
@@ -295,7 +333,7 @@ export function AccountsColumnFilterPopover({
               />
             </div>
 
-            <div className="px-1.5 py-1.5 space-y-0.5 max-h-[220px] overflow-y-auto overscroll-contain">
+            <div className="px-1.5 py-1.5 space-y-0.5 max-h-[360px] overflow-y-auto overscroll-contain">
               {showOptionsLoading ? (
                 <p className="text-[11px] text-muted-foreground py-3 text-center">Loading…</p>
               ) : (
@@ -312,6 +350,11 @@ export function AccountsColumnFilterPopover({
                   {filteredOptions.length === 0 && (
                     <p className="text-[11px] text-muted-foreground py-3 text-center">
                       No matching values
+                    </p>
+                  )}
+                  {filteredOptions.length > 0 && (
+                    <p className="text-[10px] text-muted-foreground px-1.5 pt-1 pb-0.5">
+                      {filteredOptions.length} value{filteredOptions.length === 1 ? "" : "s"}
                     </p>
                   )}
                 </>

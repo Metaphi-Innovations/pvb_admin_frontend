@@ -1648,6 +1648,29 @@ export const SalesInvoiceService = {
     }
   },
 
+  async getFilterDropdown(
+    fieldName: string,
+    opts?: {
+      invoice_type?: SalesInvoiceBackendType;
+      warehouse_id?: string;
+    },
+  ): Promise<Array<Record<string, string>>> {
+    try {
+      const response = await axiosInstance.get(
+        `${API_ENDPOINTS.ACCOUNTS.SALES_INVOICE.FILTER_DROPDOWN}${buildQuery({
+          field_name: fieldName,
+          invoice_type: opts?.invoice_type,
+          warehouse_id: opts?.warehouse_id,
+        })}`,
+      );
+      return (unwrapData(response) as Array<Record<string, string>>) || [];
+    } catch (error) {
+      throw new Error(
+        extractErrorMessage(error, "Failed to load filter options."),
+      );
+    }
+  },
+
   async getById(id: string): Promise<SalesInvoiceDetailDto> {
     try {
       const response = await axiosInstance.get(

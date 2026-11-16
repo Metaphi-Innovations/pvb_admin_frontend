@@ -3,7 +3,7 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { MasterListing } from "@/components/listing/MasterListing";
 import { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
-import { Eye, FileCheck2, Pencil } from "lucide-react";
+import { Eye, FileCheck2, Pencil, RotateCcw } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { getGrnTabApiContext } from "@/lib/warehouse/grn-list-config";
@@ -13,6 +13,7 @@ import type { GrnListItem } from "@/services/grn-list.service";
 import { useGrnListingState } from "../grn-listing-state-context";
 import { exportSalesReturnGrnExcel } from "../shared/grn-excel-export";
 import { showToast } from "@/lib/toast";
+import { GrnCancelDialog, useGrnCancel } from "../shared/grn-cancel";
 
 const SALES_RETURN_TAB_CONTEXT = getGrnTabApiContext("sales_return");
 
@@ -38,13 +39,15 @@ export function SalesReturnListing() {
     SALES_RETURN_TAB_CONTEXT.sourceType,
   );
 
-  const { items, total, loading, error } = useGrnListData({
+  const { items, total, loading, error, refetch } = useGrnListData({
     tabContext: SALES_RETURN_TAB_CONTEXT,
     filters,
     sort,
     page,
     pageSize,
   });
+  const { cancelTarget, setCancelTarget, cancelling, confirmCancel } =
+    useGrnCancel(refetch);
 
   const [exporting, setExporting] = useState(false);
   const handleExport = useCallback(async () => {
@@ -171,7 +174,7 @@ export function SalesReturnListing() {
       action: "edit",
       icon: Pencil,
       onClick: (row) => router.push(`/warehouse/grn/sales-return/${row.id}/edit`),
-      hide: (row) => row.status === "qc_completed",
+      hide: (row) => row.status === "qc_completed" || row.status === "cancelled",
     },
     {
       label: "Perform QC",
@@ -184,7 +187,15 @@ export function SalesReturnListing() {
         }
         router.push(`/warehouse/qc/create?grnId=${row.id}`);
       },
-      hide: (row) => row.status === "qc_completed",
+      hide: (row) => row.status === "qc_completed" || row.status === "cancelled",
+    },
+    {
+      label: "Cancel GRN",
+      action: "cancel",
+      icon: RotateCcw,
+      onClick: (row) =>
+        setCancelTarget({ id: row.id, grnNo: row.grnNo, status: row.status }),
+      hide: (row) => row.status === "cancelled" || row.status === "qc_completed",
     },
   ];
 
@@ -215,6 +226,12 @@ export function SalesReturnListing() {
         onAdd={() => router.push("/warehouse/grn/sales-return/create")}
         onOpenFilter={handleOpenFilter}
         onExport={() => void handleExport()}
+      />
+      <GrnCancelDialog
+        target={cancelTarget}
+        loading={cancelling}
+        onClose={() => setCancelTarget(null)}
+        onConfirm={() => void confirmCancel()}
       />
     </div>
   );

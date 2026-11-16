@@ -217,7 +217,7 @@ export function ReturnGrnCreate({
 
   useEffect(() => {
     if (!isEdit || !existingGrn || hydratedEdit) return;
-    if (existingGrn.status === "qc_completed") return;
+    if (existingGrn.status === "qc_completed" || existingGrn.status === "cancelled") return;
 
     setGrnNo(existingGrn.grnNo || "");
     setGrnDate(existingGrn.grnDate || new Date().toISOString().slice(0, 10));
@@ -675,7 +675,7 @@ export function ReturnGrnCreate({
     );
   }
 
-  if (isEdit && existingGrn?.status === "qc_completed") {
+  if (isEdit && (existingGrn?.status === "qc_completed" || existingGrn?.status === "cancelled")) {
     return (
       <FormContainer
         title={`Edit ${returnLabel} GRN`}

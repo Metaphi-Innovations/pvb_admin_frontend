@@ -24,12 +24,18 @@ export const GRN_STATUS_CONFIG: Record<
     bg: "bg-emerald-50 text-emerald-700 border-emerald-200",
     label: "QC Completed",
   },
+  cancelled: {
+    bg: "bg-slate-50 text-slate-600 border-slate-200",
+    label: "Cancelled",
+  },
 };
 
 export function mapBackendGrnStatus(status: string): GrnStatus {
   switch (status) {
     case "QC_COMPLETED":
       return "qc_completed";
+    case "CANCELLED":
+      return "cancelled";
     case "DRAFT":
     case "QC_PENDING":
     default:
@@ -42,6 +48,10 @@ export function mapFrontendGrnStatusToBackend(status: string): BackendGrnStatus 
     case "qc_completed":
     case "QC Completed":
       return "QC_COMPLETED";
+    case "cancelled":
+    case "Cancelled":
+    case "CANCELLED":
+      return "CANCELLED";
     case "pending_qc":
     case "qc_in_progress":
     case "QC Pending":

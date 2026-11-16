@@ -296,10 +296,12 @@ export function collectUniqueColumnValues<T>(
   rows: T[],
   columnKey: string,
   getCellValue: (row: T, columnKey: string) => unknown,
-  /** Optional cap. Omit / Infinity = return every distinct value (needed for late-sorted codes like SI/27). */
-  max?: number,
+  /** @deprecated Cap removed — all distinct values are always returned. */
+  _max?: number,
 ): string[] {
-  return collectColumnValueCounts(rows, columnKey, getCellValue, max).map((o) => o.value);
+  return collectColumnValueCounts(rows, columnKey, getCellValue, undefined, undefined).map(
+    (o) => o.value,
+  );
 }
 
 export function collectColumnValueCounts<T>(
@@ -307,11 +309,10 @@ export function collectColumnValueCounts<T>(
   columnKey: string,
   getCellValue: (row: T, columnKey: string) => unknown,
   /**
-   * Optional cap after alphabetical sort.
-   * Default is uncapped so filter search can reach values that sort after early prefixes
-   * (e.g. SI/19…SI/24 crowding out SI/27 when capped at 200).
+   * @deprecated Cap removed. Previously a 200 limit dropped later-sorted docs (e.g. SI/27).
+   * Argument kept for call-site compatibility and is ignored.
    */
-  max?: number,
+  _max?: number,
   getFilterValue?: (row: T, columnKey: string) => unknown,
 ): ColumnValueOption[] {
   const read = getFilterValue ?? getCellValue;
@@ -321,13 +322,11 @@ export function collectColumnValueCounts<T>(
     if (!v || v === "—") continue;
     counts.set(v, (counts.get(v) ?? 0) + 1);
   }
-  const options = [...counts.entries()]
+  return [...counts.entries()]
     .map(([value, count]) => ({ value, count }))
-    .sort((a, b) => a.value.localeCompare(b.value, undefined, { numeric: true, sensitivity: "base" }));
-  if (max != null && Number.isFinite(max) && max >= 0) {
-    return options.slice(0, max);
-  }
-  return options;
+    .sort((a, b) =>
+      a.value.localeCompare(b.value, undefined, { numeric: true, sensitivity: "base" }),
+    );
 }
 
 function isPureAmountCell(v: unknown): boolean {

@@ -43,6 +43,7 @@ export function useReceivablesListing(options: {
   customerIds: string[];
   salesperson?: string;
   warehouseId?: string;
+  warehouseIds?: string[];
   dueStatus: "all" | "overdue" | "not_due";
   page: number;
   pageSize: number;
@@ -58,6 +59,7 @@ export function useReceivablesListing(options: {
     customerIds,
     salesperson,
     warehouseId,
+    warehouseIds,
     dueStatus,
     page,
     pageSize,
@@ -78,7 +80,6 @@ export function useReceivablesListing(options: {
   const [ageingReportTotals, setAgeingReportTotals] =
     useState<AgingApiCustomerTotals | null>(null);
   const [collectionRows, setCollectionRows] = useState<ApiCollectionFollowUpRow[]>([]);
-  const [salespersonIdMap, setSalespersonIdMap] = useState<Record<string, string>>({});
 
   const sortParams = useMemo(() => {
     const map =
@@ -101,10 +102,12 @@ export function useReceivablesListing(options: {
     return undefined;
   }, [dueStatus]);
 
+  /** `salesperson` is the selected user id (or undefined for All). */
   const resolvedSalespersonId =
-    salesperson && salesperson !== "all" ? salespersonIdMap[salesperson] : undefined;
+    salesperson && salesperson !== "all" ? salesperson : undefined;
 
   const customerIdsKey = customerIds.join(",");
+  const warehouseIdsKey = (warehouseIds ?? []).join(",");
 
   useEffect(() => {
     const ac = new AbortController();
@@ -113,15 +116,19 @@ export function useReceivablesListing(options: {
       setLoading(true);
       setError(null);
       try {
-        const resolvedWarehouseId =
-          warehouseId && warehouseId !== "all" ? warehouseId : undefined;
+        const resolvedWarehouseIds =
+          warehouseIds && warehouseIds.length > 0
+            ? warehouseIds
+            : warehouseId && warehouseId !== "all"
+              ? [warehouseId]
+              : undefined;
 
         if (view === "summary") {
           const res = await ReceivablesService.getCustomerSummary({
             search: debouncedSearch.trim() || undefined,
             customerIds: selectedCustomerIds,
             salespersonId: resolvedSalespersonId,
-            warehouseId: resolvedWarehouseId,
+            warehouseIds: resolvedWarehouseIds,
             asOfDate: asOnDate,
             excludeZeroBalance: true,
             status: dueStatusApi,
@@ -132,15 +139,6 @@ export function useReceivablesListing(options: {
           });
           if (ac.signal.aborted) return;
           const apiRows = res.data ?? [];
-          setSalespersonIdMap((prev) => {
-            const next = { ...prev };
-            for (const row of apiRows) {
-              if (row.salesperson?.id && row.salesperson?.name) {
-                next[row.salesperson.name] = row.salesperson.id;
-              }
-            }
-            return next;
-          });
           let rows = apiRows.map(mapCustomerSummaryRow);
           if (dueStatus === "not_due") {
             rows = rows.filter((r) => r.overdueAmount <= 0.009 && r.outstanding > 0.009);
@@ -154,7 +152,7 @@ export function useReceivablesListing(options: {
           const res = await ReceivablesService.getInvoices({
             search: debouncedSearch.trim() || undefined,
             customerIds: selectedCustomerIds,
-            warehouseId: resolvedWarehouseId,
+            warehouseIds: resolvedWarehouseIds,
             asOfDate: asOnDate,
             status: dueStatusApi,
             page,
@@ -177,7 +175,7 @@ export function useReceivablesListing(options: {
             search: debouncedSearch.trim() || undefined,
             customerIds: selectedCustomerIds,
             salespersonId: resolvedSalespersonId,
-            warehouseId: resolvedWarehouseId,
+            warehouseIds: resolvedWarehouseIds,
             asOfDate: asOnDate,
             excludeZeroBalance: true,
             status: dueStatusApi,
@@ -243,6 +241,7 @@ export function useReceivablesListing(options: {
     customerIdsKey,
     resolvedSalespersonId,
     warehouseId,
+    warehouseIdsKey,
     dueStatus,
     dueStatusApi,
     asOnDate,

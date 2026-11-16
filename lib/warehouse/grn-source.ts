@@ -23,7 +23,8 @@ export type StockTransferGrnDisplayStatus =
   | "Partially Received"
   | "Received"
   | "QC Pending"
-  | "QC Completed";
+  | "QC Completed"
+  | "Cancelled";
 
 export function getStockTransferGrnDisplayStatus(input: {
   isPendingTransfer: boolean;
@@ -31,6 +32,7 @@ export function getStockTransferGrnDisplayStatus(input: {
   grnStatus?: GrnStatus;
 }): StockTransferGrnDisplayStatus {
   if (input.isPendingTransfer) return "Pending Receipt";
+  if (input.grnStatus === "cancelled") return "Cancelled";
   if (input.grnStatus === "qc_completed") return "QC Completed";
   if (input.receiptStatus === "partially_received") return "Partially Received";
   if (input.grnStatus === "pending_qc" || input.grnStatus === "qc_in_progress") {
@@ -49,6 +51,7 @@ export const ST_GRN_STATUS_BADGE: Record<
   Received: { bg: "bg-sky-50 text-sky-700 border-sky-200", label: "Received" },
   "QC Pending": { bg: "bg-navy-50 text-navy-700 border-navy-200", label: "QC Pending" },
   "QC Completed": { bg: "bg-emerald-50 text-emerald-700 border-emerald-200", label: "QC Completed" },
+  Cancelled: { bg: "bg-slate-50 text-slate-600 border-slate-200", label: "Cancelled" },
 };
 
 /** Status filter options for Stock Transfer → Received GRN list (API-backed display labels). */

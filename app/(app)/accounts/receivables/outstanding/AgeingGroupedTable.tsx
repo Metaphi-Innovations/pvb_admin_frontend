@@ -236,8 +236,13 @@ export function AgeingGroupedTable({
                           {group.invoices.length} bill
                           {group.invoices.length === 1 ? "" : "s"}
                         </td>
-                        <td className="px-3 py-2.5 text-muted-foreground">
-                          {group.warehouseName?.trim() || ""}
+                        <td
+                          className="px-3 py-2.5 text-muted-foreground max-w-[220px]"
+                          title={group.warehouseName?.trim() || undefined}
+                        >
+                          <span className="line-clamp-2 whitespace-normal break-words">
+                            {group.warehouseName?.trim() || ""}
+                          </span>
                         </td>
                         <td className="px-3 py-2.5 text-right">
                           <AmountCell amount={billTotal} className="font-semibold" />

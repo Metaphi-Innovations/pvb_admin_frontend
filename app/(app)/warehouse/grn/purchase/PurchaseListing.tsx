@@ -38,6 +38,7 @@ const GRN_STATUS_CONFIG = {
   pending_qc: { bg: "bg-amber-50 text-amber-700 border-amber-200", label: "QC Pending" },
   qc_in_progress: { bg: "bg-navy-50 text-navy-700 border-navy-200", label: "QC In Progress" },
   qc_completed: { bg: "bg-emerald-50 text-emerald-700 border-emerald-200", label: "QC Completed" },
+  cancelled: { bg: "bg-slate-50 text-slate-600 border-slate-200", label: "Cancelled" },
 };
 
 export function PurchaseListing() {

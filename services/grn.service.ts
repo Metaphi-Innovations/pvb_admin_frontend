@@ -487,4 +487,24 @@ export const GrnService = {
     }
     return data as Record<string, unknown>;
   },
+
+  async cancel(id: string): Promise<{
+    success: true;
+    grnId: string;
+    grnNumber: string;
+  }> {
+    const response = await axiosInstance.post(API_ENDPOINTS.WAREHOUSE.GRN.CANCEL(id));
+    const payload = response.data as Record<string, unknown>;
+    assertSuccess(payload, "Failed to cancel GRN.");
+    const data = payload.data;
+    if (!data || typeof data !== "object" || Array.isArray(data)) {
+      throw new Error("Unexpected response shape: 'data' must be an object.");
+    }
+    const record = data as Record<string, unknown>;
+    return {
+      success: true,
+      grnId: asString(record.grnId),
+      grnNumber: asString(record.grnNumber),
+    };
+  },
 };

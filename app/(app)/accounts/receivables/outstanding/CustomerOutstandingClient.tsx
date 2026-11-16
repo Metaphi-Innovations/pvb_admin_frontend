@@ -45,6 +45,7 @@ import { AgeingPartySummaryTable } from "@/components/accounts/AgeingPartySummar
 import { useAccountsSectionRefresh } from "@/lib/accounts/use-accounts-section-refresh";
 import { CustomerListService } from "@/services/customer-list.service";
 import { ReceivablesService } from "@/services/receivables.service";
+import { SalesRegisterApiService } from "@/services/sales-register.service";
 import {
   UserListService,
   type UserDropdownItem,
@@ -65,11 +66,11 @@ import {
 import {
   ReportFilterRow,
   ReportAsOnDateFilter,
-  ReportBranchFilter,
   ReportCustomerMultiFilter,
   ReportSalespersonFilter,
   ReportSearchFilter,
   ReportFilterResetButton,
+  ReportWarehouseMultiFilter,
 } from "@/components/accounts/ReportFilters";
 import { WarehouseService } from "@/services/warehouse.service";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -1151,9 +1152,12 @@ export default function CustomerOutstandingClient() {
   const [search, setSearch] = useState("");
   const [customerIds, setCustomerIds] = useState<string[]>([]);
   const [salesperson, setSalesperson] = useState("all");
-  const [warehouseId, setWarehouseId] = useState("all");
+  const [warehouseIds, setWarehouseIds] = useState<string[]>([]);
   const [branchOptions, setBranchOptions] = useState<
     { id: string; name: string }[]
+  >([]);
+  const [salespersonOptions, setSalespersonOptions] = useState<
+    Array<{ value: string; label: string }>
   >([]);
   const [dueStatus, setDueStatus] = useState<DueStatusFilter>("all");
   const [page, setPage] = useState(1);
@@ -1301,6 +1305,63 @@ export default function CustomerOutstandingClient() {
     };
   }, []);
 
+  // Master salesperson list (not derived from the current page/view rows).
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const config = await SalesRegisterApiService.getFilters();
+        if (cancelled) return;
+        const fromFilters = (config.salespeople ?? []).map((person) => ({
+          value: person.user_id,
+          label: person.name,
+        }));
+        if (fromFilters.length > 0) {
+          setSalespersonOptions(fromFilters);
+          return;
+        }
+        const users = await UserListService.dropdown();
+        if (cancelled) return;
+        setSalespersonOptions(
+          users
+            .map((u) => ({
+              value: u.userId,
+              label:
+                u.label ||
+                [u.firstName, u.lastName].filter(Boolean).join(" ").trim() ||
+                u.username ||
+                u.userId,
+            }))
+            .filter((o) => o.value)
+            .sort((a, b) => a.label.localeCompare(b.label)),
+        );
+      } catch {
+        try {
+          const users = await UserListService.dropdown();
+          if (cancelled) return;
+          setSalespersonOptions(
+            users
+              .map((u) => ({
+                value: u.userId,
+                label:
+                  u.label ||
+                  [u.firstName, u.lastName].filter(Boolean).join(" ").trim() ||
+                  u.username ||
+                  u.userId,
+              }))
+              .filter((o) => o.value)
+              .sort((a, b) => a.label.localeCompare(b.label)),
+          );
+        } catch {
+          if (!cancelled) setSalespersonOptions([]);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const handleSortChange = useCallback((key: string, dir: "asc" | "desc") => {
     setSortKey(key);
     setSortDir(dir);
@@ -1323,7 +1384,7 @@ export default function CustomerOutstandingClient() {
     search,
     customerIds,
     salesperson: salesperson !== "all" ? salesperson : undefined,
-    warehouseId: warehouseId !== "all" ? warehouseId : undefined,
+    warehouseIds: warehouseIds.length > 0 ? warehouseIds : undefined,
     dueStatus,
     page,
     pageSize,
@@ -1332,16 +1393,6 @@ export default function CustomerOutstandingClient() {
     appliedBreakpoints,
     refreshKey,
   });
-
-  const salespersonOptions = useMemo(() => {
-    const names = new Set<string>();
-    for (const row of summaryRows) {
-      if (row.salesExecutive && row.salesExecutive !== "—") {
-        names.add(row.salesExecutive);
-      }
-    }
-    return [...names].sort((a, b) => a.localeCompare(b));
-  }, [summaryRows]);
 
   const pendingAllocations = useMemo(() => {
     void refreshKey;
@@ -1358,14 +1409,14 @@ export default function CustomerOutstandingClient() {
     search.trim() !== "" ||
     customerIds.length > 0 ||
     salesperson !== "all" ||
-    warehouseId !== "all" ||
+    warehouseIds.length > 0 ||
     dueStatus !== "all";
 
   const clearFilters = () => {
     setSearch("");
     setCustomerIds([]);
     setSalesperson("all");
-    setWarehouseId("all");
+    setWarehouseIds([]);
     setDueStatus("all");
   };
 
@@ -1407,7 +1458,7 @@ export default function CustomerOutstandingClient() {
       search: search.trim() || undefined,
       customerIds: customerIds.length > 0 ? customerIds : undefined,
       salespersonId: resolvedSalespersonId,
-      warehouseId: warehouseId !== "all" ? warehouseId : undefined,
+      warehouseIds: warehouseIds.length > 0 ? warehouseIds : undefined,
       asOfDate: asOnDate,
       dueStatus,
       excludeZeroBalance: true,
@@ -1422,7 +1473,7 @@ export default function CustomerOutstandingClient() {
     search,
     customerIds,
     resolvedSalespersonId,
-    warehouseId,
+    warehouseIds,
     asOnDate,
     dueStatus,
     appliedBreakpoints,
@@ -1624,20 +1675,20 @@ export default function CustomerOutstandingClient() {
                   setSalesperson(v);
                   setPage(1);
                 }}
-                salespeople={salespersonOptions}
+                options={salespersonOptions}
               />
             )}
             {view !== "collection" && (
-              <ReportBranchFilter
-                value={warehouseId}
+              <ReportWarehouseMultiFilter
+                values={warehouseIds}
                 onChange={(v) => {
-                  setWarehouseId(v);
+                  setWarehouseIds(v);
                   setPage(1);
                 }}
-                options={branchOptions}
-                label="Warehouse/Branch"
-                placeholder="All warehouses/branches"
-                allLabel="All warehouses/branches"
+                labeledOptions={branchOptions.map((w) => ({
+                  value: w.id,
+                  label: w.name,
+                }))}
               />
             )}
             {view !== "ageing" && view !== "collection" && (

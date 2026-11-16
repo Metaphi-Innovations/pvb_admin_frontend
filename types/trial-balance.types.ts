@@ -44,6 +44,7 @@ export interface TrialBalanceScope {
   to_date: string;
   warehouse_id: string | null;
   warehouse_name: string | null;
+  company_name: string;
   opening_balance_mode: OpeningBalanceMode;
 }
 

@@ -95,6 +95,7 @@ import {
   SalesInvoiceService,
   mapSalesInvoiceDetailToRecord,
 } from "@/services/sales-invoice.service";
+import type { ColumnValueOption } from "@/lib/accounts/column-filter-types";
 import { downloadInvoicePdf } from "@/app/(app)/accounts/invoices/invoice-pdf";
 import {
   openProformaInvoicePreview,
@@ -417,6 +418,38 @@ function StatutoryStatusCells({ row }: { row: SalesInvoiceListRow }) {
   );
 }
 
+/** Invoice No. filter values from loaded listing rows (includes cancelled). */
+function buildInvoiceNoFilterFromRows(rows: SalesInvoiceListRow[]): {
+  valueOptions: ColumnValueOption[];
+  optionLabels: Record<string, string>;
+} {
+  const counts = new Map<string, number>();
+  const cancelled = new Set<string>();
+  const optionLabels: Record<string, string> = {};
+  for (const row of rows) {
+    const value = String(row.invoiceNo || "").trim();
+    if (!value || value === "—") continue;
+    counts.set(value, (counts.get(value) ?? 0) + 1);
+    if (row.invoiceStatus === "cancelled") {
+      cancelled.add(value);
+      optionLabels[value] = `${value} (Cancelled)`;
+    }
+  }
+  const byInvoiceNo = (a: string, b: string) =>
+    a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
+  // Pin cancelled numbers first so they aren't buried under hundreds of active SIs
+  // (SI/27… sorts after SI/19–24 and used to disappear entirely under a 200-option cap).
+  const valueOptions = [...counts.entries()]
+    .map(([value, count]) => ({ value, count }))
+    .sort((a, b) => {
+      const aCancelled = cancelled.has(a.value) ? 0 : 1;
+      const bCancelled = cancelled.has(b.value) ? 0 : 1;
+      if (aCancelled !== bCancelled) return aCancelled - bCancelled;
+      return byInvoiceNo(a.value, b.value);
+    });
+  return { valueOptions, optionLabels };
+}
+
 function SalesInvoicesListing({
   tab,
   listReturnHref,
@@ -433,6 +466,7 @@ function SalesInvoicesListing({
   onCancel,
   onPrint,
   onSendEmail,
+  invoiceNoFilter,
 }: {
   tab: SalesInvoiceTabId;
   listReturnHref: string;
@@ -449,6 +483,11 @@ function SalesInvoicesListing({
   onCancel: (row: SalesInvoiceListRow) => void;
   onPrint: (row: SalesInvoiceListRow) => void;
   onSendEmail: (row: SalesInvoiceListRow) => void;
+  invoiceNoFilter: {
+    valueOptions?: ColumnValueOption[];
+    optionLabels?: Record<string, string>;
+    optionsReady?: boolean;
+  };
 }) {
   const visible = useAccountsFilteredRows(toolbarRows);
   return (
@@ -481,6 +520,7 @@ function SalesInvoicesListing({
         onCancel={onCancel}
         onPrint={onPrint}
         onSendEmail={onSendEmail}
+        invoiceNoFilter={invoiceNoFilter}
       />
     </AccountsTableListing>
   );
@@ -667,6 +707,7 @@ function SalesInvoicesTable({
   onCancel,
   onPrint,
   onSendEmail,
+  invoiceNoFilter,
 }: {
   tab: SalesInvoiceTabId;
   listReturnHref: string;
@@ -682,6 +723,11 @@ function SalesInvoicesTable({
   onCancel: (row: SalesInvoiceListRow) => void;
   onPrint: (row: SalesInvoiceListRow) => void;
   onSendEmail: (row: SalesInvoiceListRow) => void;
+  invoiceNoFilter: {
+    valueOptions?: ColumnValueOption[];
+    optionLabels?: Record<string, string>;
+    optionsReady?: boolean;
+  };
 }) {
   const meta = SALES_INVOICE_TAB_META[tab];
   const ctx = useAccountsColumnFilterContext();
@@ -736,7 +782,7 @@ function SalesInvoicesTable({
         <AccountsTableHead>
           <AccountsTableHeadRow>
             <SortTh label="Invoice Date" colKey="invoiceDate" filterType="date" />
-            <SortTh label="Invoice No." colKey="invoiceNo" />
+            <SortTh label="Invoice No." colKey="invoiceNo" {...invoiceNoFilter} />
             <SortTh label="Invoice Type" colKey="invoiceTypeLabel" filterType="select" />
             <SortTh label="Reference No." colKey="referencePrimary" />
             <SortTh label="Party / Transfer" colKey="partyOrTransfer" className="accounts-col-party" />
@@ -813,7 +859,7 @@ function SalesInvoicesTable({
         <AccountsTableHead>
           <AccountsTableHeadRow>
             <SortTh label="Invoice Date" colKey="invoiceDate" filterType="date" />
-            <SortTh label="Invoice No." colKey="invoiceNo" />
+            <SortTh label="Invoice No." colKey="invoiceNo" {...invoiceNoFilter} />
             <SortTh label="Stock Transfer No." colKey="orderNo" />
             <SortTh label="Dispatch No." colKey="dispatchNo" />
             <SortTh label="From Warehouse" colKey="fromWarehouse" />
@@ -885,7 +931,7 @@ function SalesInvoicesTable({
       <AccountsTableHead>
         <AccountsTableHeadRow>
           <SortTh label="Invoice Date" colKey="invoiceDate" filterType="date" />
-          <SortTh label="Invoice No." colKey="invoiceNo" />
+          <SortTh label="Invoice No." colKey="invoiceNo" {...invoiceNoFilter} />
           <SortTh
             label={isSampleOrder ? "Sample Order No." : "Sales Order No."}
             colKey="orderNo"
@@ -1163,7 +1209,6 @@ export default function SalesInvoicesPageClient() {
       });
       return next;
     });
-
     // Only fetch the active tab immediately.
     void fetchTabRef.current(activeTabRef.current);
   }, [filterKey, mounted]);
@@ -1208,6 +1253,30 @@ export default function SalesInvoicesPageClient() {
   };
 
   const active = tabState[activeTab];
+
+  const toolbarRows = useMemo(
+    () =>
+      applyToolbarFilters(active.rows, {
+        search: active.search,
+        dateFrom,
+        dateTo,
+        branches,
+      }),
+    [active.rows, active.search, dateFrom, dateTo, branches],
+  );
+
+  // Same row set the table uses (+ full tab load) so any on-screen invoice no.
+  // — including cancelled — is always present in the Invoice No. filter.
+  const invoiceNoFilter = useMemo(() => {
+    const built = buildInvoiceNoFilterFromRows(
+      active.rows.length > 0 ? active.rows : toolbarRows,
+    );
+    return {
+      valueOptions: built.valueOptions,
+      optionLabels: built.optionLabels,
+      optionsReady: true,
+    };
+  }, [active.rows, toolbarRows]);
 
   const branchOptions = useMemo(() => {
     if (!mounted) return [];
@@ -1282,17 +1351,6 @@ export default function SalesInvoicesPageClient() {
     preset !== "this_year" ||
     financialYearId !== "all" ||
     branches.length > 0;
-
-  const toolbarRows = useMemo(
-    () =>
-      applyToolbarFilters(active.rows, {
-        search: active.search,
-        dateFrom,
-        dateTo,
-        branches,
-      }),
-    [active.rows, active.search, dateFrom, dateTo, branches],
-  );
 
   const tabCounts = useMemo(() => {
     const counts: Partial<Record<SalesInvoiceTabId, number | null>> = {};
@@ -1579,6 +1637,7 @@ export default function SalesInvoicesPageClient() {
               setSendEmailInvoiceId(String(row.salesInvoiceId || row.invoiceId));
               setSendEmailOpen(true);
             }}
+            invoiceNoFilter={invoiceNoFilter}
           />
         </AccountsPageShell>
       </AccountsColumnFilterProvider>
