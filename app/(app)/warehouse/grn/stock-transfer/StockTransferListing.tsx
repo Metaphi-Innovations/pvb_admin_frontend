@@ -8,7 +8,7 @@ import {
   SortState,
   ActionItemConfig,
 } from "@/components/listing/types";
-import { Eye, FileCheck2, FilePlus2, Pencil } from "lucide-react";
+import { Eye, FileCheck2, FilePlus2, Pencil, RotateCcw } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
@@ -33,6 +33,7 @@ import {
   exportStockTransferReceivedExcel,
 } from "../shared/grn-excel-export";
 import { showToast } from "@/lib/toast";
+import { GrnCancelDialog, useGrnCancel } from "../shared/grn-cancel";
 
 type ReceivedStockTransferGrnRow = {
   id: string;
@@ -168,6 +169,7 @@ export function StockTransferListing() {
     total: grnTotal,
     loading: grnLoading,
     error: grnError,
+    refetch: refetchReceived,
   } = useGrnListData({
     tabContext: receivedTabContext,
     filters: grnFilters,
@@ -176,6 +178,8 @@ export function StockTransferListing() {
     pageSize: grnPageSize,
     enabled: subTab === "received",
   });
+  const { cancelTarget, setCancelTarget, cancelling, confirmCancel } =
+    useGrnCancel(refetchReceived);
 
   const receivedRows = useMemo(() => grnItems.map(mapToReceivedRow), [grnItems]);
 
@@ -518,7 +522,9 @@ export function StockTransferListing() {
       onClick: (row) => {
         if (row.grnId) router.push(`/warehouse/grn/stock-transfer/${row.grnId}/edit`);
       },
-      hide: (row) => row.grnRecord?.status === "qc_completed",
+      hide: (row) =>
+        row.grnRecord?.status === "qc_completed" ||
+        row.grnRecord?.status === "cancelled",
     },
     {
       label: "Perform QC",
@@ -531,7 +537,25 @@ export function StockTransferListing() {
         }
         if (row.grnId) router.push(`/warehouse/qc/create?grnId=${row.grnId}`);
       },
-      hide: (row) => row.grnRecord?.status === "qc_completed",
+      hide: (row) =>
+        row.grnRecord?.status === "qc_completed" ||
+        row.grnRecord?.status === "cancelled",
+    },
+    {
+      label: "Cancel GRN",
+      action: "cancel",
+      icon: RotateCcw,
+      onClick: (row) => {
+        if (!row.grnId) return;
+        setCancelTarget({
+          id: row.grnId,
+          grnNo: row.grnRecord?.grnNo,
+          status: row.grnRecord?.status,
+        });
+      },
+      hide: (row) =>
+        row.grnRecord?.status === "cancelled" ||
+        row.grnRecord?.status === "qc_completed",
     },
   ];
 
@@ -616,6 +640,12 @@ export function StockTransferListing() {
             emptyMessage="No received stock transfer GRNs found"
             searchPlaceholder="Search stock transfer GRN..."
             onExport={() => void handleExport()}
+          />
+          <GrnCancelDialog
+            target={cancelTarget}
+            loading={cancelling}
+            onClose={() => setCancelTarget(null)}
+            onConfirm={() => void confirmCancel()}
           />
         </div>
       )}

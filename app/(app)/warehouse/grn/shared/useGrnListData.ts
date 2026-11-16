@@ -40,6 +40,8 @@ export function useGrnListData({
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [refreshToken, setRefreshToken] = useState(0);
+  const refetch = useCallback(() => setRefreshToken((n) => n + 1), []);
 
   const apiFilters = useMemo(
     () => buildGrnApiFilters(debouncedFilters, tabContext, destinationWarehouse),
@@ -103,6 +105,7 @@ export function useGrnListData({
     apiFilters,
     tabContext.sourceType,
     tabContext.status,
+    refreshToken,
   ]);
 
   return {
@@ -111,6 +114,7 @@ export function useGrnListData({
     loading: enabled && (loading || isDebouncing),
     error,
     debouncedFilters,
+    refetch,
   };
 }
 

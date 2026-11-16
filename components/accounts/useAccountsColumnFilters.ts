@@ -93,7 +93,7 @@ export function useAccountsColumnFilters<T>({
 
   const getValueCounts = useCallback(
     (columnKey: string): ColumnValueOption[] =>
-      // Uncapped: a hard 200 limit dropped later-sorted invoice series (e.g. SI/27 after SI/19–24).
+      // Always return every distinct value — no option cap.
       collectColumnValueCounts(rows, columnKey, getCellValue, undefined, getFilterValue),
     [rows, getCellValue, getFilterValue],
   );

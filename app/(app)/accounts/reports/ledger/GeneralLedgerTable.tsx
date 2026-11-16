@@ -25,6 +25,11 @@ import {
   formatGlDisplayDate,
 } from "./general-ledger-api-view";
 
+function textOrDash(value: string | null | undefined): string {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : "—";
+}
+
 export function GeneralLedgerTable({
   openingRow,
   transactionRows,
@@ -55,13 +60,15 @@ export function GeneralLedgerTable({
   return (
     <>
       <AccountsTableScroll className="flex-1 min-h-0 h-full">
-        <AccountsTable minWidth={960} className="text-xs financial-report">
+        <AccountsTable minWidth={1100} className="text-xs financial-report">
           <AccountsTableHead>
             <AccountsTableHeadRow>
               <FinancialReportHeadCell>Date</FinancialReportHeadCell>
               <FinancialReportHeadCell>Particulars</FinancialReportHeadCell>
               <FinancialReportHeadCell>Transaction Type</FinancialReportHeadCell>
               <FinancialReportHeadCell>Voucher No.</FinancialReportHeadCell>
+              <FinancialReportHeadCell>Warehouse</FinancialReportHeadCell>
+              <FinancialReportHeadCell>TM</FinancialReportHeadCell>
               <FinancialReportHeadCell align="right">Debit</FinancialReportHeadCell>
               <FinancialReportHeadCell align="right">Credit</FinancialReportHeadCell>
               <FinancialReportHeadCell align="right">Running Balance</FinancialReportHeadCell>
@@ -83,7 +90,7 @@ export function GeneralLedgerTable({
           </AccountsTableBody>
           <AccountsTableFoot>
             <AccountsTableRow className="bg-muted/20 font-semibold border-t border-border/80">
-              <AccountsTableCell colSpan={4} className="text-xs py-2 font-bold">
+              <AccountsTableCell colSpan={6} className="text-xs py-2 font-bold">
                 Total
               </AccountsTableCell>
               <AccountsTableCell align="right" money className="py-2 font-bold">
@@ -98,7 +105,7 @@ export function GeneralLedgerTable({
               <AccountsTableCell />
             </AccountsTableRow>
             <AccountsTableRow className="bg-brand-50/30 font-semibold border-t-2 border-foreground/20">
-              <AccountsTableCell colSpan={4} className="text-xs py-2 font-bold">
+              <AccountsTableCell colSpan={6} className="text-xs py-2 font-bold">
                 Grand Total
               </AccountsTableCell>
               <AccountsTableCell align="right" money className="py-2 font-bold">
@@ -155,7 +162,7 @@ function GeneralLedgerTableRow({
         {formatGlDisplayDate(row.date)}
       </AccountsTableCell>
       <AccountsTableCell
-        className={cn("max-w-[280px] truncate", isBalanceRow && "font-semibold")}
+        className={cn("max-w-[240px] truncate", isBalanceRow && "font-semibold")}
         title={row.narration ? `${row.particulars} — ${row.narration}` : row.particulars}
       >
         {row.particulars}
@@ -169,6 +176,12 @@ function GeneralLedgerTableRow({
         ) : (
           <span className="font-mono text-xs font-semibold text-brand-700">{row.voucher_number}</span>
         )}
+      </AccountsTableCell>
+      <AccountsTableCell className="whitespace-nowrap text-muted-foreground">
+        {isBalanceRow ? "—" : textOrDash(row.warehouse_name)}
+      </AccountsTableCell>
+      <AccountsTableCell className="whitespace-nowrap text-muted-foreground">
+        {isBalanceRow ? "—" : textOrDash(row.tm_name)}
       </AccountsTableCell>
       <AccountsTableCell align="right" money>
         {formatApiMoneyOrDash(row.debit)}

@@ -383,6 +383,7 @@ export const API_ENDPOINTS = {
       CREATE: "/sales/sales-return/create",
       PREVIEW_NUMBER: "/sales/sales-return/preview-number",
       DETAILS: (id: string) => `/sales/sales-return/${id}`,
+      CANCEL: (id: string) => `/sales/sales-return/${id}/cancel`,
     },
     SAMPLE_RETURN: {
       LIST: "/sales/sample-return/list",
@@ -390,6 +391,7 @@ export const API_ENDPOINTS = {
       FILTER: "/sales/sample-return/filter",
       CREATE: "/sales/sample-return/create",
       DETAILS: (id: string) => `/sales/sample-return/${id}`,
+      CANCEL: (id: string) => `/sales/sample-return/${id}/cancel`,
     },
   },
   USER_MANAGEMENT: {
@@ -699,6 +701,7 @@ export const API_ENDPOINTS = {
       DETAILS: (id: string) => `/warehouse/grnqc/grn/${id}`,
       CREATE: "/warehouse/grnqc/grn/create",
       UPDATE: (id: string) => `/warehouse/grnqc/grn/update/${id}`,
+      CANCEL: (id: string) => `/warehouse/grnqc/grn/${id}/cancel`,
       PREVIEW_NUMBER: "/warehouse/grnqc/grn/preview-number",
     },
     QC: {

@@ -24,7 +24,7 @@ export interface PurchaseOrder {
 }
 
 /** Warehouse-only GRN lifecycle — no procurement matching states */
-export type GrnStatus = "pending_qc" | "qc_in_progress" | "qc_completed";
+export type GrnStatus = "pending_qc" | "qc_in_progress" | "qc_completed" | "cancelled";
 
 export interface GrnItem {
   productId: string;

@@ -43,6 +43,11 @@ const STATUS_CONFIG = {
     label: "QC Completed",
     variant: "active" as const,
   },
+  cancelled: {
+    bg: "bg-slate-50 text-slate-600 border-slate-200",
+    label: "Cancelled",
+    variant: "blocked" as const,
+  },
 };
 
 function DocumentStatusRow({

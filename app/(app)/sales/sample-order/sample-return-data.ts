@@ -25,7 +25,15 @@ export interface SampleReturnRecord {
   products: SampleReturnProduct[];
   totalAmount: number;
   remarks?: string;
-  status: "pending" | "approved" | "processed";
+  status:
+    | "pending"
+    | "approved"
+    | "processed"
+    | "sample_returned"
+    | "partially_received"
+    | "received"
+    | "cancelled"
+    | string;
 }
 
 export const KEY_SAMPLE_RETURNS = "ds_sample_returns";
