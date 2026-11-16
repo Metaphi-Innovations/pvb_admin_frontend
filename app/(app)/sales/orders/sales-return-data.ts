@@ -1,4 +1,11 @@
-export type SalesReturnStatus = "pending_approval" | "approved" | "rejected";
+export type SalesReturnStatus =
+  | "pending_approval"
+  | "approved"
+  | "rejected"
+  | "sales_returned"
+  | "partially_received"
+  | "received"
+  | "cancelled";
 
 export interface SalesReturnProduct {
   product: string;

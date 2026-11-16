@@ -61,6 +61,9 @@ export interface GeneralLedgerApiRow {
   voucher_type: string | null;
   voucher_number: string | null;
   voucher_id: string | null;
+  warehouse_name: string | null;
+  state_name: string | null;
+  tm_name: string | null;
   debit: string;
   credit: string;
   running_balance: string;

@@ -362,4 +362,17 @@ export const SalesReturnService = {
     );
     return response.data?.data || [];
   },
+
+  async cancel(id: string): Promise<{ id: string; return_number: string }> {
+    const response = await axiosInstance.post(
+      API_ENDPOINTS.SALES.SALES_RETURN.CANCEL(id),
+    );
+    const payload = response.data as Record<string, unknown>;
+    assertSuccess(payload, "Failed to cancel sales return.");
+    const data = asRecord(payload.data);
+    return {
+      id: asString(data.id),
+      return_number: asString(data.return_number),
+    };
+  },
 };
