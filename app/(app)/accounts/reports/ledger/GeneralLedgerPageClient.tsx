@@ -561,7 +561,11 @@ function GeneralLedgerPageContent() {
     : null;
   const sourceHref = sourceReport ? (SOURCE_HREFS[sourceReport] ?? null) : null;
 
+  /** User-selected voucher/Dr-Cr filters only (not GST cancelled-pair hide). */
   const filtersActive = voucherTypes.length > 0 || debitCredit !== "all";
+  /** Prefer API hint so GST period footer matches visible rows. */
+  const useFilteredPeriodTotals =
+    filtersActive || Boolean(statement?.summary.uses_filtered_period);
   const scopeNote =
     statement?.notes.opening_balance_branch_limitation ||
     groupReport?.notes.opening_balance_branch_limitation ||
@@ -917,7 +921,7 @@ function GeneralLedgerPageContent() {
                   transactionRows={statement.transactions}
                   closingRow={statement.closing_row}
                   summary={statement.summary}
-                  filtersActive={filtersActive}
+                  filtersActive={useFilteredPeriodTotals}
                   page={statement.pagination.page}
                   pageSize={statement.pagination.page_size}
                   totalTransactions={statement.pagination.total_transactions}

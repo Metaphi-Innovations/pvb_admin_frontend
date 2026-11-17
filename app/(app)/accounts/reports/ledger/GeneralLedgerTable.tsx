@@ -55,7 +55,11 @@ export function GeneralLedgerTable({
   onPageSizeChange: (pageSize: number) => void;
   onVoucherClick?: (row: GeneralLedgerApiRow) => void;
 }) {
-  const visibleTotals = filtersActive ? summary.filtered_period : summary.period;
+  const useFilteredTotals =
+    filtersActive || Boolean(summary.uses_filtered_period);
+  const visibleTotals = useFilteredTotals
+    ? summary.filtered_period
+    : summary.period;
 
   return (
     <>

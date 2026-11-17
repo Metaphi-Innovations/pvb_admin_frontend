@@ -45,6 +45,7 @@ export default function AddSalesOrderPage() {
 		lineItems: [],
 		warehouseId: null,
 		warehouseName: "",
+		shipTo: { name: "", address: "", city: "", state: "", pincode: "", mobile: "" },
 	});
 	const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -108,9 +109,19 @@ export default function AddSalesOrderPage() {
 				lastName: s.last_name || "",
 				fullName: `${s.first_name || ""} ${s.last_name || ""}`.trim() || s.username || "",
 				email: s.email || "",
-				role: s.role?.role_name || s.role_type || "",
-				status: s.is_active ? "active" : "inactive",
-				department: s.department?.department_name || "",
+				mobile: s.mobile_number || "",
+				address: s.address || "",
+				address_1: s.address_1 || "",
+				current_address: s.current_address || "",
+				current_address_1: s.current_address_1 || "",
+				permanent_address: s.permanent_address || "",
+				permanent_address_1: s.permanent_address_1 || "",
+				city: s.city || "",
+				state: s.state || "",
+				pincode: s.pincode || "",
+				role: s.role?.role_name || s.role_name || s.role_type || "",
+				status: s.is_active === false ? "inactive" : "active",
+				department: s.department?.department_name || s.department_name || "",
 			}));
 			setSalesmen(mapped as any);
 		}

@@ -17,6 +17,13 @@ import { Plus, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { AccountsMoneyInput } from "@/components/accounts/AccountsMoneyInput";
 import { GenericLedgerHierarchySelect } from "@/components/accounts/GenericLedgerHierarchySelect";
@@ -35,6 +42,11 @@ const NUM_INPUT_CLASS =
   "h-8 text-xs tabular-nums text-right w-full [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none";
 
 const CHARGE_LEDGER_HEADS = ["INC", "EXP"] as const;
+
+const CHARGE_TYPE_OPTIONS: { value: InvoiceChargeEffect; label: string }[] = [
+  { value: "ADD", label: "Charge" },
+  { value: "DEDUCT", label: "Discount" },
+];
 
 function ChargeTableReadonly({
   value,
@@ -129,21 +141,34 @@ const ChargeRow = memo(function ChargeRow({
         ) : null}
       </td>
       {allowAdditionalDiscount ? (
-        <td className={cn(cellClass, "min-w-[110px] w-[120px]")}>
-          <select
-            className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs"
-            disabled={disabled}
+        <td className={cn(cellClass, "min-w-[128px] w-[140px]")}>
+          <Select
             value={chargeEffect}
-            onChange={(e) =>
+            disabled={disabled}
+            onValueChange={(value) =>
               onUpdate(row.id, {
-                chargeEffect: e.target.value as InvoiceChargeEffect,
+                chargeEffect: value as InvoiceChargeEffect,
               })
             }
-            aria-label="Charge type"
           >
-            <option value="ADD">Charge</option>
-            <option value="DEDUCT">Discount</option>
-          </select>
+            <SelectTrigger
+              className="h-8 w-full px-2 text-xs"
+              aria-label="Charge type"
+            >
+              <SelectValue placeholder="Select type…" />
+            </SelectTrigger>
+            <SelectContent className="text-xs min-w-[140px]">
+              {CHARGE_TYPE_OPTIONS.map((option) => (
+                <SelectItem
+                  key={option.value}
+                  value={option.value}
+                  className="text-xs font-normal"
+                >
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </td>
       ) : null}
       <td className={cn(cellClass, "min-w-[240px] w-[260px]")}>
@@ -180,13 +205,24 @@ const ChargeRow = memo(function ChargeRow({
         />
       </td>
       <td className={cn(cellClass, "min-w-[72px] w-[80px]")}>
-        <div className="flex items-center justify-center h-8">
-          <Switch
-            checked={gstOn}
-            disabled={disabled || isDeduct}
-            onCheckedChange={(gstApplicable) => onUpdate(row.id, { gstApplicable })}
-          />
-        </div>
+        {isDeduct ? (
+          <div
+            className="flex h-8 items-center justify-center text-xs text-muted-foreground"
+            title="GST is not applied on additional discount"
+          >
+            —
+          </div>
+        ) : (
+          <div className="flex items-center justify-center h-8">
+            <Switch
+              checked={gstOn}
+              disabled={disabled}
+              onCheckedChange={(gstApplicable) =>
+                onUpdate(row.id, { gstApplicable })
+              }
+            />
+          </div>
+        )}
       </td>
       {showGstColumns ? (
         <>
@@ -332,9 +368,14 @@ function GoodsInvoiceAdditionalChargesEditorInner({
     [hsnDropdown],
   );
 
-  /** Show GST-dependent columns when any row has GST Applicable on. */
+  /** Show GST-dependent columns when any charge row has GST Applicable on. */
   const showGstColumns = useMemo(
-    () => expenses.some((row) => row.gstApplicable),
+    () =>
+      expenses.some(
+        (row) =>
+          normalizeInvoiceChargeEffect(row.chargeEffect) !== "DEDUCT" &&
+          row.gstApplicable,
+      ),
     [expenses],
   );
 
@@ -370,7 +411,7 @@ function GoodsInvoiceAdditionalChargesEditorInner({
 
   const colClassByHeader: Record<string, string> = {
     Particular: "min-w-[180px] w-[200px]",
-    Type: "min-w-[110px] w-[120px]",
+    Type: "min-w-[128px] w-[140px]",
     "Additional Charges Ledger": "min-w-[240px] w-[260px]",
     Amount: "min-w-[120px] w-[130px]",
     GST: "min-w-[72px] w-[80px]",

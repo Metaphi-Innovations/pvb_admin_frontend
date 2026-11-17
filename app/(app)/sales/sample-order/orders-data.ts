@@ -3,15 +3,124 @@ import { loadWarehouses } from "@/app/(app)/masters/warehouse/warehouse-data";
 import { resolveSalesOrderDealerPrice } from "@/app/(app)/masters/scheme/product-discount-scheme";
 
 export const SAMPLE_ORDER_APPROVAL_ENABLED = true;
-export const SAMPLE_BILLING_PARTY = "Paramverse Bio Head Office";
+export const SAMPLE_BILLING_PARTY = "PARAMVERSE BIO PRIVATE LIMITED";
 
+/** Paramverse HO — always used as Sample Order Bill To (not customer branch). */
 export const SAMPLE_BILLING_DETAILS = {
-  companyName: "Paramverse Bio Head Office",
-  address: "Plot 12, Agri Park, Hinjawadi Phase 2, Pune, Maharashtra 411057",
-  gstin: "27AABCD1234E1Z5",
-  mobile: "+91 98765 43210",
-  contactNo: "+91 20 4567 8900",
+  companyName: "PARAMVERSE BIO PRIVATE LIMITED",
+  address:
+    "402, 4th Floor, Omega Tower, Hiranandani Link Road, Hiranandani Gardens, Opp. Colgate Palmolive",
+  city: "Mumbai",
+  state: "Maharashtra",
+  pincode: "400076",
+  gstin: "27AAQCP4960M1ZL",
+  pan: "AAQCP4960M",
+  mobile: "",
+  contactNo: "022-41276000/01/02/03",
+  email: "info@paramverse.com",
 };
+
+export type SampleShipToForm = {
+  name: string;
+  address: string;
+  city: string;
+  state: string;
+  pincode: string;
+  mobile: string;
+};
+
+export function emptySampleShipTo(): SampleShipToForm {
+  return { name: "", address: "", city: "", state: "", pincode: "", mobile: "" };
+}
+
+/** Build Ship To from Territory Manager / salesperson user master fields. */
+export function shipToFromTerritoryManager(tm: {
+  fullName?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
+  mobile?: string | null;
+  mobile_number?: string | null;
+  address?: string | null;
+  address_1?: string | null;
+  currentAddress?: string | null;
+  currentAddressLine1?: string | null;
+  currentAddressLine2?: string | null;
+  current_address?: string | null;
+  current_address_1?: string | null;
+  permanent_address?: string | null;
+  permanent_address_1?: string | null;
+  city?: string | null;
+  state?: string | null;
+  pincode?: string | null;
+} | null | undefined): SampleShipToForm {
+  if (!tm) return emptySampleShipTo();
+  const name =
+    (tm.fullName || "").trim() ||
+    `${tm.firstName || tm.first_name || ""} ${tm.lastName || tm.last_name || ""}`.trim();
+  const address = [
+    tm.currentAddressLine1 ||
+      tm.current_address ||
+      tm.currentAddress ||
+      tm.address ||
+      "",
+    tm.currentAddressLine2 || tm.current_address_1 || tm.address_1 || "",
+  ]
+    .map((p) => String(p || "").trim())
+    .filter(Boolean)
+    .join(", ");
+  const fallbackAddress = [
+    tm.permanent_address || "",
+    tm.permanent_address_1 || "",
+  ]
+    .map((p) => String(p || "").trim())
+    .filter(Boolean)
+    .join(", ");
+  return {
+    name,
+    address: address || fallbackAddress,
+    city: String(tm.city || "").trim(),
+    state: String(tm.state || "").trim(),
+    pincode: String(tm.pincode || "").trim(),
+    mobile: String(tm.mobile || tm.mobile_number || "").trim(),
+  };
+}
+
+export function sampleShipToToPayload(shipTo?: SampleShipToForm | null) {
+  if (!shipTo) return null;
+  const name = shipTo.name.trim();
+  const address = shipTo.address.trim();
+  const city = shipTo.city.trim();
+  const state = shipTo.state.trim();
+  const pincode = shipTo.pincode.trim();
+  const mobile = shipTo.mobile.trim();
+  if (!name && !address && !city && !state && !pincode && !mobile) return null;
+  return {
+    name: name || null,
+    address: address || null,
+    city: city || null,
+    state: state || null,
+    pincode: pincode || null,
+    country: "India",
+    mobile: mobile || null,
+  };
+}
+
+export function buildSampleOrderHoBillTo() {
+  return {
+    name: SAMPLE_BILLING_DETAILS.companyName,
+    address: SAMPLE_BILLING_DETAILS.address,
+    city: SAMPLE_BILLING_DETAILS.city,
+    state: SAMPLE_BILLING_DETAILS.state,
+    pincode: SAMPLE_BILLING_DETAILS.pincode,
+    country: "India",
+    gstin: SAMPLE_BILLING_DETAILS.gstin,
+    pan: SAMPLE_BILLING_DETAILS.pan,
+    mobile: SAMPLE_BILLING_DETAILS.mobile || null,
+    email: SAMPLE_BILLING_DETAILS.email,
+  };
+}
 
 export type SamplePurpose =
   | "farmer_demo"
@@ -159,7 +268,7 @@ export const EXPENSE_DISCOUNT_TYPE_OPTIONS: { value: ExpenseDiscountType; label:
 export interface SalesOrder {
   id: string | number;
   soNumber: string;
-  customerId: string | number;
+  customerId?: string | number | null;
   customerName: string;
   customerCode: string;
   territory: string;
@@ -214,7 +323,17 @@ export interface SalesOrder {
   recipientContact?: string;
   recipientAddress?: string;
   billingParty?: string;
-  billTo?: { address: string; city: string; state: string; pincode: string };
+  billTo?: {
+    name?: string;
+    address: string;
+    city: string;
+    state: string;
+    pincode: string;
+    gstin?: string;
+    mobile?: string;
+    email?: string;
+  };
+  shipTo?: SampleShipToForm;
 }
 
 export interface ProductCatalogItem {
@@ -400,9 +519,12 @@ export interface SalesOrderFormValues {
   remarks?: string;
   billToAddressId?: string;
   shipToAddressId?: string;
+  /** Free-text TM / visit Ship To (optional until Delivery Challan). */
+  shipTo?: SampleShipToForm;
 }
 
 export function orderToFormValues(order: SalesOrder): SalesOrderFormValues {
+  const ship = (order as SalesOrder & { shipTo?: Partial<SampleShipToForm> & { mobile?: string } }).shipTo;
   return {
     orderDate: order.orderDate,
     customerId: order.customerId ?? null,
@@ -414,8 +536,16 @@ export function orderToFormValues(order: SalesOrder): SalesOrderFormValues {
     })),
     warehouseId: order.warehouseId ?? null,
     warehouseName: order.warehouseName || "",
-    billToAddressId: "", // will be set based on default if loading
+    billToAddressId: "",
     shipToAddressId: "",
+    shipTo: {
+      name: ship?.name || order.recipientName || "",
+      address: ship?.address || order.recipientAddress || "",
+      city: ship?.city || "",
+      state: ship?.state || "",
+      pincode: ship?.pincode || "",
+      mobile: ship?.mobile || order.recipientContact || "",
+    },
   };
 }
 

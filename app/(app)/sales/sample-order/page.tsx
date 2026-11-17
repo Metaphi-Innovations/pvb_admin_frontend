@@ -32,6 +32,7 @@ import {
   Search,
   Check,
   X,
+  Upload,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
@@ -300,6 +301,8 @@ export default function SalesOrdersPage() {
   const [cancelOrder, setCancelOrder] = useState<SalesOrder | null>(null);
   const [approveOrder, setApproveOrder] = useState<SalesOrder | null>(null);
   const [rejectOrder, setRejectOrder] = useState<SalesOrder | null>(null);
+  const [bulkUploading, setBulkUploading] = useState(false);
+  const bulkFileInputRef = useRef<HTMLInputElement>(null);
 
   const apiFilters = useMemo(() => {
     const f: Record<string, any> = {};
@@ -453,6 +456,35 @@ export default function SalesOrdersPage() {
   }, [allCountData, draftCountData, approvalCountData, rejectedCountData, returnsCountData]);
 
   const showToast = (msg: string, type: "success" | "error" = "success") => setToast({ msg, type });
+
+  const handleBulkUpload = async (file: File | null) => {
+    if (!file) return;
+    setBulkUploading(true);
+    try {
+      const result = await SampleOrderService.bulkUpload(file);
+      if (result.success) {
+        const created = Number(result.summary?.sampleOrdersCreated ?? result.created?.length ?? 0);
+        showToast(
+          created > 0
+            ? `Bulk upload successful — ${created} sample order(s) created.`
+            : result.message || "Bulk upload successful.",
+        );
+        refetch();
+      } else {
+        const firstError = result.errors?.[0];
+        const detail =
+          firstError && typeof firstError.message === "string"
+            ? ` ${firstError.message}`
+            : "";
+        showToast((result.message || "Bulk upload failed.") + detail, "error");
+      }
+    } catch (e: unknown) {
+      showToast(getErrorMessage(e, "Sample Order bulk upload failed."), "error");
+    } finally {
+      setBulkUploading(false);
+      if (bulkFileInputRef.current) bulkFileInputRef.current.value = "";
+    }
+  };
 
   const handleTabChange = (tab: string) => {
     setActiveTab(tab as OrderListTab);
@@ -844,7 +876,31 @@ export default function SalesOrdersPage() {
           }
         />
       ) : (
-        <div>
+        <div className="space-y-2">
+          <div className="flex items-center justify-end gap-2">
+            <input
+              ref={bulkFileInputRef}
+              type="file"
+              accept=".xlsx,.xls,.xlsm"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0] || null;
+                void handleBulkUpload(file);
+              }}
+            />
+            <button
+              type="button"
+              disabled={bulkUploading}
+              onClick={() => bulkFileInputRef.current?.click()}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted/50",
+                bulkUploading && "opacity-60 cursor-not-allowed",
+              )}
+            >
+              <Upload className="w-3.5 h-3.5" />
+              {bulkUploading ? "Uploading…" : "Bulk Upload"}
+            </button>
+          </div>
           <MasterListing<SalesOrder>
             columns={columns}
             data={ordersList}

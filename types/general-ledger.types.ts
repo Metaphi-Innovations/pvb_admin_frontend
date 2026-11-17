@@ -78,6 +78,8 @@ export interface GeneralLedgerSummary {
   opening: GeneralLedgerAmountSide;
   period: GeneralLedgerDebitCredit;
   filtered_period: GeneralLedgerDebitCredit;
+  /** True when visible period totals should use filtered_period (GST cancelled-pair hide or user filters). */
+  uses_filtered_period?: boolean;
   closing: GeneralLedgerAmountSide;
   grand_total: GeneralLedgerDebitCredit;
   has_period_transactions: boolean;
