@@ -2,9 +2,13 @@ import { axiosInstance } from "@/api/axios";
 import { API_ENDPOINTS } from "@/api/endpoints";
 import type { SalesOrder, SalesOrderLineItem } from "@/app/(app)/sales/sample-order/orders-data";
 import {
+  buildSampleOrderHoBillTo,
+  sampleShipToToPayload,
+} from "@/app/(app)/sales/sample-order/orders-data";
+import {
   type SalesOrderFormValues,
 } from "@/app/(app)/sales/sample-order/components/SampleOrderForm";
-import { resolveBillShipObjects, SalesOrderService } from "./sales-order.service";
+import { SalesOrderService } from "./sales-order.service";
 
 function asString(value: unknown): string {
   if (value === null || value === undefined) return "";
@@ -150,10 +154,22 @@ export function mapBackendSampleOrder(raw: any): SalesOrder {
     recipientAddress: raw.recipient_address || undefined,
     billingParty: raw.billing_party || undefined,
     billTo: raw.bill_to ? {
-      address: raw.bill_to.address || "",
-      city: raw.bill_to.city || "",
-      state: raw.bill_to.state || "",
-      pincode: raw.bill_to.pincode || "",
+      name: asString(raw.bill_to.name),
+      address: asString(raw.bill_to.address || raw.bill_to.address_line_1),
+      city: asString(raw.bill_to.city),
+      state: asString(raw.bill_to.state),
+      pincode: asString(raw.bill_to.pincode),
+      gstin: asString(raw.bill_to.gstin),
+      mobile: asString(raw.bill_to.mobile || raw.bill_to.phone),
+      email: asString(raw.bill_to.email),
+    } : undefined,
+    shipTo: raw.ship_to ? {
+      name: asString(raw.ship_to.name),
+      address: asString(raw.ship_to.address || raw.ship_to.address_line_1),
+      city: asString(raw.ship_to.city),
+      state: asString(raw.ship_to.state),
+      pincode: asString(raw.ship_to.pincode),
+      mobile: asString(raw.ship_to.mobile || raw.ship_to.phone),
     } : undefined,
     packingListNumber: Array.isArray(raw.packing_lists) && raw.packing_lists.length > 0 
       ? asString(raw.packing_lists[0].packing_number) 
@@ -226,8 +242,6 @@ function buildBackendWriteBody(
     };
   }, { total_qty: 0, product_subtotal: 0, discount_total: 0, taxable_amount: 0, tax_amount: 0, grand_total: 0 });
 
-  const { billToObj, shipToObj } = resolveBillShipObjects(form, customerDetails);
-
   return {
     order_no: options.orderNo,
     order_date: form.orderDate ? new Date(form.orderDate).toISOString() : new Date().toISOString(),
@@ -236,8 +250,8 @@ function buildBackendWriteBody(
     customer_id: form.customerId,
     warehouse_id: form.warehouseId,
     salesperson_id: form.salesManId,
-    bill_to: billToObj,
-    ship_to: shipToObj,
+    bill_to: buildSampleOrderHoBillTo(),
+    ship_to: sampleShipToToPayload(form.shipTo),
     ...totals,
     items,
   };
@@ -328,6 +342,50 @@ export const SampleOrderService = {
       remarks: remarks || null,
     });
     return mapBackendSampleOrder(response.data?.data);
+  },
+
+  async updateShipTo(
+    id: string,
+    shipTo: {
+      name?: string | null;
+      address?: string | null;
+      city?: string | null;
+      state?: string | null;
+      pincode?: string | null;
+      mobile?: string | null;
+    } | null,
+  ): Promise<SalesOrder> {
+    const response = await axiosInstance.patch(API_ENDPOINTS.SALES.SAMPLE_ORDER.UPDATE_SHIP_TO(id), {
+      ship_to: shipTo,
+    });
+    return mapBackendSampleOrder(response.data?.data);
+  },
+
+  async bulkUpload(file: File): Promise<{
+    success: boolean;
+    message: string;
+    summary?: Record<string, unknown>;
+    errors?: Array<Record<string, unknown>>;
+    created?: Array<{ id: string; order_no: string; item_count: number }>;
+  }> {
+    const formData = new FormData();
+    formData.append("file", file);
+    const response = await axiosInstance.post(
+      API_ENDPOINTS.SALES.SAMPLE_ORDER.BULK_UPLOAD,
+      formData,
+      {
+        headers: { "Content-Type": "multipart/form-data" },
+        timeout: 10 * 60 * 1000,
+        validateStatus: (status) => status < 500,
+      },
+    );
+    return {
+      success: Boolean(response.data?.success),
+      message: asString(response.data?.message) || "Sample Order bulk upload finished.",
+      summary: response.data?.summary,
+      errors: Array.isArray(response.data?.errors) ? response.data.errors : [],
+      created: Array.isArray(response.data?.created) ? response.data.created : [],
+    };
   },
 
   async export(params: {

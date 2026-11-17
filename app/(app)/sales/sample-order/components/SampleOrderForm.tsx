@@ -26,11 +26,8 @@ import {
 	type WarehouseMaster,
 } from "@/app/(app)/masters/warehouse/warehouse-data";
 import ProductLinesEditor from "./ProductLinesEditor";
-import BillToShipToSection from "@/app/(app)/sales/orders/components/BillToShipToSection";
 import {
 	enrichCustomerFromApiDetails,
-	getCustomerAddressesForSalesOrder,
-	getDefaultBillShipAddressIds,
 	resolveSalesManIdFromCustomerDetails,
 } from "@/app/(app)/sales/orders/sales-order-address-utils";
 import { showCustomerLicenseToasts } from "@/lib/masters/customer-license-alerts";
@@ -40,6 +37,7 @@ import {
 	type ProductCatalogItem,
 	type OrderStatus,
 	SAMPLE_BILLING_DETAILS,
+	emptySampleShipTo,
 	EDITABLE_ORDER_STATUSES,
 	ORDER_STATUS_OPTIONS,
 	createEmptyLineItem,
@@ -234,8 +232,6 @@ export function validateSalesOrderForm(
 	if (!form.customerId) e.customerId = "Customer is required";
 	if (!form.salesManId) e.salesManId = "Salesperson is required";
 	if (!form.warehouseId) e.warehouseId = "Source Warehouse is required";
-	if (!form.billToAddressId) e.billToAddressId = "Bill To address is required";
-	if (!form.shipToAddressId) e.shipToAddressId = "Ship To address is required";
 	if (!form.orderDate) e.orderDate = "Order date is required";
 
 	const activeLines = form.lineItems.filter((l: any) => l.productId && l.quantity > 0);
@@ -340,46 +336,29 @@ export default function SampleOrderForm({
 		return enrichCustomerFromApiDetails(base, customerDetails);
 	}, [customers, form.customerId, customerDetails]);
 
-	const customerAddresses = useMemo(
-		() => (selectedCustomer ? getCustomerAddressesForSalesOrder(selectedCustomer as any) : []),
-		[selectedCustomer],
-	);
-
-	const billToAddresses = useMemo(() => {
-		return customerAddresses.filter((a) => a.id.includes("billing") || a.id.includes("registered") || a.id.includes("main"));
-	}, [customerAddresses]);
-
-	const shipToAddresses = useMemo(() => {
-		return customerAddresses.filter((a) => a.id.includes("shipping") || a.id.includes("registered") || a.id.includes("main"));
-	}, [customerAddresses]);
-
-	const shipToAddress = useMemo(
-		() => customerAddresses.find((a) => a.id === form.shipToAddressId) ?? null,
-		[customerAddresses, form.shipToAddressId],
-	);
+	const shipTo = form.shipTo || emptySampleShipTo();
 
 	const pricingContext = useMemo(() => {
 		if (!selectedCustomer) return null;
-		const stateName = shipToAddress?.state || selectedCustomer.stateName || "";
+		const stateName = shipTo.state || selectedCustomer.stateName || "";
 		return {
 			stateName,
 			customerMasterType: selectedCustomer.customerType || "",
 			orderDate: form.orderDate,
 		};
-	}, [selectedCustomer, shipToAddress, form.orderDate]);
+	}, [selectedCustomer, shipTo.state, form.orderDate]);
 
-	useEffect(() => {
-		if (!selectedCustomer || customerAddresses.length === 0) return;
-		const billValid = customerAddresses.some((a) => a.id === form.billToAddressId);
-		const shipValid = customerAddresses.some((a) => a.id === form.shipToAddressId);
-		if (billValid && shipValid) return;
-		const defaults = getDefaultBillShipAddressIds(customerAddresses);
-		onChange({
-			...form,
-			billToAddressId: form.billToAddressId || defaults.billToAddressId,
-			shipToAddressId: form.shipToAddressId || defaults.shipToAddressId,
-		});
-	}, [selectedCustomer, customerAddresses, form.billToAddressId, form.shipToAddressId, onChange, form]);
+	const setShipToField = (key: keyof typeof shipTo, value: string) => {
+		const nextShipTo = { ...shipTo, [key]: value };
+		const nextForm = { ...form, shipTo: nextShipTo };
+		if (key === "state" && selectedCustomer?.customerType) {
+			nextForm.lineItems = repriceSampleOrderLineItems(form.lineItems, {
+				stateName: value || selectedCustomer.stateName || "",
+				customerMasterType: selectedCustomer.customerType,
+			});
+		}
+		onChange(nextForm);
+	};
 
 	// Edit/split: seed ref so the first customer-details load does not overwrite the order's salesperson.
 	useEffect(() => {
@@ -505,17 +484,11 @@ export default function SampleOrderForm({
 						value={form.customerId !== undefined && form.customerId !== null ? form.customerId : null}
 						onChange={(id) => {
 						const c = customers.find((x) => x.id === id) as any;
-						const addressDefaults = c
-							? getDefaultBillShipAddressIds(
-									getCustomerAddressesForSalesOrder(c as any),
-								)
-							: { billToAddressId: "", shipToAddressId: "" };
 						const hadProducts = form.lineItems.some((l) => l.productId);
 						const updatedForm = {
 							...form,
 							customerId: id,
-							billToAddressId: addressDefaults.billToAddressId,
-							shipToAddressId: addressDefaults.shipToAddressId,
+							shipTo: form.shipTo || emptySampleShipTo(),
 							// Clear products when customer changes
 							lineItems: hadProducts ? [] : form.lineItems,
 						};
@@ -569,32 +542,83 @@ export default function SampleOrderForm({
 				/>
 			</div>
 
-			<div className="space-y-1.5">
-				{selectedCustomer && (
-					<BillToShipToSection
-						billToAddressId={form.billToAddressId ?? ""}
-						shipToAddressId={form.shipToAddressId ?? ""}
-						onBillToChange={(id) => set("billToAddressId", id)}
-						onShipToChange={(id) => {
-							const addr = shipToAddresses.find((a) => a.id === id);
-							const stateName = addr?.state || selectedCustomer?.stateName || "";
-							const nextForm = { ...form, shipToAddressId: id };
-							if (selectedCustomer?.customerType) {
-								nextForm.lineItems = repriceSampleOrderLineItems(
-									form.lineItems,
-									{
-										stateName,
-										customerMasterType: selectedCustomer.customerType,
-									}
-								);
-							}
-							onChange(nextForm);
-						}}
-						billOptions={billToAddresses}
-						shipOptions={shipToAddresses}
-						errors={errors}
-					/>
-				)}
+			<div className="space-y-3">
+				<div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+					<div className="rounded-lg border border-border bg-muted/20 p-3 space-y-1.5">
+						<p className="text-xs font-semibold text-foreground">Bill To (Paramverse HO)</p>
+						<p className="text-[11px] text-muted-foreground">
+							Fixed company billing address for sample issues.
+						</p>
+						<p className="text-xs font-medium text-foreground">{SAMPLE_BILLING_DETAILS.companyName}</p>
+						<p className="text-[11px] text-muted-foreground leading-snug">
+							{[SAMPLE_BILLING_DETAILS.address, SAMPLE_BILLING_DETAILS.city, SAMPLE_BILLING_DETAILS.state, SAMPLE_BILLING_DETAILS.pincode]
+								.filter(Boolean)
+								.join(", ")}
+						</p>
+						<p className="text-[11px] font-mono text-foreground/80">GSTIN: {SAMPLE_BILLING_DETAILS.gstin}</p>
+					</div>
+
+					<div className="rounded-lg border border-border p-3 space-y-2">
+						<div>
+							<p className="text-xs font-semibold text-foreground">Ship To (TM / visit address)</p>
+							<p className="text-[11px] text-muted-foreground">
+								Optional now — can be filled later before Delivery Challan download.
+							</p>
+						</div>
+						<div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+							<div className="sm:col-span-2 space-y-1">
+								<Label className="text-[11px]">Name</Label>
+								<Input
+									value={shipTo.name}
+									onChange={(e) => setShipToField("name", e.target.value)}
+									placeholder="TM / recipient name"
+									className="h-8 text-xs"
+								/>
+							</div>
+							<div className="sm:col-span-2 space-y-1">
+								<Label className="text-[11px]">Address</Label>
+								<Input
+									value={shipTo.address}
+									onChange={(e) => setShipToField("address", e.target.value)}
+									placeholder="Visit / delivery address"
+									className="h-8 text-xs"
+								/>
+							</div>
+							<div className="space-y-1">
+								<Label className="text-[11px]">City</Label>
+								<Input
+									value={shipTo.city}
+									onChange={(e) => setShipToField("city", e.target.value)}
+									className="h-8 text-xs"
+								/>
+							</div>
+							<div className="space-y-1">
+								<Label className="text-[11px]">State</Label>
+								<Input
+									value={shipTo.state}
+									onChange={(e) => setShipToField("state", e.target.value)}
+									className="h-8 text-xs"
+								/>
+							</div>
+							<div className="space-y-1">
+								<Label className="text-[11px]">Pincode</Label>
+								<Input
+									value={shipTo.pincode}
+									onChange={(e) => setShipToField("pincode", e.target.value)}
+									className="h-8 text-xs"
+								/>
+							</div>
+							<div className="space-y-1">
+								<Label className="text-[11px]">Mobile</Label>
+								<Input
+									value={shipTo.mobile}
+									onChange={(e) => setShipToField("mobile", e.target.value)}
+									className="h-8 text-xs"
+								/>
+							</div>
+						</div>
+					</div>
+				</div>
 
 				{stockError && (
 					<p className="flex items-center gap-1 text-[11px] text-red-500">

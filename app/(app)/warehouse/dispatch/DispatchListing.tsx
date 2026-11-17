@@ -67,6 +67,7 @@ import {
 import { getSampleOrderByDocumentNo } from "@/app/(app)/sales/sample-order/packing-sync";
 import { downloadProformaInvoice } from "@/app/(app)/sales/sample-order/pi-document";
 import { SendChallanEmailModal } from "./components/SendChallanEmailModal";
+import { SampleShipToBeforeChallanModal } from "./components/SampleShipToBeforeChallanModal";
 import { Toast } from "@/app/(app)/procurement/components/ProcurementUI";
 
 function asText(value: unknown): string {
@@ -208,7 +209,51 @@ export function DispatchListing({ selectedWarehouse = "All" }: DispatchListingPr
   const [deliveryTarget, setDeliveryTarget] = useState<any>(null);
   const [sendEmailDispatchId, setSendEmailDispatchId] = useState<string | null>(null);
   const [sendEmailOpen, setSendEmailOpen] = useState(false);
+  const [sampleShipToModal, setSampleShipToModal] = useState<{
+    dispatchId: string;
+    sampleOrderId: string;
+    withGoodsValue: boolean;
+  } | null>(null);
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
+
+  const openChallanForRow = useCallback(
+    async (row: DispatchRecord, withGoodsValue: boolean) => {
+      const sourceType = asText(row.source_type).toLowerCase();
+      const isSample =
+        sourceType === "sample" ||
+        subTab === "sample" ||
+        resolveWarehouseOrderType({
+          sourceDocumentType: row.sourceDocumentType,
+          source_type: row.source_type,
+          salesOrderNo: row.salesOrderNumber,
+          source_document_no: row.source_document_no,
+        }) === "sample_order";
+
+      if (isSample) {
+        let sampleOrderId = asText(row.source_id || (row as any).sourceId);
+        if (!sampleOrderId) {
+          const detail = await getDispatchById(row.id);
+          sampleOrderId = asText(detail?.source_id || detail?.sourceId);
+        }
+        if (!sampleOrderId) {
+          setToast({
+            msg: "Could not resolve Sample Order for this dispatch.",
+            type: "error",
+          });
+          return;
+        }
+        setSampleShipToModal({
+          dispatchId: row.id,
+          sampleOrderId,
+          withGoodsValue,
+        });
+        return;
+      }
+
+      await openDeliveryChallanPreviewForDispatch(row.id, { withGoodsValue });
+    },
+    [subTab],
+  );
   // TODO: re-enable when delivery confirmation fields are stored
   // const [deliveryForm, setDeliveryForm] = useState<DeliveryDetails>({ deliveryDate: "", receiverName: "", remarks: "" });
 
@@ -616,11 +661,13 @@ export function DispatchListing({ selectedWarehouse = "All" }: DispatchListingPr
           icon: FileText,
           onClick: async (row) => {
             try {
-              await openDeliveryChallanPreviewForDispatch(row.id, {
-                withGoodsValue: true,
-              });
+              await openChallanForRow(row, true);
             } catch (err) {
               console.error(err);
+              setToast({
+                msg: err instanceof Error ? err.message : "Failed to open Delivery Challan.",
+                type: "error",
+              });
             }
           },
         },
@@ -630,11 +677,13 @@ export function DispatchListing({ selectedWarehouse = "All" }: DispatchListingPr
           icon: FileText,
           onClick: async (row) => {
             try {
-              await openDeliveryChallanPreviewForDispatch(row.id, {
-                withGoodsValue: false,
-              });
+              await openChallanForRow(row, false);
             } catch (err) {
               console.error(err);
+              setToast({
+                msg: err instanceof Error ? err.message : "Failed to open Delivery Challan.",
+                type: "error",
+              });
             }
           },
         },
@@ -801,6 +850,25 @@ export function DispatchListing({ selectedWarehouse = "All" }: DispatchListingPr
         currentSort={sort}
       />
 
+      <SampleShipToBeforeChallanModal
+        open={Boolean(sampleShipToModal)}
+        sampleOrderId={sampleShipToModal?.sampleOrderId ?? null}
+        withGoodsValue={sampleShipToModal?.withGoodsValue ?? true}
+        onClose={() => setSampleShipToModal(null)}
+        onContinue={(withGoodsValue) => {
+          const dispatchId = sampleShipToModal?.dispatchId;
+          if (!dispatchId) return;
+          void openDeliveryChallanPreviewForDispatch(dispatchId, { withGoodsValue }).catch(
+            (err) => {
+              console.error(err);
+              setToast({
+                msg: err instanceof Error ? err.message : "Failed to open Delivery Challan.",
+                type: "error",
+              });
+            },
+          );
+        }}
+      />
       <SendChallanEmailModal
         open={sendEmailOpen}
         dispatchId={sendEmailDispatchId}
