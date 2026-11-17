@@ -45,6 +45,7 @@ export default function AddSalesOrderPage() {
 		lineItems: [],
 		warehouseId: null,
 		warehouseName: "",
+		shipTo: { name: "", address: "", city: "", state: "", pincode: "", mobile: "" },
 	});
 	const [errors, setErrors] = useState<Record<string, string>>({});
 

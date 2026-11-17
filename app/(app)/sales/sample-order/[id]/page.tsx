@@ -147,20 +147,29 @@ export default function ViewSalesOrderPage() {
       const { address, city, state, pincode } = order.billTo;
       return [address, city, state, pincode].filter(Boolean).join(", ");
     }
-    if (billingCustomer) {
-      if (billingCustomer.registeredGstAddress) {
-        return billingCustomer.registeredGstAddress;
-      }
-      const mainBranch = (billingCustomer.branches?.find((b: any) => b.is_main_branch) || billingCustomer.branches?.[0]) as any;
-      if (mainBranch) {
-        const bAddr = mainBranch.billing_address_line_1 || mainBranch.billingAddress?.address || "";
-        const bCity = mainBranch.billing_city || mainBranch.billingAddress?.city || "";
-        const bState = mainBranch.billing_state || mainBranch.billingAddress?.state || "";
-        const bPin = mainBranch.billing_pincode || mainBranch.billingAddress?.pincode || "";
-        return [bAddr, bCity, bState, bPin].filter(Boolean).join(", ");
-      }
+    return [
+      SAMPLE_BILLING_DETAILS.address,
+      SAMPLE_BILLING_DETAILS.city,
+      SAMPLE_BILLING_DETAILS.state,
+      SAMPLE_BILLING_DETAILS.pincode,
+    ]
+      .filter(Boolean)
+      .join(", ");
+  };
+
+  const getShipToAddress = () => {
+    if (order?.shipTo && (order.shipTo.address || order.shipTo.city || order.shipTo.state || order.shipTo.name)) {
+      return [
+        order.shipTo.name,
+        order.shipTo.address,
+        order.shipTo.city,
+        order.shipTo.state,
+        order.shipTo.pincode,
+      ]
+        .filter(Boolean)
+        .join(", ");
     }
-    return "—";
+    return "— (set before Delivery Challan)";
   };
 
   const showToast = (msg: string, type: "success" | "error" = "success") => setToast({ msg, type });
@@ -428,12 +437,13 @@ export default function ViewSalesOrderPage() {
               <RecordKvRow label="Total Amount" value={formatRupee(order.totalAmount)} amount isLast />
             </RecordSectionCard>
 
-            <RecordSectionCard title="Billing" accent="slate">
-              <RecordKvRow label="Company" value={billingCustomer?.customerName || order?.customerName || "—"} />
-              <RecordKvRow label="Address" value={getBillingAddress()} />
-              <RecordKvRow label="GSTIN" value={billingCustomer?.gstinNo || "—"} mono />
-              <RecordKvRow label="Mobile" value={billingCustomer?.mobileNo || "—"} />
-              <RecordKvRow label="Contact No." value={billingCustomer?.mobileNo || "—"} isLast />
+            <RecordSectionCard title="Billing & Shipping" accent="slate">
+              <RecordKvRow label="Bill To" value={order.billTo?.name || SAMPLE_BILLING_DETAILS.companyName} />
+              <RecordKvRow label="Bill To Address" value={getBillingAddress()} />
+              <RecordKvRow label="Bill To GSTIN" value={order.billTo?.gstin || SAMPLE_BILLING_DETAILS.gstin} mono />
+              <RecordKvRow label="Customer" value={order.customerName || billingCustomer?.customerName || "—"} />
+              <RecordKvRow label="Ship To" value={order.shipTo?.name || "—"} />
+              <RecordKvRow label="Ship To Address" value={getShipToAddress()} isLast />
             </RecordSectionCard>
 
             <div className="space-y-4">
