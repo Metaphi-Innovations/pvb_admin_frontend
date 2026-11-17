@@ -100,9 +100,9 @@ export function SampleShipToBeforeChallanModal({
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Confirm Ship To for Delivery Challan</DialogTitle>
+          <DialogTitle>Confirm Territory Manager Ship To</DialogTitle>
           <DialogDescription>
-            Bill To stays Paramverse HO. Enter the TM visit / delivery address for
+            Bill To stays Paramverse HO. Confirm or edit the Territory Manager delivery address for
             {orderNo ? ` ${orderNo}` : " this sample dispatch"} before downloading the challan.
           </DialogDescription>
         </DialogHeader>

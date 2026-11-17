@@ -33,6 +33,60 @@ export function emptySampleShipTo(): SampleShipToForm {
   return { name: "", address: "", city: "", state: "", pincode: "", mobile: "" };
 }
 
+/** Build Ship To from Territory Manager / salesperson user master fields. */
+export function shipToFromTerritoryManager(tm: {
+  fullName?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
+  mobile?: string | null;
+  mobile_number?: string | null;
+  address?: string | null;
+  address_1?: string | null;
+  currentAddress?: string | null;
+  currentAddressLine1?: string | null;
+  currentAddressLine2?: string | null;
+  current_address?: string | null;
+  current_address_1?: string | null;
+  permanent_address?: string | null;
+  permanent_address_1?: string | null;
+  city?: string | null;
+  state?: string | null;
+  pincode?: string | null;
+} | null | undefined): SampleShipToForm {
+  if (!tm) return emptySampleShipTo();
+  const name =
+    (tm.fullName || "").trim() ||
+    `${tm.firstName || tm.first_name || ""} ${tm.lastName || tm.last_name || ""}`.trim();
+  const address = [
+    tm.currentAddressLine1 ||
+      tm.current_address ||
+      tm.currentAddress ||
+      tm.address ||
+      "",
+    tm.currentAddressLine2 || tm.current_address_1 || tm.address_1 || "",
+  ]
+    .map((p) => String(p || "").trim())
+    .filter(Boolean)
+    .join(", ");
+  const fallbackAddress = [
+    tm.permanent_address || "",
+    tm.permanent_address_1 || "",
+  ]
+    .map((p) => String(p || "").trim())
+    .filter(Boolean)
+    .join(", ");
+  return {
+    name,
+    address: address || fallbackAddress,
+    city: String(tm.city || "").trim(),
+    state: String(tm.state || "").trim(),
+    pincode: String(tm.pincode || "").trim(),
+    mobile: String(tm.mobile || tm.mobile_number || "").trim(),
+  };
+}
+
 export function sampleShipToToPayload(shipTo?: SampleShipToForm | null) {
   if (!shipTo) return null;
   const name = shipTo.name.trim();
@@ -214,7 +268,7 @@ export const EXPENSE_DISCOUNT_TYPE_OPTIONS: { value: ExpenseDiscountType; label:
 export interface SalesOrder {
   id: string | number;
   soNumber: string;
-  customerId: string | number;
+  customerId?: string | number | null;
   customerName: string;
   customerCode: string;
   territory: string;
