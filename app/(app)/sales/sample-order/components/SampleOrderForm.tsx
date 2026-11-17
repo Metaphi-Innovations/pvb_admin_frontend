@@ -38,6 +38,7 @@ import {
 	type OrderStatus,
 	SAMPLE_BILLING_DETAILS,
 	emptySampleShipTo,
+	shipToFromTerritoryManager,
 	EDITABLE_ORDER_STATUSES,
 	ORDER_STATUS_OPTIONS,
 	createEmptyLineItem,
@@ -229,7 +230,6 @@ export function validateSalesOrderForm(
 	form: SalesOrderFormValues,
 ): Record<string, string> {
 	const e: Record<string, string> = {};
-	if (!form.customerId) e.customerId = "Customer is required";
 	if (!form.salesManId) e.salesManId = "Salesperson is required";
 	if (!form.warehouseId) e.warehouseId = "Source Warehouse is required";
 	if (!form.orderDate) e.orderDate = "Order date is required";
@@ -383,10 +383,15 @@ export default function SampleOrderForm({
 		const timer = window.setTimeout(() => {
 			if (String(formRef.current.customerId ?? "") !== customerKey) return;
 			if (String(formRef.current.salesManId ?? "") === salesManId) return;
-			onChangeRef.current({ ...formRef.current, salesManId });
+			const tm = salesmen.find((s) => String(s.id) === String(salesManId)) as any;
+			onChangeRef.current({
+				...formRef.current,
+				salesManId,
+				shipTo: tm ? shipToFromTerritoryManager(tm) : formRef.current.shipTo,
+			});
 		}, 0);
 		return () => window.clearTimeout(timer);
-	}, [form.customerId, customerDetails]);
+	}, [form.customerId, customerDetails, salesmen]);
 
 	// Licence status toasts once per customer selection (after details load).
 	useEffect(() => {
@@ -475,12 +480,9 @@ export default function SampleOrderForm({
 				</div>
 
 				<div className="space-y-1 md:col-span-2 col-span-2">
-					<Label className="text-xs font-medium">
-						Customer <span className="text-red-500">*</span>
-					</Label>
+					<Label className="text-xs font-medium">Customer</Label>
 					<SearchableDropdown<any>
 						label=""
-						required
 						value={form.customerId !== undefined && form.customerId !== null ? form.customerId : null}
 						onChange={(id) => {
 						const c = customers.find((x) => x.id === id) as any;
@@ -494,11 +496,13 @@ export default function SampleOrderForm({
 						};
 						if (c?.salesManId) {
 							updatedForm.salesManId = c.salesManId;
+							const tm = salesmen.find((s) => String(s.id) === String(c.salesManId)) as any;
+							if (tm) updatedForm.shipTo = shipToFromTerritoryManager(tm);
 						}
 						onChange(updatedForm);
 					}}
 						options={customers as any}
-						placeholder="Select customer…"
+						placeholder="Optional — select customer…"
 						error={errors.customerId}
 						getLabel={formatCustomerDropdownLabel}
 						getSublabel={formatCustomerDropdownSublabel}
@@ -507,12 +511,19 @@ export default function SampleOrderForm({
 
 				<div className="space-y-1 md:col-span-2">
 					<SearchableDropdown<Employee>
-						label="Salesperson"
+						label="Salesperson / Territory Manager"
 						required
 						value={form.salesManId !== undefined && form.salesManId !== null ? form.salesManId : null}
-						onChange={(id) => set("salesManId", id)}
+						onChange={(id) => {
+							const tm = salesmen.find((s) => String(s.id) === String(id)) as any;
+							onChange({
+								...form,
+								salesManId: id,
+								shipTo: shipToFromTerritoryManager(tm),
+							});
+						}}
 						options={salesmen}
-						placeholder="Select salesperson…"
+						placeholder="Select territory manager…"
 						error={errors.salesManId}
 						getLabel={(s) => s.employeeId ? `${s.employeeId} — ${s.fullName}` : s.fullName}
 						getSublabel={(s) => `${s.role} · ${s.department}`}
@@ -560,9 +571,9 @@ export default function SampleOrderForm({
 
 					<div className="rounded-lg border border-border p-3 space-y-2">
 						<div>
-							<p className="text-xs font-semibold text-foreground">Ship To (TM / visit address)</p>
+							<p className="text-xs font-semibold text-foreground">Ship To (Territory Manager)</p>
 							<p className="text-[11px] text-muted-foreground">
-								Optional now — can be filled later before Delivery Challan download.
+								Defaults from the selected TM master address. Edit if needed, or set/confirm before Delivery Challan.
 							</p>
 						</div>
 						<div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
