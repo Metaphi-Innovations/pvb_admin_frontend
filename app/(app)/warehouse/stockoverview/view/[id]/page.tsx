@@ -19,10 +19,7 @@ import { ListingAuditCell } from "@/components/listing";
 import { StackedQtyDisplay, type QtyStackMeta } from "@/app/(app)/sales/shared/StackedQtyDisplay";
 import { STATUS_BADGE_CONFIG } from "../../constants";
 import { MoveToRejectedDialog, type MoveToRejectedTarget } from "../../components/MoveToRejectedDialog";
-import {
-  StockAdjustmentDialog,
-  type StockAdjustmentPrefill,
-} from "../../components/StockAdjustmentDialog";
+import { StockAdjustmentDialog } from "../../components/StockAdjustmentDialog";
 import {
   InventoryDetails,
   RejectedDetails,
@@ -121,7 +118,7 @@ export default function ViewStockDetailsPage() {
   const [error, setError] = useState<string | null>(null);
   const [reloadNonce, setReloadNonce] = useState(0);
   const [moveTarget, setMoveTarget] = useState<MoveToRejectedTarget | null>(null);
-  const [adjustPrefill, setAdjustPrefill] = useState<StockAdjustmentPrefill | null>(null);
+  const [adjustOpen, setAdjustOpen] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -317,6 +314,17 @@ export default function ViewStockDetailsPage() {
           metaItems={[
             { label: details.warehouse.warehouse_name || "—" },
           ]}
+          headerActions={
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs gap-1.5"
+              onClick={() => setAdjustOpen(true)}
+            >
+              Stock Adjustment
+            </Button>
+          }
         >
           <div className="overflow-x-auto rounded-lg border border-border bg-white">
             <table className="w-full min-w-[1180px] text-left border-collapse">
@@ -387,56 +395,38 @@ export default function ViewStockDetailsPage() {
                           </span>
                         </td>
                         <td className="px-3 py-2.5 text-right">
-                          <div className="inline-flex items-center justify-end gap-1.5">
+                          {movable > 0 ? (
                             <Button
                               type="button"
                               variant="outline"
                               size="sm"
-                              className="h-7 text-[11px]"
+                              className="h-7 text-[11px] text-rose-700 border-rose-200 hover:bg-rose-50"
                               onClick={() =>
-                                setAdjustPrefill({
-                                  productId: details.id,
+                                setMoveTarget({
                                   productName: details.product.product_name || "—",
-                                  warehouseId: row.warehouse_id || warehouseId,
                                   batchNo: row.batch_no,
+                                  availableQty: movable,
+                                  availableCases:
+                                    row.available_cases != null
+                                      ? Number(row.available_cases)
+                                      : null,
+                                  status: rowStatus,
+                                  qtyMeta: {
+                                    ...meta,
+                                    quantityType:
+                                      row.quantity_type || meta.quantityType,
+                                  },
+                                  productId: details.id,
+                                  warehouseId: row.warehouse_id || warehouseId,
                                   expiryDate: row.expiry_date,
-                                  quantityType: row.quantity_type || meta.quantityType,
                                 })
                               }
                             >
-                              Adjust
+                              Move to Rejected
                             </Button>
-                            {movable > 0 ? (
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                className="h-7 text-[11px] text-rose-700 border-rose-200 hover:bg-rose-50"
-                                onClick={() =>
-                                  setMoveTarget({
-                                    productName: details.product.product_name || "—",
-                                    batchNo: row.batch_no,
-                                    availableQty: movable,
-                                    availableCases:
-                                      row.available_cases != null
-                                        ? Number(row.available_cases)
-                                        : null,
-                                    status: rowStatus,
-                                    qtyMeta: {
-                                      ...meta,
-                                      quantityType:
-                                        row.quantity_type || meta.quantityType,
-                                    },
-                                    productId: details.id,
-                                    warehouseId: row.warehouse_id || warehouseId,
-                                    expiryDate: row.expiry_date,
-                                  })
-                                }
-                              >
-                                Move to Rejected
-                              </Button>
-                            ) : null}
-                          </div>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
                         </td>
                       </tr>
                     );
@@ -453,20 +443,25 @@ export default function ViewStockDetailsPage() {
           onSuccess={() => setReloadNonce((n) => n + 1)}
         />
         <StockAdjustmentDialog
-          open={!!adjustPrefill}
-          warehouseId={adjustPrefill?.warehouseId || warehouseId}
+          open={adjustOpen}
+          warehouseId={warehouseId || details.warehouse.warehouse_code}
           warehouseOptions={
-            adjustPrefill?.warehouseId || warehouseId
+            warehouseId || details.warehouse.warehouse_code
               ? [
                   {
                     label: details.warehouse.warehouse_name || "Warehouse",
-                    value: adjustPrefill?.warehouseId || warehouseId || details.warehouse.warehouse_code,
+                    value: warehouseId || details.warehouse.warehouse_code,
                   },
                 ]
               : []
           }
-          prefill={adjustPrefill}
-          onClose={() => setAdjustPrefill(null)}
+          prefill={{
+            productId: details.id,
+            productName: details.product.product_name || "—",
+            warehouseId: warehouseId || details.warehouse.warehouse_code,
+            quantityType: meta.quantityType,
+          }}
+          onClose={() => setAdjustOpen(false)}
           onSuccess={() => setReloadNonce((n) => n + 1)}
         />
       </>

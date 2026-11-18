@@ -153,6 +153,7 @@ export function RejectedListing({ warehouseId, onFiltersApplied }: RejectedListi
       sortable: true,
       filterable: true,
       filterType: "dropdown",
+      filterMultiple: true,
       filterOptions: filterOptions.product_name || [],
       render: (_val, row) => (
         <Link href={`/warehouse/stock-overview/view/${row.id}?type=rejected`} className="block group/name">
@@ -166,6 +167,7 @@ export function RejectedListing({ warehouseId, onFiltersApplied }: RejectedListi
       sortable: true,
       filterable: true,
       filterType: "dropdown",
+      filterMultiple: true,
       filterOptions: filterOptions.sku || [],
       width: "120px",
       render: (val) => <span className="font-mono text-xs text-foreground">{val || "—"}</span>,
@@ -176,6 +178,7 @@ export function RejectedListing({ warehouseId, onFiltersApplied }: RejectedListi
       sortable: true,
       filterable: true,
       filterType: "dropdown",
+      filterMultiple: true,
       filterOptions: filterOptions.uom || [],
       width: "72px",
       render: (val) => <span className="text-xs text-foreground">{val || "—"}</span>,
@@ -202,6 +205,7 @@ export function RejectedListing({ warehouseId, onFiltersApplied }: RejectedListi
       sortable: true,
       filterable: true,
       filterType: "dropdown",
+      filterMultiple: true,
       filterOptions: filterOptions.warehouse_name || [],
       width: "260px",
     },
@@ -211,6 +215,7 @@ export function RejectedListing({ warehouseId, onFiltersApplied }: RejectedListi
       sortable: true,
       filterable: true,
       filterType: "dropdown",
+      filterMultiple: true,
       filterOptions: filterOptions.batch_no || [],
       width: "130px",
       render: (val) => <span className="font-mono text-xs">{val}</span>,
@@ -226,6 +231,7 @@ export function RejectedListing({ warehouseId, onFiltersApplied }: RejectedListi
       sortable: true,
       filterable: true,
       filterType: "dropdown",
+      filterMultiple: true,
       filterOptions: REJECT_TYPE_OPTIONS,
       width: "120px",
       truncate: false,
@@ -262,6 +268,7 @@ export function RejectedListing({ warehouseId, onFiltersApplied }: RejectedListi
       sortable: true,
       filterable: true,
       filterType: "dropdown",
+      filterMultiple: true,
       filterOptions: filterOptions.source_status?.length
         ? filterOptions.source_status
         : SOURCE_STATUS_OPTIONS,
@@ -282,6 +289,7 @@ export function RejectedListing({ warehouseId, onFiltersApplied }: RejectedListi
       sortable: true,
       filterable: true,
       filterType: "dropdown",
+      filterMultiple: true,
       filterOptions: REJECTED_STATUS_OPTIONS,
       width: "140px",
       truncate: false,

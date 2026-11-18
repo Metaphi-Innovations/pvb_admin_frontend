@@ -61,11 +61,16 @@ function normalizeQtyType(raw: string | null | undefined): QtyMode {
 }
 
 function batchOptionValue(b: StockAdjustmentBatchOption): string {
-  return b.inventory_detail_id;
+  if (b.inventory_detail_id) return b.inventory_detail_id;
+  const exp = b.expiry_date || "none";
+  return `new:${b.batch_no}|exp:${exp}`;
 }
 
 function batchOptionLabel(b: StockAdjustmentBatchOption): string {
   const exp = b.expiry_date ? ` · Exp ${b.expiry_date}` : "";
+  if (b.exists_at_warehouse === false) {
+    return `${b.batch_no}${exp} · Not at this warehouse yet`;
+  }
   const cases = Number(b.available_cases || 0);
   const pieces = Number(b.available_piece_qty || 0);
   return `${b.batch_no}${exp} · Case ${cases} · Piece ${pieces}`;
@@ -176,12 +181,19 @@ export function StockAdjustmentDialog({
     StockOverviewApi.listAdjustmentBatches({
       product_id: productId,
       warehouse_id: warehouseId,
+      direction,
     })
       .then((rows) => {
         if (!mounted) return;
         setBatches(rows);
         setBatchKey((prev) => {
           if (prev && rows.some((r) => batchOptionValue(r) === prev)) return prev;
+          if (prefill?.inventoryDetailId) {
+            const byId = rows.find(
+              (r) => r.inventory_detail_id === prefill.inventoryDetailId,
+            );
+            if (byId) return batchOptionValue(byId);
+          }
           if (prefill?.batchNo) {
             const match = rows.find(
               (r) =>
@@ -209,7 +221,15 @@ export function StockAdjustmentDialog({
     return () => {
       mounted = false;
     };
-  }, [open, productId, warehouseId, prefill?.batchNo, prefill?.expiryDate]);
+  }, [
+    open,
+    productId,
+    warehouseId,
+    direction,
+    prefill?.batchNo,
+    prefill?.expiryDate,
+    prefill?.inventoryDetailId,
+  ]);
 
   const qtyNum = Number(qty);
 
@@ -250,7 +270,9 @@ export function StockAdjustmentDialog({
         direction,
         product_id: productId,
         warehouse_id: warehouseId,
-        inventory_detail_id: selectedBatch.inventory_detail_id,
+        ...(selectedBatch.inventory_detail_id
+          ? { inventory_detail_id: selectedBatch.inventory_detail_id }
+          : {}),
         batch_no: selectedBatch.batch_no,
         expiry_date: selectedBatch.expiry_date,
         quantity_type: qtyMode,
@@ -282,8 +304,9 @@ export function StockAdjustmentDialog({
             Stock Adjustment
           </DialogTitle>
           <DialogDescription className="text-xs pt-1">
-            Inventory-only correction. Inward allows Case or Piece. Outward moves only the
-            selected quantity type from available stock.
+            Product-wise inventory correction. Pick direction, then a batch for this
+            product. Outward uses stock at this warehouse; inward can use any known
+            product batch (creates the lot here if missing).
           </DialogDescription>
         </DialogHeader>
 
@@ -297,6 +320,7 @@ export function StockAdjustmentDialog({
                 onClick={() => {
                   setDirection("INWARD");
                   setQty("");
+                  setBatchKey("");
                 }}
                 className={`flex items-center justify-center gap-1.5 h-9 rounded-lg border text-xs font-semibold transition-colors ${
                   direction === "INWARD"
@@ -313,6 +337,7 @@ export function StockAdjustmentDialog({
                 onClick={() => {
                   setDirection("OUTWARD");
                   setQty("");
+                  setBatchKey("");
                 }}
                 className={`flex items-center justify-center gap-1.5 h-9 rounded-lg border text-xs font-semibold transition-colors ${
                   direction === "OUTWARD"
@@ -369,7 +394,9 @@ export function StockAdjustmentDialog({
               options={batches.map((b) => ({
                 value: batchOptionValue(b),
                 label: b.batch_no,
-                sublabel: batchOptionLabel(b).replace(`${b.batch_no}`, "").replace(/^ · /, ""),
+                sublabel: batchOptionLabel(b)
+                  .replace(`${b.batch_no}`, "")
+                  .replace(/^ · /, ""),
               }))}
               value={batchKey}
               onChange={(v) => {
@@ -383,7 +410,9 @@ export function StockAdjustmentDialog({
                     ? "Loading batches..."
                     : batches.length
                       ? "Select batch..."
-                      : "No batches found"
+                      : direction === "OUTWARD"
+                        ? "No available batches at this warehouse"
+                        : "No known batches for this product"
               }
               searchPlaceholder="Search batch..."
               disabled={
@@ -407,19 +436,32 @@ export function StockAdjustmentDialog({
                   </span>
                 </p>
               ) : null}
-              <p>
-                Available — Case:{" "}
-                <span className="font-semibold text-foreground">{maxCases}</span>
-                {" · "}
-                Piece:{" "}
-                <span className="font-semibold text-foreground">
-                  {maxPieceUnits.toLocaleString("en-IN")}
-                </span>
-              </p>
+              {selectedBatch.exists_at_warehouse === false ? (
+                <p className="text-amber-700">
+                  This batch is not at this warehouse yet. Inward will create the lot
+                  here from the known product batch.
+                </p>
+              ) : (
+                <p>
+                  Available here — Case:{" "}
+                  <span className="font-semibold text-foreground">{maxCases}</span>
+                  {" · "}
+                  Piece:{" "}
+                  <span className="font-semibold text-foreground">
+                    {maxPieceUnits.toLocaleString("en-IN")}
+                  </span>
+                </p>
+              )}
             </div>
           ) : null}
 
-          {/* Quantity type dropdown + qty side by side */}
+          {direction === "INWARD" ? (
+            <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-100 rounded-md px-2.5 py-2">
+              Inward increases company stock unless you also outward the matching qty
+              on the other side (e.g. wrong-batch transfer correction).
+            </p>
+          ) : null}
+
           <div className="space-y-1.5 min-w-0">
             <Label className="text-xs">Quantity</Label>
             <div className="flex items-center gap-2 min-w-0 w-full">
@@ -503,7 +545,7 @@ export function StockAdjustmentDialog({
               disabled={submitting}
               rows={2}
               className="text-xs resize-none"
-              placeholder="e.g. Physical batch differs from system / count variance"
+              placeholder="e.g. ST wrong batch correction WH-A ↔ WH-B qty 15"
               maxLength={500}
             />
           </div>
