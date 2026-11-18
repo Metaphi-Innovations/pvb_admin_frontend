@@ -139,6 +139,14 @@ export function AgeingGroupedTable({
                                 </span>
                               </span>
                             ) : null}
+                            {group.customerState ? (
+                              <span className="text-[11px] text-muted-foreground shrink-0">
+                                · Customer State:{" "}
+                                <span className="font-medium text-foreground">
+                                  {group.customerState}
+                                </span>
+                              </span>
+                            ) : null}
                           </div>
                         </td>
                       </tr>

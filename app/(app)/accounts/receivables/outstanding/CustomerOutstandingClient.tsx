@@ -69,6 +69,7 @@ import {
   ReportCustomerMultiFilter,
   ReportSalespersonFilter,
   ReportSearchFilter,
+  ReportStateFilter,
   ReportFilterResetButton,
   ReportWarehouseMultiFilter,
 } from "@/components/accounts/ReportFilters";
@@ -1152,11 +1153,15 @@ export default function CustomerOutstandingClient() {
   const [search, setSearch] = useState("");
   const [customerIds, setCustomerIds] = useState<string[]>([]);
   const [salesperson, setSalesperson] = useState("all");
+  const [stateCode, setStateCode] = useState("all");
   const [warehouseIds, setWarehouseIds] = useState<string[]>([]);
   const [branchOptions, setBranchOptions] = useState<
     { id: string; name: string }[]
   >([]);
   const [salespersonOptions, setSalespersonOptions] = useState<
+    Array<{ value: string; label: string }>
+  >([]);
+  const [stateOptions, setStateOptions] = useState<
     Array<{ value: string; label: string }>
   >([]);
   const [dueStatus, setDueStatus] = useState<DueStatusFilter>("all");
@@ -1305,13 +1310,19 @@ export default function CustomerOutstandingClient() {
     };
   }, []);
 
-  // Master salesperson list (not derived from the current page/view rows).
+  // Master salesperson + state lists (not derived from the current page/view rows).
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         const config = await SalesRegisterApiService.getFilters();
         if (cancelled) return;
+        setStateOptions(
+          (config.states ?? []).map((state) => ({
+            value: state.state_code,
+            label: state.state_name,
+          })),
+        );
         const fromFilters = (config.salespeople ?? []).map((person) => ({
           value: person.user_id,
           label: person.name,
@@ -1353,7 +1364,10 @@ export default function CustomerOutstandingClient() {
               .sort((a, b) => a.label.localeCompare(b.label)),
           );
         } catch {
-          if (!cancelled) setSalespersonOptions([]);
+          if (!cancelled) {
+            setSalespersonOptions([]);
+            setStateOptions([]);
+          }
         }
       }
     })();
@@ -1378,6 +1392,7 @@ export default function CustomerOutstandingClient() {
     ageingReportTotals,
     collectionRows,
     resolvedSalespersonId,
+    resolvedStateCode,
   } = useReceivablesListing({
     view,
     asOnDate,
@@ -1385,6 +1400,7 @@ export default function CustomerOutstandingClient() {
     customerIds,
     salesperson: salesperson !== "all" ? salesperson : undefined,
     warehouseIds: warehouseIds.length > 0 ? warehouseIds : undefined,
+    stateCode: view === "ageing" ? stateCode : undefined,
     dueStatus,
     page,
     pageSize,
@@ -1409,6 +1425,7 @@ export default function CustomerOutstandingClient() {
     search.trim() !== "" ||
     customerIds.length > 0 ||
     salesperson !== "all" ||
+    (view === "ageing" && stateCode !== "all") ||
     warehouseIds.length > 0 ||
     dueStatus !== "all";
 
@@ -1416,6 +1433,7 @@ export default function CustomerOutstandingClient() {
     setSearch("");
     setCustomerIds([]);
     setSalesperson("all");
+    setStateCode("all");
     setWarehouseIds([]);
     setDueStatus("all");
   };
@@ -1458,6 +1476,7 @@ export default function CustomerOutstandingClient() {
       search: search.trim() || undefined,
       customerIds: customerIds.length > 0 ? customerIds : undefined,
       salespersonId: resolvedSalespersonId,
+      stateCode: view === "ageing" ? resolvedStateCode : undefined,
       warehouseIds: warehouseIds.length > 0 ? warehouseIds : undefined,
       asOfDate: asOnDate,
       dueStatus,
@@ -1473,6 +1492,7 @@ export default function CustomerOutstandingClient() {
     search,
     customerIds,
     resolvedSalespersonId,
+    resolvedStateCode,
     warehouseIds,
     asOnDate,
     dueStatus,
@@ -1691,6 +1711,19 @@ export default function CustomerOutstandingClient() {
                 }))}
               />
             )}
+            {view === "ageing" && (
+              <ReportStateFilter
+                label="Customer State"
+                value={stateCode}
+                onChange={(v) => {
+                  setStateCode(v);
+                  setPage(1);
+                }}
+                options={stateOptions}
+                placeholder="All customer states"
+                allLabel="All customer states"
+              />
+            )}
             {view !== "ageing" && view !== "collection" && (
               <Select
                 value={dueStatus}
@@ -1810,6 +1843,7 @@ export default function CustomerOutstandingClient() {
                 partyName: g.customerName,
                 partyCode: g.customerCode,
                 tmName: g.tmName,
+                customerState: g.customerState,
                 warehouseName: g.warehouseName,
                 buckets: g.totals.buckets,
                 totalOutstanding: g.totals.totalOutstanding,
@@ -1818,6 +1852,7 @@ export default function CustomerOutstandingClient() {
               bucketKeys={ageingBucketKeys}
               partyColumnLabel="Customer"
               showTmColumn
+              showCustomerStateColumn
               showWarehouseColumn
               foldNotDueIntoFirstBucket
               reportTotals={ageingReportTotals}

@@ -165,6 +165,7 @@ export function SalesReturnStockListing({ warehouseId, onFiltersApplied }: Sales
       sortable: true,
       filterable: true,
       filterType: "dropdown",
+      filterMultiple: true,
       filterOptions: filterOptions.product_name || [],
       render: (_val, row) => (
         <span className="text-xs font-semibold text-foreground">{row.product_name}</span>
@@ -176,6 +177,7 @@ export function SalesReturnStockListing({ warehouseId, onFiltersApplied }: Sales
       sortable: true,
       filterable: true,
       filterType: "dropdown",
+      filterMultiple: true,
       filterOptions: filterOptions.sku || [],
       width: "120px",
       render: (val) => <span className="font-mono text-xs text-foreground">{val || "—"}</span>,
@@ -186,6 +188,7 @@ export function SalesReturnStockListing({ warehouseId, onFiltersApplied }: Sales
       sortable: true,
       filterable: true,
       filterType: "dropdown",
+      filterMultiple: true,
       filterOptions: filterOptions.uom || [],
       width: "72px",
       render: (val) => <span className="text-xs text-foreground">{val || "—"}</span>,
@@ -242,6 +245,7 @@ export function SalesReturnStockListing({ warehouseId, onFiltersApplied }: Sales
       sortable: true,
       filterable: true,
       filterType: "dropdown",
+      filterMultiple: true,
       filterOptions: filterOptions.warehouse_name || [],
       width: "260px",
       render: (val) => (
@@ -256,6 +260,7 @@ export function SalesReturnStockListing({ warehouseId, onFiltersApplied }: Sales
       sortable: true,
       filterable: true,
       filterType: "dropdown",
+      filterMultiple: true,
       filterOptions: filterOptions.batch_no || [],
       width: "130px",
       render: (val) => <span className="font-mono text-xs text-foreground">{val}</span>,
@@ -282,6 +287,7 @@ export function SalesReturnStockListing({ warehouseId, onFiltersApplied }: Sales
       sortable: true,
       filterable: true,
       filterType: "dropdown",
+      filterMultiple: true,
       filterOptions: filterOptions.return_no || [],
       width: "140px",
       render: (val) => <span className="font-mono text-xs font-semibold">{val || "—"}</span>,
@@ -292,6 +298,7 @@ export function SalesReturnStockListing({ warehouseId, onFiltersApplied }: Sales
       sortable: true,
       filterable: true,
       filterType: "dropdown",
+      filterMultiple: true,
       filterOptions: filterOptions.customer_name || [],
       render: (val) => <span className="text-xs text-foreground">{val || "—"}</span>,
     },
@@ -301,6 +308,7 @@ export function SalesReturnStockListing({ warehouseId, onFiltersApplied }: Sales
       sortable: true,
       filterable: true,
       filterType: "dropdown",
+      filterMultiple: true,
       filterOptions: SALES_RETURN_STOCK_STATUS_OPTIONS,
       width: "135px",
       render: (val: string) => {
