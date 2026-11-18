@@ -993,36 +993,38 @@ export function ReportStateFilter({
   onChange,
   states,
   options,
+  label = "State",
+  placeholder = "All states",
+  allLabel = "All states",
 }: {
   value: string;
   onChange: (value: string) => void;
   states?: string[];
   /** Prefer value/label options when filtering by backend state codes. */
   options?: { value: string; label: string }[];
+  label?: string;
+  placeholder?: string;
+  allLabel?: string;
 }) {
-  const items =
+  const selectOptions: ReportMultiSelectOption[] =
     options ??
     (states ?? []).map((s) => ({
       value: s,
       label: s,
+      searchText: s,
     }));
+
   return (
-    <div className="space-y-0.5 min-w-[140px]">
-      <span className={filterLabelClass}>State</span>
-      <Select value={value} onValueChange={onChange}>
-        <SelectTrigger className={cn(filterSelectClass, "mt-0 w-[140px]")}>
-          <SelectValue placeholder="All states" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">All states</SelectItem>
-          {items.map((s) => (
-            <SelectItem key={s.value} value={s.value}>
-              {s.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
+    <ReportSingleSelect
+      label={label}
+      value={value === "all" ? "" : value}
+      onChange={(next) => onChange(next || "all")}
+      options={selectOptions}
+      placeholder={placeholder}
+      allLabel={allLabel}
+      allowClear
+      minWidthClass="min-w-[180px] w-[200px] max-w-[260px]"
+    />
   );
 }
 

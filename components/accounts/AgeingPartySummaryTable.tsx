@@ -16,6 +16,8 @@ export type AgeingPartySummaryRow = {
   partyCode?: string;
   /** Customer Sales Man / TM. */
   tmName?: string;
+  /** Customer billing state. */
+  customerState?: string;
   /** Warehouse / branch display name. */
   warehouseName?: string;
   buckets: Record<string, number>;
@@ -44,6 +46,7 @@ export function AgeingPartySummaryTable({
   partyColumnLabel = "Party",
   balanceSide = "Dr",
   showTmColumn = false,
+  showCustomerStateColumn = false,
   showWarehouseColumn = false,
   /** When true, hide Not Due and add it into the first bucket (debtors client preference). */
   foldNotDueIntoFirstBucket: foldNotDue = false,
@@ -66,6 +69,8 @@ export function AgeingPartySummaryTable({
   balanceSide?: "Dr" | "Cr";
   /** Show TM (Sales Man) column — receivables ageing. */
   showTmColumn?: boolean;
+  /** Show customer state column — receivables ageing. */
+  showCustomerStateColumn?: boolean;
   /** Show warehouse/branch column — receivables ageing. */
   showWarehouseColumn?: boolean;
   foldNotDueIntoFirstBucket?: boolean;
@@ -86,6 +91,7 @@ export function AgeingPartySummaryTable({
 }) {
   const minWidth =
     (showTmColumn ? 760 : 620) +
+    (showCustomerStateColumn ? 140 : 0) +
     (showWarehouseColumn ? 140 : 0) +
     bucketKeys.length * 110 -
     (foldNotDue ? 110 : 0);
@@ -165,6 +171,11 @@ export function AgeingPartySummaryTable({
                       TM
                     </th>
                   ) : null}
+                  {showCustomerStateColumn ? (
+                    <th className="px-3 py-2.5 text-left font-semibold text-foreground whitespace-nowrap min-w-[140px]">
+                      Customer State
+                    </th>
+                  ) : null}
                   {showWarehouseColumn ? (
                     <th className="px-3 py-2.5 text-left font-semibold text-foreground whitespace-nowrap min-w-[140px]">
                       Warehouse/Branch
@@ -231,6 +242,11 @@ export function AgeingPartySummaryTable({
                           {row.tmName?.trim() || "—"}
                         </td>
                       ) : null}
+                      {showCustomerStateColumn ? (
+                        <td className="px-3 py-2 whitespace-nowrap text-foreground">
+                          {row.customerState?.trim() || "—"}
+                        </td>
+                      ) : null}
                       {showWarehouseColumn ? (
                         <td
                           className="px-3 py-2 text-foreground max-w-[220px]"
@@ -281,6 +297,7 @@ export function AgeingPartySummaryTable({
                     Net Total
                   </td>
                   {showTmColumn ? <td className="px-3 py-2.5" /> : null}
+                  {showCustomerStateColumn ? <td className="px-3 py-2.5" /> : null}
                   {showWarehouseColumn ? <td className="px-3 py-2.5" /> : null}
                   {!foldNotDue ? (
                     <td
