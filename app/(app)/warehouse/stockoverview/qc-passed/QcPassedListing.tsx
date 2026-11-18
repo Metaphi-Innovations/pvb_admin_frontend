@@ -163,6 +163,7 @@ export function QcPassedListing({
       sortable: true,
       filterable: true,
       filterType: "dropdown",
+      filterMultiple: true,
       filterOptions: filterOptions.product_name || [],
       render: (_val, row) => (
         <Link href={inventoryViewHref(row.id, warehouseId)} className="block group/name">
@@ -178,6 +179,7 @@ export function QcPassedListing({
       sortable: true,
       filterable: true,
       filterType: "dropdown",
+      filterMultiple: true,
       filterOptions: filterOptions.sku || [],
       width: "120px",
       render: (val) => <span className="font-mono text-xs text-foreground">{val || "—"}</span>,
@@ -188,6 +190,7 @@ export function QcPassedListing({
       sortable: true,
       filterable: true,
       filterType: "dropdown",
+      filterMultiple: true,
       filterOptions: filterOptions.uom || [],
       width: "72px",
       render: (val) => <span className="text-xs text-foreground">{val || "—"}</span>,

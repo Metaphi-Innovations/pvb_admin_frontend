@@ -130,6 +130,8 @@ export type StockAdjustmentBatchOption = {
   net_weight: number | null;
   warehouse_id: string;
   warehouse_name: string;
+  /** False when inwarding a known batch that has no lot yet at this warehouse. */
+  exists_at_warehouse?: boolean;
 };
 
 export type StockAdjustmentPayload = {
@@ -775,12 +777,14 @@ export const StockOverviewApi = {
   async listAdjustmentBatches(params: {
     product_id: string;
     warehouse_id: string;
+    direction?: "INWARD" | "OUTWARD";
   }): Promise<StockAdjustmentBatchOption[]> {
     const response = await axiosInstance.post(
       API_ENDPOINTS.WAREHOUSE.STOCK_OVERVIEW.STOCK_ADJUSTMENT_BATCHES,
       {
         product_id: params.product_id,
         warehouse_id: params.warehouse_id,
+        direction: params.direction || "OUTWARD",
       },
     );
     const data = (response.data as Record<string, unknown>)?.data;
@@ -813,6 +817,8 @@ export const StockOverviewApi = {
         net_weight: r.net_weight != null ? toNumber(r.net_weight) : null,
         warehouse_id: asString(r.warehouse_id),
         warehouse_name: asString(r.warehouse_name),
+        exists_at_warehouse:
+          r.exists_at_warehouse == null ? true : Boolean(r.exists_at_warehouse),
       };
     });
   },

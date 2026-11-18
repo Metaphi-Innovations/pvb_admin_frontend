@@ -113,6 +113,8 @@ export interface AgingApiRow {
   customerCode: string;
   /** Customer Sales Man / TM. */
   salesperson?: SalespersonRef;
+  /** Customer billing state (main branch preferred). */
+  customerState?: string;
   warehouseId?: string;
   warehouseName?: string;
   totalOutstanding: number;
@@ -261,6 +263,8 @@ export interface AgingQuery {
   warehouseId?: string;
   warehouseIds?: string[];
   salespersonId?: string;
+  stateId?: string;
+  stateCode?: string;
   asOfDate?: string;
   excludeZeroBalance?: boolean;
   status?: string;
@@ -293,6 +297,8 @@ export interface ReceivablesExportQuery {
   customerId?: string;
   customerIds?: string[];
   salespersonId?: string;
+  stateId?: string;
+  stateCode?: string;
   branchId?: string;
   warehouseId?: string;
   warehouseIds?: string[];
@@ -390,6 +396,8 @@ export interface ApiCustomerAgeingGroup {
   customerCode: string;
   /** Customer Sales Man / TM display name. */
   tmName?: string;
+  /** Customer billing state. */
+  customerState?: string;
   warehouseId?: string;
   warehouseName?: string;
   invoices: ApiCustomerAgeingInvoiceRow[];

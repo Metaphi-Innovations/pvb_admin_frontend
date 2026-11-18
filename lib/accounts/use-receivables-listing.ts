@@ -44,6 +44,8 @@ export function useReceivablesListing(options: {
   salesperson?: string;
   warehouseId?: string;
   warehouseIds?: string[];
+  /** State master code for customer billing-state filter (ageing). */
+  stateCode?: string;
   dueStatus: "all" | "overdue" | "not_due";
   page: number;
   pageSize: number;
@@ -60,6 +62,7 @@ export function useReceivablesListing(options: {
     salesperson,
     warehouseId,
     warehouseIds,
+    stateCode,
     dueStatus,
     page,
     pageSize,
@@ -105,6 +108,8 @@ export function useReceivablesListing(options: {
   /** `salesperson` is the selected user id (or undefined for All). */
   const resolvedSalespersonId =
     salesperson && salesperson !== "all" ? salesperson : undefined;
+  const resolvedStateCode =
+    stateCode && stateCode !== "all" ? stateCode : undefined;
 
   const customerIdsKey = customerIds.join(",");
   const warehouseIdsKey = (warehouseIds ?? []).join(",");
@@ -176,6 +181,7 @@ export function useReceivablesListing(options: {
             customerIds: selectedCustomerIds,
             salespersonId: resolvedSalespersonId,
             warehouseIds: resolvedWarehouseIds,
+            stateCode: resolvedStateCode,
             asOfDate: asOnDate,
             excludeZeroBalance: true,
             status: dueStatusApi,
@@ -242,6 +248,7 @@ export function useReceivablesListing(options: {
     resolvedSalespersonId,
     warehouseId,
     warehouseIdsKey,
+    resolvedStateCode,
     dueStatus,
     dueStatusApi,
     asOnDate,
@@ -263,5 +270,6 @@ export function useReceivablesListing(options: {
     ageingReportTotals,
     collectionRows,
     resolvedSalespersonId,
+    resolvedStateCode,
   };
 }
