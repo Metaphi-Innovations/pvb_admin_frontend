@@ -30,14 +30,16 @@ import {
   parseMultiFilterParam,
 } from "@/lib/accounts/report-multi-filter-utils";
 
-export type B2bStatusFilter = "all" | "valid" | "exception";
-export type B2bGstRateFilter = "all" | "5" | "12" | "18" | "28";
+export type B2bStatusFilter = "valid" | "exception";
+export type B2bGstRateFilter = "5" | "12" | "18" | "28";
 
 export interface B2bInvoiceFilters extends GstDashboardFilters {
   customerId: string | string[];
-  gstRate: B2bGstRateFilter;
+  /** Empty = all rates. */
+  gstRate: string[];
   invoiceNo: string;
-  status: B2bStatusFilter;
+  /** Empty = all statuses. */
+  status: string[];
 }
 
 export interface B2bRateBreakup {
@@ -247,15 +249,15 @@ function invoiceToB2bRow(inv: InvoiceRecord, duplicateNos: Set<string>): B2bInvo
 
 function matchesB2bFilters(row: B2bInvoiceRow, filters: B2bInvoiceFilters): boolean {
   if (!matchesPrefixedIdFilter(filters.customerId, row.customerId, "customer:")) return false;
-  if (filters.gstRate !== "all") {
-    const rate = Number(filters.gstRate);
-    const hasRate = row.rateBreakups.some((b) => Math.round(b.ratePct) === rate);
+  if (filters.gstRate.length > 0) {
+    const hasRate = row.rateBreakups.some((b) =>
+      filters.gstRate.includes(String(Math.round(b.ratePct))),
+    );
     if (!hasRate) return false;
   }
   const q = filters.invoiceNo.trim().toLowerCase();
   if (q && !row.invoiceNo.toLowerCase().includes(q)) return false;
-  if (filters.status === "valid" && row.status !== "valid") return false;
-  if (filters.status === "exception" && row.status !== "exception") return false;
+  if (!matchesMultiFilter(filters.status, row.status)) return false;
   return true;
 }
 
@@ -350,10 +352,14 @@ export function parseB2bFiltersFromSearch(
   defaults: B2bInvoiceFilters,
 ): B2bInvoiceFilters {
   const params = new URLSearchParams(search);
-  const gstRate = params.get("gstRate") as B2bGstRateFilter | null;
-  const status = params.get("status") as B2bStatusFilter | null;
-  const validRates: B2bGstRateFilter[] = ["all", "5", "12", "18", "28"];
-  const validStatus: B2bStatusFilter[] = ["all", "valid", "exception"];
+  const validRates = new Set(["5", "12", "18", "28"]);
+  const validStatus = new Set(["valid", "exception"]);
+  const gstRate = parseMultiFilterParam(params.get("gstRate")).filter((v) =>
+    validRates.has(v),
+  );
+  const status = parseMultiFilterParam(params.get("status")).filter((v) =>
+    validStatus.has(v),
+  );
 
   const branchParam = params.get("branch");
   const warehouseParam = params.get("warehouse");
@@ -366,9 +372,9 @@ export function parseB2bFiltersFromSearch(
     branch: branchParam != null ? parseMultiFilterParam(branchParam) : defaults.branch,
     warehouse: warehouseParam != null ? parseMultiFilterParam(warehouseParam) : defaults.warehouse,
     customerId: customerParam != null ? parseMultiFilterParam(customerParam) : defaults.customerId,
-    gstRate: gstRate && validRates.includes(gstRate) ? gstRate : defaults.gstRate,
+    gstRate: params.has("gstRate") ? gstRate : defaults.gstRate,
     invoiceNo: params.get("invoiceNo") ?? defaults.invoiceNo,
-    status: status && validStatus.includes(status) ? status : defaults.status,
+    status: params.has("status") ? status : defaults.status,
   };
 }
 
@@ -380,9 +386,9 @@ export function buildB2bFilterQuery(filters: B2bInvoiceFilters): string {
   appendMultiFilterParam(params, "branch", filters.branch);
   appendMultiFilterParam(params, "warehouse", filters.warehouse);
   appendMultiFilterParam(params, "customer", filters.customerId);
-  if (filters.gstRate !== "all") params.set("gstRate", filters.gstRate);
+  appendMultiFilterParam(params, "gstRate", filters.gstRate);
   if (filters.invoiceNo.trim()) params.set("invoiceNo", filters.invoiceNo.trim());
-  if (filters.status !== "all") params.set("status", filters.status);
+  appendMultiFilterParam(params, "status", filters.status);
   return params.toString();
 }
 

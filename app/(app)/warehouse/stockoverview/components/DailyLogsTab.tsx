@@ -7,29 +7,22 @@ import { StockPositionFiltersBar } from "./StockPositionFiltersBar";
 import { StockPositionKpiRow } from "./StockPositionKpiRow";
 import { MasterListing } from "@/components/listing/MasterListing";
 import { ColumnConfig, FilterState, SortState } from "@/components/listing/types";
-import { ProductDropdownService } from "@/services/product-dropdown.service";
-import { HsnListService } from "@/services/hsn-list.service";
 import {
   DailyLogListRow,
   DailyLogSummary,
   StockOverviewApi,
   toStockOrdering,
 } from "../services/stock-overview-api";
-import { DAILY_LOG_STATUS_OPTIONS, STATUS_BADGE_CONFIG } from "../constants";
+import { STATUS_BADGE_CONFIG } from "../constants";
 import { formatMoney } from "@/lib/accounts/money-format";
 import { StackedQtyDisplay, type QtyStackMeta } from "@/app/(app)/sales/shared/StackedQtyDisplay";
 import { useStockOverviewListingState } from "../stock-overview-listing-state-context";
+import { resolveFilterOptions } from "../lib/listing-filter-options";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-/** Prefer HSN code for listing / filters / export; fall back to description only if code is missing. */
-function hsnOptionLabel(code: string | null | undefined, description?: string | null): string {
-  const hsnCode = String(code ?? "").trim();
-  if (hsnCode) return hsnCode;
-  return String(description ?? "").trim();
-}
-
+/** Prefer HSN code for listing display; resolve UUID via listing-scoped filter options when needed. */
 function displayHsn(
   value: string | null | undefined,
   hsnOptions?: Array<{ label: string; value: string }>,
@@ -157,19 +150,7 @@ export function DailyLogsTab() {
     appliedTopFilters,
   } = getPeriodListing("daily-logs");
 
-  const [productMetaOptions, setProductMetaOptions] = useState<{
-    productCode: Array<{ label: string; value: string }>;
-    productName: Array<{ label: string; value: string }>;
-    hsn: Array<{ label: string; value: string }>;
-    scientificName: Array<{ label: string; value: string }>;
-  }>({
-    productCode: [],
-    productName: [],
-    hsn: [],
-    scientificName: [],
-  });
   const [filterOptions, setFilterOptions] = useState<Record<string, Array<{ label: string; value: string }>>>({});
-  const [loadingFilters, setLoadingFilters] = useState<Set<string>>(new Set());
   const [records, setRecords] = useState<StockPositionLine[]>([]);
   const [kpis, setKpis] = useState<DailyLogSummary>(EMPTY_KPIS);
   const [totalRecords, setTotalRecords] = useState(0);
@@ -219,53 +200,6 @@ export function DailyLogsTab() {
   );
 
   useEffect(() => {
-    let mounted = true;
-    Promise.all([ProductDropdownService.dropdown(), HsnListService.dropdown()])
-      .then(([prod, hsnList]) => {
-        if (!mounted) return;
-
-        const uniq = (values: Array<string | null | undefined>) =>
-          [...new Set(values.map((v) => String(v ?? "").trim()).filter(Boolean))]
-            .sort((a, b) => a.localeCompare(b))
-            .map((value) => ({ label: value, value }));
-
-        const hsnFromMaster = hsnList
-          .filter((h) => h.id && (h.hsnCode?.trim() || h.hsnDescription?.trim()))
-          .map((h) => ({
-            label: hsnOptionLabel(h.hsnCode, h.hsnDescription),
-            value: h.id,
-          }))
-          .sort((a, b) => a.label.localeCompare(b.label));
-
-        const hsnFromProducts = (() => {
-          const seen = new Set<string>();
-          const options: Array<{ label: string; value: string }> = [];
-          for (const p of prod) {
-            const id = p.hsn?.id?.trim();
-            const code = p.hsn?.hsnCode?.trim() || p.hsn?.hsn_code?.trim();
-            const name = p.hsn?.hsnDescription?.trim();
-            const label = hsnOptionLabel(code, name);
-            if (!id || !label || seen.has(id)) continue;
-            seen.add(id);
-            options.push({ label, value: id });
-          }
-          return options.sort((a, b) => a.label.localeCompare(b.label));
-        })();
-
-        setProductMetaOptions({
-          productCode: uniq(prod.map((p) => p.product_code)),
-          productName: uniq(prod.map((p) => p.product_name)),
-          hsn: hsnFromMaster.length > 0 ? hsnFromMaster : hsnFromProducts,
-          scientificName: uniq(prod.map((p) => p.scientific_name)),
-        });
-      })
-      .catch(() => undefined);
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  useEffect(() => {
     if (!today) return;
     if (appliedTopFilters.datePreset === "custom" && (!appliedTopFilters.fromDate || !appliedTopFilters.toDate)) {
       return;
@@ -293,6 +227,7 @@ export function DailyLogsTab() {
         setRecords(result.items.map(mapDailyLogRow));
         setTotalRecords(result.total);
         setKpis(result.summary);
+        setFilterOptions(result.filter_options || {});
       })
       .catch((err) => {
         if (controller.signal.aborted) return;
@@ -300,6 +235,7 @@ export function DailyLogsTab() {
         setRecords([]);
         setTotalRecords(0);
         setKpis(EMPTY_KPIS);
+        setFilterOptions({});
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
@@ -359,60 +295,6 @@ export function DailyLogsTab() {
     [setPeriodListing],
   );
 
-  const handleOpenFilter = (columnKey: string) => {
-    if (filterOptions[columnKey] || loadingFilters.has(columnKey)) return;
-
-    if (columnKey === "hsn") {
-      if (productMetaOptions.hsn.length > 0) {
-        setFilterOptions((prev) => ({ ...prev, hsn: productMetaOptions.hsn }));
-        return;
-      }
-      setLoadingFilters((prev) => new Set(prev).add(columnKey));
-      HsnListService.dropdown()
-        .then((hsnList) => {
-          const options = hsnList
-            .filter((h) => h.id && (h.hsnCode?.trim() || h.hsnDescription?.trim()))
-            .map((h) => ({
-              label: hsnOptionLabel(h.hsnCode, h.hsnDescription),
-              value: h.id,
-            }))
-            .sort((a, b) => a.label.localeCompare(b.label));
-          setFilterOptions((prev) => ({ ...prev, hsn: options }));
-          setProductMetaOptions((prev) => ({ ...prev, hsn: options }));
-        })
-        .finally(() => {
-          setLoadingFilters((prev) => {
-            const next = new Set(prev);
-            next.delete(columnKey);
-            return next;
-          });
-        });
-      return;
-    }
-
-    // Scope product / warehouse / batch options to stock lots
-    const keyMap: Record<string, string> = {
-      productCode: "inventory_detail__product__product_code",
-      productName: "inventory_detail__product__product_name",
-      scientificName: "inventory_detail__product__scientific_name",
-      warehouse: "inventory_detail__warehouse__warehouse_name",
-      batchNumber: "batch_no",
-    };
-    const field = keyMap[columnKey];
-    if (!field) return;
-
-    setLoadingFilters((prev) => new Set(prev).add(columnKey));
-    StockOverviewApi.filterDropdown("inventory", field)
-      .then((options) => setFilterOptions((prev) => ({ ...prev, [columnKey]: options })))
-      .finally(() => {
-        setLoadingFilters((prev) => {
-          const next = new Set(prev);
-          next.delete(columnKey);
-          return next;
-        });
-      });
-  };
-
   const handleExport = useCallback(() => {
     if (exporting) return;
     const periodParams = toApiPeriod(appliedTopFilters);
@@ -436,7 +318,17 @@ export function DailyLogsTab() {
 
   const dateLabel = useMemo(() => dateLabelFor(appliedTopFilters), [appliedTopFilters]);
 
-  const columns: ColumnConfig<StockPositionLine>[] = [
+  const columns: ColumnConfig<StockPositionLine>[] = useMemo(() => {
+    const opts = (key: string) =>
+      resolveFilterOptions(
+        key,
+        filterOptions[key] || [],
+        records as unknown as Array<Record<string, unknown>>,
+        totalRecords,
+        appliedColFilters,
+      );
+
+    return [
     {
       key: "productCode",
       header: "Product Code",
@@ -444,7 +336,7 @@ export function DailyLogsTab() {
       filterable: true,
       filterType: "dropdown",
       filterMultiple: true,
-      filterOptions: filterOptions.productCode || [],
+      filterOptions: opts("productCode"),
       width: "120px",
       render: (v) => <span className="font-mono text-xs font-semibold text-brand-700">{v}</span>,
     },
@@ -455,7 +347,7 @@ export function DailyLogsTab() {
       filterable: true,
       filterType: "dropdown",
       filterMultiple: true,
-      filterOptions: filterOptions.productName || [],
+      filterOptions: opts("productName"),
     },
     {
       key: "hsn",
@@ -464,10 +356,10 @@ export function DailyLogsTab() {
       filterable: true,
       filterType: "dropdown",
       filterMultiple: true,
-      filterOptions: filterOptions.hsn || productMetaOptions.hsn,
+      filterOptions: opts("hsn"),
       width: "120px",
       render: (v) => {
-        const code = displayHsn(String(v ?? ""), productMetaOptions.hsn);
+        const code = displayHsn(String(v ?? ""), filterOptions.hsn);
         return (
           <span className="font-mono text-xs text-muted-foreground truncate max-w-[110px] block" title={code}>
             {code}
@@ -482,7 +374,7 @@ export function DailyLogsTab() {
       filterable: true,
       filterType: "dropdown",
       filterMultiple: true,
-      filterOptions: filterOptions.scientificName || [],
+      filterOptions: opts("scientificName"),
     },
     {
       key: "openingQty",
@@ -555,7 +447,7 @@ export function DailyLogsTab() {
       filterable: true,
       filterType: "dropdown",
       filterMultiple: true,
-      filterOptions: filterOptions.batchNumber || [],
+      filterOptions: opts("batchNumber"),
       width: "120px",
       render: (v) => <span className="font-mono text-xs font-semibold text-brand-700">{v}</span>,
     },
@@ -587,7 +479,7 @@ export function DailyLogsTab() {
       filterable: true,
       filterType: "dropdown",
       filterMultiple: true,
-      filterOptions: filterOptions.warehouse || [],
+      filterOptions: opts("warehouse"),
       width: "260px",
     },
     {
@@ -613,7 +505,7 @@ export function DailyLogsTab() {
       filterable: true,
       filterType: "dropdown",
       filterMultiple: true,
-      filterOptions: DAILY_LOG_STATUS_OPTIONS,
+      filterOptions: opts("status"),
       width: "150px",
       truncate: false,
       render: (val: string) => {
@@ -628,6 +520,7 @@ export function DailyLogsTab() {
       },
     },
   ];
+  }, [appliedColFilters, filterOptions, records, totalRecords]);
 
   return (
     <div className="flex flex-col gap-2.5 min-h-[calc(100vh-220px)]">
@@ -664,7 +557,6 @@ export function DailyLogsTab() {
         searchPlaceholder="Search product or batch..."
         currentFilters={appliedColFilters}
         currentSort={sort}
-        onOpenFilter={handleOpenFilter}
       />
     </div>
   );

@@ -51,6 +51,7 @@ import {
   ReportMoreFilters,
   ReportFilterSummary,
   ReportFilterField,
+  ReportStatusMultiFilter,
   ACCOUNTS_FILTER_LABEL_CLASS as filterLabelClass,
   ACCOUNTS_FILTER_CONTROL_CLASS as filterControlClass,
   REPORT_BRANCH_OPTIONS,
@@ -96,16 +97,14 @@ import { useDebouncedValue } from "../../../pl/pl-hooks";
 
 const PLACEHOLDER_DATE = "2025-04-01";
 
-const GST_RATE_OPTIONS: { value: B2bGstRateFilter; label: string }[] = [
-  { value: "all", label: "All rates" },
+const GST_RATE_OPTIONS: { value: string; label: string }[] = [
   { value: "5", label: "5%" },
   { value: "12", label: "12%" },
   { value: "18", label: "18%" },
   { value: "28", label: "28%" },
 ];
 
-const STATUS_OPTIONS: { value: B2bStatusFilter; label: string }[] = [
-  { value: "all", label: "All" },
+const STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: "valid", label: "Valid" },
   { value: "exception", label: "Exception" },
 ];
@@ -192,9 +191,9 @@ export default function B2bInvoicesPageClient() {
   const [branch, setBranch] = useState<string[]>([]);
   const [warehouse, setWarehouse] = useState<string[]>([]);
   const [customerId, setCustomerId] = useState<string[]>([]);
-  const [gstRate, setGstRate] = useState<B2bGstRateFilter>("all");
+  const [gstRates, setGstRates] = useState<string[]>([]);
   const [invoiceNo, setInvoiceNo] = useState("");
-  const [status, setStatus] = useState<B2bStatusFilter>("all");
+  const [statuses, setStatuses] = useState<string[]>([]);
   const [exporting, setExporting] = useState(false);
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
   const [viewRow, setViewRow] = useState<B2bInvoiceRow | null>(null);
@@ -222,9 +221,9 @@ export default function B2bInvoicesPageClient() {
       branch: [],
       warehouse: [],
       customerId: [],
-      gstRate: "all",
+      gstRate: [],
       invoiceNo: "",
-      status: "all",
+      status: [],
     });
     setFinancialYearId(parsed.financialYearId);
     setDateFrom(parsed.dateFrom);
@@ -232,9 +231,9 @@ export default function B2bInvoicesPageClient() {
     setBranch(normalizeMultiFilter(parsed.branch));
     setWarehouse(normalizeMultiFilter(parsed.warehouse));
     setCustomerId(normalizeMultiFilter(parsed.customerId));
-    setGstRate(parsed.gstRate);
+    setGstRates(parsed.gstRate);
     setInvoiceNo(parsed.invoiceNo);
-    setStatus(parsed.status);
+    setStatuses(parsed.status);
     setPreset("custom");
   }, [searchParams, datesReady]);
 
@@ -264,9 +263,9 @@ export default function B2bInvoicesPageClient() {
     branch,
     warehouse,
     customerId,
-    gstRate,
+    gstRate: gstRates,
     invoiceNo: debouncedInvoiceNo,
-    status,
+    status: statuses,
   }), [
     financialYearId,
     dateFrom,
@@ -274,9 +273,9 @@ export default function B2bInvoicesPageClient() {
     branch,
     warehouse,
     customerId,
-    gstRate,
+    gstRates,
     debouncedInvoiceNo,
-    status,
+    statuses,
     refreshKey,
   ]);
 
@@ -337,9 +336,9 @@ export default function B2bInvoicesPageClient() {
       isMultiFilterActive(branch) ||
       isMultiFilterActive(warehouse) ||
       isMultiFilterActive(customerId) ||
-      gstRate !== "all" ||
+      gstRates.length > 0 ||
       Boolean(invoiceNo.trim()) ||
-      status !== "all");
+      statuses.length > 0);
 
   const resetFilters = useCallback(() => {
     const { from, to, fyId } = defaultFyDateRange();
@@ -350,17 +349,17 @@ export default function B2bInvoicesPageClient() {
     setBranch([]);
     setWarehouse([]);
     setCustomerId([]);
-    setGstRate("all");
+    setGstRates([]);
     setInvoiceNo("");
-    setStatus("all");
+    setStatuses([]);
   }, []);
 
   const backHref = `/accounts/reports/gst?${buildB2bFilterQuery({
     ...b2bFilters,
     customerId: [],
-    gstRate: "all",
+    gstRate: [],
     invoiceNo: "",
-    status: "all",
+    status: [],
   })}`;
 
   const filterSummaryItems = useMemo(
@@ -398,9 +397,19 @@ export default function B2bInvoicesPageClient() {
         "Customer",
         "All customers",
       ),
-      gstRate: GST_RATE_OPTIONS.find((o) => o.value === gstRate)?.label ?? "All rates",
+      gstRate: formatMultiSelectLabel(
+        gstRates,
+        GST_RATE_OPTIONS,
+        "Rate",
+        "All rates",
+      ),
       invoiceNo: debouncedInvoiceNo,
-      status: STATUS_OPTIONS.find((o) => o.value === status)?.label ?? "All",
+      status: formatMultiSelectLabel(
+        statuses,
+        STATUS_OPTIONS,
+        "Status",
+        "All",
+      ),
     };
   }, [
     financialYearId,
@@ -410,9 +419,9 @@ export default function B2bInvoicesPageClient() {
     warehouse,
     customerId,
     customerSelectOptions,
-    gstRate,
+    gstRates,
     debouncedInvoiceNo,
-    status,
+    statuses,
   ]);
 
   const handleExportExcel = async () => {
@@ -470,20 +479,12 @@ export default function B2bInvoicesPageClient() {
             options={warehouseOptionsForFilter}
           />
         </ReportMoreFilters>
-        <ReportFilterField label="GST Rate" minWidthClass="min-w-[120px]">
-          <Select value={gstRate} onValueChange={(v) => setGstRate(v as B2bGstRateFilter)}>
-            <SelectTrigger className={cn(filterControlClass, "mt-0 w-full")}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {GST_RATE_OPTIONS.map((o) => (
-                <SelectItem key={o.value} value={o.value} className="text-xs">
-                  {o.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </ReportFilterField>
+        <ReportStatusMultiFilter
+          label="GST Rate"
+          values={gstRates}
+          onChange={setGstRates}
+          options={GST_RATE_OPTIONS}
+        />
         <ReportFilterField label="Invoice Number" minWidthClass="min-w-[180px]">
           <Input
             value={invoiceNo}
@@ -492,20 +493,12 @@ export default function B2bInvoicesPageClient() {
             className={cn(filterControlClass, "mt-0 w-full")}
           />
         </ReportFilterField>
-        <ReportFilterField label="Status" minWidthClass="min-w-[120px]">
-          <Select value={status} onValueChange={(v) => setStatus(v as B2bStatusFilter)}>
-            <SelectTrigger className={cn(filterControlClass, "mt-0 w-full")}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {STATUS_OPTIONS.map((o) => (
-                <SelectItem key={o.value} value={o.value} className="text-xs">
-                  {o.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </ReportFilterField>
+        <ReportStatusMultiFilter
+          label="Status"
+          values={statuses}
+          onChange={setStatuses}
+          options={STATUS_OPTIONS}
+        />
         {hasFilters && (
           <Button variant="outline" size="sm" className="h-8 text-sm px-2" onClick={resetFilters}>
             Reset

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { ArrowLeft, FileText, Receipt, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -20,7 +20,11 @@ import {
   AccountsTableRow,
   AccountsTableScroll,
 } from "@/components/accounts/AccountsTable";
-import { FinancialReportHeadCell } from "@/components/accounts/FinancialReportTableHead";
+import {
+  AccountsColumnFilterProvider,
+  SortTh,
+  useAccountsFilteredRows,
+} from "@/app/(app)/accounts/components/AccountsUI";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { buildGstReportHref } from "@/lib/accounts/gst-report-filters";
 import {
@@ -37,6 +41,33 @@ import { GstReportNavTabs } from "../../components/GstReportNavTabs";
 import { Gstr1ReportHeaderBlock } from "./Gstr1ReportHeaderBlock";
 
 const GST_SUMMARY_GSTR1 = "/accounts/reports/gst-summary/gstr1";
+
+function getGstr1DocsFilterCell(
+  row: Gstr1DocumentIssuedRow,
+  colKey: string,
+): string {
+  switch (colKey) {
+    case "document_type":
+      return row.document_type_label || row.document_type || "";
+    case "from_number":
+      return row.from_number || "";
+    case "to_number":
+      return row.to_number || "";
+    default:
+      return "";
+  }
+}
+
+function Gstr1DocsFilteredRows({
+  rows,
+  children,
+}: {
+  rows: Gstr1DocumentIssuedRow[];
+  children: (visible: Gstr1DocumentIssuedRow[]) => ReactNode;
+}) {
+  const visible = useAccountsFilteredRows(rows);
+  return <>{children(visible)}</>;
+}
 
 export function Gstr1DocumentsSummaryPageClient() {
   const filterState = useGstSummaryApiFilters();
@@ -184,42 +215,56 @@ export function Gstr1DocumentsSummaryPageClient() {
             </AccountsReportKpiGrid>
 
             <AccountsListingTableCard className="flex-1 min-h-0 flex flex-col">
+              <AccountsColumnFilterProvider
+                rows={rows}
+                getCellValue={getGstr1DocsFilterCell}
+              >
               <AccountsTableScroll className="flex-1 min-h-0">
                 <AccountsTable minWidth={800}>
                   <AccountsTableHead>
                     <AccountsTableHeadRow>
-                      <FinancialReportHeadCell>
-                        Document Type
-                      </FinancialReportHeadCell>
-                      <FinancialReportHeadCell>
-                        From Number
-                        {!serialReliable && (
-                          <span className="block text-[10px] font-normal text-muted-foreground">
-                            informational
-                          </span>
-                        )}
-                      </FinancialReportHeadCell>
-                      <FinancialReportHeadCell>
-                        To Number
-                        {!serialReliable && (
-                          <span className="block text-[10px] font-normal text-muted-foreground">
-                            informational
-                          </span>
-                        )}
-                      </FinancialReportHeadCell>
-                      <FinancialReportHeadCell align="right">
-                        Total Issued
-                      </FinancialReportHeadCell>
-                      <FinancialReportHeadCell align="right">
-                        Cancelled
-                      </FinancialReportHeadCell>
-                      <FinancialReportHeadCell align="right">
-                        Net Issued
-                      </FinancialReportHeadCell>
+                      <SortTh
+                        label="Document Type"
+                        colKey="document_type"
+                        sortable={false}
+                      />
+                      <SortTh
+                        label="From Number"
+                        colKey="from_number"
+                        sortable={false}
+                      />
+                      <SortTh
+                        label="To Number"
+                        colKey="to_number"
+                        sortable={false}
+                      />
+                      <SortTh
+                        label="Total Issued"
+                        colKey="total_issued"
+                        sortable={false}
+                        filterable={false}
+                        align="right"
+                      />
+                      <SortTh
+                        label="Cancelled"
+                        colKey="cancelled"
+                        sortable={false}
+                        filterable={false}
+                        align="right"
+                      />
+                      <SortTh
+                        label="Net Issued"
+                        colKey="net_issued"
+                        sortable={false}
+                        filterable={false}
+                        align="right"
+                      />
                     </AccountsTableHeadRow>
                   </AccountsTableHead>
                   <AccountsTableBody>
-                    {rows.length === 0 ? (
+                    <Gstr1DocsFilteredRows rows={rows}>
+                      {(visibleRows) =>
+                        visibleRows.length === 0 ? (
                       <AccountsTableRow>
                         <AccountsTableCell
                           colSpan={6}
@@ -229,7 +274,7 @@ export function Gstr1DocumentsSummaryPageClient() {
                         </AccountsTableCell>
                       </AccountsTableRow>
                     ) : (
-                      rows.map((row) => (
+                      visibleRows.map((row) => (
                         <AccountsTableRow key={row.id}>
                           <AccountsTableCell className="text-xs font-medium">
                             {row.document_type_label}
@@ -260,10 +305,13 @@ export function Gstr1DocumentsSummaryPageClient() {
                           </AccountsTableCell>
                         </AccountsTableRow>
                       ))
-                    )}
+                    )
+                      }
+                    </Gstr1DocsFilteredRows>
                   </AccountsTableBody>
                 </AccountsTable>
               </AccountsTableScroll>
+              </AccountsColumnFilterProvider>
             </AccountsListingTableCard>
           </>
         ) : null}

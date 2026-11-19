@@ -34,13 +34,15 @@ import {
 } from "@/lib/accounts/report-multi-filter-utils";
 
 export type NilSupplyType = "nil_rated" | "exempt" | "non_gst";
-export type NilSupplyTypeFilter = "all" | NilSupplyType;
-export type NilStatusFilter = "all" | "valid" | "exception";
+export type NilSupplyTypeFilter = NilSupplyType;
+export type NilStatusFilter = "valid" | "exception";
 
 export interface NilRatedExemptFilters extends GstDashboardFilters {
   customerId: string | string[];
-  supplyType: NilSupplyTypeFilter;
-  status: NilStatusFilter;
+  /** Empty = all supply types. */
+  supplyType: string[];
+  /** Empty = all statuses. */
+  status: string[];
   invoiceNo: string;
 }
 
@@ -404,13 +406,12 @@ function lineToRow(inv: InvoiceRecord, line: InvoiceLineItem): NilRatedExemptRow
 
 function matchesRowFilters(row: NilRatedExemptRow, filters: NilRatedExemptFilters): boolean {
   if (!matchesPrefixedIdFilter(filters.customerId, row.customerId, "customer:")) return false;
-  if (filters.supplyType !== "all" && row.supplyType !== filters.supplyType) return false;
+  if (!matchesMultiFilter(filters.supplyType, row.supplyType)) return false;
   const q = filters.invoiceNo.trim().toLowerCase();
   if (q && !row.invoiceNo.toLowerCase().includes(q) && !row.productName.toLowerCase().includes(q)) {
     return false;
   }
-  if (filters.status === "valid" && row.status !== "valid") return false;
-  if (filters.status === "exception" && row.status !== "exception") return false;
+  if (!matchesMultiFilter(filters.status, row.status)) return false;
   return true;
 }
 
@@ -534,10 +535,14 @@ export function parseNilRatedFiltersFromSearch(
   defaults: NilRatedExemptFilters,
 ): NilRatedExemptFilters {
   const params = new URLSearchParams(search);
-  const supplyType = params.get("supplyType") as NilSupplyTypeFilter | null;
-  const status = params.get("status") as NilStatusFilter | null;
-  const validSupply: NilSupplyTypeFilter[] = ["all", "nil_rated", "exempt", "non_gst"];
-  const validStatus: NilStatusFilter[] = ["all", "valid", "exception"];
+  const validSupply = new Set(["nil_rated", "exempt", "non_gst"]);
+  const validStatus = new Set(["valid", "exception"]);
+  const supplyType = parseMultiFilterParam(params.get("supplyType")).filter((v) =>
+    validSupply.has(v),
+  );
+  const status = parseMultiFilterParam(params.get("status")).filter((v) =>
+    validStatus.has(v),
+  );
 
   const branchParam = params.get("branch");
   const warehouseParam = params.get("warehouse");
@@ -550,8 +555,8 @@ export function parseNilRatedFiltersFromSearch(
     branch: branchParam != null ? parseMultiFilterParam(branchParam) : defaults.branch,
     warehouse: warehouseParam != null ? parseMultiFilterParam(warehouseParam) : defaults.warehouse,
     customerId: customerParam != null ? parseMultiFilterParam(customerParam) : defaults.customerId,
-    supplyType: supplyType && validSupply.includes(supplyType) ? supplyType : defaults.supplyType,
-    status: status && validStatus.includes(status) ? status : defaults.status,
+    supplyType: params.has("supplyType") ? supplyType : defaults.supplyType,
+    status: params.has("status") ? status : defaults.status,
     invoiceNo: params.get("invoiceNo") ?? defaults.invoiceNo,
   };
 }
@@ -564,8 +569,8 @@ export function buildNilRatedFilterQuery(filters: NilRatedExemptFilters): string
   appendMultiFilterParam(params, "branch", filters.branch);
   appendMultiFilterParam(params, "warehouse", filters.warehouse);
   appendMultiFilterParam(params, "customer", filters.customerId);
-  if (filters.supplyType !== "all") params.set("supplyType", filters.supplyType);
-  if (filters.status !== "all") params.set("status", filters.status);
+  appendMultiFilterParam(params, "supplyType", filters.supplyType);
+  appendMultiFilterParam(params, "status", filters.status);
   if (filters.invoiceNo.trim()) params.set("invoiceNo", filters.invoiceNo.trim());
   return params.toString();
 }

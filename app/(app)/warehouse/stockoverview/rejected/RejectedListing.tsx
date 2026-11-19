@@ -1,14 +1,15 @@
 "use client";
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MasterListing } from "@/components/listing/MasterListing";
 import { ColumnConfig, ActionItemConfig } from "@/components/listing/types";
 import { Eye } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { StackedQtyDisplay, type QtyStackMeta } from "@/app/(app)/sales/shared/StackedQtyDisplay";
-import { REJECTED_STATUS_OPTIONS, REJECT_TYPE_OPTIONS, SOURCE_STATUS_OPTIONS, STATUS_BADGE_CONFIG } from "../constants";
+import { STATUS_BADGE_CONFIG } from "../constants";
 import { useStockOverviewListFilters } from "../hooks/use-stock-overview-list-filters";
+import { resolveFilterOptions } from "../lib/listing-filter-options";
 import {
   RejectedListRow,
   StockOverviewApi,
@@ -63,7 +64,6 @@ export function RejectedListing({ warehouseId, onFiltersApplied }: RejectedListi
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filterOptions, setFilterOptions] = useState<Record<string, Array<{ label: string; value: string }>>>({});
-  const [loadingFilters, setLoadingFilters] = useState<Set<string>>(new Set());
   const [exporting, setExporting] = useState(false);
 
   const prevWarehouseRef = useRef(warehouseId);
@@ -89,10 +89,12 @@ export function RejectedListing({ warehouseId, onFiltersApplied }: RejectedListi
       .then((result) => {
         setRecords(result.items);
         setTotalRecords(result.total);
+        setFilterOptions(result.filter_options || {});
       })
       .catch((err) => {
         if (controller.signal.aborted) return;
         setError(StockOverviewApi.getErrorMessage(err, "Failed to load rejected inventory."));
+        setFilterOptions({});
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
@@ -121,32 +123,18 @@ export function RejectedListing({ warehouseId, onFiltersApplied }: RejectedListi
       .finally(() => setExporting(false));
   }, [appliedFilters, exporting, sort.direction, sort.key, warehouseId]);
 
-  const handleOpenFilter = (columnKey: string) => {
-    const keyMap: Record<string, string> = {
-      product_name: "inventory_detail__product__product_name",
-      sku: "inventory_detail__product__sku",
-      uom: "inventory_detail__product__unit",
-      warehouse_name: "inventory_detail__warehouse__warehouse_name",
-      batch_no: "batch_no",
-      source_status: "source_status",
-    };
-    const field = keyMap[columnKey];
-    if (!field || filterOptions[columnKey] || loadingFilters.has(columnKey)) return;
-
-    setLoadingFilters((prev) => new Set(prev).add(columnKey));
-    StockOverviewApi.filterDropdown("rejected", field)
-      .then((options) => setFilterOptions((prev) => ({ ...prev, [columnKey]: options })))
-      .finally(() => {
-        setLoadingFilters((prev) => {
-          const next = new Set(prev);
-          next.delete(columnKey);
-          return next;
-        });
-      });
-  };
-
   // Core order matches Inventory: Product → SKU → UOM → Qty → … → Status
-  const columns: ColumnConfig<RejectedListRow>[] = [
+  const columns: ColumnConfig<RejectedListRow>[] = useMemo(() => {
+    const opts = (key: string) =>
+      resolveFilterOptions(
+        key,
+        filterOptions[key] || [],
+        records as unknown as Array<Record<string, unknown>>,
+        totalRecords,
+        appliedFilters,
+      );
+
+    return [
     {
       key: "product_name",
       header: "Product",
@@ -154,7 +142,7 @@ export function RejectedListing({ warehouseId, onFiltersApplied }: RejectedListi
       filterable: true,
       filterType: "dropdown",
       filterMultiple: true,
-      filterOptions: filterOptions.product_name || [],
+      filterOptions: opts("product_name"),
       render: (_val, row) => (
         <Link href={`/warehouse/stock-overview/view/${row.id}?type=rejected`} className="block group/name">
           <span className="text-xs font-semibold text-foreground group-hover/name:text-brand-700">{row.product_name}</span>
@@ -168,7 +156,7 @@ export function RejectedListing({ warehouseId, onFiltersApplied }: RejectedListi
       filterable: true,
       filterType: "dropdown",
       filterMultiple: true,
-      filterOptions: filterOptions.sku || [],
+      filterOptions: opts("sku"),
       width: "120px",
       render: (val) => <span className="font-mono text-xs text-foreground">{val || "—"}</span>,
     },
@@ -179,7 +167,7 @@ export function RejectedListing({ warehouseId, onFiltersApplied }: RejectedListi
       filterable: true,
       filterType: "dropdown",
       filterMultiple: true,
-      filterOptions: filterOptions.uom || [],
+      filterOptions: opts("uom"),
       width: "72px",
       render: (val) => <span className="text-xs text-foreground">{val || "—"}</span>,
     },
@@ -206,7 +194,7 @@ export function RejectedListing({ warehouseId, onFiltersApplied }: RejectedListi
       filterable: true,
       filterType: "dropdown",
       filterMultiple: true,
-      filterOptions: filterOptions.warehouse_name || [],
+      filterOptions: opts("warehouse_name"),
       width: "260px",
     },
     {
@@ -216,7 +204,7 @@ export function RejectedListing({ warehouseId, onFiltersApplied }: RejectedListi
       filterable: true,
       filterType: "dropdown",
       filterMultiple: true,
-      filterOptions: filterOptions.batch_no || [],
+      filterOptions: opts("batch_no"),
       width: "130px",
       render: (val) => <span className="font-mono text-xs">{val}</span>,
     },
@@ -232,7 +220,7 @@ export function RejectedListing({ warehouseId, onFiltersApplied }: RejectedListi
       filterable: true,
       filterType: "dropdown",
       filterMultiple: true,
-      filterOptions: REJECT_TYPE_OPTIONS,
+      filterOptions: opts("reject_type"),
       width: "120px",
       truncate: false,
       render: (val: string) => {
@@ -269,9 +257,7 @@ export function RejectedListing({ warehouseId, onFiltersApplied }: RejectedListi
       filterable: true,
       filterType: "dropdown",
       filterMultiple: true,
-      filterOptions: filterOptions.source_status?.length
-        ? filterOptions.source_status
-        : SOURCE_STATUS_OPTIONS,
+      filterOptions: opts("source_status"),
       width: "140px",
       truncate: false,
       render: (val: string) => {
@@ -290,7 +276,7 @@ export function RejectedListing({ warehouseId, onFiltersApplied }: RejectedListi
       filterable: true,
       filterType: "dropdown",
       filterMultiple: true,
-      filterOptions: REJECTED_STATUS_OPTIONS,
+      filterOptions: opts("status"),
       width: "140px",
       truncate: false,
       render: (val: string) => {
@@ -303,6 +289,7 @@ export function RejectedListing({ warehouseId, onFiltersApplied }: RejectedListi
       },
     },
   ];
+  }, [appliedFilters, filterOptions, records, totalRecords]);
 
   const actions: ActionItemConfig<RejectedListRow>[] = [
     {
@@ -332,7 +319,6 @@ export function RejectedListing({ warehouseId, onFiltersApplied }: RejectedListi
         searchPlaceholder="Search product, batch or reason..."
         currentFilters={draftFilters}
         currentSort={sort}
-        onOpenFilter={handleOpenFilter}
         onExport={handleExport}
       />
     </div>

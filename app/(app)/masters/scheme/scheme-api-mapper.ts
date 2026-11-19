@@ -230,10 +230,12 @@ function mapTurnoverSlabs(form: SchemeUnifiedForm) {
 
 function mapSpecialSlabs(form: SchemeUnifiedForm) {
   if (form.specialDiscountBasedOn === "Sales Quantity") {
+    const qtyUom =
+      form.specialDiscountUom === "KG_LTR" ? "KG_LTR" : "Piece";
     return form.specialDiscountQuantitySlabs.map((slab, index) => ({
       from_value: parseNum(slab.quantityFrom),
       to_value: openEndedTo(slab.quantityTo),
-      uom: "Piece",
+      uom: qtyUom,
       discount_type: toApiDiscountType(slab.discountType),
       discount_value: parseNum(slab.discountValue),
       sort_order: index,
@@ -350,15 +352,19 @@ export function unifiedFormToCreatePayload(
             ? null
             : parseNum(form.discountValue),
           uom:
-            form.specialHasSlabs ||
-            form.specialDiscountBasedOn !== "Sales Quantity"
-              ? null
-              : "Piece",
+            form.specialDiscountBasedOn === "Sales Quantity"
+              ? form.specialDiscountUom === "KG_LTR"
+                ? "KG_LTR"
+                : "Piece"
+              : null,
           product_evaluation_mode: "COMBINED",
           evaluation_scope:
-            form.specialEvaluationScope === "One Invoice"
+            form.specialDiscountBasedOn === "Sales Quantity" &&
+            form.specialDiscountUom === "KG_LTR"
               ? "PER_INVOICE"
-              : "SCHEME_PERIOD",
+              : form.specialEvaluationScope === "One Invoice"
+                ? "PER_INVOICE"
+                : "SCHEME_PERIOD",
           settlement_run_mode:
             form.specialEvaluationScope !== "One Invoice" ||
             form.specialSettlementRunMode === "Automatic"
@@ -593,7 +599,16 @@ export function detailToUnifiedForm(
     form.specialCombineProducts = true;
 
     if (form.specialDiscountBasedOn === "Sales Quantity") {
-      form.specialDiscountUom = "Piece";
+      const rawUom =
+        asString(specialConfig?.uom) ||
+        asString((slabs[0] as Record<string, unknown> | undefined)?.uom) ||
+        "Piece";
+      const qtyUom =
+        rawUom === "KG_LTR" || rawUom === "KG/LTR" ? "KG_LTR" : "Piece";
+      form.specialDiscountUom = qtyUom;
+      if (qtyUom === "KG_LTR") {
+        form.specialEvaluationScope = "One Invoice";
+      }
 
       form.specialDiscountQuantitySlabs =
         slabs.length > 0
@@ -606,12 +621,12 @@ export function detailToUnifiedForm(
                   row.to_value == null || row.to_value === ""
                     ? ""
                     : asString(row.to_value),
-                uom: "Piece",
+                uom: qtyUom,
                 discountType: fromApiDiscountType(row.discount_type),
                 discountValue: asString(row.discount_value),
               };
             })
-          : [emptySpecialDiscountQuantitySlab()];
+          : [emptySpecialDiscountQuantitySlab(qtyUom)];
     } else {
       form.specialDiscountAmountSlabs =
         slabs.length > 0

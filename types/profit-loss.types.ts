@@ -88,7 +88,7 @@ export interface ProfitLossHealth {
   cogs_excluded_from_trading: true;
   internal_transfer_branch_policy:
     | "EXCLUDED_CONSOLIDATED"
-    | "OPEN_EXCLUDED_BY_DEFAULT";
+    | "BRANCH_TRANSFER_AS_PURCHASE_AND_SALE";
   warnings: ProfitLossWarning[];
 }
 

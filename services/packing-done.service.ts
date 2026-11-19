@@ -3,6 +3,7 @@ import { API_ENDPOINTS } from "@/api/endpoints";
 import type { FilterState } from "@/components/listing/types";
 import type { PackingRecord } from "@/app/(app)/warehouse/packing/types";
 import { extractPackingProductDisplay } from "@/app/(app)/warehouse/packing/lib/packing-qty-stack";
+import { toApiFilterValue } from "@/lib/listing/filter-values";
 
 export interface PackingDoneParams {
   page: number;
@@ -39,11 +40,6 @@ function asString(value: unknown): string {
   if (typeof value === "string") return value;
   if (typeof value === "number" || typeof value === "boolean") return String(value);
   return "";
-}
-
-function firstFilterValue(value: unknown): string {
-  if (Array.isArray(value)) return asString(value[0]).trim();
-  return asString(value).trim();
 }
 
 function formatDetailDate(value: unknown): string {
@@ -337,13 +333,13 @@ export function buildPackingDoneApiFilters(
     apiFilters.warehouse_id = selectedWarehouse;
   }
 
-  const warehouseName = firstFilterValue(filters.warehouse);
-  if (warehouseName) {
+  const warehouseName = toApiFilterValue(filters.warehouse);
+  if (warehouseName !== undefined) {
     packingListFilters.warehouse = { warehouse_name: warehouseName };
   }
 
-  const customerName = firstFilterValue(filters.customer);
-  if (customerName) {
+  const customerName = toApiFilterValue(filters.customer);
+  if (customerName !== undefined) {
     packingListFilters.customer_name = customerName;
   }
 
@@ -351,28 +347,28 @@ export function buildPackingDoneApiFilters(
     apiFilters.packing_list = packingListFilters;
   }
 
-  const status = firstFilterValue(filters.status);
-  if (status) {
+  const status = toApiFilterValue(filters.status);
+  if (status !== undefined) {
     apiFilters.status = status;
   }
 
-  const packingDoneNo = firstFilterValue(filters.packingNo);
-  if (packingDoneNo) {
+  const packingDoneNo = toApiFilterValue(filters.packingNo);
+  if (packingDoneNo !== undefined) {
     apiFilters.packing_done_no = packingDoneNo;
   }
 
-  const orderNo = firstFilterValue(filters.salesOrderNo);
-  if (orderNo) {
+  const orderNo = toApiFilterValue(filters.salesOrderNo);
+  if (orderNo !== undefined) {
     apiFilters.source_document_no = orderNo;
   }
 
-  const packedBy = firstFilterValue(filters.packedBy);
-  if (packedBy) {
+  const packedBy = toApiFilterValue(filters.packedBy);
+  if (packedBy !== undefined) {
     apiFilters.packed_by_user = { username: packedBy };
   }
 
-  const poNumber = firstFilterValue(filters.poNumber);
-  if (poNumber) {
+  const poNumber = toApiFilterValue(filters.poNumber);
+  if (poNumber !== undefined) {
     apiFilters.po_number = poNumber;
   }
 

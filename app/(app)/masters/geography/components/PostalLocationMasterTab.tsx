@@ -55,6 +55,7 @@ import {
   getErrorMessage,
   getMasterListErrorMessage,
 } from "@/lib/masters/master-query-errors";
+import { toApiFilterValue, toFilterStringList } from "@/lib/listing/filter-values";
 import { PostalMappingViewDialog } from "./PostalMappingViewDialog";
 import { PostalMappingFormDialog } from "./PostalMappingFormDialog";
 
@@ -82,10 +83,6 @@ function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () => void 
       </button>
     </div>
   );
-}
-
-function firstFilterValue(value: unknown): unknown {
-  return Array.isArray(value) ? value[0] : value;
 }
 
 export function PostalLocationMasterTab(props: {
@@ -136,15 +133,19 @@ export function PostalLocationMasterTab(props: {
 
     // Merge MasterListing column filters
     Object.entries(filters).forEach(([key, val]) => {
-      const filterValue = firstFilterValue(val);
-      if (filterValue !== undefined && filterValue !== null && filterValue !== "") {
-        if (key === "status") {
-          // Status column filter
-          if (filterValue === "active") next.status = true;
-          else if (filterValue === "inactive") next.status = false;
-        } else {
-          next[key] = filterValue;
-        }
+      if (key === "status") {
+        const tokens = toFilterStringList(val).map((t) => t.toLowerCase());
+        const hasActive = tokens.includes("active");
+        const hasInactive = tokens.includes("inactive");
+        if (hasActive && hasInactive) return;
+        if (hasActive) next.status = true;
+        else if (hasInactive) next.status = false;
+        return;
+      }
+
+      const filterValue = toApiFilterValue(val);
+      if (filterValue !== undefined) {
+        next[key] = filterValue;
       }
     });
 
@@ -152,9 +153,12 @@ export function PostalLocationMasterTab(props: {
   }, [stateFilter, districtFilter, filters]);
 
   const effectiveStatus = useMemo<"all" | "active" | "inactive">(() => {
-    const columnStatus = firstFilterValue(filters.status);
-    if (columnStatus === "active") return "active";
-    if (columnStatus === "inactive") return "inactive";
+    const tokens = toFilterStringList(filters.status).map((t) => t.toLowerCase());
+    const hasActive = tokens.includes("active");
+    const hasInactive = tokens.includes("inactive");
+    if (hasActive && hasInactive) return "all";
+    if (hasActive) return "active";
+    if (hasInactive) return "inactive";
     return statusFilter;
   }, [statusFilter, filters.status]);
 

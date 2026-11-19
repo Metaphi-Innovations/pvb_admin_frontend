@@ -28,22 +28,10 @@ import {
 } from "@/components/accounts/AccountsTableListing";
 import {
   ReportDateRangeFilter,
+  ReportStatusMultiFilter,
   useReportDateRange,
 } from "@/components/accounts/ReportFilters";
-import {
-  ACCOUNTS_FILTER_CONTROL_CLASS,
-  ACCOUNTS_FILTER_LABEL_CLASS,
-  ACCOUNTS_FILTER_SELECT_CLASS,
-} from "@/lib/accounts/accounts-typography";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { cn } from "@/lib/utils";
 import { useDebouncedValue } from "@/app/(app)/accounts/reports/pl/pl-hooks";
 import {
   AccountsColumnFilterProvider,
@@ -357,7 +345,7 @@ export function JournalVoucherListClient() {
     useReportDateRange("this_year");
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedValue(search, 300);
-  const [statusFilter, setStatusFilter] = useState<string>("");
+  const [statusFilters, setStatusFilters] = useState<string[]>([]);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(ACCOUNTS_DEFAULT_PAGE_SIZE);
   const [loading, setLoading] = useState(true);
@@ -450,7 +438,8 @@ export function JournalVoucherListClient() {
     const to = dateFilter?.dateTo || dateTo || undefined;
     const apiSort = SORT_KEY_TO_API[sortKey];
     const colStatus = csvSelected(columnFilters.status);
-    const toolbarStatus = statusFilter || undefined;
+    const toolbarStatus =
+      statusFilters.length > 0 ? statusFilters.join(",") : undefined;
     const amountFilter = amountRange(columnFilters.amount);
     const referenceFilter = columnFilters.reference_number?.textValue?.trim();
 
@@ -473,7 +462,7 @@ export function JournalVoucherListClient() {
     page,
     pageSize,
     debouncedSearch,
-    statusFilter,
+    statusFilters,
     dateFrom,
     dateTo,
     sortKey,
@@ -568,36 +557,17 @@ export function JournalVoucherListClient() {
                 onDateFromChange={onDateFromChange}
                 onDateToChange={onDateToChange}
               />
-              <div className="space-y-0.5 shrink-0 w-[148px]">
-                <span className={ACCOUNTS_FILTER_LABEL_CLASS}>Status</span>
-                <Select
-                  value={statusFilter || "all"}
-                  onValueChange={(v) => {
-                    setStatusFilter(v === "all" ? "" : v);
-                    setPage(1);
-                  }}
-                >
-                  <SelectTrigger
-                    className={cn(
-                      ACCOUNTS_FILTER_CONTROL_CLASS,
-                      ACCOUNTS_FILTER_SELECT_CLASS,
-                      "mt-0 w-[148px]",
-                    )}
-                  >
-                    <SelectValue placeholder="All statuses" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all" className="text-xs">
-                      All statuses
-                    </SelectItem>
-                    {Object.entries(JOURNAL_STATUS_LABELS).map(([k, v]) => (
-                      <SelectItem key={k} value={k} className="text-xs">
-                        {v}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              <ReportStatusMultiFilter
+                values={statusFilters}
+                onChange={(next) => {
+                  setStatusFilters(next);
+                  setPage(1);
+                }}
+                options={Object.entries(JOURNAL_STATUS_LABELS).map(([value, label]) => ({
+                  value,
+                  label,
+                }))}
+              />
             </>
           }
         />

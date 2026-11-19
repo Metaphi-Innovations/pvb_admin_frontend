@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Eye } from "lucide-react";
@@ -8,6 +8,7 @@ import { MasterListing } from "@/components/listing/MasterListing";
 import { ActionItemConfig, ColumnConfig } from "@/components/listing/types";
 import { StackedQtyDisplay, type QtyStackMeta } from "@/app/(app)/sales/shared/StackedQtyDisplay";
 import { useStockOverviewListFilters } from "../hooks/use-stock-overview-list-filters";
+import { resolveFilterOptions } from "../lib/listing-filter-options";
 import {
   InventoryListRow,
   StockOverviewApi,
@@ -68,7 +69,6 @@ export function QcPassedListing({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filterOptions, setFilterOptions] = useState<Record<string, Array<{ label: string; value: string }>>>({});
-  const [loadingFilters, setLoadingFilters] = useState<Set<string>>(new Set());
   const [exporting, setExporting] = useState(false);
 
   const prevWarehouseRef = useRef(warehouseId);
@@ -82,6 +82,7 @@ export function QcPassedListing({
     if (!warehouseId) {
       setRecords([]);
       setTotalRecords(0);
+      setFilterOptions({});
       setLoading(false);
       return;
     }
@@ -101,10 +102,12 @@ export function QcPassedListing({
       .then((result) => {
         setRecords(result.items);
         setTotalRecords(result.total);
+        setFilterOptions(result.filter_options || {});
       })
       .catch((err) => {
         if (controller.signal.aborted) return;
         setError(StockOverviewApi.getErrorMessage(err, "Failed to load inventory."));
+        setFilterOptions({});
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
@@ -133,30 +136,17 @@ export function QcPassedListing({
       .finally(() => setExporting(false));
   }, [appliedFilters, exporting, sort.direction, sort.key, warehouseId]);
 
-  const handleOpenFilter = (columnKey: string) => {
-    if (filterOptions[columnKey] || loadingFilters.has(columnKey)) return;
+  const columns: ColumnConfig<InventoryListRow>[] = useMemo(() => {
+    const opts = (key: string) =>
+      resolveFilterOptions(
+        key,
+        filterOptions[key] || [],
+        records as unknown as Array<Record<string, unknown>>,
+        totalRecords,
+        appliedFilters,
+      );
 
-    const keyMap: Record<string, string> = {
-      product_name: "inventory_detail__product__product_name",
-      sku: "inventory_detail__product__sku",
-      uom: "inventory_detail__product__unit",
-    };
-    const field = keyMap[columnKey];
-    if (!field) return;
-
-    setLoadingFilters((prev) => new Set(prev).add(columnKey));
-    StockOverviewApi.filterDropdown("inventory", field)
-      .then((options) => setFilterOptions((prev) => ({ ...prev, [columnKey]: options })))
-      .finally(() => {
-        setLoadingFilters((prev) => {
-          const next = new Set(prev);
-          next.delete(columnKey);
-          return next;
-        });
-      });
-  };
-
-  const columns: ColumnConfig<InventoryListRow>[] = [
+    return [
     {
       key: "product_name",
       header: "Product",
@@ -164,7 +154,7 @@ export function QcPassedListing({
       filterable: true,
       filterType: "dropdown",
       filterMultiple: true,
-      filterOptions: filterOptions.product_name || [],
+      filterOptions: opts("product_name"),
       render: (_val, row) => (
         <Link href={inventoryViewHref(row.id, warehouseId)} className="block group/name">
           <span className="text-xs font-semibold text-foreground group-hover/name:text-brand-700">
@@ -180,7 +170,7 @@ export function QcPassedListing({
       filterable: true,
       filterType: "dropdown",
       filterMultiple: true,
-      filterOptions: filterOptions.sku || [],
+      filterOptions: opts("sku"),
       width: "120px",
       render: (val) => <span className="font-mono text-xs text-foreground">{val || "—"}</span>,
     },
@@ -191,7 +181,7 @@ export function QcPassedListing({
       filterable: true,
       filterType: "dropdown",
       filterMultiple: true,
-      filterOptions: filterOptions.uom || [],
+      filterOptions: opts("uom"),
       width: "72px",
       render: (val) => <span className="text-xs text-foreground">{val || "—"}</span>,
     },
@@ -264,6 +254,7 @@ export function QcPassedListing({
       },
     },
   ];
+  }, [appliedFilters, filterOptions, records, totalRecords, warehouseId]);
 
   const actions: ActionItemConfig<InventoryListRow>[] = [
     {
@@ -293,7 +284,6 @@ export function QcPassedListing({
         searchPlaceholder="Search product or SKU..."
         currentFilters={draftFilters}
         currentSort={sort}
-        onOpenFilter={handleOpenFilter}
         onExport={handleExport}
       />
     </div>

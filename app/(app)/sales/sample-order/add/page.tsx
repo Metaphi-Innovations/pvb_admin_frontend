@@ -26,6 +26,7 @@ import {
 	useProductsDropdown,
 	useCustomersDropdown,
 } from "@/hooks/sales/use-sales-orders";
+import { getErrorMessage } from "@/lib/masters/master-query-errors";
 
 export default function AddSalesOrderPage() {
 	const router = useRouter();
@@ -184,8 +185,11 @@ export default function AddSalesOrderPage() {
 					});
 					setTimeout(() => router.push("/sales/sample-order"), 1000);
 				},
-				onError: () => {
-					setToast({ msg: "Failed to submit Sample Order.", type: "error" });
+				onError: (err: unknown) => {
+					setToast({
+						msg: getErrorMessage(err, "Failed to submit Sample Order."),
+						type: "error",
+					});
 				},
 			}
 		);

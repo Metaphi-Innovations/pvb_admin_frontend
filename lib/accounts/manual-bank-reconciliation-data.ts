@@ -97,6 +97,9 @@ export interface ManualReconFilters {
   coaLedgerId: number;
   dateFrom?: string;
   dateTo?: string;
+  /** Empty / omitted = all statuses (OR match when set). */
+  statuses?: BookReconStatus[];
+  /** @deprecated Prefer statuses[]; kept for callers using single value. */
   status?: "all" | BookReconStatus;
   search?: string;
 }
@@ -534,10 +537,14 @@ export function filterManualReconRows(
   rows: ManualReconGridRow[],
   filters: Omit<ManualReconFilters, "coaLedgerId">,
 ): ManualReconGridRow[] {
+  const statuses =
+    filters.statuses ??
+    (filters.status && filters.status !== "all" ? [filters.status] : []);
+  const statusSet = new Set(statuses);
   return rows.filter((row) => {
     if (filters.dateFrom && row.entryDate < filters.dateFrom) return false;
     if (filters.dateTo && row.entryDate > filters.dateTo) return false;
-    if (filters.status && filters.status !== "all" && row.status !== filters.status) return false;
+    if (statusSet.size > 0 && !statusSet.has(row.status)) return false;
     if (filters.search?.trim()) {
       const q = filters.search.trim().toLowerCase();
       const amountStr = `${row.debitAmount} ${row.creditAmount}`;

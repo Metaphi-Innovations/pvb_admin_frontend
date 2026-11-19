@@ -32,9 +32,9 @@ import {
   Search,
   Check,
   X,
-  Upload,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { toApiFilterValue, toFilterStringList } from "@/lib/listing/filter-values";
 import { Input } from "@/components/ui/input";
 import { ListingContainer } from "@/components/layout/ListingContainer";
 import { MasterListing } from "@/components/listing/MasterListing";
@@ -301,34 +301,28 @@ export default function SalesOrdersPage() {
   const [cancelOrder, setCancelOrder] = useState<SalesOrder | null>(null);
   const [approveOrder, setApproveOrder] = useState<SalesOrder | null>(null);
   const [rejectOrder, setRejectOrder] = useState<SalesOrder | null>(null);
-  const [bulkUploading, setBulkUploading] = useState(false);
-  const bulkFileInputRef = useRef<HTMLInputElement>(null);
 
   const apiFilters = useMemo(() => {
     const f: Record<string, any> = {};
     if (sampleTabKey !== "all") {
       f.status = mapFrontendStatusToBackend(sampleTabKey);
     }
-    if (filters.status && Array.isArray(filters.status) && filters.status.length > 0) {
-      f.status = filters.status.map((s) => mapFrontendStatusToBackend(String(s)));
-    } else if (filters.status && typeof filters.status === "string") {
-      f.status = mapFrontendStatusToBackend(filters.status);
-    }
-    if (filters.fulfillmentStatus && Array.isArray(filters.fulfillmentStatus) && filters.fulfillmentStatus.length > 0) {
-      f.fulfillment_status = filters.fulfillmentStatus;
-    } else if (filters.fulfillmentStatus && typeof filters.fulfillmentStatus === "string") {
-      f.fulfillment_status = filters.fulfillmentStatus;
-    }
-    if (filters.soNumber && Array.isArray(filters.soNumber) && filters.soNumber.length > 0) {
-      f.order_no = filters.soNumber;
-    } else if (filters.soNumber && typeof filters.soNumber === "string") {
-      f.order_no = filters.soNumber;
-    }
-    if (filters.customerName && Array.isArray(filters.customerName) && filters.customerName.length > 0) {
-      f.salesperson = { username: filters.customerName };
-    } else if (filters.customerName && typeof filters.customerName === "string") {
-      f.salesperson = { username: filters.customerName };
-    }
+
+    const statusList = toFilterStringList(filters.status)
+      .map((s) => mapFrontendStatusToBackend(s))
+      .filter(Boolean);
+    const status = toApiFilterValue(statusList);
+    if (status !== undefined) f.status = status;
+
+    const fulfillment = toApiFilterValue(filters.fulfillmentStatus);
+    if (fulfillment !== undefined) f.fulfillment_status = fulfillment;
+
+    const orderNo = toApiFilterValue(filters.soNumber);
+    if (orderNo !== undefined) f.order_no = orderNo;
+
+    const customerName = toApiFilterValue(filters.customerName);
+    if (customerName !== undefined) f.salesperson = { username: customerName };
+
     return f;
   }, [filters, sampleTabKey]);
 
@@ -456,35 +450,6 @@ export default function SalesOrdersPage() {
   }, [allCountData, draftCountData, approvalCountData, rejectedCountData, returnsCountData]);
 
   const showToast = (msg: string, type: "success" | "error" = "success") => setToast({ msg, type });
-
-  const handleBulkUpload = async (file: File | null) => {
-    if (!file) return;
-    setBulkUploading(true);
-    try {
-      const result = await SampleOrderService.bulkUpload(file);
-      if (result.success) {
-        const created = Number(result.summary?.sampleOrdersCreated ?? result.created?.length ?? 0);
-        showToast(
-          created > 0
-            ? `Bulk upload successful — ${created} sample order(s) created.`
-            : result.message || "Bulk upload successful.",
-        );
-        refetch();
-      } else {
-        const firstError = result.errors?.[0];
-        const detail =
-          firstError && typeof firstError.message === "string"
-            ? ` ${firstError.message}`
-            : "";
-        showToast((result.message || "Bulk upload failed.") + detail, "error");
-      }
-    } catch (e: unknown) {
-      showToast(getErrorMessage(e, "Sample Order bulk upload failed."), "error");
-    } finally {
-      setBulkUploading(false);
-      if (bulkFileInputRef.current) bulkFileInputRef.current.value = "";
-    }
-  };
 
   const handleTabChange = (tab: string) => {
     setActiveTab(tab as OrderListTab);
@@ -876,70 +841,44 @@ export default function SalesOrdersPage() {
           }
         />
       ) : (
-        <div className="space-y-2">
-          <div className="flex items-center justify-end gap-2">
-            <input
-              ref={bulkFileInputRef}
-              type="file"
-              accept=".xlsx,.xls,.xlsm"
-              className="hidden"
-              onChange={(e) => {
-                const file = e.target.files?.[0] || null;
-                void handleBulkUpload(file);
-              }}
-            />
-            <button
-              type="button"
-              disabled={bulkUploading}
-              onClick={() => bulkFileInputRef.current?.click()}
-              className={cn(
-                "inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted/50",
-                bulkUploading && "opacity-60 cursor-not-allowed",
-              )}
-            >
-              <Upload className="w-3.5 h-3.5" />
-              {bulkUploading ? "Uploading…" : "Bulk Upload"}
-            </button>
-          </div>
-          <MasterListing<SalesOrder>
-            columns={columns}
-            data={ordersList}
-            totalRecords={totalRecords}
-            page={page}
-            pageSize={pageSize}
-            onPageChange={setPage}
-            onPageSizeChange={setPageSize}
-            onSortChange={setSort}
-            onFilterChange={setFilters}
-            emptyMessage=""
-            searchPlaceholder="Search sample orders, employees…"
-            currentFilters={filters}
-            currentSort={sort}
-            onAdd={() => router.push("/sales/sample-order/add")}
-            addLabel="New Sample Order"
-            onExport={async () => {
-              try {
-                const csvData = await SampleOrderService.export({
-                  search: filters.search as string,
-                  ordering,
-                  apiFilters,
-                });
-                const blob = new Blob([csvData], { type: "text/csv" });
-                const url = window.URL.createObjectURL(blob);
-                const link = document.createElement("a");
-                link.href = url;
-                link.download = `sample-orders_${new Date().toISOString().slice(0, 10)}.csv`;
-                document.body.appendChild(link);
-                link.click();
-                link.remove();
-                window.URL.revokeObjectURL(url);
-                showToast("Exported sample orders successfully.");
-              } catch {
-                showToast("Failed to export sample orders.", "error");
-              }
-            }}
-          />
-        </div>
+        <MasterListing<SalesOrder>
+          columns={columns}
+          data={ordersList}
+          totalRecords={totalRecords}
+          page={page}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+          onSortChange={setSort}
+          onFilterChange={setFilters}
+          emptyMessage=""
+          searchPlaceholder="Search sample orders, employees…"
+          currentFilters={filters}
+          currentSort={sort}
+          onAdd={() => router.push("/sales/sample-order/add")}
+          addLabel="New Sample Order"
+          onExport={async () => {
+            try {
+              const csvData = await SampleOrderService.export({
+                search: filters.search as string,
+                ordering,
+                apiFilters,
+              });
+              const blob = new Blob([csvData], { type: "text/csv" });
+              const url = window.URL.createObjectURL(blob);
+              const link = document.createElement("a");
+              link.href = url;
+              link.download = `sample-orders_${new Date().toISOString().slice(0, 10)}.csv`;
+              document.body.appendChild(link);
+              link.click();
+              link.remove();
+              window.URL.revokeObjectURL(url);
+              showToast("Exported sample orders successfully.");
+            } catch {
+              showToast("Failed to export sample orders.", "error");
+            }
+          }}
+        />
       )}
 
       <CancelOrderDialog

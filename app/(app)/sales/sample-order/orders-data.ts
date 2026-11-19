@@ -556,7 +556,8 @@ export function createEmptyLineItem(): SalesOrderLineItem {
     productCode: "",
     productName: "",
     availableStock: 0,
-    quantityType: "Piece",
+    // Stock is inwarded as CASE; sample packing allocates CASE sellable rows only.
+    quantityType: "Case",
     caseQuantity: 0,
     pieceQuantity: 0,
     quantity: 0,

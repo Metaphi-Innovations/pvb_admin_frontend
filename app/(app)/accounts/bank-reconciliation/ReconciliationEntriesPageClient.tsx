@@ -3,10 +3,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { ArrowLeft, FileSpreadsheet, Search } from "lucide-react";
+import { ReportMultiSelect } from "@/components/accounts/ReportMultiSelect";
+import { ReportStatusMultiFilter } from "@/components/accounts/ReportFilters";
 import {
   getEntriesForStatement,
   getStatementById,
@@ -42,8 +43,8 @@ export default function ReconciliationEntriesPageClient({
   const statement = getStatementById(statementId);
   const [entries, setEntries] = useState<BankStatementEntry[]>([]);
   const [search, setSearch] = useState("");
-  const [matchStatus, setMatchStatus] = useState("all");
-  const [entryType, setEntryType] = useState("all");
+  const [matchStatuses, setMatchStatuses] = useState<string[]>([]);
+  const [entryTypes, setEntryTypes] = useState<string[]>([]);
   const [activeEntries, setActiveEntries] = useState<BankStatementEntry[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [exporting, setExporting] = useState(false);
@@ -53,11 +54,11 @@ export default function ReconciliationEntriesPageClient({
     setEntries(
       getEntriesForStatement(statementId, {
         search,
-        matchStatus,
-        entryType,
+        matchStatus: matchStatuses,
+        entryType: entryTypes,
       }),
     );
-  }, [statementId, search, matchStatus, entryType]);
+  }, [statementId, search, matchStatuses, entryTypes]);
 
   useEffect(() => {
     refresh();
@@ -177,29 +178,26 @@ export default function ReconciliationEntriesPageClient({
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <Select value={matchStatus} onValueChange={setMatchStatus}>
-          <SelectTrigger className="h-8 w-[120px] text-sm">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all" className="text-xs">All status</SelectItem>
-            {MATCH_STATUS_OPTIONS.map((s) => (
-              <SelectItem key={s} value={s} className="text-xs capitalize">
-                {s}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={entryType} onValueChange={setEntryType}>
-          <SelectTrigger className="h-8 w-[120px] text-sm">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all" className="text-xs">All types</SelectItem>
-            <SelectItem value="debit" className="text-xs">Withdrawals</SelectItem>
-            <SelectItem value="credit" className="text-xs">Deposits</SelectItem>
-          </SelectContent>
-        </Select>
+        <ReportStatusMultiFilter
+          values={matchStatuses}
+          onChange={setMatchStatuses}
+          options={MATCH_STATUS_OPTIONS.map((s) => ({
+            value: s,
+            label: s.charAt(0).toUpperCase() + s.slice(1),
+          }))}
+        />
+        <ReportMultiSelect
+          label="Type"
+          values={entryTypes}
+          onChange={setEntryTypes}
+          options={[
+            { value: "debit", label: "Withdrawals" },
+            { value: "credit", label: "Deposits" },
+          ]}
+          entityName="Type"
+          allLabel="All types"
+          minWidthClass="min-w-[120px]"
+        />
         <span className="text-xs text-muted-foreground ml-auto hidden sm:inline">
           W: {formatINR(stats.totalDebit)} · D: {formatINR(stats.totalCredit)}
         </span>

@@ -8,18 +8,12 @@ import { AccountsFilterBar } from "@/components/accounts/AccountsFilterBar";
 import { AccountsListingDateFilter } from "@/components/accounts/AccountsListingFilter";
 import { Button } from "@/components/ui/button";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   AccountsEditAction,
   AccountsTableActionCell,
   AccountsViewAction,
   accountsActionColClass,
 } from "@/components/accounts/AccountsTableActions";
+import { ReportMultiSelect } from "@/components/accounts/ReportMultiSelect";
 import { Plus } from "lucide-react";
 import {
   filterPurchaseInvoices,
@@ -42,8 +36,8 @@ import { cn } from "@/lib/utils";
 export default function PurchasePageClient() {
   const [records, setRecords] = useState<PurchaseInvoiceRecord[]>([]);
   const [search, setSearch] = useState("");
-  const [source, setSource] = useState("all");
-  const [vendor, setVendor] = useState("all");
+  const [sources, setSources] = useState<string[]>([]);
+  const [vendors, setVendors] = useState<string[]>([]);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
 
@@ -57,9 +51,29 @@ export default function PurchasePageClient() {
     [records],
   );
 
+  const sourceOptions = useMemo(
+    () =>
+      (Object.entries(PURCHASE_SOURCE_LABELS) as [string, string][]).map(
+        ([value, label]) => ({ value, label }),
+      ),
+    [],
+  );
+
+  const vendorOptions = useMemo(
+    () => vendorNames.map((v) => ({ value: v, label: v })),
+    [vendorNames],
+  );
+
   const visible = useMemo(
-    () => filterPurchaseInvoices(records, { search, source, vendor, dateFrom, dateTo }),
-    [records, search, source, vendor, dateFrom, dateTo],
+    () =>
+      filterPurchaseInvoices(records, {
+        search,
+        source: sources,
+        vendor: vendors,
+        dateFrom,
+        dateTo,
+      }),
+    [records, search, sources, vendors, dateFrom, dateTo],
   );
 
   return (
@@ -88,29 +102,24 @@ export default function PurchasePageClient() {
           onSearchChange={setSearch}
           searchPlaceholder="Purchase no., supplier invoice no., supplier, PO…"
         >
-          <Select value={source} onValueChange={setSource}>
-            <SelectTrigger className="h-8 w-[130px] text-sm bg-white">
-              <SelectValue placeholder="Source" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all" className="text-xs">All sources</SelectItem>
-              <SelectItem value="po_invoice" className="text-xs">PO Invoice</SelectItem>
-              <SelectItem value="manual_entry" className="text-xs">Manual Entry</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={vendor} onValueChange={setVendor}>
-            <SelectTrigger className="h-8 w-[140px] text-sm bg-white">
-              <SelectValue placeholder="Supplier" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all" className="text-xs">All suppliers</SelectItem>
-              {vendorNames.map((v) => (
-                <SelectItem key={v} value={v} className="text-xs">
-                  {v}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <ReportMultiSelect
+            label="Source"
+            values={sources}
+            onChange={setSources}
+            options={sourceOptions}
+            entityName="Source"
+            allLabel="All sources"
+            minWidthClass="min-w-[130px]"
+          />
+          <ReportMultiSelect
+            label="Supplier"
+            values={vendors}
+            onChange={setVendors}
+            options={vendorOptions}
+            entityName="Supplier"
+            allLabel="All suppliers"
+            minWidthClass="min-w-[140px]"
+          />
           <AccountsListingDateFilter
             dateFrom={dateFrom}
             dateTo={dateTo}

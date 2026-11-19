@@ -40,6 +40,7 @@ export function CashBookTable({
   onRemoveSort,
   filters,
   onFilterChange,
+  voucherTypeOptions = [],
   loading = false,
 }: {
   openingRow: CashBookDisplayRow;
@@ -54,6 +55,7 @@ export function CashBookTable({
   sortDir?: "asc" | "desc";
   onSort?: (key: string) => void;
   onRemoveSort?: () => void;
+  voucherTypeOptions?: ColumnValueOption[];
   filters?: {
     voucherType?: string;
     voucherNo?: string;
@@ -132,7 +134,17 @@ export function CashBookTable({
                 sortDir={sortDir}
                 onSort={onSort}
                 onRemoveSort={onRemoveSort}
-                filterable={false}
+                filterType="text"
+                valueOptions={voucherTypeOptions}
+                filterValue={
+                  filters?.voucherType
+                    ? {
+                        type: "text",
+                        selectedValues: filters.voucherType.split(",").filter(Boolean),
+                      }
+                    : undefined
+                }
+                onFilterChange={(val) => onFilterChange?.("voucherType", val)}
               />
               <SortTh
                 label="Voucher No."

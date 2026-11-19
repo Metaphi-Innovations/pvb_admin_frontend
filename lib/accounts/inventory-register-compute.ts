@@ -24,7 +24,7 @@ export interface InventoryRegisterFilters {
   financialYearId: string;
   warehouse: string | string[];
   productId: string | string[];
-  category: string;
+  category: string | string[];
   search: string;
 }
 
@@ -192,7 +192,7 @@ function matchesScopeFilters(
 ): boolean {
   if (!matchesMultiFilter(filters.warehouse, movement.warehouse)) return false;
   if (!matchesMultiFilter(filters.productId, movement.productCode)) return false;
-  if (filters.category !== "all" && movement.category !== filters.category) return false;
+  if (!matchesMultiFilter(filters.category, movement.category)) return false;
 
   if (options?.periodOnly) {
     if (filters.dateFrom && movement.date < filters.dateFrom) return false;

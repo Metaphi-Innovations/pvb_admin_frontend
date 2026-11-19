@@ -1028,6 +1028,41 @@ export function ReportStateFilter({
   );
 }
 
+export function ReportStateMultiFilter({
+  values,
+  onChange,
+  states,
+  options,
+  label = "State",
+  allLabel = "All states",
+}: {
+  values: string[];
+  onChange: (values: string[]) => void;
+  states?: string[];
+  options?: { value: string; label: string }[];
+  label?: string;
+  allLabel?: string;
+}) {
+  const selectOptions: ReportMultiSelectOption[] =
+    options ??
+    (states ?? []).map((s) => ({
+      value: s,
+      label: s,
+      searchText: s,
+    }));
+  return (
+    <ReportMultiSelect
+      label={label}
+      values={values}
+      onChange={onChange}
+      options={selectOptions}
+      entityName="State"
+      allLabel={allLabel}
+      minWidthClass="min-w-[180px] w-[200px] max-w-[260px]"
+    />
+  );
+}
+
 export function ReportViewByFilter({
   value,
   onChange,

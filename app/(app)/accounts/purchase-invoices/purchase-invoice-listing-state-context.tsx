@@ -13,13 +13,19 @@ import { resolveDateRangePreset, type DateRangePresetId } from "@/lib/accounts/r
 import type { PurchaseInvoiceListTabId } from "./purchase-invoice-nav";
 import type { PurchaseNature, PurchaseSourceType } from "./purchase-invoice-types";
 
+/** @deprecated Prefer string[] multi filters; kept for transitional imports. */
 export type PurchaseSourceTypeFilter = "all" | PurchaseSourceType;
+/** @deprecated Prefer string[] multi filters; kept for transitional imports. */
 export type PurchaseNatureFilter = "all" | "inventory" | PurchaseNature;
+
+export type PurchaseNatureValue = "inventory" | PurchaseNature;
 
 export type PurchaseInvoicesTabState = {
   search: string;
-  sourceTypeFilter: PurchaseSourceTypeFilter;
-  purchaseNatureFilter: PurchaseNatureFilter;
+  /** Empty = All source types */
+  sourceTypeFilters: string[];
+  /** Empty = All purchase natures */
+  purchaseNatureFilters: string[];
   page: number;
   pageSize: number;
   sortKey: string;
@@ -47,8 +53,8 @@ export function createDefaultPurchaseInvoicesTabState(
   const presetDates = resolveDateRangePreset(LISTING_DEFAULT_PRESET);
   return {
     search: "",
-    sourceTypeFilter: "all",
-    purchaseNatureFilter: "all",
+    sourceTypeFilters: [],
+    purchaseNatureFilters: [],
     page: 1,
     pageSize: 25,
     sortKey: "",

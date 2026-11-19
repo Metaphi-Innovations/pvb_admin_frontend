@@ -1,4 +1,5 @@
 import type { FilterState, SortState } from "@/components/listing/types";
+import { toApiFilterValue } from "@/lib/listing/filter-values";
 import { exportRowsToExcel } from "@/lib/warehouse/export-excel";
 import { getQcSourceType } from "@/lib/warehouse/grn-source";
 import { QcService } from "@/services/qc.service";
@@ -29,12 +30,6 @@ const FRONTEND_SOURCE_MAP: Record<QcListSource, string> = {
   "stock-transfer": "stock_transfer",
 };
 
-function firstFilterValue(value: unknown): string {
-  if (Array.isArray(value)) return String(value[0] ?? "").trim();
-  if (value == null) return "";
-  return String(value).trim();
-}
-
 function buildQcApiFilters(
   source: QcListSource,
   statusTab: QcStatusTab,
@@ -45,20 +40,20 @@ function buildQcApiFilters(
   };
   const pending = statusTab === "pending";
 
-  const qcNo = firstFilterValue(filters.qcNo);
-  if (qcNo) api.qcNumber = qcNo;
+  const qcNo = toApiFilterValue(filters.qcNo);
+  if (qcNo !== undefined) api.qcNumber = qcNo;
 
-  const grnNo = firstFilterValue(filters.grnNo);
-  if (grnNo) {
+  const grnNo = toApiFilterValue(filters.grnNo);
+  if (grnNo !== undefined) {
     if (pending) api.grnNumber = grnNo;
     else api.grn = { ...(api.grn as object), grnNumber: grnNo };
   }
 
   if (source === "purchase") {
-    const poNumber = firstFilterValue(filters.poNumber);
-    if (poNumber) api.poNumber = poNumber;
-    const vendorName = firstFilterValue(filters.vendorName);
-    if (vendorName) {
+    const poNumber = toApiFilterValue(filters.poNumber);
+    if (poNumber !== undefined) api.poNumber = poNumber;
+    const vendorName = toApiFilterValue(filters.vendorName);
+    if (vendorName !== undefined) {
       if (pending) {
         api.supplier = { supplier_name: vendorName };
       } else {
@@ -69,37 +64,39 @@ function buildQcApiFilters(
       }
     }
   } else if (source === "sales-return") {
-    const returnNo = firstFilterValue(filters.poNumber) || firstFilterValue(filters.salesReturnNo);
-    if (returnNo) {
+    const returnNo =
+      toApiFilterValue(filters.poNumber) ?? toApiFilterValue(filters.salesReturnNo);
+    if (returnNo !== undefined) {
       if (pending) api.sales_return_no = returnNo;
       else api.poNumber = returnNo;
     }
-    const customer = firstFilterValue(filters.vendorName);
-    if (customer) {
+    const customer = toApiFilterValue(filters.vendorName);
+    if (customer !== undefined) {
       if (pending) api.customer_name = customer;
       else api.vendorName = customer;
     }
   } else if (source === "sample-return") {
-    const returnNo = firstFilterValue(filters.poNumber) || firstFilterValue(filters.sampleReturnNo);
-    if (returnNo) {
+    const returnNo =
+      toApiFilterValue(filters.poNumber) ?? toApiFilterValue(filters.sampleReturnNo);
+    if (returnNo !== undefined) {
       if (pending) api.sample_return_no = returnNo;
       else api.poNumber = returnNo;
     }
-    const customer = firstFilterValue(filters.vendorName);
-    if (customer) {
+    const customer = toApiFilterValue(filters.vendorName);
+    if (customer !== undefined) {
       if (pending) api.customer_name = customer;
       else api.vendorName = customer;
     }
   } else {
-    const stNo = firstFilterValue(filters.stockTransferNo);
-    if (stNo) {
+    const stNo = toApiFilterValue(filters.stockTransferNo);
+    if (stNo !== undefined) {
       if (pending) api.stock_transfer_no = stNo;
       else api.poNumber = stNo;
     }
-    const fromWh = firstFilterValue(filters.fromWarehouse);
-    if (fromWh) api.from_warehouse = fromWh;
-    const toWh = firstFilterValue(filters.toWarehouse);
-    if (toWh) {
+    const fromWh = toApiFilterValue(filters.fromWarehouse);
+    if (fromWh !== undefined) api.from_warehouse = fromWh;
+    const toWh = toApiFilterValue(filters.toWarehouse);
+    if (toWh !== undefined) {
       if (pending) api.warehouse = { warehouse_name: toWh };
       else {
         api.grn = {
@@ -110,8 +107,8 @@ function buildQcApiFilters(
     }
   }
 
-  const warehouse = firstFilterValue(filters.warehouse);
-  if (warehouse && source !== "stock-transfer") {
+  const warehouse = toApiFilterValue(filters.warehouse);
+  if (warehouse !== undefined && source !== "stock-transfer") {
     if (pending) {
       api.warehouse = { warehouse_name: warehouse };
     } else {

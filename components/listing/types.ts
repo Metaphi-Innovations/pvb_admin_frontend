@@ -9,7 +9,10 @@ export interface ColumnConfig<T = any> {
   filterable?: boolean;
   filterType?: FilterType;
   filterOptions?: { label: string; value: string }[]; // For dropdown filters
-  /** When true, dropdown filter allows selecting multiple values. Default: single-select. */
+  /**
+   * Dropdown multi-select. Default: true for filterType "dropdown".
+   * Set false to force single-select.
+   */
   filterMultiple?: boolean;
   /** Optional width/class for the filter popover (e.g. long warehouse names). */
   filterPopoverClassName?: string;

@@ -578,11 +578,14 @@ export function lookupPayableSource(
 export interface PaymentListFilters {
   tab: string;
   search: string;
-  paymentMode: string;
-  sourceType: string;
+  /** Empty = all modes (OR match when set). */
+  paymentModes: string[];
+  /** Empty = all source types (OR match when set). */
+  sourceTypes: string[];
   dateFrom: string;
   dateTo: string;
-  statusFilter: string;
+  /** Empty = all statuses (OR match when set). */
+  statusFilters: string[];
 }
 
 export function tabMatchesPayment(rec: CompanyPaymentRecord, tab: string): boolean {
@@ -603,14 +606,17 @@ export function filterCompanyPayments(
 ): CompanyPaymentRecord[] {
   let r = records.map(normalizeCompanyPayment).filter((e) => tabMatchesPayment(e, filters.tab));
 
-  if (filters.statusFilter && filters.statusFilter !== "all") {
-    r = r.filter((e) => e.paymentStatus === filters.statusFilter);
+  if (filters.statusFilters.length > 0) {
+    const allowed = new Set(filters.statusFilters);
+    r = r.filter((e) => allowed.has(e.paymentStatus));
   }
-  if (filters.paymentMode && filters.paymentMode !== "all") {
-    r = r.filter((e) => e.paymentMode === filters.paymentMode);
+  if (filters.paymentModes.length > 0) {
+    const allowed = new Set(filters.paymentModes);
+    r = r.filter((e) => e.paymentMode != null && allowed.has(e.paymentMode));
   }
-  if (filters.sourceType && filters.sourceType !== "all") {
-    r = r.filter((e) => e.sourceType === filters.sourceType);
+  if (filters.sourceTypes.length > 0) {
+    const allowed = new Set(filters.sourceTypes);
+    r = r.filter((e) => allowed.has(e.sourceType));
   }
   if (filters.search.trim()) {
     const q = filters.search.toLowerCase();

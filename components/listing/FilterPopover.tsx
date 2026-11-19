@@ -43,7 +43,11 @@ export function FilterPopover({
   const [selectedDropdownValues, setSelectedDropdownValues] = useState<
     string[]
   >([]);
-  const multi = Boolean(column.filterMultiple);
+  // Dropdown filters are multi-select by default (ERP-wide). Opt out with filterMultiple: false.
+  const multi =
+    column.filterType === "dropdown"
+      ? column.filterMultiple !== false
+      : Boolean(column.filterMultiple);
   const wideFilter = needsWideFilterPopover(column);
   const filterWidthClass =
     column.filterPopoverClassName ||

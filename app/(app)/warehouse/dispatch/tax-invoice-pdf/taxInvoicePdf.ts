@@ -17,6 +17,7 @@ import {
   renderPdfTable,
   renderSummaryRows,
   sanitizePdfFileName,
+  stripGstAddressFieldLabels,
   toNumber,
   type PdfTableColumn,
   type PdfTableRow,
@@ -209,11 +210,12 @@ function partyFromRaw(
   raw: Record<string, unknown>,
   fallbacks: Record<string, unknown> = {},
 ): PdfPartyBlock {
-  const address =
+  const address = stripGstAddressFieldLabels(
     asText(raw.address ?? raw.address_line ?? fallbacks.address, "") ||
-    [asText(raw.address_line_1, ""), asText(raw.address_line_2, "")]
-      .filter(Boolean)
-      .join(", ");
+      [asText(raw.address_line_1, ""), asText(raw.address_line_2, "")]
+        .filter(Boolean)
+        .join(", "),
+  );
   const cityStatePin = [
     asText(raw.city ?? fallbacks.city, ""),
     asText(raw.state ?? fallbacks.state, ""),

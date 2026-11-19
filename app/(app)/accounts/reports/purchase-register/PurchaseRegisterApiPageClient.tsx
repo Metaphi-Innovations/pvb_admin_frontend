@@ -39,6 +39,15 @@ import {
 import { AccountsColumnHeader } from "@/components/accounts/AccountsColumnHeader";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import {
+  applyAccountsColumnFilters,
+  collectColumnValueCounts,
+} from "@/lib/accounts/column-filter-engine";
+import type {
+  AccountsColumnFilterState,
+  AccountsColumnFilters,
+  ColumnValueOption,
+} from "@/lib/accounts/column-filter-types";
+import {
   formatMoneyString,
   MONEY_AMOUNT_CLASS,
 } from "@/lib/accounts/money-format";
@@ -99,6 +108,18 @@ const INVOICE_TYPE_LABELS: Record<PurchaseRegisterInvoiceType, string> = {
   STOCK_TRANSFER: "Stock Transfer",
 };
 
+const DEFAULT_INVOICE_TYPES: PurchaseRegisterInvoiceType[] = [
+  "PURCHASE",
+  "DIRECT_PURCHASE",
+  "STOCK_TRANSFER",
+];
+
+function invoiceTypesMatchDefault(values: string[]): boolean {
+  if (values.length !== DEFAULT_INVOICE_TYPES.length) return false;
+  const set = new Set(values);
+  return DEFAULT_INVOICE_TYPES.every((t) => set.has(t));
+}
+
 const GSTR2B_STATUS_LABELS: Record<PurchaseRegisterGstr2bSimpleStatus, string> =
   {
     matched: "Matched",
@@ -114,6 +135,83 @@ const STATUS_FALLBACK: { value: PurchaseRegisterReportStatus; label: string }[] 
     { value: "CANCELLED", label: "Cancelled" },
     { value: "REVERSED", label: "Reversed" },
   ];
+
+const STATUS_OPTION_LABELS: Record<string, string> = {
+  POSTED: "Posted",
+  CANCELLED: "Cancelled",
+  REVERSED: "Reversed",
+};
+
+const FILTERABLE_TEXT_COLS = new Set<PurchaseRegisterApiColKey>([
+  "voucher_number",
+  "supplier_invoice_number",
+  "supplier_name",
+  "supplier_gstin",
+  "invoice_type",
+  "purchase_type",
+  "branch",
+  "warehouse",
+  "po_number",
+  "grn_number",
+  "hsn_sac",
+  "gstr2b_simple_status",
+  "voucher_status",
+]);
+
+function selectedColumnValues(
+  filter?: AccountsColumnFilterState,
+): string[] {
+  return (filter?.selectedValues ?? [])
+    .map((v) => String(v).trim())
+    .filter(Boolean);
+}
+
+function intersectIds(a: string[], b: string[]): string[] {
+  if (a.length === 0) return b;
+  if (b.length === 0) return a;
+  const set = new Set(a);
+  return b.filter((id) => set.has(id));
+}
+
+function getPurchaseRegisterFilterCell(
+  row: PurchaseRegisterApiRow,
+  colKey: string,
+): string {
+  switch (colKey as PurchaseRegisterApiColKey) {
+    case "voucher_number":
+      return row.voucher_number || "";
+    case "supplier_invoice_number":
+      return row.supplier_invoice_number || "";
+    case "supplier_name":
+      return row.supplier.name || "";
+    case "supplier_gstin":
+      return row.supplier.gstin || "";
+    case "invoice_type":
+      if (!row.invoice_type) {
+        return row.source_kind === "debit_note" ? "Debit Note" : "";
+      }
+      return INVOICE_TYPE_LABELS[row.invoice_type] ?? row.invoice_type;
+    case "purchase_type":
+      if (!row.purchase_type) return "";
+      return row.purchase_type === "local" ? "Local" : "Interstate";
+    case "branch":
+      return row.branch.name || "";
+    case "warehouse":
+      return row.warehouse.name || "";
+    case "po_number":
+      return row.po.number || "";
+    case "grn_number":
+      return row.grn.number || "";
+    case "hsn_sac":
+      return row.hsn_sac || "";
+    case "gstr2b_simple_status":
+      return row.gstr2b_simple_status || "";
+    case "voucher_status":
+      return row.voucher_status || "";
+    default:
+      return "";
+  }
+}
 
 /** Supported money: real zero shows 0.00; null → em dash (Not Available). */
 function formatSupportedMoney(
@@ -227,7 +325,9 @@ export default function PurchaseRegisterApiPageClient() {
   const [supplierIds, setSupplierIds] = useState<string[]>([]);
   const [supplierGstin, setSupplierGstin] = useState("");
   const [debouncedSupplierGstin, setDebouncedSupplierGstin] = useState("");
-  const [invoiceTypes, setInvoiceTypes] = useState<string[]>([]);
+  const [invoiceTypes, setInvoiceTypes] = useState<string[]>([
+    ...DEFAULT_INVOICE_TYPES,
+  ]);
   const [statuses, setStatuses] = useState<string[]>([]);
   const [gstr2bStatuses, setGstr2bStatuses] = useState<string[]>([]);
   const [productSearch, setProductSearch] = useState("");
@@ -243,6 +343,7 @@ export default function PurchaseRegisterApiPageClient() {
     useState<PurchaseRegisterSortBy>("purchase_date");
   const [sortOrder, setSortOrder] =
     useState<PurchaseRegisterSortOrder>("desc");
+  const [columnFilters, setColumnFilters] = useState<AccountsColumnFilters>({});
 
   const [report, setReport] = useState<PurchaseRegisterReportResult | null>(
     null,
@@ -348,6 +449,17 @@ export default function PurchaseRegisterApiPageClient() {
     setPageSize(filtersConfig.defaults.page_size || 25);
     setSortBy(filtersConfig.defaults.sort_by || "purchase_date");
     setSortOrder(filtersConfig.defaults.sort_order || "desc");
+    const defaultInvoiceTypes = (filtersConfig.defaults.invoice_types ?? []).filter(
+      (t): t is PurchaseRegisterInvoiceType =>
+        t === "PURCHASE" ||
+        t === "DIRECT_PURCHASE" ||
+        t === "STOCK_TRANSFER",
+    );
+    setInvoiceTypes(
+      defaultInvoiceTypes.length > 0
+        ? defaultInvoiceTypes
+        : [...DEFAULT_INVOICE_TYPES],
+    );
     appliedDefaults.current = true;
   }, [filtersConfig, ready]);
 
@@ -385,11 +497,29 @@ export default function PurchaseRegisterApiPageClient() {
     { value: "not_applicable" as const, label: "Not Applicable" },
   ];
 
+  const handleColumnFilterChange = useCallback(
+    (colKey: string, value: AccountsColumnFilterState | undefined) => {
+      setColumnFilters((prev) => {
+        if (!value) {
+          const next = { ...prev };
+          delete next[colKey];
+          return next;
+        }
+        return { ...prev, [colKey]: value };
+      });
+    },
+    [],
+  );
+
   const queryParams = useMemo<PurchaseRegisterQueryParams | null>(() => {
     if (!financialYearId || financialYearId === "all" || !dateFrom || !dateTo) {
       return null;
     }
-    const statusParams = statuses.filter(
+    const colStatuses = selectedColumnValues(columnFilters.voucher_status).filter(
+      (s): s is PurchaseRegisterReportStatus =>
+        s === "POSTED" || s === "CANCELLED" || s === "REVERSED",
+    );
+    const statusParams = (colStatuses.length > 0 ? colStatuses : statuses).filter(
       (s): s is PurchaseRegisterReportStatus =>
         s === "POSTED" || s === "CANCELLED" || s === "REVERSED",
     );
@@ -399,7 +529,17 @@ export default function PurchaseRegisterApiPageClient() {
         t === "DIRECT_PURCHASE" ||
         t === "STOCK_TRANSFER",
     );
-    const gstrParams = gstr2bStatuses.filter(
+    const colGstr = selectedColumnValues(
+      columnFilters.gstr2b_simple_status,
+    ).filter(
+      (s): s is PurchaseRegisterGstr2bSimpleStatus =>
+        s === "matched" ||
+        s === "partially_matched" ||
+        s === "missing_in_2b" ||
+        s === "mismatch" ||
+        s === "not_applicable",
+    );
+    const gstrParams = (colGstr.length > 0 ? colGstr : gstr2bStatuses).filter(
       (s): s is PurchaseRegisterGstr2bSimpleStatus =>
         s === "matched" ||
         s === "partially_matched" ||
@@ -408,9 +548,27 @@ export default function PurchaseRegisterApiPageClient() {
         s === "not_applicable",
     );
     const allowedSupplierIds = new Set(suppliers.map((s) => s.id));
-    const safeSupplierIds = supplierIds.filter((id) =>
+    const toolbarSupplierIds = supplierIds.filter((id) =>
       allowedSupplierIds.has(id),
     );
+    const colSupplierNames = selectedColumnValues(columnFilters.supplier_name);
+    const colSupplierIds =
+      colSupplierNames.length > 0
+        ? suppliers
+            .filter((s) => colSupplierNames.includes(s.vendorName))
+            .map((s) => s.id)
+        : [];
+    const safeSupplierIds = intersectIds(toolbarSupplierIds, colSupplierIds);
+
+    const colGstins = selectedColumnValues(columnFilters.supplier_gstin);
+    const effectiveSupplierGstin =
+      colGstins.length === 1
+        ? colGstins[0]
+        : debouncedSupplierGstin || undefined;
+
+    const colHsn = selectedColumnValues(columnFilters.hsn_sac);
+    const effectiveHsn =
+      colHsn.length === 1 ? colHsn[0] : debouncedHsnSac || undefined;
 
     return {
       financial_year_id: financialYearId,
@@ -419,12 +577,12 @@ export default function PurchaseRegisterApiPageClient() {
       branch_ids: branchIds,
       warehouse_ids: warehouseIds,
       supplier_ids: safeSupplierIds,
-      supplier_gstin: debouncedSupplierGstin || undefined,
+      supplier_gstin: effectiveSupplierGstin,
       invoice_types: typeParams.length > 0 ? typeParams : undefined,
       statuses: statusParams.length > 0 ? statusParams : undefined,
       gstr2b_statuses: gstrParams.length > 0 ? gstrParams : undefined,
       product_search: debouncedProductSearch || undefined,
-      hsn_sac: debouncedHsnSac || undefined,
+      hsn_sac: effectiveHsn,
       search: debouncedSearch || undefined,
       page,
       page_size: pageSize,
@@ -433,6 +591,7 @@ export default function PurchaseRegisterApiPageClient() {
     };
   }, [
     branchIds,
+    columnFilters,
     dateFrom,
     dateTo,
     debouncedHsnSac,
@@ -469,6 +628,7 @@ export default function PurchaseRegisterApiPageClient() {
     debouncedHsnSac,
     debouncedSearch,
     pageSize,
+    columnFilters,
   ]);
 
   useEffect(() => {
@@ -509,7 +669,17 @@ export default function PurchaseRegisterApiPageClient() {
     setSupplierIds([]);
     setSupplierGstin("");
     setDebouncedSupplierGstin("");
-    setInvoiceTypes([]);
+    const defaultInvoiceTypes = (filtersConfig?.defaults.invoice_types ?? []).filter(
+      (t): t is PurchaseRegisterInvoiceType =>
+        t === "PURCHASE" ||
+        t === "DIRECT_PURCHASE" ||
+        t === "STOCK_TRANSFER",
+    );
+    setInvoiceTypes(
+      defaultInvoiceTypes.length > 0
+        ? defaultInvoiceTypes
+        : [...DEFAULT_INVOICE_TYPES],
+    );
     setStatuses([]);
     setGstr2bStatuses([]);
     setProductSearch("");
@@ -518,6 +688,7 @@ export default function PurchaseRegisterApiPageClient() {
     setDebouncedHsnSac("");
     setSearch("");
     setDebouncedSearch("");
+    setColumnFilters({});
     setPage(1);
     setSortBy("purchase_date");
     setSortOrder("desc");
@@ -586,7 +757,64 @@ export default function PurchaseRegisterApiPageClient() {
   );
 
   const summary = report?.summary;
-  const rows = report?.rows ?? [];
+  const fetchedRows = report?.rows ?? [];
+  const filterOptionsByColumn = useMemo(() => {
+    const out: Record<string, ColumnValueOption[]> = {
+      voucher_status: STATUS_FALLBACK.map((s) => ({
+        value: s.value,
+        count: 0,
+      })),
+      gstr2b_simple_status: Object.keys(GSTR2B_STATUS_LABELS).map((value) => ({
+        value,
+        count: 0,
+      })),
+    };
+    for (const key of FILTERABLE_TEXT_COLS) {
+      if (key === "voucher_status" || key === "gstr2b_simple_status") continue;
+      out[key] = collectColumnValueCounts(
+        fetchedRows,
+        key,
+        getPurchaseRegisterFilterCell,
+      );
+    }
+    return out;
+  }, [fetchedRows]);
+
+  // Client-side on loaded page for free-text dims; status/supplier/gstin/hsn/gstr2b
+  // also map into queryParams (export uses those API params).
+  const rows = useMemo(
+    () =>
+      applyAccountsColumnFilters(
+        fetchedRows,
+        Object.fromEntries(
+          Object.entries(columnFilters).filter(([key]) =>
+            FILTERABLE_TEXT_COLS.has(key as PurchaseRegisterApiColKey),
+          ),
+        ),
+        getPurchaseRegisterFilterCell,
+      ),
+    [fetchedRows, columnFilters],
+  );
+
+  const filterableProps = useCallback(
+    (
+      colKey: string,
+      opts?: {
+        filterType?: "text" | "status";
+        optionLabels?: Record<string, string>;
+      },
+    ) => ({
+      filterable: true as const,
+      filterType: opts?.filterType ?? ("text" as const),
+      filterValue: columnFilters[colKey],
+      onFilterChange: (value: AccountsColumnFilterState | undefined) =>
+        handleColumnFilterChange(colKey, value),
+      valueOptions: filterOptionsByColumn[colKey] ?? [],
+      optionLabels: opts?.optionLabels,
+    }),
+    [columnFilters, filterOptionsByColumn, handleColumnFilterChange],
+  );
+
   const pagination = report?.pagination;
   const totalRows = pagination?.total_rows ?? 0;
   const selectedRow = selectedRowId
@@ -598,12 +826,15 @@ export default function PurchaseRegisterApiPageClient() {
     warehouseIds.length > 0 ||
     supplierIds.length > 0 ||
     Boolean(supplierGstin.trim()) ||
-    invoiceTypes.length > 0 ||
+    !invoiceTypesMatchDefault(invoiceTypes) ||
     statuses.length > 0 ||
     gstr2bStatuses.length > 0 ||
     Boolean(productSearch.trim()) ||
     Boolean(hsnSac.trim()) ||
-    Boolean(search.trim());
+    Boolean(search.trim()) ||
+    Object.values(columnFilters).some(
+      (f) => f?.selectedValues && f.selectedValues.length > 0,
+    );
 
   const filterSummaryItems = useMemo(() => {
     const items: Array<ReportFilterSummaryItem | null> = [
@@ -648,7 +879,7 @@ export default function PurchaseRegisterApiPageClient() {
             },
           }
         : null,
-      invoiceTypes.length > 0
+      !invoiceTypesMatchDefault(invoiceTypes)
         ? {
             id: "invoice_types",
             label: "Invoice Type",
@@ -658,7 +889,7 @@ export default function PurchaseRegisterApiPageClient() {
                   INVOICE_TYPE_LABELS[t as PurchaseRegisterInvoiceType] ?? t,
               )
               .join(", "),
-            onRemove: () => setInvoiceTypes([]),
+            onRemove: () => setInvoiceTypes([...DEFAULT_INVOICE_TYPES]),
           }
         : null,
       statuses.length > 0
@@ -1122,6 +1353,22 @@ export default function PurchaseRegisterApiPageClient() {
                 <AccountsTableHeadRow>
                   {defs.map((col) => {
                     const sortKey = col.sortKey;
+                    const canFilter = FILTERABLE_TEXT_COLS.has(col.key);
+                    const filterOpts =
+                      col.key === "voucher_status"
+                        ? filterableProps(col.key, {
+                            filterType: "status",
+                            optionLabels: STATUS_OPTION_LABELS,
+                          })
+                        : col.key === "gstr2b_simple_status"
+                          ? filterableProps(col.key, {
+                              filterType: "status",
+                              optionLabels: GSTR2B_STATUS_LABELS,
+                            })
+                          : canFilter
+                            ? filterableProps(col.key)
+                            : { filterable: false as const };
+
                     if (sortKey && SORT_FIELD_MAP[sortKey]) {
                       return (
                         <ServerSortTh
@@ -1132,6 +1379,19 @@ export default function PurchaseRegisterApiPageClient() {
                           sortDir={sortOrder}
                           onSort={handleSort}
                           align={col.align === "right" ? "right" : "left"}
+                          {...filterOpts}
+                        />
+                      );
+                    }
+                    if (canFilter) {
+                      return (
+                        <AccountsColumnHeader
+                          key={col.key}
+                          label={col.label}
+                          colKey={col.key}
+                          sortable={false}
+                          align={col.align === "right" ? "right" : "left"}
+                          {...filterOpts}
                         />
                       );
                     }
@@ -1291,6 +1551,12 @@ function ServerSortTh({
   onSort,
   align = "left",
   className,
+  filterable = false,
+  filterType = "text",
+  filterValue,
+  onFilterChange,
+  valueOptions,
+  optionLabels,
 }: {
   label: string;
   colKey: string;
@@ -1299,6 +1565,12 @@ function ServerSortTh({
   onSort: (key: string) => void;
   align?: "left" | "right";
   className?: string;
+  filterable?: boolean;
+  filterType?: "text" | "status";
+  filterValue?: AccountsColumnFilterState;
+  onFilterChange?: (value: AccountsColumnFilterState | undefined) => void;
+  valueOptions?: ColumnValueOption[];
+  optionLabels?: Record<string, string>;
 }) {
   return (
     <AccountsColumnHeader
@@ -1306,11 +1578,16 @@ function ServerSortTh({
       colKey={colKey}
       align={align}
       sortable
-      filterable={false}
+      filterable={filterable}
+      filterType={filterType}
       sortKey={activeKey}
       sortDir={sortDir}
       onSort={onSort}
       className={className}
+      filterValue={filterValue}
+      onFilterChange={onFilterChange}
+      valueOptions={valueOptions}
+      optionLabels={optionLabels}
     />
   );
 }

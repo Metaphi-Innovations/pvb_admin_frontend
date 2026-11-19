@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { MasterListing } from "@/components/listing/MasterListing";
 import type { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
 import { Eye, RotateCcw } from "lucide-react";
+import { toApiFilterValue } from "@/lib/listing/filter-values";
 import { SalesReturnService } from "@/services/sales-return.service";
 import {
   type SalesReturnRecord,
@@ -104,17 +105,15 @@ export function SalesReturnTab({
     try {
       setLoading(true);
       const apiFilters: Record<string, any> = {};
-      
-      if (returnFilters.returnNumber && Array.isArray(returnFilters.returnNumber) && returnFilters.returnNumber.length > 0) {
-        apiFilters.return_number = returnFilters.returnNumber[0];
-      } else if (returnFilters.returnNumber && typeof returnFilters.returnNumber === "string") {
-        apiFilters.return_number = returnFilters.returnNumber;
+
+      const returnNumber = toApiFilterValue(returnFilters.returnNumber);
+      if (returnNumber !== undefined) {
+        apiFilters.return_number = returnNumber;
       }
 
-      if (returnFilters.customer && Array.isArray(returnFilters.customer) && returnFilters.customer.length > 0) {
-        apiFilters.customer = { customer_name: returnFilters.customer[0] };
-      } else if (returnFilters.customer && typeof returnFilters.customer === "string") {
-        apiFilters.customer = { customer_name: returnFilters.customer };
+      const customerName = toApiFilterValue(returnFilters.customer);
+      if (customerName !== undefined) {
+        apiFilters.customer = { customer_name: customerName };
       }
 
       let ordering = undefined;

@@ -1,6 +1,7 @@
 import { axiosInstance as api } from "@/api/axios";
 import { API_ENDPOINTS } from "@/api/endpoints";
 import type { FilterState } from "@/components/listing/types";
+import { toApiFilterValue } from "@/lib/listing/filter-values";
 
 export async function getPreviewNumber(warehouseId?: string | null): Promise<string> {
   const response = await api.get(API_ENDPOINTS.WAREHOUSE.DISPATCH.PREVIEW_NUMBER, {
@@ -66,11 +67,6 @@ function asString(value: unknown): string {
   return "";
 }
 
-function firstFilterValue(value: unknown): string {
-  if (Array.isArray(value)) return asString(value[0]).trim();
-  return asString(value).trim();
-}
-
 export function resolveDispatchApiSourceType(
   subTab: DispatchSourceTab,
 ): "normal_sales" | "sample" | "stock_transfer" | "purchase_return" {
@@ -96,14 +92,14 @@ export function buildDispatchApiFilters(
     apiFilters.warehouse_id = options.selectedWarehouse;
   }
 
-  const dispatchNo = firstFilterValue(filters.dispatch_number);
-  if (dispatchNo) apiFilters.dispatch_number = dispatchNo;
+  const dispatchNo = toApiFilterValue(filters.dispatch_number);
+  if (dispatchNo !== undefined) apiFilters.dispatch_number = dispatchNo;
 
-  const sourceDocNo = firstFilterValue(filters.source_document_no);
-  if (sourceDocNo) apiFilters.source_document_no = sourceDocNo;
+  const sourceDocNo = toApiFilterValue(filters.source_document_no);
+  if (sourceDocNo !== undefined) apiFilters.source_document_no = sourceDocNo;
 
-  const party = firstFilterValue(filters["customer.customer_name"]);
-  if (party) {
+  const party = toApiFilterValue(filters["customer.customer_name"]);
+  if (party !== undefined) {
     if (options.sourceType === "stock_transfer") {
       apiFilters.to_warehouse = party;
     } else {
@@ -111,19 +107,19 @@ export function buildDispatchApiFilters(
     }
   }
 
-  const warehouseName = firstFilterValue(filters.source_warehouse_name);
-  if (warehouseName) {
+  const warehouseName = toApiFilterValue(filters.source_warehouse_name);
+  if (warehouseName !== undefined) {
     apiFilters.warehouse = { warehouse_name: warehouseName };
   }
 
-  const vehicleNo = firstFilterValue(filters.vehicleNumber);
-  if (vehicleNo) apiFilters.vehicle_number = vehicleNo;
+  const vehicleNo = toApiFilterValue(filters.vehicleNumber);
+  if (vehicleNo !== undefined) apiFilters.vehicle_number = vehicleNo;
 
-  const transporter = firstFilterValue(filters.driverName);
-  if (transporter) apiFilters.transporter = transporter;
+  const transporter = toApiFilterValue(filters.driverName);
+  if (transporter !== undefined) apiFilters.transporter = transporter;
 
-  const status = firstFilterValue(filters.status);
-  if (status) apiFilters.status = status;
+  const status = toApiFilterValue(filters.status);
+  if (status !== undefined) apiFilters.status = status;
 
   const dateRange = filters.dispatch_date;
   if (

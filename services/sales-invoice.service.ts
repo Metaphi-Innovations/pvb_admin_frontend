@@ -225,6 +225,8 @@ export type EligibleInvoiceCnSchemeOffer = {
   run_mode: "AUTOMATIC" | "MANUAL";
   will_auto_apply: boolean;
   based_on?: "SALES_AMOUNT" | "SALES_QUANTITY" | null;
+  /** Special qty only — Piece (Unit Qty) or KG_LTR (Quantity Base). */
+  quantity_uom?: "Piece" | "KG_LTR" | null;
   evaluation_scope?: "PER_INVOICE" | "SCHEME_PERIOD" | null;
   discount_type: "Percentage" | "Flat" | null;
   discount_value: number | null;

@@ -59,9 +59,10 @@ export interface RegisterReportFilterParams {
   voucherTypes?: string[];
   product?: string | string[];
   salespersons?: string[];
-  gstRate: string;
-  /** "all" | "cgst_sgst" | "igst" */
-  gstType?: string;
+  /** Empty / omitted = all rates. */
+  gstRate?: string | string[];
+  /** Empty / omitted = all; values are "cgst_sgst" | "igst". */
+  gstType?: string | string[];
   invoiceNo?: string;
   search: string;
 }

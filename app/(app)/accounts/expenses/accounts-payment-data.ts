@@ -104,9 +104,15 @@ export function getPaymentById(id: number): AccountPaymentRecord | undefined {
 export interface PaymentListFilters {
   tab: string;
   search: string;
-  source: string;
+  /** Empty = all sources (OR match when set). Values use expense UI keys (e.g. hr_tada_claim). */
+  sources: string[];
   dateFrom: string;
   dateTo: string;
+}
+
+function mapExpenseSourceToPaymentSourceType(source: string): string {
+  if (source === "hr_tada_claim") return "tada_claim";
+  return source;
 }
 
 export function tabMatchesPayment(rec: AccountPaymentRecord, tab: string): boolean {
@@ -128,11 +134,11 @@ export function filterPayments(
   const filtered = filterCompanyPayments(company, {
     tab: filters.tab,
     search: filters.search,
-    paymentMode: "all",
-    sourceType: filters.source === "all" ? "all" : filters.source === "hr_tada_claim" ? "tada_claim" : filters.source,
+    paymentModes: [],
+    sourceTypes: filters.sources.map(mapExpenseSourceToPaymentSourceType),
     dateFrom: filters.dateFrom,
     dateTo: filters.dateTo,
-    statusFilter: "all",
+    statusFilters: [],
   });
   const ids = new Set(filtered.map((f) => f.id));
   return records.map(normalizePaymentRecord).filter((r) => ids.has(r.id));

@@ -1,13 +1,14 @@
 "use client";
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Ban } from "lucide-react";
 import { MasterListing } from "@/components/listing/MasterListing";
 import { ActionItemConfig, ColumnConfig } from "@/components/listing/types";
 import { StackedQtyDisplay, type QtyStackMeta } from "@/app/(app)/sales/shared/StackedQtyDisplay";
-import { SALES_RETURN_STOCK_STATUS_OPTIONS, STATUS_BADGE_CONFIG } from "../constants";
+import { STATUS_BADGE_CONFIG } from "../constants";
 import { MoveToRejectedDialog, type MoveToRejectedTarget } from "../components/MoveToRejectedDialog";
 import { useStockOverviewListFilters } from "../hooks/use-stock-overview-list-filters";
+import { resolveFilterOptions } from "../lib/listing-filter-options";
 import {
   ReturnStockListRow,
   StockOverviewApi,
@@ -72,7 +73,6 @@ export function SalesReturnStockListing({ warehouseId, onFiltersApplied }: Sales
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filterOptions, setFilterOptions] = useState<Record<string, Array<{ label: string; value: string }>>>({});
-  const [loadingFilters, setLoadingFilters] = useState<Set<string>>(new Set());
   const [moveTarget, setMoveTarget] = useState<MoveToRejectedTarget | null>(null);
   const [exporting, setExporting] = useState(false);
 
@@ -99,10 +99,12 @@ export function SalesReturnStockListing({ warehouseId, onFiltersApplied }: Sales
       .then((result) => {
         setRecords(result.items);
         setTotalRecords(result.total);
+        setFilterOptions(result.filter_options || {});
       })
       .catch((err) => {
         if (controller.signal.aborted) return;
         setError(StockOverviewApi.getErrorMessage(err, "Failed to load sales return stock."));
+        setFilterOptions({});
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
@@ -131,34 +133,17 @@ export function SalesReturnStockListing({ warehouseId, onFiltersApplied }: Sales
       .finally(() => setExporting(false));
   }, [appliedFilters, exporting, sort.direction, sort.key, warehouseId]);
 
-  const handleOpenFilter = (columnKey: string) => {
-    if (filterOptions[columnKey] || loadingFilters.has(columnKey)) return;
+  const columns: ColumnConfig<ReturnStockListRow>[] = useMemo(() => {
+    const opts = (key: string) =>
+      resolveFilterOptions(
+        key,
+        filterOptions[key] || [],
+        records as unknown as Array<Record<string, unknown>>,
+        totalRecords,
+        appliedFilters,
+      );
 
-    const keyMap: Record<string, string> = {
-      product_name: "inventory_detail__product__product_name",
-      sku: "inventory_detail__product__sku",
-      uom: "inventory_detail__product__unit",
-      warehouse_name: "inventory_detail__warehouse__warehouse_name",
-      customer_name: "customer_name",
-      batch_no: "batch_no",
-      return_no: "return_no",
-    };
-    const field = keyMap[columnKey];
-    if (!field) return;
-
-    setLoadingFilters((prev) => new Set(prev).add(columnKey));
-    StockOverviewApi.filterDropdown("sales_return", field)
-      .then((options) => setFilterOptions((prev) => ({ ...prev, [columnKey]: options })))
-      .finally(() => {
-        setLoadingFilters((prev) => {
-          const next = new Set(prev);
-          next.delete(columnKey);
-          return next;
-        });
-      });
-  };
-
-  const columns: ColumnConfig<ReturnStockListRow>[] = [
+    return [
     {
       key: "product_name",
       header: "Product",
@@ -166,7 +151,7 @@ export function SalesReturnStockListing({ warehouseId, onFiltersApplied }: Sales
       filterable: true,
       filterType: "dropdown",
       filterMultiple: true,
-      filterOptions: filterOptions.product_name || [],
+      filterOptions: opts("product_name"),
       render: (_val, row) => (
         <span className="text-xs font-semibold text-foreground">{row.product_name}</span>
       ),
@@ -178,7 +163,7 @@ export function SalesReturnStockListing({ warehouseId, onFiltersApplied }: Sales
       filterable: true,
       filterType: "dropdown",
       filterMultiple: true,
-      filterOptions: filterOptions.sku || [],
+      filterOptions: opts("sku"),
       width: "120px",
       render: (val) => <span className="font-mono text-xs text-foreground">{val || "—"}</span>,
     },
@@ -189,7 +174,7 @@ export function SalesReturnStockListing({ warehouseId, onFiltersApplied }: Sales
       filterable: true,
       filterType: "dropdown",
       filterMultiple: true,
-      filterOptions: filterOptions.uom || [],
+      filterOptions: opts("uom"),
       width: "72px",
       render: (val) => <span className="text-xs text-foreground">{val || "—"}</span>,
     },
@@ -246,7 +231,7 @@ export function SalesReturnStockListing({ warehouseId, onFiltersApplied }: Sales
       filterable: true,
       filterType: "dropdown",
       filterMultiple: true,
-      filterOptions: filterOptions.warehouse_name || [],
+      filterOptions: opts("warehouse_name"),
       width: "260px",
       render: (val) => (
         <span className="text-xs text-foreground" title={val ? String(val) : undefined}>
@@ -261,7 +246,7 @@ export function SalesReturnStockListing({ warehouseId, onFiltersApplied }: Sales
       filterable: true,
       filterType: "dropdown",
       filterMultiple: true,
-      filterOptions: filterOptions.batch_no || [],
+      filterOptions: opts("batch_no"),
       width: "130px",
       render: (val) => <span className="font-mono text-xs text-foreground">{val}</span>,
     },
@@ -288,7 +273,7 @@ export function SalesReturnStockListing({ warehouseId, onFiltersApplied }: Sales
       filterable: true,
       filterType: "dropdown",
       filterMultiple: true,
-      filterOptions: filterOptions.return_no || [],
+      filterOptions: opts("return_no"),
       width: "140px",
       render: (val) => <span className="font-mono text-xs font-semibold">{val || "—"}</span>,
     },
@@ -299,7 +284,7 @@ export function SalesReturnStockListing({ warehouseId, onFiltersApplied }: Sales
       filterable: true,
       filterType: "dropdown",
       filterMultiple: true,
-      filterOptions: filterOptions.customer_name || [],
+      filterOptions: opts("customer_name"),
       render: (val) => <span className="text-xs text-foreground">{val || "—"}</span>,
     },
     {
@@ -309,7 +294,7 @@ export function SalesReturnStockListing({ warehouseId, onFiltersApplied }: Sales
       filterable: true,
       filterType: "dropdown",
       filterMultiple: true,
-      filterOptions: SALES_RETURN_STOCK_STATUS_OPTIONS,
+      filterOptions: opts("status"),
       width: "135px",
       render: (val: string) => {
         const cfg = STATUS_BADGE_CONFIG[val] || { bg: "bg-slate-100 text-slate-700 border-slate-200", label: val };
@@ -321,6 +306,7 @@ export function SalesReturnStockListing({ warehouseId, onFiltersApplied }: Sales
       },
     },
   ];
+  }, [appliedFilters, filterOptions, records, totalRecords]);
 
   const actions: ActionItemConfig<ReturnStockListRow>[] = [
     {
@@ -362,7 +348,6 @@ export function SalesReturnStockListing({ warehouseId, onFiltersApplied }: Sales
         searchPlaceholder="Search product, batch, return no or customer..."
         currentFilters={draftFilters}
         currentSort={sort}
-        onOpenFilter={handleOpenFilter}
         onExport={handleExport}
       />
       <MoveToRejectedDialog
