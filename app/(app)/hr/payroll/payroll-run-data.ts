@@ -2,7 +2,8 @@
  * Payroll Run foundation — frontend/demo persistence + calculation orchestration.
  *
  * Reuses Salary Structure, LOP, PF, ESI, PT, LWF, TDS resolvers.
- * Does NOT generate payslips, post accounting, or run DB migrations.
+ * On finalize, generates payslip snapshots (Template Management).
+ * Does NOT post accounting or run DB migrations.
  */
 
 import { CURRENT_USER } from "@/lib/hr/config";
@@ -47,6 +48,7 @@ import {
   resolveEmployeeEsi,
   type EmployeeEsiDisplay,
 } from "../settings/esi-settings-data";
+import { generatePayslipsForFinalizedRun } from "./payslip-generation";
 import {
   resolveEmployeeProfessionalTax,
   type EmployeePtDisplay,
@@ -1021,7 +1023,10 @@ export function calculatePayrollRun(runId: string): PayrollRun | null {
   return updated;
 }
 
-export function finalizePayrollRun(runId: string): { run: PayrollRun | null; error?: string } {
+export function finalizePayrollRun(
+  runId: string,
+  options?: { allowConfigIssues?: boolean; generatePayslips?: boolean },
+): { run: PayrollRun | null; error?: string; payslipsCreated?: number } {
   const list = loadPayrollRuns();
   const run = list.find((r) => r.id === runId);
   if (!run) return { run: null, error: "Payroll run not found." };
@@ -1029,7 +1034,7 @@ export function finalizePayrollRun(runId: string): { run: PayrollRun | null; err
   if (run.status !== "calculated") {
     return { run, error: "Calculate payroll before finalizing." };
   }
-  if (run.totals.configIssueCount > 0) {
+  if (run.totals.configIssueCount > 0 && !options?.allowConfigIssues) {
     return {
       run,
       error: `${run.totals.configIssueCount} employee(s) have configuration issues. Resolve before finalize.`,
@@ -1040,8 +1045,21 @@ export function finalizePayrollRun(runId: string): { run: PayrollRun | null; err
   }
 
   const today = policyToday();
+  // Demo path: treat config-blocked rows as calculated so payslips can still be generated
+  const employees =
+    options?.allowConfigIssues && run.totals.configIssueCount > 0
+      ? run.employees.map((e) =>
+          e.status === "configuration_required" ? { ...e, status: "calculated" as const } : e,
+        )
+      : run.employees;
+
   const updated: PayrollRun = {
     ...run,
+    employees,
+    totals: {
+      ...computeTotals(employees),
+      configIssueCount: 0,
+    },
     status: "finalized",
     finalizedAt: today,
     updatedAt: today,
@@ -1054,7 +1072,14 @@ export function finalizePayrollRun(runId: string): { run: PayrollRun | null; err
     sourceId: updated.id,
     context: { payroll_month: updated.periodLabel },
   });
-  return { run: updated };
+
+  let payslipsCreated = 0;
+  if (options?.generatePayslips !== false) {
+    const result = generatePayslipsForFinalizedRun(updated.id, { notify: true });
+    payslipsCreated = result.created;
+  }
+
+  return { run: updated, payslipsCreated };
 }
 
 export function deleteDraftPayrollRun(runId: string): boolean {

@@ -21,6 +21,8 @@ export function HrOrgPageHeader({
   maxWidthClass = HR_PAGE_MAX_CLASS,
   sectionLabel = "Organization Setup",
   sectionHref = "/hr/settings",
+  /** Optional control beside the title (e.g. HrInfoHint). */
+  titleAside,
 }: {
   title: string;
   description?: string;
@@ -32,6 +34,7 @@ export function HrOrgPageHeader({
   /** Parent settings group label in breadcrumb */
   sectionLabel?: string;
   sectionHref?: string;
+  titleAside?: React.ReactNode;
 }) {
   const crumbs = hrBreadcrumb(
     { label: "Settings", href: "/hr/settings" },
@@ -69,7 +72,12 @@ export function HrOrgPageHeader({
               </div>
             )}
             <div className="min-w-0 pt-0.5">
-              <h1 className="text-lg font-bold text-foreground leading-tight">{title}</h1>
+              <div className="flex items-center gap-1.5 min-w-0">
+                <h1 className="text-lg font-bold text-foreground leading-tight truncate">
+                  {title}
+                </h1>
+                {titleAside}
+              </div>
               {description && (
                 <p className="text-xs text-muted-foreground mt-0.5 leading-snug max-w-xl">
                   {description}

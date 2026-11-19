@@ -17,6 +17,10 @@ export interface WelcomeTemplateRecord {
   subject: string;
   message: string;
   attachments: WelcomeAttachmentMeta[];
+  /**
+   * Legacy — kept so existing localStorage templates/history still parse.
+   * Welcome Workflow UI no longer creates or edits this field.
+   */
   videoLink: string;
   status: "active" | "inactive";
   createdBy: string;
@@ -44,6 +48,7 @@ export interface WelcomeSentRecord {
   subjectSnapshot: string;
   messageSnapshot: string;
   attachmentsSnapshot: WelcomeAttachmentMeta[];
+  /** Legacy snapshot field — retained for historical records. */
   videoLinkSnapshot: string;
   channel: WelcomeChannel;
   sentToEmail: string;
@@ -99,7 +104,8 @@ const TEMPLATE_SEED: WelcomeTemplateRecord[] = [
         sizeLabel: "1.2 MB",
       },
     ],
-    videoLink: "https://example.com/welcome-induction",
+    /** Legacy field retained for localStorage compatibility; UI no longer edits it. */
+    videoLink: "",
     status: "active",
     createdBy: "Admin",
     updatedBy: "Admin",
@@ -161,7 +167,13 @@ export function loadWelcomeTemplates(): WelcomeTemplateRecord[] {
       return seed;
     }
     const parsed = JSON.parse(raw) as WelcomeTemplateRecord[];
-    return Array.isArray(parsed) ? parsed.map((t) => ({ ...t, attachments: t.attachments ?? [] })) : TEMPLATE_SEED.map((t) => ({ ...t }));
+    return Array.isArray(parsed)
+      ? parsed.map((t) => ({
+          ...t,
+          attachments: t.attachments ?? [],
+          videoLink: typeof t.videoLink === "string" ? t.videoLink : "",
+        }))
+      : TEMPLATE_SEED.map((t) => ({ ...t }));
   } catch {
     return TEMPLATE_SEED.map((t) => ({ ...t, attachments: [...t.attachments] }));
   }
@@ -184,6 +196,7 @@ export function withWelcomeTemplateAudit(
   return {
     ...partial,
     attachments: partial.attachments ?? [],
+    videoLink: typeof partial.videoLink === "string" ? partial.videoLink : "",
     createdBy: partial.createdBy ?? "Admin",
     updatedBy: partial.updatedBy ?? "Admin",
     createdAt: partial.createdAt ?? today,
@@ -287,7 +300,14 @@ export function loadWelcomeSentHistory(): WelcomeSentRecord[] {
     if (!raw) return [];
     const parsed = JSON.parse(raw) as WelcomeSentRecord[];
     return Array.isArray(parsed)
-      ? [...parsed].sort((a, b) => b.sentOn.localeCompare(a.sentOn))
+      ? [...parsed]
+          .map((r) => ({
+            ...r,
+            attachmentsSnapshot: r.attachmentsSnapshot ?? [],
+            videoLinkSnapshot:
+              typeof r.videoLinkSnapshot === "string" ? r.videoLinkSnapshot : "",
+          }))
+          .sort((a, b) => b.sentOn.localeCompare(a.sentOn))
       : [];
   } catch {
     return [];
@@ -333,19 +353,15 @@ export function resolveEmployeeWelcomeEmail(employee: {
 export function formatWelcomeMaterialLabel(record: {
   attachments?: WelcomeAttachmentMeta[];
   attachmentsSnapshot?: WelcomeAttachmentMeta[];
+  /** @deprecated Video link removed from Welcome Workflow UI; ignored for new labels. */
   videoLink?: string;
   videoLinkSnapshot?: string;
 }): string {
   const files = record.attachmentsSnapshot ?? record.attachments ?? [];
-  const video = (record.videoLinkSnapshot ?? record.videoLink ?? "").trim();
   const n = files.length;
-  const hasVideo = !!video;
-  if (n === 0 && !hasVideo) return "—";
-  if (n === 1 && hasVideo) return "1 File + Video";
+  if (n === 0) return "—";
   if (n === 1) return "1 File";
-  if (n > 1 && hasVideo) return `${n} Files + Video`;
-  if (n > 1) return `${n} Files`;
-  return "Video";
+  return `${n} Files`;
 }
 
 export function formatWelcomeHistoryStatus(status: WelcomeDeliveryStatus): string {
@@ -389,6 +405,37 @@ export function applyWelcomePlaceholders(
     .replaceAll("{{department}}", vars.department ?? "")
     .replaceAll("{{branch}}", vars.branch ?? "");
 }
+
+/** Strip tags for required-field checks — keeps plain-text and HTML templates compatible. */
+export function welcomeMessagePlainText(htmlOrText: string): string {
+  return (htmlOrText ?? "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(p|div|h[1-6]|li)>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/\u00a0/g, " ")
+    .trim();
+}
+
+/** Basic HTML sanitizer for preview/history display (no script execution). */
+export function sanitizeWelcomeHtml(html: string): string {
+  return (html ?? "")
+    .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, "")
+    .replace(/<\/?\s*(iframe|object|embed|form|input|button)[^>]*>/gi, "")
+    .replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "")
+    .replace(/(href|src)\s*=\s*(['"])\s*javascript:[^'"]*\2/gi, '$1="#"');
+}
+
+export const WELCOME_PLACEHOLDER_OPTIONS: { value: string; label: string }[] = [
+  { value: "{{employee_name}}", label: "Employee Name" },
+  { value: "{{joining_date}}", label: "Joining Date" },
+  { value: "{{designation}}", label: "Designation" },
+  { value: "{{department}}", label: "Department" },
+  { value: "{{branch}}", label: "Branch" },
+];
 
 export function getSampleWelcomePreviewVars() {
   return {
@@ -443,7 +490,8 @@ export function logWelcomeCommunication(input: {
     subjectSnapshot: input.template.subject,
     messageSnapshot: input.template.message,
     attachmentsSnapshot: input.template.attachments.map((a) => ({ ...a })),
-    videoLinkSnapshot: input.template.videoLink,
+    // Always empty for new sends; historical rows may still have a legacy value.
+    videoLinkSnapshot: "",
     channel: input.channel,
     sentToEmail: input.channel === "email" ? resolved.email : "",
     sentOn: nowIso(),

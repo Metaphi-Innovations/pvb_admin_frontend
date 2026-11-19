@@ -331,6 +331,70 @@ export function saveDailyRecords(list: DailyAttendanceRecord[]): void {
   localStorage.setItem(RECORDS_KEY, JSON.stringify(list));
 }
 
+function isQuotaExceeded(err: unknown): boolean {
+  return (
+    err instanceof DOMException &&
+    (err.name === "QuotaExceededError" ||
+      err.name === "NS_ERROR_DOM_QUOTA_REACHED" ||
+      err.code === 22 ||
+      err.code === 1014)
+  );
+}
+
+/**
+ * Persist attendance with quota fallback — keeps newest rows if storage is full.
+ * Used by Demo Workspace seed; normal saves still use saveDailyRecords.
+ */
+export function saveDailyRecordsSafe(
+  list: DailyAttendanceRecord[],
+): { ok: boolean; saved: number; trimmed: boolean; error?: string } {
+  if (typeof window === "undefined") {
+    return { ok: true, saved: list.length, trimmed: false };
+  }
+  let working = list;
+  let trimmed = false;
+  for (let attempt = 0; attempt < 6; attempt++) {
+    try {
+      localStorage.setItem(RECORDS_KEY, JSON.stringify(working));
+      return { ok: true, saved: working.length, trimmed };
+    } catch (err) {
+      if (!isQuotaExceeded(err)) {
+        return {
+          ok: false,
+          saved: 0,
+          trimmed,
+          error: err instanceof Error ? err.message : "Failed to save attendance.",
+        };
+      }
+      trimmed = true;
+      if (working.length <= 80) {
+        try {
+          localStorage.removeItem(RECORDS_KEY);
+          localStorage.setItem(RECORDS_KEY, JSON.stringify(working.slice(0, 40)));
+          return { ok: true, saved: Math.min(40, working.length), trimmed: true };
+        } catch {
+          return {
+            ok: false,
+            saved: 0,
+            trimmed: true,
+            error: "Browser storage quota exceeded for attendance records.",
+          };
+        }
+      }
+      // Keep newest ~60% by date
+      working = [...working]
+        .sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id)
+        .slice(0, Math.max(80, Math.floor(working.length * 0.6)));
+    }
+  }
+  return {
+    ok: false,
+    saved: 0,
+    trimmed: true,
+    error: "Browser storage quota exceeded for attendance records.",
+  };
+}
+
 export function loadCorrections(): AttendanceCorrection[] {
   if (typeof window === "undefined") return [];
   try {

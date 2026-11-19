@@ -29,6 +29,30 @@ export function loadPolicyList<T>(storageKey: string, seed: T[]): T[] {
   }
 }
 
+/**
+ * Like loadPolicyList, but if storage already holds an empty array and seed has
+ * rows, write the seed (demo-friendly recovery after EMPTY_SEED first visits).
+ * Never overwrites non-empty user configurations.
+ */
+export function loadPolicyListFillEmpty<T>(storageKey: string, seed: T[]): T[] {
+  if (typeof window === "undefined") return seed;
+  try {
+    const raw = localStorage.getItem(storageKey);
+    if (!raw) {
+      localStorage.setItem(storageKey, JSON.stringify(seed));
+      return structuredClone(seed);
+    }
+    const parsed = JSON.parse(raw) as T[];
+    if (Array.isArray(parsed) && parsed.length === 0 && seed.length > 0) {
+      localStorage.setItem(storageKey, JSON.stringify(seed));
+      return structuredClone(seed);
+    }
+    return parsed;
+  } catch {
+    return structuredClone(seed);
+  }
+}
+
 export function savePolicyList<T>(storageKey: string, list: T[]): void {
   if (typeof window === "undefined") return;
   localStorage.setItem(storageKey, JSON.stringify(list));

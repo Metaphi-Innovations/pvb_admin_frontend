@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { FINANCIAL_YEARS, FY_STATUS_CONFIG, setStoredFYId, type FinancialYear } from "@/lib/fy-store";
+import { HR_ONLY_TOP_NAV } from "@/components/navigation/nav-config";
 import { AuthService } from "@/services/auth.service";
 import { LoginRequest } from "@/types/api.types";
 import { error } from "console";
@@ -293,7 +294,7 @@ export default function LoginPage() {
   const handleFYContinue = () => {
     if (!selectedFY) return;
     setStoredFYId(selectedFY.id);
-    window.location.href = "/dashboard";
+    window.location.href = HR_ONLY_TOP_NAV ? "/hr/employees" : "/dashboard";
   };
 
   // ── Step renderers ─────────────────────────────────────────────────────────

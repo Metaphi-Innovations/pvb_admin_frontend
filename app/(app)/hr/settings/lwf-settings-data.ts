@@ -12,7 +12,7 @@
 
 import { CURRENT_USER } from "@/lib/hr/config";
 import {
-  loadPolicyList,
+  loadPolicyListFillEmpty,
   savePolicyList,
   nextPolicyId,
   policyToday,
@@ -201,7 +201,57 @@ export const LWF_EMPLOYEE_APPLICABILITY_OPTIONS: {
   { value: "no", label: "No" },
 ];
 
-const EMPTY_SEED: LwfConfiguration[] = [];
+/** Demo seed — illustrative state LWF rules for client demos. */
+const LWF_SEED: LwfConfiguration[] = [
+  {
+    id: 1,
+    state: "Maharashtra",
+    applicability: "all",
+    employeeContributionType: "fixed",
+    employeeContributionValue: 25,
+    employeeCalculateOn: null,
+    employerContributionType: "fixed",
+    employerContributionValue: 75,
+    employerCalculateOn: null,
+    frequency: "half_yearly",
+    contributionMonths: [6, 12],
+    salaryEligibilityEnabled: false,
+    eligibilitySalaryBasis: null,
+    minSalary: null,
+    maxSalary: null,
+    effectiveFrom: "2025-04-01",
+    effectiveTo: null,
+    status: "active",
+    createdBy: "Admin",
+    updatedBy: "Admin",
+    createdAt: "2025-04-01",
+    updatedAt: "2025-04-01",
+  },
+  {
+    id: 2,
+    state: "Gujarat",
+    applicability: "all",
+    employeeContributionType: "fixed",
+    employeeContributionValue: 6,
+    employeeCalculateOn: null,
+    employerContributionType: "fixed",
+    employerContributionValue: 12,
+    employerCalculateOn: null,
+    frequency: "half_yearly",
+    contributionMonths: [6, 12],
+    salaryEligibilityEnabled: false,
+    eligibilitySalaryBasis: null,
+    minSalary: null,
+    maxSalary: null,
+    effectiveFrom: "2025-04-01",
+    effectiveTo: null,
+    status: "active",
+    createdBy: "Admin",
+    updatedBy: "Admin",
+    createdAt: "2025-04-01",
+    updatedAt: "2025-04-01",
+  },
+];
 
 function normalizeContributionType(raw: unknown): LwfContributionType {
   const s = String(raw ?? "").toLowerCase();
@@ -289,7 +339,7 @@ function normalizeConfiguration(
 }
 
 export function loadLwfConfigurations(): LwfConfiguration[] {
-  const raw = loadPolicyList(CONFIGS_STORAGE_KEY, structuredClone(EMPTY_SEED));
+  const raw = loadPolicyListFillEmpty(CONFIGS_STORAGE_KEY, structuredClone(LWF_SEED));
   return raw.map((r, i) => normalizeConfiguration(r as unknown as Record<string, unknown>, i));
 }
 

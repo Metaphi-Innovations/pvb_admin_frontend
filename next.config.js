@@ -32,6 +32,8 @@ const nextConfig = {
         destination: "/login",
         permanent: false,
       },
+      // `/hr` must never hit the catch-all Coming Soon page — enter the workspace.
+      { source: "/hr", destination: "/hr/employees", permanent: false },
       { source: "/hr/masters/tada-policy", destination: "/hr/sales-force-policy", permanent: false },
       { source: "/hr/masters/monthly-target", destination: "/hr/sales-force-policy", permanent: false },
       { source: "/hr/tada-config", destination: "/hr/sales-force-policy", permanent: false },

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { ExternalLink, FileText } from "lucide-react";
+import { FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -28,6 +28,7 @@ import {
   loadWelcomeSetup,
   logWelcomeCommunication,
   resolveEmployeeWelcomeEmail,
+  sanitizeWelcomeHtml,
   type WelcomeChannel,
   type WelcomeTemplateRecord,
 } from "../../welcome-workflow-data";
@@ -145,7 +146,7 @@ export function SendWelcomeDialog({
             <p className="text-[11px] font-medium">Template</p>
             {templates.length === 0 ? (
               <p className="text-[11px] text-amber-700">
-                No active welcome templates. Add one under Welcome Workflow → Templates.
+                No active welcome templates are available.
               </p>
             ) : (
               <Select
@@ -202,35 +203,37 @@ export function SendWelcomeDialog({
                   {applyWelcomePlaceholders(template.subject, previewVars)}
                 </span>
               </p>
-              <p className="text-[11px] whitespace-pre-wrap leading-snug">
-                {applyWelcomePlaceholders(template.message, previewVars)}
-              </p>
+              <div
+                className="text-[11px] leading-snug [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4 [&_a]:text-brand-700 [&_a]:underline"
+                dangerouslySetInnerHTML={{
+                  __html: sanitizeWelcomeHtml(
+                    applyWelcomePlaceholders(template.message, previewVars),
+                  ),
+                }}
+              />
               <p className="text-[11px]">
                 <span className="text-muted-foreground">Material: </span>
                 {formatWelcomeMaterialLabel({
                   attachments: template.attachments,
-                  videoLink: template.videoLink,
                 })}
               </p>
               {template.attachments.length > 0 && (
-                <ul className="space-y-0.5">
-                  {template.attachments.map((a) => (
-                    <li key={a.id} className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                      <FileText className="w-3 h-3 shrink-0" />
-                      {a.fileName}
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {template.videoLink.trim() && (
-                <a
-                  href={template.videoLink}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-1 text-[11px] text-brand-700 hover:underline"
-                >
-                  Video link <ExternalLink className="w-3 h-3" />
-                </a>
+                <>
+                  <ul className="space-y-0.5">
+                    {template.attachments.map((a) => (
+                      <li
+                        key={a.id}
+                        className="flex items-center gap-1.5 text-[11px] text-muted-foreground"
+                      >
+                        <FileText className="w-3 h-3 shrink-0" />
+                        {a.fileName}
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="text-[10px] text-amber-800">
+                    Attachment names are recorded only — files are not delivered yet.
+                  </p>
+                </>
               )}
             </div>
           )}

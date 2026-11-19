@@ -1,5 +1,6 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import { createLazyClientPage } from "@/lib/createLazyClientPage";
-
-export default createLazyClientPage(() => import("./AttendanceModesClient"));
+/** Compatibility: Attendance Modes are configured inside Shift Setup. */
+export default function AttendanceModesRedirectPage() {
+  redirect("/hr/settings/attendance/shift-setup");
+}

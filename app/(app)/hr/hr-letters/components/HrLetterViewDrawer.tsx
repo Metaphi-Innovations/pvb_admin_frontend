@@ -21,6 +21,7 @@ import {
 import { getHrEmployeeById } from "@/app/(app)/hr/employees/employee-master-data";
 import {
   getHrTemplateById,
+  stripHtmlToText,
   type GeneratedHrDocument,
 } from "@/app/(app)/hr/settings/hr-template-data";
 import {
@@ -30,6 +31,12 @@ import {
   previewHrLetter,
 } from "../hr-letters-data";
 import { HrLetterDocumentFrame, printHrLetterPreview } from "./HrLetterDocumentFrame";
+
+function isSparseLetterBody(html: string): boolean {
+  const text = stripHtmlToText(html || "");
+  if (text.length < 280) return true;
+  return /\beffective\s*[—–-]\s*\.?$/i.test(text) || /\bto\s+[—–-]\s*\.?$/i.test(text);
+}
 
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
@@ -56,27 +63,15 @@ export function HrLetterViewDrawer({
 
   const resolved = useMemo(() => {
     if (!letter) return null;
-    const useLive = livePreview || letter.status === "draft";
-    if (!useLive) {
-      return {
-        title: letter.documentTitle || letter.renderedSubject,
-        header: letter.renderedHeader,
-        body: letter.renderedBody,
-        footer: letter.renderedFooter,
-        companyName: letter.snapshotCompanyName,
-        companyAddress: letter.snapshotCompanyAddress,
-        companyContact: letter.snapshotCompanyContact,
-        logoUrl: letter.snapshotLogoUrl,
-        useCompanyLogo: letter.snapshotUseCompanyLogo,
-        showCompanyAddress: letter.snapshotShowCompanyAddress,
-        showCompanyContact: letter.snapshotShowCompanyContact,
-        unknownPlaceholders: letter.unknownPlaceholders,
-      };
-    }
     const template = getHrTemplateById(letter.templateId);
     const employee =
       letter.employeeId != null ? getHrEmployeeById(letter.employeeId) : undefined;
-    if (!template || !employee) {
+    const useLive =
+      livePreview ||
+      letter.status === "draft" ||
+      (isSparseLetterBody(letter.renderedBody) && !!template && !!employee);
+
+    if (!useLive || !template || !employee) {
       return {
         title: letter.documentTitle || letter.renderedSubject,
         header: letter.renderedHeader,
@@ -86,10 +81,12 @@ export function HrLetterViewDrawer({
         companyAddress: letter.snapshotCompanyAddress,
         companyContact: letter.snapshotCompanyContact,
         logoUrl: letter.snapshotLogoUrl,
-        useCompanyLogo: letter.snapshotUseCompanyLogo,
-        showCompanyAddress: letter.snapshotShowCompanyAddress,
-        showCompanyContact: letter.snapshotShowCompanyContact,
+        useCompanyLogo: letter.snapshotUseCompanyLogo ?? true,
+        showCompanyAddress: letter.snapshotShowCompanyAddress ?? true,
+        showCompanyContact: letter.snapshotShowCompanyContact ?? true,
         unknownPlaceholders: letter.unknownPlaceholders,
+        issueDate: letter.issueDate ? formatDateDisplay(letter.issueDate) : undefined,
+        referenceNumber: letter.referenceNumber || undefined,
       };
     }
     const preview = previewHrLetter(
@@ -111,6 +108,8 @@ export function HrLetterViewDrawer({
       showCompanyAddress: preview.rendered.showCompanyAddress,
       showCompanyContact: preview.rendered.showCompanyContact,
       unknownPlaceholders: preview.rendered.unknownPlaceholders,
+      issueDate: letter.issueDate ? formatDateDisplay(letter.issueDate) : undefined,
+      referenceNumber: letter.referenceNumber || undefined,
     };
   }, [letter, livePreview]);
 
@@ -203,6 +202,8 @@ export function HrLetterViewDrawer({
                 showCompanyAddress={resolved.showCompanyAddress}
                 showCompanyContact={resolved.showCompanyContact}
                 unknownPlaceholders={resolved.unknownPlaceholders}
+                issueDate={resolved.issueDate}
+                referenceNumber={resolved.referenceNumber}
               />
             </div>
           ) : null}

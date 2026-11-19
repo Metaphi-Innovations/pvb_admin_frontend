@@ -4,7 +4,7 @@
 
 import { BRANCH_OPTIONS, EMPLOYEE_TYPE_OPTIONS, EMPLOYMENT_STATUS_OPTIONS } from "@/lib/hr/config";
 import {
-  loadMandatoryProfileSections,
+  MANDATORY_PROFILE_SECTION_SEED,
   getMandatoryDocumentFieldChecks,
   type MandatoryProfileSectionConfig,
   type MandatoryProfileSectionId,
@@ -61,8 +61,11 @@ function sectionFieldChecks(
 }
 
 /**
- * Profile completion driven by Mandatory Profile Sections settings.
- * Optional sections are excluded from filled/total and do not block 100%.
+ * Profile completion from system-required profile sections
+ * (`MANDATORY_PROFILE_SECTION_SEED`). Optional sections are excluded and do not
+ * block 100%. Field checks within sections are fixed in `sectionFieldChecks`
+ * (not a configurable rule engine). Documents use active mandatory document
+ * types from `DOCUMENT_REQUIREMENT_SEED` / stored requirements.
  */
 export function getEmployeeProfileCompletion(
   e: HrEmployee,
@@ -73,7 +76,7 @@ export function getEmployeeProfileCompletion(
   total: number;
   missingLabels: string[];
 } {
-  const config = sectionConfig ?? loadMandatoryProfileSections();
+  const config = sectionConfig ?? MANDATORY_PROFILE_SECTION_SEED;
   const bySection = sectionFieldChecks(e);
   const checks: Array<{ label: string; ok: boolean }> = [];
 

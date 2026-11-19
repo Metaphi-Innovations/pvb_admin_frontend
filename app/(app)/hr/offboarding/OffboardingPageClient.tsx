@@ -36,6 +36,8 @@ import {
   type OffboardingExitType,
   type OffboardingRecord,
 } from "./offboarding-data";
+import { ensureDemoCompletedOffboarding } from "@/app/(app)/hr/demo/demo-workspace-seed";
+import { isHrDemoWorkspaceEnabled } from "@/app/(app)/hr/demo/demo-workspace-constants";
 import { OffboardingStatusPill } from "./components/OffboardingStatusPill";
 import { StartOffboardingDrawer } from "./components/StartOffboardingDrawer";
 import { ResignationReviewDrawer } from "./components/ResignationReviewDrawer";
@@ -82,6 +84,13 @@ export default function OffboardingPageClient() {
   }, []);
 
   useEffect(() => {
+    if (isHrDemoWorkspaceEnabled()) {
+      try {
+        ensureDemoCompletedOffboarding();
+      } catch {
+        /* non-blocking */
+      }
+    }
     refresh();
     const onUpd = () => refresh();
     window.addEventListener(HR_OFFBOARDING_EVENT, onUpd);

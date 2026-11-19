@@ -166,6 +166,7 @@ function ensureFieldForceShifts(shifts: ShiftRecord[]): {
       graceInMinutes: 15,
       graceOutMinutes: 10,
       breakDurationMinutes: 60,
+      attendancePolicyId: null,
       status: "active",
       weeklySchedule: {
         monday: workingDayConfig("09:30", "18:30"),
@@ -191,6 +192,7 @@ function ensureFieldForceShifts(shifts: ShiftRecord[]): {
       graceInMinutes: 15,
       graceOutMinutes: 10,
       breakDurationMinutes: 60,
+      attendancePolicyId: null,
       status: "active",
       weeklySchedule: {
         monday: workingDayConfig("09:30", "18:30"),

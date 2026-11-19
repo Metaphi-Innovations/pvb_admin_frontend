@@ -8,6 +8,7 @@
 import { CURRENT_USER } from "@/lib/hr/config";
 import { policyToday } from "@/lib/hr/policy-common";
 import { loadHrEmployees, type HrEmployee } from "../employees/employee-master-data";
+import { getAssignedShiftForEmployee } from "./shift-setup-data";
 
 const STORAGE_KEY = "ds_hr_attendance_policies_v3";
 const SINGLETON_KEY = "ds_hr_attendance_policy_settings_v2";
@@ -268,12 +269,19 @@ export function resolveEmployeeAttendancePolicyId(
   employee: Pick<HrEmployee, "profileSummaries">,
   list?: AttendancePolicyRecord[],
 ): number | undefined {
+  const policies = list ?? loadAttendancePolicies();
   const explicit = employee.profileSummaries?.attendance?.attendancePolicyId;
   if (typeof explicit === "number") {
-    const found = getAttendancePolicyById(explicit, list);
+    const found = getAttendancePolicyById(explicit, policies);
     if (found) return found.id;
   }
-  return getDefaultAttendancePolicy(list)?.id;
+  // Shift-linked rules (set via unified Shift Setup) when employee has no explicit policy.
+  const shift = getAssignedShiftForEmployee(employee.profileSummaries?.attendance);
+  if (shift?.attendancePolicyId != null) {
+    const linked = getAttendancePolicyById(shift.attendancePolicyId, policies);
+    if (linked) return linked.id;
+  }
+  return getDefaultAttendancePolicy(policies)?.id;
 }
 
 export function resolveEmployeeAttendancePolicyLabel(

@@ -1,10 +1,8 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
 import {
   Eye,
-  ExternalLink,
   FileText,
   Pencil,
   Plus,
@@ -13,9 +11,9 @@ import {
   Trash2,
   Upload,
 } from "lucide-react";
+import { HrInfoHint, HrInfoHeading } from "@/app/(app)/hr/components/HrInfoHint";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -55,13 +53,16 @@ import {
   HrIconActionButton,
   exportOrgCsv,
   hrInput,
-  hrTextarea,
   hrSelect,
   hrBtn,
   type HrDensity,
   type HrStatusFilter,
   type HrDataGridColumn,
 } from "../../organization/_components";
+import {
+  TemplateRichEditor,
+  insertPlaceholderIntoEditor,
+} from "../../templates/TemplateRichEditor";
 import {
   applyWelcomePlaceholders,
   createWelcomeAttachmentFromFile,
@@ -77,11 +78,13 @@ import {
   loadWelcomeTemplates,
   nextWelcomeTemplateId,
   normalizeWelcomeTemplateName,
+  sanitizeWelcomeHtml,
   saveWelcomeSetup,
   saveWelcomeTemplates,
   touchWelcomeTemplate,
+  welcomeMessagePlainText,
   withWelcomeTemplateAudit,
-  WELCOME_PLACEHOLDERS,
+  WELCOME_PLACEHOLDER_OPTIONS,
   WELCOME_SEND_ON_OPTIONS,
   type WelcomeAttachmentMeta,
   type WelcomeChannel,
@@ -99,7 +102,6 @@ type TemplateForm = {
   subject: string;
   message: string;
   attachments: WelcomeAttachmentMeta[];
-  videoLink: string;
   status: WelcomeTemplateRecord["status"];
 };
 
@@ -108,7 +110,6 @@ const EMPTY_FORM: TemplateForm = {
   subject: "",
   message: "",
   attachments: [],
-  videoLink: "",
   status: "active",
 };
 
@@ -233,7 +234,9 @@ export default function WelcomeWorkflowClient() {
   const [form, setForm] = useState<TemplateForm>(EMPTY_FORM);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [preview, setPreview] = useState<WelcomeTemplateRecord | null>(null);
+  const [insertVar, setInsertVar] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
+  const msgEditorHost = useRef<HTMLDivElement>(null);
 
   /* setup */
   const [savedSetup, setSavedSetup] = useState<WelcomeSetupSettings | null>(null);
@@ -331,7 +334,6 @@ export default function WelcomeWorkflowClient() {
       subject: r.subject,
       message: r.message,
       attachments: r.attachments.map((a) => ({ ...a })),
-      videoLink: r.videoLink,
       status: r.status,
     });
     setErrors({});
@@ -351,15 +353,7 @@ export default function WelcomeWorkflowClient() {
       e.name = "Template name already exists.";
     }
     if (!form.subject.trim()) e.subject = "Email Subject is required";
-    if (!form.message.trim()) e.message = "Welcome Message is required";
-    if (form.videoLink.trim()) {
-      try {
-        // eslint-disable-next-line no-new
-        new URL(form.videoLink.trim());
-      } catch {
-        e.videoLink = "Enter a valid URL";
-      }
-    }
+    if (!welcomeMessagePlainText(form.message)) e.message = "Welcome Message is required";
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -376,7 +370,8 @@ export default function WelcomeWorkflowClient() {
                 subject: form.subject.trim(),
                 message: form.message.trim(),
                 attachments: form.attachments,
-                videoLink: form.videoLink.trim(),
+                // Preserve any legacy videoLink on stored records; field removed from UI.
+                videoLink: t.videoLink ?? "",
                 status: form.status,
               })
             : t,
@@ -391,7 +386,7 @@ export default function WelcomeWorkflowClient() {
           subject: form.subject.trim(),
           message: form.message.trim(),
           attachments: form.attachments,
-          videoLink: form.videoLink.trim(),
+          videoLink: "",
           status: form.status,
         }),
       ]);
@@ -454,12 +449,11 @@ export default function WelcomeWorkflowClient() {
       id: "material",
       label: "Material",
       sortable: true,
-      sortValue: (r) => r.attachments.length + (r.videoLink.trim() ? 1 : 0),
+      sortValue: (r) => r.attachments.length,
       render: (r) => (
         <span className="text-foreground">
           {formatWelcomeMaterialLabel({
             attachments: r.attachments,
-            videoLink: r.videoLink,
           })}
         </span>
       ),
@@ -565,13 +559,108 @@ export default function WelcomeWorkflowClient() {
 
   const previewVars = getSampleWelcomePreviewVars();
 
+  const setupSnapshot = draftSetup ?? savedSetup;
+  const defaultTemplateName =
+    setupSnapshot?.defaultTemplateId != null
+      ? templates.find((t) => t.id === setupSnapshot.defaultTemplateId)?.name ??
+        "Selected template inactive / missing"
+      : "—";
+  const activeTemplateCount = activeTemplates.length;
+
+  const pageInfo = {
+    title: "Welcome Workflow",
+    summary:
+      "Manages welcome communications for new joiners — templates, delivery setup, and send history.",
+    what: "Lets HR define reusable welcome messages (with formatting, variables, and attachment names), choose email/notification channels and timing, and log sends from the employee profile.",
+    when: "Used when onboarding a new employee — typically around joining date — from Employee Profile → Send Welcome, or via intended setup timing.",
+    affects: "HR Settings → Welcome Workflow, Employee Profile welcome actions, and HR Notifications (welcome_communication). Separate from Template Management Welcome Letter documents.",
+    rules: (
+      <ul className="list-disc pl-4 space-y-1">
+        <li>Attachment file bytes are not stored or delivered until document storage is connected.</li>
+        <li>Email/push delivery is not live — history shows Not Delivered until integration is connected.</li>
+        <li>Do not duplicate Welcome Letter body masters here; letter documents stay under Template Management.</li>
+      </ul>
+    ),
+  };
+
+  const templatesInfo = {
+    title: "Welcome Templates",
+    summary:
+      "Reusable welcome messages for email/notification delivery — not the same as Template Management letters.",
+    what: "Create and maintain welcome template name, subject, rich message, and attachment metadata.",
+    when: "Whenever HR needs a standard welcome communication for new joiners (employees, interns, etc.).",
+    affects: "Welcome Setup default template, Send Welcome on Employee Profile, and Sent History snapshots.",
+    rules: (
+      <ul className="list-disc pl-4 space-y-1">
+        <li>
+          Active templates available now:{" "}
+          <span className="font-semibold">{activeTemplateCount}</span>
+        </li>
+        <li>
+          Welcome Letter document templates (print/PDF) live under Template Management — this list
+          owns delivery-oriented welcome messages only.
+        </li>
+        <li>Attachment names are metadata only until document storage is connected.</li>
+      </ul>
+    ),
+  };
+
+  const setupInfo = {
+    title: "Welcome Setup",
+    summary: "Controls which channels are enabled, send timing intent, and the default template.",
+    what: "Turns Welcome Email and Welcome Notification on or off, sets intended Send On timing, and picks the default template for new sends.",
+    when: "Configured once (or when policy changes); applied when HR sends a welcome from an employee profile.",
+    affects: "Send Welcome dialog channel options and default template selection on Employee Profile.",
+    sections: [
+      {
+        label: "Current configuration",
+        body: (
+          <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-xs">
+            <dt className="text-muted-foreground">Welcome Email</dt>
+            <dd className="font-medium">
+              {setupSnapshot?.welcomeEmail ? "On" : "Off"}
+            </dd>
+            <dt className="text-muted-foreground">Welcome Notification</dt>
+            <dd className="font-medium">
+              {setupSnapshot?.welcomeNotification ? "On" : "Off"}
+            </dd>
+            <dt className="text-muted-foreground">Send On</dt>
+            <dd className="font-medium">
+              {setupSnapshot
+                ? getWelcomeSendOnLabel(setupSnapshot.sendOn)
+                : "—"}
+            </dd>
+            <dt className="text-muted-foreground">Default template</dt>
+            <dd className="font-medium">{defaultTemplateName}</dd>
+            <dt className="text-muted-foreground">Active templates</dt>
+            <dd className="font-medium">{activeTemplateCount}</dd>
+          </dl>
+        ),
+      },
+    ],
+    rules:
+      "If both channels are off, Send Welcome cannot deliver via email or notification. Deactivating the default template clears it from setup.",
+  };
+
+  const historyInfo = {
+    title: "Sent History",
+    summary:
+      "Audit log of welcome communications attempted from Employee Profile. Delivery is not confirmed until email/push integration is connected.",
+    what: "Stores a snapshot of subject, message, attachment names, channel, recipient, and status at send time.",
+    when: "Each time HR uses Send Welcome (or resend) on an employee.",
+    affects: "Employee onboarding audit trail and HR Notifications welcome events.",
+    rules:
+      "Status labels such as Not Delivered mean the send was logged in HRMS only — not that SMTP/push succeeded.",
+  };
+
   return (
     <HrOrgPageHeader
       title="Welcome Workflow"
-      description="Configure welcome templates, delivery setup, and sent history for new employees."
+      description="Templates, delivery setup, and sent history for new employees."
       icon={Sparkles}
       sectionLabel="Employee Onboarding Setup"
       sectionHref="/hr/settings"
+      titleAside={<HrInfoHint mode="drawer" content={pageInfo} />}
       actions={
         tab === "templates" ? (
           <Button size="sm" className={hrBtn("gap-1.5", true)} onClick={openAdd}>
@@ -623,24 +712,9 @@ export default function WelcomeWorkflowClient() {
 
         {/* ── Templates ── */}
         <TabsContent value="templates" className="mt-0 space-y-3">
-          <div className="rounded-lg border border-navy-100 bg-navy-50/50 px-3 py-2.5 text-xs text-navy-800 flex flex-wrap items-start gap-2">
-            <FileText className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-navy-600" />
-            <div className="min-w-0 flex-1">
-              <p className="font-medium text-navy-900">Central Template Management</p>
-              <p className="text-[11px] text-navy-700 mt-0.5 leading-relaxed">
-                Reusable Welcome Letter body content is managed under{" "}
-                <Link
-                  href="/hr/settings/templates?type=welcome_letter"
-                  className="font-semibold text-brand-700 hover:underline inline-flex items-center gap-0.5"
-                >
-                  Template Management
-                  <ExternalLink className="w-3 h-3" />
-                </Link>
-                . This Welcome Workflow keeps delivery channels, attachments, video links,
-                setup timing, and sent history — those are not duplicated in Template Management.
-              </p>
-            </div>
-          </div>
+          <HrInfoHeading mode="drawer" info={templatesInfo}>
+            Welcome Templates
+          </HrInfoHeading>
           <HrListingToolbar
             search={tSearch}
             onSearchChange={setTSearch}
@@ -663,7 +737,6 @@ export default function WelcomeWorkflowClient() {
                   t.subject,
                   formatWelcomeMaterialLabel({
                     attachments: t.attachments,
-                    videoLink: t.videoLink,
                   }),
                   t.status,
                 ]),
@@ -694,6 +767,9 @@ export default function WelcomeWorkflowClient() {
         <TabsContent value="setup" className="mt-0">
           {draftSetup && (
             <div className="max-w-2xl border border-border rounded-[12px] bg-white shadow-sm p-4 space-y-3">
+              <HrInfoHeading mode="drawer" info={setupInfo}>
+                Welcome Setup
+              </HrInfoHeading>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <ToggleCard
                   id="ws-email"
@@ -811,6 +887,9 @@ export default function WelcomeWorkflowClient() {
 
         {/* ── History ── */}
         <TabsContent value="history" className="mt-0 space-y-3">
+          <HrInfoHeading mode="popover" info={historyInfo}>
+            Sent History
+          </HrInfoHeading>
           <div className="flex flex-wrap items-center gap-2">
             <input
               value={hSearch}
@@ -918,24 +997,56 @@ export default function WelcomeWorkflowClient() {
               placeholder="Welcome to the Team"
             />
           </HrOrgField>
-          <HrOrgField label="Welcome Message" required error={errors.message} id="wt-msg">
-            <Textarea
-              id="wt-msg"
-              rows={5}
+          <div ref={msgEditorHost} className="space-y-1.5">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-medium">
+                Welcome Message <span className="text-red-500">*</span>
+              </p>
+              <Select
+                value={insertVar || undefined}
+                onValueChange={(token) => {
+                  const root = msgEditorHost.current?.querySelector(
+                    "[contenteditable]",
+                  ) as HTMLElement | null;
+                  insertPlaceholderIntoEditor(root, token);
+                  setForm((f) => {
+                    const html = root?.innerHTML;
+                    return html != null ? { ...f, message: html } : f;
+                  });
+                  setInsertVar("");
+                }}
+              >
+                <SelectTrigger className={cn(hrSelect(), "h-7 w-[148px] text-[11px]")}>
+                  <SelectValue placeholder="Insert Variable" />
+                </SelectTrigger>
+                <SelectContent>
+                  {WELCOME_PLACEHOLDER_OPTIONS.map((o) => (
+                    <SelectItem key={o.value} value={o.value} className="text-xs">
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <TemplateRichEditor
               value={form.message}
-              onChange={(e) => setForm({ ...form, message: e.target.value })}
-              className={hrTextarea()}
+              onChange={(html) => setForm({ ...form, message: html })}
               placeholder="Welcome {{employee_name}}…"
+              minHeightClass="min-h-[140px]"
             />
-            <p className="text-[11px] text-muted-foreground mt-1.5 leading-snug">
-              Placeholders (stored as plain text): {WELCOME_PLACEHOLDERS.join(" · ")}
+            {errors.message && (
+              <p className="text-xs text-red-500 flex items-center gap-1">{errors.message}</p>
+            )}
+            <p className="text-[11px] text-muted-foreground leading-snug">
+              Variables stay as tokens (e.g. {"{{employee_name}}"}) until send/preview.
             </p>
-          </HrOrgField>
+          </div>
           <div className="space-y-1.5">
             <p className="text-xs font-medium">Attachments</p>
-            <p className="text-[11px] text-muted-foreground">
-              File delivery will be available once document storage is connected.
-            </p>
+            <div className="rounded-[10px] border border-amber-200 bg-amber-50 px-2.5 py-2 text-[11px] text-amber-800 leading-snug">
+              Document storage is not connected. File names and sizes are saved for planning
+              only — files are not uploaded, downloaded, or delivered with welcome messages.
+            </div>
             <div className="space-y-1.5">
               {form.attachments.map((a) => (
                 <div
@@ -950,6 +1061,7 @@ export default function WelcomeWorkflowClient() {
                     <p className="text-[11px] text-muted-foreground mt-0.5">
                       {a.fileType.toUpperCase()}
                       {a.sizeLabel ? ` · ${a.sizeLabel}` : ""}
+                      <span className="text-amber-700"> · metadata only</span>
                     </p>
                   </div>
                   <button
@@ -975,7 +1087,7 @@ export default function WelcomeWorkflowClient() {
               className="h-8 text-xs gap-1.5"
               onClick={() => fileRef.current?.click()}
             >
-              <Upload className="w-3.5 h-3.5" /> Add File
+              <Upload className="w-3.5 h-3.5" /> Add File Name
             </Button>
             <input
               ref={fileRef}
@@ -991,28 +1103,6 @@ export default function WelcomeWorkflowClient() {
               <p className="text-xs text-red-600">{errors.attachments}</p>
             )}
           </div>
-          <HrOrgField label="Video Link" error={errors.videoLink} id="wt-video">
-            <div className="flex gap-2">
-              <Input
-                id="wt-video"
-                value={form.videoLink}
-                onChange={(e) => setForm({ ...form, videoLink: e.target.value })}
-                className={hrInput(undefined, errors.videoLink ? "error" : "default")}
-                placeholder="https://…"
-              />
-              {form.videoLink.trim() && (
-                <a
-                  href={form.videoLink}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="h-9 w-9 inline-flex items-center justify-center rounded-lg border border-border text-slate-600 hover:bg-muted"
-                  aria-label="Open video link"
-                >
-                  <ExternalLink className="w-4 h-4" />
-                </a>
-              )}
-            </div>
-          </HrOrgField>
           <div className="space-y-1.5">
             <p className="text-xs font-medium">Active / Inactive</p>
             <div className="h-9 flex items-center">
@@ -1053,45 +1143,40 @@ export default function WelcomeWorkflowClient() {
               </p>
               <div>
                 <p className="text-muted-foreground mb-1">Welcome Message</p>
-                <p className="whitespace-pre-wrap leading-snug">
-                  {applyWelcomePlaceholders(preview.message, previewVars)}
-                </p>
+                <div
+                  className="rounded-lg border border-border bg-muted/20 px-2.5 py-2 leading-snug [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4 [&_a]:text-brand-700 [&_a]:underline [&_h3]:text-sm [&_h3]:font-semibold"
+                  dangerouslySetInnerHTML={{
+                    __html: sanitizeWelcomeHtml(
+                      applyWelcomePlaceholders(preview.message, previewVars),
+                    ),
+                  }}
+                />
               </div>
               <div>
                 <p className="text-muted-foreground mb-1">Attachments</p>
                 {preview.attachments.length === 0 ? (
                   <p className="text-muted-foreground">—</p>
                 ) : (
-                  <ul className="space-y-1">
-                    {preview.attachments.map((a) => (
-                      <li key={a.id} className="flex items-center gap-1.5">
-                        <FileText className="w-3.5 h-3.5 text-muted-foreground" />
-                        <span>
-                          {a.fileName}
-                          <span className="text-muted-foreground">
-                            {" "}
-                            ({a.fileType.toUpperCase()}
-                            {a.sizeLabel ? ` · ${a.sizeLabel}` : ""})
+                  <>
+                    <ul className="space-y-1">
+                      {preview.attachments.map((a) => (
+                        <li key={a.id} className="flex items-center gap-1.5">
+                          <FileText className="w-3.5 h-3.5 text-muted-foreground" />
+                          <span>
+                            {a.fileName}
+                            <span className="text-muted-foreground">
+                              {" "}
+                              ({a.fileType.toUpperCase()}
+                              {a.sizeLabel ? ` · ${a.sizeLabel}` : ""})
+                            </span>
                           </span>
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-              <div>
-                <p className="text-muted-foreground mb-1">Video Link</p>
-                {preview.videoLink.trim() ? (
-                  <a
-                    href={preview.videoLink}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1 text-brand-700 hover:underline"
-                  >
-                    {preview.videoLink} <ExternalLink className="w-3 h-3" />
-                  </a>
-                ) : (
-                  <p className="text-muted-foreground">—</p>
+                        </li>
+                      ))}
+                    </ul>
+                    <p className="text-[11px] text-amber-800 mt-1.5">
+                      Names only — files are not stored or delivered yet.
+                    </p>
+                  </>
                 )}
               </div>
             </div>
@@ -1130,36 +1215,31 @@ export default function WelcomeWorkflowClient() {
               </p>
               <div>
                 <p className="text-muted-foreground mb-1">Message</p>
-                <p className="whitespace-pre-wrap leading-snug">{viewHist.messageSnapshot}</p>
+                <div
+                  className="rounded-lg border border-border bg-muted/20 px-2.5 py-2 leading-snug [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4 [&_a]:text-brand-700 [&_a]:underline"
+                  dangerouslySetInnerHTML={{
+                    __html: sanitizeWelcomeHtml(viewHist.messageSnapshot),
+                  }}
+                />
               </div>
               <div>
                 <p className="text-muted-foreground mb-1">Files</p>
                 {viewHist.attachmentsSnapshot.length === 0 ? (
                   <p className="text-muted-foreground">—</p>
                 ) : (
-                  <ul className="space-y-0.5">
-                    {viewHist.attachmentsSnapshot.map((a) => (
-                      <li key={a.id} className="flex items-center gap-1.5">
-                        <FileText className="w-3.5 h-3.5 text-muted-foreground" />
-                        {a.fileName}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-              <div>
-                <p className="text-muted-foreground mb-1">Video Link</p>
-                {viewHist.videoLinkSnapshot.trim() ? (
-                  <a
-                    href={viewHist.videoLinkSnapshot}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1 text-brand-700 hover:underline"
-                  >
-                    {viewHist.videoLinkSnapshot} <ExternalLink className="w-3 h-3" />
-                  </a>
-                ) : (
-                  <p className="text-muted-foreground">—</p>
+                  <>
+                    <ul className="space-y-0.5">
+                      {viewHist.attachmentsSnapshot.map((a) => (
+                        <li key={a.id} className="flex items-center gap-1.5">
+                          <FileText className="w-3.5 h-3.5 text-muted-foreground" />
+                          {a.fileName}
+                        </li>
+                      ))}
+                    </ul>
+                    <p className="text-[11px] text-amber-800 mt-1">
+                      Metadata snapshot only — no file delivery.
+                    </p>
+                  </>
                 )}
               </div>
               <p>

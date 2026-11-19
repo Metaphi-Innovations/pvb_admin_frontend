@@ -6,7 +6,6 @@
 import { loadCompanyProfile, loadBranches, loadDepartments, loadDesignations } from "../organization-data";
 import { loadShifts } from "../shift-setup-data";
 import { loadHolidayCalendars } from "../holiday-calendar-data";
-import { loadAttendancePolicies } from "../attendance-policy-data";
 import { loadLeaveTypes, loadLeavePolicies } from "../leave-data";
 import { loadSalaryComponents } from "../salary-components-data";
 import { loadSalaryStructures } from "../salary-structures-data";
@@ -98,7 +97,7 @@ export function getSettingsOverviewRecommendations(limit = 3): OverviewRecommend
     if (shifts.length === 0) {
       out.push({
         title: "Configure Shift Setup",
-        description: "Working hours and weekly offs for attendance.",
+        description: "Working hours, weekly offs, and attendance rules.",
         href: "/hr/settings/attendance/shift-setup",
       });
     }
@@ -111,20 +110,8 @@ export function getSettingsOverviewRecommendations(limit = 3): OverviewRecommend
     if (calendars.length === 0) {
       out.push({
         title: "Set up Holiday Calendar",
-        description: "Public and optional holidays for attendance and leave.",
+        description: "Mandatory and optional holidays for attendance and leave.",
         href: "/hr/settings/attendance/holiday-calendar",
-      });
-    }
-  } catch {
-    /* ignore */
-  }
-
-  try {
-    if (loadAttendancePolicies().filter((p) => p.status === "active").length === 0) {
-      out.push({
-        title: "Create Attendance Policy",
-        description: "Assignable attendance rules for employees.",
-        href: "/hr/settings/attendance/attendance-policy",
       });
     }
   } catch {

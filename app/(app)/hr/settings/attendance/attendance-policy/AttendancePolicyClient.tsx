@@ -104,7 +104,12 @@ function applyDefault(list: AttendancePolicyRecord[], defaultId: number): Attend
   return list.map((p) => ({ ...p, isDefault: p.id === defaultId }));
 }
 
-export default function AttendancePolicyClient() {
+export default function AttendancePolicyClient({
+  embedded = false,
+}: {
+  /** When true, omit page chrome (used inside Shift & Attendance Setup tabs). */
+  embedded?: boolean;
+} = {}) {
   const [records, setRecords] = useState<AttendancePolicyRecord[]>([]);
   const [employees, setEmployees] = useState<HrEmployee[]>([]);
   const [loading, setLoading] = useState(true);
@@ -352,19 +357,21 @@ export default function AttendancePolicyClient() {
     },
   ];
 
-  return (
-    <HrOrgPageHeader
-      title="Attendance Policy"
-      description="Reusable attendance rules that can be assigned to employees."
-      icon={Shield}
-      sectionLabel="Attendance Settings"
-      actions={
-        <Button size="sm" className={hrBtn("gap-1.5", true)} onClick={openAdd}>
-          <Plus className="w-3.5 h-3.5" /> Add Attendance Policy
-        </Button>
-      }
-    >
+  const addAction = (
+    <Button size="sm" className={hrBtn("gap-1.5", true)} onClick={openAdd}>
+      <Plus className="w-3.5 h-3.5" /> Add Attendance Policy
+    </Button>
+  );
+
+  const body = (
+    <>
       <div className="space-y-3">
+        {embedded && (
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs font-semibold text-foreground">Attendance Policy</p>
+            {addAction}
+          </div>
+        )}
         <HrListingToolbar
           search={search}
           onSearchChange={setSearch}
@@ -481,6 +488,20 @@ export default function AttendancePolicyClient() {
       />
 
       <HrSuccessToast message={toast} onDismiss={() => setToast(null)} />
+    </>
+  );
+
+  if (embedded) return body;
+
+  return (
+    <HrOrgPageHeader
+      title="Attendance Policy"
+      description="Reusable attendance rules that can be assigned to employees."
+      icon={Shield}
+      sectionLabel="Attendance Settings"
+      actions={addAction}
+    >
+      {body}
     </HrOrgPageHeader>
   );
 }

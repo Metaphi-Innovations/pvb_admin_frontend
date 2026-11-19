@@ -1,5 +1,6 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import { createLazyClientPage } from "@/lib/createLazyClientPage";
-
-export default createLazyClientPage(() => import("./AttendancePolicyClient"));
+/** Compatibility: Attendance Policy is configured inside Shift Setup. */
+export default function AttendancePolicyRedirectPage() {
+  redirect("/hr/settings/attendance/shift-setup");
+}

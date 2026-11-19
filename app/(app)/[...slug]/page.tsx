@@ -1,11 +1,12 @@
 "use client";
 
-import React from "react";
+import React, { useEffect } from "react";
 import { useParams } from "next/navigation";
 import { AppLayout, PageShell } from "@/components/layout/AppLayout";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Construction, ArrowLeft } from "lucide-react";
 import Link from "next/link";
+import { HR_MODULE_ENTRY_HREF } from "@/lib/hr/hr-nav";
 
 // Friendly labels for known module roots
 const MODULE_LABELS: Record<string, string> = {
@@ -21,6 +22,11 @@ const MODULE_LABELS: Record<string, string> = {
   demo: "Demo",
 };
 
+/** Roots that have a real app — never show Coming Soon for the bare module URL. */
+const MODULE_HOME: Record<string, string> = {
+  hr: HR_MODULE_ENTRY_HREF,
+};
+
 function toTitle(slug: string) {
   return slug
     .split("-")
@@ -32,6 +38,28 @@ export default function PlaceholderPage() {
   const params = useParams();
   const segments = Array.isArray(params.slug) ? params.slug : [params.slug ?? ""];
   const root = segments[0] ?? "";
+  const home = MODULE_HOME[root];
+
+  // If a real module home exists for this root (e.g. /hr → employees), leave Coming Soon.
+  useEffect(() => {
+    if (!home) return;
+    if (segments.length === 1) {
+      window.location.replace(home);
+    }
+  }, [home, segments.length]);
+
+  if (home && segments.length === 1) {
+    return (
+      <AppLayout>
+        <PageShell>
+          <div className="flex flex-col items-center justify-center py-24 px-6">
+            <p className="text-sm text-muted-foreground">Opening {MODULE_LABELS[root] ?? root}…</p>
+          </div>
+        </PageShell>
+      </AppLayout>
+    );
+  }
+
   const module = MODULE_LABELS[root] ?? toTitle(root);
   const sub = segments.slice(1).map(toTitle).join(" › ");
   const title = sub ? `${module} › ${sub}` : module;
@@ -65,11 +93,11 @@ export default function PlaceholderPage() {
           </p>
 
           <Link
-            href="/dashboard"
+            href={home ?? "/dashboard"}
             className="inline-flex items-center gap-2 text-sm font-medium text-brand-600 hover:text-brand-700 transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
-            Back to Dashboard
+            {home ? "Open HR" : "Back to Dashboard"}
           </Link>
         </div>
       </PageShell>

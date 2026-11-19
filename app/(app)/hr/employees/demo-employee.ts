@@ -3,6 +3,10 @@
  * Not a real person; used for Employee Profile visual review.
  */
 import type { HrEmployee } from "./employee-master-data";
+import {
+  buildDemoDocuments,
+  buildDemoOnboardingSummary,
+} from "@/app/(app)/hr/demo/demo-employee-profile";
 
 export const DEMO_EMPLOYEE_CODE = "EMP-DEMO-001";
 
@@ -189,39 +193,25 @@ export function buildDemoEmployee(id: number): HrEmployee {
         relievingLetterName: "",
       },
     ],
-    documents: [
+    documents: buildDemoDocuments(
+      DEMO_EMPLOYEE_CODE,
+      "Aarav Deshmukh",
+      6,
+      "2024-04-01",
       {
-        id: "demo-doc-pan",
-        documentType: "PAN Card",
-        documentName: "PAN Card Copy",
-        documentNumber: "ABCDE1234F",
-        fileName: "aarav-pan-card.pdf",
-        uploadedDate: "",
-        expiryDate: "",
-        verificationStatus: "missing",
-        verifiedBy: "",
-        verifiedDate: "",
-        comment: "",
+        pan: "ABCDE1234F",
+        aadhaar: "123456789012",
+        uan: "100012345678",
+        pfNumber: "MH/PUN/1234567",
+        esicNumber: "3100123456",
+        passportNumber: "N1234567",
+        passportExpiry: "2031-12-31",
+        drivingLicenceNumber: "MH1420240012345",
+        drivingLicenceExpiry: "2034-06-30",
       },
-    ],
+    ),
     profileSummaries: {
-      onboarding: {
-        status: "Completed",
-        startDate: "2024-03-25",
-        completionDate: "2024-04-05",
-        assignedHr: "Priya Nair",
-        checklistAssigned: 6,
-        checklistCompleted: 6,
-        checklistPending: 0,
-        checklistItems: [
-          { item: "Employee Details Completed", status: "Completed", completedOn: "2024-03-26" },
-          { item: "Bank Details Added", status: "Completed", completedOn: "2024-03-28" },
-          { item: "Government IDs Added", status: "Completed", completedOn: "2024-03-28" },
-          { item: "Joining Documents Collected", status: "Completed", completedOn: "2024-04-01" },
-          { item: "Manager Assigned", status: "Completed", completedOn: "2024-03-25" },
-          { item: "Welcome Orientation Completed", status: "Completed", completedOn: "2024-04-05" },
-        ],
-      },
+      onboarding: buildDemoOnboardingSummary("2024-03-25", "Priya Nair"),
       attendance: {
         shift: "General Shift",
         shiftId: 1,

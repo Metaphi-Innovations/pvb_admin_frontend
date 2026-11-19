@@ -38,6 +38,11 @@ export interface ShiftRecord {
   graceOutMinutes: number;
   breakDurationMinutes: number;
   weeklySchedule: ShiftWeeklySchedule;
+  /**
+   * Linked attendance-policy rules for this shift (exclusive when edited via Shift Setup).
+   * Enforcement still prefers an employee’s explicit attendancePolicyId when set.
+   */
+  attendancePolicyId: number | null;
   status: ShiftStatus;
   createdBy: string;
   updatedBy: string;
@@ -366,6 +371,7 @@ const SEED: Omit<ShiftRecord, "id" | "createdBy" | "updatedBy" | "createdAt" | "
     graceInMinutes: 15,
     graceOutMinutes: 10,
     breakDurationMinutes: 60,
+    attendancePolicyId: 1,
     status: "active",
     weeklySchedule: {
       monday: workingDayConfig("09:30", "18:30"),
@@ -382,6 +388,7 @@ const SEED: Omit<ShiftRecord, "id" | "createdBy" | "updatedBy" | "createdAt" | "
     graceInMinutes: 15,
     graceOutMinutes: 10,
     breakDurationMinutes: 60,
+    attendancePolicyId: 1,
     status: "active",
     weeklySchedule: {
       monday: workingDayConfig("21:00", "06:00"),
@@ -398,6 +405,7 @@ const SEED: Omit<ShiftRecord, "id" | "createdBy" | "updatedBy" | "createdAt" | "
     graceInMinutes: 10,
     graceOutMinutes: 10,
     breakDurationMinutes: 45,
+    attendancePolicyId: 2,
     status: "active",
     weeklySchedule: {
       monday: workingDayConfig("10:00", "19:00"),
@@ -458,6 +466,14 @@ function normalizeShiftRecord(raw: Record<string, unknown>): ShiftRecord {
     );
   }
 
+  const policyRaw = raw.attendancePolicyId;
+  const attendancePolicyId =
+    typeof policyRaw === "number" && Number.isFinite(policyRaw)
+      ? policyRaw
+      : policyRaw == null || policyRaw === ""
+        ? null
+        : Number(policyRaw) || null;
+
   return withAudit({
     id: Number(raw.id) || 0,
     name: String(raw.name ?? ""),
@@ -465,6 +481,7 @@ function normalizeShiftRecord(raw: Record<string, unknown>): ShiftRecord {
     graceOutMinutes: Number(raw.graceOutMinutes) || 0,
     breakDurationMinutes: Number(raw.breakDurationMinutes) || 0,
     weeklySchedule,
+    attendancePolicyId,
     status: raw.status === "inactive" ? "inactive" : "active",
     createdBy: typeof raw.createdBy === "string" ? raw.createdBy : undefined,
     updatedBy: typeof raw.updatedBy === "string" ? raw.updatedBy : undefined,

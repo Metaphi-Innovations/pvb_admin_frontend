@@ -8,6 +8,7 @@ import { CURRENT_USER } from "@/lib/hr/config";
 import { createHrNotification } from "@/lib/hr/hr-notifications";
 import { policyToday } from "@/lib/hr/policy-common";
 import {
+  formatDateDisplay,
   getBranchDisplayLabel,
   getEmployeeTypeLabel,
 } from "@/app/(app)/hr/employees/employee-display";
@@ -16,6 +17,7 @@ import {
   getHrEmployeeById,
   type HrEmployee,
 } from "@/app/(app)/hr/employees/employee-master-data";
+import { getLatestOffboardingForEmployee } from "@/app/(app)/hr/offboarding/offboarding-data";
 import { parseMonthlyCtcValue } from "@/app/(app)/hr/settings/employee-salary-resolve";
 import { loadCompanyProfile } from "@/app/(app)/hr/settings/organization-data";
 import {
@@ -104,6 +106,13 @@ export function listHrLettersForEmployee(
   );
 }
 
+function displayDate(iso: string): string {
+  const raw = (iso || "").trim();
+  if (!raw) return "";
+  const formatted = formatDateDisplay(raw.slice(0, 10));
+  return formatted === "—" ? raw : formatted;
+}
+
 export function buildEmployeeLetterContext(
   employee: HrEmployee,
   issueDate: string,
@@ -121,7 +130,13 @@ export function buildEmployeeLetterContext(
     ? `${company.phoneCountryCode || "+91"} ${company.phoneNumber || ""}`.trim()
     : "";
 
-  return {
+  // Prefer Offboarding LWD when present; otherwise leave empty for extra to fill
+  const offboarding = getLatestOffboardingForEmployee(employee.id);
+  const lwdFromExit = offboarding?.lastWorkingDate?.trim() || "";
+
+  const issue = issueDate || today;
+
+  const ctx: TemplateRenderContext = {
     employee_name: employee.employeeName || "",
     employee_code: employee.employeeCode || "",
     personal_email: employee.contact?.personalEmail || "",
@@ -130,7 +145,7 @@ export function buildEmployeeLetterContext(
     designation: employee.designation || "",
     department: employee.department || "",
     branch: getBranchDisplayLabel(employee.branch) || employee.branch || "",
-    joining_date: employee.dateOfJoining || "",
+    joining_date: displayDate(employee.dateOfJoining || ""),
     employment_type: getEmployeeTypeLabel(employee.employeeType) || employee.employeeType || "",
     company_name: company?.companyName || "",
     company_address: companyAddress,
@@ -149,11 +164,24 @@ export function buildEmployeeLetterContext(
     payroll_period: "",
     payable_days: "",
     lop_days: "",
-    current_date: today,
-    issue_date: issueDate || today,
-    last_working_date: "",
+    current_date: displayDate(today),
+    issue_date: displayDate(issue),
+    last_working_date: displayDate(lwdFromExit),
     ...extra,
   };
+
+  // Format any raw ISO dates passed via extra
+  if (extra?.joining_date) ctx.joining_date = displayDate(extra.joining_date);
+  if (extra?.issue_date) ctx.issue_date = displayDate(extra.issue_date);
+  if (extra?.current_date) ctx.current_date = displayDate(extra.current_date);
+  if (extra?.last_working_date) ctx.last_working_date = displayDate(extra.last_working_date);
+
+  // Demo-safe: never leave LWD blank in rendered letters (prefer exit LWD, else issue date)
+  if (!ctx.last_working_date?.trim()) {
+    ctx.last_working_date = displayDate(issue);
+  }
+
+  return ctx;
 }
 
 export function getLetterDataGaps(

@@ -199,7 +199,82 @@ const BRANCH_SLUG_STATE: Record<string, string> = {
   "branch-bangalore": "Karnataka",
 };
 
-const EMPTY_SEED: ProfessionalTaxConfiguration[] = [];
+/** Demo seed — illustrative PT slabs for Maharashtra / Karnataka. */
+const PT_SEED: ProfessionalTaxConfiguration[] = [
+  {
+    id: 1,
+    state: "Maharashtra",
+    salaryBasis: "monthly_gross",
+    effectiveFrom: "2025-04-01",
+    effectiveTo: null,
+    status: "active",
+    slabs: [
+      {
+        id: 1,
+        applicability: "all",
+        salaryFrom: 0,
+        salaryTo: 7500,
+        amount: 0,
+        specialMonth: null,
+        specialMonthAmount: null,
+      },
+      {
+        id: 2,
+        applicability: "all",
+        salaryFrom: 7501,
+        salaryTo: 10000,
+        amount: 175,
+        specialMonth: 2,
+        specialMonthAmount: 300,
+      },
+      {
+        id: 3,
+        applicability: "all",
+        salaryFrom: 10001,
+        salaryTo: null,
+        amount: 200,
+        specialMonth: 2,
+        specialMonthAmount: 300,
+      },
+    ],
+    createdBy: "Admin",
+    updatedBy: "Admin",
+    createdAt: "2025-04-01",
+    updatedAt: "2025-04-01",
+  },
+  {
+    id: 2,
+    state: "Karnataka",
+    salaryBasis: "monthly_gross",
+    effectiveFrom: "2025-04-01",
+    effectiveTo: null,
+    status: "active",
+    slabs: [
+      {
+        id: 1,
+        applicability: "all",
+        salaryFrom: 0,
+        salaryTo: 14999,
+        amount: 0,
+        specialMonth: null,
+        specialMonthAmount: null,
+      },
+      {
+        id: 2,
+        applicability: "all",
+        salaryFrom: 15000,
+        salaryTo: null,
+        amount: 200,
+        specialMonth: null,
+        specialMonthAmount: null,
+      },
+    ],
+    createdBy: "Admin",
+    updatedBy: "Admin",
+    createdAt: "2025-04-01",
+    updatedAt: "2025-04-01",
+  },
+];
 
 function normalizeApplicability(raw: unknown): PtApplicability {
   const s = String(raw ?? "").toLowerCase();
@@ -385,7 +460,16 @@ function readConfigsFromStorage(): ProfessionalTaxConfiguration[] | null {
 
 export function loadProfessionalTaxConfigurations(): ProfessionalTaxConfiguration[] {
   const existing = readConfigsFromStorage();
-  if (existing != null) return existing;
+  if (existing != null && existing.length > 0) return existing;
+
+  // Empty array previously saved from EMPTY_SEED — fill demo configs once
+  if (existing != null && existing.length === 0) {
+    const seed = structuredClone(PT_SEED);
+    savePolicyList(CONFIGS_STORAGE_KEY, seed);
+    return seed.map((r, i) =>
+      normalizeConfiguration(r as unknown as Record<string, unknown>, i),
+    );
+  }
 
   const migrated = migrateLegacyFlatRulesToConfigs();
   if (migrated.length > 0) {
@@ -393,9 +477,11 @@ export function loadProfessionalTaxConfigurations(): ProfessionalTaxConfiguratio
     return migrated;
   }
 
-  const seed = structuredClone(EMPTY_SEED);
+  const seed = structuredClone(PT_SEED);
   savePolicyList(CONFIGS_STORAGE_KEY, seed);
-  return seed;
+  return seed.map((r, i) =>
+    normalizeConfiguration(r as unknown as Record<string, unknown>, i),
+  );
 }
 
 export function saveProfessionalTaxConfigurations(

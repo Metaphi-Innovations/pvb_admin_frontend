@@ -1,19 +1,17 @@
 /**
  * Holiday Calendar — Attendance Settings master (localStorage v2).
  *
- * Structure: Year → Holiday Calendar (scope) → Holiday rows
+ * HR Holiday Management UI is simplified: holidays are org-wide by default
+ * (Name, Year, Date, Type: Mandatory | Optional). New holidays are stored on a
+ * company_wide calendar for that year.
+ *
+ * Compatibility: `applicableTo` / state / branch fields remain on calendar
+ * records so historical state- or branch-scoped calendars are preserved and
+ * still resolve for attendance/leave. HR UI no longer creates or edits scope.
  *
  * Holiday Type on each row:
- * - public   → Public Holiday (auto non-working; no employee application)
- * - optional → Optional Holiday (employee may apply; entitlement via Leave Policy)
- *
- * Employee resolution intent (future — not implemented here):
- * 1. Resolve employee → Branch → State
- * 2. Match Branch calendar, then State calendar, plus Company Wide calendars for that year
- * 3. Company-wide public holidays always apply alongside state/branch calendars
- * 4. Optional holidays = eligible dates only; entitlement count lives in Leave Policy
- *
- * Does NOT implement leave deduction / approval workflow or calendar merge engine.
+ * - public   → Mandatory (auto non-working in attendance)
+ * - optional → Optional (employee may request via Optional Leave rules)
  */
 
 import { loadBranches } from "./organization-data";
@@ -70,17 +68,64 @@ export const HOLIDAY_TYPE_OPTIONS: {
 }[] = [
   {
     value: "public",
-    label: "Public Holiday",
+    label: "Mandatory",
     helper:
-      "Observed closed for covered employees. Applied automatically — no leave request required.",
+      "Appears automatically as a holiday in attendance. No leave request required.",
   },
   {
     value: "optional",
-    label: "Optional Holiday",
+    label: "Optional",
     helper:
-      "Employee may choose to avail via leave/request flow. Entitlement limit is set in Leave Settings.",
+      "Available for employees to request under Optional Leave rules. Entitlement is set in Leave Settings.",
   },
 ];
+
+/** Flat holiday row for simplified HR listing (spans calendars for a year). */
+export interface ListedHolidayRow extends HolidayRow {
+  calendarId: number;
+  year: number;
+}
+
+/**
+ * Ensure an active company-wide calendar exists for the year.
+ * Does not convert or delete historical state/branch calendars.
+ */
+export function ensureCompanyWideCalendar(
+  list: HolidayCalendarRecord[],
+  year: number,
+): { list: HolidayCalendarRecord[]; calendar: HolidayCalendarRecord } {
+  const existing = list.find(
+    (c) => c.year === year && c.applicableTo === "company_wide",
+  );
+  if (existing) return { list, calendar: existing };
+
+  const created = withCalendarNewAudit({
+    id: nextCalendarId(list),
+    name: `Company Holiday Calendar ${year}`,
+    year,
+    applicableTo: "company_wide",
+    state: "",
+    branchId: null,
+    branchName: "",
+    status: "active",
+    holidays: [],
+  });
+  return { list: [...list, created], calendar: created };
+}
+
+/** Flatten holidays for a year across all calendars (preserves historical scoped rows). */
+export function listHolidaysForYear(
+  year: number,
+  list?: HolidayCalendarRecord[],
+): ListedHolidayRow[] {
+  return getCalendarsForYear(year, list).flatMap((c) =>
+    c.holidays.map((h) => ({
+      ...h,
+      calendarId: c.id,
+      year: c.year,
+    })),
+  );
+}
 
 export const APPLICABLE_TO_OPTIONS: {
   value: HolidayApplicableTo;

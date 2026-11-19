@@ -12,7 +12,7 @@
 
 import { CURRENT_USER } from "@/lib/hr/config";
 import {
-  loadPolicyList,
+  loadPolicyListFillEmpty,
   savePolicyList,
   nextPolicyId,
   policyToday,
@@ -152,7 +152,33 @@ export const PF_CONTRIBUTION_BASE_OPTIONS: {
   },
 ];
 
-const EMPTY_SEED: PfConfiguration[] = [];
+/** Demo seed — illustrative rates/ceilings for client demos. */
+const PF_SEED: PfConfiguration[] = [
+  {
+    id: 1,
+    ruleName: "Standard EPF Rule",
+    contributionBase: "basic",
+    employeePfEnabled: true,
+    employerPfEnabled: true,
+    employeeContributionRate: 12,
+    employerContributionRate: 12,
+    applyWageCeiling: true,
+    wageCeiling: 15000,
+    epsEnabled: true,
+    epsRate: 8.33,
+    epsWageCeiling: 15000,
+    edliEnabled: true,
+    edliRate: 0.5,
+    edliWageCeiling: 15000,
+    effectiveFrom: "2025-04-01",
+    effectiveTo: null,
+    status: "active",
+    createdBy: "Admin",
+    updatedBy: "Admin",
+    createdAt: "2025-04-01",
+    updatedAt: "2025-04-01",
+  },
+];
 
 function normalizeContributionBase(raw: unknown): PfContributionBase {
   const s = String(raw ?? "")
@@ -210,7 +236,7 @@ function normalizeConfiguration(
 }
 
 export function loadPfConfigurations(): PfConfiguration[] {
-  const raw = loadPolicyList(CONFIGS_STORAGE_KEY, structuredClone(EMPTY_SEED));
+  const raw = loadPolicyListFillEmpty(CONFIGS_STORAGE_KEY, structuredClone(PF_SEED));
   return raw.map((r, i) => normalizeConfiguration(r as unknown as Record<string, unknown>, i));
 }
 

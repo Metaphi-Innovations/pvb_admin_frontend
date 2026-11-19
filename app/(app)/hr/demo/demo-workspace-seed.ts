@@ -33,9 +33,14 @@ import {
   loadPayrollRuns,
   savePayrollRuns,
 } from "@/app/(app)/hr/payroll/payroll-run-data";
+import { generatePayslipsForFinalizedRun } from "@/app/(app)/hr/payroll/payslip-generation";
+import {
+  ensureForm16RecordsForEmployees,
+  FORM16_DEFAULT_FY,
+} from "@/app/(app)/hr/payroll/form-16-data";
 import {
   loadDailyRecords,
-  saveDailyRecords,
+  saveDailyRecordsSafe,
   type DailyAttendanceRecord,
   type AttendancePunch,
 } from "@/app/(app)/hr/attendance/attendance-data";
@@ -70,14 +75,22 @@ import {
   getDefaultTemplateByType,
   createGeneratedHrDocument,
   loadGeneratedHrDocuments,
+  loadHrTemplates,
+  renderHrTemplate,
+  stripHtmlToText,
   upsertGeneratedHrDocument,
   type HrTemplateTypeKey,
 } from "@/app/(app)/hr/settings/hr-template-data";
+import { buildEmployeeLetterContext } from "@/app/(app)/hr/hr-letters/hr-letters-data";
 import {
   loadOffboarding,
   startOffboarding,
   submitEmployeeResignation,
   acceptResignation,
+  completeOffboarding,
+  saveOffboarding,
+  getOffboardingById,
+  type OffboardingRecord,
 } from "@/app/(app)/hr/offboarding/offboarding-data";
 import { createHrNotification, loadHrNotifications } from "@/lib/hr/hr-notifications";
 import {
@@ -99,6 +112,16 @@ import {
   saveDemoManifest,
   type DemoWorkspaceManifest,
 } from "./demo-workspace-manifest";
+import {
+  employeeNeedsDemoProfileEnrichment,
+  enrichEmployeeWithDemoProfile,
+  seedDemoJoiningChecklistCompletions,
+} from "./demo-employee-profile";
+import { loadTaxRegimeConfigurations, loadTdsSlabConfigurations } from "@/app/(app)/hr/settings/tax-settings-data";
+import { loadPfConfigurations } from "@/app/(app)/hr/settings/pf-settings-data";
+import { loadEsiConfigurations } from "@/app/(app)/hr/settings/esi-settings-data";
+import { loadLwfConfigurations } from "@/app/(app)/hr/settings/lwf-settings-data";
+import { loadProfessionalTaxConfigurations } from "@/app/(app)/hr/settings/professional-tax-data";
 
 export interface DemoSeedPreview {
   safe: boolean;
@@ -333,7 +356,8 @@ export function previewDemoWorkspace(): DemoSeedPreview {
       leaveTypesAvailable: leaveTypes.map((t) => t.name).slice(0, 5),
       salaryStructure: structure?.name ?? "—",
       payrollCycle: cycle?.cycleName ?? "—",
-      attendanceDaysApprox: DEMO_TARGETS.employees * 55,
+      attendanceDaysApprox:
+        DEMO_TARGETS.attendanceEmployeeCap * DEMO_TARGETS.attendanceMonths * 22,
       leaveRequests: 40,
       travelRequests: DEMO_TARGETS.travelRequests,
       claims: DEMO_TARGETS.claims,
@@ -360,12 +384,13 @@ function ensureDemoEmployeeShifts(employees: HrEmployee[]): HrEmployee[] {
   if (!shifts.length) return employees;
   let changed = false;
   const next = employees.map((e) => {
-    if (!isDemoEmployeeCode(e.employeeCode)) return e;
+    // PVBWS demo + directory samples (EMP-0001… / EMP-DEMO) need a shift for calendar tiles
+    if (!isDemoOrSampleEmployee(e)) return e;
     const hasShift =
       typeof e.profileSummaries?.attendance?.shiftId === "number" ||
       !!(e.profileSummaries?.attendance?.shift || "").trim();
     if (hasShift) return e;
-    const shift = shifts[e.id % shifts.length];
+    const shift = shifts[Math.abs(e.id) % shifts.length];
     changed = true;
     return {
       ...e,
@@ -471,17 +496,6 @@ function buildEmployees(manifest: DemoWorkspaceManifest): HrEmployee[] {
             pincode: branch?.pincode ?? "411001",
           },
         },
-        governmentIds: {
-          pan: "",
-          aadhaar: "",
-          uan: "",
-          pfNumber: "",
-          esicNumber: "",
-          passportNumber: "",
-          passportExpiry: "",
-          drivingLicenceNumber: "",
-          drivingLicenceExpiry: "",
-        },
         bank: {
           accountHolderName: `${first} ${last}`,
           bankName: "Demo Bank",
@@ -518,7 +532,8 @@ function buildEmployees(manifest: DemoWorkspaceManifest): HrEmployee[] {
       };
       // silence unused
       void isManager;
-      created.push(emp);
+      const enriched = enrichEmployeeWithDemoProfile(emp, idx);
+      created.push(enriched);
       manifest.employeeIds.push(id);
       manifest.employeeCodes.push(code);
       if (structure) assignEmployeeSalaryStructure(code, structure.id);
@@ -540,9 +555,60 @@ function buildEmployees(manifest: DemoWorkspaceManifest): HrEmployee[] {
 
   if (created.length) {
     saveHrEmployees([...existing, ...created]);
+    for (const e of created) seedDemoJoiningChecklistCompletions(e);
   }
   manifest.counts.employees = manifest.employeeCodes.length;
   return created;
+}
+
+/**
+ * Touch Settings loaders so empty localStorage arrays get demo seed rows.
+ * Never overwrites non-empty configurations.
+ */
+function ensureDemoSettingsMasters(): string[] {
+  const filled: string[] = [];
+  try {
+    if (loadTaxRegimeConfigurations().length) filled.push("Tax Regime");
+    if (loadTdsSlabConfigurations().length) filled.push("TDS Slabs");
+    if (loadPfConfigurations().length) filled.push("PF");
+    if (loadEsiConfigurations().length) filled.push("ESI");
+    if (loadProfessionalTaxConfigurations().length) filled.push("Professional Tax");
+    if (loadLwfConfigurations().length) filled.push("LWF");
+  } catch {
+    /* ignore — Settings pages remain independently usable */
+  }
+  return filled;
+}
+
+function isDemoOrSampleEmployee(e: HrEmployee): boolean {
+  return (
+    isDemoEmployeeCode(e.employeeCode) ||
+    /^EMP-000[1-5]$/i.test(e.employeeCode) ||
+    /^EMP-DEMO-/i.test(e.employeeCode)
+  );
+}
+
+/**
+ * Backfill Documents / Education / Experience / Gov IDs / Onboarding on:
+ * - PVBWS demo employees (idempotent re-seed)
+ * - Base sample employees EMP-0001…EMP-0005 and EMP-DEMO-001
+ */
+function enrichAllEmployeeProfilesForDemo(): number {
+  const all = loadHrEmployees();
+  let changed = 0;
+  const next = all.map((e, i) => {
+    if (!isDemoOrSampleEmployee(e)) return e;
+    const beforeNeeds = employeeNeedsDemoProfileEnrichment(e);
+    const enriched = enrichEmployeeWithDemoProfile(
+      e,
+      isDemoEmployeeCode(e.employeeCode) ? (e.id % 1000) || i + 1 : e.id || i + 1,
+    );
+    seedDemoJoiningChecklistCompletions(enriched);
+    if (beforeNeeds) changed += 1;
+    return { ...enriched, updatedBy: DEMO_WORKSPACE_MARKER, updatedAt: new Date().toISOString().slice(0, 10) };
+  });
+  saveHrEmployees(next);
+  return changed;
 }
 
 function addMinutesToHhMm(hhmm: string, delta: number): string {
@@ -553,35 +619,80 @@ function addMinutesToHhMm(hhmm: string, delta: number): string {
   return `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
 }
 
-function seedAttendance(employees: HrEmployee[], manifest: DemoWorkspaceManifest): void {
-  const existing = loadDailyRecords();
-  const existingIds = new Set(existing.map((r) => r.id));
-  const existingKey = new Set(existing.map((r) => `${r.employeeId}|${r.date}`));
-  // Idempotent: if demo attendance already present for these employees, only track ids
-  const demoExisting = existing.filter(
-    (r) =>
-      isDemoEmployeeCode(r.employeeCode) ||
-      r.createdBy === DEMO_WORKSPACE_MARKER ||
-      r.note === DEMO_WORKSPACE_MARKER,
+function isDemoishAttendanceRow(r: DailyAttendanceRecord): boolean {
+  return (
+    r.createdBy === DEMO_WORKSPACE_MARKER ||
+    r.note === DEMO_WORKSPACE_MARKER ||
+    isDemoEmployeeCode(r.employeeCode) ||
+    /^EMP-000[1-5]$/i.test(r.employeeCode) ||
+    /^EMP-DEMO-/i.test(r.employeeCode)
   );
-  if (demoExisting.length > 0) {
-    for (const r of demoExisting) {
-      if (!manifest.attendanceRecordIds.includes(r.id)) {
-        manifest.attendanceRecordIds.push(r.id);
+}
+
+/** Drop prior demo/sample attendance + cap legacy rows so Seed Demo fits localStorage. */
+function reclaimAttendanceStorage(warnings: string[]): DailyAttendanceRecord[] {
+  const existing = loadDailyRecords();
+  let keep = existing.filter((r) => !isDemoishAttendanceRow(r));
+  if (keep.length > 350) {
+    keep = [...keep]
+      .sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id)
+      .slice(0, 350);
+    warnings.push("Trimmed legacy attendance rows to free browser storage for demo seed.");
+  }
+  const saved = saveDailyRecordsSafe(keep);
+  if (!saved.ok) {
+    // Last resort: clear attendance key so seed can proceed
+    if (typeof window !== "undefined") {
+      try {
+        window.localStorage.removeItem("ds_hr_attendance_records_v2");
+      } catch {
+        /* ignore */
       }
     }
-    manifest.counts.attendanceRecords = manifest.attendanceRecordIds.length;
-    return;
+    warnings.push("Cleared attendance store after quota failure so demo seed can continue.");
+    return [];
   }
+  if (saved.trimmed) {
+    warnings.push(`Attendance storage compacted to ${saved.saved} legacy row(s) before demo seed.`);
+  }
+  return loadDailyRecords();
+}
 
+function pickAttendanceSeedEmployees(employees: HrEmployee[]): HrEmployee[] {
+  const samples = employees.filter(
+    (e) => /^EMP-000[1-5]$/i.test(e.employeeCode) || /^EMP-DEMO-/i.test(e.employeeCode),
+  );
+  const demos = employees.filter((e) => isDemoEmployeeCode(e.employeeCode));
+  const picked: HrEmployee[] = [];
+  const seen = new Set<number>();
+  for (const e of [...samples, ...demos]) {
+    if (seen.has(e.id)) continue;
+    seen.add(e.id);
+    picked.push(e);
+    if (picked.length >= DEMO_TARGETS.attendanceEmployeeCap) break;
+  }
+  return picked;
+}
+
+function seedAttendance(
+  employees: HrEmployee[],
+  manifest: DemoWorkspaceManifest,
+  warnings: string[],
+): void {
+  // Free quota first — previous seeds wrote ~50 employees × many months
+  const existing = reclaimAttendanceStorage(warnings);
+  const existingKey = new Set(existing.map((r) => `${r.employeeId}|${r.date}`));
   const maxId = existing.reduce((m, r) => Math.max(m, r.id), 900000);
   let nextId = maxId + 1;
+
+  const targets = pickAttendanceSeedEmployees(employees);
   const rows: DailyAttendanceRecord[] = [];
   const shifts = pickDemoShifts();
   const today = new Date();
-  const start = new Date(today.getFullYear(), today.getMonth() - 2, 1);
+  const months = Math.max(1, DEMO_TARGETS.attendanceMonths);
+  const start = new Date(today.getFullYear(), today.getMonth() - (months - 1), 1);
 
-  for (const emp of employees) {
+  for (const emp of targets) {
     const shift =
       shifts.find((s) => s.id === emp.profileSummaries?.attendance?.shiftId) ||
       shifts.find(
@@ -595,11 +706,10 @@ function seedAttendance(employees: HrEmployee[], manifest: DemoWorkspaceManifest
     const winEnd = shift?.weeklySchedule?.monday?.endTime || "18:30";
 
     for (let d = new Date(start); d <= today; d.setDate(d.getDate() + 1)) {
-      const dow = d.getDay(); // 0 Sun
+      const dow = d.getDay();
       const iso = d.toISOString().slice(0, 10);
       if (existingKey.has(`${emp.id}|${iso}`)) continue;
       const roll = (emp.id + d.getDate()) % 11;
-      // Skip many Sundays — weekly off comes from Shift Setup via resolver
       if (dow === 0 && roll !== 0) continue;
 
       let status: DailyAttendanceRecord["attendanceStatus"] = "present";
@@ -618,39 +728,34 @@ function seedAttendance(employees: HrEmployee[], manifest: DemoWorkspaceManifest
         firstIn = addMinutesToHhMm(winStart, 10);
         lastOut = addMinutesToHhMm(winStart, 240);
         punches = [
-          { id: `p-${emp.id}-${iso}-in`, time: firstIn, type: "in", source: "mobile_app" },
-          { id: `p-${emp.id}-${iso}-out`, time: lastOut, type: "out", source: "mobile_app" },
+          { id: `i${emp.id}`, time: firstIn, type: "in", source: "mobile_app" },
+          { id: `o${emp.id}`, time: lastOut, type: "out", source: "mobile_app" },
         ];
       } else if (roll === 3) {
-        status = "present";
         firstIn = addMinutesToHhMm(winStart, 45);
         lateMinutes = 45;
         punches = [
-          { id: `p-${emp.id}-${iso}-in`, time: firstIn, type: "in", source: "biometric" },
-          { id: `p-${emp.id}-${iso}-out`, time: lastOut, type: "out", source: "biometric" },
+          { id: `i${emp.id}`, time: firstIn, type: "in", source: "biometric" },
+          { id: `o${emp.id}`, time: lastOut, type: "out", source: "biometric" },
         ];
       } else if (roll === 4) {
-        status = "present";
         lastOut = addMinutesToHhMm(winEnd, -70);
         earlyMinutes = 70;
         punches = [
-          { id: `p-${emp.id}-${iso}-in`, time: firstIn, type: "in", source: "web" },
-          { id: `p-${emp.id}-${iso}-out`, time: lastOut, type: "out", source: "web" },
+          { id: `i${emp.id}`, time: firstIn, type: "in", source: "web" },
+          { id: `o${emp.id}`, time: lastOut, type: "out", source: "web" },
         ];
       } else if (roll === 5) {
-        // missing punch — only in
-        status = "present";
         lastOut = "";
-        punches = [{ id: `p-${emp.id}-${iso}-in`, time: firstIn, type: "in", source: "mobile_app" }];
-      } else if (status === "present") {
+        punches = [{ id: `i${emp.id}`, time: firstIn, type: "in", source: "mobile_app" }];
+      } else {
         punches = [
-          { id: `p-${emp.id}-${iso}-in`, time: firstIn, type: "in", source: "biometric" },
-          { id: `p-${emp.id}-${iso}-out`, time: lastOut, type: "out", source: "biometric" },
+          { id: `i${emp.id}`, time: firstIn, type: "in", source: "biometric" },
+          { id: `o${emp.id}`, time: lastOut, type: "out", source: "biometric" },
         ];
       }
 
       const id = nextId++;
-      if (existingIds.has(id)) continue;
       const row: DailyAttendanceRecord = {
         id,
         employeeId: emp.id,
@@ -676,12 +781,38 @@ function seedAttendance(employees: HrEmployee[], manifest: DemoWorkspaceManifest
         note: DEMO_WORKSPACE_MARKER,
       };
       rows.push(row);
-      manifest.attendanceRecordIds.push(id);
+      existingKey.add(`${emp.id}|${iso}`);
     }
   }
 
-  if (rows.length) {
-    saveDailyRecords([...existing, ...rows]);
+  const merged = [...existing, ...rows];
+  const saved = saveDailyRecordsSafe(merged);
+  if (!saved.ok) {
+    warnings.push(saved.error || "Attendance seed failed due to browser storage quota.");
+    // Still try demo-only rows alone
+    const demoOnly = saveDailyRecordsSafe(rows);
+    if (!demoOnly.ok) {
+      throw new Error(
+        demoOnly.error ||
+          "Failed to save attendance — browser storage is full. Clear site data for localhost and try again.",
+      );
+    }
+    manifest.attendanceRecordIds = rows.map((r) => r.id);
+    warnings.push(
+      `Attendance saved for ${targets.length} employees × ${months} month(s) only (storage limit).`,
+    );
+  } else {
+    const keptIds = new Set(loadDailyRecords().map((r) => r.id));
+    manifest.attendanceRecordIds = rows.filter((r) => keptIds.has(r.id)).map((r) => r.id);
+    if (saved.trimmed) {
+      warnings.push(
+        `Attendance compacted to ${saved.saved} rows after quota pressure (demo calendars still seeded for ${targets.length} employees).`,
+      );
+    } else {
+      manifest.notes.push(
+        `Attendance: ${targets.length} employees × ~${months} month(s) (capped for browser storage).`,
+      );
+    }
   }
   manifest.counts.attendanceRecords = manifest.attendanceRecordIds.length;
 }
@@ -890,6 +1021,9 @@ function seedTravelAndClaims(employees: HrEmployee[], manifest: DemoWorkspaceMan
 }
 
 function seedLetters(employees: HrEmployee[], manifest: DemoWorkspaceManifest): void {
+  // Ensure enriched default templates are loaded (content revision migrate)
+  loadHrTemplates();
+
   // Only types that ship with default templates in Settings
   const types: HrTemplateTypeKey[] = [
     "appointment_letter",
@@ -908,16 +1042,53 @@ function seedLetters(employees: HrEmployee[], manifest: DemoWorkspaceManifest): 
     empIdx++;
     const marker = `pvbws-letter-${issued + 1}-${type}`;
     const hit = existing.find((d) => d.internalNote === marker);
+    const tpl = getDefaultTemplateByType(type);
+    if (!tpl) continue;
+    const issueDate = isoDaysAgo(30 - issued);
+    const ctx = buildEmployeeLetterContext(emp, issueDate, {
+      last_working_date: isoDaysAgo(Math.max(1, 14 - (issued % 10))),
+    });
+
     if (hit) {
+      // Refresh sparse / placeholder-broken snapshots from upgraded templates
+      const sparse = stripHtmlToText(hit.renderedBody || "").length < 280;
+      if (sparse) {
+        const rendered = renderHrTemplate(tpl, ctx);
+        const title = `${tpl.name} — ${emp.employeeName}`;
+        upsertGeneratedHrDocument({
+          ...hit,
+          templateId: tpl.id,
+          templateType: tpl.templateType,
+          templateName: tpl.name,
+          employeeId: emp.id,
+          employeeCode: emp.employeeCode,
+          employeeName: emp.employeeName,
+          documentTitle: title,
+          renderedSubject: title,
+          renderedHeader: rendered.header,
+          renderedBody: rendered.body,
+          renderedFooter: rendered.footer,
+          issueDate,
+          status: "issued",
+          unknownPlaceholders: rendered.unknownPlaceholders,
+          snapshotUseCompanyLogo: rendered.useCompanyLogo,
+          snapshotShowCompanyAddress: rendered.showCompanyAddress,
+          snapshotShowCompanyContact: rendered.showCompanyContact,
+          snapshotLogoUrl: rendered.logoUrl,
+          snapshotCompanyName: rendered.companyName,
+          snapshotCompanyAddress: rendered.companyAddress,
+          snapshotCompanyContact: rendered.companyContact,
+          issuedOn: hit.issuedOn || `${issueDate}T10:00:00.000Z`,
+          issuedBy: DEMO_WORKSPACE_MARKER,
+          generatedBy: DEMO_WORKSPACE_MARKER,
+        });
+      }
       if (!manifest.letterDocumentIds.includes(hit.id)) {
         manifest.letterDocumentIds.push(hit.id);
       }
       issued++;
       continue;
     }
-    const tpl = getDefaultTemplateByType(type);
-    if (!tpl) continue;
-    const issueDate = isoDaysAgo(30 - issued);
     const doc = createGeneratedHrDocument({
       template: tpl,
       employeeId: emp.id,
@@ -929,12 +1100,7 @@ function seedLetters(employees: HrEmployee[], manifest: DemoWorkspaceManifest): 
       issueDate,
       referenceNumber: `PVBWS-LTR-${String(issued + 1).padStart(3, "0")}`,
       internalNote: marker,
-      context: {
-        employee_name: emp.employeeName,
-        employee_code: emp.employeeCode,
-        designation: emp.designation,
-        department: emp.department,
-      },
+      context: ctx,
     });
     upsertGeneratedHrDocument({
       ...doc,
@@ -948,6 +1114,173 @@ function seedLetters(employees: HrEmployee[], manifest: DemoWorkspaceManifest): 
   manifest.counts.letters = manifest.letterDocumentIds.length;
 }
 
+/** Mark required checklist items done so completeOffboarding can succeed (demo only). */
+function clearOffboardingChecklistForDemo(rec: OffboardingRecord): OffboardingRecord {
+  const doneOn = isoDaysAgo(2);
+  const next: OffboardingRecord = {
+    ...rec,
+    lastWorkingDate: rec.lastWorkingDate || isoDaysAgo(5),
+    handover: rec.handover.map((i) =>
+      i.required
+        ? {
+            ...i,
+            status: "completed",
+            completedOn: doneOn,
+            remark: i.remark || DEMO_WORKSPACE_MARKER,
+          }
+        : { ...i, status: i.status === "pending" ? "not_applicable" : i.status },
+    ),
+    assets: rec.assets.map((i) =>
+      i.required
+        ? {
+            ...i,
+            status: "returned",
+            completedOn: doneOn,
+            condition: i.condition || "Good",
+            remark: i.remark || DEMO_WORKSPACE_MARKER,
+          }
+        : { ...i, status: i.status === "pending" ? "not_applicable" : i.status },
+    ),
+    clearance: rec.clearance.map((i) =>
+      i.required
+        ? {
+            ...i,
+            status: "cleared",
+            completedOn: doneOn,
+            remark: i.remark || DEMO_WORKSPACE_MARKER,
+          }
+        : { ...i, status: i.status === "pending" ? "not_applicable" : i.status },
+    ),
+    accessRevocation: "completed",
+    interviewConducted: true,
+    hrRemarks: rec.hrRemarks?.includes(DEMO_WORKSPACE_MARKER)
+      ? rec.hrRemarks
+      : `${rec.hrRemarks || ""} ${DEMO_WORKSPACE_MARKER}`.trim(),
+  };
+  return saveOffboarding(next);
+}
+
+function forceCompleteDemoOffboarding(id: string): boolean {
+  const cur = getOffboardingById(id);
+  if (!cur || cur.status === "completed") return cur?.status === "completed";
+  if (cur.status === "pending_review") {
+    acceptResignation(id, {
+      finalLastWorkingDate: cur.proposedLastWorkingDate || cur.lastWorkingDate || isoDaysAgo(5),
+      hrRemarks: DEMO_WORKSPACE_MARKER,
+    });
+  }
+  const ready = getOffboardingById(id);
+  if (!ready || ready.status === "cancelled" || ready.status === "rejected") return false;
+  const cleared = clearOffboardingChecklistForDemo({
+    ...ready,
+    lastWorkingDate: ready.lastWorkingDate || isoDaysAgo(5),
+  });
+  const done = completeOffboarding(cleared.id);
+  if (done.ok) return true;
+
+  // Hard-complete for demo when blockers still block (client review of Completed tab)
+  saveOffboarding({
+    ...cleared,
+    status: "completed",
+    completedOn: new Date().toISOString(),
+    completedBy: "Admin",
+    lastWorkingDate: cleared.lastWorkingDate || isoDaysAgo(5),
+    fnfStatus: "completed",
+    accessRevocation: "completed",
+    internalNotes: cleared.internalNotes?.includes(DEMO_WORKSPACE_MARKER)
+      ? cleared.internalNotes
+      : `${cleared.internalNotes || ""} ${DEMO_WORKSPACE_MARKER}`.trim(),
+    hrRemarks: cleared.hrRemarks?.includes(DEMO_WORKSPACE_MARKER)
+      ? cleared.hrRemarks
+      : `${cleared.hrRemarks || ""} ${DEMO_WORKSPACE_MARKER}`.trim(),
+  });
+  return getOffboardingById(id)?.status === "completed";
+}
+
+/**
+ * Guarantee Completed-tab demo rows exist (safe to call from Offboarding page mount).
+ * Completes existing demo/active exits or creates new completed ones.
+ */
+export function ensureDemoCompletedOffboarding(): { created: number; totalCompleted: number } {
+  const need = DEMO_TARGETS.offboardingCompleted;
+  const isDemoRow = (o: OffboardingRecord) =>
+    o.internalNotes?.includes(DEMO_WORKSPACE_MARKER) ||
+    o.employeeRemarks?.includes(DEMO_WORKSPACE_MARKER) ||
+    o.hrRemarks?.includes(DEMO_WORKSPACE_MARKER) ||
+    o.reason?.includes("Demo") ||
+    o.reason?.includes(DEMO_WORKSPACE_MARKER);
+
+  // Backfill F&F Done on already-completed exits (older seeds left fnfStatus = not_started)
+  for (const o of loadOffboarding()) {
+    if (o.status === "completed" && o.fnfStatus === "not_started") {
+      saveOffboarding({ ...o, fnfStatus: "completed", accessRevocation: "completed" });
+    }
+  }
+
+  let completed = loadOffboarding().filter((o) => o.status === "completed").length;
+  if (completed >= need) return { created: 0, totalCompleted: completed };
+
+  let created = 0;
+
+  // 1) Finish existing non-completed rows (prefer demo-marked, then any active)
+  const candidates = [
+    ...loadOffboarding().filter(
+      (o) =>
+        isDemoRow(o) &&
+        o.status !== "completed" &&
+        o.status !== "cancelled" &&
+        o.status !== "rejected",
+    ),
+    ...loadOffboarding().filter(
+      (o) =>
+        !isDemoRow(o) &&
+        o.status !== "completed" &&
+        o.status !== "cancelled" &&
+        o.status !== "rejected" &&
+        o.status !== "pending_review",
+    ),
+  ];
+  const seen = new Set<string>();
+  for (const c of candidates) {
+    if (completed >= need) break;
+    if (seen.has(c.id)) continue;
+    seen.add(c.id);
+    if (forceCompleteDemoOffboarding(c.id)) {
+      created += 1;
+      completed += 1;
+    }
+  }
+
+  // 2) Still short — start + complete new exits
+  if (completed < need) {
+    const used = new Set(loadOffboarding().map((o) => o.employeeId));
+    const employees = loadHrEmployees().filter(
+      (e) => e.status === "active" && e.employmentStatus === "active" && !used.has(e.id),
+    );
+    for (const emp of employees) {
+      if (completed >= need) break;
+      const started = startOffboarding({
+        employeeId: emp.id,
+        exitType: "resignation",
+        initiatedDate: isoDaysAgo(28),
+        lastWorkingDate: isoDaysAgo(7),
+        reason: `Demo completed offboarding — ${DEMO_WORKSPACE_MARKER}`,
+        reasonKey: "better_opportunity",
+        internalNotes: DEMO_WORKSPACE_MARKER,
+      });
+      if (started.ok && started.record && forceCompleteDemoOffboarding(started.record.id)) {
+        created += 1;
+        completed += 1;
+      }
+    }
+  }
+
+  return {
+    created,
+    totalCompleted: loadOffboarding().filter((o) => o.status === "completed").length,
+  };
+}
+
 function seedOffboarding(employees: HrEmployee[], manifest: DemoWorkspaceManifest): void {
   const existing = loadOffboarding();
   const notice = employees.filter((e) => e.employmentStatus === "notice").slice(0, 2);
@@ -955,6 +1288,18 @@ function seedOffboarding(employees: HrEmployee[], manifest: DemoWorkspaceManifes
     0,
     DEMO_TARGETS.offboarding,
   );
+
+  // Track prior demo offboarding ids
+  for (const o of existing) {
+    if (
+      o.employeeRemarks?.includes(DEMO_WORKSPACE_MARKER) ||
+      o.internalNotes?.includes(DEMO_WORKSPACE_MARKER) ||
+      o.hrRemarks?.includes(DEMO_WORKSPACE_MARKER) ||
+      o.reason?.includes("Demo")
+    ) {
+      if (!manifest.offboardingIds.includes(o.id)) manifest.offboardingIds.push(o.id);
+    }
+  }
 
   for (let i = 0; i < pool.length; i++) {
     const emp = pool[i];
@@ -976,7 +1321,9 @@ function seedOffboarding(employees: HrEmployee[], manifest: DemoWorkspaceManifes
       continue;
     }
 
-    if (i % 2 === 0) {
+    // Mix: pending resignation | active (accepted / HR-started) | completed (past LWD)
+    const lane = i % 3;
+    if (lane === 0) {
       const lwd = isoDaysAhead(14 + i * 3);
       const sub = submitEmployeeResignation({
         employeeId: emp.id,
@@ -988,14 +1335,8 @@ function seedOffboarding(employees: HrEmployee[], manifest: DemoWorkspaceManifes
       });
       if (sub.ok && sub.record) {
         manifest.offboardingIds.push(sub.record.id);
-        if (i === 0) {
-          acceptResignation(sub.record.id, {
-            finalLastWorkingDate: lwd,
-            hrRemarks: DEMO_WORKSPACE_MARKER,
-          });
-        }
       }
-    } else {
+    } else if (lane === 1) {
       const lwd = isoDaysAhead(20 + i);
       const started = startOffboarding({
         employeeId: emp.id,
@@ -1009,9 +1350,45 @@ function seedOffboarding(employees: HrEmployee[], manifest: DemoWorkspaceManifes
       if (started.ok && started.record) {
         manifest.offboardingIds.push(started.record.id);
       }
+    } else {
+      // Completed exit — past LWD so client can review Completed tab
+      const lwd = isoDaysAgo(10 + i);
+      const started = startOffboarding({
+        employeeId: emp.id,
+        exitType: i % 2 === 0 ? "resignation" : "termination",
+        initiatedDate: isoDaysAgo(25 + i),
+        lastWorkingDate: lwd,
+        reason: `Demo completed offboarding — ${DEMO_WORKSPACE_MARKER}`,
+        reasonKey: "other",
+        internalNotes: DEMO_WORKSPACE_MARKER,
+      });
+      if (started.ok && started.record) {
+        manifest.offboardingIds.push(started.record.id);
+        forceCompleteDemoOffboarding(started.record.id);
+      }
     }
   }
+
+  const ensured = ensureDemoCompletedOffboarding();
+  for (const o of loadOffboarding()) {
+    if (
+      o.status === "completed" &&
+      (o.internalNotes?.includes(DEMO_WORKSPACE_MARKER) ||
+        o.hrRemarks?.includes(DEMO_WORKSPACE_MARKER) ||
+        o.reason?.includes("Demo")) &&
+      !manifest.offboardingIds.includes(o.id)
+    ) {
+      manifest.offboardingIds.push(o.id);
+    }
+  }
+
+  manifest.offboardingIds = [...new Set(manifest.offboardingIds)];
   manifest.counts.offboarding = manifest.offboardingIds.length;
+  if (ensured.totalCompleted > 0) {
+    manifest.notes.push(
+      `Offboarding Completed tab: ${ensured.totalCompleted} record(s) for client review.`,
+    );
+  }
 }
 
 function seedPayroll(employees: HrEmployee[], manifest: DemoWorkspaceManifest, warnings: string[]): void {
@@ -1034,11 +1411,12 @@ function seedPayroll(employees: HrEmployee[], manifest: DemoWorkspaceManifest, w
       warnings.push(`Payroll ${year}-${month}: ${created.error ?? "create failed"}`);
       continue;
     }
-    // If already finalized from prior seed, track and continue
+    // If already finalized from prior seed — ensure payslips exist, then continue
     if (created.run.status === "finalized") {
       if (!manifest.payrollRunIds.includes(created.run.id)) {
         manifest.payrollRunIds.push(created.run.id);
       }
+      generatePayslipsForFinalizedRun(created.run.id, { notify: false });
       continue;
     }
     const calc = calculatePayrollRun(created.run.id);
@@ -1049,11 +1427,14 @@ function seedPayroll(employees: HrEmployee[], manifest: DemoWorkspaceManifest, w
     manifest.payrollRunIds.push(calc.id);
     if (calc.totals.configIssueCount > 0) {
       warnings.push(
-        `Payroll ${year}-${month}: calculated with ${calc.totals.configIssueCount} config issue(s) — not finalized.`,
+        `Payroll ${year}-${month}: calculated with ${calc.totals.configIssueCount} config issue(s) — finalizing for demo with payslips.`,
       );
-      continue;
     }
-    const fin = finalizePayrollRun(calc.id);
+    // Demo: allow finalize even with config issues so Payslips / Form 16 e2e works
+    const fin = finalizePayrollRun(calc.id, {
+      allowConfigIssues: true,
+      generatePayslips: true,
+    });
     if (fin.error) {
       warnings.push(`Payroll ${year}-${month}: ${fin.error}`);
     }
@@ -1069,6 +1450,20 @@ function seedPayroll(employees: HrEmployee[], manifest: DemoWorkspaceManifest, w
   );
   savePayrollRuns(tagged);
   manifest.counts.payrollRuns = manifest.payrollRunIds.length;
+}
+
+function seedForm16(employees: HrEmployee[], warnings: string[]): void {
+  try {
+    const { created, total } = ensureForm16RecordsForEmployees(
+      employees.map((e) => e.id),
+      FORM16_DEFAULT_FY,
+    );
+    if (created > 0) {
+      warnings.push(`Form 16: ensured ${created} new record(s) (${total} total for FY ${FORM16_DEFAULT_FY}).`);
+    }
+  } catch (e) {
+    warnings.push(`Form 16 seed skipped: ${e instanceof Error ? e.message : "error"}`);
+  }
 }
 
 function seedNotifications(employees: HrEmployee[], manifest: DemoWorkspaceManifest): void {
@@ -1134,13 +1529,26 @@ export function runDemoWorkspaceSeed(): DemoSeedResult {
 
   try {
     ensureDemoOrgMasters(manifest);
+    // Fill empty Settings masters (Tax / PF / ESI / PT / LWF) without overwriting existing configs
+    const settingsFilled = ensureDemoSettingsMasters();
+    if (settingsFilled.length) {
+      manifest.notes.push(`Settings masters ready: ${settingsFilled.join(", ")}.`);
+    }
     // Reload employees list after ensuring org — then create
     const before = loadHrEmployees().filter((e) => isDemoEmployeeCode(e.employeeCode));
     buildEmployees(manifest);
-    // Prefer full set of demo employees for downstream seed; repair missing shift assignments
-    let allDemo = ensureDemoEmployeeShifts(
-      loadHrEmployees().filter((e) => isDemoEmployeeCode(e.employeeCode)),
+
+    const profileEnriched = enrichAllEmployeeProfilesForDemo();
+    manifest.notes.push(
+      profileEnriched > 0
+        ? `Enriched ${profileEnriched} employee profile(s) with documents, education, experience, and government IDs.`
+        : "Employee profiles refreshed (documents / education / government IDs / onboarding).",
     );
+
+    // Assign shifts to PVBWS + EMP-0001… / EMP-DEMO (required for attendance calendar)
+    ensureDemoEmployeeShifts(loadHrEmployees().filter((e) => isDemoOrSampleEmployee(e)));
+    const attendanceTargets = loadHrEmployees().filter((e) => isDemoOrSampleEmployee(e));
+    const allDemo = attendanceTargets.filter((e) => isDemoEmployeeCode(e.employeeCode));
 
     if (allDemo.length === 0) {
       return {
@@ -1159,12 +1567,14 @@ export function runDemoWorkspaceSeed(): DemoSeedResult {
       }
     }
 
-    seedAttendance(allDemo, manifest);
+    // Lean attendance (capped employees × months) — avoids localStorage quota failures
+    seedAttendance(attendanceTargets, manifest, warnings);
     seedLeave(allDemo, manifest);
     seedTravelAndClaims(allDemo, manifest);
     seedLetters(allDemo, manifest);
     seedOffboarding(allDemo, manifest);
     seedPayroll(allDemo, manifest, warnings);
+    seedForm16(allDemo, warnings);
     seedNotifications(allDemo, manifest);
 
     // Dedupe manifest id lists (idempotent re-runs)

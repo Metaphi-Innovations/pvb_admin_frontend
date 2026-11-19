@@ -42,7 +42,9 @@ import { cn } from "@/lib/utils";
 import { HrPageShell } from "@/app/(app)/hr/components/HrPageShell";
 import { hrBreadcrumb } from "@/lib/hr/hr-nav";
 import { hrBtn, hrInput } from "@/app/(app)/hr/settings/organization/_components";
+import { loadHrEmployees } from "@/app/(app)/hr/employees/employee-master-data";
 import {
+  ensureForm16RecordsForEmployees,
   FORM16_DEFAULT_FY,
   formatForm16FyLabel,
   formatForm16Money,
@@ -230,8 +232,12 @@ export default function Form16PageClient() {
   const years = useMemo(() => listForm16FinancialYears(), []);
 
   const refresh = useCallback(() => {
+    const empIds = loadHrEmployees()
+      .filter((e) => e.status === "active")
+      .map((e) => e.id);
+    ensureForm16RecordsForEmployees(empIds, fy);
     setRows(loadForm16Records());
-  }, []);
+  }, [fy]);
 
   useEffect(() => {
     refresh();

@@ -25,8 +25,13 @@ export const DEMO_TARGETS = {
   travelRequests: 12,
   claims: 20,
   letters: 10,
-  offboarding: 5,
-  attendanceMonths: 3,
+  /** Mix of pending + active + completed so all Offboarding tabs have reviewable data. */
+  offboarding: 6,
+  offboardingCompleted: 2,
+  /** Lean window — full calendars for a capped employee set (localStorage quota). */
+  attendanceMonths: 2,
+  /** Max employees with day-level attendance rows (samples + first N demo). */
+  attendanceEmployeeCap: 12,
   payrollMonths: 3,
 } as const;
 

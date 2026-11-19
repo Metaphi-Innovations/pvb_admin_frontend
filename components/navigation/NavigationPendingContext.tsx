@@ -11,6 +11,7 @@ import React, {
   useTransition,
 } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { HR_ONLY_TOP_NAV } from "@/components/navigation/nav-config";
 
 type NavigationPendingContextValue = {
   pendingHref: string | null;
@@ -102,6 +103,11 @@ export function NavigationPendingProvider({ children }: { children: React.ReactN
       e?.preventDefault();
       if (hrefMatchesRoute(href, pathname, readSearch())) {
         clearPending();
+        return;
+      }
+      // HR demo: hard navigate into /hr/* so soft nav never lands on catch-all Coming Soon.
+      if (HR_ONLY_TOP_NAV && href.startsWith("/hr")) {
+        window.location.assign(href);
         return;
       }
       inFlightRef.current = href;

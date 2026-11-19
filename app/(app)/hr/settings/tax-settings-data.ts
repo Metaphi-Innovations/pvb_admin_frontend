@@ -14,7 +14,7 @@
 
 import { CURRENT_USER } from "@/lib/hr/config";
 import {
-  loadPolicyList,
+  loadPolicyListFillEmpty,
   savePolicyList,
   nextPolicyId,
   policyToday,
@@ -130,8 +130,80 @@ export const EMPLOYEE_TAX_REGIME_OPTIONS: {
   { value: "new", label: "New Regime" },
 ];
 
-const EMPTY_REGIME_SEED: TaxRegimeConfiguration[] = [];
-const EMPTY_SLAB_SEED: TdsSlabConfiguration[] = [];
+/** Demo seed — illustrative only; not statutory legal rates. */
+const REGIME_SEED: TaxRegimeConfiguration[] = [
+  {
+    id: 1,
+    ruleName: "New Regime — Company Default",
+    regimeType: "new",
+    isCompanyDefault: true,
+    standardDeduction: 75000,
+    notes: "Demo default for TDS projection (New Regime).",
+    effectiveFrom: "2025-04-01",
+    effectiveTo: null,
+    status: "active",
+    createdBy: "Admin",
+    updatedBy: "Admin",
+    createdAt: "2025-04-01",
+    updatedAt: "2025-04-01",
+  },
+  {
+    id: 2,
+    ruleName: "Old Regime",
+    regimeType: "old",
+    isCompanyDefault: false,
+    standardDeduction: 50000,
+    notes: "Demo Old Regime for employees who opt in.",
+    effectiveFrom: "2025-04-01",
+    effectiveTo: null,
+    status: "active",
+    createdBy: "Admin",
+    updatedBy: "Admin",
+    createdAt: "2025-04-01",
+    updatedAt: "2025-04-01",
+  },
+];
+
+const SLAB_SEED: TdsSlabConfiguration[] = [
+  {
+    id: 1,
+    ruleName: "New Regime Slabs FY 2025-26 (Demo)",
+    regimeType: "new",
+    slabs: [
+      { id: 1, incomeFrom: 0, incomeTo: 300000, ratePercent: 0, cessPercent: 4 },
+      { id: 2, incomeFrom: 300001, incomeTo: 700000, ratePercent: 5, cessPercent: 4 },
+      { id: 3, incomeFrom: 700001, incomeTo: 1000000, ratePercent: 10, cessPercent: 4 },
+      { id: 4, incomeFrom: 1000001, incomeTo: 1200000, ratePercent: 15, cessPercent: 4 },
+      { id: 5, incomeFrom: 1200001, incomeTo: 1500000, ratePercent: 20, cessPercent: 4 },
+      { id: 6, incomeFrom: 1500001, incomeTo: null, ratePercent: 30, cessPercent: 4 },
+    ],
+    effectiveFrom: "2025-04-01",
+    effectiveTo: null,
+    status: "active",
+    createdBy: "Admin",
+    updatedBy: "Admin",
+    createdAt: "2025-04-01",
+    updatedAt: "2025-04-01",
+  },
+  {
+    id: 2,
+    ruleName: "Old Regime Slabs FY 2025-26 (Demo)",
+    regimeType: "old",
+    slabs: [
+      { id: 1, incomeFrom: 0, incomeTo: 250000, ratePercent: 0, cessPercent: 4 },
+      { id: 2, incomeFrom: 250001, incomeTo: 500000, ratePercent: 5, cessPercent: 4 },
+      { id: 3, incomeFrom: 500001, incomeTo: 1000000, ratePercent: 20, cessPercent: 4 },
+      { id: 4, incomeFrom: 1000001, incomeTo: null, ratePercent: 30, cessPercent: 4 },
+    ],
+    effectiveFrom: "2025-04-01",
+    effectiveTo: null,
+    status: "active",
+    createdBy: "Admin",
+    updatedBy: "Admin",
+    createdAt: "2025-04-01",
+    updatedAt: "2025-04-01",
+  },
+];
 
 function normalizeRegimeType(raw: unknown): TaxRegimeType {
   const s = String(raw ?? "").toLowerCase();
@@ -218,7 +290,7 @@ function isEffectiveOn(
 /* ─── Tax Regime CRUD ───────────────────────────────────────── */
 
 export function loadTaxRegimeConfigurations(): TaxRegimeConfiguration[] {
-  const raw = loadPolicyList(REGIME_STORAGE_KEY, structuredClone(EMPTY_REGIME_SEED));
+  const raw = loadPolicyListFillEmpty(REGIME_STORAGE_KEY, structuredClone(REGIME_SEED));
   return raw.map((r, i) => normalizeRegime(r as unknown as Record<string, unknown>, i));
 }
 
@@ -311,7 +383,7 @@ export function findRegimePeriodConflicts(
 /* ─── TDS Slab CRUD ─────────────────────────────────────────── */
 
 export function loadTdsSlabConfigurations(): TdsSlabConfiguration[] {
-  const raw = loadPolicyList(SLAB_STORAGE_KEY, structuredClone(EMPTY_SLAB_SEED));
+  const raw = loadPolicyListFillEmpty(SLAB_STORAGE_KEY, structuredClone(SLAB_SEED));
   return raw.map((r, i) => normalizeSlabConfig(r as unknown as Record<string, unknown>, i));
 }
 

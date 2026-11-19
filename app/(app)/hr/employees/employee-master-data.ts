@@ -1,4 +1,5 @@
 import { CURRENT_USER } from "@/lib/hr/config";
+import { areMandatoryDocumentsComplete } from "@/app/(app)/hr/settings/onboarding-data";
 import { buildDemoEmployee, DEMO_EMPLOYEE_CODE } from "./demo-employee";
 
 export type EmployeeRecordStatus = "active" | "inactive";
@@ -380,7 +381,7 @@ function isCompleteDemoEmployee(e: HrEmployee): boolean {
     e.governmentIds?.pan &&
     (e.education?.length ?? 0) >= 2 &&
     (e.experience?.length ?? 0) >= 2 &&
-    (e.documents?.length ?? 0) >= 1 &&
+    areMandatoryDocumentsComplete(e.documents) &&
     e.profileSummaries?.onboarding
   );
 }

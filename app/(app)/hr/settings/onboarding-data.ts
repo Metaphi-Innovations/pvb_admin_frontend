@@ -1,6 +1,8 @@
 /**
- * HR Employee Onboarding Setup — frontend/demo persistence.
- * Mandatory Profile Sections controls which profile blocks count toward completion.
+ * HR employee onboarding data — system defaults + localStorage compatibility.
+ * Settings UI for configuring these masters was removed; seeds remain the
+ * canonical system rules. Stored keys are still read so historical demo data
+ * (document types, joining checklist, welcome templates) keeps working.
  */
 
 export type MandatoryProfileSectionId =
@@ -82,8 +84,9 @@ export function setProfileSectionMandatory(
   return next;
 }
 
+/** System rule — same as `MANDATORY_PROFILE_SECTION_SEED` (Settings UI removed). */
 export function isProfileSectionMandatory(id: MandatoryProfileSectionId): boolean {
-  return loadMandatoryProfileSections().find((s) => s.id === id)?.mandatory ?? false;
+  return MANDATORY_PROFILE_SECTION_SEED.find((s) => s.id === id)?.mandatory ?? false;
 }
 
 /* ─── Document Requirement Master ─── */

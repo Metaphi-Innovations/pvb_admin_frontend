@@ -28,6 +28,7 @@ import {
   type HrEmployee,
 } from "@/app/(app)/hr/employees/employee-master-data";
 import { loadCompanyProfile } from "@/app/(app)/hr/settings/organization-data";
+import { parseMonthlyCtcValue } from "@/app/(app)/hr/settings/employee-salary-resolve";
 import {
   getEmployeeTaxRegimeChoice,
   resolveTdsEstimate,
@@ -557,6 +558,77 @@ export function loadForm16Records(): Form16Record[] {
 
 export function saveForm16Records(records: Form16Record[]): void {
   writeStore({ version: 1, records });
+}
+
+/**
+ * Ensure Form 16 rows exist for the given employees (Part A pending until HR uploads).
+ * Idempotent — skips employees that already have a record for the FY.
+ */
+export function ensureForm16RecordsForEmployees(
+  employeeIds: number[],
+  fy: string = FORM16_DEFAULT_FY,
+): { created: number; total: number } {
+  const list = loadForm16Records();
+  const ay = assessmentYearForFy(fy);
+  const employer = demoEmployer();
+  const existingKeys = new Set(
+    list.filter((r) => r.financialYear === fy).map((r) => `${r.financialYear}:${r.employeeId}`),
+  );
+  let created = 0;
+  const next = [...list];
+  for (const id of employeeIds) {
+    const key = `${fy}:${id}`;
+    if (existingKeys.has(key)) continue;
+    const emp = getHrEmployeeById(id);
+    if (!emp) continue;
+    const regime = resolveRegimeForForm16(emp, "new");
+    const monthly = parseMonthlyCtcValue(emp.profileSummaries?.payroll) || 45000;
+    const annualGross = Math.round(monthly * 12);
+    const tdsEstimate = Math.round(annualGross * 0.05);
+    const base: Form16Record = {
+      id: `f16-${fy}-${emp.id}`,
+      financialYear: fy,
+      assessmentYear: ay,
+      employeeId: emp.id,
+      employeeCode: emp.employeeCode,
+      employeeName: emp.employeeName,
+      designation: emp.designation,
+      pan: `DEMO${String(emp.id).padStart(5, "0")}A`.slice(0, 10),
+      taxRegime: regime,
+      employer,
+      salary: salary(annualGross, 0, Math.round(annualGross * 0.08), tdsEstimate, Math.round(tdsEstimate * 0.04), tdsEstimate),
+      partAStatus: "pending",
+      partAUploadedAt: null,
+      partAFileName: null,
+      partASource: "Manual upload",
+      partBStatus: "not_generated",
+      partBGeneratedAt: null,
+      partBComputation: null,
+      verified: false,
+      verifiedOn: null,
+      verifiedBy: null,
+      signed: false,
+      signedOn: null,
+      signedBy: null,
+      signedRemarks: "",
+      filingStatus: "not_filed",
+      filingDate: null,
+      acknowledgementNumber: "",
+      filingRemarks: "",
+      form16Status: "pending",
+      publishedAt: null,
+      publishedBy: null,
+      updatedAt: nowIso(),
+    };
+    next.push(base);
+    existingKeys.add(key);
+    created += 1;
+  }
+  if (created > 0) saveForm16Records(next);
+  return {
+    created,
+    total: next.filter((r) => r.financialYear === fy).length,
+  };
 }
 
 export function listForm16FinancialYears(): string[] {

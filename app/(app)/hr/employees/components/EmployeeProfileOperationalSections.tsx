@@ -759,13 +759,6 @@ export function AttendanceProfileSection({
       </SectionBlock>
 
       <SectionBlock title="Attendance Summary">
-        {demoAtt ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-3">
-            <MiniStat label="Present" value={demoAtt.present} />
-            <MiniStat label="Absent" value={demoAtt.absent} />
-            <MiniStat label="Leave" value={demoAtt.leave} />
-          </div>
-        ) : null}
         <div className="flex flex-wrap items-center gap-2 mb-3">
           <Select value={month} onValueChange={setMonth}>
             <SelectTrigger className="h-8 w-[160px] text-xs">
@@ -786,9 +779,9 @@ export function AttendanceProfileSection({
             Open attendance <ExternalLink className="w-3 h-3" />
           </Link>
         </div>
-        {!demoAtt && (!summary || summary.count === 0) ? (
-          <EmptyProfileState message="No attendance information available yet." />
-        ) : !demoAtt && summary ? (
+        {!summary || summary.count === 0 ? (
+          <EmptyProfileState message="No attendance information available for this month yet." />
+        ) : (
           <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
             <MiniStat label="Present" value={summary.present} />
             <MiniStat label="Absent" value={summary.absent} />
@@ -798,7 +791,7 @@ export function AttendanceProfileSection({
             <MiniStat label="Weekly Off" value={summary.weekOff} />
             <MiniStat label="Holiday" value={summary.holiday} />
           </div>
-        ) : null}
+        )}
       </SectionBlock>
     </div>
   );

@@ -167,7 +167,7 @@ export default function DemoWorkspaceClient() {
   return (
     <HrOrgPageHeader
       title="Demo Workspace"
-      description="Safe, manual demo data seeding for client presentations. Does not overwrite Settings or non-demo records."
+      description="Safe, manual demo data seeding for client presentations — employees, profile documents, attendance, leave, travel, payroll, letters, and offboarding. Does not overwrite Settings masters."
       icon={Database}
       sectionLabel="Tools"
       sectionHref="/hr/settings"

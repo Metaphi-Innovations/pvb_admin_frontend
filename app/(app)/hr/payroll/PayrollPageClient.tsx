@@ -795,7 +795,7 @@ export default function PayrollPageClient({
 
   const handleFinalize = () => {
     if (!activeRunId) return;
-    const { run, error } = finalizePayrollRun(activeRunId);
+    const { run, error, payslipsCreated } = finalizePayrollRun(activeRunId);
     setFinalizeOpen(false);
     if (error) {
       setToast(error);
@@ -805,7 +805,12 @@ export default function PayrollPageClient({
       setActiveRun(run);
       refreshLists();
       setTab("history");
-      setToast("Payroll finalized.");
+      const n = payslipsCreated ?? 0;
+      setToast(
+        n > 0
+          ? `Payroll finalized. ${n} payslip${n === 1 ? "" : "s"} generated — open Payslips to view.`
+          : "Payroll finalized. Open Payslips to generate or view snapshots.",
+      );
     }
   };
 
@@ -1415,7 +1420,7 @@ export default function PayrollPageClient({
         onClose={() => setFinalizeOpen(false)}
         onConfirm={handleFinalize}
         title={`Finalize payroll for ${activeRun?.periodLabel ?? ""}?`}
-        description="Finalized payroll will be treated as the approved payroll result for this period. It cannot be silently recalculated afterward."
+        description="Finalized payroll will be treated as the approved payroll result for this period. Payslip snapshots are generated automatically for each employee and appear under Payslips."
         confirmLabel="Finalize"
       />
 

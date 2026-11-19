@@ -12,7 +12,7 @@
 
 import { CURRENT_USER } from "@/lib/hr/config";
 import {
-  loadPolicyList,
+  loadPolicyListFillEmpty,
   savePolicyList,
   nextPolicyId,
   policyToday,
@@ -134,7 +134,25 @@ export const ESI_CONTRIBUTION_BASE_OPTIONS: {
   },
 ];
 
-const EMPTY_SEED: EsiConfiguration[] = [];
+/** Demo seed — illustrative ESI rates for client demos. */
+const ESI_SEED: EsiConfiguration[] = [
+  {
+    id: 1,
+    ruleName: "Standard ESI Rule",
+    esiEnabled: true,
+    contributionBase: "gross_earnings",
+    wageEligibilityLimit: 21000,
+    employeeContributionRate: 0.75,
+    employerContributionRate: 3.25,
+    effectiveFrom: "2025-04-01",
+    effectiveTo: null,
+    status: "active",
+    createdBy: "Admin",
+    updatedBy: "Admin",
+    createdAt: "2025-04-01",
+    updatedAt: "2025-04-01",
+  },
+];
 
 function normalizeContributionBase(raw: unknown): EsiContributionBase {
   const s = String(raw ?? "")
@@ -173,7 +191,7 @@ function normalizeConfiguration(
 }
 
 export function loadEsiConfigurations(): EsiConfiguration[] {
-  const raw = loadPolicyList(CONFIGS_STORAGE_KEY, structuredClone(EMPTY_SEED));
+  const raw = loadPolicyListFillEmpty(CONFIGS_STORAGE_KEY, structuredClone(ESI_SEED));
   return raw.map((r, i) => normalizeConfiguration(r as unknown as Record<string, unknown>, i));
 }
 

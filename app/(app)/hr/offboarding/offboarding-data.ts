@@ -769,6 +769,8 @@ export function completeOffboarding(
     status: "completed",
     completedOn: nowIso(),
     completedBy: CURRENT_USER,
+    // F&F Done — tracking status for HR review (payroll calc remains outside this screen)
+    fnfStatus: rec.fnfStatus === "not_started" ? "completed" : rec.fnfStatus,
     accessRevocation:
       rec.clearance.some(
         (c) => c.label.toLowerCase().includes("access revocation") && c.status === "cleared",

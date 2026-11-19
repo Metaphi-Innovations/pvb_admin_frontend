@@ -478,6 +478,9 @@ function normalizeRecord(raw: Record<string, unknown>, index: number): HrTemplat
 const SEED_OFFER_SALARY_BLOCK = createBlockInstance("salary_breakup_table");
 const SEED_APPT_SALARY_BLOCK = createBlockInstance("salary_breakup_table");
 
+/** Content revision — bump when default letter/payslip bodies are enriched so localStorage migrates. */
+export const HR_TEMPLATE_CONTENT_REVISION = 2;
+
 const SEED: HrTemplateRecord[] = [
   {
     id: 1,
@@ -486,8 +489,8 @@ const SEED: HrTemplateRecord[] = [
     customTypeName: "",
     subject: "Payslip — {{payroll_month}}",
     header: "Payslip for {{payroll_month}}",
-    body: `<p><strong>{{employee_name}}</strong> ({{employee_code}})<br/>{{designation}} · {{department}} · {{branch}}</p><p>Period: {{payroll_period}}</p>{{earnings_table}}{{deductions_table}}{{attendance_summary}}{{payroll_summary}}<p>Net Pay: <strong>{{net_pay}}</strong></p>`,
-    footer: "This is a computer-generated payslip for {{company_name}}.",
+    body: `<p><strong>{{employee_name}}</strong> ({{employee_code}})<br/>{{designation}} · {{department}} · {{branch}}</p><p>Period: {{payroll_period}} · Payable days: {{payable_days}} · LOP: {{lop_days}}</p>{{earnings_table}}{{deductions_table}}{{attendance_summary}}{{payroll_summary}}<p style="margin-top:12px">Net Pay: <strong>{{net_pay}}</strong></p>`,
+    footer: "This is a computer-generated payslip for {{company_name}}. Generated on {{current_date}}.",
     blocks: [],
     useCompanyLogo: true,
     showCompanyAddress: true,
@@ -507,8 +510,8 @@ const SEED: HrTemplateRecord[] = [
     customTypeName: "",
     subject: "Offer of Employment — {{employee_name}}",
     header: "",
-    body: `<p>Dear {{employee_name}},</p><p>We are pleased to offer you the position of <strong>{{designation}}</strong> in the {{department}} department at {{branch}}.</p><p>Your proposed monthly CTC is {{monthly_ctc}} (annual {{annual_ctc}}).</p><p>Compensation breakup:</p>{{salary_breakup_table}}<p>Proposed joining date: {{joining_date}}.</p><p>We look forward to welcoming you to {{company_name}}.</p>`,
-    footer: "For {{company_name}} · HR Department",
+    body: `<p>Date: {{issue_date}}</p><p>Dear {{employee_name}},</p><p>We are pleased to offer you employment with <strong>{{company_name}}</strong> for the position of <strong>{{designation}}</strong> in the {{department}} department, based at {{branch}}.</p><p>Your proposed compensation is <strong>{{monthly_ctc}}</strong> per month (annual CTC <strong>{{annual_ctc}}</strong>). The detailed breakup is as follows:</p>{{salary_breakup_table}}<p>Your proposed date of joining is <strong>{{joining_date}}</strong>. This offer is subject to successful completion of background verification and submission of required documents.</p><p>Please confirm your acceptance of this offer by signing and returning a copy of this letter. We look forward to welcoming you to {{company_name}}.</p><p style="margin-top:28px">Yours sincerely,</p><p><strong>Human Resources</strong><br/>{{company_name}}</p>`,
+    footer: "For {{company_name}} · HR Department · {{company_address}}",
     blocks: [SEED_OFFER_SALARY_BLOCK],
     useCompanyLogo: true,
     showCompanyAddress: true,
@@ -526,14 +529,14 @@ const SEED: HrTemplateRecord[] = [
     name: "Standard Appointment Letter",
     templateType: "appointment_letter",
     customTypeName: "",
-    subject: "Appointment Letter",
+    subject: "Appointment Letter — {{employee_name}}",
     header: "",
-    body: `<p>Dear {{employee_name}},</p><p>This letter confirms your appointment as {{designation}} in {{department}} effective {{joining_date}}.</p><p>Employee Code: {{employee_code}} · Branch: {{branch}}</p><p>Salary breakup:</p>{{salary_breakup_table}}`,
-    footer: "{{company_name}} · HR",
+    body: `<p>Date: {{issue_date}}</p><p>Dear {{employee_name}},</p><p>We are pleased to confirm your appointment as <strong>{{designation}}</strong> in the {{department}} department of <strong>{{company_name}}</strong>, effective <strong>{{joining_date}}</strong>.</p><p><strong>Employee Code:</strong> {{employee_code}}<br/><strong>Branch / Location:</strong> {{branch}}<br/><strong>Employment Type:</strong> {{employment_type}}</p><p>Your monthly CTC is <strong>{{monthly_ctc}}</strong> (annual <strong>{{annual_ctc}}</strong>). Salary breakup:</p>{{salary_breakup_table}}<p>You will be governed by the policies, rules, and code of conduct of {{company_name}} as amended from time to time. Please report to your reporting manager on the joining date and complete onboarding formalities with HR.</p><p style="margin-top:28px">We wish you a successful career with us.</p><p><strong>Authorized Signatory</strong><br/>Human Resources<br/>{{company_name}}</p>`,
+    footer: "{{company_name}} · HR Department",
     blocks: [SEED_APPT_SALARY_BLOCK],
     useCompanyLogo: true,
-    showCompanyAddress: false,
-    showCompanyContact: false,
+    showCompanyAddress: true,
+    showCompanyContact: true,
     isDefault: true,
     status: "active",
     usageCount: 0,
@@ -547,13 +550,13 @@ const SEED: HrTemplateRecord[] = [
     name: "Standard Welcome Letter",
     templateType: "welcome_letter",
     customTypeName: "",
-    subject: "Welcome to {{company_name}}",
+    subject: "Welcome to {{company_name}} — {{employee_name}}",
     header: "",
-    body: `<p>Dear {{employee_name}},</p><p>Welcome to {{company_name}}! We are excited to have you join as {{designation}} in {{department}} on {{joining_date}}.</p><p>Your branch is {{branch}}.</p>`,
-    footer: "Warm regards, HR Team",
+    body: `<p>Date: {{issue_date}}</p><p>Dear {{employee_name}},</p><p>Welcome to <strong>{{company_name}}</strong>! We are delighted to have you join us as <strong>{{designation}}</strong> in the {{department}} team.</p><p>Your joining date is <strong>{{joining_date}}</strong> and your work location is <strong>{{branch}}</strong>. Your employee code is <strong>{{employee_code}}</strong>.</p><p>Our HR team will guide you through onboarding — document submission, system access, and introduction to your colleagues. Please keep your contact details updated ({{personal_email}} / {{mobile_number}}) so we can support you smoothly.</p><p>We are confident that your skills and experience will contribute to our shared goals. Once again, welcome aboard!</p><p style="margin-top:28px">Warm regards,</p><p><strong>HR Team</strong><br/>{{company_name}}</p>`,
+    footer: "Warm regards · HR Team · {{company_name}}",
     blocks: [],
     useCompanyLogo: true,
-    showCompanyAddress: false,
+    showCompanyAddress: true,
     showCompanyContact: false,
     isDefault: true,
     status: "active",
@@ -570,12 +573,12 @@ const SEED: HrTemplateRecord[] = [
     customTypeName: "",
     subject: "Experience Certificate — {{employee_name}}",
     header: "",
-    body: `<p>This is to certify that {{employee_name}} ({{employee_code}}) worked with {{company_name}} as {{designation}} in {{department}}.</p><p>Period of employment: {{joining_date}} to {{last_working_date}}.</p>`,
-    footer: "Authorized Signatory · {{company_name}}",
+    body: `<p>Date: {{issue_date}}</p><p><strong>TO WHOMSOEVER IT MAY CONCERN</strong></p><p>This is to certify that <strong>{{employee_name}}</strong> (Employee Code: <strong>{{employee_code}}</strong>) was employed with <strong>{{company_name}}</strong> as <strong>{{designation}}</strong> in the {{department}} department.</p><p><strong>Period of employment:</strong> {{joining_date}} to {{last_working_date}}<br/><strong>Branch / Location:</strong> {{branch}}<br/><strong>Employment Type:</strong> {{employment_type}}</p><p>During the tenure, {{employee_name}} performed the assigned responsibilities diligently and maintained professional conduct. We wish {{employee_name}} success in all future endeavours.</p><p style="margin-top:28px">For {{company_name}}</p><p><strong>Authorized Signatory</strong><br/>Human Resources<br/>{{company_name}}</p>`,
+    footer: "Authorized Signatory · {{company_name}} · Issued on {{issue_date}}",
     blocks: [],
     useCompanyLogo: true,
     showCompanyAddress: true,
-    showCompanyContact: false,
+    showCompanyContact: true,
     isDefault: true,
     status: "active",
     usageCount: 0,
@@ -591,12 +594,12 @@ const SEED: HrTemplateRecord[] = [
     customTypeName: "",
     subject: "Relieving Letter — {{employee_name}}",
     header: "",
-    body: `<p>Dear {{employee_name}},</p><p>This is to confirm that you have been relieved from your duties as {{designation}} effective {{last_working_date}}.</p>`,
-    footer: "{{company_name}} · HR",
+    body: `<p>Date: {{issue_date}}</p><p>Dear {{employee_name}},</p><p>This is to confirm that you have been relieved from your duties with <strong>{{company_name}}</strong> as <strong>{{designation}}</strong> ({{department}}) with effect from <strong>{{last_working_date}}</strong>.</p><p><strong>Employee Code:</strong> {{employee_code}}<br/><strong>Date of Joining:</strong> {{joining_date}}<br/><strong>Last Working Date:</strong> {{last_working_date}}<br/><strong>Branch:</strong> {{branch}}</p><p>All company property, access credentials, and pending formalities have been / are being settled as per HR and clearance process. Your full and final settlement, if applicable, will be processed as per company policy.</p><p>We thank you for your contribution to {{company_name}} and wish you the very best in your future career.</p><p style="margin-top:28px">Yours sincerely,</p><p><strong>Human Resources</strong><br/>{{company_name}}</p>`,
+    footer: "{{company_name}} · HR Department · {{issue_date}}",
     blocks: [],
     useCompanyLogo: true,
-    showCompanyAddress: false,
-    showCompanyContact: false,
+    showCompanyAddress: true,
+    showCompanyContact: true,
     isDefault: true,
     status: "active",
     usageCount: 0,
@@ -612,12 +615,12 @@ const SEED: HrTemplateRecord[] = [
     customTypeName: "",
     subject: "Termination of Employment — {{employee_name}}",
     header: "",
-    body: `<p>Dear {{employee_name}},</p><p>This letter confirms the termination of your employment with {{company_name}}. Your last working date is {{last_working_date}}.</p>`,
-    footer: "{{company_name}} · HR",
+    body: `<p>Date: {{issue_date}}</p><p>Dear {{employee_name}},</p><p>This letter confirms the termination of your employment with <strong>{{company_name}}</strong> in the capacity of <strong>{{designation}}</strong> ({{department}}).</p><p>Your last working date with the organization is <strong>{{last_working_date}}</strong>. Employee Code: <strong>{{employee_code}}</strong>. Branch: {{branch}}.</p><p>Please ensure return of all company assets and completion of exit clearance. Any dues payable by either party will be settled as per applicable policy and law. You are reminded of your continuing obligations regarding confidentiality of company information.</p><p>We wish you well for the future.</p><p style="margin-top:28px">Yours sincerely,</p><p><strong>Human Resources</strong><br/>{{company_name}}</p>`,
+    footer: "{{company_name}} · HR Department · {{issue_date}}",
     blocks: [],
     useCompanyLogo: true,
-    showCompanyAddress: false,
-    showCompanyContact: false,
+    showCompanyAddress: true,
+    showCompanyContact: true,
     isDefault: true,
     status: "active",
     usageCount: 0,
@@ -627,6 +630,43 @@ const SEED: HrTemplateRecord[] = [
     updatedAt: "2026-01-01",
   },
 ];
+
+const TEMPLATE_REVISION_KEY = "ds_hr_templates_content_rev_v1";
+
+/** Upgrade sparse default templates already saved in localStorage. */
+function migrateDefaultTemplateContent(list: HrTemplateRecord[]): {
+  list: HrTemplateRecord[];
+  changed: boolean;
+} {
+  if (typeof window === "undefined") return { list, changed: false };
+  const rev = Number(window.localStorage.getItem(TEMPLATE_REVISION_KEY) || "0");
+  if (rev >= HR_TEMPLATE_CONTENT_REVISION) return { list, changed: false };
+
+  let changed = false;
+  const next = list.map((t) => {
+    if (!t.isDefault) return t;
+    const seed = SEED.find((s) => s.templateType === t.templateType && s.isDefault);
+    if (!seed) return t;
+    const plain = stripHtmlToText(t.body || "");
+    // Always refresh short/legacy default bodies; keep custom user edits that are already rich
+    if (plain.length >= 350 && rev > 0) return t;
+    changed = true;
+    return {
+      ...t,
+      subject: seed.subject,
+      header: seed.header,
+      body: seed.body,
+      footer: seed.footer,
+      blocks: seed.blocks,
+      useCompanyLogo: seed.useCompanyLogo,
+      showCompanyAddress: seed.showCompanyAddress,
+      showCompanyContact: seed.showCompanyContact,
+      updatedAt: today(),
+      updatedBy: CURRENT_USER,
+    };
+  });
+  return { list: next, changed };
+}
 
 function ensureOneDefaultPerType(list: HrTemplateRecord[]): HrTemplateRecord[] {
   const seen = new Set<string>();
@@ -645,13 +685,23 @@ export function loadHrTemplates(): HrTemplateRecord[] {
     const raw = localStorage.getItem(TEMPLATE_KEY);
     if (!raw) {
       localStorage.setItem(TEMPLATE_KEY, JSON.stringify(SEED));
+      window.localStorage.setItem(TEMPLATE_REVISION_KEY, String(HR_TEMPLATE_CONTENT_REVISION));
       return structuredClone(SEED);
     }
     const parsed = JSON.parse(raw) as unknown[];
     const list = (Array.isArray(parsed) ? parsed : []).map((r, i) =>
       normalizeRecord((r ?? {}) as Record<string, unknown>, i),
     );
-    return ensureOneDefaultPerType(list.length ? list : structuredClone(SEED));
+    const base = ensureOneDefaultPerType(list.length ? list : structuredClone(SEED));
+    const migrated = migrateDefaultTemplateContent(base);
+    if (migrated.changed) {
+      localStorage.setItem(TEMPLATE_KEY, JSON.stringify(migrated.list));
+      window.localStorage.setItem(TEMPLATE_REVISION_KEY, String(HR_TEMPLATE_CONTENT_REVISION));
+      window.dispatchEvent(new CustomEvent("hr-templates-updated"));
+    } else if (!window.localStorage.getItem(TEMPLATE_REVISION_KEY)) {
+      window.localStorage.setItem(TEMPLATE_REVISION_KEY, String(HR_TEMPLATE_CONTENT_REVISION));
+    }
+    return migrated.list;
   } catch {
     return structuredClone(SEED);
   }

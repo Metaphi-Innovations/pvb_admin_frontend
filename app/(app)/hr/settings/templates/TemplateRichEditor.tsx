@@ -6,10 +6,15 @@ import {
   AlignLeft,
   AlignRight,
   Bold,
+  Heading2,
   Italic,
+  Link2,
   List,
   ListOrdered,
+  Redo2,
+  RemoveFormatting,
   Underline,
+  Undo2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { hrBtn } from "../organization/_components";
@@ -37,8 +42,8 @@ export function TemplateRichEditor({
     if (!ref.current) return;
     if (value !== last.current && ref.current.innerHTML !== value) {
       ref.current.innerHTML = value || "";
-      last.current = value;
     }
+    last.current = value;
   }, [value]);
 
   const emit = useCallback(() => {
@@ -57,6 +62,25 @@ export function TemplateRichEditor({
       /* ignore */
     }
     emit();
+  };
+
+  const insertLink = () => {
+    if (disabled) return;
+    ref.current?.focus();
+    const raw = window.prompt("Enter link URL (https://…)");
+    if (raw == null) return;
+    const url = raw.trim();
+    if (!url) return;
+    try {
+      const parsed = new URL(url);
+      if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+        window.alert("Enter a valid http(s) URL.");
+        return;
+      }
+      cmd("createLink", parsed.toString());
+    } catch {
+      window.alert("Enter a valid URL.");
+    }
   };
 
   const insertToken = useCallback(
@@ -148,14 +172,28 @@ export function TemplateRichEditor({
           </button>
         ))}
         <span className="w-px h-4 bg-border mx-0.5" />
+        <button
+          type="button"
+          title="Heading"
+          disabled={disabled}
+          className={cn(hrBtn("h-7 w-7 p-0"), "text-muted-foreground")}
+          onMouseDown={(e) => {
+            e.preventDefault();
+            cmd("formatBlock", "h3");
+          }}
+        >
+          <Heading2 className="w-3.5 h-3.5" />
+        </button>
+        <span className="w-px h-4 bg-border mx-0.5" />
         {[
-          { icon: AlignLeft, c: "justifyLeft" },
-          { icon: AlignCenter, c: "justifyCenter" },
-          { icon: AlignRight, c: "justifyRight" },
-        ].map(({ icon: Icon, c }) => (
+          { icon: AlignLeft, c: "justifyLeft", label: "Align left" },
+          { icon: AlignCenter, c: "justifyCenter", label: "Align center" },
+          { icon: AlignRight, c: "justifyRight", label: "Align right" },
+        ].map(({ icon: Icon, c, label }) => (
           <button
             key={c}
             type="button"
+            title={label}
             disabled={disabled}
             className={cn(hrBtn("h-7 w-7 p-0"), "text-muted-foreground")}
             onMouseDown={(e) => {
@@ -191,6 +229,57 @@ export function TemplateRichEditor({
         >
           <ListOrdered className="w-3.5 h-3.5" />
         </button>
+        <span className="w-px h-4 bg-border mx-0.5" />
+        <button
+          type="button"
+          title="Link"
+          disabled={disabled}
+          className={cn(hrBtn("h-7 w-7 p-0"), "text-muted-foreground")}
+          onMouseDown={(e) => {
+            e.preventDefault();
+            insertLink();
+          }}
+        >
+          <Link2 className="w-3.5 h-3.5" />
+        </button>
+        <span className="w-px h-4 bg-border mx-0.5" />
+        <button
+          type="button"
+          title="Undo"
+          disabled={disabled}
+          className={cn(hrBtn("h-7 w-7 p-0"), "text-muted-foreground")}
+          onMouseDown={(e) => {
+            e.preventDefault();
+            cmd("undo");
+          }}
+        >
+          <Undo2 className="w-3.5 h-3.5" />
+        </button>
+        <button
+          type="button"
+          title="Redo"
+          disabled={disabled}
+          className={cn(hrBtn("h-7 w-7 p-0"), "text-muted-foreground")}
+          onMouseDown={(e) => {
+            e.preventDefault();
+            cmd("redo");
+          }}
+        >
+          <Redo2 className="w-3.5 h-3.5" />
+        </button>
+        <button
+          type="button"
+          title="Clear formatting"
+          disabled={disabled}
+          className={cn(hrBtn("h-7 w-7 p-0"), "text-muted-foreground")}
+          onMouseDown={(e) => {
+            e.preventDefault();
+            cmd("removeFormat");
+            cmd("formatBlock", "p");
+          }}
+        >
+          <RemoveFormatting className="w-3.5 h-3.5" />
+        </button>
       </div>
       <div
         ref={ref}
@@ -199,6 +288,7 @@ export function TemplateRichEditor({
         data-placeholder={placeholder}
         className={cn(
           "px-3 py-2 text-xs leading-relaxed outline-none empty:before:content-[attr(data-placeholder)] empty:before:text-muted-foreground",
+          "[&_h3]:text-sm [&_h3]:font-semibold [&_h3]:my-1 [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4 [&_a]:text-brand-700 [&_a]:underline",
           minHeightClass,
         )}
         onInput={emit}

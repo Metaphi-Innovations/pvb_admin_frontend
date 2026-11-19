@@ -175,7 +175,16 @@ export default function OffboardingDetailClient() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   const refresh = useCallback(() => {
-    setRecord(getOffboardingById(recordId) ?? null);
+    let rec = getOffboardingById(recordId) ?? null;
+    // Completed exits should show F&F Done (backfill older records left on Not Started)
+    if (rec && rec.status === "completed" && rec.fnfStatus === "not_started") {
+      rec = saveOffboarding({
+        ...rec,
+        fnfStatus: "completed",
+        accessRevocation: rec.accessRevocation === "pending" ? "completed" : rec.accessRevocation,
+      });
+    }
+    setRecord(rec);
   }, [recordId]);
 
   useEffect(() => {
@@ -810,8 +819,8 @@ export default function OffboardingDetailClient() {
         <Section n={8} title="Completion">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
             <HrOrgField
-              label="Full & Final"
-              helper="Tracking only. Payroll F&F calculation is not implemented in this task."
+              label="Full & Final (F&F)"
+              helper="HR tracking status for Full & Final settlement. Mark Completed when F&F is Done."
             >
               <HrLetterCombobox
                 value={record.fnfStatus}
@@ -820,8 +829,11 @@ export default function OffboardingDetailClient() {
                 placeholder="F&F status"
                 options={FNF_STATUS_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
               />
+              {record.fnfStatus === "completed" ? (
+                <p className="text-[11px] text-emerald-700 mt-1.5 font-medium">F&F Done</p>
+              ) : null}
             </HrOrgField>
-            <HrOrgField label="Access Revocation" helper="Recorded under IT clearance. Login is not disabled in this prototype.">
+            <HrOrgField label="Access Revocation" helper="Recorded under IT clearance.">
               <p className="text-xs font-medium h-9 flex items-center">
                 {record.accessRevocation === "completed" ? "Completed" : "Pending"}
               </p>

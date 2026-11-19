@@ -11,13 +11,14 @@ import {
   Palette, ChevronDown, Warehouse, ChevronLeft, ChevronRight, type LucideIcon,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { NAV_ITEMS, type NavGroup, type NavItem } from "@/components/navigation/nav-config";
+import { HR_ONLY_TOP_NAV, NAV_ITEMS, type NavGroup, type NavItem } from "@/components/navigation/nav-config";
 import { arrangeAccountsMegaMenuColumns } from "@/lib/accounts/accounts-nav";
 import type { AccountsNavGroupId } from "@/lib/accounts/accounts-nav";
 import { PrefetchLink } from "@/components/navigation/PrefetchLink";
 import { useNavigationPending } from "@/components/navigation/NavigationPendingContext";
 import { ApprovalsButton } from "./ApprovalsButton";
 import { prefetchNavChildren } from "@/components/navigation/NavRoutePrefetch";
+
 
 function navPath(href: string): string {
   return href.split("?")[0];
@@ -428,11 +429,20 @@ const NavDropdown = memo(function NavDropdown({
   const [hoveredGroup, setHoveredGroup] = useState(0);
   const [panelWidth, setPanelWidth] = useState(760);
 
-  /** Portaled menu unmounts on close before Link navigation — push explicitly with pending state. */
+  /**
+   * Portaled menu unmounts on close before Link navigation — push explicitly.
+   * HR-only demo: hard navigate so we never stick on catch-all Coming Soon after soft nav.
+   */
   const navigateFromMenu = useCallback(
     (href: string, e: React.MouseEvent, label?: string) => {
       if (!href || href === "#") return;
+      e.preventDefault();
+      e.stopPropagation();
       setIsOpen(false);
+      if (HR_ONLY_TOP_NAV && href.startsWith("/hr")) {
+        window.location.assign(href);
+        return;
+      }
       navigateTo(href, label, e);
     },
     [navigateTo],

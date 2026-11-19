@@ -672,37 +672,77 @@ export function DocumentsSection({
         ) : null}
 
         <Dialog open={!!viewRec} onOpenChange={(o) => !o && setViewRec(null)}>
-          <DialogContent className="max-w-sm">
+          <DialogContent className="max-w-md">
             <DialogHeader>
               <DialogTitle className="text-base">View Document</DialogTitle>
               <DialogDescription className="text-xs">
-                Document details for UI preview. File storage is not connected.
+                {viewRec?.documentType || "Employee document"} details
               </DialogDescription>
             </DialogHeader>
             {viewRec && (
-              <div className="space-y-2 text-xs pt-1">
-                {(
-                  [
-                    ["Document Type", viewRec.documentType],
-                    ["Document Name", viewRec.documentName],
-                    ["Document Number", viewRec.documentNumber || "—"],
-                    ["Expiry Date", formatDateDisplay(viewRec.expiryDate)],
-                    ["File", viewRec.fileName || "—"],
-                    ["Remarks", viewRec.remarks || "—"],
-                  ] as const
-                ).map(([label, value]) => (
-                  <div key={label} className="flex justify-between gap-3">
-                    <span className={cn(EMP_LABEL, "text-muted-foreground")}>{label}</span>
-                    <span
-                      className={cn(
-                        EMP_TEXT,
-                        "text-foreground text-right truncate max-w-[180px]",
-                      )}
-                    >
-                      {value}
-                    </span>
+              <div className="space-y-3 pt-1">
+                <div className="rounded-[12px] border border-border bg-muted/20 overflow-hidden">
+                  <div className="flex items-center gap-3 px-3 py-2.5 border-b border-border bg-white">
+                    <div className="w-9 h-9 rounded-lg bg-brand-50 border border-brand-100 flex items-center justify-center shrink-0">
+                      <FileText className="w-4 h-4 text-brand-600" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-semibold text-foreground truncate">
+                        {viewRec.documentName || viewRec.documentType}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground truncate font-mono">
+                        {viewRec.fileName || "No file name"}
+                      </p>
+                    </div>
                   </div>
-                ))}
+                  <div className="px-3 py-6 flex flex-col items-center justify-center text-center gap-1.5 min-h-[140px] bg-[linear-gradient(180deg,#fafafa_0%,#f3f4f6_100%)]">
+                    <FileText className="w-10 h-10 text-muted-foreground/50" />
+                    <p className="text-xs font-medium text-foreground">Document preview</p>
+                    <p className="text-[11px] text-muted-foreground max-w-[260px]">
+                      {viewRec.fileName
+                        ? `${viewRec.fileName}${viewRec.fileSizeLabel && viewRec.fileSizeLabel !== "—" ? ` · ${viewRec.fileSizeLabel}` : ""}`
+                        : "No file attached"}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="rounded-[12px] border border-border bg-white px-3 divide-y divide-border/60">
+                  {(
+                    [
+                      ["Document Type", viewRec.documentType || "—"],
+                      ["Document Name", viewRec.documentName || "—"],
+                      ["Document Number", viewRec.documentNumber || "—"],
+                      ["Expiry Date", formatDateDisplay(viewRec.expiryDate)],
+                      ["File", viewRec.fileName || "—"],
+                      ["Remarks", viewRec.remarks || "—"],
+                    ] as const
+                  ).map(([label, value]) => (
+                    <div key={label} className="flex justify-between gap-3 py-2">
+                      <span className={cn(EMP_LABEL, "text-muted-foreground shrink-0")}>
+                        {label}
+                      </span>
+                      <span
+                        className={cn(
+                          EMP_TEXT,
+                          "text-foreground text-right break-words max-w-[220px]",
+                        )}
+                        title={value}
+                      >
+                        {value}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    className="h-8 px-3 text-xs border rounded-lg hover:bg-muted/50"
+                    onClick={() => setViewRec(null)}
+                  >
+                    Close
+                  </button>
+                </div>
               </div>
             )}
           </DialogContent>

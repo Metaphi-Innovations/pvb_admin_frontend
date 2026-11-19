@@ -44,8 +44,11 @@ export interface NavItem {
   menuLayout?: NavMenuLayout;
 }
 
-/** Lightweight route config only — no page/form/table imports. */
-export const NAV_ITEMS: NavItem[] = [
+/**
+ * Full ERP nav catalog. Top bar filters via HR_ONLY_TOP_NAV for client demos.
+ * Routes remain reachable by URL; only chrome visibility changes.
+ */
+const ALL_NAV_ITEMS: NavItem[] = [
   {
     id: "dashboard",
     label: "Dashboard",
@@ -109,11 +112,6 @@ export const NAV_ITEMS: NavItem[] = [
       { label: "Sample Orders", href: "/sales/sample-order" },
       { label: "Stock Transfer", href: "/sales/stock-transfer" },
       { label: "Scheme Progress", href: "/sales/scheme-progress" },
-      // { label: "Invoices", href: "/sales/invoices" },
-      // { label: "Dispatch", href: "/sales/dispatch" },
-      // { label: "Collections", href: "/sales/collections" },
-      // { label: "Targets", href: "/sales/targets" },
-      // { label: "Beat Plan", href: "/sales/beat-plan" },
     ],
   },
   {
@@ -172,13 +170,15 @@ export const NAV_ITEMS: NavItem[] = [
       { label: "Demo", href: "/events/demo" },
     ],
   },
-  // {
-  //   id: "template",
-  //   label: "Template",
-  //   icon: Palette,
-  //   href: "/template",
-  // },
 ];
+
+/** Client demo: show only HR in the top navbar. Set false to restore full ERP nav. */
+export const HR_ONLY_TOP_NAV = true;
+
+/** Lightweight route config only — no page/form/table imports. */
+export const NAV_ITEMS: NavItem[] = HR_ONLY_TOP_NAV
+  ? ALL_NAV_ITEMS.filter((item) => item.id === "hr")
+  : ALL_NAV_ITEMS;
 
 export function collectNavHrefs(items: NavItem[] = NAV_ITEMS): string[] {
   const hrefs = new Set<string>();
