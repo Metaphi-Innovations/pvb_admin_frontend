@@ -1,6 +1,7 @@
 import { axiosInstance } from "@/api/axios";
 import { API_ENDPOINTS } from "@/api/endpoints";
 import { normalizePlaceName } from "@/lib/geography/india-post-normalize";
+import { toApiFilterValue, toFilterStringList } from "@/lib/listing/filter-values";
 
 // ---------------------------------------------------------------------------
 // Nested payload shapes
@@ -488,12 +489,45 @@ function toBackendFilters(apiFilters?: Record<string, unknown>): Record<string, 
             continue;
         }
 
-        let realVal: unknown = value;
-        if (Array.isArray(value)) {
-            if (value.length === 0) continue;
-            realVal = value[0];
+        if (key === "status") {
+            const list = toFilterStringList(value);
+            if (list.length === 0) continue;
+            const lower = list.map((t) => t.trim().toLowerCase());
+            if (lower.includes("all")) continue;
+
+            const hasActive = lower.includes("active");
+            const hasInactive = lower.includes("inactive");
+            const otherRaw = list.filter((raw) => {
+                const token = raw.trim().toLowerCase();
+                return token !== "active" && token !== "inactive" && token !== "all";
+            });
+
+            // Both active+inactive with no other values → treat as all (omit filter)
+            if (hasActive && hasInactive && otherRaw.length === 0) continue;
+
+            const finalStatuses: string[] = [];
+            if (!(hasActive && hasInactive)) {
+                if (hasActive) finalStatuses.push("Active");
+                if (hasInactive) finalStatuses.push("Inactive");
+            }
+            for (const raw of otherRaw) {
+                const token = raw.trim().toLowerCase();
+                if (token === "under maintenance" || token === "under_maintenance") {
+                    finalStatuses.push("Under Maintenance");
+                } else if (token === "closed") {
+                    finalStatuses.push("Closed");
+                } else {
+                    finalStatuses.push(raw.trim());
+                }
+            }
+
+            const status = toApiFilterValue(finalStatuses);
+            if (status !== undefined) backendFilters.status = status;
+            continue;
         }
-        if (realVal === undefined || realVal === null || realVal === "") continue;
+
+        const realVal = toApiFilterValue(value);
+        if (realVal === undefined) continue;
 
         if (key === "warehouseName") {
             backendFilters.warehouse_name = realVal;
@@ -503,12 +537,6 @@ function toBackendFilters(apiFilters?: Record<string, unknown>): Record<string, 
             backendFilters.gst_number = realVal;
         } else if (key === "registeredGstAddress") {
             backendFilters.registered_gst_address = realVal;
-        } else if (key === "status") {
-            const token = String(realVal).trim().toLowerCase();
-            if (token === "all") continue;
-            if (token === "active") backendFilters.status = "Active";
-            else if (token === "inactive") backendFilters.status = "Inactive";
-            else backendFilters.status = realVal;
         } else {
             backendFilters[key] = realVal;
         }

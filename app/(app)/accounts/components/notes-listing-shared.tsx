@@ -4,19 +4,13 @@ import { RefreshCw, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
 import {
   ReportDateRangeFilter,
   ReportFilterResetButton,
   ReportFilterRow,
   ReportSearchFilter,
+  ReportStatusMultiFilter,
 } from "@/components/accounts/ReportFilters";
 import { ReportMoreFilters } from "@/components/accounts/ReportMoreFilters";
 import { ReportMultiSelect } from "@/components/accounts/ReportMultiSelect";
@@ -24,7 +18,6 @@ import { ACCOUNTS_FILTER_LABEL_CLASS } from "@/lib/accounts/accounts-typography"
 import type { DateRangePresetId } from "@/lib/accounts/report-date-presets";
 import { resolveDateRangePreset } from "@/lib/accounts/report-date-presets";
 import type { ReportMultiSelectOption } from "@/lib/accounts/report-multi-filter-utils";
-import { cn } from "@/lib/utils";
 
 export interface NotesListingFilterState {
   search: string;
@@ -34,7 +27,8 @@ export interface NotesListingFilterState {
   branches: string[];
   parties: string[];
   sources: string[];
-  status: string;
+  /** Empty = All statuses */
+  status: string[];
   voucherNo: string;
   invoiceNo: string;
 }
@@ -47,7 +41,7 @@ export const EMPTY_NOTES_FILTERS: NotesListingFilterState = {
   branches: [],
   parties: [],
   sources: [],
-  status: "all",
+  status: [],
   voucherNo: "",
   invoiceNo: "",
 };
@@ -64,7 +58,7 @@ export function notesListingFiltersActive(
     current.branches.length > 0 ||
     current.parties.length > 0 ||
     current.sources.length > 0 ||
-    current.status !== baseline.status ||
+    current.status.length > 0 ||
     current.voucherNo !== baseline.voucherNo ||
     current.invoiceNo !== baseline.invoiceNo
   );
@@ -149,7 +143,7 @@ export function NotesListingFilterBar({
   showInvoiceNoFilter = true,
 }: NotesListingFilterBarProps) {
   const moreActiveCount =
-    (filters.status !== "all" ? 1 : 0) +
+    (filters.status.length > 0 ? 1 : 0) +
     (filters.voucherNo.trim() ? 1 : 0) +
     (showInvoiceNoFilter && filters.invoiceNo.trim() ? 1 : 0);
 
@@ -205,21 +199,11 @@ export function NotesListingFilterBar({
             minWidthClass="min-w-[120px]"
           />
           <ReportMoreFilters activeCount={moreActiveCount}>
-            <div className="space-y-1.5">
-              <Label className={ACCOUNTS_FILTER_LABEL_CLASS}>Status</Label>
-              <Select value={filters.status} onValueChange={(status) => onChange({ status })}>
-                <SelectTrigger className="h-8 text-xs">
-                  <SelectValue placeholder="All statuses" />
-                </SelectTrigger>
-                <SelectContent>
-                  {statusOptions.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value} className="text-xs">
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <ReportStatusMultiFilter
+              values={filters.status}
+              onChange={(status) => onChange({ status })}
+              options={statusOptions}
+            />
             <div className="space-y-1.5">
               <Label className={ACCOUNTS_FILTER_LABEL_CLASS}>Voucher Number</Label>
               <Input
@@ -278,9 +262,8 @@ export const NOTES_STATUS_TABS = [
   { id: "reversed", label: "Reversed" },
 ] as const;
 
-/** More Filters status options — aligned with NOTES_STATUS_TABS. */
+/** More Filters status options — aligned with NOTES_STATUS_TABS (empty selection = All). */
 export const NOTES_STATUS_FILTER_OPTIONS = [
-  { value: "all", label: "All Statuses" },
   { value: "draft", label: "Draft" },
   { value: "posted", label: "Posted" },
   { value: "cancelled", label: "Cancelled" },

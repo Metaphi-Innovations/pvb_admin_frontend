@@ -7,6 +7,7 @@ import { Eye, ClipboardCheck, Edit3, RotateCcw } from "lucide-react";
 import { QcRecord, QcStatus } from "../types";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import Link from "next/link";
+import { toApiFilterValue } from "@/lib/listing/filter-values";
 import { getQcSourceType } from "@/lib/warehouse/grn-source";
 import { QcService } from "@/services/qc.service";
 import {
@@ -242,39 +243,44 @@ export function SalesReturnQcListing() {
 
         const filters: any = {};
         filters.source_type = "SALES_RETURN";
-        if (qcFilters.qcNo) {
-          filters.qcNumber = qcFilters.qcNo;
+        const qcNo = toApiFilterValue(qcFilters.qcNo);
+        if (qcNo !== undefined) {
+          filters.qcNumber = qcNo;
         }
-        if (qcFilters.grnNo) {
+        const grnNo = toApiFilterValue(qcFilters.grnNo);
+        if (grnNo !== undefined) {
           if (activeTab === "pending") {
-            filters.grnNumber = qcFilters.grnNo;
+            filters.grnNumber = grnNo;
           } else {
             filters.grn = filters.grn || {};
-            filters.grn.grnNumber = qcFilters.grnNo;
+            filters.grn.grnNumber = grnNo;
           }
         }
-        if (qcFilters.poNumber) {
+        const poNumber = toApiFilterValue(qcFilters.poNumber);
+        if (poNumber !== undefined) {
           if (activeTab === "pending") {
-            filters.sales_return_no = qcFilters.poNumber;
+            filters.sales_return_no = poNumber;
           } else {
-            filters.poNumber = qcFilters.poNumber;
+            filters.poNumber = poNumber;
           }
         }
-        if (qcFilters.vendorName) {
+        const vendorName = toApiFilterValue(qcFilters.vendorName);
+        if (vendorName !== undefined) {
           if (activeTab === "pending") {
-            filters.customer_name = qcFilters.vendorName;
+            filters.customer_name = vendorName;
           } else {
-            filters.vendorName = qcFilters.vendorName;
+            filters.vendorName = vendorName;
           }
         }
-        if (qcFilters.warehouse) {
+        const warehouse = toApiFilterValue(qcFilters.warehouse);
+        if (warehouse !== undefined) {
           if (activeTab === "pending") {
             filters.warehouse = filters.warehouse || {};
-            filters.warehouse.warehouse_name = qcFilters.warehouse;
+            filters.warehouse.warehouse_name = warehouse;
           } else {
             filters.grn = filters.grn || {};
             filters.grn.warehouse = filters.grn.warehouse || {};
-            filters.grn.warehouse.warehouse_name = qcFilters.warehouse;
+            filters.grn.warehouse.warehouse_name = warehouse;
           }
         }
         if (qcFilters.inspectionDate) {

@@ -7,14 +7,6 @@ import { AccountsListingChrome } from "@/components/accounts/ui";
 import { AccountsFilterBar } from "@/components/accounts/AccountsFilterBar";
 import { AccountsListingDateFilter } from "@/components/accounts/AccountsListingFilter";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,6 +18,7 @@ import {
   AccountsViewAction,
   accountsActionColClass,
 } from "@/components/accounts/AccountsTableActions";
+import { ReportMultiSelect } from "@/components/accounts/ReportMultiSelect";
 import { Banknote, FileSpreadsheet } from "lucide-react";
 import { SectionTabs } from "../components/AccountsUI";
 import {
@@ -56,7 +49,7 @@ export default function ExpensesPageClient() {
   const [records, setRecords] = useState<AccountPaymentRecord[]>([]);
   const [tab, setTab] = useState("all");
   const [search, setSearch] = useState("");
-  const [sourceFilter, setSourceFilter] = useState("all");
+  const [sourceFilters, setSourceFilters] = useState<string[]>([]);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [paymentTarget, setPaymentTarget] = useState<AccountPaymentRecord | null>(null);
@@ -68,8 +61,8 @@ export default function ExpensesPageClient() {
   }, [refresh]);
 
   const listFilters = useMemo(
-    () => ({ tab, search, source: sourceFilter, dateFrom, dateTo }),
-    [tab, search, sourceFilter, dateFrom, dateTo],
+    () => ({ tab, search, sources: sourceFilters, dateFrom, dateTo }),
+    [tab, search, sourceFilters, dateFrom, dateTo],
   );
   const visible = useMemo(() => filterPayments(records, listFilters), [records, listFilters]);
   const counts = useMemo(() => computePaymentTabCounts(records), [records]);
@@ -104,15 +97,15 @@ export default function ExpensesPageClient() {
           onSearchChange={setSearch}
           searchPlaceholder="Search claim no., employee…"
         >
-          <Select value={sourceFilter} onValueChange={setSourceFilter}>
-            <SelectTrigger className="h-8 w-[160px] text-sm bg-white">
-              <SelectValue placeholder="Source" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all" className="text-xs">All Sources</SelectItem>
-              <SelectItem value="hr_tada_claim" className="text-xs">HR TA/DA Claims</SelectItem>
-            </SelectContent>
-          </Select>
+          <ReportMultiSelect
+            label="Source"
+            values={sourceFilters}
+            onChange={setSourceFilters}
+            options={[{ value: "hr_tada_claim", label: "HR TA/DA Claims" }]}
+            entityName="Source"
+            allLabel="All Sources"
+            minWidthClass="min-w-[160px]"
+          />
           <AccountsListingDateFilter
             dateFrom={dateFrom}
             dateTo={dateTo}

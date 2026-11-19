@@ -52,6 +52,7 @@ function BankBookPageContent() {
 
   // Column Filters
   const [columnFilters, setColumnFilters] = useState<{
+    voucherType?: string;
     voucherNo?: string;
     particular?: string;
     reference?: string;
@@ -238,9 +239,10 @@ function BankBookPageContent() {
     setError(null);
 
     const voucherTypeParam =
-      voucherTypes.length > 0 && voucherTypes[0] !== "all"
+      columnFilters.voucherType ||
+      (voucherTypes.length > 0 && voucherTypes[0] !== "all"
         ? voucherTypes[0]
-        : undefined;
+        : undefined);
 
     BankBookApiService.getBankBook(
       {
@@ -567,6 +569,10 @@ function BankBookPageContent() {
                   onRemoveSort={handleRemoveSort}
                   filters={columnFilters}
                   onFilterChange={handleColumnFilterChange}
+                  voucherTypeOptions={voucherTypeOptions.map((o) => ({
+                    value: o.value,
+                    count: 0,
+                  }))}
                   loading={loading}
                 />
               ) : loading ? (

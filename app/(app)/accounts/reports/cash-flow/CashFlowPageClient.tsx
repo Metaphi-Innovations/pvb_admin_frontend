@@ -18,7 +18,7 @@ import {
   ReportFilterRow,
   ReportDateRangeFilter,
   ReportFinancialYearFilter,
-  ReportBranchFilter,
+  ReportBranchMultiFilter,
   ReportFilterSummary,
   ReportFromDateFilter,
   ReportToDateFilter,
@@ -93,7 +93,7 @@ export default function CashFlowPageClient() {
   const [dateTo, setDateTo] = useState("");
   const [datesReady, setDatesReady] = useState(false);
   const [financialYearId, setFinancialYearId] = useState("");
-  const [warehouseId, setWarehouseId] = useState("all");
+  const [warehouseIds, setWarehouseIds] = useState<string[]>([]);
   const [activityType, setActivityType] = useState<CashFlowActivityFilter>("ALL");
   const [cashBankLedgerId, setCashBankLedgerId] = useState("all");
   const [exporting, setExporting] = useState(false);
@@ -110,8 +110,13 @@ export default function CashFlowPageClient() {
     const urlFy = searchParams.get("fy") ?? searchParams.get("fyId") ?? "";
     const urlBranch = searchParams.get("branch") ?? searchParams.get("warehouse") ?? "";
     if (urlFy && urlFy !== "all") setFinancialYearId(urlFy);
-    if (urlBranch && urlBranch !== "all" && !urlBranch.includes(",")) {
-      setWarehouseId(urlBranch);
+    if (urlBranch && urlBranch !== "all") {
+      setWarehouseIds(
+        urlBranch
+          .split(",")
+          .map((v) => v.trim())
+          .filter((v) => v && v.toLowerCase() !== "all"),
+      );
     }
     setActivityType(readActivityType(searchParams.get("activityType")));
     const urlLedger =
@@ -231,7 +236,7 @@ export default function CashFlowPageClient() {
       financial_year_id: financialYearId,
       from_date: dateFrom,
       to_date: dateTo,
-      warehouse_id: warehouseId !== "all" ? warehouseId : undefined,
+      warehouse_id: warehouseIds.length === 1 ? warehouseIds[0] : undefined,
       activity_type: activityType,
       cash_bank_ledger_id: cashBankLedgerId !== "all" ? cashBankLedgerId : undefined,
     };
@@ -240,7 +245,7 @@ export default function CashFlowPageClient() {
     financialYearId,
     dateFrom,
     dateTo,
-    warehouseId,
+    warehouseIds,
     activityType,
     cashBankLedgerId,
     fyBounds,
@@ -278,7 +283,8 @@ export default function CashFlowPageClient() {
       financialYearId,
       fromDate: dateFrom,
       toDate: dateTo,
-      warehouseId,
+      warehouseId:
+        warehouseIds.length === 0 ? "all" : warehouseIds.join(","),
       activityType,
       cashBankLedgerId,
     });
@@ -290,7 +296,7 @@ export default function CashFlowPageClient() {
     financialYearId,
     dateFrom,
     dateTo,
-    warehouseId,
+    warehouseIds,
     activityType,
     cashBankLedgerId,
     fyBounds,
@@ -370,7 +376,7 @@ export default function CashFlowPageClient() {
     setFinancialYearId(fyId);
     setDateFrom(range.from);
     setDateTo(range.to);
-    setWarehouseId("all");
+    setWarehouseIds([]);
     setActivityType(filtersConfig?.defaults.activity_type ?? "ALL");
     setCashBankLedgerId("all");
   }, [filtersConfig, selectedFY, financialYearId, dateFrom, dateTo]);
@@ -398,10 +404,10 @@ export default function CashFlowPageClient() {
             financialYearId,
             fromDate: report.scope.from_date,
             toDate: report.scope.to_date,
-            warehouseId: warehouseId !== "all" ? warehouseId : undefined,
+            warehouseId: warehouseIds.length === 1 ? warehouseIds[0] : undefined,
           })
         : null,
-    [report, financialYearId, warehouseId],
+    [report, financialYearId, warehouseIds],
   );
 
   const warnings = report?.health.warnings ?? [];
@@ -413,7 +419,7 @@ export default function CashFlowPageClient() {
   const moreFilterCount =
     (activityType !== "ALL" ? 1 : 0) + (cashBankLedgerId !== "all" ? 1 : 0);
   const hasFilters =
-    warehouseId !== "all" ||
+    warehouseIds.length > 0 ||
     activityType !== "ALL" ||
     cashBankLedgerId !== "all" ||
     preset !== "custom";
@@ -441,9 +447,12 @@ export default function CashFlowPageClient() {
       id: "branch",
       label: "Branch",
       value:
-        warehouseId === "all"
+        warehouseIds.length === 0
           ? "All branches"
-          : branchOptions.find((branch) => branch.id === warehouseId)?.name ?? warehouseId,
+          : warehouseIds.length === 1
+            ? branchOptions.find((branch) => branch.id === warehouseIds[0])?.name ??
+              warehouseIds[0]
+            : `${warehouseIds.length} branches`,
     });
     if (activityType !== "ALL") {
       items.push({
@@ -470,7 +479,7 @@ export default function CashFlowPageClient() {
     financialYearId,
     dateFrom,
     dateTo,
-    warehouseId,
+    warehouseIds,
     branchOptions,
     activityType,
     activityOptions,
@@ -515,7 +524,11 @@ export default function CashFlowPageClient() {
         min={dateFrom || fyMin}
         max={fyMax}
       />
-      <ReportBranchFilter value={warehouseId} onChange={setWarehouseId} options={branchOptions} />
+      <ReportBranchMultiFilter
+            values={warehouseIds}
+            onChange={setWarehouseIds}
+            labeledOptions={branchOptions.map((b) => ({ value: b.id, label: b.name }))}
+          />
       <ReportMoreFilters activeCount={moreFilterCount}>
         <div className="space-y-0.5 min-w-[160px]">
           <span className={filterLabelClass}>Activity Type</span>

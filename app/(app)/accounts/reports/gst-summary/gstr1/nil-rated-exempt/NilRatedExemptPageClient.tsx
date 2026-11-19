@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
@@ -34,11 +34,15 @@ import {
   AccountsTableBody,
   AccountsTableCell,
   AccountsTableHead,
-  AccountsTableHeadCell,
   AccountsTableHeadRow,
   AccountsTableRow,
   AccountsTableScroll,
 } from "@/components/accounts/AccountsTable";
+import {
+  AccountsColumnFilterProvider,
+  SortTh,
+  useAccountsFilteredRows,
+} from "@/app/(app)/accounts/components/AccountsUI";
 import {
   ReportFilterRow,
   ReportDateRangeFilter,
@@ -49,6 +53,7 @@ import {
   ReportMoreFilters,
   ReportFilterSummary,
   ReportFilterField,
+  ReportStatusMultiFilter,
   ACCOUNTS_FILTER_LABEL_CLASS as filterLabelClass,
   ACCOUNTS_FILTER_CONTROL_CLASS as filterControlClass,
   REPORT_BRANCH_OPTIONS,
@@ -91,17 +96,51 @@ import { exportNilRatedExemptToExcel, exportNilRatedExemptToPdf } from "./gstr1-
 import { NilRatedExemptDetailSheet } from "./components/NilRatedExemptDetailSheet";
 import { useDebouncedValue } from "../../../pl/pl-hooks";
 
+
+function getNilFilterCell(row: NilRatedExemptRow, colKey: string): string {
+  switch (colKey) {
+    case "invoiceNo":
+      return row.invoiceNo || "";
+    case "customerName":
+      return row.customerName || "";
+    case "gstin":
+      return row.gstin || "";
+    case "placeOfSupply":
+      return row.placeOfSupply || "";
+    case "supplyType":
+      return row.supplyTypeLabel || row.supplyType || "";
+    case "productName":
+      return row.productName || "";
+    case "hsn":
+      return row.hsn || "";
+    case "status":
+      return row.status || "";
+    default:
+      return "";
+  }
+}
+
+function NilFilteredRows({
+  rows,
+  children,
+}: {
+  rows: NilRatedExemptRow[];
+  children: (visible: NilRatedExemptRow[]) => ReactNode;
+}) {
+  const visible = useAccountsFilteredRows(rows);
+  return <>{children(visible)}</>;
+}
+
+
 const PLACEHOLDER_DATE = "2025-04-01";
 
-const SUPPLY_TYPE_OPTIONS: { value: NilSupplyTypeFilter; label: string }[] = [
-  { value: "all", label: "All" },
+const SUPPLY_TYPE_OPTIONS: { value: string; label: string }[] = [
   { value: "nil_rated", label: "Nil Rated" },
   { value: "exempt", label: "Exempt" },
   { value: "non_gst", label: "Non-GST" },
 ];
 
-const STATUS_OPTIONS: { value: NilStatusFilter; label: string }[] = [
-  { value: "all", label: "All" },
+const STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: "valid", label: "Valid" },
   { value: "exception", label: "Exception" },
 ];
@@ -148,9 +187,9 @@ export default function NilRatedExemptPageClient() {
   const [branch, setBranch] = useState<string[]>([]);
   const [warehouse, setWarehouse] = useState<string[]>([]);
   const [customerId, setCustomerId] = useState<string[]>([]);
-  const [supplyType, setSupplyType] = useState<NilSupplyTypeFilter>("all");
+  const [supplyTypes, setSupplyTypes] = useState<string[]>([]);
   const [invoiceNo, setInvoiceNo] = useState("");
-  const [status, setStatus] = useState<NilStatusFilter>("all");
+  const [statuses, setStatuses] = useState<string[]>([]);
   const [exporting, setExporting] = useState(false);
   const [viewRow, setViewRow] = useState<NilRatedExemptRow | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -177,8 +216,8 @@ export default function NilRatedExemptPageClient() {
       branch: [],
       warehouse: [],
       customerId: [],
-      supplyType: "all",
-      status: "all",
+      supplyType: [],
+      status: [],
       invoiceNo: "",
     });
     setFinancialYearId(parsed.financialYearId);
@@ -187,9 +226,9 @@ export default function NilRatedExemptPageClient() {
     setBranch(normalizeMultiFilter(parsed.branch));
     setWarehouse(normalizeMultiFilter(parsed.warehouse));
     setCustomerId(normalizeMultiFilter(parsed.customerId));
-    setSupplyType(parsed.supplyType);
+    setSupplyTypes(parsed.supplyType);
     setInvoiceNo(parsed.invoiceNo);
-    setStatus(parsed.status);
+    setStatuses(parsed.status);
     setPreset("custom");
   }, [searchParams, datesReady]);
 
@@ -220,9 +259,9 @@ export default function NilRatedExemptPageClient() {
       branch,
       warehouse,
       customerId,
-      supplyType,
+      supplyType: supplyTypes,
       invoiceNo: debouncedInvoiceNo,
-      status,
+      status: statuses,
     }),
     [
       financialYearId,
@@ -231,9 +270,9 @@ export default function NilRatedExemptPageClient() {
       branch,
       warehouse,
       customerId,
-      supplyType,
+      supplyTypes,
       debouncedInvoiceNo,
-      status,
+      statuses,
       refreshKey,
     ],
   );
@@ -285,8 +324,8 @@ export default function NilRatedExemptPageClient() {
   const backHref = `/accounts/reports/gst-summary/gstr1?${buildNilRatedFilterQuery({
     ...filters,
     customerId: [],
-    supplyType: "all",
-    status: "all",
+    supplyType: [],
+    status: [],
     invoiceNo: "",
   })}`;
 
@@ -294,16 +333,16 @@ export default function NilRatedExemptPageClient() {
     isMultiFilterActive(branch) ||
     isMultiFilterActive(warehouse) ||
     isMultiFilterActive(customerId) ||
-    supplyType !== "all" ||
-    status !== "all" ||
+    supplyTypes.length > 0 ||
+    statuses.length > 0 ||
     invoiceNo.trim() !== "";
 
   const resetFilters = () => {
     setBranch([]);
     setWarehouse([]);
     setCustomerId([]);
-    setSupplyType("all");
-    setStatus("all");
+    setSupplyTypes([]);
+    setStatuses([]);
     setInvoiceNo("");
   };
 
@@ -342,9 +381,9 @@ export default function NilRatedExemptPageClient() {
         "Customer",
         "All customers",
       ),
-      supplyType: SUPPLY_TYPE_OPTIONS.find((o) => o.value === supplyType)?.label ?? supplyType,
+      supplyType: formatMultiSelectLabel(supplyTypes, SUPPLY_TYPE_OPTIONS, "Type", "All types"),
       invoiceNo: debouncedInvoiceNo,
-      status: STATUS_OPTIONS.find((o) => o.value === status)?.label ?? status,
+      status: formatMultiSelectLabel(statuses, STATUS_OPTIONS, "Status", "All"),
     };
   }, [
     financialYearId,
@@ -354,9 +393,9 @@ export default function NilRatedExemptPageClient() {
     warehouse,
     customerId,
     customerSelectOptions,
-    supplyType,
+    supplyTypes,
     debouncedInvoiceNo,
-    status,
+    statuses,
   ]);
 
   const handleExportExcel = async () => {
@@ -406,23 +445,12 @@ export default function NilRatedExemptPageClient() {
             options={warehouseOptionsForFilter}
           />
         </ReportMoreFilters>
-        <ReportFilterField label="Supply Type" minWidthClass="min-w-[130px]">
-          <Select
-            value={supplyType}
-            onValueChange={(v) => setSupplyType(v as NilSupplyTypeFilter)}
-          >
-            <SelectTrigger className={cn(filterControlClass, "mt-0 w-full")}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {SUPPLY_TYPE_OPTIONS.map((o) => (
-                <SelectItem key={o.value} value={o.value} className="text-xs">
-                  {o.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </ReportFilterField>
+        <ReportStatusMultiFilter
+          label="Supply Type"
+          values={supplyTypes}
+          onChange={setSupplyTypes}
+          options={SUPPLY_TYPE_OPTIONS}
+        />
         <ReportFilterField label="Search" minWidthClass="min-w-[200px]">
           <Input
             value={invoiceNo}
@@ -431,20 +459,12 @@ export default function NilRatedExemptPageClient() {
             className={cn(filterControlClass, "mt-0 w-full")}
           />
         </ReportFilterField>
-        <ReportFilterField label="Status" minWidthClass="min-w-[120px]">
-          <Select value={status} onValueChange={(v) => setStatus(v as NilStatusFilter)}>
-            <SelectTrigger className={cn(filterControlClass, "mt-0 w-full")}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {STATUS_OPTIONS.map((o) => (
-                <SelectItem key={o.value} value={o.value} className="text-xs">
-                  {o.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </ReportFilterField>
+        <ReportStatusMultiFilter
+          label="Status"
+          values={statuses}
+          onChange={setStatuses}
+          options={STATUS_OPTIONS}
+        />
         {hasFilters && (
           <Button variant="outline" size="sm" className="h-8 text-sm px-2" onClick={resetFilters}>
             Reset
@@ -514,27 +534,33 @@ export default function NilRatedExemptPageClient() {
               )}
             </div>
           ) : (
+            <AccountsColumnFilterProvider
+              rows={report.rows}
+              getCellValue={getNilFilterCell}
+            >
             <AccountsTableScroll className="flex-1 min-h-0">
               <AccountsTable minWidth={1600}>
                 <AccountsTableHead>
                   <AccountsTableHeadRow>
-                    <AccountsTableHeadCell>Invoice Date</AccountsTableHeadCell>
-                    <AccountsTableHeadCell>Invoice Number</AccountsTableHeadCell>
-                    <AccountsTableHeadCell>Customer Name</AccountsTableHeadCell>
-                    <AccountsTableHeadCell>Customer GSTIN</AccountsTableHeadCell>
-                    <AccountsTableHeadCell>Place of Supply</AccountsTableHeadCell>
-                    <AccountsTableHeadCell>Supply Type</AccountsTableHeadCell>
-                    <AccountsTableHeadCell>Product / Service</AccountsTableHeadCell>
-                    <AccountsTableHeadCell>HSN / SAC</AccountsTableHeadCell>
-                    <AccountsTableHeadCell align="right">Quantity</AccountsTableHeadCell>
-                    <AccountsTableHeadCell align="right">Supply Value</AccountsTableHeadCell>
-                    <AccountsTableHeadCell>GST Rate</AccountsTableHeadCell>
-                    <AccountsTableHeadCell>Status</AccountsTableHeadCell>
-                    <AccountsTableHeadCell className="w-24">Action</AccountsTableHeadCell>
+                    <SortTh label="Invoice Date" colKey="invoiceDate" sortable={false} filterable={false} />
+                    <SortTh label="Invoice Number" colKey="invoiceNo" sortable={false} />
+                    <SortTh label="Customer Name" colKey="customerName" sortable={false} />
+                    <SortTh label="Customer GSTIN" colKey="gstin" sortable={false} />
+                    <SortTh label="Place of Supply" colKey="placeOfSupply" sortable={false} />
+                    <SortTh label="Supply Type" colKey="supplyType" sortable={false} />
+                    <SortTh label="Product / Service" colKey="productName" sortable={false} />
+                    <SortTh label="HSN / SAC" colKey="hsn" sortable={false} />
+                    <SortTh label="Quantity" colKey="qty" sortable={false} filterable={false} align="right" />
+                    <SortTh label="Supply Value" colKey="supplyValue" sortable={false} filterable={false} align="right" />
+                    <SortTh label="GST Rate" colKey="gstRate" sortable={false} filterable={false} />
+                    <SortTh label="Status" colKey="status" sortable={false} />
+                    <SortTh label="Action" colKey="_actions" sortable={false} filterable={false} className="w-24" />
                   </AccountsTableHeadRow>
                 </AccountsTableHead>
                 <AccountsTableBody>
-                  {report.rows.map((row) => {
+                  <NilFilteredRows rows={report.rows}>
+                    {(visibleRows) =>
+                      visibleRows.map((row) => {
                     const primaryFix =
                       row.status === "exception" && row.exceptions[0]
                         ? resolveNilRatedExceptionFixAction(row.exceptions[0].code, row)
@@ -626,10 +652,13 @@ export default function NilRatedExemptPageClient() {
                         </AccountsTableCell>
                       </AccountsTableRow>
                     );
-                  })}
+                      })
+                    }
+                  </NilFilteredRows>
                 </AccountsTableBody>
               </AccountsTable>
             </AccountsTableScroll>
+            </AccountsColumnFilterProvider>
           )}
         </AccountsListingTableCard>
       </AccountsReportBody>

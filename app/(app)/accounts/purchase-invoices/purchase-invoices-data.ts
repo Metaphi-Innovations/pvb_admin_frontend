@@ -833,46 +833,70 @@ export function updateManualPurchaseEntry(
   return updated;
 }
 
+function asMultiFilterValues(value?: string | string[]): string[] {
+  if (value == null) return [];
+  if (Array.isArray(value)) return value.map((v) => String(v).trim()).filter(Boolean);
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === "all") return [];
+  return [trimmed];
+}
+
 export function filterPurchaseInvoices(
   records: PurchaseInvoiceRecord[],
   filters: {
     search: string;
-    sourceType?: string;
-    source?: string;
-    purchaseNature?: string;
-    vendor?: string;
+    sourceType?: string | string[];
+    source?: string | string[];
+    purchaseNature?: string | string[];
+    vendor?: string | string[];
     dateFrom: string;
     dateTo: string;
-    status?: string;
-    approvalStatus?: string;
-    postingStatus?: string;
-    branchGstin?: string;
+    status?: string | string[];
+    approvalStatus?: string | string[];
+    postingStatus?: string | string[];
+    branchGstin?: string | string[];
   },
 ): PurchaseInvoiceRecord[] {
   let r = [...records];
-  if (filters.sourceType && filters.sourceType !== "all") {
-    r = r.filter((x) => resolvePurchaseSourceType(x) === filters.sourceType);
+  const sourceTypes = asMultiFilterValues(filters.sourceType);
+  if (sourceTypes.length > 0) {
+    const allowed = new Set(sourceTypes);
+    r = r.filter((x) => allowed.has(resolvePurchaseSourceType(x)));
   }
-  if (filters.source && filters.source !== "all") {
-    r = r.filter((x) => x.source === filters.source);
+  const sources = asMultiFilterValues(filters.source);
+  if (sources.length > 0) {
+    const allowed = new Set(sources);
+    r = r.filter((x) => allowed.has(x.source));
   }
-  if (filters.purchaseNature && filters.purchaseNature !== "all") {
-    r = r.filter((x) => (x.purchaseNature ?? "expense") === filters.purchaseNature);
+  const purchaseNatures = asMultiFilterValues(filters.purchaseNature);
+  if (purchaseNatures.length > 0) {
+    const allowed = new Set(purchaseNatures);
+    r = r.filter((x) => allowed.has(x.purchaseNature ?? "expense"));
   }
-  if (filters.vendor && filters.vendor !== "all") {
-    r = r.filter((x) => x.vendorName === filters.vendor);
+  const vendors = asMultiFilterValues(filters.vendor);
+  if (vendors.length > 0) {
+    const allowed = new Set(vendors);
+    r = r.filter((x) => allowed.has(x.vendorName));
   }
-  if (filters.status && filters.status !== "all") {
-    r = r.filter((x) => getPurchaseInvoicePaymentStatus(x) === filters.status);
+  const statuses = asMultiFilterValues(filters.status);
+  if (statuses.length > 0) {
+    const allowed = new Set(statuses);
+    r = r.filter((x) => allowed.has(getPurchaseInvoicePaymentStatus(x)));
   }
-  if (filters.approvalStatus && filters.approvalStatus !== "all") {
-    r = r.filter((x) => getPurchaseInvoiceApprovalStatus(x) === filters.approvalStatus);
+  const approvalStatuses = asMultiFilterValues(filters.approvalStatus);
+  if (approvalStatuses.length > 0) {
+    const allowed = new Set(approvalStatuses);
+    r = r.filter((x) => allowed.has(getPurchaseInvoiceApprovalStatus(x)));
   }
-  if (filters.postingStatus && filters.postingStatus !== "all") {
-    r = r.filter((x) => getPurchaseInvoicePostingStatus(x) === filters.postingStatus);
+  const postingStatuses = asMultiFilterValues(filters.postingStatus);
+  if (postingStatuses.length > 0) {
+    const allowed = new Set(postingStatuses);
+    r = r.filter((x) => allowed.has(getPurchaseInvoicePostingStatus(x)));
   }
-  if (filters.branchGstin && filters.branchGstin !== "all") {
-    r = r.filter((x) => (x.branchGstin ?? COMPANY_BILLING.gstNumber) === filters.branchGstin);
+  const branchGstins = asMultiFilterValues(filters.branchGstin);
+  if (branchGstins.length > 0) {
+    const allowed = new Set(branchGstins);
+    r = r.filter((x) => allowed.has(x.branchGstin ?? COMPANY_BILLING.gstNumber));
   }
   if (filters.dateFrom) r = r.filter((x) => x.invoiceDate >= filters.dateFrom);
   if (filters.dateTo) r = r.filter((x) => x.invoiceDate <= filters.dateTo);

@@ -1,5 +1,6 @@
 import { axiosInstance } from "@/api/axios";
 import { API_ENDPOINTS } from "@/api/endpoints";
+import { toApiFilterValue, toFilterStringList } from "@/lib/listing/filter-values";
 import { WarehouseService } from "@/services/warehouse.service";
 import { ReorderFormData, ReorderLevel, ReorderSummary } from "../types";
 
@@ -105,8 +106,35 @@ function buildListFilters(filters: Record<string, unknown> | undefined): Record<
 
   const mapped: Record<string, unknown> = {};
   Object.entries(filters).forEach(([key, val]) => {
-    const value = Array.isArray(val) ? val[0] : val;
-    if (value === undefined || value === null || value === "") return;
+    if (key === "activeStatus") {
+      const tokens = toFilterStringList(val).map((t) => t.toLowerCase());
+      const hasActive = tokens.includes("active");
+      const hasInactive = tokens.includes("inactive");
+      if (hasActive && hasInactive) return;
+      if (hasActive) mapped.is_active = true;
+      else if (hasInactive) mapped.is_active = false;
+      return;
+    }
+
+    if (key === "status") {
+      const statuses = toFilterStringList(val)
+        .map((token) => token.trim().toLowerCase().replace(/_/g, " "))
+        .filter((token) => token === "in stock" || token === "low stock");
+      const status = toApiFilterValue(statuses);
+      if (status !== undefined) mapped.status = status;
+      return;
+    }
+
+    // Keep audit / date-range objects intact
+    if (val && typeof val === "object" && !Array.isArray(val)) {
+      if (key === "createdBy") mapped.created_by_user = val;
+      else if (key === "updatedBy") mapped.updated_by_user = val;
+      else mapped[key] = val;
+      return;
+    }
+
+    const value = toApiFilterValue(val);
+    if (value === undefined) return;
 
     if (key === "product") mapped.product_name = value;
     else if (key === "masterItemId") mapped.master_item_id = value;
@@ -116,14 +144,6 @@ function buildListFilters(filters: Record<string, unknown> | undefined): Record<
     else if (key === "warehouse") mapped.warehouse_name = value;
     else if (key === "createdBy") mapped.created_by_user = value;
     else if (key === "updatedBy") mapped.updated_by_user = value;
-    else if (key === "activeStatus") mapped.is_active = String(value) === "active";
-    else if (key === "status") {
-      // Backend computes status as "in stock" | "low stock"
-      const normalized = String(value).trim().toLowerCase().replace(/_/g, " ");
-      if (normalized === "in stock" || normalized === "low stock") {
-        mapped.status = normalized;
-      }
-    }
   });
 
   return mapped;

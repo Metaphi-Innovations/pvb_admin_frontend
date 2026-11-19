@@ -3,6 +3,7 @@ import { API_ENDPOINTS } from "@/api/endpoints";
 import type { FilterState } from "@/components/listing/types";
 import type { SalesOrderRecord } from "@/app/(app)/warehouse/packing/types";
 import { extractPackingProductDisplay } from "@/app/(app)/warehouse/packing/lib/packing-qty-stack";
+import { toApiFilterValue } from "@/lib/listing/filter-values";
 
 export interface PackingListListItem {
   id: string;
@@ -163,8 +164,8 @@ export function buildPackingListApiFilters(
 ): Record<string, unknown> {
   const apiFilters: Record<string, unknown> = {};
 
-  const warehouseName = firstFilterValue(filters.warehouse);
-  if (warehouseName) {
+  const warehouseName = toApiFilterValue(filters.warehouse);
+  if (warehouseName !== undefined) {
     apiFilters.warehouse = { warehouse_name: warehouseName };
   }
 
@@ -172,20 +173,20 @@ export function buildPackingListApiFilters(
     apiFilters.warehouse_id = selectedWarehouse;
   }
 
-  const customerName = firstFilterValue(filters.customer);
-  if (customerName) {
+  const customerName = toApiFilterValue(filters.customer);
+  if (customerName !== undefined) {
     apiFilters.customer_name = customerName;
   }
 
-  const status = firstFilterValue(filters.status);
-  if (status) {
+  const status = toApiFilterValue(filters.status);
+  if (status !== undefined) {
     apiFilters.status = status;
   }
 
-  const orderNo = firstFilterValue(
+  const orderNo = toApiFilterValue(
     filters.packingNo || filters.salesOrderNo || filters.packingListNo,
   );
-  if (orderNo) {
+  if (orderNo !== undefined) {
     apiFilters.source_document_no = orderNo;
   }
 

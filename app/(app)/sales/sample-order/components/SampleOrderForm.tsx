@@ -12,12 +12,6 @@ import {
 } from "@/components/ui/popover";
 import { Check, ChevronsUpDown, AlertCircle, Search, Info } from "lucide-react";
 import type { Employee } from "@/app/(app)/user-management/employee/employee-data";
-import type { Customer } from "@/app/(app)/masters/customers/customer-data";
-import {
-	customerMatchesTransactionSearch,
-	formatCustomerDropdownLabel,
-	formatCustomerDropdownSublabel,
-} from "@/lib/masters/entity-display";
 import { useCustomerDetails, useCustomersDropdown, useWarehousesDropdown, useProductPricingDropdown } from "@/hooks/sales/use-sales-orders";
 import { useProductsWithWarehouseStock, withLatestLineStock } from "@/hooks/sales/use-warehouse-stock";
 import { setDynamicPricingRecords, mapProductPricingDropdownRecords } from "@/app/(app)/masters/pricing/pricing-data";
@@ -476,36 +470,6 @@ export default function SampleOrderForm({
 						error={errors.warehouseId}
 						getLabel={(w) => w.warehouseCode ? `${w.warehouseCode} — ${w.warehouseName}` : w.warehouseName}
 						getSublabel={(w) => w.state}
-					/>
-				</div>
-
-				<div className="space-y-1 md:col-span-2 col-span-2">
-					<Label className="text-xs font-medium">Customer</Label>
-					<SearchableDropdown<any>
-						label=""
-						value={form.customerId !== undefined && form.customerId !== null ? form.customerId : null}
-						onChange={(id) => {
-						const c = customers.find((x) => x.id === id) as any;
-						const hadProducts = form.lineItems.some((l) => l.productId);
-						const updatedForm = {
-							...form,
-							customerId: id,
-							shipTo: form.shipTo || emptySampleShipTo(),
-							// Clear products when customer changes
-							lineItems: hadProducts ? [] : form.lineItems,
-						};
-						if (c?.salesManId) {
-							updatedForm.salesManId = c.salesManId;
-							const tm = salesmen.find((s) => String(s.id) === String(c.salesManId)) as any;
-							if (tm) updatedForm.shipTo = shipToFromTerritoryManager(tm);
-						}
-						onChange(updatedForm);
-					}}
-						options={customers as any}
-						placeholder="Optional — select customer…"
-						error={errors.customerId}
-						getLabel={formatCustomerDropdownLabel}
-						getSublabel={formatCustomerDropdownSublabel}
 					/>
 				</div>
 

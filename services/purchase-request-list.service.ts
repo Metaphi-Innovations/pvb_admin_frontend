@@ -11,6 +11,7 @@ import {
   type PRListStatus,
   type PRPoStatus,
 } from "@/lib/procurement/pr-status";
+import { toApiFilterValue, toFilterStringList } from "@/lib/listing/filter-values";
 
 export interface PurchaseRequestListItem {
   id: string;
@@ -93,11 +94,6 @@ function asDateOnly(value: unknown): string {
   return parsed.toISOString().slice(0, 10);
 }
 
-function firstFilterValue(value: unknown): string {
-  if (Array.isArray(value)) return asString(value[0]).trim();
-  return asString(value).trim();
-}
-
 function mapItem(raw: Record<string, unknown>): PurchaseRequestListItem {
   return {
     id: asString(raw.id),
@@ -174,29 +170,33 @@ export function buildPurchaseRequestApiFilters(
 ): Record<string, unknown> {
   const apiFilters: Record<string, unknown> = {};
 
-  const prNumber = firstFilterValue(filters.prNumber);
-  if (prNumber) {
+  const prNumber = toApiFilterValue(filters.prNumber);
+  if (prNumber !== undefined) {
     apiFilters.pr_number = prNumber;
   }
 
-  const columnStatus = firstFilterValue(filters.approvalStatus);
-  if (columnStatus) {
-    const backendStatus = mapFrontendStatusToBackend(columnStatus);
-    if (backendStatus) apiFilters.status = backendStatus;
+  const mappedStatuses = toFilterStringList(filters.approvalStatus)
+    .map((token) => mapFrontendStatusToBackend(token))
+    .filter((status): status is NonNullable<typeof status> => Boolean(status));
+  const columnStatus = toApiFilterValue(mappedStatuses);
+  if (columnStatus !== undefined) {
+    apiFilters.status = columnStatus;
   } else if (tabStatus && tabStatus !== "all") {
     const backendStatus = mapFrontendStatusToBackend(tabStatus);
     if (backendStatus) apiFilters.status = backendStatus;
   }
 
-  const requestedBy = firstFilterValue(filters.requestedBy);
-  if (requestedBy) {
+  const requestedBy = toApiFilterValue(filters.requestedBy);
+  if (requestedBy !== undefined) {
     apiFilters.requested_by_name = requestedBy;
   }
 
-  const poStatus = firstFilterValue(filters.poStatus);
-  if (poStatus) {
-    const backendPo = mapFrontendPoStatusToBackend(poStatus);
-    if (backendPo) apiFilters.po_status = backendPo;
+  const mappedPoStatuses = toFilterStringList(filters.poStatus)
+    .map((token) => mapFrontendPoStatusToBackend(token))
+    .filter((status): status is NonNullable<typeof status> => Boolean(status));
+  const poStatus = toApiFilterValue(mappedPoStatuses);
+  if (poStatus !== undefined) {
+    apiFilters.po_status = poStatus;
   }
 
   const requiredByDate = filters.requiredByDate;

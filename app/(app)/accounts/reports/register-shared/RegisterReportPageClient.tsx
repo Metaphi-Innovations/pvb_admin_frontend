@@ -43,7 +43,7 @@ import {
   ReportFilterSummary,
   ReportFilterField,
   ReportFinancialYearFilter,
-  ReportStateFilter,
+  ReportStateMultiFilter,
   ACCOUNTS_FILTER_CONTROL_CLASS as filterControlClass,
   useReportDateRange,
 } from "@/components/accounts/ReportFilters";
@@ -90,7 +90,6 @@ import {
 } from "../register-shared/register-utils";
 
 const GST_RATE_OPTIONS = [
-  { value: "all", label: "All rates" },
   { value: "5", label: "5%" },
   { value: "12", label: "12%" },
   { value: "18", label: "18%" },
@@ -98,7 +97,6 @@ const GST_RATE_OPTIONS = [
 ];
 
 const GST_TYPE_OPTIONS = [
-  { value: "all", label: "All GST types" },
   { value: "cgst_sgst", label: "CGST/SGST" },
   { value: "igst", label: "IGST" },
 ];
@@ -470,19 +468,19 @@ function RegisterReportBody({
   setSalespersonIds,
   customerTypes,
   setCustomerTypes,
-  stateFilter,
-  setStateFilter,
+  stateFilters,
+  setStateFilters,
   invoiceNo,
   setInvoiceNo,
-  gstType,
-  setGstType,
+  gstTypes,
+  setGstTypes,
   stateOptions,
   warehouseOptions,
   productOptions,
   salespeople,
   moreFiltersActive,
-  gstRate,
-  setGstRate,
+  gstRates,
+  setGstRates,
   search,
   setSearch,
 }: {
@@ -518,19 +516,19 @@ function RegisterReportBody({
   setSalespersonIds: (v: string[]) => void;
   customerTypes: string[];
   setCustomerTypes: (v: string[]) => void;
-  stateFilter: string;
-  setStateFilter: (v: string) => void;
+  stateFilters: string[];
+  setStateFilters: (v: string[]) => void;
   invoiceNo: string;
   setInvoiceNo: (v: string) => void;
-  gstType: string;
-  setGstType: (v: string) => void;
+  gstTypes: string[];
+  setGstTypes: (v: string[]) => void;
   stateOptions: string[];
   warehouseOptions: string[];
   productOptions: { value: string; label: string }[];
   salespeople: string[];
   moreFiltersActive: number;
-  gstRate: string;
-  setGstRate: (v: string) => void;
+  gstRates: string[];
+  setGstRates: (v: string[]) => void;
   search: string;
   setSearch: (v: string) => void;
 }) {
@@ -559,10 +557,10 @@ function RegisterReportBody({
     productIds,
     salespersonIds,
     customerTypes,
-    stateFilter,
+    stateFilters,
     invoiceNo,
-    gstType,
-    gstRate,
+    gstTypes,
+    gstRates,
     search,
     pageSize,
   ]);
@@ -663,9 +661,9 @@ function RegisterReportBody({
                     className={cn(filterControlClass, "w-full")}
                   />
                 </ReportFilterField>
-                <ReportStateFilter
-                  value={stateFilter}
-                  onChange={setStateFilter}
+                <ReportStateMultiFilter
+                  values={stateFilters}
+                  onChange={setStateFilters}
                   states={stateOptions}
                 />
                 <ReportStatusMultiFilter
@@ -674,20 +672,12 @@ function RegisterReportBody({
                   options={statusOptions}
                   label="Status"
                 />
-                <ReportFilterField label="GST Type" minWidthClass="min-w-[140px]">
-                  <Select value={gstType} onValueChange={setGstType}>
-                    <SelectTrigger className={cn(filterControlClass, "w-full")}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {GST_TYPE_OPTIONS.map((o) => (
-                        <SelectItem key={o.value} value={o.value}>
-                          {o.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </ReportFilterField>
+                <ReportStatusMultiFilter
+                  label="GST Type"
+                  values={gstTypes}
+                  onChange={setGstTypes}
+                  options={GST_TYPE_OPTIONS}
+                />
               </>
             ) : (
               <>
@@ -710,20 +700,12 @@ function RegisterReportBody({
                     products={productOptions}
                   />
                 </ReportMoreFilters>
-                <ReportFilterField label="GST Rate" minWidthClass="min-w-[120px]">
-                  <Select value={gstRate} onValueChange={setGstRate}>
-                    <SelectTrigger className={cn(filterControlClass, "w-full")}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {GST_RATE_OPTIONS.map((o) => (
-                        <SelectItem key={o.value} value={o.value}>
-                          {o.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </ReportFilterField>
+                <ReportStatusMultiFilter
+                  label="GST Rate"
+                  values={gstRates}
+                  onChange={setGstRates}
+                  options={GST_RATE_OPTIONS}
+                />
                 <ReportSearchFilter
                   value={search}
                   onChange={setSearch}
@@ -810,10 +792,10 @@ export function RegisterReportPageClient({ config }: { config: RegisterReportPag
   const [productIds, setProductIds] = useState<string[]>([]);
   const [salespersonIds, setSalespersonIds] = useState<string[]>([]);
   const [customerTypes, setCustomerTypes] = useState<string[]>([]);
-  const [stateFilter, setStateFilter] = useState("all");
+  const [stateFilters, setStateFilters] = useState<string[]>([]);
   const [invoiceNo, setInvoiceNo] = useState("");
-  const [gstType, setGstType] = useState("all");
-  const [gstRate, setGstRate] = useState("all");
+  const [gstTypes, setGstTypes] = useState<string[]>([]);
+  const [gstRates, setGstRates] = useState<string[]>([]);
   const [search, setSearch] = useState("");
 
   const customers = useMemo(() => loadCustomers(), []);
@@ -869,13 +851,13 @@ export function RegisterReportPageClient({ config }: { config: RegisterReportPag
       branch: branchIds,
       warehouse: isSales ? warehouseIds : undefined,
       customerTypes: isSales ? customerTypes : undefined,
-      states: isSales && stateFilter !== "all" ? stateFilter : undefined,
+      states: isSales ? stateFilters : undefined,
       statuses,
       voucherTypes,
       product: productIds,
       salespersons: isSales ? salespersonIds : undefined,
-      gstRate,
-      gstType: isSales ? gstType : undefined,
+      gstRate: gstRates,
+      gstType: isSales ? gstTypes : undefined,
       invoiceNo: isSales ? invoiceNo : undefined,
       search,
     }),
@@ -888,13 +870,13 @@ export function RegisterReportPageClient({ config }: { config: RegisterReportPag
       branchIds,
       warehouseIds,
       customerTypes,
-      stateFilter,
+      stateFilters,
       statuses,
       voucherTypes,
       productIds,
       salespersonIds,
-      gstRate,
-      gstType,
+      gstRates,
+      gstTypes,
       invoiceNo,
       search,
     ],
@@ -919,8 +901,8 @@ export function RegisterReportPageClient({ config }: { config: RegisterReportPag
       statuses.length > 0 ||
       salespersonIds.length > 0 ||
       customerTypes.length > 0 ||
-      stateFilter !== "all" ||
-      gstType !== "all" ||
+      stateFilters.length > 0 ||
+      gstTypes.length > 0 ||
       financialYearId !== "all"
     : search.trim() !== "" ||
       branchIds.length > 0 ||
@@ -928,7 +910,7 @@ export function RegisterReportPageClient({ config }: { config: RegisterReportPag
       statuses.length > 0 ||
       voucherTypes.length > 0 ||
       productIds.length > 0 ||
-      gstRate !== "all";
+      gstRates.length > 0;
 
   const clearFilters = () => {
     setSearch("");
@@ -941,9 +923,9 @@ export function RegisterReportPageClient({ config }: { config: RegisterReportPag
     setProductIds([]);
     setSalespersonIds([]);
     setCustomerTypes([]);
-    setStateFilter("all");
-    setGstType("all");
-    setGstRate("all");
+    setStateFilters([]);
+    setGstTypes([]);
+    setGstRates([]);
     setFinancialYearId("all");
   };
 
@@ -973,9 +955,18 @@ export function RegisterReportPageClient({ config }: { config: RegisterReportPag
             isSales ? SALES_STATUS_OPTIONS : PURCHASE_STATUS_OPTIONS,
             "Status",
           );
-    const gstLabel = GST_RATE_OPTIONS.find((o) => o.value === gstRate)?.label ?? gstRate;
-    const gstTypeLabel =
-      GST_TYPE_OPTIONS.find((o) => o.value === gstType)?.label ?? "All GST types";
+    const gstLabel = formatMultiSelectLabel(
+      gstRates,
+      GST_RATE_OPTIONS,
+      "Rate",
+      "All rates",
+    );
+    const gstTypeLabel = formatMultiSelectLabel(
+      gstTypes,
+      GST_TYPE_OPTIONS,
+      "GST Type",
+      "All GST types",
+    );
     const branchLabel =
       branchIds.length === 0
         ? "All branches"
@@ -1017,8 +1008,8 @@ export function RegisterReportPageClient({ config }: { config: RegisterReportPag
     branchIds,
     warehouseIds,
     statuses,
-    gstRate,
-    gstType,
+    gstRates,
+    gstTypes,
     invoiceNo,
     search,
   ]);
@@ -1053,21 +1044,35 @@ export function RegisterReportPageClient({ config }: { config: RegisterReportPag
         onRemove: () => setCustomerTypes([]),
       });
     }
-    if (isSales && stateFilter !== "all") {
-      items.push({
-        id: "state",
-        label: "State",
-        value: stateFilter,
-        onRemove: () => setStateFilter("all"),
-      });
-    }
-    if (isSales && gstType !== "all") {
-      items.push({
-        id: "gstType",
-        label: "GST Type",
-        value: GST_TYPE_OPTIONS.find((o) => o.value === gstType)?.label ?? gstType,
-        onRemove: () => setGstType("all"),
-      });
+    if (isSales) {
+      items.push(
+        buildEntityFilterSummary(
+          "state",
+          "State",
+          stateFilters,
+          stateOptions.map((s) => ({ value: s, label: s })),
+          () => setStateFilters([]),
+        ),
+      );
+      items.push(
+        buildEntityFilterSummary(
+          "gstType",
+          "GST Type",
+          gstTypes,
+          GST_TYPE_OPTIONS,
+          () => setGstTypes([]),
+        ),
+      );
+    } else {
+      items.push(
+        buildEntityFilterSummary(
+          "gstRate",
+          "GST Rate",
+          gstRates,
+          GST_RATE_OPTIONS,
+          () => setGstRates([]),
+        ),
+      );
     }
     if (statuses.length > 0) {
       items.push({
@@ -1086,8 +1091,10 @@ export function RegisterReportPageClient({ config }: { config: RegisterReportPag
     vendorSelectOptions,
     warehouseIds,
     customerTypes,
-    stateFilter,
-    gstType,
+    stateFilters,
+    stateOptions,
+    gstTypes,
+    gstRates,
     statuses,
   ]);
 
@@ -1170,19 +1177,19 @@ export function RegisterReportPageClient({ config }: { config: RegisterReportPag
         setSalespersonIds={setSalespersonIds}
         customerTypes={customerTypes}
         setCustomerTypes={setCustomerTypes}
-        stateFilter={stateFilter}
-        setStateFilter={setStateFilter}
+        stateFilters={stateFilters}
+        setStateFilters={setStateFilters}
         invoiceNo={invoiceNo}
         setInvoiceNo={setInvoiceNo}
-        gstType={gstType}
-        setGstType={setGstType}
+        gstTypes={gstTypes}
+        setGstTypes={setGstTypes}
         stateOptions={stateOptions}
         warehouseOptions={warehouseOptions}
         productOptions={productOptions}
         salespeople={salespeople}
         moreFiltersActive={moreFiltersActive}
-        gstRate={gstRate}
-        setGstRate={setGstRate}
+        gstRates={gstRates}
+        setGstRates={setGstRates}
         search={search}
         setSearch={setSearch}
       />

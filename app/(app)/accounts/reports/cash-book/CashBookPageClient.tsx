@@ -50,6 +50,7 @@ function CashBookPageContent() {
 
   // Column Filters
   const [columnFilters, setColumnFilters] = useState<{
+    voucherType?: string;
     voucherNo?: string;
     particular?: string;
     reference?: string;
@@ -221,9 +222,10 @@ function CashBookPageContent() {
     setError(null);
 
     const voucherTypeParam =
-      voucherTypes.length > 0 && voucherTypes[0] !== "all"
+      columnFilters.voucherType ||
+      (voucherTypes.length > 0 && voucherTypes[0] !== "all"
         ? voucherTypes.join(",")
-        : undefined;
+        : undefined);
 
     CashBookApiService.getCashBook(
       {
@@ -387,9 +389,10 @@ function CashBookPageContent() {
     setExporting(true);
     try {
       const voucherTypeParam =
-        voucherTypes.length > 0 && voucherTypes[0] !== "all"
+        columnFilters.voucherType ||
+        (voucherTypes.length > 0 && voucherTypes[0] !== "all"
           ? voucherTypes.join(",")
-          : undefined;
+          : undefined);
 
       await CashBookApiService.exportExcel(
         {
@@ -420,9 +423,10 @@ function CashBookPageContent() {
     setExporting(true);
     try {
       const voucherTypeParam =
-        voucherTypes.length > 0 && voucherTypes[0] !== "all"
+        columnFilters.voucherType ||
+        (voucherTypes.length > 0 && voucherTypes[0] !== "all"
           ? voucherTypes.join(",")
-          : undefined;
+          : undefined);
 
       await CashBookApiService.exportPdf(
         {
@@ -533,6 +537,10 @@ function CashBookPageContent() {
                   onRemoveSort={handleRemoveSort}
                   filters={columnFilters}
                   onFilterChange={handleColumnFilterChange}
+                  voucherTypeOptions={voucherTypeOptions.map((o) => ({
+                    value: o.value,
+                    count: 0,
+                  }))}
                   loading={loading}
                 />
               ) : loading ? (

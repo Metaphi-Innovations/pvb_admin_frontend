@@ -20,6 +20,32 @@ export function asText(value: unknown, fallback = "-"): string {
   return text ? text : fallback;
 }
 
+/** GST portal address field labels sometimes stored in registered_gst_address. */
+const GST_ADDRESS_FIELD_LABEL_RE =
+  /(?:Building No\.\/Flat No\.|Building No\.|Flat No\.|Floor No\.|Premise No\.|Road\/Street|Street|Locality\/Sub Locality|Sub Locality|Locality|City\/Town\/Village|City\/Town|Town\/Village|District|State|PIN Code|Pincode|Landmark)\s*:\s*/gi;
+
+const GST_ADDRESS_LABEL_HINT_RE =
+  /(?:Building No\.\/Flat No\.|Road\/Street|Locality\/Sub Locality|City\/Town\/Village|PIN Code)\s*:/i;
+
+/**
+ * Strip GST-portal field labels from an address so PDFs show values only.
+ * e.g. "Building No./Flat No.: KHATIAN NO-2167, Road/Street: J.L NO-2"
+ *   → "KHATIAN NO-2167, J.L NO-2"
+ */
+export function stripGstAddressFieldLabels(value: unknown): string {
+  let text = String(value ?? "").trim();
+  if (!text) return "";
+  if (GST_ADDRESS_LABEL_HINT_RE.test(text)) {
+    text = text.replace(GST_ADDRESS_FIELD_LABEL_RE, "");
+  }
+  return text
+    .replace(/,{2,}/g, ",")
+    .replace(/\s*,\s*/g, ", ")
+    .replace(/^,\s*|,\s*$/g, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
 export function escapeHtml(value: unknown): string {
   return asText(value, "-")
     .replaceAll("&", "&amp;")

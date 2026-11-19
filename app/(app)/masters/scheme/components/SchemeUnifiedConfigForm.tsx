@@ -39,6 +39,7 @@ import {
   applySelectedProductIds,
   applySpecialDiscountBasedOn,
   applySpecialDiscountProductIds,
+  applySpecialDiscountQuantityUom,
   buildSchemeWorkingSummary,
   formatProductsApplicabilitySummary,
   categoryShowsImpactFlags,
@@ -49,11 +50,15 @@ import {
   formShowsProductApplicability,
   getProductDiscountRowError,
   productIdsWithDiscountData,
+  QUANTITY_MEASURED_AS_OPTIONS,
+  quantityUomLabel,
+  normalizeSchemeQuantityUom,
   resolveAutomaticBenefit,
   schemeTypeDisplayLabel,
   syncProductDiscountRules,
   type ProductDiscountRuleForm,
   type ProductDiscountSetupMode,
+  type SchemeQuantityUom,
   type SchemeUnifiedForm,
   type SpecialDiscountBasedOnUI,
   type SpecialEvaluationScopeUI,
@@ -103,6 +108,7 @@ const SPECIAL_SETTLEMENT_RUN_MODE_SELECT_OPTIONS = toSchemeSelectOptions(
 const SPECIAL_DISCOUNT_BASED_ON_SELECT_OPTIONS = toSchemeSelectOptions(
   SPECIAL_DISCOUNT_BASED_ON_OPTIONS,
 );
+const QUANTITY_MEASURED_AS_SELECT_OPTIONS = [...QUANTITY_MEASURED_AS_OPTIONS];
 const PAYMENT_CONDITION_SELECT_OPTIONS = toSchemeSelectOptions(
   PAYMENT_CONDITION_OPTIONS,
 );
@@ -495,19 +501,26 @@ function SpecialDiscountConditionFields({
 
   const isQty = form.specialDiscountBasedOn === "Sales Quantity";
   const hasSlabs = form.specialHasSlabs;
-  const isMultiInvoice = form.specialEvaluationScope === "Multiple Invoices";
+  const qtyUom = normalizeSchemeQuantityUom(form.specialDiscountUom);
+  const isQtyBase = isQty && qtyUom === "KG_LTR";
+  const isMultiInvoice =
+    !isQtyBase && form.specialEvaluationScope === "Multiple Invoices";
+  const qtyUnitLabel = quantityUomLabel(qtyUom);
 
   const helpText = (() => {
     const scopeBit =
-      form.specialEvaluationScope === "One Invoice"
+      isQtyBase || form.specialEvaluationScope === "One Invoice"
         ? "on a single invoice"
         : "across invoices during Valid From–Valid To";
     const runBit =
       isMultiInvoice || form.specialSettlementRunMode === "Automatic"
         ? "Entitlement is created automatically"
         : "Entitlement requires manual settlement via Credit Note";
+    if (isQty && isQtyBase) {
+      return `Combined Quantity Base (dispatch qty × product net weight as KG/LTR) of selected products ${scopeBit} determines qualification. Discount applies once on the combined eligible value. ${runBit}.`;
+    }
     if (isQty) {
-      return `Net sold quantity of selected products combined (invoice qty − returned qty) ${scopeBit} determines qualification. Discount applies once on the combined eligible value. ${runBit}.`;
+      return `Net sold unit quantity of selected products combined (invoice qty − returned qty) ${scopeBit} determines qualification. Discount applies once on the combined eligible value. ${runBit}.`;
     }
     return `Eligible Net Taxable Sales of selected products combined (Taxable Sales − Sales Returns, excluding GST) ${scopeBit} determines qualification. Discount applies once on the combined eligible value. ${runBit}.`;
   })();
@@ -516,20 +529,30 @@ function SpecialDiscountConditionFields({
     <div className="space-y-2">
       <div className="scheme-row">
         <Field className="scheme-w-select-md" label="Evaluate On" required>
-          <SchemeSearchableSelect
-            value={form.specialEvaluationScope}
-            onChange={(v) => {
-              const scope = v as SpecialEvaluationScopeUI;
-              onChange({
-                ...form,
-                specialEvaluationScope: scope,
-                ...(scope === "Multiple Invoices"
-                  ? { specialSettlementRunMode: "Automatic" as const }
-                  : {}),
-              });
-            }}
-            options={SPECIAL_EVALUATION_SCOPE_SELECT_OPTIONS}
-          />
+          <div
+            title={
+              isQtyBase
+                ? "Quantity Base (KG/LTR) is always One Invoice"
+                : undefined
+            }
+          >
+            <SchemeSearchableSelect
+              value={isQtyBase ? "One Invoice" : form.specialEvaluationScope}
+              onChange={(v) => {
+                if (isQtyBase) return;
+                const scope = v as SpecialEvaluationScopeUI;
+                onChange({
+                  ...form,
+                  specialEvaluationScope: scope,
+                  ...(scope === "Multiple Invoices"
+                    ? { specialSettlementRunMode: "Automatic" as const }
+                    : {}),
+                });
+              }}
+              options={SPECIAL_EVALUATION_SCOPE_SELECT_OPTIONS}
+              disabled={isQtyBase}
+            />
+          </div>
         </Field>
         <Field className="scheme-w-select-md" label="Entitlement Mode" required>
           <div
@@ -586,6 +609,26 @@ function SpecialDiscountConditionFields({
             options={SPECIAL_DISCOUNT_BASED_ON_SELECT_OPTIONS}
           />
         </Field>
+        {isQty ? (
+          <Field
+            className="scheme-w-select-md"
+            label="Quantity Measured As"
+            required
+          >
+            <SchemeSearchableSelect
+              value={qtyUom}
+              onChange={(v) =>
+                onChange(
+                  applySpecialDiscountQuantityUom(
+                    form,
+                    v as SchemeQuantityUom,
+                  ),
+                )
+              }
+              options={QUANTITY_MEASURED_AS_SELECT_OPTIONS}
+            />
+          </Field>
+        ) : null}
       </div>
 
       <p className="text-[10px] text-muted-foreground leading-snug max-w-xl">
@@ -596,13 +639,19 @@ function SpecialDiscountConditionFields({
         <div className="scheme-row">
           <Field
             className="scheme-w-num-cell"
-            label={isQty ? "Min. Quantity" : "Min. Sales Value"}
+            label={
+              isQty
+                ? isQtyBase
+                  ? "Min. Quantity (KG/LTR)"
+                  : "Min. Quantity (Units)"
+                : "Min. Sales Value"
+            }
             required
           >
             <SchemeNumberField
               value={form.specialThresholdValue}
               onChange={(v) => set("specialThresholdValue", v)}
-              placeholder={isQty ? "Qty" : "₹"}
+              placeholder={isQty ? (isQtyBase ? "KG/LTR" : "Qty") : "₹"}
               min={0}
               className="scheme-ctrl"
             />
@@ -769,8 +818,12 @@ function SpecialDiscountConditionFields({
             <table className="scheme-slab-table">
               <thead>
                 <tr>
-                  <th className="scheme-w-num-cell">Quantity From</th>
-                  <th className="scheme-w-num-cell">Quantity To</th>
+                  <th className="scheme-w-num-cell">
+                    Quantity From ({qtyUnitLabel})
+                  </th>
+                  <th className="scheme-w-num-cell">
+                    Quantity To ({qtyUnitLabel})
+                  </th>
                   <th className="scheme-w-select-sm">Discount Type</th>
                   <th
                     className="scheme-w-num-cell"
@@ -2006,13 +2059,24 @@ export function SchemeUnifiedConfigForm({
                   <span className="font-semibold text-foreground">Scheme Period: </span>
                   {form.startDate || "—"} to {form.endDate || "—"}
                 </p>
+                {form.specialDiscountBasedOn === "Sales Quantity" ? (
+                  <p>
+                    <span className="font-semibold text-foreground">
+                      Quantity Measured As:{" "}
+                    </span>
+                    {normalizeSchemeQuantityUom(form.specialDiscountUom) ===
+                    "KG_LTR"
+                      ? "Quantity Base (KG/LTR)"
+                      : "Unit Qty (Pieces)"}
+                  </p>
+                ) : null}
                 {!form.specialHasSlabs ? (
                   <p>
                     <span className="font-semibold text-foreground">
                       Flat threshold:{" "}
                     </span>
                     {form.specialDiscountBasedOn === "Sales Quantity"
-                      ? `${form.specialThresholdValue || "—"} units`
+                      ? `${form.specialThresholdValue || "—"} ${quantityUomLabel(form.specialDiscountUom)}`
                       : `₹${form.specialThresholdValue || "—"}`}
                     {" → "}
                     {formatSlabDiscountLabel(
@@ -2096,16 +2160,20 @@ export function SchemeUnifiedConfigForm({
                             s.discountType,
                             s.discountValue,
                           );
+                          const unitLabel = quantityUomLabel(
+                            form.specialDiscountUom,
+                          );
                           if (!s.quantityTo.trim()) {
                             return (
                               <li key={s.id}>
-                                {s.quantityFrom}+ units → {disc}
+                                {s.quantityFrom}+ {unitLabel} → {disc}
                               </li>
                             );
                           }
                           return (
                             <li key={s.id}>
-                              {s.quantityFrom}–{s.quantityTo} units → {disc}
+                              {s.quantityFrom}–{s.quantityTo} {unitLabel} →{" "}
+                              {disc}
                             </li>
                           );
                         })}

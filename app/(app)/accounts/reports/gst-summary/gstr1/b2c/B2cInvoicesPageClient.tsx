@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, Fragment } from "react";
+import { useCallback, useEffect, useMemo, useState, Fragment, type ReactNode } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
@@ -36,11 +36,15 @@ import {
   AccountsTableBody,
   AccountsTableCell,
   AccountsTableHead,
-  AccountsTableHeadCell,
   AccountsTableHeadRow,
   AccountsTableRow,
   AccountsTableScroll,
 } from "@/components/accounts/AccountsTable";
+import {
+  AccountsColumnFilterProvider,
+  SortTh,
+  useAccountsFilteredRows,
+} from "@/app/(app)/accounts/components/AccountsUI";
 import {
   ReportFilterRow,
   ReportDateRangeFilter,
@@ -51,6 +55,7 @@ import {
   ReportMoreFilters,
   ReportFilterSummary,
   ReportFilterField,
+  ReportStatusMultiFilter,
   ACCOUNTS_FILTER_LABEL_CLASS as filterLabelClass,
   ACCOUNTS_FILTER_CONTROL_CLASS as filterControlClass,
   REPORT_BRANCH_OPTIONS,
@@ -94,18 +99,46 @@ import { exportB2cInvoicesToExcel, exportB2cInvoicesToPdf } from "./gstr1-b2c-ex
 import { B2cInvoiceDetailSheet } from "./components/B2cInvoiceDetailSheet";
 import { useDebouncedValue } from "../../../pl/pl-hooks";
 
+
+function getB2cFilterCell(row: B2cInvoiceRow, colKey: string): string {
+  switch (colKey) {
+    case "invoiceNo":
+      return row.invoiceNo || "";
+    case "customerName":
+      return row.customerName || "";
+    case "customerType":
+      return row.customerType || "";
+    case "placeOfSupply":
+      return row.placeOfSupply || "";
+    case "status":
+      return row.status || "";
+    default:
+      return "";
+  }
+}
+
+function B2cFilteredRows({
+  rows,
+  children,
+}: {
+  rows: B2cInvoiceRow[];
+  children: (visible: B2cInvoiceRow[]) => ReactNode;
+}) {
+  const visible = useAccountsFilteredRows(rows);
+  return <>{children(visible)}</>;
+}
+
+
 const PLACEHOLDER_DATE = "2025-04-01";
 
-const GST_RATE_OPTIONS: { value: B2cGstRateFilter; label: string }[] = [
-  { value: "all", label: "All rates" },
+const GST_RATE_OPTIONS: { value: string; label: string }[] = [
   { value: "5", label: "5%" },
   { value: "12", label: "12%" },
   { value: "18", label: "18%" },
   { value: "28", label: "28%" },
 ];
 
-const STATUS_OPTIONS: { value: B2cStatusFilter; label: string }[] = [
-  { value: "all", label: "All" },
+const STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: "valid", label: "Valid" },
   { value: "exception", label: "Exception" },
 ];
@@ -192,9 +225,9 @@ export default function B2cInvoicesPageClient() {
   const [branch, setBranch] = useState<string[]>([]);
   const [warehouse, setWarehouse] = useState<string[]>([]);
   const [customerId, setCustomerId] = useState<string[]>([]);
-  const [gstRate, setGstRate] = useState<B2cGstRateFilter>("all");
+  const [gstRates, setGstRates] = useState<string[]>([]);
   const [invoiceNo, setInvoiceNo] = useState("");
-  const [status, setStatus] = useState<B2cStatusFilter>("all");
+  const [statuses, setStatuses] = useState<string[]>([]);
   const [exporting, setExporting] = useState(false);
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
   const [viewRow, setViewRow] = useState<B2cInvoiceRow | null>(null);
@@ -222,9 +255,9 @@ export default function B2cInvoicesPageClient() {
       branch: [],
       warehouse: [],
       customerId: [],
-      gstRate: "all",
+      gstRate: [],
       invoiceNo: "",
-      status: "all",
+      status: [],
     });
     setFinancialYearId(parsed.financialYearId);
     setDateFrom(parsed.dateFrom);
@@ -232,9 +265,9 @@ export default function B2cInvoicesPageClient() {
     setBranch(normalizeMultiFilter(parsed.branch));
     setWarehouse(normalizeMultiFilter(parsed.warehouse));
     setCustomerId(normalizeMultiFilter(parsed.customerId));
-    setGstRate(parsed.gstRate);
+    setGstRates(parsed.gstRate);
     setInvoiceNo(parsed.invoiceNo);
-    setStatus(parsed.status);
+    setStatuses(parsed.status);
     setPreset("custom");
   }, [searchParams, datesReady]);
 
@@ -264,9 +297,9 @@ export default function B2cInvoicesPageClient() {
     branch,
     warehouse,
     customerId,
-    gstRate,
+    gstRate: gstRates,
     invoiceNo: debouncedInvoiceNo,
-    status,
+    status: statuses,
   }), [
     financialYearId,
     dateFrom,
@@ -274,9 +307,9 @@ export default function B2cInvoicesPageClient() {
     branch,
     warehouse,
     customerId,
-    gstRate,
+    gstRates,
     debouncedInvoiceNo,
-    status,
+    statuses,
     refreshKey,
   ]);
 
@@ -337,9 +370,9 @@ export default function B2cInvoicesPageClient() {
       isMultiFilterActive(branch) ||
       isMultiFilterActive(warehouse) ||
       isMultiFilterActive(customerId) ||
-      gstRate !== "all" ||
+      gstRates.length > 0 ||
       Boolean(invoiceNo.trim()) ||
-      status !== "all");
+      statuses.length > 0);
 
   const resetFilters = useCallback(() => {
     const { from, to, fyId } = defaultFyDateRange();
@@ -350,17 +383,17 @@ export default function B2cInvoicesPageClient() {
     setBranch([]);
     setWarehouse([]);
     setCustomerId([]);
-    setGstRate("all");
+    setGstRates([]);
     setInvoiceNo("");
-    setStatus("all");
+    setStatuses([]);
   }, []);
 
   const backHref = `/accounts/reports/gst-summary/gstr1?${buildB2cFilterQuery({
     ...b2cFilters,
     customerId: [],
-    gstRate: "all",
+    gstRate: [],
     invoiceNo: "",
-    status: "all",
+    status: [],
   })}`;
 
   const filterSummaryItems = useMemo(
@@ -398,9 +431,9 @@ export default function B2cInvoicesPageClient() {
         "Customer",
         "All customers",
       ),
-      gstRate: GST_RATE_OPTIONS.find((o) => o.value === gstRate)?.label ?? "All rates",
+      gstRate: formatMultiSelectLabel(gstRates, GST_RATE_OPTIONS, "Rate", "All rates"),
       invoiceNo: debouncedInvoiceNo,
-      status: STATUS_OPTIONS.find((o) => o.value === status)?.label ?? "All",
+      status: formatMultiSelectLabel(statuses, STATUS_OPTIONS, "Status", "All"),
     };
   }, [
     financialYearId,
@@ -410,9 +443,9 @@ export default function B2cInvoicesPageClient() {
     warehouse,
     customerId,
     customerSelectOptions,
-    gstRate,
+    gstRates,
     debouncedInvoiceNo,
-    status,
+    statuses,
   ]);
 
   const handleExportExcel = async () => {
@@ -471,20 +504,12 @@ export default function B2cInvoicesPageClient() {
             options={warehouseOptionsForFilter}
           />
         </ReportMoreFilters>
-        <ReportFilterField label="GST Rate" minWidthClass="min-w-[120px]">
-          <Select value={gstRate} onValueChange={(v) => setGstRate(v as B2cGstRateFilter)}>
-            <SelectTrigger className={cn(filterControlClass, "mt-0 w-full")}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {GST_RATE_OPTIONS.map((o) => (
-                <SelectItem key={o.value} value={o.value} className="text-xs">
-                  {o.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </ReportFilterField>
+        <ReportStatusMultiFilter
+          label="GST Rate"
+          values={gstRates}
+          onChange={setGstRates}
+          options={GST_RATE_OPTIONS}
+        />
         <ReportFilterField label="Invoice Number" minWidthClass="min-w-[180px]">
           <Input
             value={invoiceNo}
@@ -493,20 +518,12 @@ export default function B2cInvoicesPageClient() {
             className={cn(filterControlClass, "mt-0 w-full")}
           />
         </ReportFilterField>
-        <ReportFilterField label="Status" minWidthClass="min-w-[120px]">
-          <Select value={status} onValueChange={(v) => setStatus(v as B2cStatusFilter)}>
-            <SelectTrigger className={cn(filterControlClass, "mt-0 w-full")}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {STATUS_OPTIONS.map((o) => (
-                <SelectItem key={o.value} value={o.value} className="text-xs">
-                  {o.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </ReportFilterField>
+        <ReportStatusMultiFilter
+          label="Status"
+          values={statuses}
+          onChange={setStatuses}
+          options={STATUS_OPTIONS}
+        />
         {hasFilters && (
           <Button variant="outline" size="sm" className="h-8 text-sm px-2" onClick={resetFilters}>
             Reset
@@ -575,30 +592,36 @@ export default function B2cInvoicesPageClient() {
               )}
             </div>
           ) : (
+            <AccountsColumnFilterProvider
+              rows={report.rows}
+              getCellValue={getB2cFilterCell}
+            >
             <AccountsTableScroll className="flex-1 min-h-0">
               <AccountsTable minWidth={1400}>
                 <AccountsTableHead>
                   <AccountsTableHeadRow>
-                    <AccountsTableHeadCell className="w-8" />
-                    <AccountsTableHeadCell>Invoice Date</AccountsTableHeadCell>
-                    <AccountsTableHeadCell>Invoice Number</AccountsTableHeadCell>
-                    <AccountsTableHeadCell>Customer Name</AccountsTableHeadCell>
-                    <AccountsTableHeadCell>Customer Type</AccountsTableHeadCell>
-                    <AccountsTableHeadCell>Place of Supply</AccountsTableHeadCell>
-                    <AccountsTableHeadCell align="right">Invoice Value</AccountsTableHeadCell>
-                    <AccountsTableHeadCell align="right">Taxable Value</AccountsTableHeadCell>
-                    <AccountsTableHeadCell>GST Rate</AccountsTableHeadCell>
-                    <AccountsTableHeadCell align="right">CGST</AccountsTableHeadCell>
-                    <AccountsTableHeadCell align="right">SGST</AccountsTableHeadCell>
-                    <AccountsTableHeadCell align="right">IGST</AccountsTableHeadCell>
-                    <AccountsTableHeadCell align="right">Cess</AccountsTableHeadCell>
-                    <AccountsTableHeadCell align="right">Total Tax</AccountsTableHeadCell>
-                    <AccountsTableHeadCell>Status</AccountsTableHeadCell>
-                    <AccountsTableHeadCell className="w-24">Action</AccountsTableHeadCell>
+                    <SortTh label="" colKey="_expand" sortable={false} filterable={false} className="w-8" />
+                    <SortTh label="Invoice Date" colKey="invoiceDate" sortable={false} filterable={false} />
+                    <SortTh label="Invoice Number" colKey="invoiceNo" sortable={false} />
+                    <SortTh label="Customer Name" colKey="customerName" sortable={false} />
+                    <SortTh label="Customer Type" colKey="customerType" sortable={false} />
+                    <SortTh label="Place of Supply" colKey="placeOfSupply" sortable={false} />
+                    <SortTh label="Invoice Value" colKey="invoiceValue" sortable={false} filterable={false} align="right" />
+                    <SortTh label="Taxable Value" colKey="taxableValue" sortable={false} filterable={false} align="right" />
+                    <SortTh label="GST Rate" colKey="gstRate" sortable={false} filterable={false} />
+                    <SortTh label="CGST" colKey="cgst" sortable={false} filterable={false} align="right" />
+                    <SortTh label="SGST" colKey="sgst" sortable={false} filterable={false} align="right" />
+                    <SortTh label="IGST" colKey="igst" sortable={false} filterable={false} align="right" />
+                    <SortTh label="Cess" colKey="cess" sortable={false} filterable={false} align="right" />
+                    <SortTh label="Total Tax" colKey="totalTax" sortable={false} filterable={false} align="right" />
+                    <SortTh label="Status" colKey="status" sortable={false} />
+                    <SortTh label="Action" colKey="_actions" sortable={false} filterable={false} className="w-24" />
                   </AccountsTableHeadRow>
                 </AccountsTableHead>
                 <AccountsTableBody>
-                  {report.rows.map((row) => {
+                  <B2cFilteredRows rows={report.rows}>
+                    {(visibleRows) =>
+                      visibleRows.map((row) => {
                     const isExpanded = expandedIds.has(row.invoiceId);
                     const sourceInv = loadInvoices().find((i) => i.id === row.invoiceId);
                     const primaryFix =
@@ -696,10 +719,13 @@ export default function B2cInvoicesPageClient() {
                         {isExpanded && row.hasMultipleRates && <RateBreakupRows row={row} />}
                       </Fragment>
                     );
-                  })}
+                      })
+                    }
+                  </B2cFilteredRows>
                 </AccountsTableBody>
               </AccountsTable>
             </AccountsTableScroll>
+            </AccountsColumnFilterProvider>
           )}
         </AccountsListingTableCard>
       </AccountsReportBody>

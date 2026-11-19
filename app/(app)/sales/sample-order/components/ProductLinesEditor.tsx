@@ -4,7 +4,6 @@ import React, { useState } from "react";
 import { cn } from "@/lib/utils";
 import { exceedsEntryDigits } from "@/lib/quantity-limits";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -235,7 +234,8 @@ export default function ProductLinesEditor({
 	pricingContext,
 }: ProductLinesEditorProps) {
 	const [localError, setLocalError] = useState<string | null>(null);
-	const [topQuantityType, setTopQuantityType] = useState<"Case" | "Piece">("Piece");
+	/** Sample stock is CASE-inwarded; Piece is not offered. */
+	const topQuantityType: "Case" = "Case";
 	const [editingId, setEditingId] = useState<string | null>(null);
 	const [editDraft, setEditDraft] = useState<Partial<SalesOrderLineItem> | null>(null);
 
@@ -335,7 +335,7 @@ export default function ProductLinesEditor({
 			const p = selectedProducts[i];
 			let newLine = createEmptyLineItem();
 			newLine.productId = p.id;
-			newLine.quantityType = lines[lineIndex].quantityType || "Piece";
+			newLine.quantityType = "Case";
 			newLine = applyProductToLine(newLine, p, pricingContext);
 			newLines.push(newLine);
 		}
@@ -451,18 +451,9 @@ export default function ProductLinesEditor({
 									className="h-8 text-xs w-20 bg-white"
 									placeholder="1"
 								/>
-								<Select
-									value={topQuantityType}
-									onValueChange={(value) => setTopQuantityType(value as "Case" | "Piece")}
-								>
-									<SelectTrigger className="h-8 text-xs rounded-lg border-border bg-white w-[90px]">
-										<SelectValue placeholder="Type" />
-									</SelectTrigger>
-									<SelectContent className="min-w-[120px]">
-										<SelectItem value="Case">Case</SelectItem>
-										<SelectItem value="Piece">Piece</SelectItem>
-									</SelectContent>
-								</Select>
+								<div className="h-8 px-2.5 text-xs rounded-lg border border-border bg-muted/30 flex items-center text-foreground w-[90px]">
+									Case
+								</div>
 							</div>
 						</div>
 					</>
@@ -528,49 +519,32 @@ export default function ProductLinesEditor({
 													type="number"
 													min={0}
 													value={
-														draftLine.quantityType === "Case"
-															? (draftLine.caseQuantity === 0 && !draftLine.quantity ? "" : draftLine.caseQuantity)
-															: (draftLine.pieceQuantity === 0 && !draftLine.quantity ? "" : draftLine.pieceQuantity)
+														draftLine.caseQuantity === 0 && !draftLine.quantity
+															? ""
+															: draftLine.caseQuantity
 													}
 													onChange={(e) => {
 														const val = e.target.value;
 														if (exceedsEntryDigits(val)) return;
 														const num = val ? Number(val) : 0;
-														if (draftLine.quantityType === "Case") {
-															updateDraft({ caseQuantity: num });
-														} else {
-															updateDraft({ pieceQuantity: num });
-														}
+														updateDraft({
+															quantityType: "Case",
+															caseQuantity: num,
+															pieceQuantity: 0,
+														});
 													}}
 													className="h-7 text-xs w-16 text-left tabular-nums"
 												/>
-												<Select
-													value={draftLine.quantityType || "Piece"}
-													onValueChange={(value) => {
-														const type = value as "Case" | "Piece";
-														const currentVal = draftLine.quantityType === "Case" ? draftLine.caseQuantity : draftLine.pieceQuantity;
-														if (type === "Case") {
-															updateDraft({ quantityType: type, caseQuantity: currentVal || 0, pieceQuantity: 0 });
-														} else {
-															updateDraft({ quantityType: type, pieceQuantity: currentVal || 0, caseQuantity: 0 });
-														}
-													}}
-												>
-													<SelectTrigger className="h-7 text-[10px] rounded border-border bg-white w-[54px] px-1.5 shrink-0">
-														<SelectValue placeholder="Type" />
-													</SelectTrigger>
-													<SelectContent className="min-w-[100px]">
-														<SelectItem value="Case">Case</SelectItem>
-														<SelectItem value="Piece">Piece</SelectItem>
-													</SelectContent>
-												</Select>
+												<div className="h-7 px-1.5 text-[10px] rounded border border-border bg-muted/30 flex items-center w-[54px] shrink-0">
+													Case
+												</div>
 											</div>
 										) : (
 											<span className={cn(
 												"text-xs font-semibold tabular-nums",
 												qtyOverStock ? "text-red-600" : "text-foreground"
 											)}>
-												{line.quantityType === "Case" ? line.caseQuantity : line.pieceQuantity} {line.quantityType || "Piece"}
+												{line.caseQuantity ?? 0} Case
 											</span>
 										)}
 

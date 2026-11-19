@@ -5,13 +5,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   AccountsEditAction,
   AccountsTableActionCell,
   AccountsViewAction,
@@ -23,11 +16,6 @@ import { MoneyAmount } from "@/components/accounts/MoneyAmount";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { VoucherFormToastHost } from "@/components/accounts/voucher-form/VoucherFormToastHost";
 import { accountsBreadcrumb, JOURNAL_VOUCHER_HREF } from "@/lib/accounts/accounts-nav";
-import {
-  ACCOUNTS_FILTER_CONTROL_CLASS,
-  ACCOUNTS_FILTER_LABEL_CLASS,
-  ACCOUNTS_FILTER_SELECT_CLASS,
-} from "@/lib/accounts/accounts-typography";
 import { formatMoney, MONEY_AMOUNT_CLASS, roundMoney } from "@/lib/accounts/money-format";
 import { summarizeVoucherLedgers } from "@/lib/accounts/voucher-line-helpers";
 import { loadChartOfAccounts } from "@/app/(app)/accounts/data";
@@ -39,6 +27,7 @@ import {
   ReportDateRangeFilter,
   ReportFilterRow,
   ReportSearchFilter,
+  ReportStatusMultiFilter,
   useReportDateRange,
 } from "@/components/accounts/ReportFilters";
 import {
@@ -70,7 +59,6 @@ import {
 const DEFAULT_PAGE_SIZE = ACCOUNTS_DEFAULT_PAGE_SIZE;
 
 const STATUS_OPTIONS = [
-  { value: "all", label: "All Status" },
   { value: "draft", label: "Draft" },
   { value: "posted", label: "Posted" },
   { value: "approved", label: "Approved" },
@@ -268,7 +256,7 @@ function JournalListContent({
   page,
   pageSize,
   toolbarFiltered,
-  statusFilter,
+  statusFilters,
   search,
   dateFrom,
   dateTo,
@@ -280,21 +268,23 @@ function JournalListContent({
   page: number;
   pageSize: number;
   toolbarFiltered: JournalDisplayRow[];
-  statusFilter: string;
+  statusFilters: string[];
   search: string;
   dateFrom: string;
   dateTo: string;
   setPage: (p: number) => void;
   setPageSize: (s: number) => void;
 }) {
-  const visible = useAccountsFilteredRows(toolbarFiltered);
+  const visible = useAccountsFilteredRows<JournalDisplayRow>(toolbarFiltered);
+  const statusLabel =
+    statusFilters.length > 0 ? statusFilters.join(", ") : "all";
 
   const handleExcel = () => {
     const rows = vouchersToJournalExportRows(visible);
     const summary = computeJournalExportSummary(rows);
     void exportJournalVouchersToExcel(
       rows,
-      { dateFrom, dateTo, search, status: statusFilter },
+      { dateFrom, dateTo, search, status: statusLabel },
       summary,
     );
   };
@@ -304,7 +294,7 @@ function JournalListContent({
     const summary = computeJournalExportSummary(rows);
     exportJournalVouchersToPdf(
       rows,
-      { dateFrom, dateTo, search, status: statusFilter },
+      { dateFrom, dateTo, search, status: statusLabel },
       summary,
     );
   };
@@ -353,7 +343,7 @@ export default function JournalListPageClient() {
   const mounted = useClientMounted();
   const sectionRefresh = useAccountsSectionRefresh();
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [statusFilters, setStatusFilters] = useState<string[]>([]);
   const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } =
     useReportDateRange("this_year");
   const [page, setPage] = useState(1);
@@ -388,17 +378,17 @@ export default function JournalListPageClient() {
           v.creditLedger.toLowerCase().includes(q),
       );
     }
-    if (statusFilter !== "all") {
-      r = r.filter((v) => v.status === statusFilter);
+    if (statusFilters.length > 0) {
+      r = r.filter((v) => statusFilters.includes(v.status));
     }
     if (dateFrom) r = r.filter((v) => v.date >= dateFrom);
     if (dateTo) r = r.filter((v) => v.date <= dateTo);
     return r;
-  }, [records, search, statusFilter, dateFrom, dateTo]);
+  }, [records, search, statusFilters, dateFrom, dateTo]);
 
   useEffect(() => {
     setPage(1);
-  }, [search, statusFilter, dateFrom, dateTo, pageSize]);
+  }, [search, statusFilters, dateFrom, dateTo, pageSize]);
 
   const filterBar = (
     <ReportFilterRow>
@@ -411,33 +401,14 @@ export default function JournalListPageClient() {
         placeholder="Search voucher, ledger, narration…"
         className="min-w-[200px] flex-1 max-w-sm"
       />
-      <div className="space-y-0.5 shrink-0">
-        <span className={ACCOUNTS_FILTER_LABEL_CLASS}>Status</span>
-        <Select
-          value={statusFilter}
-          onValueChange={(v) => {
-            setStatusFilter(v);
-            setPage(1);
-          }}
-        >
-          <SelectTrigger
-            className={cn(
-              ACCOUNTS_FILTER_CONTROL_CLASS,
-              ACCOUNTS_FILTER_SELECT_CLASS,
-              "w-[128px]",
-            )}
-          >
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            {STATUS_OPTIONS.map((o) => (
-              <SelectItem key={o.value} value={o.value} className="text-xs">
-                {o.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+      <ReportStatusMultiFilter
+        values={statusFilters}
+        onChange={(next) => {
+          setStatusFilters(next);
+          setPage(1);
+        }}
+        options={[...STATUS_OPTIONS]}
+      />
       <ReportDateRangeFilter
         preset={preset}
         dateFrom={dateFrom}
@@ -471,7 +442,7 @@ export default function JournalListPageClient() {
         page={page}
         pageSize={pageSize}
         toolbarFiltered={toolbarFiltered}
-        statusFilter={statusFilter}
+        statusFilters={statusFilters}
         search={search}
         dateFrom={dateFrom}
         dateTo={dateTo}

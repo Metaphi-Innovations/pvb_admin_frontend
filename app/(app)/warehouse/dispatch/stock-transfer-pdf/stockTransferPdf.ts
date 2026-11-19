@@ -12,6 +12,7 @@ import {
   openEditablePdfPreview,
   loadNavbarLogoDataUrl,
   sanitizePdfFileName,
+  stripGstAddressFieldLabels,
 } from "@/lib/pdf/paramverse";
 
 function readRecord(value: unknown): Record<string, unknown> {
@@ -76,9 +77,10 @@ function partyFromWarehouse(
     wh.registered_legal_name || wh.warehouse_name || fallbackName,
     fallbackName,
   );
-  const address =
+  const address = stripGstAddressFieldLabels(
     asText(wh.address ?? wh.address_1 ?? wh.registered_gst_address, "") ||
-    [asText(wh.address, ""), asText(wh.address_1, "")].filter(Boolean).join(", ");
+      [asText(wh.address, ""), asText(wh.address_1, "")].filter(Boolean).join(", "),
+  );
   const cityStatePin = [
     asText(wh.city || wh.town || wh.district, ""),
     asText(wh.state, ""),

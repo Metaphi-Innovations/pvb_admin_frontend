@@ -28,11 +28,12 @@ import {
 } from "@/lib/accounts/report-multi-filter-utils";
 
 export type GstDocumentType = "sales_invoice" | "credit_note" | "debit_note";
-export type GstDocumentTypeFilter = "all" | GstDocumentType;
-export type DocumentsSummaryStatusFilter = "all" | "valid" | "exception";
+export type GstDocumentTypeFilter = GstDocumentType;
+export type DocumentsSummaryStatusFilter = "valid" | "exception";
 
 export interface DocumentsSummaryFilters extends GstDashboardFilters {
-  documentType: GstDocumentTypeFilter;
+  /** Empty = all document types. */
+  documentType: string[];
 }
 
 export interface GstDocumentEntry {
@@ -173,7 +174,7 @@ function collectDocumentEntries(filters: DocumentsSummaryFilters): GstDocumentEn
     const entry = invoiceToEntry(inv);
     if (!entry) continue;
     if (!matchesDateAndLocation(entry.documentDate, entry.branch, entry.warehouse, filters)) continue;
-    if (filters.documentType !== "all" && filters.documentType !== "sales_invoice") continue;
+    if (!matchesMultiFilter(filters.documentType, "sales_invoice")) continue;
     entries.push(entry);
   }
 
@@ -181,7 +182,7 @@ function collectDocumentEntries(filters: DocumentsSummaryFilters): GstDocumentEn
     const entry = creditNoteToEntry(cn);
     if (!entry) continue;
     if (!matchesDateAndLocation(entry.documentDate, entry.branch, entry.warehouse, filters)) continue;
-    if (filters.documentType !== "all" && filters.documentType !== "credit_note") continue;
+    if (!matchesMultiFilter(filters.documentType, "credit_note")) continue;
     entries.push(entry);
   }
 
@@ -189,7 +190,7 @@ function collectDocumentEntries(filters: DocumentsSummaryFilters): GstDocumentEn
     const entry = debitNoteToEntry(dn);
     if (!entry) continue;
     if (!matchesDateAndLocation(entry.documentDate, entry.branch, entry.warehouse, filters)) continue;
-    if (filters.documentType !== "all" && filters.documentType !== "debit_note") continue;
+    if (!matchesMultiFilter(filters.documentType, "debit_note")) continue;
     entries.push(entry);
   }
 
@@ -262,8 +263,11 @@ const ROW_ORDER: GstDocumentType[] = ["sales_invoice", "credit_note", "debit_not
 
 export function buildDocumentsSummaryReport(filters: DocumentsSummaryFilters): DocumentsSummaryReport {
   const entries = collectDocumentEntries(filters);
+  const selected = new Set(filters.documentType);
   const typesToShow: GstDocumentType[] =
-    filters.documentType === "all" ? ROW_ORDER : [filters.documentType];
+    selected.size === 0
+      ? ROW_ORDER
+      : ROW_ORDER.filter((t) => selected.has(t));
 
   const rows: DocumentsSummaryRow[] = [];
   for (const docType of typesToShow) {
@@ -283,13 +287,10 @@ export function parseDocumentsSummaryFiltersFromSearch(
   defaults: DocumentsSummaryFilters,
 ): DocumentsSummaryFilters {
   const params = new URLSearchParams(search);
-  const docType = params.get("documentType") as GstDocumentTypeFilter | null;
-  const validTypes: GstDocumentTypeFilter[] = [
-    "all",
-    "sales_invoice",
-    "credit_note",
-    "debit_note",
-  ];
+  const validTypes = new Set(["sales_invoice", "credit_note", "debit_note"]);
+  const documentType = parseMultiFilterParam(params.get("documentType")).filter((v) =>
+    validTypes.has(v),
+  );
 
   const branchParam = params.get("branch");
   const warehouseParam = params.get("warehouse");
@@ -300,7 +301,7 @@ export function parseDocumentsSummaryFiltersFromSearch(
     dateTo: params.get("to") ?? defaults.dateTo,
     branch: branchParam != null ? parseMultiFilterParam(branchParam) : defaults.branch,
     warehouse: warehouseParam != null ? parseMultiFilterParam(warehouseParam) : defaults.warehouse,
-    documentType: docType && validTypes.includes(docType) ? docType : defaults.documentType,
+    documentType: params.has("documentType") ? documentType : defaults.documentType,
   };
 }
 
@@ -311,7 +312,7 @@ export function buildDocumentsSummaryFilterQuery(filters: DocumentsSummaryFilter
   params.set("to", filters.dateTo);
   appendMultiFilterParam(params, "branch", filters.branch);
   appendMultiFilterParam(params, "warehouse", filters.warehouse);
-  if (filters.documentType !== "all") params.set("documentType", filters.documentType);
+  appendMultiFilterParam(params, "documentType", filters.documentType);
   return params.toString();
 }
 

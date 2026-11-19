@@ -4,6 +4,7 @@ import type {
   FilterState,
   FilterValue,
 } from "@/components/listing/types";
+import { toApiFilterValue, toFilterStringList } from "@/lib/listing/filter-values";
 
 export type MasterListStatus = "all" | "active" | "inactive";
 
@@ -49,17 +50,22 @@ function coerceScalar(value: FilterValue): string | string[] {
   return String(value).trim();
 }
 
-function normalizeStatusToken(value: FilterValue | undefined): string {
-  if (value === undefined || value === null) return "";
-  const raw = Array.isArray(value) ? value[0] : value;
-  if (typeof raw !== "string") return "";
-  return raw.trim().toLowerCase();
+function normalizeStatusTokens(value: FilterValue | undefined): string[] {
+  if (value === undefined || value === null) return [];
+  const rawList = Array.isArray(value) ? value : [value];
+  return rawList
+    .map((raw) => (typeof raw === "string" ? raw.trim().toLowerCase() : ""))
+    .filter(Boolean);
 }
 
 export function mapStatusToIsActive(value: FilterValue): boolean | null {
-  const token = normalizeStatusToken(value);
-  if (token === "active") return true;
-  if (token === "inactive") return false;
+  const tokens = normalizeStatusTokens(value);
+  const hasActive = tokens.includes("active");
+  const hasInactive = tokens.includes("inactive");
+  // Both selected → no is_active constraint (show all)
+  if (hasActive && hasInactive) return null;
+  if (hasActive) return true;
+  if (hasInactive) return false;
   return null;
 }
 
@@ -81,8 +87,12 @@ export function resolveListStatus(
   filters: FilterState,
   statusTab?: MasterListStatus,
 ): MasterListStatus {
-  const token = normalizeStatusToken(filters.status);
-  if (token === "active" || token === "inactive") return token;
+  const tokens = normalizeStatusTokens(filters.status as FilterValue | undefined);
+  const hasActive = tokens.includes("active");
+  const hasInactive = tokens.includes("inactive");
+  if (hasActive && hasInactive) return "all";
+  if (hasActive) return "active";
+  if (hasInactive) return "inactive";
   if (statusTab && statusTab !== "all") return statusTab;
   return "all";
 }
@@ -282,9 +292,11 @@ export const MASTER_FILTER_FIELD_MAPS = {
   },
   gst: {
     gstPercentage: (value) => {
-      const raw = Array.isArray(value) ? value[0] : value;
-      const num = Number(String(raw).replace(/%/g, "").trim());
-      return Number.isFinite(num) ? { gstPercentage: num } : null;
+      const nums = (Array.isArray(value) ? value : [value])
+        .map((raw) => Number(String(raw ?? "").replace(/%/g, "").trim()))
+        .filter((num) => Number.isFinite(num));
+      if (nums.length === 0) return null;
+      return { gstPercentage: nums.length === 1 ? nums[0] : nums };
     },
     remarks: "remark",
     status: statusColumnMapper,
@@ -295,10 +307,14 @@ export const MASTER_FILTER_FIELD_MAPS = {
     hsnDescription: "hsnDescription",
     codeType: "codeType",
     gstRate: (value) => {
-      const raw = Array.isArray(value) ? value[0] : value;
-      const label = String(raw).split(" — ")[0];
-      const num = Number(label.replace(/%/g, "").trim());
-      return Number.isFinite(num) ? { gst: { gstPercentage: num } } : null;
+      const nums = (Array.isArray(value) ? value : [value])
+        .map((raw) => {
+          const label = String(raw ?? "").split(" — ")[0];
+          return Number(label.replace(/%/g, "").trim());
+        })
+        .filter((num) => Number.isFinite(num));
+      if (nums.length === 0) return null;
+      return { gst: { gstPercentage: nums.length === 1 ? nums[0] : nums } };
     },
     status: statusColumnMapper,
     ...AUDIT_FILTER_FIELDS,
@@ -352,9 +368,8 @@ export const MASTER_FILTER_FIELD_MAPS = {
   role: {
     roleName: "role_name",
     department: (value) => {
-      const raw = Array.isArray(value) ? value[0] : value;
-      const name = String(raw ?? "").trim();
-      return name ? { department: { department_name: name } } : null;
+      const name = toApiFilterValue(value);
+      return name !== undefined ? { department: { department_name: name } } : null;
     },
     geoLevel: "geography_level",
     status: statusColumnMapper,
@@ -363,9 +378,11 @@ export const MASTER_FILTER_FIELD_MAPS = {
   tds: {
     sectionName: "tds_section_name",
     tdsRate: (value) => {
-      const raw = Array.isArray(value) ? value[0] : value;
-      const num = Number(String(raw).replace(/%/g, "").trim());
-      return Number.isFinite(num) ? { tds_rate: num } : null;
+      const nums = (Array.isArray(value) ? value : [value])
+        .map((raw) => Number(String(raw ?? "").replace(/%/g, "").trim()))
+        .filter((num) => Number.isFinite(num));
+      if (nums.length === 0) return null;
+      return { tds_rate: nums.length === 1 ? nums[0] : nums };
     },
     applicableTo: "applicable_to",
     description: "description",
@@ -375,9 +392,11 @@ export const MASTER_FILTER_FIELD_MAPS = {
   tcs: {
     sectionName: "tcs_section_name",
     tcsRate: (value) => {
-      const raw = Array.isArray(value) ? value[0] : value;
-      const num = Number(String(raw).replace(/%/g, "").trim());
-      return Number.isFinite(num) ? { tcs_rate: num } : null;
+      const nums = (Array.isArray(value) ? value : [value])
+        .map((raw) => Number(String(raw ?? "").replace(/%/g, "").trim()))
+        .filter((num) => Number.isFinite(num));
+      if (nums.length === 0) return null;
+      return { tcs_rate: nums.length === 1 ? nums[0] : nums };
     },
     applicableTo: "applicable_to",
     description: "description",
@@ -396,10 +415,13 @@ export const MASTER_FILTER_FIELD_MAPS = {
     hsnSacCode: "hsn_sac_code",
     description: "description",
     defaultGstRate: (value) => {
-      const raw = Array.isArray(value) ? value[0] : value;
-      const pct = Number(String(raw ?? "").replace("%", "").trim());
-      if (raw === undefined || raw === null || raw === "" || !Number.isFinite(pct)) return null;
-      return { default_gst_rate: { gstPercentage: pct } };
+      const nums = (Array.isArray(value) ? value : [value])
+        .map((raw) => Number(String(raw ?? "").replace("%", "").trim()))
+        .filter((num) => Number.isFinite(num));
+      if (nums.length === 0) return null;
+      return {
+        default_gst_rate: { gstPercentage: nums.length === 1 ? nums[0] : nums },
+      };
     },
     status: statusColumnMapper,
     ...AUDIT_FILTER_FIELDS,
@@ -427,9 +449,11 @@ export const MASTER_FILTER_FIELD_MAPS = {
     shortName: "short_name",
     parentUomName: "uom.unit_name",
     conversionFactor: (value) => {
-      const raw = Array.isArray(value) ? value[0] : value;
-      const num = Number(String(raw).trim());
-      return Number.isFinite(num) ? { conversion_factor: num } : null;
+      const nums = (Array.isArray(value) ? value : [value])
+        .map((raw) => Number(String(raw ?? "").trim()))
+        .filter((num) => Number.isFinite(num));
+      if (nums.length === 0) return null;
+      return { conversion_factor: nums.length === 1 ? nums[0] : nums };
     },
     status: statusColumnMapper,
     ...AUDIT_FILTER_FIELDS,
@@ -446,14 +470,12 @@ export const MASTER_FILTER_FIELD_MAPS = {
     email: "email",
     mobile: "mobile_number",
     role: (value) => {
-      const raw = Array.isArray(value) ? value[0] : value;
-      const name = String(raw ?? "").trim();
-      return name ? { role: { role_name: name } } : null;
+      const name = toApiFilterValue(value);
+      return name !== undefined ? { role: { role_name: name } } : null;
     },
     department: (value) => {
-      const raw = Array.isArray(value) ? value[0] : value;
-      const name = String(raw ?? "").trim();
-      return name ? { department: { department_name: name } } : null;
+      const name = toApiFilterValue(value);
+      return name !== undefined ? { department: { department_name: name } } : null;
     },
     employeeType: "employee_type",
     roleType: "role_type",
@@ -471,22 +493,36 @@ export const MASTER_FILTER_FIELD_MAPS = {
     packSize: "pack_size",
     baseUnit: "unit",
     mrp: (value) => {
-      const raw = Array.isArray(value) ? value[0] : value;
-      const num = Number(String(raw ?? "").replace(/[₹,\s]/g, "").trim());
-      return Number.isFinite(num) ? { mrp: num } : null;
+      const nums = (Array.isArray(value) ? value : [value])
+        .map((raw) => Number(String(raw ?? "").replace(/[₹,\s]/g, "").trim()))
+        .filter((num) => Number.isFinite(num));
+      if (nums.length === 0) return null;
+      return { mrp: nums.length === 1 ? nums[0] : nums };
     },
     costPrice: (value) => {
-      const raw = Array.isArray(value) ? value[0] : value;
-      const num = Number(String(raw ?? "").replace(/[₹,\s]/g, "").trim());
-      return Number.isFinite(num) ? { cost_price: num } : null;
+      const nums = (Array.isArray(value) ? value : [value])
+        .map((raw) => Number(String(raw ?? "").replace(/[₹,\s]/g, "").trim()))
+        .filter((num) => Number.isFinite(num));
+      if (nums.length === 0) return null;
+      return { cost_price: nums.length === 1 ? nums[0] : nums };
     },
     status: (value) => {
-      const token = normalizeStatusToken(value);
-      if (token === "active") return { status: "Active" };
-      if (token === "inactive") return { status: "Inactive" };
-      const raw = Array.isArray(value) ? value[0] : value;
-      const label = String(raw ?? "").trim();
-      return label ? { status: label } : null;
+      const list = toFilterStringList(value);
+      if (list.length === 0) return null;
+      const lower = list.map((s) => s.toLowerCase());
+      const hasActive = lower.includes("active");
+      const hasInactive = lower.includes("inactive");
+      if (hasActive && hasInactive && lower.every((t) => t === "active" || t === "inactive")) {
+        return null;
+      }
+      const mapped = list.map((raw) => {
+        const token = raw.trim().toLowerCase();
+        if (token === "active") return "Active";
+        if (token === "inactive") return "Inactive";
+        return raw.trim();
+      });
+      const status = toApiFilterValue(mapped);
+      return status !== undefined ? { status } : null;
     },
     ...AUDIT_FILTER_FIELDS,
   },
@@ -519,27 +555,35 @@ export const MASTER_FILTER_FIELD_MAPS = {
     category: "product.category.categoryName",
     segment: "product.segment.segment_name",
     packSize: (value) => {
-      const raw = Array.isArray(value) ? value[0] : value;
-      const num = Number(String(raw).trim());
-      return Number.isFinite(num) ? { product: { pack_size: num } } : null;
+      const nums = (Array.isArray(value) ? value : [value])
+        .map((raw) => Number(String(raw ?? "").trim()))
+        .filter((num) => Number.isFinite(num));
+      if (nums.length === 0) return null;
+      return { product: { pack_size: nums.length === 1 ? nums[0] : nums } };
     },
     unit: "product.unit",
     gstPct: (value) => {
-      const raw = Array.isArray(value) ? value[0] : value;
-      const num = Number(String(raw).replace(/%/g, "").trim());
-      return Number.isFinite(num)
-        ? { product: { gst_rate: { gstPercentage: num } } }
-        : null;
+      const nums = (Array.isArray(value) ? value : [value])
+        .map((raw) => Number(String(raw ?? "").replace(/%/g, "").trim()))
+        .filter((num) => Number.isFinite(num));
+      if (nums.length === 0) return null;
+      return {
+        product: { gst_rate: { gstPercentage: nums.length === 1 ? nums[0] : nums } },
+      };
     },
     dealerPrice: (value) => {
-      const raw = Array.isArray(value) ? value[0] : value;
-      const num = Number(String(raw).trim());
-      return Number.isFinite(num) ? { dealer_price: num } : null;
+      const nums = (Array.isArray(value) ? value : [value])
+        .map((raw) => Number(String(raw ?? "").trim()))
+        .filter((num) => Number.isFinite(num));
+      if (nums.length === 0) return null;
+      return { dealer_price: nums.length === 1 ? nums[0] : nums };
     },
     mrp: (value) => {
-      const raw = Array.isArray(value) ? value[0] : value;
-      const num = Number(String(raw).trim());
-      return Number.isFinite(num) ? { product: { mrp: num } } : null;
+      const nums = (Array.isArray(value) ? value : [value])
+        .map((raw) => Number(String(raw ?? "").trim()))
+        .filter((num) => Number.isFinite(num));
+      if (nums.length === 0) return null;
+      return { product: { mrp: nums.length === 1 ? nums[0] : nums } };
     },
     status: statusColumnMapper,
     ...AUDIT_FILTER_FIELDS,
@@ -554,17 +598,38 @@ export const MASTER_FILTER_FIELD_MAPS = {
     city: "city",
     pincode: "pincode",
     status: (value) => {
-      const token = normalizeStatusToken(value);
-      if (!token || token === "all") return null;
-      if (token === "active") return { status: "Active" };
-      if (token === "inactive") return { status: "Inactive" };
-      if (token === "under maintenance" || token === "under_maintenance") {
-        return { status: "Under Maintenance" };
+      const list = toFilterStringList(value);
+      if (list.length === 0) return null;
+      const lower = list.map((s) => s.toLowerCase());
+      if (lower.includes("all")) return null;
+
+      const hasActive = lower.includes("active");
+      const hasInactive = lower.includes("inactive");
+      const otherTokens = list.filter((raw) => {
+        const token = raw.trim().toLowerCase();
+        return token !== "active" && token !== "inactive" && token !== "all";
+      });
+
+      if (hasActive && hasInactive && otherTokens.length === 0) return null;
+
+      const mapped: string[] = [];
+      if (!(hasActive && hasInactive)) {
+        if (hasActive) mapped.push("Active");
+        if (hasInactive) mapped.push("Inactive");
       }
-      if (token === "closed") return { status: "Closed" };
-      const raw = Array.isArray(value) ? value[0] : value;
-      const label = String(raw ?? "").trim();
-      return label ? { status: label } : null;
+      for (const raw of otherTokens) {
+        const token = raw.trim().toLowerCase();
+        if (token === "under maintenance" || token === "under_maintenance") {
+          mapped.push("Under Maintenance");
+        } else if (token === "closed") {
+          mapped.push("Closed");
+        } else {
+          mapped.push(raw.trim());
+        }
+      }
+
+      const status = toApiFilterValue(mapped);
+      return status !== undefined ? { status } : null;
     },
     ...AUDIT_FILTER_FIELDS,
   },

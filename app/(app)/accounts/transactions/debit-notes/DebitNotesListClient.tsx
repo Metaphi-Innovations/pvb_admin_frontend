@@ -116,6 +116,17 @@ function mapNotesStatusFilterToApi(status: string): string | undefined {
   }
 }
 
+/** Map UI status multi-select → API enums. Empty = all (no filter). */
+function mapNotesStatusFiltersToApi(statuses: string[]): string[] {
+  return [
+    ...new Set(
+      statuses
+        .map(mapNotesStatusFilterToApi)
+        .filter((s): s is string => Boolean(s)),
+    ),
+  ];
+}
+
 function getRowActions(status: string, approvalRequired: boolean): string[] {
   const s = status.toUpperCase();
   if (s === "DRAFT") {
@@ -505,6 +516,7 @@ export default function DebitNotesListClient() {
     };
   }, [mounted, moduleTab, mastersLoaded]);
 
+  // Status multi-select is client-only (API accepts a single enum) — omit from fetch key.
   const listFiltersKey = useMemo(
     () =>
       JSON.stringify({
@@ -512,7 +524,6 @@ export default function DebitNotesListClient() {
         parties: filters.parties,
         branches: filters.branches,
         sources: filters.sources,
-        statusFilter: filters.status,
         voucherNo: filters.voucherNo.trim(),
         dateFrom: filters.dateFrom,
         dateTo: filters.dateTo,
@@ -522,7 +533,6 @@ export default function DebitNotesListClient() {
       filters.parties,
       filters.branches,
       filters.sources,
-      filters.status,
       filters.voucherNo,
       filters.dateFrom,
       filters.dateTo,
@@ -571,15 +581,13 @@ export default function DebitNotesListClient() {
           })
           .filter((v): v is "DIRECT" | "PURCHASE_RETURN" => v != null);
 
-        // Load all statuses so secondary tabs can filter client-side with stable counts.
-        const moreFilterStatus = mapNotesStatusFilterToApi(filters.status);
-
+        // Omit status from API — backend accepts a single enum only; multi-select
+        // OR-matches client-side so secondary tab counts stay stable.
         const baseQuery = {
           search: debouncedSearch.trim() || undefined,
           supplier_ids: selectedSupplierIds.length ? selectedSupplierIds : undefined,
           warehouse_ids: selectedWarehouseIds.length ? selectedWarehouseIds : undefined,
           source_types: sourceTypes.length ? sourceTypes : undefined,
-          status: moreFilterStatus as any,
           dn_number: filters.voucherNo.trim() || undefined,
           from_date: filters.dateFrom || undefined,
           to_date: filters.dateTo || undefined,
@@ -742,10 +750,10 @@ export default function DebitNotesListClient() {
       list = list.filter((r) => String(r.status || "").toUpperCase() === "REVERSED");
     }
 
-    const apiStatus = mapNotesStatusFilterToApi(filters.status);
-    if (!apiStatus) return list;
-    return list.filter(
-      (r) => String(r.status || "").toUpperCase() === apiStatus,
+    const apiStatuses = mapNotesStatusFiltersToApi(filters.status);
+    if (!apiStatuses.length) return list;
+    return list.filter((r) =>
+      apiStatuses.includes(String(r.status || "").toUpperCase()),
     );
   }, [records, filters.status, statusTab]);
 

@@ -1,6 +1,7 @@
 import { axiosInstance } from "@/api/axios";
 import { API_ENDPOINTS } from "@/api/endpoints";
 import { getDispatches, getDispatchFilterDropdown } from "@/app/(app)/warehouse/dispatch/services";
+import { toApiFilterValue } from "@/lib/listing/filter-values";
 import {
   normalizeGrnQuantityType,
   type GrnQuantityType,
@@ -195,25 +196,20 @@ export async function fetchPendingStockTransferDispatches(
     exclude_existing_st_grn: true,
   };
 
-  const firstValue = (value: unknown): string => {
-    if (Array.isArray(value)) return asString(value[0]).trim();
-    return asString(value).trim();
-  };
+  const stockTransferNo = toApiFilterValue(filters.stockTransferNo);
+  if (stockTransferNo !== undefined) apiFilters.source_document_no = stockTransferNo;
 
-  const stockTransferNo = firstValue(filters.stockTransferNo);
-  if (stockTransferNo) apiFilters.source_document_no = stockTransferNo;
+  const dispatchNumber = toApiFilterValue(filters.dispatchNumber);
+  if (dispatchNumber !== undefined) apiFilters.dispatch_number = dispatchNumber;
 
-  const dispatchNumber = firstValue(filters.dispatchNumber);
-  if (dispatchNumber) apiFilters.dispatch_number = dispatchNumber;
+  const fromWarehouse = toApiFilterValue(filters.fromWarehouse);
+  if (fromWarehouse !== undefined) apiFilters.from_warehouse = fromWarehouse;
 
-  const fromWarehouse = firstValue(filters.fromWarehouse);
-  if (fromWarehouse) apiFilters.from_warehouse = fromWarehouse;
+  const toWarehouse = toApiFilterValue(filters.toWarehouse);
+  if (toWarehouse !== undefined) apiFilters.to_warehouse = toWarehouse;
 
-  const toWarehouse = firstValue(filters.toWarehouse);
-  if (toWarehouse) apiFilters.to_warehouse = toWarehouse;
-
-  const status = firstValue(filters.status);
-  if (status) apiFilters.status = status;
+  const status = toApiFilterValue(filters.status);
+  if (status !== undefined) apiFilters.status = status;
 
   const dispatchDate = filters.dispatchDate;
   if (dispatchDate && typeof dispatchDate === "object" && !Array.isArray(dispatchDate)) {
@@ -229,8 +225,8 @@ export async function fetchPendingStockTransferDispatches(
       };
     }
   } else {
-    const exactDate = firstValue(dispatchDate);
-    if (exactDate) apiFilters.dispatch_date = exactDate;
+    const exactDate = toApiFilterValue(dispatchDate);
+    if (exactDate !== undefined) apiFilters.dispatch_date = exactDate;
   }
 
   if (destinationWarehouseId && destinationWarehouseId !== "All") {

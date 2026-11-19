@@ -7,13 +7,6 @@ import "./bank-reconciliation-compact.css";
 import { ArrowLeft, Check, Info, MoreVertical, RotateCcw, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -35,7 +28,12 @@ import {
   AccountsTableEmpty,
   ACCOUNTS_DEFAULT_PAGE_SIZE,
 } from "@/components/accounts/AccountsTableListing";
-import { ACCOUNTS_FILTER_CONTROL_CLASS } from "@/components/accounts/ReportFilters";
+import {
+  ACCOUNTS_FILTER_CONTROL_CLASS,
+  ReportStatusMultiFilter,
+  ReportVoucherTypeMultiFilter,
+} from "@/components/accounts/ReportFilters";
+import { ReportMultiSelect } from "@/components/accounts/ReportMultiSelect";
 import { Pagination } from "@/components/listing/Pagination";
 import {
   Tooltip,
@@ -72,24 +70,21 @@ function moneyOrDash(n: number): string {
 }
 
 const VOUCHER_TYPE_FILTERS = [
-  { value: "all", label: "All Types" },
   { value: "payment", label: "Payment" },
   { value: "receipt", label: "Receipt" },
   { value: "contra", label: "Contra" },
   { value: "journal", label: "Journal" },
-] as const;
+];
 
 const DIRECTION_FILTERS = [
-  { value: "all", label: "All" },
   { value: "deposit", label: "Deposit" },
   { value: "withdrawal", label: "Withdrawal" },
-] as const;
+];
 
 const STATUS_FILTERS = [
-  { value: "all", label: "All" },
   { value: "UNRECONCILED", label: "Unreconciled" },
   { value: "RECONCILED", label: "Reconciled" },
-] as const;
+];
 
 export default function BankReconciliationWorkspacePageClient({
   accountId: accountIdProp,
@@ -114,9 +109,9 @@ export default function BankReconciliationWorkspacePageClient({
 
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("UNRECONCILED");
-  const [voucherTypeFilter, setVoucherTypeFilter] = useState("all");
-  const [directionFilter, setDirectionFilter] = useState("all");
+  const [statusFilters, setStatusFilters] = useState<string[]>(["UNRECONCILED"]);
+  const [voucherTypeFilters, setVoucherTypeFilters] = useState<string[]>([]);
+  const [directionFilters, setDirectionFilters] = useState<string[]>([]);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [page, setPage] = useState(1);
@@ -136,28 +131,22 @@ export default function BankReconciliationWorkspacePageClient({
 
   useEffect(() => {
     if (!accountId) return;
-    setStatusFilter("UNRECONCILED");
+    setStatusFilters(["UNRECONCILED"]);
     setSelectedIds(new Set());
     setDateFrom(selectedFY.startDate || "");
     setDateTo(selectedFY.endDate || "");
   }, [accountId, selectedFY.startDate, selectedFY.endDate]);
 
   useEffect(() => {
-    if (voucherTypeFilter === "other") {
-      setVoucherTypeFilter("all");
-    }
-  }, [voucherTypeFilter]);
-
-  useEffect(() => {
     setPage(1);
     setSelectedIds(new Set());
   }, [
-    statusFilter,
+    statusFilters,
     debouncedSearch,
     dateFrom,
     dateTo,
-    voucherTypeFilter,
-    directionFilter,
+    voucherTypeFilters,
+    directionFilters,
     accountId,
   ]);
 
@@ -225,31 +214,61 @@ export default function BankReconciliationWorkspacePageClient({
     setBooksLoading(true);
     setBooksError(null);
     try {
+      // API accepts a single value per dimension; multi uses client OR when >1 selected.
       const reconciliationStatus: BankReconciliationStatus | undefined =
-        statusFilter === "all"
-          ? undefined
-          : (statusFilter as BankReconciliationStatus);
-      const voucherType = voucherTypeFilterToApi(voucherTypeFilter);
+        statusFilters.length === 1
+          ? (statusFilters[0] as BankReconciliationStatus)
+          : undefined;
+      const voucherType =
+        voucherTypeFilters.length === 1
+          ? voucherTypeFilterToApi(voucherTypeFilters[0])
+          : undefined;
+      const transactionDirection =
+        directionFilters.length === 1
+          ? directionFilters[0] === "deposit"
+            ? "DEPOSIT"
+            : directionFilters[0] === "withdrawal"
+              ? "WITHDRAWAL"
+              : undefined
+          : undefined;
       const data = await BankReconciliationService.getBookEntries({
         bank_account_id: accountId,
         date_from: dateFrom || undefined,
         date_to: dateTo || undefined,
         reconciliation_status: reconciliationStatus,
         voucher_type: voucherType,
-        transaction_direction:
-          directionFilter === "deposit"
-            ? "DEPOSIT"
-            : directionFilter === "withdrawal"
-              ? "WITHDRAWAL"
-              : undefined,
+        transaction_direction: transactionDirection,
         search: debouncedSearch.trim() || undefined,
         page,
         page_size: pageSize,
         ordering: "-voucher_date",
       });
       let items = data.items.map(mapBookEntryToUiRow);
+      if (statusFilters.length > 1) {
+        const allowed = new Set(statusFilters);
+        items = items.filter((row) => allowed.has(row.status));
+      }
+      if (voucherTypeFilters.length > 1) {
+        const allowed = new Set(voucherTypeFilters.map((v) => v.toLowerCase()));
+        items = items.filter((row) => allowed.has(row.voucherTypeCode));
+      }
+      if (directionFilters.length > 1) {
+        const wantDeposit = directionFilters.includes("deposit");
+        const wantWithdrawal = directionFilters.includes("withdrawal");
+        items = items.filter((row) => {
+          if (wantDeposit && row.deposit > 0) return true;
+          if (wantWithdrawal && row.withdrawal > 0) return true;
+          return false;
+        });
+      }
       setBooks(items);
-      setBooksTotal(data.pagination.total);
+      setBooksTotal(
+        statusFilters.length > 1 ||
+          voucherTypeFilters.length > 1 ||
+          directionFilters.length > 1
+          ? items.length
+          : data.pagination.total,
+      );
     } catch (err) {
       setBooks([]);
       setBooksTotal(0);
@@ -260,9 +279,9 @@ export default function BankReconciliationWorkspacePageClient({
   }, [
     accountId,
     account,
-    statusFilter,
-    voucherTypeFilter,
-    directionFilter,
+    statusFilters,
+    voucherTypeFilters,
+    directionFilters,
     dateFrom,
     dateTo,
     debouncedSearch,
@@ -341,9 +360,9 @@ export default function BankReconciliationWorkspacePageClient({
 
   const handleResetFilters = useCallback(() => {
     setSearch("");
-    setStatusFilter("UNRECONCILED");
-    setVoucherTypeFilter("all");
-    setDirectionFilter("all");
+    setStatusFilters(["UNRECONCILED"]);
+    setVoucherTypeFilters([]);
+    setDirectionFilters([]);
     setDateFrom(selectedFY.startDate || "");
     setDateTo(selectedFY.endDate || "");
     setBulkBankDate("");
@@ -486,68 +505,25 @@ export default function BankReconciliationWorkspacePageClient({
               />
             </div>
           </div>
-          <div className="space-y-1">
-            <span className="block text-[10px] font-medium text-muted-foreground">Status</span>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger
-                className={cn(
-                  ACCOUNTS_FILTER_CONTROL_CLASS,
-                  "h-8 mt-0 w-[130px] rounded-lg border-border/70 px-2.5 text-xs",
-                )}
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {STATUS_FILTERS.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1">
-            <span className="block text-[10px] font-medium text-muted-foreground">Voucher Type</span>
-            <Select value={voucherTypeFilter} onValueChange={setVoucherTypeFilter}>
-              <SelectTrigger
-                className={cn(
-                  ACCOUNTS_FILTER_CONTROL_CLASS,
-                  "h-8 mt-0 w-[135px] rounded-lg border-border/70 px-2.5 text-xs",
-                )}
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {VOUCHER_TYPE_FILTERS.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1">
-            <span className="block text-[10px] font-medium text-muted-foreground">
-              Transaction Type
-            </span>
-            <Select value={directionFilter} onValueChange={setDirectionFilter}>
-              <SelectTrigger
-                className={cn(
-                  ACCOUNTS_FILTER_CONTROL_CLASS,
-                  "h-8 mt-0 w-[150px] rounded-lg border-border/70 px-2.5 text-xs",
-                )}
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {DIRECTION_FILTERS.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          <ReportStatusMultiFilter
+            values={statusFilters}
+            onChange={setStatusFilters}
+            options={STATUS_FILTERS}
+          />
+          <ReportVoucherTypeMultiFilter
+            values={voucherTypeFilters}
+            onChange={setVoucherTypeFilters}
+            options={VOUCHER_TYPE_FILTERS}
+          />
+          <ReportMultiSelect
+            label="Transaction Type"
+            values={directionFilters}
+            onChange={setDirectionFilters}
+            options={DIRECTION_FILTERS}
+            entityName="Type"
+            allLabel="All"
+            minWidthClass="min-w-[150px]"
+          />
           <div className="space-y-1 min-w-[180px] flex-1">
             <span className="block text-[10px] font-medium text-muted-foreground">Search</span>
             <div className="relative">
@@ -583,11 +559,13 @@ export default function BankReconciliationWorkspacePageClient({
             <div className="h-9 flex-shrink-0 flex items-center gap-3 border-b border-border/60 bg-white px-3">
               <span className="text-xs text-muted-foreground whitespace-nowrap">
                 <strong className="text-foreground">{booksTotal}</strong>{" "}
-                {statusFilter === "RECONCILED"
+                {statusFilters.length === 1 && statusFilters[0] === "RECONCILED"
                   ? "reconciled"
-                  : statusFilter === "all"
+                  : statusFilters.length === 0
                     ? "records"
-                    : "pending"}
+                    : statusFilters.length === 1 && statusFilters[0] === "UNRECONCILED"
+                      ? "pending"
+                      : "records"}
               </span>
               <span className="text-xs text-muted-foreground whitespace-nowrap">
                 <strong className="text-foreground">{selectedIds.size}</strong> selected

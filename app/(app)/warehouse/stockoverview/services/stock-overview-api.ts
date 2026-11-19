@@ -517,10 +517,38 @@ export function buildStockOverviewFilters(filters: FilterState | undefined): Rec
   return mapped;
 }
 
-function parseListResponse<T>(payload: Record<string, unknown>): { items: T[]; total: number } {
+function parseFilterOptions(
+  raw: unknown,
+): Record<string, Array<{ label: string; value: string }>> {
+  if (!raw || typeof raw !== "object") return {};
+  const out: Record<string, Array<{ label: string; value: string }>> = {};
+  Object.entries(raw as Record<string, unknown>).forEach(([key, val]) => {
+    if (!Array.isArray(val)) return;
+    out[key] = val
+      .map((row) => {
+        if (!row || typeof row !== "object") return null;
+        const rec = row as Record<string, unknown>;
+        const value = asString(rec.value ?? rec.label).trim();
+        if (!value) return null;
+        return { label: asString(rec.label || value).trim() || value, value };
+      })
+      .filter((x): x is { label: string; value: string } => Boolean(x));
+  });
+  return out;
+}
+
+function parseListResponse<T>(payload: Record<string, unknown>): {
+  items: T[];
+  total: number;
+  filter_options: Record<string, Array<{ label: string; value: string }>>;
+} {
   const data = Array.isArray(payload.data) ? (payload.data as T[]) : [];
   const total = Number(payload.totalRecords ?? payload.count ?? data.length);
-  return { items: data, total: Number.isFinite(total) ? total : data.length };
+  return {
+    items: data,
+    total: Number.isFinite(total) ? total : data.length,
+    filter_options: parseFilterOptions(payload.filter_options),
+  };
 }
 
 function getErrorMessage(err: unknown, fallback: string): string {
@@ -663,7 +691,11 @@ export const StockOverviewApi = {
       .filter((x): x is { label: string; value: string } => Boolean(x));
   },
 
-  async listInventory(params: ListBaseParams): Promise<{ items: InventoryListRow[]; total: number }> {
+  async listInventory(params: ListBaseParams): Promise<{
+    items: InventoryListRow[];
+    total: number;
+    filter_options: Record<string, Array<{ label: string; value: string }>>;
+  }> {
     const warehouseId = params.warehouse_id && params.warehouse_id !== "All" ? params.warehouse_id : "all";
     const query = buildQuery({
       page: String(params.page),
@@ -683,7 +715,11 @@ export const StockOverviewApi = {
     return parseListResponse<InventoryListRow>(response.data as Record<string, unknown>);
   },
 
-  async listRejected(params: ListBaseParams): Promise<{ items: RejectedListRow[]; total: number }> {
+  async listRejected(params: ListBaseParams): Promise<{
+    items: RejectedListRow[];
+    total: number;
+    filter_options: Record<string, Array<{ label: string; value: string }>>;
+  }> {
     const warehouseId = params.warehouse_id && params.warehouse_id !== "All" ? params.warehouse_id : "all";
     const query = buildQuery({
       page: String(params.page),
@@ -703,7 +739,11 @@ export const StockOverviewApi = {
     return parseListResponse<RejectedListRow>(response.data as Record<string, unknown>);
   },
 
-  async listSalesReturn(params: ListBaseParams): Promise<{ items: ReturnStockListRow[]; total: number }> {
+  async listSalesReturn(params: ListBaseParams): Promise<{
+    items: ReturnStockListRow[];
+    total: number;
+    filter_options: Record<string, Array<{ label: string; value: string }>>;
+  }> {
     const warehouseId = params.warehouse_id && params.warehouse_id !== "All" ? params.warehouse_id : "all";
     const query = buildQuery({
       page: String(params.page),
@@ -723,7 +763,11 @@ export const StockOverviewApi = {
     return parseListResponse<ReturnStockListRow>(response.data as Record<string, unknown>);
   },
 
-  async listSampleReturn(params: ListBaseParams): Promise<{ items: ReturnStockListRow[]; total: number }> {
+  async listSampleReturn(params: ListBaseParams): Promise<{
+    items: ReturnStockListRow[];
+    total: number;
+    filter_options: Record<string, Array<{ label: string; value: string }>>;
+  }> {
     const warehouseId = params.warehouse_id && params.warehouse_id !== "All" ? params.warehouse_id : "all";
     const query = buildQuery({
       page: String(params.page),
@@ -1004,6 +1048,7 @@ export const StockOverviewApi = {
     items: DailyLogListRow[];
     total: number;
     summary: DailyLogSummary;
+    filter_options: Record<string, Array<{ label: string; value: string }>>;
   }> {
     const warehouseId = params.warehouse_id && params.warehouse_id !== "All" ? params.warehouse_id : "all";
     const productId = params.product_id && params.product_id !== "all" ? params.product_id : "all";
@@ -1028,11 +1073,12 @@ export const StockOverviewApi = {
       { signal: params.signal },
     );
     const payload = response.data as Record<string, unknown>;
-    const { items, total } = parseListResponse<DailyLogListRow>(payload);
+    const { items, total, filter_options } = parseListResponse<DailyLogListRow>(payload);
     const summaryRaw = (payload.summary ?? {}) as Record<string, unknown>;
     return {
       items,
       total,
+      filter_options,
       summary: {
         openingStockQty: toNumber(summaryRaw.openingStockQty),
         dayInQty: toNumber(summaryRaw.dayInQty),

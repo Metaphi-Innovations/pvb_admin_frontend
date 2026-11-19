@@ -34,6 +34,7 @@ import {
   ReportFilterRow,
   ReportDateRangeFilter,
   ReportSearchFilter,
+  ReportStatusMultiFilter,
   useReportDateRange,
 } from "@/components/accounts/ReportFilters";
 import { bankingBreadcrumb } from "@/lib/accounts/accounts-nav";
@@ -346,7 +347,7 @@ export default function ManualBankReconciliationPageClient() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [bankAccountId, setBankAccountId] = useState("");
   const { preset, setPreset, dateFrom, setDateFrom, dateTo, setDateTo } = useReportDateRange("this_year");
-  const [statusFilter, setStatusFilter] = useState<"all" | BookReconStatus>("all");
+  const [statusFilters, setStatusFilters] = useState<string[]>([]);
   const [search, setSearch] = useState("");
   const [uploadOpen, setUploadOpen] = useState(false);
   const [draftDates, setDraftDates] = useState<Record<string, string>>({});
@@ -479,10 +480,10 @@ export default function ManualBankReconciliationPageClient() {
     return filterManualReconRows(withDraftStatus, {
       dateFrom: dateFrom || undefined,
       dateTo: dateTo || undefined,
-      status: statusFilter,
+      statuses: statusFilters as BookReconStatus[],
       search: search || undefined,
     });
-  }, [gridRows, draftDates, dateFrom, dateTo, statusFilter, search]);
+  }, [gridRows, draftDates, dateFrom, dateTo, statusFilters, search]);
 
   const statementLineCount = useMemo(() => {
     if (!bankMasterId) return 0;
@@ -636,7 +637,7 @@ export default function ManualBankReconciliationPageClient() {
 
   useEffect(() => {
     setPage(1);
-  }, [bankAccountId, dateFrom, dateTo, statusFilter, search, pageSize]);
+  }, [bankAccountId, dateFrom, dateTo, statusFilters, search, pageSize]);
 
   const getCellValue = useCallback(
     (row: ManualReconGridRow, key: string) => reconGetCellValue(row, key),
@@ -762,21 +763,16 @@ export default function ManualBankReconciliationPageClient() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-1 min-w-[120px]">
-                <Label className="text-xs font-medium uppercase text-muted-foreground leading-none">Status</Label>
-                <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as typeof statusFilter)}>
-                  <SelectTrigger className="h-9 text-sm font-medium bg-white mt-0.5">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all" className="text-xs">All</SelectItem>
-                    <SelectItem value="pending" className="text-xs">Pending</SelectItem>
-                    <SelectItem value="reconciled" className="text-xs">Reconciled</SelectItem>
-                    <SelectItem value="unmatched" className="text-xs">Unmatched</SelectItem>
-                    <SelectItem value="difference" className="text-xs">Difference</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              <ReportStatusMultiFilter
+                values={statusFilters}
+                onChange={setStatusFilters}
+                options={[
+                  { value: "pending", label: "Pending" },
+                  { value: "reconciled", label: "Reconciled" },
+                  { value: "unmatched", label: "Unmatched" },
+                  { value: "difference", label: "Difference" },
+                ]}
+              />
               <ReportSearchFilter
                 value={search}
                 onChange={setSearch}

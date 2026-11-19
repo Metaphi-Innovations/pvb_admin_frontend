@@ -1,5 +1,6 @@
 import { axiosInstance } from "@/api/axios";
 import { API_ENDPOINTS } from "@/api/endpoints";
+import { toFilterStringList } from "@/lib/listing/filter-values";
 
 export interface PricingListParams {
   page: number;
@@ -312,10 +313,17 @@ function toBackendFilters(apiFilters?: Record<string, unknown>): Record<string, 
   const status = filters.status ?? filters.is_active;
   if (status !== undefined) {
     delete filters.status;
-    const token = Array.isArray(status) ? String(status[0]) : String(status);
-    const normalized = token.trim().toLowerCase();
-    if (normalized === "active") filters.is_active = true;
-    else if (normalized === "inactive") filters.is_active = false;
+    const tokens = toFilterStringList(status).map((t) => t.trim().toLowerCase());
+    const hasActive = tokens.includes("active");
+    const hasInactive = tokens.includes("inactive");
+    // Both selected → omit is_active (show all)
+    if (hasActive && hasInactive) {
+      // no-op
+    } else if (hasActive) {
+      filters.is_active = true;
+    } else if (hasInactive) {
+      filters.is_active = false;
+    }
   }
 
   return filters;

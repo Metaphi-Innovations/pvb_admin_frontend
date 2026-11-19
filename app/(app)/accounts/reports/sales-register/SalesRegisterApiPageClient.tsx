@@ -39,7 +39,7 @@ import {
   ReportFilterSummary,
   ReportFilterField,
   ReportFinancialYearFilter,
-  ReportStateFilter,
+  ReportStateMultiFilter,
   ReportSearchFilter,
   ReportFilterResetButton,
   ACCOUNTS_FILTER_CONTROL_CLASS as filterControlClass,
@@ -47,6 +47,15 @@ import {
 } from "@/components/accounts/ReportFilters";
 import { AccountsColumnHeader } from "@/components/accounts/AccountsColumnHeader";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
+import {
+  applyAccountsColumnFilters,
+  collectColumnValueCounts,
+} from "@/lib/accounts/column-filter-engine";
+import type {
+  AccountsColumnFilterState,
+  AccountsColumnFilters,
+  ColumnValueOption,
+} from "@/lib/accounts/column-filter-types";
 import {
   formatMoneyString,
   formatMoneyStringOrDash,
@@ -61,6 +70,7 @@ import { StatusBadge } from "@/app/(app)/accounts/components/AccountsUI";
 import type { ReportFilterSummaryItem } from "@/lib/accounts/report-multi-filter-utils";
 import {
   buildEntityFilterSummary,
+  matchesMultiFilter,
   type ReportMultiSelectOption,
 } from "@/lib/accounts/report-multi-filter-utils";
 import {
@@ -86,7 +96,6 @@ const DESCRIPTION =
   "Sales Tax Invoices (Posted and Cancelled) with taxable value, CGST/SGST/IGST breakup, and net totals (Posted − Cancelled). Drafts and other sales documents are excluded.";
 
 const GST_TYPE_OPTIONS: { value: string; label: string }[] = [
-  { value: "all", label: "All GST types" },
   { value: "cgst_sgst", label: "CGST/SGST" },
   { value: "igst", label: "IGST" },
 ];
@@ -96,7 +105,80 @@ const STATUS_OPTIONS: { value: "POSTED" | "CANCELLED"; label: string }[] = [
   { value: "CANCELLED", label: "Cancelled" },
 ];
 
+const STATUS_OPTION_LABELS: Record<string, string> = {
+  POSTED: "Posted",
+  CANCELLED: "Cancelled",
+};
+
 const DEFAULT_STATUSES: SalesRegisterReportStatus[] = ["POSTED", "CANCELLED"];
+
+/** Columns filtered client-side on the loaded page of rows (no dedicated multi API). */
+const CLIENT_FILTER_COLUMNS = new Set([
+  "invoice_no",
+  "customer_name",
+  "gstin",
+  "state",
+  "salesperson",
+  "status",
+  "product_code",
+  "product_name",
+  "hsn_sac",
+]);
+
+function selectedColumnValues(
+  filter?: AccountsColumnFilterState,
+): string[] {
+  return (filter?.selectedValues ?? [])
+    .map((v) => String(v).trim())
+    .filter(Boolean);
+}
+
+function getSalesRegisterFilterCell(
+  row: SalesRegisterApiRow,
+  colKey: string,
+): string {
+  switch (colKey) {
+    case "invoice_no":
+      return row.invoice_no || "";
+    case "customer_name":
+      return row.customer.name || "";
+    case "gstin":
+      return row.customer.gstin || "";
+    case "state":
+      return row.state.name || row.state.code || "";
+    case "salesperson":
+      return row.salesperson.name || "";
+    case "status":
+      return row.invoice_status || "";
+    case "product_code":
+      return row.item?.product.code || "";
+    case "product_name":
+      return row.item?.product.name || "";
+    case "hsn_sac":
+      return row.item?.hsn_sac || "";
+    default:
+      return "";
+  }
+}
+
+function intersectIds(a: string[], b: string[]): string[] {
+  if (a.length === 0) return b;
+  if (b.length === 0) return a;
+  const set = new Set(a);
+  return b.filter((id) => set.has(id));
+}
+
+const DEFAULT_INVOICE_TYPES: SalesRegisterInvoiceType[] = [
+  "SALES",
+  "DIRECT_SERVICE",
+  "STOCK_TRANSFER",
+];
+
+const INVOICE_TYPE_LABELS: Record<SalesRegisterInvoiceType, string> = {
+  SALES: "Sales",
+  DIRECT_SERVICE: "Direct Service",
+  STOCK_TRANSFER: "Stock Transfer",
+};
 
 const ROW_GRAIN_OPTIONS: { value: SalesRegisterRowGrain; label: string }[] = [
   { value: "INVOICE", label: "Invoice wise" },
@@ -107,6 +189,12 @@ function statusesMatchDefault(values: string[]): boolean {
   if (values.length !== DEFAULT_STATUSES.length) return false;
   const set = new Set(values);
   return DEFAULT_STATUSES.every((s) => set.has(s));
+}
+
+function invoiceTypesMatchDefault(values: string[]): boolean {
+  if (values.length !== DEFAULT_INVOICE_TYPES.length) return false;
+  const set = new Set(values);
+  return DEFAULT_INVOICE_TYPES.every((t) => set.has(t));
 }
 
 const SORT_FIELD_MAP: Record<string, SalesRegisterSortBy> = {
@@ -122,6 +210,16 @@ function mapGstType(value: string): SalesRegisterGstTypeFilter {
   if (lower === "igst") return "IGST";
   if (lower === "cgst_sgst") return "CGST_SGST";
   return "ALL";
+}
+
+/** API accepts a single gst_type; empty or both dimensions → ALL. */
+function mapGstTypes(values: string[]): SalesRegisterGstTypeFilter {
+  const mapped = values
+    .map(mapGstType)
+    .filter((v): v is Exclude<SalesRegisterGstTypeFilter, "ALL"> => v !== "ALL");
+  if (mapped.length === 0) return "ALL";
+  if (mapped.includes("IGST") && mapped.includes("CGST_SGST")) return "ALL";
+  return mapped[0] ?? "ALL";
 }
 
 function formatStatusForBadge(status: SalesRegisterReportStatus): string {
@@ -162,16 +260,19 @@ export default function SalesRegisterApiPageClient() {
   const [customerTypeId, setCustomerTypeId] = useState("all");
   const [salespersonIds, setSalespersonIds] = useState<string[]>([]);
   const [statuses, setStatuses] = useState<string[]>([...DEFAULT_STATUSES]);
-  const [invoiceTypes, setInvoiceTypes] = useState<string[]>([]);
-  const [stateCode, setStateCode] = useState("all");
+  const [invoiceTypes, setInvoiceTypes] = useState<string[]>([
+    ...DEFAULT_INVOICE_TYPES,
+  ]);
+  const [stateCodes, setStateCodes] = useState<string[]>([]);
   const [invoiceNo, setInvoiceNo] = useState("");
   const [debouncedInvoiceNo, setDebouncedInvoiceNo] = useState("");
-  const [gstType, setGstType] = useState("all");
+  const [gstTypes, setGstTypes] = useState<string[]>([]);
   const [rowGrain, setRowGrain] = useState<SalesRegisterRowGrain>("INVOICE");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [sortBy, setSortBy] = useState<SalesRegisterSortBy>("invoice_date");
   const [sortOrder, setSortOrder] = useState<SalesRegisterSortOrder>("desc");
+  const [columnFilters, setColumnFilters] = useState<AccountsColumnFilters>({});
 
   const [report, setReport] = useState<SalesRegisterReportResult | null>(null);
   const [reportLoading, setReportLoading] = useState(false);
@@ -268,6 +369,15 @@ export default function SalesRegisterApiPageClient() {
     setStatuses(
       defaultStatuses.length > 0 ? defaultStatuses : [...DEFAULT_STATUSES],
     );
+    const defaultInvoiceTypes = (filtersConfig.defaults.invoice_types ?? []).filter(
+      (t): t is SalesRegisterInvoiceType =>
+        t === "SALES" || t === "DIRECT_SERVICE" || t === "STOCK_TRANSFER",
+    );
+    setInvoiceTypes(
+      defaultInvoiceTypes.length > 0
+        ? defaultInvoiceTypes
+        : [...DEFAULT_INVOICE_TYPES],
+    );
     appliedDefaults.current = true;
   }, [filtersConfig, ready, setDateFrom, setDateTo, setPreset]);
 
@@ -315,11 +425,31 @@ export default function SalesRegisterApiPageClient() {
     { value: "STOCK_TRANSFER" as const, label: "Stock Transfer" },
   ];
 
+  const handleColumnFilterChange = useCallback(
+    (colKey: string, value: AccountsColumnFilterState | undefined) => {
+      setColumnFilters((prev) => {
+        if (!value) {
+          const next = { ...prev };
+          delete next[colKey];
+          return next;
+        }
+        return { ...prev, [colKey]: value };
+      });
+    },
+    [],
+  );
+
   const queryParams = useMemo<SalesRegisterQueryParams | null>(() => {
     if (!financialYearId || financialYearId === "all" || !dateFrom || !dateTo) {
       return null;
     }
-    const statusParams = statuses.filter(
+    const colStatuses = selectedColumnValues(columnFilters.status).filter(
+      (s): s is SalesRegisterReportStatus =>
+        s === "POSTED" || s === "CANCELLED",
+    );
+    const statusParams = (
+      colStatuses.length > 0 ? colStatuses : statuses
+    ).filter(
       (s): s is SalesRegisterReportStatus =>
         s === "POSTED" || s === "CANCELLED",
     );
@@ -328,7 +458,52 @@ export default function SalesRegisterApiPageClient() {
         t === "SALES" || t === "DIRECT_SERVICE" || t === "STOCK_TRANSFER",
     );
     const allowedCustomerIds = new Set(customers.map((c) => c.id));
-    const safeCustomerIds = customerIds.filter((id) => allowedCustomerIds.has(id));
+    const toolbarCustomerIds = customerIds.filter((id) =>
+      allowedCustomerIds.has(id),
+    );
+    const colCustomerNames = selectedColumnValues(columnFilters.customer_name);
+    const colCustomerIds =
+      colCustomerNames.length > 0
+        ? customers
+            .filter((c) => colCustomerNames.includes(c.customerName))
+            .map((c) => c.id)
+        : [];
+    const safeCustomerIds = intersectIds(toolbarCustomerIds, colCustomerIds);
+
+    const colSalespersonNames = selectedColumnValues(columnFilters.salesperson);
+    const colSalespersonIds =
+      colSalespersonNames.length > 0
+        ? (filtersConfig?.salespeople ?? [])
+            .filter((p) => colSalespersonNames.includes(p.name))
+            .map((p) => p.user_id)
+        : [];
+    const effectiveSalespersonIds = intersectIds(
+      salespersonIds,
+      colSalespersonIds,
+    );
+
+    const colInvoiceNos = selectedColumnValues(columnFilters.invoice_no);
+    // API accepts a single search string; multi invoice nos stay client-side.
+    const effectiveInvoiceNumber =
+      colInvoiceNos.length === 1
+        ? colInvoiceNos[0]
+        : debouncedInvoiceNo || undefined;
+
+    const colStates = selectedColumnValues(columnFilters.state);
+    // API is single state_code; toolbar/column multi-state OR-filters loaded rows.
+    let effectiveStateCode =
+      stateCodes.length === 1 ? stateCodes[0] : undefined;
+    if (colStates.length === 1 && stateCodes.length <= 1) {
+      const match = (filtersConfig?.states ?? []).find(
+        (s) => s.state_name === colStates[0] || s.state_code === colStates[0],
+      );
+      if (match) {
+        if (!effectiveStateCode || effectiveStateCode === match.state_code) {
+          effectiveStateCode = match.state_code;
+        }
+      }
+    }
+
     return {
       financial_year_id: financialYearId,
       from_date: dateFrom,
@@ -338,13 +513,13 @@ export default function SalesRegisterApiPageClient() {
       customer_ids: safeCustomerIds,
       customer_type_id:
         customerTypeId !== "all" ? customerTypeId : undefined,
-      salesperson_ids: salespersonIds,
-      invoice_number: debouncedInvoiceNo || undefined,
-      state_code: stateCode !== "all" ? stateCode : undefined,
+      salesperson_ids: effectiveSalespersonIds,
+      invoice_number: effectiveInvoiceNumber,
+      state_code: effectiveStateCode,
       statuses:
         statusParams.length > 0 ? statusParams : [...DEFAULT_STATUSES],
       invoice_types: typeParams.length > 0 ? typeParams : undefined,
-      gst_type: mapGstType(gstType),
+      gst_type: mapGstTypes(gstTypes),
       row_grain: rowGrain,
       page,
       page_size: pageSize,
@@ -353,14 +528,16 @@ export default function SalesRegisterApiPageClient() {
     };
   }, [
     branchIds,
+    columnFilters,
     customerIds,
     customers,
     customerTypeId,
     dateFrom,
     dateTo,
     debouncedInvoiceNo,
+    filtersConfig,
     financialYearId,
-    gstType,
+    gstTypes,
     invoiceTypes,
     page,
     pageSize,
@@ -368,7 +545,7 @@ export default function SalesRegisterApiPageClient() {
     salespersonIds,
     sortBy,
     sortOrder,
-    stateCode,
+    stateCodes,
     statuses,
     warehouseIds,
   ]);
@@ -385,12 +562,13 @@ export default function SalesRegisterApiPageClient() {
     customerTypeId,
     salespersonIds,
     debouncedInvoiceNo,
-    stateCode,
+    stateCodes,
     statuses,
     invoiceTypes,
-    gstType,
+    gstTypes,
     rowGrain,
     pageSize,
+    columnFilters,
   ]);
 
   useEffect(() => {
@@ -438,12 +616,21 @@ export default function SalesRegisterApiPageClient() {
     setStatuses(
       defaultStatuses.length > 0 ? defaultStatuses : [...DEFAULT_STATUSES],
     );
-    setInvoiceTypes([]);
-    setStateCode("all");
+    const defaultInvoiceTypes = (filtersConfig?.defaults.invoice_types ?? []).filter(
+      (t): t is SalesRegisterInvoiceType =>
+        t === "SALES" || t === "DIRECT_SERVICE" || t === "STOCK_TRANSFER",
+    );
+    setInvoiceTypes(
+      defaultInvoiceTypes.length > 0
+        ? defaultInvoiceTypes
+        : [...DEFAULT_INVOICE_TYPES],
+    );
+    setStateCodes([]);
     setInvoiceNo("");
     setDebouncedInvoiceNo("");
-    setGstType("all");
+    setGstTypes([]);
     setRowGrain(filtersConfig?.defaults.row_grain || "INVOICE");
+    setColumnFilters({});
     setPage(1);
     setSortBy("invoice_date");
     setSortOrder("desc");
@@ -514,7 +701,72 @@ export default function SalesRegisterApiPageClient() {
   );
 
   const summary = report?.summary;
-  const rows = report?.rows ?? [];
+  const fetchedRows = report?.rows ?? [];
+  const filterOptionsByColumn = useMemo(() => {
+    const keys = [
+      "invoice_no",
+      "customer_name",
+      "gstin",
+      "state",
+      "salesperson",
+      "product_code",
+      "product_name",
+      "hsn_sac",
+    ] as const;
+    const out: Record<string, ColumnValueOption[]> = {
+      status: STATUS_OPTIONS.map((s) => ({ value: s.value, count: 0 })),
+    };
+    for (const key of keys) {
+      out[key] = collectColumnValueCounts(
+        fetchedRows,
+        key,
+        getSalesRegisterFilterCell,
+      );
+    }
+    return out;
+  }, [fetchedRows]);
+
+  // Client-side AND across columns on the loaded page (GSTIN / multi invoice-no /
+  // multi state / product cols have no multi API; status/customer/salesperson/
+  // single invoice/state also map into queryParams above for export + fetch).
+  const rows = useMemo(() => {
+    let next = applyAccountsColumnFilters(
+      fetchedRows,
+      Object.fromEntries(
+        Object.entries(columnFilters).filter(([key]) =>
+          CLIENT_FILTER_COLUMNS.has(key),
+        ),
+      ),
+      getSalesRegisterFilterCell,
+    );
+    // Toolbar multi-state: API only accepts one state_code.
+    if (stateCodes.length > 1) {
+      next = next.filter((row) =>
+        matchesMultiFilter(stateCodes, row.state.code ?? row.state.name),
+      );
+    }
+    return next;
+  }, [fetchedRows, columnFilters, stateCodes]);
+
+  const filterableProps = useCallback(
+    (
+      colKey: string,
+      opts?: {
+        filterType?: "text" | "status";
+        optionLabels?: Record<string, string>;
+      },
+    ) => ({
+      filterable: true as const,
+      filterType: opts?.filterType ?? ("text" as const),
+      filterValue: columnFilters[colKey],
+      onFilterChange: (value: AccountsColumnFilterState | undefined) =>
+        handleColumnFilterChange(colKey, value),
+      valueOptions: filterOptionsByColumn[colKey] ?? [],
+      optionLabels: opts?.optionLabels,
+    }),
+    [columnFilters, filterOptionsByColumn, handleColumnFilterChange],
+  );
+
   const pagination = report?.pagination;
   const totalRows = pagination?.total_rows ?? 0;
   const itemWise = rowGrain === "ITEM";
@@ -525,11 +777,14 @@ export default function SalesRegisterApiPageClient() {
     customerTypeId !== "all" ||
     salespersonIds.length > 0 ||
     !statusesMatchDefault(statuses) ||
-    invoiceTypes.length > 0 ||
-    stateCode !== "all" ||
+    !invoiceTypesMatchDefault(invoiceTypes) ||
+    stateCodes.length > 0 ||
     Boolean(invoiceNo.trim()) ||
-    gstType !== "all" ||
-    rowGrain !== "INVOICE";
+    gstTypes.length > 0 ||
+    rowGrain !== "INVOICE" ||
+    Object.values(columnFilters).some(
+      (f) => f?.selectedValues && f.selectedValues.length > 0,
+    );
 
   const filterSummaryItems = useMemo(() => {
     const items: Array<ReportFilterSummaryItem | null> = [
@@ -590,7 +845,7 @@ export default function SalesRegisterApiPageClient() {
             onRemove: () => setStatuses([...DEFAULT_STATUSES]),
           }
         : null,
-      invoiceTypes.length > 0
+      !invoiceTypesMatchDefault(invoiceTypes)
         ? {
             id: "invoice_types",
             label: "Invoice Type",
@@ -600,29 +855,23 @@ export default function SalesRegisterApiPageClient() {
                   invoiceTypeOptions.find((o) => o.value === t)?.label ?? t,
               )
               .join(", "),
-            onRemove: () => setInvoiceTypes([]),
+            onRemove: () => setInvoiceTypes([...DEFAULT_INVOICE_TYPES]),
           }
         : null,
-      stateCode !== "all"
-        ? {
-            id: "state",
-            label: "State",
-            value:
-              stateOptions.find((s) => s.value === stateCode)?.label ??
-              stateCode,
-            onRemove: () => setStateCode("all"),
-          }
-        : null,
-      gstType !== "all"
-        ? {
-            id: "gstType",
-            label: "GST Type",
-            value:
-              GST_TYPE_OPTIONS.find((o) => o.value === gstType)?.label ??
-              gstType,
-            onRemove: () => setGstType("all"),
-          }
-        : null,
+      buildEntityFilterSummary(
+        "state",
+        "State",
+        stateCodes,
+        stateOptions,
+        () => setStateCodes([]),
+      ),
+      buildEntityFilterSummary(
+        "gstType",
+        "GST Type",
+        gstTypes,
+        GST_TYPE_OPTIONS,
+        () => setGstTypes([]),
+      ),
       rowGrain !== "INVOICE"
         ? {
             id: "rowGrain",
@@ -650,14 +899,14 @@ export default function SalesRegisterApiPageClient() {
     customerTypeId,
     customerTypeOptions,
     customers,
-    gstType,
+    gstTypes,
     invoiceNo,
     invoiceTypeOptions,
     invoiceTypes,
     rowGrain,
     salespersonIds,
     salespersonOptions,
-    stateCode,
+    stateCodes,
     stateOptions,
     statuses,
     warehouseIds,
@@ -764,9 +1013,9 @@ export default function SalesRegisterApiPageClient() {
               onChange={setInvoiceNo}
               placeholder="Invoice number…"
             />
-            <ReportStateFilter
-              value={stateCode}
-              onChange={setStateCode}
+            <ReportStateMultiFilter
+              values={stateCodes}
+              onChange={setStateCodes}
               options={stateOptions}
             />
             <ReportStatusMultiFilter
@@ -787,20 +1036,12 @@ export default function SalesRegisterApiPageClient() {
                 label: o.label,
               }))}
             />
-            <ReportFilterField label="GST Type" minWidthClass="min-w-[130px]">
-              <Select value={gstType} onValueChange={setGstType}>
-                <SelectTrigger className={cn(filterControlClass, "w-full")}>
-                  <SelectValue placeholder="All GST types" />
-                </SelectTrigger>
-                <SelectContent>
-                  {GST_TYPE_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </ReportFilterField>
+            <ReportStatusMultiFilter
+              label="GST Type"
+              values={gstTypes}
+              onChange={setGstTypes}
+              options={GST_TYPE_OPTIONS}
+            />
             <ReportFilterField label="View" minWidthClass="min-w-[140px]">
               <Select
                 value={rowGrain}
@@ -947,7 +1188,7 @@ export default function SalesRegisterApiPageClient() {
           </div>
         ) : (
           <>
-            <AccountsTable minWidth={itemWise ? 2200 : 1760}>
+            <AccountsTable minWidth={itemWise ? 2320 : 1880}>
               <AccountsTableHead>
                 <AccountsTableHeadRow>
                   <AccountsTableHeadCell
@@ -969,7 +1210,14 @@ export default function SalesRegisterApiPageClient() {
                     activeKey={activeSortCol}
                     sortDir={sortOrder}
                     onSort={handleSort}
+                    {...filterableProps("invoice_no")}
                   />
+                  <AccountsTableHeadCell
+                    uppercase
+                    className="whitespace-nowrap"
+                  >
+                    Invoice Type
+                  </AccountsTableHeadCell>
                   <AccountsTableHeadCell
                     uppercase
                     className="whitespace-nowrap"
@@ -982,25 +1230,26 @@ export default function SalesRegisterApiPageClient() {
                     activeKey={activeSortCol}
                     sortDir={sortOrder}
                     onSort={handleSort}
+                    {...filterableProps("customer_name")}
                   />
-                  <AccountsTableHeadCell
-                    uppercase
-                    className="whitespace-nowrap"
-                  >
-                    GSTIN
-                  </AccountsTableHeadCell>
-                  <AccountsTableHeadCell
-                    uppercase
-                    className="whitespace-nowrap"
-                  >
-                    State
-                  </AccountsTableHeadCell>
-                  <AccountsTableHeadCell
-                    uppercase
-                    className="whitespace-nowrap"
-                  >
-                    Salesperson
-                  </AccountsTableHeadCell>
+                  <AccountsColumnHeader
+                    label="GSTIN"
+                    colKey="gstin"
+                    sortable={false}
+                    {...filterableProps("gstin")}
+                  />
+                  <AccountsColumnHeader
+                    label="State"
+                    colKey="state"
+                    sortable={false}
+                    {...filterableProps("state")}
+                  />
+                  <AccountsColumnHeader
+                    label="Salesperson"
+                    colKey="salesperson"
+                    sortable={false}
+                    {...filterableProps("salesperson")}
+                  />
                   <AccountsTableHeadCell
                     uppercase
                     className="whitespace-nowrap min-w-[220px]"
@@ -1009,24 +1258,24 @@ export default function SalesRegisterApiPageClient() {
                   </AccountsTableHeadCell>
                   {itemWise ? (
                     <>
-                      <AccountsTableHeadCell
-                        uppercase
-                        className="whitespace-nowrap"
-                      >
-                        Product Code
-                      </AccountsTableHeadCell>
-                      <AccountsTableHeadCell
-                        uppercase
-                        className="whitespace-nowrap"
-                      >
-                        Product Name
-                      </AccountsTableHeadCell>
-                      <AccountsTableHeadCell
-                        uppercase
-                        className="whitespace-nowrap"
-                      >
-                        HSN / SAC
-                      </AccountsTableHeadCell>
+                      <AccountsColumnHeader
+                        label="Product Code"
+                        colKey="product_code"
+                        sortable={false}
+                        {...filterableProps("product_code")}
+                      />
+                      <AccountsColumnHeader
+                        label="Product Name"
+                        colKey="product_name"
+                        sortable={false}
+                        {...filterableProps("product_name")}
+                      />
+                      <AccountsColumnHeader
+                        label="HSN / SAC"
+                        colKey="hsn_sac"
+                        sortable={false}
+                        {...filterableProps("hsn_sac")}
+                      />
                       <AccountsTableHeadCell
                         uppercase
                         align="right"
@@ -1126,12 +1375,15 @@ export default function SalesRegisterApiPageClient() {
                       Payment Terms
                     </AccountsTableHeadCell>
                   )}
-                  <AccountsTableHeadCell
-                    uppercase
-                    className="whitespace-nowrap"
-                  >
-                    Status
-                  </AccountsTableHeadCell>
+                  <AccountsColumnHeader
+                    label="Status"
+                    colKey="status"
+                    sortable={false}
+                    {...filterableProps("status", {
+                      filterType: "status",
+                      optionLabels: STATUS_OPTION_LABELS,
+                    })}
+                  />
                 </AccountsTableHeadRow>
               </AccountsTableHead>
               <AccountsTableBody>
@@ -1193,6 +1445,12 @@ function ServerSortTh({
   sortDir,
   onSort,
   align = "left",
+  filterable = false,
+  filterType = "text",
+  filterValue,
+  onFilterChange,
+  valueOptions,
+  optionLabels,
 }: {
   label: string;
   colKey: string;
@@ -1200,6 +1458,12 @@ function ServerSortTh({
   sortDir: SalesRegisterSortOrder;
   onSort: (key: string) => void;
   align?: "left" | "right";
+  filterable?: boolean;
+  filterType?: "text" | "status";
+  filterValue?: AccountsColumnFilterState;
+  onFilterChange?: (value: AccountsColumnFilterState | undefined) => void;
+  valueOptions?: ColumnValueOption[];
+  optionLabels?: Record<string, string>;
 }) {
   return (
     <AccountsColumnHeader
@@ -1207,10 +1471,15 @@ function ServerSortTh({
       colKey={colKey}
       align={align}
       sortable
-      filterable={false}
+      filterable={filterable}
+      filterType={filterType}
       sortKey={activeKey}
       sortDir={sortDir}
       onSort={onSort}
+      filterValue={filterValue}
+      onFilterChange={onFilterChange}
+      valueOptions={valueOptions}
+      optionLabels={optionLabels}
     />
   );
 }
@@ -1243,7 +1512,7 @@ function SummaryFooterRow({
   return (
     <AccountsTableRow className={rowClass}>
       <AccountsTableCell
-        colSpan={itemWise ? 15 : 9}
+        colSpan={itemWise ? 16 : 10}
         className="font-semibold text-xs text-foreground"
       >
         {label}
@@ -1364,6 +1633,9 @@ function SalesRegisterRowView({
         >
           {row.invoice_no}
         </Link>
+      </AccountsTableCell>
+      <AccountsTableCell className="text-xs whitespace-nowrap">
+        {INVOICE_TYPE_LABELS[row.invoice_type] ?? row.invoice_type}
       </AccountsTableCell>
       <AccountsTableCell mono className="text-xs text-brand-700">
         {row.customer.code || "—"}

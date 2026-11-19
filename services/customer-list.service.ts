@@ -1,6 +1,7 @@
 import { axiosInstance } from "@/api/axios";
 import { API_ENDPOINTS } from "@/api/endpoints";
 import { CustomerBranch } from "@/app/(app)/masters/customers/customer-data";
+import { toApiFilterValue, toFilterStringList } from "@/lib/listing/filter-values";
 import { createFlatDateAuditFieldMapper } from "@/lib/masters/list-api-filters";
 
 export interface CustomerBranchDocumentPayload {
@@ -346,32 +347,47 @@ function mapFilters(filters: Record<string, unknown> = {}) {
         }
 
         if (key === "mobile" || key === "mobileNo") {
-            const raw = String(Array.isArray(value) ? value[0] : value).trim();
-            const digits = raw.replace(/^\+\d+\s*/, "").replace(/\D/g, "");
-            if (digits) mapped.mobile_no = digits;
+            const mobiles = toFilterStringList(value)
+                .map((raw) => raw.replace(/^\+\d+\s*/, "").replace(/\D/g, ""))
+                .filter(Boolean);
+            const mobile = toApiFilterValue(mobiles);
+            if (mobile !== undefined) mapped.mobile_no = mobile;
             continue;
         }
 
         if (key === "creditLimit") {
-            const raw = String(Array.isArray(value) ? value[0] : value)
-                .replace(/[₹,\s]/g, "")
-                .trim();
-            const num = Number(raw);
-            if (Number.isFinite(num)) mapped.credit_limit = num;
+            const limits = toFilterStringList(value)
+                .map((raw) => Number(raw.replace(/[₹,\s]/g, "").trim()))
+                .filter((num) => Number.isFinite(num))
+                .map(String);
+            const creditLimit = toApiFilterValue(limits);
+            if (creditLimit !== undefined) {
+                mapped.credit_limit =
+                    typeof creditLimit === "string"
+                        ? Number(creditLimit)
+                        : creditLimit.map(Number);
+            }
             continue;
         }
 
         if (key === "status") {
-            const raw = String(Array.isArray(value) ? value[0] : value).trim().toLowerCase();
-            if (raw === "active") mapped.status = "Active";
-            else if (raw === "inactive") mapped.status = "Inactive";
-            else if (raw) mapped.status = raw;
+            const tokens = toFilterStringList(value).map((t) => t.toLowerCase());
+            const hasActive = tokens.includes("active");
+            const hasInactive = tokens.includes("inactive");
+            if (hasActive && hasInactive) continue;
+            const mappedStatuses = tokens.map((raw) => {
+                if (raw === "active") return "Active";
+                if (raw === "inactive") return "Inactive";
+                return raw;
+            });
+            const status = toApiFilterValue(mappedStatuses);
+            if (status !== undefined) mapped.status = status;
             continue;
         }
 
         const apiKey = FILTER_FIELD_MAP[key] ?? key;
-
-        mapped[apiKey] = Array.isArray(value) ? value[0] : value;
+        const apiValue = toApiFilterValue(value);
+        if (apiValue !== undefined) mapped[apiKey] = apiValue;
     }
 
     return mapped;
