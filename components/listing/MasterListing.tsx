@@ -5,6 +5,7 @@ import { ChevronDown, ChevronUp, ChevronsUpDown, Search, SlidersHorizontal, Plus
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
 import { ColumnConfig, FilterState, SortState, MasterListingProps } from "./types";
 import { FilterPopover } from "./FilterPopover";
 import { DateRangeFilter } from "./DateRangeFilter";
@@ -46,6 +47,8 @@ export function MasterListing<T = any>({
   onAdd,
   addLabel = "Add New",
   onExport,
+  onExportExcel,
+  onExportPdf,
   searchPlaceholder = "Search...",
   hideSearch = false,
   currentFilters,
@@ -175,7 +178,12 @@ export function MasterListing<T = any>({
 
         {/* Right aligned actions (Add, Export) */}
         <div className="ml-auto flex items-center gap-2">
-          {onExport && (
+          {onExportExcel || onExportPdf ? (
+            <AccountsExportMenu
+              onExcel={onExportExcel}
+              onPdf={onExportPdf}
+            />
+          ) : onExport ? (
             <Button
               variant="outline"
               size="sm"
@@ -184,7 +192,7 @@ export function MasterListing<T = any>({
             >
               <Download className="w-3.5 h-3.5" /> Export
             </Button>
-          )}
+          ) : null}
           {onAdd && (
             <Button
               size="sm"

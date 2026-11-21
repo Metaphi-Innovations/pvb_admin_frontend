@@ -11,7 +11,7 @@ import {
   ReportFilterRow,
   ReportDateRangeFilter,
   ReportFinancialYearFilter,
-  ReportBranchMultiFilter,
+  ReportBranchFilter,
   ReportFilterSummary,
   ReportFromDateFilter,
   ReportToDateFilter,
@@ -67,7 +67,7 @@ export default function ProfitLossPageClient() {
   const [dateTo, setDateTo] = useState("");
   const [datesReady, setDatesReady] = useState(false);
   const [financialYearId, setFinancialYearId] = useState("");
-  const [warehouseIds, setWarehouseIds] = useState<string[]>([]);
+  const [warehouseId, setWarehouseId] = useState<string>("all");
   const [exporting, setExporting] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -85,12 +85,9 @@ export default function ProfitLossPageClient() {
     const urlBranch = searchParams.get("branch") ?? searchParams.get("warehouse") ?? "";
     if (urlFy && urlFy !== "all") setFinancialYearId(urlFy);
     if (urlBranch && urlBranch !== "all") {
-      setWarehouseIds(
-        urlBranch
-          .split(",")
-          .map((v) => v.trim())
-          .filter((v) => v && v.toLowerCase() !== "all"),
-      );
+      // Single-select only; legacy comma-separated URLs keep the first branch.
+      const first = urlBranch.split(",")[0]?.trim() ?? "";
+      if (first && first.toLowerCase() !== "all") setWarehouseId(first);
     }
     setUrlReady(true);
   }, [mounted, searchParams, urlReady]);
@@ -193,7 +190,8 @@ export default function ProfitLossPageClient() {
       financial_year_id: financialYearId,
       from_date: dateFrom,
       to_date: dateTo,
-      warehouse_id: warehouseIds.length === 1 ? warehouseIds[0] : undefined,
+      warehouse_id:
+        warehouseId && warehouseId !== "all" ? warehouseId : undefined,
       show_zero: showZeroDefault,
     };
   }, [
@@ -201,7 +199,7 @@ export default function ProfitLossPageClient() {
     financialYearId,
     dateFrom,
     dateTo,
-    warehouseIds,
+    warehouseId,
     showZeroDefault,
     activeTab,
     fyBounds,
@@ -237,8 +235,7 @@ export default function ProfitLossPageClient() {
       fromDate: dateFrom,
       toDate: dateTo,
       reportType: activeTab,
-      warehouseId:
-        warehouseIds.length === 0 ? "all" : warehouseIds.join(","),
+      warehouseId: warehouseId || "all",
       groupId: "all",
       subGroupId: "all",
       ledgerId: "all",
@@ -252,7 +249,7 @@ export default function ProfitLossPageClient() {
     financialYearId,
     dateFrom,
     dateTo,
-    warehouseIds,
+    warehouseId,
     activeTab,
     fyBounds,
     router,
@@ -331,7 +328,7 @@ export default function ProfitLossPageClient() {
     setFinancialYearId(fyId);
     setDateFrom(range.from);
     setDateTo(range.to);
-    setWarehouseIds([]);
+    setWarehouseId("all");
   }, [filtersConfig, selectedFY, financialYearId, dateFrom, dateTo]);
 
   const handleExport = async (format: "EXCEL" | "PDF") => {
@@ -357,7 +354,8 @@ export default function ProfitLossPageClient() {
     report && (!report.trading_account.is_balanced || !report.profit_and_loss_account.is_balanced),
   );
 
-  const hasFilters = warehouseIds.length > 0 || activeTab !== "normal" || preset !== "custom";
+  const hasFilters =
+    (warehouseId && warehouseId !== "all") || activeTab !== "normal" || preset !== "custom";
 
   const scopeSummaryItems = useMemo((): ReportFilterSummaryItem[] => {
     const fyName = selectedFy?.name || selectedFY?.label || financialYearId;
@@ -370,15 +368,12 @@ export default function ProfitLossPageClient() {
       id: "branch",
       label: "Branch",
       value:
-        warehouseIds.length === 0
+        !warehouseId || warehouseId === "all"
           ? "All branches"
-          : warehouseIds.length === 1
-            ? branchOptions.find((branch) => branch.id === warehouseIds[0])?.name ??
-              warehouseIds[0]
-            : `${warehouseIds.length} branches`,
+          : branchOptions.find((branch) => branch.id === warehouseId)?.name ?? warehouseId,
     });
     return items;
-  }, [selectedFy, selectedFY, financialYearId, dateFrom, dateTo, warehouseIds, branchOptions]);
+  }, [selectedFy, selectedFY, financialYearId, dateFrom, dateTo, warehouseId, branchOptions]);
 
   const filterBar = (
     <ReportFilterRow
@@ -407,11 +402,11 @@ export default function ProfitLossPageClient() {
       />
       <ReportFromDateFilter value={dateFrom} onChange={setDateFrom} min={fyMin} max={dateTo || fyMax} />
       <ReportToDateFilter value={dateTo} onChange={setDateTo} min={dateFrom || fyMin} max={fyMax} />
-      <ReportBranchMultiFilter
-            values={warehouseIds}
-            onChange={setWarehouseIds}
-            labeledOptions={branchOptions.map((b) => ({ value: b.id, label: b.name }))}
-          />
+      <ReportBranchFilter
+        value={warehouseId || "all"}
+        onChange={setWarehouseId}
+        options={branchOptions}
+      />
       {hasFilters && (
         <Button variant="outline" size="sm" className="h-8 text-sm px-2" onClick={resetFilters}>
           Reset
@@ -470,12 +465,6 @@ export default function ProfitLossPageClient() {
             </ul>
           </div>
         )}
-        {report?.health.internal_transfer_excluded &&
-          !warnings.some((warning) => warning.code === "INTERNAL_TRANSFER_EXCLUDED") && (
-          <p className="px-3 pt-2 text-[11px] text-muted-foreground">
-            Internal stock-transfer sales/costs are excluded from the consolidated P&L.
-          </p>
-        )}
         {totalsUnequal && (
           <p className="px-3 pt-2 text-[11px] text-red-700">
             Backend report totals are not balanced. The screen is showing the returned totals and has not adjusted them.
@@ -514,7 +503,8 @@ export default function ProfitLossPageClient() {
               dateFrom: periodFrom,
               dateTo: periodTo,
               financialYearId,
-              warehouseId: warehouseIds.length === 1 ? warehouseIds[0] : undefined,
+              warehouseId:
+                warehouseId && warehouseId !== "all" ? warehouseId : undefined,
             }}
           />
         )}

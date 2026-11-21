@@ -74,9 +74,10 @@ export const FIXED_SCHEME_QUANTITY_UOM = DEFAULT_SCHEME_QUANTITY_UOM;
 
 export const SCHEME_QUANTITY_UOM_OPTIONS = SCHEME_QUANTITY_UOMS;
 
+/** KG_LTR temporarily hidden — only Unit Qty (Pieces) is offered in the UI. */
 export const QUANTITY_MEASURED_AS_OPTIONS = [
   { value: "Piece", label: "Unit Qty (Pieces)" },
-  { value: "KG_LTR", label: "Quantity Base (KG/LTR)" },
+  // { value: "KG_LTR", label: "Quantity Base (KG/LTR)" },
 ] as const;
 
 export function normalizeSchemeQuantityUom(
@@ -567,9 +568,8 @@ export function applySpecialDiscountBasedOn(
 ): SchemeUnifiedForm {
   if (form.schemeCategory !== "Special Discount") return form;
   if (basedOn === "Sales Quantity") {
-    const uom = normalizeSchemeQuantityUom(
-      form.specialDiscountUom || DEFAULT_SCHEME_QUANTITY_UOM,
-    );
+    // KG_LTR option is hidden for now — always Unit Qty (Pieces).
+    const uom = DEFAULT_SCHEME_QUANTITY_UOM;
     const quantitySlabs = (
       form.specialDiscountQuantitySlabs.length
         ? form.specialDiscountQuantitySlabs
@@ -583,9 +583,6 @@ export function applySpecialDiscountBasedOn(
       productIds: form.productIds,
       specialDiscountUom: uom,
       specialDiscountQuantitySlabs: quantitySlabs,
-      ...(uom === "KG_LTR"
-        ? { specialEvaluationScope: "One Invoice" as const }
-        : {}),
     };
   }
   // Sales Amount: restore All/Selected dropdown; keep products if any were selected.

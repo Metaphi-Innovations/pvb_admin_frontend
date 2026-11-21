@@ -54,6 +54,15 @@
   max-height: var(--so-ctrl-h) !important;
   padding-left: 0.5rem !important;
   padding-right: 0.5rem !important;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.transaction-voucher-view .so-goods-ro:not(.so-goods-ro--multiline),
+.receipt-voucher-view .so-goods-ro:not(.so-goods-ro--multiline) {
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .transaction-voucher-view button:disabled span,

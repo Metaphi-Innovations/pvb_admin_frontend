@@ -39,7 +39,6 @@ import {
   applySelectedProductIds,
   applySpecialDiscountBasedOn,
   applySpecialDiscountProductIds,
-  applySpecialDiscountQuantityUom,
   buildSchemeWorkingSummary,
   formatProductsApplicabilitySummary,
   categoryShowsImpactFlags,
@@ -50,7 +49,6 @@ import {
   formShowsProductApplicability,
   getProductDiscountRowError,
   productIdsWithDiscountData,
-  QUANTITY_MEASURED_AS_OPTIONS,
   quantityUomLabel,
   normalizeSchemeQuantityUom,
   resolveAutomaticBenefit,
@@ -58,7 +56,6 @@ import {
   syncProductDiscountRules,
   type ProductDiscountRuleForm,
   type ProductDiscountSetupMode,
-  type SchemeQuantityUom,
   type SchemeUnifiedForm,
   type SpecialDiscountBasedOnUI,
   type SpecialEvaluationScopeUI,
@@ -108,7 +105,6 @@ const SPECIAL_SETTLEMENT_RUN_MODE_SELECT_OPTIONS = toSchemeSelectOptions(
 const SPECIAL_DISCOUNT_BASED_ON_SELECT_OPTIONS = toSchemeSelectOptions(
   SPECIAL_DISCOUNT_BASED_ON_OPTIONS,
 );
-const QUANTITY_MEASURED_AS_SELECT_OPTIONS = [...QUANTITY_MEASURED_AS_OPTIONS];
 const PAYMENT_CONDITION_SELECT_OPTIONS = toSchemeSelectOptions(
   PAYMENT_CONDITION_OPTIONS,
 );
@@ -609,26 +605,7 @@ function SpecialDiscountConditionFields({
             options={SPECIAL_DISCOUNT_BASED_ON_SELECT_OPTIONS}
           />
         </Field>
-        {isQty ? (
-          <Field
-            className="scheme-w-select-md"
-            label="Quantity Measured As"
-            required
-          >
-            <SchemeSearchableSelect
-              value={qtyUom}
-              onChange={(v) =>
-                onChange(
-                  applySpecialDiscountQuantityUom(
-                    form,
-                    v as SchemeQuantityUom,
-                  ),
-                )
-              }
-              options={QUANTITY_MEASURED_AS_SELECT_OPTIONS}
-            />
-          </Field>
-        ) : null}
+        {/* Quantity Measured As (KG/LTR) hidden for now — qty schemes use Unit Qty only. */}
       </div>
 
       <p className="text-[10px] text-muted-foreground leading-snug max-w-xl">
@@ -1026,6 +1003,8 @@ interface SchemeUnifiedConfigFormProps {
     id: string;
     name: string;
     customerTypeId?: string | null;
+    /** Main-branch billing state name (matches scheme state options). */
+    billingState?: string | null;
   }[];
   customerTypeSelectOptions?: { id: string; name: string }[];
   schemeCategoryOptions?: SchemeCategory[];
@@ -1078,34 +1057,78 @@ export function SchemeUnifiedConfigForm({
       CUSTOMER_TYPE_MULTI_OPTIONS.map((t) => ({ id: t, name: t })),
     [customerTypeSelectOptions],
   );
-  const customerTypeById = useMemo(() => {
+  const customerMetaById = useMemo(() => {
     if (!customerSelectOptions) return null;
     return new Map(
-      customerSelectOptions.map((c) => [c.id, c.customerTypeId ?? null]),
+      customerSelectOptions.map((c) => [
+        c.id,
+        {
+          customerTypeId: c.customerTypeId ?? null,
+          billingState: c.billingState?.trim() || null,
+        },
+      ]),
     );
   }, [customerSelectOptions]);
-  const customerIdsAllowedForTypes = (typeIds: string[], ids: string[]) => {
-    if (!customerTypeById) return ids;
-    const allowed = new Set(typeIds);
+
+  const normalizeStateKey = (value: string | null | undefined) =>
+    (value ?? "").trim().toLowerCase();
+
+  const customerIdsAllowedForScope = (
+    typeIds: string[],
+    stateNames: string[],
+    ids: string[],
+  ) => {
+    if (!customerMetaById) return ids;
+    const allowedTypes = new Set(typeIds);
+    const allowedStates = new Set(
+      stateNames.map(normalizeStateKey).filter(Boolean),
+    );
     return ids.filter((id) => {
-      const typeId = customerTypeById.get(id);
-      return Boolean(typeId && allowed.has(typeId));
+      const meta = customerMetaById.get(id);
+      if (!meta) return false;
+      const typeOk = Boolean(
+        meta.customerTypeId && allowedTypes.has(meta.customerTypeId),
+      );
+      const stateOk =
+        allowedStates.size === 0
+          ? false
+          : Boolean(
+              meta.billingState &&
+                allowedStates.has(normalizeStateKey(meta.billingState)),
+            );
+      return typeOk && stateOk;
     });
   };
-  /** Only customers of the selected customer type(s); already-locked picks stay visible. */
-  const typeFilteredCustomerOptions = useMemo(() => {
-    if (!customerTypeById) return customerOptions;
-    const allowed = new Set(form.customerTypes);
+
+  /**
+   * Customers matching selected customer type(s) and state(s).
+   * Locked picks stay visible when the scheme is already in use.
+   */
+  const scopeFilteredCustomerOptions = useMemo(() => {
+    if (!customerMetaById) return customerOptions;
+    const allowedTypes = new Set(form.customerTypes);
+    const allowedStates = new Set(
+      form.stateNames.map(normalizeStateKey).filter(Boolean),
+    );
     const locked = new Set(usageConstraints?.lockedCustomerIds ?? []);
     return customerOptions.filter((c) => {
       if (locked.has(c.id)) return true;
-      const typeId = customerTypeById.get(c.id);
-      return Boolean(typeId && allowed.has(typeId));
+      const meta = customerMetaById.get(c.id);
+      if (!meta) return false;
+      const typeOk = Boolean(
+        meta.customerTypeId && allowedTypes.has(meta.customerTypeId),
+      );
+      const stateOk = Boolean(
+        meta.billingState &&
+          allowedStates.has(normalizeStateKey(meta.billingState)),
+      );
+      return typeOk && stateOk;
     });
   }, [
     customerOptions,
-    customerTypeById,
+    customerMetaById,
     form.customerTypes,
+    form.stateNames,
     usageConstraints?.lockedCustomerIds,
   ]);
   const usesProducts = formShowsProductApplicability(form);
@@ -1437,7 +1460,20 @@ export function SchemeUnifiedConfigForm({
                 options={stateOptions}
                 selectedIds={form.stateNames}
                 lockedIds={usageConstraints?.lockedStateNames}
-                onChange={(ids) => set("stateNames", ids)}
+                onChange={(ids) =>
+                  onChange({
+                    ...form,
+                    stateNames: ids,
+                    // Drop customers that no longer match selected states/types.
+                    customerIds: usageConstraints?.isUsed
+                      ? form.customerIds
+                      : customerIdsAllowedForScope(
+                          form.customerTypes,
+                          ids,
+                          form.customerIds,
+                        ),
+                  })
+                }
                 error={
                   error && /state/i.test(error)
                     ? "Please select at least one state (or Select All)."
@@ -1464,7 +1500,11 @@ export function SchemeUnifiedConfigForm({
                     // Keep existing customers when scheme is in use (add-only).
                     customerIds: usageConstraints?.isUsed
                       ? form.customerIds
-                      : customerIdsAllowedForTypes(ids, form.customerIds),
+                      : customerIdsAllowedForScope(
+                          ids,
+                          form.stateNames,
+                          form.customerIds,
+                        ),
                   })
                 }
                 error={
@@ -1480,13 +1520,13 @@ export function SchemeUnifiedConfigForm({
               <SchemeMultiSelect
                 label="Customers"
                 placeholder={
-                  form.customerTypes.length === 0
-                    ? "Select customer type first"
+                  form.stateNames.length === 0 || form.customerTypes.length === 0
+                    ? "Select state and customer type first"
                     : "Select customers"
                 }
                 searchPlaceholder="Search customers…"
                 required
-                options={typeFilteredCustomerOptions}
+                options={scopeFilteredCustomerOptions}
                 selectedIds={form.customerIds}
                 lockedIds={usageConstraints?.lockedCustomerIds}
                 onChange={(ids) => set("customerIds", ids)}
