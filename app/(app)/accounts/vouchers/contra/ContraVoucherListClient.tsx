@@ -33,22 +33,11 @@ import {
 } from "@/components/accounts/AccountsTableListing";
 import {
   ReportDateRangeFilter,
+  ReportStatusMultiFilter,
+  ReportWarehouseMultiFilter,
   useReportDateRange,
 } from "@/components/accounts/ReportFilters";
-import {
-  ACCOUNTS_FILTER_CONTROL_CLASS,
-  ACCOUNTS_FILTER_LABEL_CLASS,
-  ACCOUNTS_FILTER_SELECT_CLASS,
-} from "@/lib/accounts/accounts-typography";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { cn } from "@/lib/utils";
 import { useDebouncedValue } from "@/app/(app)/accounts/reports/pl/pl-hooks";
 import {
   AccountsColumnFilterProvider,
@@ -127,14 +116,21 @@ function selectedValues(filter?: AccountsColumnFilterState): string[] {
   return (filter?.selectedValues ?? []).map((v) => String(v).trim()).filter(Boolean);
 }
 
-function firstSelected(filter?: AccountsColumnFilterState): string | undefined {
-  const values = selectedValues(filter);
-  return values.length > 0 ? values[0] : undefined;
-}
-
 function csvSelected(filter?: AccountsColumnFilterState): string | undefined {
   const values = selectedValues(filter);
   return values.length > 0 ? values.join(",") : undefined;
+}
+
+function warehouseIdsToNamesCsv(
+  ids: string[],
+  warehouses: { id: string; name: string }[],
+): string | undefined {
+  if (ids.length === 0) return undefined;
+  const byId = new Map(warehouses.map((w) => [w.id, w.name]));
+  const names = ids
+    .map((id) => byId.get(id)?.trim())
+    .filter((n): n is string => Boolean(n));
+  return names.length > 0 ? names.join(",") : undefined;
 }
 
 function toValueOptions(values: string[]): { value: string; count: number }[] {
@@ -557,9 +553,9 @@ export function ContraVoucherListClient() {
   const [search, setSearch] = useState("");
   const refreshTick = useAccountsSectionRefresh("contra-vouchers", { apiListing: true });
   const debouncedSearch = useDebouncedValue(search, 300);
-  const [statusFilter, setStatusFilter] = useState<string>("");
-  const [fromWarehouseId, setFromWarehouseId] = useState<string>("");
-  const [toWarehouseId, setToWarehouseId] = useState<string>("");
+  const [statusFilters, setStatusFilters] = useState<string[]>([]);
+  const [fromWarehouseIds, setFromWarehouseIds] = useState<string[]>([]);
+  const [toWarehouseIds, setToWarehouseIds] = useState<string[]>([]);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(ACCOUNTS_DEFAULT_PAGE_SIZE);
   const [loading, setLoading] = useState(true);
@@ -616,21 +612,35 @@ export function ContraVoucherListClient() {
   const fromTypesKey = fromTypes.join(",");
   const toTypesKey = toTypes.join(",");
 
+  const warehouseLabeledOptions = useMemo(
+    () => warehouses.map((w) => ({ value: w.id, label: w.name })),
+    [warehouses],
+  );
+
+  const toolbarFromWarehouseNames = useMemo(
+    () => warehouseIdsToNamesCsv(fromWarehouseIds, warehouses),
+    [fromWarehouseIds, warehouses],
+  );
+  const toolbarToWarehouseNames = useMemo(
+    () => warehouseIdsToNamesCsv(toWarehouseIds, warehouses),
+    [toWarehouseIds, warehouses],
+  );
+
   const accountFilterResetKey = useMemo(
     () =>
       [
-        fromWarehouseId || "",
-        firstSelected(columnFilters.from_warehouse) || "",
+        fromWarehouseIds.join(",") || "",
+        csvSelected(columnFilters.from_warehouse) || "",
         fromTypesKey,
-        toWarehouseId || "",
-        firstSelected(columnFilters.to_warehouse) || "",
+        toWarehouseIds.join(",") || "",
+        csvSelected(columnFilters.to_warehouse) || "",
         toTypesKey,
       ].join("|"),
     [
-      fromWarehouseId,
+      fromWarehouseIds,
       columnFilters.from_warehouse,
       fromTypesKey,
-      toWarehouseId,
+      toWarehouseIds,
       columnFilters.to_warehouse,
       toTypesKey,
     ],
@@ -646,9 +656,10 @@ export function ContraVoucherListClient() {
           page: 1,
           page_size: 100,
           search: debouncedSearch.trim() || undefined,
-          status: statusFilter || undefined,
-          from_warehouse_id: fromWarehouseId || undefined,
-          to_warehouse_id: toWarehouseId || undefined,
+          status:
+            statusFilters.length > 0 ? statusFilters.join(",") : undefined,
+          from_warehouse_names: toolbarFromWarehouseNames,
+          to_warehouse_names: toolbarToWarehouseNames,
           from_date: dateFrom || undefined,
           to_date: dateTo || undefined,
         });
@@ -666,9 +677,9 @@ export function ContraVoucherListClient() {
     };
   }, [
     debouncedSearch,
-    statusFilter,
-    fromWarehouseId,
-    toWarehouseId,
+    statusFilters,
+    toolbarFromWarehouseNames,
+    toolbarToWarehouseNames,
     dateFrom,
     dateTo,
     listRefreshKey,
@@ -773,7 +784,8 @@ export function ContraVoucherListClient() {
     const to = dateFilter?.dateTo || dateTo || undefined;
 
     const colStatus = csvSelected(columnFilters.status);
-    const toolbarStatus = statusFilter || undefined;
+    const toolbarStatus =
+      statusFilters.length > 0 ? statusFilters.join(",") : undefined;
     const fromWarehouseNames = csvSelected(columnFilters.from_warehouse);
     const toWarehouseNames = csvSelected(columnFilters.to_warehouse);
 
@@ -805,16 +817,17 @@ export function ContraVoucherListClient() {
       sort_dir: apiSort ? sortDir : undefined,
     };
 
+    // Column Excel filter names win over toolbar branch IDs → names.
     if (fromWarehouseNames) {
       query.from_warehouse_names = fromWarehouseNames;
-    } else if (fromWarehouseId) {
-      query.from_warehouse_id = fromWarehouseId;
+    } else if (toolbarFromWarehouseNames) {
+      query.from_warehouse_names = toolbarFromWarehouseNames;
     }
 
     if (toWarehouseNames) {
       query.to_warehouse_names = toWarehouseNames;
-    } else if (toWarehouseId) {
-      query.to_warehouse_id = toWarehouseId;
+    } else if (toolbarToWarehouseNames) {
+      query.to_warehouse_names = toolbarToWarehouseNames;
     }
 
     if (fromCashIds.length > 0) {
@@ -835,9 +848,9 @@ export function ContraVoucherListClient() {
     page,
     pageSize,
     debouncedSearch,
-    statusFilter,
-    fromWarehouseId,
-    toWarehouseId,
+    statusFilters,
+    toolbarFromWarehouseNames,
+    toolbarToWarehouseNames,
     dateFrom,
     dateTo,
     sortKey,
@@ -978,96 +991,37 @@ export function ContraVoucherListClient() {
                 onDateFromChange={onDateFromChange}
                 onDateToChange={onDateToChange}
               />
-              <div className="space-y-0.5 shrink-0 w-[148px]">
-                <span className={ACCOUNTS_FILTER_LABEL_CLASS}>Status</span>
-                <Select
-                  value={statusFilter || "all"}
-                  onValueChange={(v) => {
-                    setStatusFilter(v === "all" ? "" : v);
-                    setPage(1);
-                  }}
-                >
-                  <SelectTrigger
-                    className={cn(
-                      ACCOUNTS_FILTER_CONTROL_CLASS,
-                      ACCOUNTS_FILTER_SELECT_CLASS,
-                      "mt-0 w-[148px]",
-                    )}
-                  >
-                    <SelectValue placeholder="All statuses" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all" className="text-xs">
-                      All statuses
-                    </SelectItem>
-                    {CONTRA_STATUS_FILTER_VALUES.map((status) => (
-                      <SelectItem key={status} value={status} className="text-xs">
-                        {CONTRA_STATUS_FILTER_LABELS[status]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-0.5 shrink-0 w-[160px]">
-                <span className={ACCOUNTS_FILTER_LABEL_CLASS}>From Branch</span>
-                <Select
-                  value={fromWarehouseId || "all"}
-                  onValueChange={(v) => {
-                    setFromWarehouseId(v === "all" ? "" : v);
-                    setPage(1);
-                  }}
-                >
-                  <SelectTrigger
-                    className={cn(
-                      ACCOUNTS_FILTER_CONTROL_CLASS,
-                      ACCOUNTS_FILTER_SELECT_CLASS,
-                      "mt-0 w-[160px]",
-                    )}
-                  >
-                    <SelectValue placeholder="All branches" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all" className="text-xs">
-                      All branches
-                    </SelectItem>
-                    {warehouses.map((w) => (
-                      <SelectItem key={w.id} value={w.id} className="text-xs">
-                        {w.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-0.5 shrink-0 w-[160px]">
-                <span className={ACCOUNTS_FILTER_LABEL_CLASS}>To Branch</span>
-                <Select
-                  value={toWarehouseId || "all"}
-                  onValueChange={(v) => {
-                    setToWarehouseId(v === "all" ? "" : v);
-                    setPage(1);
-                  }}
-                >
-                  <SelectTrigger
-                    className={cn(
-                      ACCOUNTS_FILTER_CONTROL_CLASS,
-                      ACCOUNTS_FILTER_SELECT_CLASS,
-                      "mt-0 w-[160px]",
-                    )}
-                  >
-                    <SelectValue placeholder="All branches" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all" className="text-xs">
-                      All branches
-                    </SelectItem>
-                    {warehouses.map((w) => (
-                      <SelectItem key={w.id} value={w.id} className="text-xs">
-                        {w.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              <ReportStatusMultiFilter
+                values={statusFilters}
+                onChange={(next) => {
+                  setStatusFilters(next);
+                  setPage(1);
+                }}
+                options={CONTRA_STATUS_FILTER_VALUES.map((status) => ({
+                  value: status,
+                  label: CONTRA_STATUS_FILTER_LABELS[status] || status,
+                }))}
+              />
+              <ReportWarehouseMultiFilter
+                label="From Branch"
+                allLabel="All branches"
+                values={fromWarehouseIds}
+                onChange={(next) => {
+                  setFromWarehouseIds(next);
+                  setPage(1);
+                }}
+                labeledOptions={warehouseLabeledOptions}
+              />
+              <ReportWarehouseMultiFilter
+                label="To Branch"
+                allLabel="All branches"
+                values={toWarehouseIds}
+                onChange={(next) => {
+                  setToWarehouseIds(next);
+                  setPage(1);
+                }}
+                labeledOptions={warehouseLabeledOptions}
+              />
             </>
           }
         />

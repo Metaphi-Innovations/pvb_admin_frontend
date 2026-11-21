@@ -12,14 +12,6 @@ import {
   Warehouse,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { AccountsListingTableCard } from "@/components/accounts/AccountsListingHeader";
@@ -56,9 +48,8 @@ import {
   ReportSearchFilter,
   ReportWarehouseMultiFilter,
   ReportProductMultiFilter,
+  ReportStatusMultiFilter,
   ReportFilterSummary,
-  ACCOUNTS_FILTER_LABEL_CLASS as filterLabelClass,
-  ACCOUNTS_FILTER_CONTROL_CLASS as filterControlClass,
 } from "@/components/accounts/ReportFilters";
 import {
   buildEntityFilterSummary,
@@ -69,7 +60,6 @@ import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { resolveFinancialYearLabel } from "@/lib/accounts/pl-compute";
 import type { DateRangePresetId } from "@/lib/accounts/report-date-presets";
 import { useClientMounted } from "@/lib/use-client-mounted";
-import { cn } from "@/lib/utils";
 import { ensureFinancialYearsCurrent, loadFinancialYears } from "@/app/(app)/accounts/masters/masters-data";
 import { getActiveFinancialYearId } from "@/lib/accounts/day-book-data";
 import {
@@ -114,7 +104,7 @@ export default function InventoryRegisterPageClient() {
   const [financialYearId, setFinancialYearId] = useState("all");
   const [warehouses, setWarehouses] = useState<string[]>([]);
   const [productIds, setProductIds] = useState<string[]>([]);
-  const [category, setCategory] = useState("all");
+  const [categories, setCategories] = useState<string[]>([]);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
@@ -176,10 +166,10 @@ export default function InventoryRegisterPageClient() {
       financialYearId,
       warehouse: warehouses,
       productId: productIds,
-      category,
+      category: categories,
       search,
     }),
-    [dateFrom, dateTo, financialYearId, warehouses, productIds, category, search, refreshKey],
+    [dateFrom, dateTo, financialYearId, warehouses, productIds, categories, search, refreshKey],
   );
 
   const report = useMemo(() => {
@@ -201,20 +191,25 @@ export default function InventoryRegisterPageClient() {
 
   useEffect(() => {
     setPage(1);
-  }, [dateFrom, dateTo, financialYearId, warehouses, productIds, category, search, pageSize]);
+  }, [dateFrom, dateTo, financialYearId, warehouses, productIds, categories, search, pageSize]);
+
+  const categorySelectOptions = useMemo(
+    () => categoryOptions.map((c) => ({ value: c, label: c })),
+    [categoryOptions],
+  );
 
   const hasFilters =
     search.trim() !== "" ||
     warehouses.length > 0 ||
     productIds.length > 0 ||
-    category !== "all" ||
+    categories.length > 0 ||
     financialYearId !== "all";
 
   const clearFilters = () => {
     setSearch("");
     setWarehouses([]);
     setProductIds([]);
-    setCategory("all");
+    setCategories([]);
     const { fyId } = defaultFyDateRange();
     setFinancialYearId(fyId);
   };
@@ -229,8 +224,15 @@ export default function InventoryRegisterPageClient() {
         () => setWarehouses([]),
       ),
       buildEntityFilterSummary("product", "Products", productIds, productOptions, () => setProductIds([])),
+      buildEntityFilterSummary(
+        "category",
+        "Category",
+        categories,
+        categorySelectOptions,
+        () => setCategories([]),
+      ),
     ].filter((item): item is ReportFilterSummaryItem => item != null),
-  [warehouses, productIds, warehouseOptions, productOptions]);
+  [warehouses, productIds, categories, warehouseOptions, productOptions, categorySelectOptions]);
 
   const exportMeta = useMemo(() => {
     return {
@@ -244,10 +246,15 @@ export default function InventoryRegisterPageClient() {
         "All",
       ),
       product: formatMultiSelectLabel(productIds, productOptions, "Product", "All"),
-      category: category === "all" ? "All" : category,
+      category: formatMultiSelectLabel(
+        categories,
+        categorySelectOptions,
+        "Category",
+        "All",
+      ),
       search,
     };
-  }, [dateFrom, dateTo, financialYearId, warehouses, productIds, productOptions, warehouseOptions, category, search]);
+  }, [dateFrom, dateTo, financialYearId, warehouses, productIds, productOptions, warehouseOptions, categories, categorySelectOptions, search]);
 
   const getInventoryCellValue = useCallback(
     (row: InventoryRegisterProductRow, key: string) => {
@@ -343,24 +350,12 @@ export default function InventoryRegisterPageClient() {
               onChange={setProductIds}
               products={productOptions}
             />
-            <div className="space-y-0.5 min-w-[140px]">
-              <Label className={filterLabelClass}>Category</Label>
-              <Select value={category} onValueChange={setCategory}>
-                <SelectTrigger className={cn(filterControlClass, "mt-0 w-[140px]")}>
-                  <SelectValue placeholder="All categories" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all" className="text-xs">
-                    All categories
-                  </SelectItem>
-                  {categoryOptions.map((c) => (
-                    <SelectItem key={c} value={c} className="text-xs">
-                      {c}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <ReportStatusMultiFilter
+              label="Category"
+              values={categories}
+              onChange={setCategories}
+              options={categorySelectOptions}
+            />
             <ReportSearchFilter
               value={search}
               onChange={setSearch}

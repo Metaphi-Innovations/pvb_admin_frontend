@@ -4,14 +4,6 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
 import { AccountsSummaryCards } from "@/components/accounts/AccountsSummaryCards";
 import {
@@ -40,9 +32,8 @@ import {
   ReportFilterRow,
   ReportSearchFilter,
   ReportFilterResetButton,
-  ACCOUNTS_FILTER_CONTROL_CLASS,
-  ACCOUNTS_FILTER_LABEL_CLASS,
 } from "@/components/accounts/ReportFilters";
+import { ReportMultiSelect } from "@/components/accounts/ReportMultiSelect";
 import { AccountsExportMenu } from "@/components/accounts/AccountsExportMenu";
 import { AccountsListingDateFilter } from "@/components/accounts/AccountsListingFilter";
 import { formatMoney } from "@/lib/accounts/money-format";
@@ -50,7 +41,6 @@ import { formatDisplayDate } from "@/lib/accounts/date-display";
 import { useFY } from "@/lib/fy-store";
 import { useClientMounted } from "@/lib/use-client-mounted";
 import { bankingBreadcrumb } from "@/lib/accounts/accounts-nav";
-import { cn } from "@/lib/utils";
 import { SkeletonRow } from "@/components/ui/Loaders";
 import { bankReconWorkspacePath, RECONCILIATION_LIST_PATH } from "./reconciliation-utils";
 import { BankReconciliationService } from "@/services/bank-reconciliation.service";
@@ -60,7 +50,6 @@ import {
 } from "@/lib/accounts/bank-recon-api-mappers";
 
 const ACCOUNT_TYPE_FILTER_OPTIONS = [
-  { value: "all", label: "All Types" },
   { value: "Current", label: "Current" },
   { value: "Savings", label: "Savings" },
   { value: "Cash Credit", label: "Cash Credit" },
@@ -254,7 +243,7 @@ export default function BankReconciliationListingPageClient() {
   const [error, setError] = useState<string | null>(null);
   const [allRows, setAllRows] = useState<BankReconListingRowUi[]>([]);
   const [search, setSearch] = useState("");
-  const [accountType, setAccountType] = useState("all");
+  const [accountTypes, setAccountTypes] = useState<string[]>([]);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [page, setPage] = useState(1);
@@ -281,13 +270,14 @@ export default function BankReconciliationListingPageClient() {
   }, [loadDashboard]);
 
   const filteredAccounts = useMemo(() => {
+    const allowedTypes = new Set(accountTypes);
     return allRows.filter((a) => {
-      if (accountType !== "all" && a.accountType !== accountType) return false;
+      if (allowedTypes.size > 0 && !allowedTypes.has(a.accountType)) return false;
       if (dateFrom && a.lastReconciledDate && a.lastReconciledDate < dateFrom) return false;
       if (dateTo && a.lastReconciledDate && a.lastReconciledDate > dateTo) return false;
       return true;
     });
-  }, [allRows, accountType, dateFrom, dateTo]);
+  }, [allRows, accountTypes, dateFrom, dateTo]);
 
   const paginatedRows = useMemo(() => {
     const start = (page - 1) * pageSize;
@@ -319,7 +309,7 @@ export default function BankReconciliationListingPageClient() {
 
   const handleReset = useCallback(() => {
     setSearch("");
-    setAccountType("all");
+    setAccountTypes([]);
     setDateFrom("");
     setDateTo("");
     setPage(1);
@@ -435,27 +425,18 @@ export default function BankReconciliationListingPageClient() {
                   placeholder="Search bank accounts…"
                   className="min-w-[180px] flex-1 max-w-sm"
                 />
-                <div className="space-y-0.5 min-w-[130px]">
-                  <Label className={ACCOUNTS_FILTER_LABEL_CLASS}>Account Type</Label>
-                  <Select
-                    value={accountType}
-                    onValueChange={(v) => {
-                      setAccountType(v);
-                      setPage(1);
-                    }}
-                  >
-                    <SelectTrigger className={cn(ACCOUNTS_FILTER_CONTROL_CLASS, "mt-0 w-full")}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {ACCOUNT_TYPE_FILTER_OPTIONS.map((o) => (
-                        <SelectItem key={o.value} value={o.value}>
-                          {o.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                <ReportMultiSelect
+                  label="Account Type"
+                  values={accountTypes}
+                  onChange={(next) => {
+                    setAccountTypes(next);
+                    setPage(1);
+                  }}
+                  options={ACCOUNT_TYPE_FILTER_OPTIONS}
+                  entityName="Type"
+                  allLabel="All Types"
+                  minWidthClass="min-w-[130px]"
+                />
                 {mounted && (
                   <AccountsListingDateFilter
                     dateFrom={dateFrom}

@@ -9,6 +9,7 @@ import {
   type BackendGrnSourceType,
 } from "@/lib/warehouse/grn-status";
 import type { GrnTabApiContext } from "@/lib/warehouse/grn-list-config";
+import { toApiFilterValue, toFilterStringList } from "@/lib/listing/filter-values";
 
 export interface GrnListItem extends GrnRecord {
   receivedQty: number;
@@ -86,11 +87,6 @@ function asDateOnly(value: unknown): string {
 function asRecord(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   return value as Record<string, unknown>;
-}
-
-function firstFilterValue(value: unknown): string {
-  if (Array.isArray(value)) return asString(value[0]).trim();
-  return asString(value).trim();
 }
 
 function mapSourceTypeToFrontend(
@@ -302,62 +298,59 @@ export function buildGrnApiFilters(
     apiFilters.status = tabContext.status;
   }
 
-  const grnNumber = firstFilterValue(filters.grnNo);
-  if (grnNumber) {
+  const grnNumber = toApiFilterValue(filters.grnNo);
+  if (grnNumber !== undefined) {
     apiFilters.grnNumber = grnNumber;
   }
 
-  const vendorName = firstFilterValue(filters.vendorName);
-  if (vendorName) {
+  const vendorName = toApiFilterValue(filters.vendorName);
+  if (vendorName !== undefined) {
     apiFilters.supplier = { supplier_name: vendorName };
   }
 
-  const poNumber = firstFilterValue(filters.poNumber);
-  if (poNumber) {
+  const poNumber = toApiFilterValue(filters.poNumber);
+  if (poNumber !== undefined) {
     apiFilters.po_no = poNumber;
   }
 
-  const invoiceNumber = firstFilterValue(filters.invoiceNumber);
-  if (invoiceNumber) {
+  const invoiceNumber = toApiFilterValue(filters.invoiceNumber);
+  if (invoiceNumber !== undefined) {
     apiFilters.invoices = { invoiceNumber };
   }
 
-  const salesReturnNo = firstFilterValue(filters.salesReturnNo);
-  if (salesReturnNo) {
+  const salesReturnNo = toApiFilterValue(filters.salesReturnNo);
+  if (salesReturnNo !== undefined) {
     apiFilters.sales_return_no = salesReturnNo;
   }
 
-  const sampleReturnNo = firstFilterValue(filters.sampleReturnNo);
-  if (sampleReturnNo) {
+  const sampleReturnNo = toApiFilterValue(filters.sampleReturnNo);
+  if (sampleReturnNo !== undefined) {
     apiFilters.sample_return_no = sampleReturnNo;
   }
 
-  const stockTransferNo = firstFilterValue(filters.stockTransferNo);
-  if (stockTransferNo) {
+  const stockTransferNo = toApiFilterValue(filters.stockTransferNo);
+  if (stockTransferNo !== undefined) {
     apiFilters.stock_transfer_no = stockTransferNo;
   }
 
-  const fromWarehouse = firstFilterValue(filters.fromWarehouse);
-  if (fromWarehouse && tabContext.sourceType === "STOCK_TRANSFER") {
+  const fromWarehouse = toApiFilterValue(filters.fromWarehouse);
+  if (fromWarehouse !== undefined && tabContext.sourceType === "STOCK_TRANSFER") {
     apiFilters.from_warehouse = fromWarehouse;
   }
 
-  const toWarehouse = firstFilterValue(filters.toWarehouse);
-  if (toWarehouse && tabContext.sourceType === "STOCK_TRANSFER") {
+  const toWarehouse = toApiFilterValue(filters.toWarehouse);
+  if (toWarehouse !== undefined && tabContext.sourceType === "STOCK_TRANSFER") {
     apiFilters.warehouse = { warehouse_name: toWarehouse };
   }
 
-  const customerName = firstFilterValue(filters.customerName);
-  if (customerName) {
+  const customerName = toApiFilterValue(filters.customerName);
+  if (customerName !== undefined) {
     apiFilters.customer_name = customerName;
   }
 
-  const warehouseFilter = filters.warehouse;
-  if (warehouseFilter) {
-    const warehouseName = firstFilterValue(warehouseFilter);
-    if (warehouseName) {
-      apiFilters.warehouse = { warehouse_name: warehouseName };
-    }
+  const warehouseName = toApiFilterValue(filters.warehouse);
+  if (warehouseName !== undefined) {
+    apiFilters.warehouse = { warehouse_name: warehouseName };
   }
 
   if (destinationWarehouse && destinationWarehouse !== "All") {
@@ -365,11 +358,16 @@ export function buildGrnApiFilters(
     apiFilters.warehouseId = destinationWarehouse;
   }
 
-  const columnStatus = firstFilterValue(filters.status) || firstFilterValue(filters.displayStatus);
-  if (columnStatus && !tabContext.status) {
-    const backendStatus = mapFrontendGrnStatusToBackend(columnStatus);
-    if (backendStatus) {
-      apiFilters.status = backendStatus;
+  if (!tabContext.status) {
+    const statusTokens = toFilterStringList(filters.status).length
+      ? toFilterStringList(filters.status)
+      : toFilterStringList(filters.displayStatus);
+    const mappedStatuses = statusTokens
+      .map((token) => mapFrontendGrnStatusToBackend(token))
+      .filter(Boolean);
+    const columnStatus = toApiFilterValue(mappedStatuses);
+    if (columnStatus !== undefined) {
+      apiFilters.status = columnStatus;
     }
   }
 

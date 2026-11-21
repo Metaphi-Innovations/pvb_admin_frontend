@@ -125,18 +125,24 @@ function Field({
 }) {
   const empty =
     value == null || value === "" || (typeof value === "string" && !value.trim());
+  const title = typeof value === "string" && value.trim() ? value : undefined;
   return (
     <div className={cn("so-goods-field so-goods-field--view min-w-0 w-full", className)}>
       <p className="so-goods-field__label">{label}</p>
       <div
         className={cn(
-          "so-goods-ro text-xs font-medium min-w-0",
+          "so-goods-ro text-xs font-medium min-w-0 w-full",
           multiline && "so-goods-ro--multiline h-auto min-h-[var(--so-ctrl-h)] items-start py-1.5 whitespace-pre-wrap",
           mono && "so-goods-ro--mono font-mono text-brand-700",
           empty && "text-muted-foreground",
         )}
+        title={title}
       >
-        {empty ? "—" : value}
+        {multiline ? (
+          empty ? "—" : value
+        ) : (
+          <span className="block min-w-0 truncate">{empty ? "—" : value}</span>
+        )}
       </div>
     </div>
   );

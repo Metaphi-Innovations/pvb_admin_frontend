@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, Fragment } from "react";
+import { useCallback, useEffect, useMemo, useState, Fragment, type ReactNode } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
@@ -36,11 +36,15 @@ import {
   AccountsTableBody,
   AccountsTableCell,
   AccountsTableHead,
-  AccountsTableHeadCell,
   AccountsTableHeadRow,
   AccountsTableRow,
   AccountsTableScroll,
 } from "@/components/accounts/AccountsTable";
+import {
+  AccountsColumnFilterProvider,
+  SortTh,
+  useAccountsFilteredRows,
+} from "@/app/(app)/accounts/components/AccountsUI";
 import {
   ReportFilterRow,
   ReportDateRangeFilter,
@@ -51,6 +55,7 @@ import {
   ReportMoreFilters,
   ReportFilterSummary,
   ReportFilterField,
+  ReportStatusMultiFilter,
   ACCOUNTS_FILTER_LABEL_CLASS as filterLabelClass,
   ACCOUNTS_FILTER_CONTROL_CLASS as filterControlClass,
   REPORT_BRANCH_OPTIONS,
@@ -95,17 +100,49 @@ import { exportGstCreditDebitToExcel, exportGstCreditDebitToPdf } from "./gstr1-
 import { CreditDebitNoteDetailSheet } from "./components/CreditDebitNoteDetailSheet";
 import { useDebouncedValue } from "../../../pl/pl-hooks";
 
+
+function getCdnFilterCell(row: GstCreditDebitNoteRow, colKey: string): string {
+  switch (colKey) {
+    case "noteNumber":
+      return row.noteNumber || "";
+    case "originalInvoiceNo":
+      return row.originalInvoiceNo || "";
+    case "customerName":
+      return row.customerName || "";
+    case "gstin":
+      return row.gstin || "";
+    case "registrationType":
+      return row.registrationType || "";
+    case "reason":
+      return row.reason || "";
+    case "status":
+      return row.status || "";
+    default:
+      return "";
+  }
+}
+
+function CdnFilteredRows({
+  rows,
+  children,
+}: {
+  rows: GstCreditDebitNoteRow[];
+  children: (visible: GstCreditDebitNoteRow[]) => ReactNode;
+}) {
+  const visible = useAccountsFilteredRows(rows);
+  return <>{children(visible)}</>;
+}
+
+
 const PLACEHOLDER_DATE = "2025-04-01";
 const COL_COUNT = 18;
 
-const NOTE_TYPE_OPTIONS: { value: GstNoteTypeFilter; label: string }[] = [
-  { value: "all", label: "All" },
-  { value: "credit", label: "Credit" },
-  { value: "debit", label: "Debit" },
+const NOTE_TYPE_OPTIONS: { value: string; label: string }[] = [
+  { value: "credit", label: "Credit Note" },
+  { value: "debit", label: "Debit Note" },
 ];
 
-const STATUS_OPTIONS: { value: GstNoteStatusFilter; label: string }[] = [
-  { value: "all", label: "All" },
+const STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: "valid", label: "Valid" },
   { value: "exception", label: "Exception" },
 ];
@@ -204,9 +241,9 @@ export default function CreditDebitNotesPageClient() {
   const [branch, setBranch] = useState<string[]>([]);
   const [warehouse, setWarehouse] = useState<string[]>([]);
   const [customerId, setCustomerId] = useState<string[]>([]);
-  const [noteType, setNoteType] = useState<GstNoteTypeFilter>("all");
+  const [noteTypes, setNoteTypes] = useState<string[]>([]);
   const [noteNo, setNoteNo] = useState("");
-  const [status, setStatus] = useState<GstNoteStatusFilter>("all");
+  const [statuses, setStatuses] = useState<string[]>([]);
   const [subsection, setSubsection] = useState<GstCreditDebitFilters["subsection"]>("all");
   const [exporting, setExporting] = useState(false);
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set());
@@ -235,8 +272,8 @@ export default function CreditDebitNotesPageClient() {
       branch: [],
       warehouse: [],
       customerId: [],
-      noteType: "all",
-      status: "all",
+      noteType: [],
+      status: [],
       noteNo: "",
       subsection: "all",
     });
@@ -246,9 +283,9 @@ export default function CreditDebitNotesPageClient() {
     setBranch(normalizeMultiFilter(parsed.branch));
     setWarehouse(normalizeMultiFilter(parsed.warehouse));
     setCustomerId(normalizeMultiFilter(parsed.customerId));
-    setNoteType(parsed.noteType);
+    setNoteTypes(parsed.noteType);
     setNoteNo(parsed.noteNo);
-    setStatus(parsed.status);
+    setStatuses(parsed.status);
     setSubsection(parsed.subsection);
     setPreset("custom");
   }, [searchParams, datesReady]);
@@ -280,9 +317,9 @@ export default function CreditDebitNotesPageClient() {
       branch,
       warehouse,
       customerId,
-      noteType,
+      noteType: noteTypes,
       noteNo: debouncedNoteNo,
-      status,
+      status: statuses,
       subsection,
     }),
     [
@@ -292,9 +329,9 @@ export default function CreditDebitNotesPageClient() {
       branch,
       warehouse,
       customerId,
-      noteType,
+      noteTypes,
       debouncedNoteNo,
-      status,
+      statuses,
       subsection,
       refreshKey,
     ],
@@ -347,8 +384,8 @@ export default function CreditDebitNotesPageClient() {
   const backHref = `/accounts/reports/gst?${buildGstCreditDebitFilterQuery({
     ...noteFilters,
     customerId: [],
-    noteType: "all",
-    status: "all",
+    noteType: [],
+    status: [],
     noteNo: "",
     subsection: "all",
   })}`;
@@ -357,8 +394,8 @@ export default function CreditDebitNotesPageClient() {
     isMultiFilterActive(branch) ||
     isMultiFilterActive(warehouse) ||
     isMultiFilterActive(customerId) ||
-    noteType !== "all" ||
-    status !== "all" ||
+    noteTypes.length > 0 ||
+    statuses.length > 0 ||
     subsection !== "all" ||
     noteNo.trim() !== "";
 
@@ -366,8 +403,8 @@ export default function CreditDebitNotesPageClient() {
     setBranch([]);
     setWarehouse([]);
     setCustomerId([]);
-    setNoteType("all");
-    setStatus("all");
+    setNoteTypes([]);
+    setStatuses([]);
     setSubsection("all");
     setNoteNo("");
   };
@@ -407,10 +444,9 @@ export default function CreditDebitNotesPageClient() {
         "Customer",
         "All customers",
       ),
-      noteType:
-        NOTE_TYPE_OPTIONS.find((o) => o.value === noteType)?.label ?? noteType,
+      noteType: formatMultiSelectLabel(noteTypes, NOTE_TYPE_OPTIONS, "Type", "All types"),
       noteNo: debouncedNoteNo,
-      status: STATUS_OPTIONS.find((o) => o.value === status)?.label ?? status,
+      status: formatMultiSelectLabel(statuses, STATUS_OPTIONS, "Status", "All"),
       subsection:
         SUBSECTION_OPTIONS.find((o) => o.value === subsection)?.label ?? subsection,
     };
@@ -422,9 +458,9 @@ export default function CreditDebitNotesPageClient() {
     warehouse,
     customerId,
     customerSelectOptions,
-    noteType,
+    noteTypes,
     debouncedNoteNo,
-    status,
+    statuses,
     subsection,
   ]);
 
@@ -483,20 +519,12 @@ export default function CreditDebitNotesPageClient() {
             options={warehouseOptionsForFilter}
           />
         </ReportMoreFilters>
-        <ReportFilterField label="Note Type" minWidthClass="min-w-[120px]">
-          <Select value={noteType} onValueChange={(v) => setNoteType(v as GstNoteTypeFilter)}>
-            <SelectTrigger className={cn(filterControlClass, "mt-0 w-full")}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {NOTE_TYPE_OPTIONS.map((o) => (
-                <SelectItem key={o.value} value={o.value} className="text-xs">
-                  {o.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </ReportFilterField>
+        <ReportStatusMultiFilter
+          label="Note Type"
+          values={noteTypes}
+          onChange={setNoteTypes}
+          options={NOTE_TYPE_OPTIONS}
+        />
         <ReportFilterField label="Section" minWidthClass="min-w-[160px]">
           <Select
             value={subsection}
@@ -522,20 +550,12 @@ export default function CreditDebitNotesPageClient() {
             className={cn(filterControlClass, "mt-0 w-full")}
           />
         </ReportFilterField>
-        <ReportFilterField label="Status" minWidthClass="min-w-[120px]">
-          <Select value={status} onValueChange={(v) => setStatus(v as GstNoteStatusFilter)}>
-            <SelectTrigger className={cn(filterControlClass, "mt-0 w-full")}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {STATUS_OPTIONS.map((o) => (
-                <SelectItem key={o.value} value={o.value} className="text-xs">
-                  {o.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </ReportFilterField>
+        <ReportStatusMultiFilter
+          label="Status"
+          values={statuses}
+          onChange={setStatuses}
+          options={STATUS_OPTIONS}
+        />
         {hasFilters && (
           <Button variant="outline" size="sm" className="h-8 text-sm px-2" onClick={resetFilters}>
             Reset
@@ -547,7 +567,6 @@ export default function CreditDebitNotesPageClient() {
   );
 
   const { totals } = report;
-  let lastSubsection: GstNoteSubsection | null = null;
 
   return (
     <AccountsPageShell
@@ -616,32 +635,39 @@ export default function CreditDebitNotesPageClient() {
               )}
             </div>
           ) : (
+            <AccountsColumnFilterProvider
+              rows={report.rows}
+              getCellValue={getCdnFilterCell}
+            >
             <AccountsTableScroll className="flex-1 min-h-0">
               <AccountsTable minWidth={1800}>
                 <AccountsTableHead>
                   <AccountsTableHeadRow>
-                    <AccountsTableHeadCell className="w-8" />
-                    <AccountsTableHeadCell>Note Date</AccountsTableHeadCell>
-                    <AccountsTableHeadCell>Note Number</AccountsTableHeadCell>
-                    <AccountsTableHeadCell>Original Invoice No.</AccountsTableHeadCell>
-                    <AccountsTableHeadCell>Original Invoice Date</AccountsTableHeadCell>
-                    <AccountsTableHeadCell>Customer Name</AccountsTableHeadCell>
-                    <AccountsTableHeadCell>GSTIN</AccountsTableHeadCell>
-                    <AccountsTableHeadCell>Registration Type</AccountsTableHeadCell>
-                    <AccountsTableHeadCell align="right">Taxable Value</AccountsTableHeadCell>
-                    <AccountsTableHeadCell>GST Rate</AccountsTableHeadCell>
-                    <AccountsTableHeadCell align="right">CGST</AccountsTableHeadCell>
-                    <AccountsTableHeadCell align="right">SGST</AccountsTableHeadCell>
-                    <AccountsTableHeadCell align="right">IGST</AccountsTableHeadCell>
-                    <AccountsTableHeadCell align="right">Cess</AccountsTableHeadCell>
-                    <AccountsTableHeadCell align="right">Total Amount</AccountsTableHeadCell>
-                    <AccountsTableHeadCell>Reason</AccountsTableHeadCell>
-                    <AccountsTableHeadCell>Status</AccountsTableHeadCell>
-                    <AccountsTableHeadCell className="w-24">Action</AccountsTableHeadCell>
+                    <SortTh label="" colKey="_expand" sortable={false} filterable={false} className="w-8" />
+                    <SortTh label="Note Date" colKey="noteDate" sortable={false} filterable={false} />
+                    <SortTh label="Note Number" colKey="noteNumber" sortable={false} />
+                    <SortTh label="Original Invoice No." colKey="originalInvoiceNo" sortable={false} />
+                    <SortTh label="Original Invoice Date" colKey="originalInvoiceDate" sortable={false} filterable={false} />
+                    <SortTh label="Customer Name" colKey="customerName" sortable={false} />
+                    <SortTh label="GSTIN" colKey="gstin" sortable={false} />
+                    <SortTh label="Registration Type" colKey="registrationType" sortable={false} />
+                    <SortTh label="Taxable Value" colKey="taxableValue" sortable={false} filterable={false} align="right" />
+                    <SortTh label="GST Rate" colKey="gstRate" sortable={false} filterable={false} />
+                    <SortTh label="CGST" colKey="cgst" sortable={false} filterable={false} align="right" />
+                    <SortTh label="SGST" colKey="sgst" sortable={false} filterable={false} align="right" />
+                    <SortTh label="IGST" colKey="igst" sortable={false} filterable={false} align="right" />
+                    <SortTh label="Cess" colKey="cess" sortable={false} filterable={false} align="right" />
+                    <SortTh label="Total Amount" colKey="totalAmount" sortable={false} filterable={false} align="right" />
+                    <SortTh label="Reason" colKey="reason" sortable={false} />
+                    <SortTh label="Status" colKey="status" sortable={false} />
+                    <SortTh label="Action" colKey="_actions" sortable={false} filterable={false} className="w-24" />
                   </AccountsTableHeadRow>
                 </AccountsTableHead>
                 <AccountsTableBody>
-                  {report.rows.map((row) => {
+                  <CdnFilteredRows rows={report.rows}>
+                    {(visibleRows) => {
+                      let lastSubsection: GstNoteSubsection | null = null;
+                      return visibleRows.map((row) => {
                     const showSectionHeader =
                       subsection === "all" && row.subsection !== lastSubsection;
                     if (showSectionHeader) lastSubsection = row.subsection;
@@ -758,10 +784,13 @@ export default function CreditDebitNotesPageClient() {
                         {isExpanded && row.hasMultipleRates && <RateBreakupRows row={row} />}
                       </Fragment>
                     );
-                  })}
+                      });
+                    }}
+                  </CdnFilteredRows>
                 </AccountsTableBody>
               </AccountsTable>
             </AccountsTableScroll>
+            </AccountsColumnFilterProvider>
           )}
         </AccountsListingTableCard>
       </AccountsReportBody>

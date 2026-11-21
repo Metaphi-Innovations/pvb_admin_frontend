@@ -45,13 +45,15 @@ export type GstNoteSubsection =
   | "debit-notes-registered"
   | "debit-notes-unregistered";
 
-export type GstNoteTypeFilter = "all" | "credit" | "debit";
-export type GstNoteStatusFilter = "all" | "valid" | "exception";
+export type GstNoteTypeFilter = "credit" | "debit";
+export type GstNoteStatusFilter = "valid" | "exception";
 
 export interface GstCreditDebitFilters extends GstDashboardFilters {
   customerId: string | string[];
-  noteType: GstNoteTypeFilter;
-  status: GstNoteStatusFilter;
+  /** Empty = all note types. Values: credit | debit. */
+  noteType: string[];
+  /** Empty = all statuses. */
+  status: string[];
   noteNo: string;
   subsection: GstNoteSubsection | "all";
 }
@@ -485,13 +487,19 @@ function debitNoteToRow(dn: DebitNoteRecord, duplicateNos: Set<string>): GstCred
 
 function matchesRowFilters(row: GstCreditDebitNoteRow, filters: GstCreditDebitFilters): boolean {
   if (filters.subsection !== "all" && row.subsection !== filters.subsection) return false;
-  if (filters.noteType === "credit" && row.docType !== "credit_note") return false;
-  if (filters.noteType === "debit" && row.docType !== "debit_note") return false;
+  if (filters.noteType.length > 0) {
+    const mapped =
+      row.docType === "credit_note"
+        ? "credit"
+        : row.docType === "debit_note"
+          ? "debit"
+          : "";
+    if (!filters.noteType.includes(mapped)) return false;
+  }
   if (!matchesPrefixedIdFilter(filters.customerId, row.customerId, "customer:")) return false;
   const q = filters.noteNo.trim().toLowerCase();
   if (q && !row.noteNumber.toLowerCase().includes(q)) return false;
-  if (filters.status === "valid" && row.status !== "valid") return false;
-  if (filters.status === "exception" && row.status !== "exception") return false;
+  if (!matchesMultiFilter(filters.status, row.status)) return false;
   return true;
 }
 
@@ -643,11 +651,15 @@ export function parseGstCreditDebitFiltersFromSearch(
   defaults: GstCreditDebitFilters,
 ): GstCreditDebitFilters {
   const params = new URLSearchParams(search);
-  const noteType = params.get("noteType") as GstNoteTypeFilter | null;
-  const status = params.get("status") as GstNoteStatusFilter | null;
   const subsection = params.get("subsection") as GstCreditDebitFilters["subsection"] | null;
-  const validNoteTypes: GstNoteTypeFilter[] = ["all", "credit", "debit"];
-  const validStatus: GstNoteStatusFilter[] = ["all", "valid", "exception"];
+  const validNoteTypes = new Set(["credit", "debit"]);
+  const validStatus = new Set(["valid", "exception"]);
+  const noteType = parseMultiFilterParam(params.get("noteType")).filter((v) =>
+    validNoteTypes.has(v),
+  );
+  const status = parseMultiFilterParam(params.get("status")).filter((v) =>
+    validStatus.has(v),
+  );
   const validSubsections: GstCreditDebitFilters["subsection"][] = [
     "all",
     ...SUBSECTION_ORDER,
@@ -664,8 +676,8 @@ export function parseGstCreditDebitFiltersFromSearch(
     branch: branchParam != null ? parseMultiFilterParam(branchParam) : defaults.branch,
     warehouse: warehouseParam != null ? parseMultiFilterParam(warehouseParam) : defaults.warehouse,
     customerId: customerParam != null ? parseMultiFilterParam(customerParam) : defaults.customerId,
-    noteType: noteType && validNoteTypes.includes(noteType) ? noteType : defaults.noteType,
-    status: status && validStatus.includes(status) ? status : defaults.status,
+    noteType: params.has("noteType") ? noteType : defaults.noteType,
+    status: params.has("status") ? status : defaults.status,
     noteNo: params.get("noteNo") ?? defaults.noteNo,
     subsection:
       subsection && validSubsections.includes(subsection) ? subsection : defaults.subsection,
@@ -680,8 +692,8 @@ export function buildGstCreditDebitFilterQuery(filters: GstCreditDebitFilters): 
   appendMultiFilterParam(params, "branch", filters.branch);
   appendMultiFilterParam(params, "warehouse", filters.warehouse);
   appendMultiFilterParam(params, "customer", filters.customerId);
-  if (filters.noteType !== "all") params.set("noteType", filters.noteType);
-  if (filters.status !== "all") params.set("status", filters.status);
+  appendMultiFilterParam(params, "noteType", filters.noteType);
+  appendMultiFilterParam(params, "status", filters.status);
   if (filters.noteNo.trim()) params.set("noteNo", filters.noteNo.trim());
   if (filters.subsection !== "all") params.set("subsection", filters.subsection);
   return params.toString();

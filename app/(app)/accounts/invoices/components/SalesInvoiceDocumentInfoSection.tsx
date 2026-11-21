@@ -136,7 +136,12 @@ function SalesInvoiceDocumentInfoSectionInner({
               <p className="so-goods-field__label">Customer</p>
               <div className="so-goods-field__control">
                 <div className="so-goods-ro-with-info">
-                  <span className="so-goods-ro-with-info__value">{customerName || "—"}</span>
+                  <span
+                    className="so-goods-ro-with-info__value"
+                    title={customerName || undefined}
+                  >
+                    {customerName || "—"}
+                  </span>
                   {customerInfoButton}
                 </div>
               </div>
@@ -148,7 +153,12 @@ function SalesInvoiceDocumentInfoSectionInner({
               <p className="so-goods-field__label">Warehouse</p>
               <div className="so-goods-field__control">
                 <div className="so-goods-ro-with-info">
-                  <span className="so-goods-ro-with-info__value">{warehouseName || "—"}</span>
+                  <span
+                    className="so-goods-ro-with-info__value"
+                    title={warehouseName || undefined}
+                  >
+                    {warehouseName || "—"}
+                  </span>
                   {warehouseInfoButton}
                 </div>
               </div>

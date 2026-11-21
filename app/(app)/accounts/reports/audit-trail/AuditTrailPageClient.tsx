@@ -36,6 +36,15 @@ import {
   type ReportMultiSelectOption,
 } from "@/lib/accounts/report-multi-filter-utils";
 import { StatusBadge } from "@/app/(app)/accounts/components/AccountsUI";
+import {
+  applyAccountsColumnFilters,
+  collectColumnValueCounts,
+} from "@/lib/accounts/column-filter-engine";
+import type {
+  AccountsColumnFilterState,
+  AccountsColumnFilters,
+  ColumnValueOption,
+} from "@/lib/accounts/column-filter-types";
 import { formatDisplayDate } from "@/lib/accounts/date-display";
 import { useClientMounted } from "@/lib/use-client-mounted";
 import { showToast } from "@/lib/toast";
@@ -167,6 +176,33 @@ const AuditTrailRow = memo(function AuditTrailRow({
   );
 });
 
+function selectedColumnValues(
+  filter?: AccountsColumnFilterState,
+): string[] {
+  return (filter?.selectedValues ?? [])
+    .map((v) => String(v).trim())
+    .filter(Boolean);
+}
+
+function getAuditTrailFilterCell(row: AuditTrailApiRow, colKey: string): string {
+  switch (colKey) {
+    case "performed_by_name":
+      return row.user_display || "";
+    case "entity_type":
+      return row.entity_type_label || row.entity_type || "";
+    case "entity_number":
+      return row.entity_number || "";
+    case "action":
+      return row.action_label || row.action || "";
+    case "particular":
+      return row.particular || "";
+    case "document_status":
+      return row.document_status || "";
+    default:
+      return "";
+  }
+}
+
 function SortableTh({
   label,
   colKey,
@@ -174,6 +210,11 @@ function SortableTh({
   sortDir,
   onSort,
   sortable = true,
+  filterable = false,
+  filterType = "text",
+  filterValue,
+  onFilterChange,
+  valueOptions,
 }: {
   label: string;
   colKey: string;
@@ -181,6 +222,11 @@ function SortableTh({
   sortDir: AuditTrailSortDirection;
   onSort: (key: string) => void;
   sortable?: boolean;
+  filterable?: boolean;
+  filterType?: "text" | "status";
+  filterValue?: AccountsColumnFilterState;
+  onFilterChange?: (value: AccountsColumnFilterState | undefined) => void;
+  valueOptions?: ColumnValueOption[];
 }) {
   return (
     <AccountsColumnHeader
@@ -190,7 +236,11 @@ function SortableTh({
       sortKey={activeSortKey}
       sortDir={sortDir}
       onSort={onSort}
-      filterable={false}
+      filterable={filterable}
+      filterType={filterType}
+      filterValue={filterValue}
+      onFilterChange={onFilterChange}
+      valueOptions={valueOptions}
     />
   );
 }
@@ -217,8 +267,8 @@ export default function AuditTrailPageClient() {
     useState<AuditTrailSortField>("performed_at");
   const [sortDirection, setSortDirection] =
     useState<AuditTrailSortDirection>("desc");
-  const [report, setReport] = useState<AuditTrailReportResult | null>(null);
-  const [reportLoading, setReportLoading] = useState(false);
+  const [columnFilters, setColumnFilters] = useState<AccountsColumnFilters>({});
+  const [report, setReport] = useState<AuditTrailReportResult | null>(null);  const [reportLoading, setReportLoading] = useState(false);
   const [reportError, setReportError] = useState<AuditTrailApiError | null>(
     null,
   );
@@ -290,16 +340,80 @@ export default function AuditTrailPageClient() {
     [filtersConfig],
   );
 
+  const handleColumnFilterChange = useCallback(
+    (colKey: string, value: AccountsColumnFilterState | undefined) => {
+      setColumnFilters((prev) => {
+        if (!value) {
+          const next = { ...prev };
+          delete next[colKey];
+          return next;
+        }
+        return { ...prev, [colKey]: value };
+      });
+    },
+    [],
+  );
+
   const queryParams = useMemo<AuditTrailQueryParams | null>(() => {
     if (!financialYearId || financialYearId === "all" || !dateFrom || !dateTo) {
       return null;
     }
     const entityTypeSet = new Set(entityTypeOptions.map((o) => o.value));
     const actionSet = new Set(actionOptions.map((o) => o.value));
-    const safeEntityTypes = entityTypes.filter((v): v is AuditTrailEntityType =>
-      entityTypeSet.has(v as AuditTrailEntityType),
+    const colEntityLabels = selectedColumnValues(columnFilters.entity_type);
+    const colEntityValues =
+      colEntityLabels.length > 0
+        ? entityTypeOptions
+            .filter(
+              (o) =>
+                colEntityLabels.includes(o.label) ||
+                colEntityLabels.includes(o.value),
+            )
+            .map((o) => o.value)
+        : [];
+    const mergedEntityTypes =
+      colEntityValues.length > 0
+        ? entityTypes.length > 0
+          ? entityTypes.filter((v) =>
+              (colEntityValues as string[]).includes(v),
+            )
+          : colEntityValues
+        : entityTypes;
+    const colActionLabels = selectedColumnValues(columnFilters.action);
+    const colActionValues =
+      colActionLabels.length > 0
+        ? actionOptions
+            .filter(
+              (o) =>
+                colActionLabels.includes(o.label) ||
+                colActionLabels.includes(o.value),
+            )
+            .map((o) => o.value)
+        : [];
+    const mergedActions =
+      colActionValues.length > 0
+        ? actions.length > 0
+          ? actions.filter((v) => (colActionValues as string[]).includes(v))
+          : colActionValues
+        : actions;
+    const colUserLabels = selectedColumnValues(columnFilters.performed_by_name);
+    const colUserIds =
+      colUserLabels.length > 0
+        ? (filtersConfig?.users ?? [])
+            .filter((u) => colUserLabels.includes(u.display_name ?? u.username ?? ""))
+            .map((u) => u.user_id)
+        : [];
+    const mergedUsers =
+      colUserIds.length > 0
+        ? users.length > 0
+          ? users.filter((id) => colUserIds.includes(id))
+          : colUserIds
+        : users;
+    const safeEntityTypes = mergedEntityTypes.filter(
+      (v): v is AuditTrailEntityType =>
+        entityTypeSet.has(v as AuditTrailEntityType),
     );
-    const safeActions = actions.filter((v): v is AuditTrailAction =>
+    const safeActions = mergedActions.filter((v): v is AuditTrailAction =>
       actionSet.has(v as AuditTrailAction),
     );
     return {
@@ -308,7 +422,7 @@ export default function AuditTrailPageClient() {
       to_date: dateTo,
       entity_types: safeEntityTypes.length > 0 ? safeEntityTypes : undefined,
       actions: safeActions.length > 0 ? safeActions : undefined,
-      user_ids: users.length > 0 ? users : undefined,
+      user_ids: mergedUsers.length > 0 ? mergedUsers : undefined,
       search: debouncedSearch || undefined,
       page,
       page_size: pageSize,
@@ -318,11 +432,13 @@ export default function AuditTrailPageClient() {
   }, [
     actionOptions,
     actions,
+    columnFilters,
     dateFrom,
     dateTo,
     debouncedSearch,
     entityTypeOptions,
     entityTypes,
+    filtersConfig,
     financialYearId,
     page,
     pageSize,
@@ -344,6 +460,7 @@ export default function AuditTrailPageClient() {
     sortField,
     sortDirection,
     pageSize,
+    columnFilters,
   ]);
 
   useEffect(() => {
@@ -384,6 +501,7 @@ export default function AuditTrailPageClient() {
     setEntityTypes([]);
     setUsers([]);
     setActions([]);
+    setColumnFilters({});
     setPage(1);
     setSortField("performed_at");
     setSortDirection("desc");
@@ -453,7 +571,54 @@ export default function AuditTrailPageClient() {
     [exporting, queryParams],
   );
 
-  const rows = report?.rows ?? [];
+  const fetchedRows = report?.rows ?? [];
+  const filterOptionsByColumn = useMemo(() => {
+    const out: Record<string, ColumnValueOption[]> = {
+      entity_type: entityTypeOptions.map((o) => ({
+        value: o.label || o.value,
+        count: 0,
+      })),
+      action: actionOptions.map((o) => ({
+        value: o.label || o.value,
+        count: 0,
+      })),
+      performed_by_name: (filtersConfig?.users ?? []).map((u) => ({
+        value: u.display_name || u.username || u.user_id,
+        count: 0,
+      })),
+    };
+    for (const key of ["entity_number", "particular", "document_status"] as const) {
+      out[key] = collectColumnValueCounts(
+        fetchedRows,
+        key,
+        getAuditTrailFilterCell,
+      );
+    }
+    return out;
+  }, [actionOptions, entityTypeOptions, fetchedRows, filtersConfig]);
+
+  const rows = useMemo(
+    () =>
+      applyAccountsColumnFilters(
+        fetchedRows,
+        columnFilters,
+        getAuditTrailFilterCell,
+      ),
+    [fetchedRows, columnFilters],
+  );
+
+  const filterableProps = useCallback(
+    (colKey: string) => ({
+      filterable: true as const,
+      filterType: "text" as const,
+      filterValue: columnFilters[colKey],
+      onFilterChange: (value: AccountsColumnFilterState | undefined) =>
+        handleColumnFilterChange(colKey, value),
+      valueOptions: filterOptionsByColumn[colKey] ?? [],
+    }),
+    [columnFilters, filterOptionsByColumn, handleColumnFilterChange],
+  );
+
   const pagination = report?.pagination;
   const totalRows = pagination?.total_rows ?? 0;
 
@@ -461,7 +626,10 @@ export default function AuditTrailPageClient() {
     entityTypes.length > 0 ||
     users.length > 0 ||
     actions.length > 0 ||
-    Boolean(search.trim());
+    Boolean(search.trim()) ||
+    Object.values(columnFilters).some(
+      (f) => f?.selectedValues && f.selectedValues.length > 0,
+    );
 
   const filterSummaryItems = useMemo((): ReportFilterSummaryItem[] => {
     const fyLabel =
@@ -687,6 +855,7 @@ export default function AuditTrailPageClient() {
                   activeSortKey={sortField}
                   sortDir={sortDirection}
                   onSort={handleSort}
+                  {...filterableProps("performed_by_name")}
                 />
                 <SortableTh
                   label="Entity"
@@ -694,6 +863,7 @@ export default function AuditTrailPageClient() {
                   activeSortKey={sortField}
                   sortDir={sortDirection}
                   onSort={handleSort}
+                  {...filterableProps("entity_type")}
                 />
                 <SortableTh
                   label="Document No."
@@ -701,6 +871,7 @@ export default function AuditTrailPageClient() {
                   activeSortKey={sortField}
                   sortDir={sortDirection}
                   onSort={handleSort}
+                  {...filterableProps("entity_number")}
                 />
                 <SortableTh
                   label="Action"
@@ -708,6 +879,7 @@ export default function AuditTrailPageClient() {
                   activeSortKey={sortField}
                   sortDir={sortDirection}
                   onSort={handleSort}
+                  {...filterableProps("action")}
                 />
                 <SortableTh
                   label="Particular"
@@ -715,6 +887,7 @@ export default function AuditTrailPageClient() {
                   activeSortKey={sortField}
                   sortDir={sortDirection}
                   onSort={handleSort}
+                  {...filterableProps("particular")}
                 />
                 <AccountsColumnHeader
                   label="Before Alteration"
@@ -732,7 +905,7 @@ export default function AuditTrailPageClient() {
                   label="Document Status"
                   colKey="document_status"
                   sortable={false}
-                  filterable={false}
+                  {...filterableProps("document_status")}
                 />
                 <AccountsColumnHeader
                   label="Accounting Voucher"

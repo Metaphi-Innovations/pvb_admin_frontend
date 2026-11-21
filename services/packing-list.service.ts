@@ -3,6 +3,7 @@ import { API_ENDPOINTS } from "@/api/endpoints";
 import type { FilterState } from "@/components/listing/types";
 import type { SalesOrderRecord } from "@/app/(app)/warehouse/packing/types";
 import { extractPackingProductDisplay } from "@/app/(app)/warehouse/packing/lib/packing-qty-stack";
+import { toApiFilterValue } from "@/lib/listing/filter-values";
 
 export interface PackingListListItem {
   id: string;
@@ -40,6 +41,17 @@ export interface PackingListParams {
 export interface PackingListResult {
   items: PackingListListItem[];
   total: number;
+}
+
+export interface ReadyExportSummaryRow {
+  product: string;
+  sku: string;
+  batch: string;
+  cases_to_pack: number;
+}
+
+export interface ReadyExportSummaryResult {
+  rows: ReadyExportSummaryRow[];
 }
 
 export interface PackingListFilterOption {
@@ -163,8 +175,8 @@ export function buildPackingListApiFilters(
 ): Record<string, unknown> {
   const apiFilters: Record<string, unknown> = {};
 
-  const warehouseName = firstFilterValue(filters.warehouse);
-  if (warehouseName) {
+  const warehouseName = toApiFilterValue(filters.warehouse);
+  if (warehouseName !== undefined) {
     apiFilters.warehouse = { warehouse_name: warehouseName };
   }
 
@@ -172,20 +184,20 @@ export function buildPackingListApiFilters(
     apiFilters.warehouse_id = selectedWarehouse;
   }
 
-  const customerName = firstFilterValue(filters.customer);
-  if (customerName) {
+  const customerName = toApiFilterValue(filters.customer);
+  if (customerName !== undefined) {
     apiFilters.customer_name = customerName;
   }
 
-  const status = firstFilterValue(filters.status);
-  if (status) {
+  const status = toApiFilterValue(filters.status);
+  if (status !== undefined) {
     apiFilters.status = status;
   }
 
-  const orderNo = firstFilterValue(
+  const orderNo = toApiFilterValue(
     filters.packingNo || filters.salesOrderNo || filters.packingListNo,
   );
-  if (orderNo) {
+  if (orderNo !== undefined) {
     apiFilters.source_document_no = orderNo;
   }
 
@@ -255,6 +267,44 @@ export const PackingListService = {
       : items.length;
 
     return { items, total: totalRecords };
+  },
+
+  /** Aggregated Product + SKU + Batch pending cases for Ready For Packing export. */
+  async exportReadySummary(params: {
+    search?: string;
+    ordering?: string;
+    apiFilters?: Record<string, unknown>;
+    signal?: AbortSignal;
+  }): Promise<ReadyExportSummaryResult> {
+    const query = new URLSearchParams();
+    if (params.ordering) query.set("ordering", params.ordering);
+    if (params.search) query.set("search", params.search);
+    const qs = query.toString();
+
+    const response = await axiosInstance.post(
+      `${API_ENDPOINTS.WAREHOUSE.PACKING_LIST.EXPORT_READY_SUMMARY}${qs ? `?${qs}` : ""}`,
+      {
+        filters: params.apiFilters ?? {},
+        ...(params.search ? { search: params.search } : {}),
+      },
+      { signal: params.signal },
+    );
+
+    const payload = response.data as Record<string, unknown>;
+    const data = (payload.data ?? {}) as Record<string, unknown>;
+    const rawRows = Array.isArray(data.rows) ? data.rows : [];
+
+    const rows: ReadyExportSummaryRow[] = rawRows.map((row) => {
+      const record = (row ?? {}) as Record<string, unknown>;
+      return {
+        product: asString(record.product) || "—",
+        sku: asString(record.sku) || "—",
+        batch: asString(record.batch) || "—",
+        cases_to_pack: asNumber(record.cases_to_pack),
+      };
+    });
+
+    return { rows };
   },
 
   async getFilterDropdown(

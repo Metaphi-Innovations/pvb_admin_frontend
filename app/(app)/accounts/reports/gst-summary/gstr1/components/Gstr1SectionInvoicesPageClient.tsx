@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { ArrowLeft, FileText, IndianRupee, Scale } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -28,7 +28,11 @@ import {
   AccountsTableScroll,
 } from "@/components/accounts/AccountsTable";
 import { AccountsTablePagination } from "@/components/accounts/AccountsTableListing";
-import { FinancialReportHeadCell } from "@/components/accounts/FinancialReportTableHead";
+import {
+  AccountsColumnFilterProvider,
+  SortTh,
+  useAccountsFilteredRows,
+} from "@/app/(app)/accounts/components/AccountsUI";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { buildGstReportHref } from "@/lib/accounts/gst-report-filters";
 import {
@@ -54,6 +58,41 @@ import { GSTR1_SECTION_LABELS, type Gstr1ReportSectionId } from "../gstr1-report
 import { Gstr1ReportHeaderBlock } from "./Gstr1ReportHeaderBlock";
 
 const GST_SUMMARY_GSTR1 = "/accounts/reports/gst-summary/gstr1";
+
+function getGstr1InvoiceFilterCell(
+  row: Gstr1DocumentRow,
+  colKey: string,
+): string {
+  switch (colKey) {
+    case "document_number":
+      return row.document_number || "";
+    case "customer_name":
+      return row.customer_name || "";
+    case "customer_gstin":
+      return row.customer_gstin || "";
+    case "place_of_supply":
+      return row.place_of_supply_state_code || "";
+    case "invoice_type":
+      return row.invoice_type || row.source_type || "";
+    case "status":
+      return row.needs_review ? "Needs Review" : row.source_status || "";
+    case "original_invoice":
+      return row.original_invoice_number || "";
+    default:
+      return "";
+  }
+}
+
+function Gstr1FilteredRows({
+  rows,
+  children,
+}: {
+  rows: Gstr1DocumentRow[];
+  children: (visible: Gstr1DocumentRow[]) => ReactNode;
+}) {
+  const visible = useAccountsFilteredRows(rows);
+  return <>{children(visible)}</>;
+}
 
 function resolveSourceHref(row: Gstr1DocumentRow): string | null {
   if (row.source_type === "CREDIT_NOTE") {
@@ -331,55 +370,108 @@ export function Gstr1SectionInvoicesPageClient({
             </div>
 
             <AccountsListingTableCard className="flex-1 min-h-0 flex flex-col">
+              <AccountsColumnFilterProvider
+                rows={rows}
+                getCellValue={getGstr1InvoiceFilterCell}
+              >
               <AccountsTableScroll className="flex-1 min-h-0">
                 <AccountsTable minWidth={isCn ? 1400 : 1300}>
                   <AccountsTableHead>
                     <AccountsTableHeadRow>
-                      <FinancialReportHeadCell>
-                        {isCn ? "CN Date" : "Invoice Date"}
-                      </FinancialReportHeadCell>
-                      <FinancialReportHeadCell>
-                        {isCn ? "CN Number" : "Invoice Number"}
-                      </FinancialReportHeadCell>
-                      <FinancialReportHeadCell>Customer</FinancialReportHeadCell>
-                      <FinancialReportHeadCell>GSTIN</FinancialReportHeadCell>
+                      <SortTh
+                        label={isCn ? "CN Date" : "Invoice Date"}
+                        colKey="document_date"
+                        sortable={false}
+                        filterable={false}
+                      />
+                      <SortTh
+                        label={isCn ? "CN Number" : "Invoice Number"}
+                        colKey="document_number"
+                        sortable={false}
+                      />
+                      <SortTh
+                        label="Customer"
+                        colKey="customer_name"
+                        sortable={false}
+                      />
+                      <SortTh
+                        label="GSTIN"
+                        colKey="customer_gstin"
+                        sortable={false}
+                      />
                       {isCn && (
-                        <FinancialReportHeadCell>
-                          Original Invoice
-                        </FinancialReportHeadCell>
+                        <SortTh
+                          label="Original Invoice"
+                          colKey="original_invoice"
+                          sortable={false}
+                        />
                       )}
-                      <FinancialReportHeadCell>
-                        Place of Supply
-                      </FinancialReportHeadCell>
-                      <FinancialReportHeadCell>
-                        {isCn ? "Source" : "Invoice Type"}
-                      </FinancialReportHeadCell>
-                      <FinancialReportHeadCell align="right">
-                        {isCn ? "Note Amount" : "Invoice Amount"}
-                      </FinancialReportHeadCell>
-                      <FinancialReportHeadCell align="right">
-                        {isCn ? "Taxable Reduction" : "Taxable Amount"}
-                      </FinancialReportHeadCell>
-                      <FinancialReportHeadCell align="right">
-                        IGST
-                      </FinancialReportHeadCell>
-                      <FinancialReportHeadCell align="right">
-                        CGST
-                      </FinancialReportHeadCell>
-                      <FinancialReportHeadCell align="right">
-                        SGST
-                      </FinancialReportHeadCell>
-                      <FinancialReportHeadCell align="right">
-                        Tax Amount
-                      </FinancialReportHeadCell>
-                      <FinancialReportHeadCell>Status</FinancialReportHeadCell>
-                      <FinancialReportHeadCell className="w-16">
-                        Action
-                      </FinancialReportHeadCell>
+                      <SortTh
+                        label="Place of Supply"
+                        colKey="place_of_supply"
+                        sortable={false}
+                      />
+                      <SortTh
+                        label={isCn ? "Source" : "Invoice Type"}
+                        colKey="invoice_type"
+                        sortable={false}
+                      />
+                      <SortTh
+                        label={isCn ? "Note Amount" : "Invoice Amount"}
+                        colKey="total_amount"
+                        sortable={false}
+                        filterable={false}
+                        align="right"
+                      />
+                      <SortTh
+                        label={isCn ? "Taxable Reduction" : "Taxable Amount"}
+                        colKey="taxable_amount"
+                        sortable={false}
+                        filterable={false}
+                        align="right"
+                      />
+                      <SortTh
+                        label="IGST"
+                        colKey="igst"
+                        sortable={false}
+                        filterable={false}
+                        align="right"
+                      />
+                      <SortTh
+                        label="CGST"
+                        colKey="cgst"
+                        sortable={false}
+                        filterable={false}
+                        align="right"
+                      />
+                      <SortTh
+                        label="SGST"
+                        colKey="sgst"
+                        sortable={false}
+                        filterable={false}
+                        align="right"
+                      />
+                      <SortTh
+                        label="Tax Amount"
+                        colKey="gst_amount"
+                        sortable={false}
+                        filterable={false}
+                        align="right"
+                      />
+                      <SortTh label="Status" colKey="status" sortable={false} />
+                      <SortTh
+                        label="Action"
+                        colKey="_actions"
+                        sortable={false}
+                        filterable={false}
+                        className="w-16"
+                      />
                     </AccountsTableHeadRow>
                   </AccountsTableHead>
                   <AccountsTableBody>
-                    {rows.length === 0 ? (
+                    <Gstr1FilteredRows rows={rows}>
+                      {(visibleRows) =>
+                        visibleRows.length === 0 ? (
                       <AccountsTableRow>
                         <AccountsTableCell
                           colSpan={isCn ? 15 : 14}
@@ -389,7 +481,7 @@ export function Gstr1SectionInvoicesPageClient({
                         </AccountsTableCell>
                       </AccountsTableRow>
                     ) : (
-                      rows.map((row) => {
+                      visibleRows.map((row) => {
                         const href = resolveSourceHref(row);
                         return (
                           <AccountsTableRow
@@ -514,7 +606,9 @@ export function Gstr1SectionInvoicesPageClient({
                           </AccountsTableRow>
                         );
                       })
-                    )}
+                    )
+                      }
+                    </Gstr1FilteredRows>
                   </AccountsTableBody>
                 </AccountsTable>
               </AccountsTableScroll>
@@ -532,6 +626,7 @@ export function Gstr1SectionInvoicesPageClient({
                   recordLabel="documents"
                 />
               )}
+              </AccountsColumnFilterProvider>
             </AccountsListingTableCard>
           </>
         ) : null}

@@ -31,6 +31,7 @@ import {
   Mail,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { toApiFilterValue, toFilterStringList } from "@/lib/listing/filter-values";
 import { ListingContainer } from "@/components/layout/ListingContainer";
 import { MasterListing } from "@/components/listing/MasterListing";
 import type { ColumnConfig, FilterState, SortState } from "@/components/listing/types";
@@ -198,23 +199,29 @@ export default function StockTransferPage() {
         f.status = activeTab.toUpperCase();
       }
     }
-    if (filters.status && Array.isArray(filters.status) && filters.status.length > 0) {
-      f.status = filters.status.map(s => s === "pending" ? "SUBMITTED" : s === "approved" ? "APPROVED" : s.toUpperCase());
+
+    const statusList = toFilterStringList(filters.status).map((s) =>
+      s === "pending" ? "SUBMITTED" : s === "approved" ? "APPROVED" : s.toUpperCase(),
+    );
+    const status = toApiFilterValue(statusList);
+    if (status !== undefined) f.status = status;
+
+    const sourceWarehouse = toApiFilterValue(filters.sourceWarehouseName);
+    if (sourceWarehouse !== undefined) {
+      f.from_warehouse = { warehouse_name: sourceWarehouse };
     }
-    if (filters.sourceWarehouseName && Array.isArray(filters.sourceWarehouseName) && filters.sourceWarehouseName.length > 0) {
-      f.from_warehouse = { warehouse_name: filters.sourceWarehouseName };
+
+    const targetWarehouse = toApiFilterValue(filters.targetWarehouseName);
+    if (targetWarehouse !== undefined) {
+      f.to_warehouse = { warehouse_name: targetWarehouse };
     }
-    if (filters.targetWarehouseName && Array.isArray(filters.targetWarehouseName) && filters.targetWarehouseName.length > 0) {
-      f.to_warehouse = { warehouse_name: filters.targetWarehouseName };
-    }
-    if (filters.transferNumber) {
-      f.transfer_no = filters.transferNumber;
-    }
-    if (filters.fulfillmentStatus && Array.isArray(filters.fulfillmentStatus) && filters.fulfillmentStatus.length > 0) {
-      f.fulfillment_status = filters.fulfillmentStatus;
-    } else if (filters.fulfillmentStatus && typeof filters.fulfillmentStatus === "string") {
-      f.fulfillment_status = filters.fulfillmentStatus;
-    }
+
+    const transferNo = toApiFilterValue(filters.transferNumber);
+    if (transferNo !== undefined) f.transfer_no = transferNo;
+
+    const fulfillment = toApiFilterValue(filters.fulfillmentStatus);
+    if (fulfillment !== undefined) f.fulfillment_status = fulfillment;
+
     return f;
   }, [activeTab, filters]);
 

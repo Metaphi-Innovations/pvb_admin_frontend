@@ -1,6 +1,7 @@
 import { axiosInstance } from "@/api/axios";
 import { API_ENDPOINTS } from "@/api/endpoints";
 import type { FilterState } from "@/components/listing/types";
+import { toApiFilterValue } from "@/lib/listing/filter-values";
 import { amountInWords, round2 } from "@/lib/procurement/utils";
 import type { ProcurementAdditionalCharge } from "@/lib/procurement/procurement-line-utils";
 import { resolveNetWeightPerPack } from "@/lib/procurement/procurement-line-utils";
@@ -388,11 +389,6 @@ export type PurchaseReturnFilterField =
   | "warehouse__warehouse_name"
   | "created_by_user__username";
 
-function firstFilterValue(value: unknown): string {
-  if (Array.isArray(value)) return asString(value[0]).trim();
-  return asString(value).trim();
-}
-
 function mapFilterOptions(
   data: unknown[],
   fieldName: PurchaseReturnFilterField,
@@ -425,29 +421,29 @@ function mapFilterOptions(
 export function buildPurchaseReturnApiFilters(filters: FilterState): Record<string, unknown> {
   const apiFilters: Record<string, unknown> = {};
 
-  const status = firstFilterValue(filters.status);
-  if (status) apiFilters.status = status;
+  const status = toApiFilterValue(filters.status);
+  if (status !== undefined) apiFilters.status = status;
 
-  const returnNumber = firstFilterValue(filters.returnNumber);
-  if (returnNumber) apiFilters.return_no = returnNumber;
+  const returnNumber = toApiFilterValue(filters.returnNumber);
+  if (returnNumber !== undefined) apiFilters.return_no = returnNumber;
 
-  const supplierName = firstFilterValue(filters.supplierName);
-  if (supplierName) {
+  const supplierName = toApiFilterValue(filters.supplierName);
+  if (supplierName !== undefined) {
     apiFilters.supplier = { supplier_name: supplierName };
   }
 
-  const poNumber = firstFilterValue(filters.poNumber);
-  if (poNumber) {
+  const poNumber = toApiFilterValue(filters.poNumber);
+  if (poNumber !== undefined) {
     apiFilters.purchase_order = { po_no: poNumber };
   }
 
-  const warehouseName = firstFilterValue(filters.warehouseName);
-  if (warehouseName) {
+  const warehouseName = toApiFilterValue(filters.warehouseName);
+  if (warehouseName !== undefined) {
     apiFilters.warehouse = { warehouse_name: warehouseName };
   }
 
-  const initiatedBy = firstFilterValue(filters.initiatedBy);
-  if (initiatedBy) {
+  const initiatedBy = toApiFilterValue(filters.initiatedBy);
+  if (initiatedBy !== undefined) {
     apiFilters.created_by_user = { username: initiatedBy };
   }
 

@@ -233,34 +233,43 @@ export default function SalesOrdersPage() {
     return sort.direction === "desc" ? `-${backendKey}` : backendKey;
   }, [sort]);
 
-  // Construct filters payload
+  // Construct filters payload (multi-select → string | string[] for dynamicFilter `in`)
   const apiFilters = useMemo(() => {
     const backendFilters: Record<string, any> = {};
     if (soTabKey !== "all") {
       backendFilters.status = soTabKey.toUpperCase();
     }
 
-    if (filters.soNumber && Array.isArray(filters.soNumber) && filters.soNumber.length > 0) {
-      backendFilters.so_number = filters.soNumber[0];
-    } else if (filters.soNumber && typeof filters.soNumber === "string") {
-      backendFilters.so_number = filters.soNumber;
+    const asList = (value: unknown): string[] => {
+      if (value == null || value === "") return [];
+      if (Array.isArray(value)) return value.map(String).map((v) => v.trim()).filter(Boolean);
+      if (typeof value === "object") return [];
+      const s = String(value).trim();
+      return s ? [s] : [];
+    };
+    const asApi = (value: unknown): string | string[] | undefined => {
+      const list = asList(value);
+      if (list.length === 0) return undefined;
+      return list.length === 1 ? list[0] : list;
+    };
+
+    const soNumber = asApi(filters.soNumber);
+    if (soNumber !== undefined) backendFilters.so_number = soNumber;
+
+    const statusList = asList(filters.status).map((s) => s.toUpperCase());
+    if (statusList.length > 0) {
+      backendFilters.status = statusList.length === 1 ? statusList[0] : statusList;
     }
 
-    if (filters.status && Array.isArray(filters.status) && filters.status.length > 0) {
-      backendFilters.status = filters.status[0].toUpperCase();
+    const fulfillment = asApi(filters.fulfillmentStatus);
+    if (fulfillment !== undefined) backendFilters.fulfillment_status = fulfillment;
+
+    const customerName = asApi(filters.customerName);
+    if (customerName !== undefined) {
+      backendFilters.customer = { customer_name: customerName };
     }
 
-    if (filters.fulfillmentStatus && Array.isArray(filters.fulfillmentStatus) && filters.fulfillmentStatus.length > 0) {
-      backendFilters.fulfillment_status = filters.fulfillmentStatus[0];
-    } else if (filters.fulfillmentStatus && typeof filters.fulfillmentStatus === "string") {
-      backendFilters.fulfillment_status = filters.fulfillmentStatus;
-    }
-
-    if (filters.customerName && Array.isArray(filters.customerName) && filters.customerName.length > 0) {
-      backendFilters.customer = { customer_name: filters.customerName[0] };
-    }
-
-    if (filters.orderDate && typeof filters.orderDate === "object") {
+    if (filters.orderDate && typeof filters.orderDate === "object" && !Array.isArray(filters.orderDate)) {
       const range = filters.orderDate as { fromDate?: string; toDate?: string };
       if (range.fromDate || range.toDate) {
         backendFilters.range = {

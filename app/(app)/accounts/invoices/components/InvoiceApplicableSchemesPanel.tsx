@@ -49,14 +49,18 @@ function specialAchievementLine(scheme: EligibleInvoiceCnSchemeOffer): string | 
   const achieved = scheme.achievement_value;
   if (achieved == null) return null;
   const isQty = scheme.based_on === "SALES_QUANTITY";
+  const isQtyBase = isQty && scheme.quantity_uom === "KG_LTR";
+  const qtyLabel = isQtyBase ? "KG/LTR" : "qty";
   const base = (scheme.contributing_products ?? []).reduce(
     (s, p) => s + p.taxable_amount,
     0,
   );
-  const achievedLabel = isQty ? `${formatQty(achieved)} qty` : formatSchemeRupee(achieved);
+  const achievedLabel = isQty
+    ? `${formatQty(achieved)} ${qtyLabel}`
+    : formatSchemeRupee(achieved);
   const minLabel =
     scheme.min_required_value != null
-      ? ` (min ${isQty ? formatQty(scheme.min_required_value) : formatSchemeRupee(scheme.min_required_value)})`
+      ? ` (min ${isQty ? `${formatQty(scheme.min_required_value)} ${qtyLabel}` : formatSchemeRupee(scheme.min_required_value)})`
       : "";
   return `Combined ${achievedLabel}${minLabel} → ${discountLabel(scheme)} on ${formatSchemeRupee(base)}`;
 }
@@ -102,12 +106,16 @@ function NearExpiryProducts({ scheme }: { scheme: EligibleInvoiceCnSchemeOffer }
 
 function SpecialProducts({ scheme }: { scheme: EligibleInvoiceCnSchemeOffer }) {
   const products = scheme.contributing_products ?? [];
+  const qtyHeader =
+    scheme.based_on === "SALES_QUANTITY" && scheme.quantity_uom === "KG_LTR"
+      ? "KG/LTR"
+      : "Qty";
   return (
     <table className="w-full text-[11px]">
       <thead>
         <tr className="text-left text-[10px] uppercase tracking-wide text-muted-foreground">
           <th className="py-1 pr-2 font-medium">Product</th>
-          <th className="py-1 pr-2 font-medium text-right">Qty</th>
+          <th className="py-1 pr-2 font-medium text-right">{qtyHeader}</th>
           <th className="py-1 font-medium text-right">Taxable value</th>
         </tr>
       </thead>

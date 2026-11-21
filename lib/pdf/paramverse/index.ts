@@ -12,6 +12,7 @@ export {
   formatPercent,
   formatQty,
   sanitizePdfFileName,
+  stripGstAddressFieldLabels,
   toNumber,
 } from "./formatters";
 

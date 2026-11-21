@@ -8,6 +8,7 @@ import {
   type POListStatus,
 } from "@/lib/procurement/po-status";
 import type { FilterState } from "@/components/listing/types";
+import { toApiFilterValue, toFilterStringList } from "@/lib/listing/filter-values";
 
 export type ThreeWayMatchStatus = "PENDING" | "MATCHED" | "NOT_MATCHED";
 
@@ -222,11 +223,6 @@ function mapFilterOptions(
   return options.sort((a, b) => a.label.localeCompare(b.label));
 }
 
-function firstFilterValue(value: unknown): string {
-  if (Array.isArray(value)) return asString(value[0]).trim();
-  return asString(value).trim();
-}
-
 /**
  * Maps MasterListing filter state + tab into backend list `filters` payload.
  */
@@ -236,27 +232,27 @@ export function buildPurchaseOrderApiFilters(
 ): Record<string, unknown> {
   const apiFilters: Record<string, unknown> = {};
 
-  const poNumber = firstFilterValue(filters.poNumber);
-  if (poNumber) {
+  const poNumber = toApiFilterValue(filters.poNumber);
+  if (poNumber !== undefined) {
     apiFilters.po_no = poNumber;
   }
 
-  const supplierName = firstFilterValue(filters.supplierName);
-  if (supplierName) {
+  const supplierName = toApiFilterValue(filters.supplierName);
+  if (supplierName !== undefined) {
     apiFilters.supplier = { supplier_name: supplierName };
   }
 
-  const sourcePrNumber = firstFilterValue(filters.sourcePrNumber);
-  if (sourcePrNumber) {
+  const sourcePrNumber = toApiFilterValue(filters.sourcePrNumber);
+  if (sourcePrNumber !== undefined) {
     apiFilters.purchase_requisition = { pr_number: sourcePrNumber };
   }
 
-  const columnStatus = firstFilterValue(filters.status);
-  if (columnStatus) {
-    const backendStatus = mapFrontendStatusToBackend(columnStatus);
-    if (backendStatus) {
-      apiFilters.po_status = backendStatus;
-    }
+  const mappedStatuses = toFilterStringList(filters.status)
+    .map((token) => mapFrontendStatusToBackend(token))
+    .filter((status): status is NonNullable<typeof status> => Boolean(status));
+  const columnStatus = toApiFilterValue(mappedStatuses);
+  if (columnStatus !== undefined) {
+    apiFilters.po_status = columnStatus;
   } else if (tabStatus === "draft") {
     apiFilters.po_status = "Draft";
   } else if (!tabStatus || tabStatus === "all") {

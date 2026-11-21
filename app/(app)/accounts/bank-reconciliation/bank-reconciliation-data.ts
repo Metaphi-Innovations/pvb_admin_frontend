@@ -587,6 +587,9 @@ export function enrichStatementsWithStats(statements: BankStatement[]) {
 }
 
 export interface StatementListFilters {
+  /** Empty = all banks (OR match when set). Also accepts legacy single string. */
+  bankAccountIds?: string | string[];
+  /** @deprecated Prefer bankAccountIds */
   bankAccountId?: string;
   month?: string;
   year?: string;
@@ -597,10 +600,24 @@ export function filterStatements(
   statements: ReturnType<typeof enrichStatementsWithStats>,
   filters: StatementListFilters,
 ) {
+  const bankIds = (() => {
+    if (filters.bankAccountIds != null) {
+      if (Array.isArray(filters.bankAccountIds)) {
+        return filters.bankAccountIds.map((v) => String(v).trim()).filter(Boolean);
+      }
+      const trimmed = String(filters.bankAccountIds).trim();
+      return !trimmed || trimmed === "all" ? [] : [trimmed];
+    }
+    if (filters.bankAccountId && filters.bankAccountId !== "all") {
+      return [filters.bankAccountId];
+    }
+    return [];
+  })();
+  const bankSet = new Set(bankIds);
+
   return statements
     .filter((s) => {
-      if (filters.bankAccountId && filters.bankAccountId !== "all" && String(s.bankAccountId) !== filters.bankAccountId)
-        return false;
+      if (bankSet.size > 0 && !bankSet.has(String(s.bankAccountId))) return false;
       if (filters.month && filters.month !== "all" && String(s.month) !== filters.month) return false;
       if (filters.year && filters.year !== "all" && String(s.year) !== filters.year) return false;
       if (filters.search) {
@@ -613,11 +630,20 @@ export function filterStatements(
     .sort((a, b) => b.year - a.year || b.month - a.month || b.uploadedAt.localeCompare(a.uploadedAt));
 }
 
+function asEntryMultiValues(value?: string | string[]): string[] {
+  if (value == null) return [];
+  if (Array.isArray(value)) return value.map((v) => String(v).trim()).filter(Boolean);
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === "all") return [];
+  return [trimmed];
+}
+
 export interface EntryListFilters {
-  matchStatus?: string;
-  reconciliationStatus?: string;
-  entryType?: string;
-  matchedModule?: string;
+  /** Empty = all (OR match when set). Also accepts legacy single string. */
+  matchStatus?: string | string[];
+  reconciliationStatus?: string | string[];
+  entryType?: string | string[];
+  matchedModule?: string | string[];
   search?: string;
 }
 
@@ -625,17 +651,25 @@ export function getEntriesForStatement(statementId: number, filters?: EntryListF
   let list = loadBankEntries().filter((e) => e.statementId === statementId);
   if (!filters) return list.sort((a, b) => a.transactionDate.localeCompare(b.transactionDate));
 
-  if (filters.matchStatus && filters.matchStatus !== "all") {
-    list = list.filter((e) => e.matchStatus === filters.matchStatus);
+  const matchStatuses = asEntryMultiValues(filters.matchStatus);
+  if (matchStatuses.length > 0) {
+    const allowed = new Set(matchStatuses);
+    list = list.filter((e) => allowed.has(e.matchStatus));
   }
-  if (filters.reconciliationStatus && filters.reconciliationStatus !== "all") {
-    list = list.filter((e) => e.reconciliationStatus === filters.reconciliationStatus);
+  const reconciliationStatuses = asEntryMultiValues(filters.reconciliationStatus);
+  if (reconciliationStatuses.length > 0) {
+    const allowed = new Set(reconciliationStatuses);
+    list = list.filter((e) => allowed.has(e.reconciliationStatus));
   }
-  if (filters.entryType && filters.entryType !== "all") {
-    list = list.filter((e) => e.entryType === filters.entryType);
+  const entryTypes = asEntryMultiValues(filters.entryType);
+  if (entryTypes.length > 0) {
+    const allowed = new Set(entryTypes);
+    list = list.filter((e) => allowed.has(e.entryType));
   }
-  if (filters.matchedModule && filters.matchedModule !== "all") {
-    list = list.filter((e) => e.matchedModule === filters.matchedModule);
+  const matchedModules = asEntryMultiValues(filters.matchedModule);
+  if (matchedModules.length > 0) {
+    const allowed = new Set(matchedModules);
+    list = list.filter((e) => allowed.has(e.matchedModule));
   }
   if (filters.search) {
     const q = filters.search.toLowerCase();

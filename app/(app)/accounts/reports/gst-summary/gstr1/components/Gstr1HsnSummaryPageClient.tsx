@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { ArrowLeft, Barcode, IndianRupee, Layers, Package } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -21,7 +21,11 @@ import {
   AccountsTableScroll,
 } from "@/components/accounts/AccountsTable";
 import { AccountsTablePagination } from "@/components/accounts/AccountsTableListing";
-import { FinancialReportHeadCell } from "@/components/accounts/FinancialReportTableHead";
+import {
+  AccountsColumnFilterProvider,
+  SortTh,
+  useAccountsFilteredRows,
+} from "@/app/(app)/accounts/components/AccountsUI";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { buildGstReportHref } from "@/lib/accounts/gst-report-filters";
 import {
@@ -43,6 +47,30 @@ import { GstReportNavTabs } from "../../components/GstReportNavTabs";
 import { Gstr1ReportHeaderBlock } from "./Gstr1ReportHeaderBlock";
 
 const GST_SUMMARY_GSTR1 = "/accounts/reports/gst-summary/gstr1";
+
+function getGstr1HsnFilterCell(row: Gstr1HsnRow, colKey: string): string {
+  switch (colKey) {
+    case "hsn":
+      return row.hsn_sac_code || "";
+    case "description":
+      return row.description || "";
+    case "gst_rate":
+      return `${row.gst_rate}%`;
+    default:
+      return "";
+  }
+}
+
+function Gstr1HsnFilteredRows({
+  rows,
+  children,
+}: {
+  rows: Gstr1HsnRow[];
+  children: (visible: Gstr1HsnRow[]) => ReactNode;
+}) {
+  const visible = useAccountsFilteredRows(rows);
+  return <>{children(visible)}</>;
+}
 
 export function Gstr1HsnSummaryPageClient() {
   const filterState = useGstSummaryApiFilters();
@@ -194,39 +222,73 @@ export function Gstr1HsnSummaryPageClient() {
             </AccountsReportKpiGrid>
 
             <AccountsListingTableCard className="flex-1 min-h-0 flex flex-col">
+              <AccountsColumnFilterProvider
+                rows={rows}
+                getCellValue={getGstr1HsnFilterCell}
+              >
               <AccountsTableScroll className="flex-1 min-h-0">
                 <AccountsTable minWidth={1000}>
                   <AccountsTableHead>
                     <AccountsTableHeadRow>
-                      <FinancialReportHeadCell>HSN</FinancialReportHeadCell>
-                      <FinancialReportHeadCell>
-                        Description
-                      </FinancialReportHeadCell>
-                      <FinancialReportHeadCell align="right">
-                        Quantity
-                      </FinancialReportHeadCell>
-                      <FinancialReportHeadCell align="right">
-                        Taxable Amount
-                      </FinancialReportHeadCell>
-                      <FinancialReportHeadCell>
-                        GST Rate
-                      </FinancialReportHeadCell>
-                      <FinancialReportHeadCell align="right">
-                        IGST
-                      </FinancialReportHeadCell>
-                      <FinancialReportHeadCell align="right">
-                        CGST
-                      </FinancialReportHeadCell>
-                      <FinancialReportHeadCell align="right">
-                        SGST
-                      </FinancialReportHeadCell>
-                      <FinancialReportHeadCell align="right">
-                        Total Tax
-                      </FinancialReportHeadCell>
+                      <SortTh label="HSN" colKey="hsn" sortable={false} />
+                      <SortTh
+                        label="Description"
+                        colKey="description"
+                        sortable={false}
+                      />
+                      <SortTh
+                        label="Quantity"
+                        colKey="quantity"
+                        sortable={false}
+                        filterable={false}
+                        align="right"
+                      />
+                      <SortTh
+                        label="Taxable Amount"
+                        colKey="taxable_amount"
+                        sortable={false}
+                        filterable={false}
+                        align="right"
+                      />
+                      <SortTh
+                        label="GST Rate"
+                        colKey="gst_rate"
+                        sortable={false}
+                      />
+                      <SortTh
+                        label="IGST"
+                        colKey="igst"
+                        sortable={false}
+                        filterable={false}
+                        align="right"
+                      />
+                      <SortTh
+                        label="CGST"
+                        colKey="cgst"
+                        sortable={false}
+                        filterable={false}
+                        align="right"
+                      />
+                      <SortTh
+                        label="SGST"
+                        colKey="sgst"
+                        sortable={false}
+                        filterable={false}
+                        align="right"
+                      />
+                      <SortTh
+                        label="Total Tax"
+                        colKey="gst_amount"
+                        sortable={false}
+                        filterable={false}
+                        align="right"
+                      />
                     </AccountsTableHeadRow>
                   </AccountsTableHead>
                   <AccountsTableBody>
-                    {rows.length === 0 ? (
+                    <Gstr1HsnFilteredRows rows={rows}>
+                      {(visibleRows) =>
+                        visibleRows.length === 0 ? (
                       <AccountsTableRow>
                         <AccountsTableCell
                           colSpan={9}
@@ -236,7 +298,7 @@ export function Gstr1HsnSummaryPageClient() {
                         </AccountsTableCell>
                       </AccountsTableRow>
                     ) : (
-                      rows.map((row) => (
+                      visibleRows.map((row) => (
                         <AccountsTableRow key={row.id}>
                           <AccountsTableCell className="text-xs font-mono font-semibold text-brand-700">
                             {row.hsn_sac_code}
@@ -297,7 +359,9 @@ export function Gstr1HsnSummaryPageClient() {
                           </AccountsTableCell>
                         </AccountsTableRow>
                       ))
-                    )}
+                    )
+                      }
+                    </Gstr1HsnFilteredRows>
                   </AccountsTableBody>
                 </AccountsTable>
               </AccountsTableScroll>
@@ -315,6 +379,7 @@ export function Gstr1HsnSummaryPageClient() {
                   recordLabel="HSN rows"
                 />
               )}
+              </AccountsColumnFilterProvider>
             </AccountsListingTableCard>
           </>
         ) : null}

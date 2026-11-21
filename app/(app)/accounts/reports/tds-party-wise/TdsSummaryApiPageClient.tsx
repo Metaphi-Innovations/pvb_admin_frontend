@@ -40,11 +40,21 @@ import {
   ReportMoreFilters,
   ReportPartyMultiFilter,
   ReportSearchFilter,
+  ReportStatusMultiFilter,
   ReportTdsSectionMultiFilter,
   useReportDateRange,
 } from "@/components/accounts/ReportFilters";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { buildGeneralLedgerHref } from "@/lib/accounts/general-ledger-href";
+import {
+  applyAccountsColumnFilters,
+  collectColumnValueCounts,
+} from "@/lib/accounts/column-filter-engine";
+import type {
+  AccountsColumnFilterState,
+  AccountsColumnFilters,
+  ColumnValueOption,
+} from "@/lib/accounts/column-filter-types";
 import {
   formatMoneyString,
   MONEY_AMOUNT_CLASS,
@@ -80,6 +90,27 @@ import type {
 const TITLE = "TDS Summary";
 const DESCRIPTION =
   "Transaction-wise TDS deductions for the selected period.";
+
+/** API accepts a single enum including ALL; empty or both dimensions → ALL. */
+function mapTdsNature(values: string[]): TdsSummaryNatureFilter {
+  const cleaned = values.filter(
+    (v): v is Exclude<TdsSummaryNatureFilter, "ALL"> =>
+      v === "TDS_RECEIVABLE" || v === "TDS_PAYABLE",
+  );
+  if (cleaned.length === 0 || cleaned.length >= 2) return "ALL";
+  return cleaned[0]!;
+}
+
+function mapTdsApplicationMode(
+  values: string[],
+): TdsSummaryApplicationModeFilter {
+  const cleaned = values.filter(
+    (v): v is Exclude<TdsSummaryApplicationModeFilter, "ALL"> =>
+      v === "AGAINST_INVOICE" || v === "ON_ACCOUNT",
+  );
+  if (cleaned.length === 0 || cleaned.length >= 2) return "ALL";
+  return cleaned[0]!;
+}
 
 const SORT_FIELD_MAP: Record<string, TdsSummarySortBy> = {
   month_key: "voucher_date",
@@ -134,6 +165,31 @@ function TdsSummarySkeleton() {
   );
 }
 
+function selectedColumnValues(
+  filter?: AccountsColumnFilterState,
+): string[] {
+  return (filter?.selectedValues ?? [])
+    .map((v) => String(v).trim())
+    .filter(Boolean);
+}
+
+function getTdsFilterCell(row: TdsSummaryApiRow, colKey: string): string {
+  switch (colKey) {
+    case "party_name":
+      return row.party_name || "";
+    case "pan":
+      return row.pan || "";
+    case "invoice_number":
+      return row.invoice_number || "";
+    case "tds_section":
+      return formatSectionDisplay(row);
+    case "month_key":
+      return row.month_label || row.month_key || "";
+    default:
+      return "";
+  }
+}
+
 function ServerSortTh({
   label,
   colKey,
@@ -141,6 +197,11 @@ function ServerSortTh({
   sortDir,
   onSort,
   align = "left",
+  filterable = false,
+  filterType = "text",
+  filterValue,
+  onFilterChange,
+  valueOptions,
 }: {
   label: string;
   colKey: string;
@@ -148,6 +209,11 @@ function ServerSortTh({
   sortDir: TdsSummarySortOrder;
   onSort: (key: string) => void;
   align?: "left" | "right";
+  filterable?: boolean;
+  filterType?: "text" | "status";
+  filterValue?: AccountsColumnFilterState;
+  onFilterChange?: (value: AccountsColumnFilterState | undefined) => void;
+  valueOptions?: ColumnValueOption[];
 }) {
   return (
     <AccountsColumnHeader
@@ -155,10 +221,14 @@ function ServerSortTh({
       colKey={colKey}
       align={align}
       sortable
-      filterable={false}
+      filterable={filterable}
+      filterType={filterType}
       sortKey={activeKey}
       sortDir={sortDir}
       onSort={onSort}
+      filterValue={filterValue}
+      onFilterChange={onFilterChange}
+      valueOptions={valueOptions}
     />
   );
 }
@@ -253,14 +323,14 @@ export default function TdsSummaryApiPageClient() {
   const [partyIds, setPartyIds] = useState<string[]>([]);
   const [tdsSectionIds, setTdsSectionIds] = useState<string[]>([]);
   const [branchIds, setBranchIds] = useState<string[]>([]);
-  const [tdsNature, setTdsNature] = useState<TdsSummaryNatureFilter>("ALL");
-  const [applicationMode, setApplicationMode] =
-    useState<TdsSummaryApplicationModeFilter>("ALL");
+  const [tdsNatures, setTdsNatures] = useState<string[]>([]);
+  const [applicationModes, setApplicationModes] = useState<string[]>([]);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [sortBy, setSortBy] = useState<TdsSummarySortBy>("voucher_date");
+  const [columnFilters, setColumnFilters] = useState<AccountsColumnFilters>({});
   const [sortOrder, setSortOrder] = useState<TdsSummarySortOrder>("desc");
 
   const [report, setReport] = useState<TdsSummaryReportResult | null>(null);
@@ -359,8 +429,12 @@ export default function TdsSummaryApiPageClient() {
     setPageSize(filtersConfig.defaults.page_size || 25);
     setSortBy(filtersConfig.defaults.sort_by || "voucher_date");
     setSortOrder(filtersConfig.defaults.sort_order || "desc");
-    setTdsNature(filtersConfig.defaults.tds_nature || "ALL");
-    setApplicationMode(filtersConfig.defaults.application_mode || "ALL");
+    {
+      const nature = filtersConfig.defaults.tds_nature || "ALL";
+      setTdsNatures(nature === "ALL" ? [] : [nature]);
+      const mode = filtersConfig.defaults.application_mode || "ALL";
+      setApplicationModes(mode === "ALL" ? [] : [mode]);
+    }
     appliedDefaults.current = true;
   }, [filtersConfig, ready, setDateFrom, setDateTo, setPreset]);
 
@@ -411,22 +485,34 @@ export default function TdsSummaryApiPageClient() {
 
   const natureOptions = useMemo(
     () =>
-      filtersConfig?.tds_natures ?? [
-        { value: "ALL" as const, label: "All" },
+      (filtersConfig?.tds_natures ?? [
         { value: "TDS_RECEIVABLE" as const, label: "TDS Receivable" },
         { value: "TDS_PAYABLE" as const, label: "TDS Payable" },
-      ],
+      ]).filter((o) => o.value !== "ALL"),
     [filtersConfig],
   );
 
   const applicationModeOptions = useMemo(
     () =>
-      filtersConfig?.application_modes ?? [
-        { value: "ALL" as const, label: "All" },
+      (filtersConfig?.application_modes ?? [
         { value: "AGAINST_INVOICE" as const, label: "Against Invoice" },
         { value: "ON_ACCOUNT" as const, label: "On Account" },
-      ],
+      ]).filter((o) => o.value !== "ALL"),
     [filtersConfig],
+  );
+
+  const handleColumnFilterChange = useCallback(
+    (colKey: string, value: AccountsColumnFilterState | undefined) => {
+      setColumnFilters((prev) => {
+        if (!value) {
+          const next = { ...prev };
+          delete next[colKey];
+          return next;
+        }
+        return { ...prev, [colKey]: value };
+      });
+    },
+    [],
   );
 
   const queryParams = useMemo<TdsSummaryQueryParams | null>(() => {
@@ -434,10 +520,42 @@ export default function TdsSummaryApiPageClient() {
       return null;
     }
     const allowedPartyIds = new Set(parties.map((p) => p.id));
-    const safePartyIds =
+    const toolbarPartyIds =
       parties.length > 0
         ? partyIds.filter((id) => allowedPartyIds.has(id))
         : partyIds;
+    const colPartyNames = selectedColumnValues(columnFilters.party_name);
+    const colPartyIds =
+      colPartyNames.length > 0
+        ? parties
+            .filter((p) => colPartyNames.includes(p.name))
+            .map((p) => p.id)
+        : [];
+    const safePartyIds =
+      colPartyIds.length > 0
+        ? toolbarPartyIds.length > 0
+          ? toolbarPartyIds.filter((id) => colPartyIds.includes(id))
+          : colPartyIds
+        : toolbarPartyIds;
+
+    const colSections = selectedColumnValues(columnFilters.tds_section);
+    const colSectionIds =
+      colSections.length > 0
+        ? (filtersConfig?.tds_sections ?? [])
+            .filter(
+              (s) =>
+                colSections.includes(s.tds_code) ||
+                colSections.includes(s.tds_section_name ?? "") ||
+                colSections.includes(s.tds_section_id),
+            )
+            .map((s) => s.tds_section_id)
+        : [];
+    const effectiveSectionIds =
+      colSectionIds.length > 0
+        ? tdsSectionIds.length > 0
+          ? tdsSectionIds.filter((id) => colSectionIds.includes(id))
+          : colSectionIds
+        : tdsSectionIds;
 
     return {
       financial_year_id: financialYearId,
@@ -445,10 +563,10 @@ export default function TdsSummaryApiPageClient() {
       to_date: dateTo,
       month: month !== "all" ? month : undefined,
       branch_ids: branchIds,
-      tds_section_ids: tdsSectionIds,
+      tds_section_ids: effectiveSectionIds,
       party_ids: safePartyIds,
-      tds_nature: tdsNature,
-      application_mode: applicationMode,
+      tds_nature: mapTdsNature(tdsNatures),
+      application_mode: mapTdsApplicationMode(applicationModes),
       search: debouncedSearch || undefined,
       page,
       page_size: pageSize,
@@ -456,11 +574,13 @@ export default function TdsSummaryApiPageClient() {
       sort_order: sortOrder,
     };
   }, [
-    applicationMode,
+    applicationModes,
     branchIds,
+    columnFilters,
     dateFrom,
     dateTo,
     debouncedSearch,
+    filtersConfig,
     financialYearId,
     month,
     page,
@@ -469,7 +589,7 @@ export default function TdsSummaryApiPageClient() {
     partyIds,
     sortBy,
     sortOrder,
-    tdsNature,
+    tdsNatures,
     tdsSectionIds,
   ]);
 
@@ -483,10 +603,11 @@ export default function TdsSummaryApiPageClient() {
     branchIds,
     tdsSectionIds,
     partyIds,
-    tdsNature,
-    applicationMode,
+    tdsNatures,
+    applicationModes,
     debouncedSearch,
     pageSize,
+    columnFilters,
   ]);
 
   useEffect(() => {
@@ -526,10 +647,11 @@ export default function TdsSummaryApiPageClient() {
     setPartyIds([]);
     setTdsSectionIds([]);
     setBranchIds([]);
-    setTdsNature("ALL");
-    setApplicationMode("ALL");
+    setTdsNatures([]);
+    setApplicationModes([]);
     setSearch("");
     setDebouncedSearch("");
+    setColumnFilters({});
     setPage(1);
     setSortBy("voucher_date");
     setSortOrder("desc");
@@ -601,13 +723,44 @@ export default function TdsSummaryApiPageClient() {
   );
 
   const summary = report?.summary;
-  const rows = report?.rows ?? [];
+  const fetchedRows = report?.rows ?? [];
+  const filterOptionsByColumn = useMemo(() => {
+    const out: Record<string, ColumnValueOption[]> = {
+      tds_section: (filtersConfig?.tds_sections ?? []).map((s) => ({
+        value: s.tds_code,
+        count: 0,
+      })),
+    };
+    for (const key of ["party_name", "pan", "invoice_number", "month_key"] as const) {
+      out[key] = collectColumnValueCounts(fetchedRows, key, getTdsFilterCell);
+    }
+    return out;
+  }, [fetchedRows, filtersConfig]);
+
+  const rows = useMemo(
+    () =>
+      applyAccountsColumnFilters(fetchedRows, columnFilters, getTdsFilterCell),
+    [fetchedRows, columnFilters],
+  );
+
+  const filterableProps = useCallback(
+    (colKey: string) => ({
+      filterable: true as const,
+      filterType: "text" as const,
+      filterValue: columnFilters[colKey],
+      onFilterChange: (value: AccountsColumnFilterState | undefined) =>
+        handleColumnFilterChange(colKey, value),
+      valueOptions: filterOptionsByColumn[colKey] ?? [],
+    }),
+    [columnFilters, filterOptionsByColumn, handleColumnFilterChange],
+  );
+
   const pagination = report?.pagination;
   const totalRows = pagination?.total_rows ?? 0;
 
   const moreFiltersActiveCount = countActiveMoreFilters({
     branch: branchIds,
-  }) + (tdsNature !== "ALL" ? 1 : 0) + (applicationMode !== "ALL" ? 1 : 0);
+  }) + (tdsNatures.length > 0 ? 1 : 0) + (applicationModes.length > 0 ? 1 : 0);
 
   const hasActiveFilters =
     Boolean(search.trim()) ||
@@ -615,8 +768,11 @@ export default function TdsSummaryApiPageClient() {
     partyIds.length > 0 ||
     tdsSectionIds.length > 0 ||
     branchIds.length > 0 ||
-    tdsNature !== "ALL" ||
-    applicationMode !== "ALL";
+    tdsNatures.length > 0 ||
+    applicationModes.length > 0 ||
+    Object.values(columnFilters).some(
+      (f) => f?.selectedValues && f.selectedValues.length > 0,
+    );
 
   const monthLabel =
     month === "all"
@@ -658,29 +814,23 @@ export default function TdsSummaryApiPageClient() {
         branchOptions,
         () => setBranchIds([]),
       ),
-      tdsNature !== "ALL"
-        ? {
-            id: "tdsNature",
-            label: "TDS Nature",
-            value:
-              natureOptions.find((o) => o.value === tdsNature)?.label ??
-              tdsNature,
-            onRemove: () => setTdsNature("ALL"),
-          }
-        : null,
-      applicationMode !== "ALL"
-        ? {
-            id: "applicationMode",
-            label: "Application Mode",
-            value:
-              applicationModeOptions.find((o) => o.value === applicationMode)
-                ?.label ?? applicationMode,
-            onRemove: () => setApplicationMode("ALL"),
-          }
-        : null,
+      buildEntityFilterSummary(
+        "tdsNature",
+        "TDS Nature",
+        tdsNatures,
+        natureOptions,
+        () => setTdsNatures([]),
+      ),
+      buildEntityFilterSummary(
+        "applicationMode",
+        "Application Mode",
+        applicationModes,
+        applicationModeOptions,
+        () => setApplicationModes([]),
+      ),
     ].filter((item): item is ReportFilterSummaryItem => item != null);
   }, [
-    applicationMode,
+    applicationModes,
     applicationModeOptions,
     branchIds,
     branchOptions,
@@ -689,7 +839,7 @@ export default function TdsSummaryApiPageClient() {
     natureOptions,
     parties,
     partyIds,
-    tdsNature,
+    tdsNatures,
     tdsSectionIds,
     tdsSectionOptions,
   ]);
@@ -790,46 +940,18 @@ export default function TdsSummaryApiPageClient() {
                 onChange={setBranchIds}
                 labeledOptions={branchOptions}
               />
-              <div className="space-y-1 min-w-[160px]">
-                <Label className={filterLabelClass}>TDS Nature</Label>
-                <Select
-                  value={tdsNature}
-                  onValueChange={(v) =>
-                    setTdsNature(v as TdsSummaryNatureFilter)
-                  }
-                >
-                  <SelectTrigger className={cn(filterControlClass, "mt-0 w-[160px]")}>
-                    <SelectValue placeholder="All" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {natureOptions.map((o) => (
-                      <SelectItem key={o.value} value={o.value} className="text-xs">
-                        {o.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1 min-w-[160px]">
-                <Label className={filterLabelClass}>Application Mode</Label>
-                <Select
-                  value={applicationMode}
-                  onValueChange={(v) =>
-                    setApplicationMode(v as TdsSummaryApplicationModeFilter)
-                  }
-                >
-                  <SelectTrigger className={cn(filterControlClass, "mt-0 w-[160px]")}>
-                    <SelectValue placeholder="All" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {applicationModeOptions.map((o) => (
-                      <SelectItem key={o.value} value={o.value} className="text-xs">
-                        {o.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              <ReportStatusMultiFilter
+                label="TDS Nature"
+                values={tdsNatures}
+                onChange={setTdsNatures}
+                options={natureOptions}
+              />
+              <ReportStatusMultiFilter
+                label="Application Mode"
+                values={applicationModes}
+                onChange={setApplicationModes}
+                options={applicationModeOptions}
+              />
             </ReportMoreFilters>
             {hasActiveFilters && (
               <Button
@@ -918,6 +1040,7 @@ export default function TdsSummaryApiPageClient() {
                     activeKey={activeSortCol}
                     sortDir={sortOrder}
                     onSort={handleSort}
+                    {...filterableProps("month_key")}
                   />
                   <ServerSortTh
                     label="Party Name"
@@ -925,10 +1048,14 @@ export default function TdsSummaryApiPageClient() {
                     activeKey={activeSortCol}
                     sortDir={sortOrder}
                     onSort={handleSort}
+                    {...filterableProps("party_name")}
                   />
-                  <th className="px-3 py-2.5 text-left text-xs font-semibold whitespace-nowrap">
-                    PAN
-                  </th>
+                  <AccountsColumnHeader
+                    label="PAN"
+                    colKey="pan"
+                    sortable={false}
+                    {...filterableProps("pan")}
+                  />
                   <ServerSortTh
                     label="Invoice Date"
                     colKey="invoice_date"
@@ -942,6 +1069,7 @@ export default function TdsSummaryApiPageClient() {
                     activeKey={activeSortCol}
                     sortDir={sortOrder}
                     onSort={handleSort}
+                    {...filterableProps("invoice_number")}
                   />
                   <ServerSortTh
                     label="Amount"
@@ -973,6 +1101,7 @@ export default function TdsSummaryApiPageClient() {
                     activeKey={activeSortCol}
                     sortDir={sortOrder}
                     onSort={handleSort}
+                    {...filterableProps("tds_section")}
                   />
                 </AccountsTableHeadRow>
               </AccountsTableHead>

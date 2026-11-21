@@ -7,12 +7,7 @@ import { AccountsListingChrome } from "@/components/accounts/ui";
 import { AccountsFilterBar } from "@/components/accounts/AccountsFilterBar";
 import { AccountsListingDateFilter } from "@/components/accounts/AccountsListingFilter";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-} from "@/components/ui/dropdown-menu";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import {
   AccountsEditAction,
   AccountsMoreActions,
@@ -20,6 +15,8 @@ import {
   AccountsViewAction,
   accountsActionColClass,
 } from "@/components/accounts/AccountsTableActions";
+import { ReportMultiSelect } from "@/components/accounts/ReportMultiSelect";
+import { ReportStatusMultiFilter } from "@/components/accounts/ReportFilters";
 import { Banknote, FileSpreadsheet, Plus, XCircle } from "lucide-react";
 import { SectionTabs } from "../components/AccountsUI";
 import {
@@ -50,13 +47,22 @@ const TABS = [
   { id: "cancelled", label: "Cancelled" },
 ];
 
+const PAYMENT_STATUS_OPTIONS = [
+  { value: "payment_pending", label: "Pending" },
+  { value: "partially_paid", label: "Partially Paid" },
+  { value: "payment_done", label: "Paid" },
+  { value: "cancelled", label: "Cancelled" },
+] as const;
+
+const PAYMENT_MODE_OPTIONS = PAYMENT_MODES.map((m) => ({ value: m, label: m }));
+
 export default function PaymentsPageClient() {
   const [records, setRecords] = useState<CompanyPaymentRecord[]>([]);
   const [tab, setTab] = useState("all");
   const [search, setSearch] = useState("");
-  const [paymentMode, setPaymentMode] = useState("all");
-  const [sourceType, setSourceType] = useState("all");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [paymentModes, setPaymentModes] = useState<string[]>([]);
+  const [sourceTypes, setSourceTypes] = useState<string[]>([]);
+  const [statusFilters, setStatusFilters] = useState<string[]>([]);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [payTarget, setPayTarget] = useState<CompanyPaymentRecord | null>(null);
@@ -68,8 +74,16 @@ export default function PaymentsPageClient() {
   }, [refresh]);
 
   const listFilters = useMemo(
-    () => ({ tab, search, paymentMode, sourceType, dateFrom, dateTo, statusFilter }),
-    [tab, search, paymentMode, sourceType, dateFrom, dateTo, statusFilter],
+    () => ({
+      tab,
+      search,
+      paymentModes,
+      sourceTypes,
+      dateFrom,
+      dateTo,
+      statusFilters,
+    }),
+    [tab, search, paymentModes, sourceTypes, dateFrom, dateTo, statusFilters],
   );
   const visible = useMemo(() => filterCompanyPayments(records, listFilters), [records, listFilters]);
   const counts = useMemo(() => computePaymentTabCounts(records), [records]);
@@ -115,44 +129,29 @@ export default function PaymentsPageClient() {
         <SectionTabs tabs={TABS} active={tab} onChange={setTab} counts={counts} />
 
         <AccountsFilterBar searchValue={search} onSearchChange={setSearch} searchPlaceholder="Payment no., payee, source ref…">
-          <Select value={sourceType} onValueChange={setSourceType}>
-            <SelectTrigger className="h-8 w-[150px] text-sm bg-white">
-              <SelectValue placeholder="Source type" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all" className="text-xs">All source types</SelectItem>
-              {SOURCE_TYPE_OPTIONS.map((o) => (
-                <SelectItem key={o.value} value={o.value} className="text-xs">
-                  {o.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={paymentMode} onValueChange={setPaymentMode}>
-            <SelectTrigger className="h-8 w-[130px] text-sm bg-white">
-              <SelectValue placeholder="Mode" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all" className="text-xs">All modes</SelectItem>
-              {PAYMENT_MODES.map((m) => (
-                <SelectItem key={m} value={m} className="text-xs">
-                  {m}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="h-8 w-[130px] text-sm bg-white">
-              <SelectValue placeholder="Status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all" className="text-xs">All statuses</SelectItem>
-              <SelectItem value="payment_pending" className="text-xs">Pending</SelectItem>
-              <SelectItem value="partially_paid" className="text-xs">Partially Paid</SelectItem>
-              <SelectItem value="payment_done" className="text-xs">Paid</SelectItem>
-              <SelectItem value="cancelled" className="text-xs">Cancelled</SelectItem>
-            </SelectContent>
-          </Select>
+          <ReportMultiSelect
+            label="Source type"
+            values={sourceTypes}
+            onChange={setSourceTypes}
+            options={SOURCE_TYPE_OPTIONS}
+            entityName="Source type"
+            allLabel="All source types"
+            minWidthClass="min-w-[150px]"
+          />
+          <ReportMultiSelect
+            label="Mode"
+            values={paymentModes}
+            onChange={setPaymentModes}
+            options={PAYMENT_MODE_OPTIONS}
+            entityName="Mode"
+            allLabel="All modes"
+            minWidthClass="min-w-[130px]"
+          />
+          <ReportStatusMultiFilter
+            values={statusFilters}
+            onChange={setStatusFilters}
+            options={[...PAYMENT_STATUS_OPTIONS]}
+          />
           <AccountsListingDateFilter
             dateFrom={dateFrom}
             dateTo={dateTo}

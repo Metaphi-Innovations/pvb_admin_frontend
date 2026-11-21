@@ -67,7 +67,7 @@ export default function ProfitLossPageClient() {
   const [dateTo, setDateTo] = useState("");
   const [datesReady, setDatesReady] = useState(false);
   const [financialYearId, setFinancialYearId] = useState("");
-  const [warehouseId, setWarehouseId] = useState("all");
+  const [warehouseId, setWarehouseId] = useState<string>("all");
   const [exporting, setExporting] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -84,7 +84,11 @@ export default function ProfitLossPageClient() {
     const urlFy = searchParams.get("fy") ?? searchParams.get("fyId") ?? "";
     const urlBranch = searchParams.get("branch") ?? searchParams.get("warehouse") ?? "";
     if (urlFy && urlFy !== "all") setFinancialYearId(urlFy);
-    if (urlBranch && urlBranch !== "all" && !urlBranch.includes(",")) setWarehouseId(urlBranch);
+    if (urlBranch && urlBranch !== "all") {
+      // Single-select only; legacy comma-separated URLs keep the first branch.
+      const first = urlBranch.split(",")[0]?.trim() ?? "";
+      if (first && first.toLowerCase() !== "all") setWarehouseId(first);
+    }
     setUrlReady(true);
   }, [mounted, searchParams, urlReady]);
 
@@ -186,7 +190,8 @@ export default function ProfitLossPageClient() {
       financial_year_id: financialYearId,
       from_date: dateFrom,
       to_date: dateTo,
-      warehouse_id: warehouseId !== "all" ? warehouseId : undefined,
+      warehouse_id:
+        warehouseId && warehouseId !== "all" ? warehouseId : undefined,
       show_zero: showZeroDefault,
     };
   }, [
@@ -230,7 +235,7 @@ export default function ProfitLossPageClient() {
       fromDate: dateFrom,
       toDate: dateTo,
       reportType: activeTab,
-      warehouseId,
+      warehouseId: warehouseId || "all",
       groupId: "all",
       subGroupId: "all",
       ledgerId: "all",
@@ -349,7 +354,8 @@ export default function ProfitLossPageClient() {
     report && (!report.trading_account.is_balanced || !report.profit_and_loss_account.is_balanced),
   );
 
-  const hasFilters = warehouseId !== "all" || activeTab !== "normal" || preset !== "custom";
+  const hasFilters =
+    (warehouseId && warehouseId !== "all") || activeTab !== "normal" || preset !== "custom";
 
   const scopeSummaryItems = useMemo((): ReportFilterSummaryItem[] => {
     const fyName = selectedFy?.name || selectedFY?.label || financialYearId;
@@ -362,7 +368,7 @@ export default function ProfitLossPageClient() {
       id: "branch",
       label: "Branch",
       value:
-        warehouseId === "all"
+        !warehouseId || warehouseId === "all"
           ? "All branches"
           : branchOptions.find((branch) => branch.id === warehouseId)?.name ?? warehouseId,
     });
@@ -396,7 +402,11 @@ export default function ProfitLossPageClient() {
       />
       <ReportFromDateFilter value={dateFrom} onChange={setDateFrom} min={fyMin} max={dateTo || fyMax} />
       <ReportToDateFilter value={dateTo} onChange={setDateTo} min={dateFrom || fyMin} max={fyMax} />
-      <ReportBranchFilter value={warehouseId} onChange={setWarehouseId} options={branchOptions} />
+      <ReportBranchFilter
+        value={warehouseId || "all"}
+        onChange={setWarehouseId}
+        options={branchOptions}
+      />
       {hasFilters && (
         <Button variant="outline" size="sm" className="h-8 text-sm px-2" onClick={resetFilters}>
           Reset
@@ -455,12 +465,6 @@ export default function ProfitLossPageClient() {
             </ul>
           </div>
         )}
-        {report?.health.internal_transfer_excluded &&
-          !warnings.some((warning) => warning.code === "INTERNAL_TRANSFER_EXCLUDED") && (
-          <p className="px-3 pt-2 text-[11px] text-muted-foreground">
-            Internal stock-transfer sales/costs are excluded from the consolidated P&L.
-          </p>
-        )}
         {totalsUnequal && (
           <p className="px-3 pt-2 text-[11px] text-red-700">
             Backend report totals are not balanced. The screen is showing the returned totals and has not adjusted them.
@@ -499,7 +503,8 @@ export default function ProfitLossPageClient() {
               dateFrom: periodFrom,
               dateTo: periodTo,
               financialYearId,
-              warehouseId: warehouseId !== "all" ? warehouseId : undefined,
+              warehouseId:
+                warehouseId && warehouseId !== "all" ? warehouseId : undefined,
             }}
           />
         )}

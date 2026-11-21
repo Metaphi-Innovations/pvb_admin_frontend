@@ -1,6 +1,7 @@
 import { axiosInstance } from "@/api/axios";
 import { API_ENDPOINTS } from "@/api/endpoints";
 import { CustomerBranch } from "@/app/(app)/masters/customers/customer-data";
+import { toApiFilterValue, toFilterStringList } from "@/lib/listing/filter-values";
 import { createFlatDateAuditFieldMapper } from "@/lib/masters/list-api-filters";
 
 export interface CustomerBranchDocumentPayload {
@@ -196,6 +197,7 @@ export interface CustomerExportParams {
     status: "all" | "active" | "inactive";
     ordering?: string;
     apiFilters?: Record<string, unknown>;
+    format?: "excel" | "pdf" | "csv";
 }
 
 export interface CustomerFilterOption {
@@ -222,9 +224,13 @@ export interface CustomerDropdownItem {
 
     customer_type_id?: string | null;
     customer_type?: {
-        customer_type_id: string;
+        customer_type_id?: string;
+        id?: string;
         customer_type_name: string;
     } | null;
+
+    /** Main-branch billing state (for scheme applicability filters). */
+    billing_state?: string | null;
 
     mobile_no?: string | null;
     email?: string | null;
@@ -346,32 +352,47 @@ function mapFilters(filters: Record<string, unknown> = {}) {
         }
 
         if (key === "mobile" || key === "mobileNo") {
-            const raw = String(Array.isArray(value) ? value[0] : value).trim();
-            const digits = raw.replace(/^\+\d+\s*/, "").replace(/\D/g, "");
-            if (digits) mapped.mobile_no = digits;
+            const mobiles = toFilterStringList(value)
+                .map((raw) => raw.replace(/^\+\d+\s*/, "").replace(/\D/g, ""))
+                .filter(Boolean);
+            const mobile = toApiFilterValue(mobiles);
+            if (mobile !== undefined) mapped.mobile_no = mobile;
             continue;
         }
 
         if (key === "creditLimit") {
-            const raw = String(Array.isArray(value) ? value[0] : value)
-                .replace(/[₹,\s]/g, "")
-                .trim();
-            const num = Number(raw);
-            if (Number.isFinite(num)) mapped.credit_limit = num;
+            const limits = toFilterStringList(value)
+                .map((raw) => Number(raw.replace(/[₹,\s]/g, "").trim()))
+                .filter((num) => Number.isFinite(num))
+                .map(String);
+            const creditLimit = toApiFilterValue(limits);
+            if (creditLimit !== undefined) {
+                mapped.credit_limit =
+                    typeof creditLimit === "string"
+                        ? Number(creditLimit)
+                        : creditLimit.map(Number);
+            }
             continue;
         }
 
         if (key === "status") {
-            const raw = String(Array.isArray(value) ? value[0] : value).trim().toLowerCase();
-            if (raw === "active") mapped.status = "Active";
-            else if (raw === "inactive") mapped.status = "Inactive";
-            else if (raw) mapped.status = raw;
+            const tokens = toFilterStringList(value).map((t) => t.toLowerCase());
+            const hasActive = tokens.includes("active");
+            const hasInactive = tokens.includes("inactive");
+            if (hasActive && hasInactive) continue;
+            const mappedStatuses = tokens.map((raw) => {
+                if (raw === "active") return "Active";
+                if (raw === "inactive") return "Inactive";
+                return raw;
+            });
+            const status = toApiFilterValue(mappedStatuses);
+            if (status !== undefined) mapped.status = status;
             continue;
         }
 
         const apiKey = FILTER_FIELD_MAP[key] ?? key;
-
-        mapped[apiKey] = Array.isArray(value) ? value[0] : value;
+        const apiValue = toApiFilterValue(value);
+        if (apiValue !== undefined) mapped[apiKey] = apiValue;
     }
 
     return mapped;
@@ -763,17 +784,19 @@ export const CustomerListService = {
     },
 
     async export(params: CustomerExportParams): Promise<void> {
+        const format = params.format ?? "excel";
         const response = await axiosInstance.post(
             `${API_ENDPOINTS.MASTER.CUSTOMER.EXPORT}?search=${encodeURIComponent(params.search)}&ordering=${encodeURIComponent(params.ordering ?? "")}`,
-            { filters: mapFilters(params.apiFilters) },
+            { filters: mapFilters(params.apiFilters), format },
             { responseType: "blob" },
         );
 
+        const ext = format === "pdf" ? "pdf" : format === "csv" ? "csv" : "xlsx";
         const blob = response.data as Blob;
         const url = window.URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.href = url;
-        link.download = `customers_${new Date().toISOString().slice(0, 10)}.csv`;
+        link.download = `customers_${new Date().toISOString().slice(0, 10)}.${ext}`;
         document.body.appendChild(link);
         link.click();
         link.remove();

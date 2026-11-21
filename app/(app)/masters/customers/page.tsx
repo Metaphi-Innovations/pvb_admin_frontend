@@ -613,12 +613,13 @@ export default function CustomersPage() {
 		setPage(1);
 	};
 
-	const handleExport = () => {
+	const handleExport = (format: "excel" | "pdf") => {
 		exportCustomers.mutate({
 			search: appliedSearch,
 			ordering,
 			status: "all",
 			apiFilters: appliedFilters,
+			format,
 		});
 	};
 
@@ -697,7 +698,8 @@ export default function CustomersPage() {
 					actions={actions}
 					onAdd={perms.canCreate ? handleAdd : undefined}
 					addLabel='Add Customer'
-					onExport={handleExport}
+					onExportExcel={() => handleExport("excel")}
+					onExportPdf={() => handleExport("pdf")}
 					emptyMessage='customers'
 					searchPlaceholder='Search name, mobile, state…'
 					currentFilters={filters}

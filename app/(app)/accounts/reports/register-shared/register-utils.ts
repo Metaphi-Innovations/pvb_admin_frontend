@@ -46,8 +46,6 @@ export function filterRegisterRows(
   const customerTypes = normalizeMultiFilter(filters.customerTypes);
   const partyIds = mode === "sales" ? filters.customerIds : filters.vendorIds;
   const invoiceNoQ = (filters.invoiceNo ?? "").trim().toLowerCase();
-  const gstType = filters.gstType && filters.gstType !== "all" ? filters.gstType : null;
-
   return rows.filter((row) => {
     if (filters.dateFrom && row.invoiceDate < filters.dateFrom) return false;
     if (filters.dateTo && row.invoiceDate > filters.dateTo) return false;
@@ -77,8 +75,8 @@ export function filterRegisterRows(
       if (!hasProduct) return false;
     }
     if (salespersons.length > 0 && !matchesMultiFilter(salespersons, row.salesperson)) return false;
-    if (filters.gstRate !== "all" && String(row.gstRate) !== filters.gstRate) return false;
-    if (gstType && row.gstType !== gstType) return false;
+    if (!matchesMultiFilter(filters.gstRate, String(row.gstRate))) return false;
+    if (!matchesMultiFilter(filters.gstType, row.gstType)) return false;
     if (invoiceNoQ && !row.invoiceNo.toLowerCase().includes(invoiceNoQ)) return false;
     if (
       !matchesSearch(filters.search, [

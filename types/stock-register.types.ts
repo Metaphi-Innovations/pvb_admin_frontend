@@ -76,6 +76,10 @@ export interface StockRegisterSummaryApiRow {
   product_id: string;
   product_code: string | null;
   product_name: string;
+  size_label: string | null;
+  sku: string | null;
+  /** Product-master cost_price for this SKU/size only. */
+  cost_price: string | null;
   uom: string | null;
   warehouse_id: string;
   warehouse_name: string | null;
@@ -127,6 +131,8 @@ export interface StockRegisterDetailedApiRow {
   product_id: string;
   product_code: string | null;
   product_name: string;
+  size_label: string | null;
+  sku: string | null;
   warehouse_id: string;
   warehouse_name: string | null;
   party_name: string | null;
@@ -165,6 +171,9 @@ export interface StockRegisterBatchApiRow {
   product_id: string;
   product_code: string | null;
   product_name: string;
+  size_label: string | null;
+  sku: string | null;
+  cost_price: string | null;
   uom: string | null;
   warehouse_id: string;
   warehouse_name: string | null;
@@ -206,6 +215,9 @@ export interface StockRegisterRejectedSummaryApiRow {
   product_id: string;
   product_code: string | null;
   product_name: string;
+  size_label: string | null;
+  sku: string | null;
+  cost_price: string | null;
   uom: string | null;
   warehouse_id: string;
   warehouse_name: string | null;
@@ -237,6 +249,8 @@ export interface StockRegisterRejectedDetailedApiRow {
   product_id: string;
   product_code: string | null;
   product_name: string;
+  size_label: string | null;
+  sku: string | null;
   warehouse_id: string;
   warehouse_name: string | null;
   batch_no: string | null;
@@ -288,6 +302,8 @@ export interface StockRegisterFiltersConfig {
     product_id: string;
     product_code: string | null;
     product_name: string;
+    size_label: string | null;
+    sku: string | null;
     uom: string | null;
   }>;
   defaults: {

@@ -36,13 +36,15 @@ import {
   parseMultiFilterParam,
 } from "@/lib/accounts/report-multi-filter-utils";
 
-export type HsnStatusFilter = "all" | "valid" | "exception";
-export type HsnGstRateFilter = "all" | "0" | "5" | "12" | "18" | "28";
+export type HsnStatusFilter = "valid" | "exception";
+export type HsnGstRateFilter = "0" | "5" | "12" | "18" | "28";
 
 export interface HsnSummaryFilters extends GstDashboardFilters {
   hsnCode: string;
-  gstRate: HsnGstRateFilter;
-  status: HsnStatusFilter;
+  /** Empty = all rates. */
+  gstRate: string[];
+  /** Empty = all statuses. */
+  status: string[];
 }
 
 export type HsnRowStatus = "valid" | "exception";
@@ -539,12 +541,13 @@ function matchesRowFilters(row: HsnSummaryRow, filters: HsnSummaryFilters): bool
   if (q && !row.hsnCode.toLowerCase().includes(q) && !row.description.toLowerCase().includes(q)) {
     return false;
   }
-  if (filters.gstRate !== "all") {
-    const rate = Number(filters.gstRate);
-    if (Math.round(row.gstRate) !== rate) return false;
+  if (
+    filters.gstRate.length > 0 &&
+    !filters.gstRate.includes(String(Math.round(row.gstRate)))
+  ) {
+    return false;
   }
-  if (filters.status === "valid" && row.status !== "valid") return false;
-  if (filters.status === "exception" && row.status !== "exception") return false;
+  if (!matchesMultiFilter(filters.status, row.status)) return false;
   return true;
 }
 
@@ -708,10 +711,14 @@ export function parseHsnSummaryFiltersFromSearch(
   defaults: HsnSummaryFilters,
 ): HsnSummaryFilters {
   const params = new URLSearchParams(search);
-  const gstRate = params.get("gstRate") as HsnGstRateFilter | null;
-  const status = params.get("status") as HsnStatusFilter | null;
-  const validRates: HsnGstRateFilter[] = ["all", "0", "5", "12", "18", "28"];
-  const validStatus: HsnStatusFilter[] = ["all", "valid", "exception"];
+  const validRates = new Set(["0", "5", "12", "18", "28"]);
+  const validStatus = new Set(["valid", "exception"]);
+  const gstRate = parseMultiFilterParam(params.get("gstRate")).filter((v) =>
+    validRates.has(v),
+  );
+  const status = parseMultiFilterParam(params.get("status")).filter((v) =>
+    validStatus.has(v),
+  );
 
   const branchParam = params.get("branch");
   const warehouseParam = params.get("warehouse");
@@ -723,8 +730,8 @@ export function parseHsnSummaryFiltersFromSearch(
     branch: branchParam != null ? parseMultiFilterParam(branchParam) : defaults.branch,
     warehouse: warehouseParam != null ? parseMultiFilterParam(warehouseParam) : defaults.warehouse,
     hsnCode: params.get("hsn") ?? defaults.hsnCode,
-    gstRate: gstRate && validRates.includes(gstRate) ? gstRate : defaults.gstRate,
-    status: status && validStatus.includes(status) ? status : defaults.status,
+    gstRate: params.has("gstRate") ? gstRate : defaults.gstRate,
+    status: params.has("status") ? status : defaults.status,
   };
 }
 
@@ -736,8 +743,8 @@ export function buildHsnSummaryFilterQuery(filters: HsnSummaryFilters): string {
   appendMultiFilterParam(params, "branch", filters.branch);
   appendMultiFilterParam(params, "warehouse", filters.warehouse);
   if (filters.hsnCode.trim()) params.set("hsn", filters.hsnCode.trim());
-  if (filters.gstRate !== "all") params.set("gstRate", filters.gstRate);
-  if (filters.status !== "all") params.set("status", filters.status);
+  appendMultiFilterParam(params, "gstRate", filters.gstRate);
+  appendMultiFilterParam(params, "status", filters.status);
   return params.toString();
 }
 

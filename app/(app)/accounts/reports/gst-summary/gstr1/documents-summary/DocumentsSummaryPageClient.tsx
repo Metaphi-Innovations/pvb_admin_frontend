@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
@@ -33,11 +33,15 @@ import {
   AccountsTableBody,
   AccountsTableCell,
   AccountsTableHead,
-  AccountsTableHeadCell,
   AccountsTableHeadRow,
   AccountsTableRow,
   AccountsTableScroll,
 } from "@/components/accounts/AccountsTable";
+import {
+  AccountsColumnFilterProvider,
+  SortTh,
+  useAccountsFilteredRows,
+} from "@/app/(app)/accounts/components/AccountsUI";
 import {
   ReportFilterRow,
   ReportDateRangeFilter,
@@ -47,6 +51,7 @@ import {
   ReportMoreFilters,
   ReportFilterSummary,
   ReportFilterField,
+  ReportStatusMultiFilter,
   ACCOUNTS_FILTER_LABEL_CLASS as filterLabelClass,
   ACCOUNTS_FILTER_CONTROL_CLASS as filterControlClass,
   REPORT_BRANCH_OPTIONS,
@@ -55,6 +60,7 @@ import {
   buildBranchFilterSummary,
   buildEntityFilterSummary,
   countActiveMoreFilters,
+  formatMultiSelectLabel,
   isMultiFilterActive,
   normalizeMultiFilter,
 } from "@/lib/accounts/report-multi-filter-utils";
@@ -78,6 +84,7 @@ import {
   getDocumentsSummaryWarehouseOptions,
   parseDocumentsSummaryFiltersFromSearch,
   type DocumentsSummaryFilters,
+  type DocumentsSummaryRow,
   type GstDocumentTypeFilter,
 } from "@/lib/accounts/gstr1-documents-summary-compute";
 import {
@@ -85,10 +92,35 @@ import {
   exportDocumentsSummaryToPdf,
 } from "./gstr1-documents-summary-export";
 
+
+function getDocsFilterCell(row: DocumentsSummaryRow, colKey: string): string {
+  switch (colKey) {
+    case "documentType":
+      return row.documentTypeLabel || row.documentType || "";
+    case "firstDocumentNo":
+      return row.firstDocumentNo || "";
+    case "lastDocumentNo":
+      return row.lastDocumentNo || "";
+    default:
+      return "";
+  }
+}
+
+function DocsFilteredRows({
+  rows,
+  children,
+}: {
+  rows: DocumentsSummaryRow[];
+  children: (visible: DocumentsSummaryRow[]) => ReactNode;
+}) {
+  const visible = useAccountsFilteredRows(rows);
+  return <>{children(visible)}</>;
+}
+
+
 const PLACEHOLDER_DATE = "2025-04-01";
 
-const DOCUMENT_TYPE_OPTIONS: { value: GstDocumentTypeFilter; label: string }[] = [
-  { value: "all", label: "All" },
+const DOCUMENT_TYPE_OPTIONS: { value: string; label: string }[] = [
   { value: "sales_invoice", label: DOCUMENT_TYPE_LABELS.sales_invoice },
   { value: "credit_note", label: DOCUMENT_TYPE_LABELS.credit_note },
   { value: "debit_note", label: DOCUMENT_TYPE_LABELS.debit_note },
@@ -118,7 +150,7 @@ export default function DocumentsSummaryPageClient() {
   const [financialYearId, setFinancialYearId] = useState("all");
   const [branch, setBranch] = useState<string[]>([]);
   const [warehouse, setWarehouse] = useState<string[]>([]);
-  const [documentType, setDocumentType] = useState<GstDocumentTypeFilter>("all");
+  const [documentTypes, setDocumentTypes] = useState<string[]>([]);
   const [exporting, setExporting] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -141,14 +173,14 @@ export default function DocumentsSummaryPageClient() {
       dateTo: to,
       branch: [],
       warehouse: [],
-      documentType: "all",
+      documentType: [],
     });
     setFinancialYearId(parsed.financialYearId);
     setDateFrom(parsed.dateFrom);
     setDateTo(parsed.dateTo);
     setBranch(normalizeMultiFilter(parsed.branch));
     setWarehouse(normalizeMultiFilter(parsed.warehouse));
-    setDocumentType(parsed.documentType);
+    setDocumentTypes(parsed.documentType);
     setPreset("custom");
   }, [searchParams, datesReady]);
 
@@ -178,9 +210,9 @@ export default function DocumentsSummaryPageClient() {
       dateTo,
       branch,
       warehouse,
-      documentType,
+      documentType: documentTypes,
     }),
-    [financialYearId, dateFrom, dateTo, branch, warehouse, documentType, refreshKey],
+    [financialYearId, dateFrom, dateTo, branch, warehouse, documentTypes, refreshKey],
   );
 
   const branchOptions = useMemo(
@@ -213,18 +245,18 @@ export default function DocumentsSummaryPageClient() {
 
   const backHref = `/accounts/reports/gst-summary/gstr1?${buildDocumentsSummaryFilterQuery({
     ...filters,
-    documentType: "all",
+    documentType: [],
   })}`;
 
   const hasFilters =
     isMultiFilterActive(branch) ||
     isMultiFilterActive(warehouse) ||
-    documentType !== "all";
+    documentTypes.length > 0;
 
   const resetFilters = () => {
     setBranch([]);
     setWarehouse([]);
-    setDocumentType("all");
+    setDocumentTypes([]);
   };
 
   const filterSummaryItems = useMemo(
@@ -249,10 +281,9 @@ export default function DocumentsSummaryPageClient() {
       dateTo,
       branch: resolveBranchFilterLabel(branch),
       warehouse: resolveWarehouseFilterLabel(warehouse),
-      documentType:
-        DOCUMENT_TYPE_OPTIONS.find((o) => o.value === documentType)?.label ?? documentType,
+      documentType: formatMultiSelectLabel(documentTypes, DOCUMENT_TYPE_OPTIONS, "Type", "All types"),
     }),
-    [financialYearId, dateFrom, dateTo, branch, warehouse, documentType],
+    [financialYearId, dateFrom, dateTo, branch, warehouse, documentTypes],
   );
 
   const handleExportExcel = async () => {
@@ -297,23 +328,12 @@ export default function DocumentsSummaryPageClient() {
             options={warehouseOptionsForFilter}
           />
         </ReportMoreFilters>
-        <ReportFilterField label="Document Type" minWidthClass="min-w-[150px]">
-          <Select
-            value={documentType}
-            onValueChange={(v) => setDocumentType(v as GstDocumentTypeFilter)}
-          >
-            <SelectTrigger className={cn(filterControlClass, "mt-0 w-full")}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {DOCUMENT_TYPE_OPTIONS.map((o) => (
-                <SelectItem key={o.value} value={o.value} className="text-xs">
-                  {o.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </ReportFilterField>
+        <ReportStatusMultiFilter
+          label="Document Type"
+          values={documentTypes}
+          onChange={setDocumentTypes}
+          options={DOCUMENT_TYPE_OPTIONS}
+        />
         {hasFilters && (
           <Button variant="outline" size="sm" className="h-8 text-sm px-2" onClick={resetFilters}>
             Reset
@@ -384,21 +404,27 @@ export default function DocumentsSummaryPageClient() {
               )}
             </div>
           ) : (
+            <AccountsColumnFilterProvider
+              rows={report.rows}
+              getCellValue={getDocsFilterCell}
+            >
             <AccountsTableScroll className="flex-1 min-h-0">
               <AccountsTable minWidth={1100}>
                 <AccountsTableHead>
                   <AccountsTableHeadRow>
-                    <AccountsTableHeadCell>Document Type</AccountsTableHeadCell>
-                    <AccountsTableHeadCell>First Document Number</AccountsTableHeadCell>
-                    <AccountsTableHeadCell>Last Document Number</AccountsTableHeadCell>
-                    <AccountsTableHeadCell align="right">Total Generated</AccountsTableHeadCell>
-                    <AccountsTableHeadCell align="right">Cancelled</AccountsTableHeadCell>
-                    <AccountsTableHeadCell align="right">Active</AccountsTableHeadCell>
-                    <AccountsTableHeadCell className="w-28">Action</AccountsTableHeadCell>
+                    <SortTh label="Document Type" colKey="documentType" sortable={false} />
+                    <SortTh label="First Document Number" colKey="firstDocumentNo" sortable={false} />
+                    <SortTh label="Last Document Number" colKey="lastDocumentNo" sortable={false} />
+                    <SortTh label="Total Generated" colKey="totalGenerated" sortable={false} filterable={false} align="right" />
+                    <SortTh label="Cancelled" colKey="cancelledCount" sortable={false} filterable={false} align="right" />
+                    <SortTh label="Active" colKey="activeCount" sortable={false} filterable={false} align="right" />
+                    <SortTh label="Action" colKey="_actions" sortable={false} filterable={false} className="w-28" />
                   </AccountsTableHeadRow>
                 </AccountsTableHead>
                 <AccountsTableBody>
-                  {report.rows.map((row) => (
+                  <DocsFilteredRows rows={report.rows}>
+                    {(visibleRows) =>
+                      visibleRows.map((row) => (
                     <AccountsTableRow key={row.rowKey} className="group">
                       <AccountsTableCell className="text-xs font-semibold">
                         {row.documentTypeLabel}
@@ -438,10 +464,13 @@ export default function DocumentsSummaryPageClient() {
                         </Button>
                       </AccountsTableCell>
                     </AccountsTableRow>
-                  ))}
+                      ))
+                    }
+                  </DocsFilteredRows>
                 </AccountsTableBody>
               </AccountsTable>
             </AccountsTableScroll>
+            </AccountsColumnFilterProvider>
           )}
         </AccountsListingTableCard>
       </AccountsReportBody>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import {
   AlertCircle,
@@ -48,6 +48,8 @@ import {
   SheetDescription,
 } from "@/components/ui/sheet";
 import { AccountsPageShell } from "@/components/accounts/AccountsPageShell";
+import { ReportStatusMultiFilter } from "@/components/accounts/ReportFilters";
+import { matchesMultiFilter } from "@/lib/accounts/report-multi-filter-utils";
 import { AccountsListingTableCard } from "@/components/accounts/AccountsListingHeader";
 import { AccountsReportBody } from "@/components/accounts/AccountsReportLayout";
 import {
@@ -60,7 +62,12 @@ import {
   AccountsTableScroll,
 } from "@/components/accounts/AccountsTable";
 import { AccountsTablePagination } from "@/components/accounts/AccountsTableListing";
-import { AccountsColumnHeader } from "@/app/(app)/accounts/components/AccountsUI";
+import {
+  AccountsColumnFilterProvider,
+  AccountsColumnHeader,
+  SortTh,
+  useAccountsFilteredRows,
+} from "@/app/(app)/accounts/components/AccountsUI";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import {
   formatMoneyString,
@@ -107,22 +114,26 @@ import {
 } from "./gstr2b-report-types";
 import { Gstr2bItcTreatmentDialog } from "./components/Gstr2bItcTreatmentDialog";
 
-const MATCH_STATUS_OPTIONS: Array<Gstr2aMatchStatusApi | "all"> = [
-  "all",
-  "MATCHED",
-  "PARTIAL_MATCH",
-  "MISSING_IN_BOOKS",
-  "MISSING_IN_GSTR",
-  "DUPLICATE",
-  "NEEDS_REVIEW",
+const MATCH_STATUS_MULTI_OPTIONS: { value: Gstr2aMatchStatusApi; label: string }[] = [
+  { value: "MATCHED", label: GSTR2B_MATCH_STATUS_LABELS.MATCHED },
+  { value: "PARTIAL_MATCH", label: GSTR2B_MATCH_STATUS_LABELS.PARTIAL_MATCH },
+  { value: "MISSING_IN_BOOKS", label: GSTR2B_MATCH_STATUS_LABELS.MISSING_IN_BOOKS },
+  { value: "MISSING_IN_GSTR", label: GSTR2B_MATCH_STATUS_LABELS.MISSING_IN_GSTR },
+  { value: "DUPLICATE", label: GSTR2B_MATCH_STATUS_LABELS.DUPLICATE },
+  { value: "NEEDS_REVIEW", label: GSTR2B_MATCH_STATUS_LABELS.NEEDS_REVIEW },
 ];
 
-const REVIEW_STATUS_OPTIONS: Array<Gstr2aReviewStatusApi | "all"> = [
-  "all",
-  "PENDING",
-  "MARKED_FOR_REVIEW",
-  "REVIEWED",
-  "RESOLVED",
+const REVIEW_STATUS_MULTI_OPTIONS: {
+  value: Gstr2aReviewStatusApi;
+  label: string;
+}[] = [
+  { value: "PENDING", label: GSTR2B_REVIEW_STATUS_LABELS.PENDING },
+  {
+    value: "MARKED_FOR_REVIEW",
+    label: GSTR2B_REVIEW_STATUS_LABELS.MARKED_FOR_REVIEW,
+  },
+  { value: "REVIEWED", label: GSTR2B_REVIEW_STATUS_LABELS.REVIEWED },
+  { value: "RESOLVED", label: GSTR2B_REVIEW_STATUS_LABELS.RESOLVED },
 ];
 
 const STATUS_PILL: Record<
@@ -431,6 +442,39 @@ function hasDiff(value: string | null | undefined): boolean {
   return Number.isFinite(n) && Math.abs(n) > 0;
 }
 
+
+function getGstr2bReconFilterCell(row: any, colKey: string): string {
+  switch (colKey) {
+    case "supplier":
+      return row.supplier?.books_supplier_name || row.supplier?.portal_supplier_name || "";
+    case "gstin":
+      return row.supplier?.supplier_gstin || "";
+    case "books_inv":
+      return row.books?.books_invoice_number || "";
+    case "portal_inv":
+      return row.portal?.portal_invoice_number || "";
+    case "match":
+      return row.status?.match_status || "";
+    case "review":
+      return row.status?.review_status || "";
+    case "remarks":
+      return row.workflow?.remarks || "";
+    default:
+      return "";
+  }
+}
+
+function Gstr2bFilteredRows({
+  rows,
+  children,
+}: {
+  rows: Gstr2aReconCombinedRowDto[];
+  children: (visible: Gstr2aReconCombinedRowDto[]) => ReactNode;
+}) {
+  const visible = useAccountsFilteredRows(rows);
+  return <>{children(visible)}</>;
+}
+
 export default function Gstr2bPageClient() {
   const filterState = useGstSummaryApiFilters();
   const {
@@ -452,12 +496,8 @@ export default function Gstr2bPageClient() {
 
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
-  const [matchStatusFilter, setMatchStatusFilter] = useState<
-    Gstr2aMatchStatusApi | "all"
-  >("all");
-  const [reviewStatusFilter, setReviewStatusFilter] = useState<
-    Gstr2aReviewStatusApi | "all"
-  >("all");
+  const [matchStatuses, setMatchStatuses] = useState<string[]>([]);
+  const [reviewStatuses, setReviewStatuses] = useState<string[]>([]);
   const [supplierGstinFilter, setSupplierGstinFilter] = useState("");
   const [documentNumberFilter, setDocumentNumberFilter] = useState("");
   const [supplierGstinApplied, setSupplierGstinApplied] = useState("");
@@ -542,8 +582,8 @@ export default function Gstr2bPageClient() {
   useEffect(() => {
     setPage(1);
   }, [
-    matchStatusFilter,
-    reviewStatusFilter,
+    matchStatuses,
+    reviewStatuses,
     viewImportId,
     supplierGstinApplied,
     documentNumberApplied,
@@ -570,9 +610,9 @@ export default function Gstr2bPageClient() {
           ...base,
           import_id: viewImportId ?? undefined,
           match_status:
-            matchStatusFilter !== "all" ? matchStatusFilter : undefined,
+            matchStatuses.length === 1 ? matchStatuses[0] : undefined,
           review_status:
-            reviewStatusFilter !== "all" ? reviewStatusFilter : undefined,
+            reviewStatuses.length === 1 ? reviewStatuses[0] : undefined,
           supplier_gstin: supplierGstinApplied || undefined,
           document_number: documentNumberApplied || undefined,
           page,
@@ -608,8 +648,8 @@ export default function Gstr2bPageClient() {
     financialYearId,
     gstPeriod,
     gstRegistration,
-    matchStatusFilter,
-    reviewStatusFilter,
+    matchStatuses,
+    reviewStatuses,
     supplierGstinApplied,
     documentNumberApplied,
     page,
@@ -937,11 +977,9 @@ export default function Gstr2bPageClient() {
                   return_period: gstPeriod !== "all" ? gstPeriod : undefined,
                   import_id: viewImportId ?? undefined,
                   match_status:
-                    matchStatusFilter !== "all" ? matchStatusFilter : undefined,
+                    matchStatuses.length === 1 ? matchStatuses[0] : undefined,
                   review_status:
-                    reviewStatusFilter !== "all"
-                      ? reviewStatusFilter
-                      : undefined,
+                    reviewStatuses.length === 1 ? reviewStatuses[0] : undefined,
                   supplier_gstin: supplierGstinApplied || undefined,
                   document_number: documentNumberApplied || undefined,
                   format,
@@ -1014,54 +1052,18 @@ export default function Gstr2bPageClient() {
               )}
 
               <div className="flex flex-wrap items-end gap-2">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                    Match Status
-                  </label>
-                  <Select
-                    value={matchStatusFilter}
-                    onValueChange={(v) =>
-                      setMatchStatusFilter(v as Gstr2aMatchStatusApi | "all")
-                    }
-                  >
-                    <SelectTrigger className="h-8 w-[11rem] text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {MATCH_STATUS_OPTIONS.map((opt) => (
-                        <SelectItem key={opt} value={opt} className="text-xs">
-                          {opt === "all"
-                            ? "All statuses"
-                            : GSTR2B_MATCH_STATUS_LABELS[opt]}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                    Review Status
-                  </label>
-                  <Select
-                    value={reviewStatusFilter}
-                    onValueChange={(v) =>
-                      setReviewStatusFilter(v as Gstr2aReviewStatusApi | "all")
-                    }
-                  >
-                    <SelectTrigger className="h-8 w-[11rem] text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {REVIEW_STATUS_OPTIONS.map((opt) => (
-                        <SelectItem key={opt} value={opt} className="text-xs">
-                          {opt === "all"
-                            ? "All reviews"
-                            : GSTR2B_REVIEW_STATUS_LABELS[opt]}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                <ReportStatusMultiFilter
+                  label="Match Status"
+                  values={matchStatuses}
+                  onChange={setMatchStatuses}
+                  options={MATCH_STATUS_MULTI_OPTIONS}
+                />
+                <ReportStatusMultiFilter
+                  label="Review Status"
+                  values={reviewStatuses}
+                  onChange={setReviewStatuses}
+                  options={REVIEW_STATUS_MULTI_OPTIONS}
+                />
                 <div className="space-y-1">
                   <label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                     Supplier GSTIN
@@ -1110,35 +1112,49 @@ export default function Gstr2bPageClient() {
               {recon.summary && <SummaryCards summary={recon.summary} />}
 
               <AccountsListingTableCard className="flex-1 min-h-0 flex flex-col">
+                <AccountsColumnFilterProvider
+                  rows={
+                    matchStatuses.length > 1 || reviewStatuses.length > 1
+                      ? recon.rows.filter(
+                          (row) =>
+                            matchesMultiFilter(
+                              matchStatuses,
+                              row.status.match_status,
+                            ) &&
+                            matchesMultiFilter(
+                              reviewStatuses,
+                              row.status.review_status,
+                            ),
+                        )
+                      : recon.rows
+                  }
+                  getCellValue={getGstr2bReconFilterCell}
+                >
                 <AccountsTableScroll className="flex-1 min-h-0">
                   <AccountsTable minWidth={1480}>
                     <AccountsTableHead>
                       <AccountsTableHeadRow>
-                        <AccountsColumnHeader
+                        <SortTh
                           label="Supplier"
                           colKey="supplier"
                           sortable={false}
-                          filterable={false}
                           className="min-w-[9rem]"
                         />
-                        <AccountsColumnHeader
+                        <SortTh
                           label="Supplier GSTIN"
                           colKey="gstin"
                           sortable={false}
-                          filterable={false}
                           className="min-w-[8rem]"
                         />
-                        <AccountsColumnHeader
+                        <SortTh
                           label="Books Invoice No."
                           colKey="books_inv"
                           sortable={false}
-                          filterable={false}
                         />
-                        <AccountsColumnHeader
+                        <SortTh
                           label="Portal Invoice No."
                           colKey="portal_inv"
                           sortable={false}
-                          filterable={false}
                         />
                         <AccountsColumnHeader
                           label="Books Date"
@@ -1194,11 +1210,10 @@ export default function Gstr2bPageClient() {
                           filterable={false}
                           align="right"
                         />
-                        <AccountsColumnHeader
+                        <SortTh
                           label="Reconciliation Status"
                           colKey="match"
                           sortable={false}
-                          filterable={false}
                         />
                         <AccountsColumnHeader
                           label="2B ITC Status"
@@ -1212,17 +1227,15 @@ export default function Gstr2bPageClient() {
                           sortable={false}
                           filterable={false}
                         />
-                        <AccountsColumnHeader
+                        <SortTh
                           label="Review Status"
                           colKey="review"
                           sortable={false}
-                          filterable={false}
                         />
-                        <AccountsColumnHeader
+                        <SortTh
                           label="Remarks"
                           colKey="remarks"
                           sortable={false}
-                          filterable={false}
                           className="min-w-[8rem]"
                         />
                         <AccountsColumnHeader
@@ -1235,7 +1248,25 @@ export default function Gstr2bPageClient() {
                       </AccountsTableHeadRow>
                     </AccountsTableHead>
                     <AccountsTableBody>
-                      {recon.rows.length === 0 ? (
+                      <Gstr2bFilteredRows
+                        rows={
+                          matchStatuses.length > 1 || reviewStatuses.length > 1
+                            ? recon.rows.filter(
+                                (row) =>
+                                  matchesMultiFilter(
+                                    matchStatuses,
+                                    row.status.match_status,
+                                  ) &&
+                                  matchesMultiFilter(
+                                    reviewStatuses,
+                                    row.status.review_status,
+                                  ),
+                              )
+                            : recon.rows
+                        }
+                      >
+                        {(visibleRows) =>
+                          visibleRows.length === 0 ? (
                         <AccountsTableRow>
                           <AccountsTableCell
                             colSpan={18}
@@ -1250,7 +1281,7 @@ export default function Gstr2bPageClient() {
                           </AccountsTableCell>
                         </AccountsTableRow>
                       ) : (
-                        recon.rows.map((row) => {
+                        visibleRows.map((row) => {
                           const taxableMismatch = hasDiff(
                             row.differences.taxable_difference,
                           );
@@ -1435,7 +1466,9 @@ export default function Gstr2bPageClient() {
                             </AccountsTableRow>
                           );
                         })
-                      )}
+                      )
+                        }
+                      </Gstr2bFilteredRows>
                     </AccountsTableBody>
                   </AccountsTable>
                 </AccountsTableScroll>
@@ -1449,6 +1482,7 @@ export default function Gstr2bPageClient() {
                     setPage(1);
                   }}
                 />
+                </AccountsColumnFilterProvider>
               </AccountsListingTableCard>
             </>
           )}

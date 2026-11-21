@@ -7,6 +7,7 @@ import { Eye, ClipboardCheck, Edit3, RotateCcw } from "lucide-react";
 import { QcRecord, QcStatus } from "../types";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import Link from "next/link";
+import { toApiFilterValue } from "@/lib/listing/filter-values";
 import { getQcSourceType } from "@/lib/warehouse/grn-source";
 import { QcService } from "@/services/qc.service";
 import {
@@ -263,39 +264,40 @@ export function StockTransferQcListing() {
 
         const filters: any = {};
         filters.source_type = "STOCK_TRANSFER";
-        if (qcFilters.qcNo) {
-          filters.qcNumber = qcFilters.qcNo;
+        const qcNo = toApiFilterValue(qcFilters.qcNo);
+        if (qcNo !== undefined) {
+          filters.qcNumber = qcNo;
         }
-        if (qcFilters.grnNo) {
+        const grnNo = toApiFilterValue(qcFilters.grnNo);
+        if (grnNo !== undefined) {
           if (activeTab === "pending") {
-            filters.grnNumber = qcFilters.grnNo;
+            filters.grnNumber = grnNo;
           } else {
             filters.grn = filters.grn || {};
-            filters.grn.grnNumber = qcFilters.grnNo;
+            filters.grn.grnNumber = grnNo;
           }
         }
-        if (qcFilters.stockTransferNo) {
+        const stockTransferNo = toApiFilterValue(qcFilters.stockTransferNo);
+        if (stockTransferNo !== undefined) {
           if (activeTab === "pending") {
-            filters.stock_transfer_no = qcFilters.stockTransferNo;
+            filters.stock_transfer_no = stockTransferNo;
           } else {
-            filters.poNumber = qcFilters.stockTransferNo;
+            filters.poNumber = stockTransferNo;
           }
         }
-        if (qcFilters.fromWarehouse) {
-          if (activeTab === "pending") {
-            filters.from_warehouse = qcFilters.fromWarehouse;
-          } else {
-            filters.from_warehouse = qcFilters.fromWarehouse;
-          }
+        const fromWarehouse = toApiFilterValue(qcFilters.fromWarehouse);
+        if (fromWarehouse !== undefined) {
+          filters.from_warehouse = fromWarehouse;
         }
-        if (qcFilters.toWarehouse) {
+        const toWarehouse = toApiFilterValue(qcFilters.toWarehouse);
+        if (toWarehouse !== undefined) {
           if (activeTab === "pending") {
             filters.warehouse = filters.warehouse || {};
-            filters.warehouse.warehouse_name = qcFilters.toWarehouse;
+            filters.warehouse.warehouse_name = toWarehouse;
           } else {
             filters.grn = filters.grn || {};
             filters.grn.warehouse = filters.grn.warehouse || {};
-            filters.grn.warehouse.warehouse_name = qcFilters.toWarehouse;
+            filters.grn.warehouse.warehouse_name = toWarehouse;
           }
         }
         if (qcFilters.inspectionDate) {

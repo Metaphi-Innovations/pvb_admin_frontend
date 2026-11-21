@@ -18,6 +18,7 @@ import {
   toStockOrdering,
 } from "../services/stock-overview-api";
 import { useStockOverviewListingState } from "../stock-overview-listing-state-context";
+import { resolveFilterOptions } from "../lib/listing-filter-options";
 
 const EMPTY_SUMMARY: BatchMovementSummary = {
   totalMovements: 0,
@@ -77,61 +78,6 @@ function formatQty(value: number): string {
   return Number(value || 0).toLocaleString("en-IN", {
     maximumFractionDigits: 3,
   });
-}
-
-function isActiveColFilter(value: unknown): boolean {
-  if (value == null || value === "") return false;
-  if (Array.isArray(value)) return value.length > 0;
-  if (typeof value === "object") return false;
-  return true;
-}
-
-/** Unique dropdown options from the rows currently shown in the listing. */
-function optionsFromRecords(
-  rows: BatchMovementListRow[],
-  key: keyof BatchMovementListRow,
-): Array<{ label: string; value: string }> {
-  const values = [
-    ...new Set(
-      rows
-        .map((r) => String(r[key] ?? "").trim())
-        .filter((v) => v && v !== "—"),
-    ),
-  ].sort((a, b) =>
-    a.localeCompare(b, undefined, { sensitivity: "base", numeric: true }),
-  );
-  return values.map((value) => ({ label: value, value }));
-}
-
-/**
- * Cascading filter options:
- * - Active column → keep server facet list (exclude-self) so the user can change it
- * - Other columns, when another filter is applied and the full filtered set is loaded
- *   → only values that appear in the listing (what the user sees)
- * - Otherwise → server filter_options
- */
-function resolveFilterOptions(
-  columnKey: string,
-  serverOptions: Array<{ label: string; value: string }>,
-  records: BatchMovementListRow[],
-  totalRecords: number,
-  appliedFilters: FilterState,
-): Array<{ label: string; value: string }> {
-  const activeKeys = Object.keys(appliedFilters).filter(
-    (k) => k !== "search" && isActiveColFilter(appliedFilters[k]),
-  );
-  const selfFiltered = activeKeys.includes(columnKey);
-  const otherFiltersActive = activeKeys.some((k) => k !== columnKey);
-  const fullFilteredSetLoaded =
-    records.length > 0 && records.length === totalRecords;
-
-  if (!selfFiltered && otherFiltersActive && fullFilteredSetLoaded) {
-    return optionsFromRecords(
-      records,
-      columnKey as keyof BatchMovementListRow,
-    );
-  }
-  return serverOptions;
 }
 
 export function BatchMovementsTab() {
@@ -338,7 +284,7 @@ export function BatchMovementsTab() {
       resolveFilterOptions(
         key,
         filterOptions[key] || [],
-        records,
+        records as unknown as Array<Record<string, unknown>>,
         totalRecords,
         appliedColFilters,
       );

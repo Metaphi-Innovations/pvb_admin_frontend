@@ -53,7 +53,9 @@ import type {
 import { useLazyFilterColumns } from "@/lib/masters/use-lazy-filter-columns";
 import { accountsBreadcrumb } from "@/lib/accounts/accounts-nav";
 import { formatDisplayDate } from "@/lib/accounts/date-display";
+import { formatMoney, MONEY_AMOUNT_CLASS } from "@/lib/accounts/money-format";
 import { useClientMounted } from "@/lib/use-client-mounted";
+import { cn } from "@/lib/utils";
 import {
   buildStockRegisterColumnFilterParams,
   buildStockRegisterOrdering,
@@ -199,6 +201,8 @@ type SummaryUiRow = {
   stockType: StockRegisterStockType;
   productName: string;
   productCode: string;
+  sizeLabel: string;
+  costPrice: number | null;
   warehouse: string;
   uom: string;
   openingQty: number;
@@ -214,6 +218,7 @@ type DetailedUiRow = {
   voucherType: string;
   voucherNumber: string;
   productName: string;
+  sizeLabel: string;
   warehouse: string;
   partyName: string;
   batchNo: string;
@@ -228,6 +233,8 @@ type BatchUiRow = {
   stockType: StockRegisterStockType;
   productName: string;
   productCode: string;
+  sizeLabel: string;
+  costPrice: number | null;
   batchNo: string;
   mfgDate: string;
   expiryDate: string;
@@ -244,6 +251,8 @@ function mapSummaryRow(row: StockRegisterSummaryApiRow): SummaryUiRow {
     stockType: row.stock_type,
     productName: row.product_name,
     productCode: row.product_code ?? "",
+    sizeLabel: row.size_label?.trim() || "—",
+    costPrice: row.cost_price != null && row.cost_price !== "" ? num(row.cost_price) : null,
     warehouse: row.warehouse_name ?? "—",
     uom: row.uom ?? "",
     openingQty: num(row.opening_qty),
@@ -261,6 +270,7 @@ function mapDetailedRow(row: StockRegisterDetailedApiRow): DetailedUiRow {
     voucherType: row.voucher_type,
     voucherNumber: row.voucher_number,
     productName: row.product_name,
+    sizeLabel: row.size_label?.trim() || "—",
     warehouse: row.warehouse_name ?? "—",
     partyName: row.party_name?.trim() || "—",
     batchNo: row.batch_no?.trim() || "—",
@@ -277,6 +287,8 @@ function mapBatchRow(row: StockRegisterBatchApiRow): BatchUiRow {
     stockType: row.stock_type,
     productName: row.product_name,
     productCode: row.product_code ?? "",
+    sizeLabel: row.size_label?.trim() || "—",
+    costPrice: row.cost_price != null && row.cost_price !== "" ? num(row.cost_price) : null,
     batchNo: row.batch_no,
     mfgDate: row.manufacture_date ?? "",
     expiryDate: row.expiry_date ?? "",
@@ -630,11 +642,16 @@ export default function StockRegisterPageClient() {
 
   const productOptions = useMemo(
     () =>
-      (filtersConfig?.products ?? []).map((p) => ({
-        value: p.product_id,
-        label: p.product_name,
-        searchText: p.product_code ?? undefined,
-      })),
+      (filtersConfig?.products ?? []).map((p) => {
+        const size = p.size_label?.trim() || p.sku?.trim() || "";
+        return {
+          value: p.product_id,
+          label: size ? `${p.product_name} (${size})` : p.product_name,
+          searchText: [p.product_code, p.sku, p.size_label]
+            .filter(Boolean)
+            .join(" "),
+        };
+      }),
     [filtersConfig],
   );
 
@@ -1162,6 +1179,19 @@ function SummaryTable({
             onSort={onSort}
             {...filterable("productName")}
           />
+          <AccountsColumnHeader
+            label="Size"
+            colKey="sizeLabel"
+            sortable={false}
+            filterable={false}
+          />
+          <AccountsColumnHeader
+            label="Cost Price"
+            colKey="costPrice"
+            align="right"
+            sortable={false}
+            filterable={false}
+          />
           <ServerSortTh
             label="Warehouse"
             colKey="warehouse"
@@ -1219,6 +1249,14 @@ function SummaryTable({
             <AccountsTableCell className="font-medium">
               {row.productName}
             </AccountsTableCell>
+            <AccountsTableCell>{row.sizeLabel}</AccountsTableCell>
+            <AccountsTableCell
+              align="right"
+              money
+              className={cn(MONEY_AMOUNT_CLASS, "align-middle")}
+            >
+              {row.costPrice == null ? "—" : formatMoney(row.costPrice)}
+            </AccountsTableCell>
             <AccountsTableCell>{row.warehouse}</AccountsTableCell>
             <AccountsTableCell>{row.uom || "—"}</AccountsTableCell>
             <AccountsTableCell align="right" className="tabular-nums">
@@ -1238,7 +1276,7 @@ function SummaryTable({
       </AccountsTableBody>
       <AccountsTableFoot>
         <AccountsTableRow>
-          <AccountsTableCell className="font-semibold" colSpan={4}>
+          <AccountsTableCell className="font-semibold" colSpan={6}>
             Combined totals (do not treat as one stock bucket)
           </AccountsTableCell>
           <AccountsTableCell align="right" className="font-semibold tabular-nums">
@@ -1333,6 +1371,12 @@ function DetailedMovementTable({
             onSort={onSort}
             {...filterable("productName")}
           />
+          <AccountsColumnHeader
+            label="Size"
+            colKey="sizeLabel"
+            sortable={false}
+            filterable={false}
+          />
           <ServerSortTh
             label="Warehouse"
             colKey="warehouse"
@@ -1400,6 +1444,7 @@ function DetailedMovementTable({
             <AccountsTableCell className="font-medium whitespace-nowrap">
               {row.productName}
             </AccountsTableCell>
+            <AccountsTableCell>{row.sizeLabel}</AccountsTableCell>
             <AccountsTableCell>{row.warehouse}</AccountsTableCell>
             <AccountsTableCell>{row.partyName}</AccountsTableCell>
             <AccountsTableCell className="font-mono text-xs">
@@ -1487,6 +1532,19 @@ function BatchWiseSummaryTable({
             onSort={onSort}
             {...filterable("productName")}
           />
+          <AccountsColumnHeader
+            label="Size"
+            colKey="sizeLabel"
+            sortable={false}
+            filterable={false}
+          />
+          <AccountsColumnHeader
+            label="Cost Price"
+            colKey="costPrice"
+            align="right"
+            sortable={false}
+            filterable={false}
+          />
           <ServerSortTh
             label="Batch Number"
             colKey="batchNo"
@@ -1558,6 +1616,14 @@ function BatchWiseSummaryTable({
             <AccountsTableCell className="font-medium whitespace-nowrap">
               {row.productName}
             </AccountsTableCell>
+            <AccountsTableCell>{row.sizeLabel}</AccountsTableCell>
+            <AccountsTableCell
+              align="right"
+              money
+              className={cn(MONEY_AMOUNT_CLASS, "align-middle")}
+            >
+              {row.costPrice == null ? "—" : formatMoney(row.costPrice)}
+            </AccountsTableCell>
             <AccountsTableCell className="font-mono text-xs">
               {row.batchNo}
             </AccountsTableCell>
@@ -1585,7 +1651,7 @@ function BatchWiseSummaryTable({
       </AccountsTableBody>
       <AccountsTableFoot>
         <AccountsTableRow>
-          <AccountsTableCell className="font-semibold" colSpan={6}>
+          <AccountsTableCell className="font-semibold" colSpan={8}>
             Combined totals (do not treat as one stock bucket)
           </AccountsTableCell>
           <AccountsTableCell align="right" className="font-semibold tabular-nums">

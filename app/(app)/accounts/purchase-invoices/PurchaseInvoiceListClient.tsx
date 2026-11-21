@@ -12,8 +12,6 @@ import {
 } from "./purchase-invoice-nav";
 import {
   usePurchaseInvoiceListingState,
-  type PurchaseNatureFilter,
-  type PurchaseSourceTypeFilter,
 } from "./purchase-invoice-listing-state-context";
 import {
   AccountsEditAction,
@@ -58,10 +56,9 @@ import {
   ReportFilterRow,
   ReportFilterResetButton,
   ACCOUNTS_FILTER_LABEL_CLASS,
-  ACCOUNTS_FILTER_SELECT_CLASS,
 } from "@/components/accounts/ReportFilters";
+import { ReportMultiSelect } from "@/components/accounts/ReportMultiSelect";
 import type { DateRangePresetId } from "@/lib/accounts/report-date-presets";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { accountsListingFiltersActive } from "@/lib/accounts/use-accounts-listing-reset";
 import {
   INVOICE_LISTING_DATE_PRESETS,
@@ -89,6 +86,7 @@ import {
   sourceTypeToInvoiceType,
   type EligibleGrnDto,
   type PurchaseInvoiceApprovalStatus,
+  type PurchaseInvoiceBackendType,
   type PurchaseInvoiceListRow,
   type PurchaseInvoicePaymentStatus,
 } from "@/services/purchase-invoice.service";
@@ -102,6 +100,18 @@ const PURCHASE_NATURE_OPTION_LABELS: Record<string, string> = {
   other_non_stock: "Capital Goods",
   stock_transfer: "Stock Transfer",
 };
+
+const PURCHASE_SOURCE_TYPE_OPTIONS = (
+  Object.entries(PURCHASE_SOURCE_TYPE_LABELS) as [PurchaseSourceType, string][]
+).map(([value, label]) => ({ value, label }));
+
+const PURCHASE_NATURE_TOOLBAR_OPTIONS = [
+  { value: "inventory", label: "Inventory" },
+  { value: "expense", label: "Expense" },
+  { value: "service", label: "Service" },
+  { value: "fixed_asset", label: "Fixed Asset" },
+  { value: "other_non_stock", label: "Capital Goods" },
+];
 
 const PURCHASE_NATURE_COLUMN_FILTER_OPTIONS = Object.keys(PURCHASE_NATURE_OPTION_LABELS).map(
   (value) => ({ value, count: 0 }),
@@ -119,8 +129,37 @@ function mapDropdownOptions(
     .map((value) => ({ value, count: 0 }));
 }
 
+function cleanMultiFilterValues(values: string[]): string[] {
+  return values.filter((v) => v && v !== "all");
+}
+
+/** Single source → DB `invoice_type`; multi → omit (use filters JSON). */
+function sourceTypesToInvoiceType(
+  sources: string[],
+): PurchaseInvoiceBackendType | undefined {
+  const clean = cleanMultiFilterValues(sources);
+  if (clean.length !== 1) return undefined;
+  return sourceTypeToInvoiceType(clean[0] as PurchaseSourceType | "all");
+}
+
+/** Toolbar nature (+ multi source) → server column-filter JSON. */
+function buildPurchaseToolbarServerFilters(
+  sourceTypes: string[],
+  natures: string[],
+): string {
+  const filters: Record<string, unknown> = {};
+  const cleanSources = cleanMultiFilterValues(sourceTypes);
+  const cleanNatures = cleanMultiFilterValues(natures);
+  if (cleanSources.length > 1) {
+    filters.sourceType = { selectedValues: cleanSources };
+  }
+  if (cleanNatures.length > 0) {
+    filters.purchaseNature = { selectedValues: cleanNatures };
+  }
+  return Object.keys(filters).length ? JSON.stringify(filters) : "{}";
+}
+
 type Tab = PurchaseInvoiceListTabId;
-type SourceTypeFilter = PurchaseSourceTypeFilter;
 
 const LISTING_DEFAULT_PRESET = "this_year" as const;
 const PURCHASE_INVOICE_DATE_PRESETS = [
@@ -138,8 +177,8 @@ function listingFilterDefaults(fyDates?: { from?: string; to?: string } | null) 
     preset: LISTING_DEFAULT_PRESET,
     dateFrom: from,
     dateTo: to,
-    sourceType: "all" as SourceTypeFilter,
-    purchaseNature: "all" as PurchaseNatureFilter,
+    sourceType: "",
+    purchaseNature: "",
   };
 }
 
@@ -170,11 +209,6 @@ function ListingFilterReset({
     </div>
   );
 }
-
-const LISTING_SELECT_TRIGGER_CLASS = cn(
-  "accounts-filter-control accounts-filter-select mt-0 h-8 min-h-8 max-h-8",
-  ACCOUNTS_FILTER_SELECT_CLASS,
-);
 
 function formatDateOnly(value: string | null | undefined): string {
   return formatDisplayDate(value, "—");
@@ -333,38 +367,6 @@ function ListingRowActions({
         </AccountsMoreActions>
       ) : null}
     </AccountsTableActionCell>
-  );
-}
-
-function ListingSelectFilter<T extends string>({
-  label,
-  value,
-  onChange,
-  options,
-  widthClass = "w-[148px]",
-}: {
-  label: string;
-  value: T;
-  onChange: (v: T) => void;
-  options: { value: T; label: string }[];
-  widthClass?: string;
-}) {
-  return (
-    <div className={cn("space-y-0.5 shrink-0", widthClass)}>
-      <span className={ACCOUNTS_FILTER_LABEL_CLASS}>{label}</span>
-      <Select value={value} onValueChange={(v) => onChange(v as T)}>
-        <SelectTrigger className={cn(LISTING_SELECT_TRIGGER_CLASS, widthClass)}>
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {options.map((o) => (
-            <SelectItem key={o.value} value={o.value} className="text-xs">
-              {o.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
   );
 }
 
@@ -701,10 +703,10 @@ function PurchaseInvoicesTabBody({
   listReturnHref,
   search,
   setSearch,
-  sourceTypeFilter,
-  setSourceTypeFilter,
-  purchaseNatureFilter,
-  setPurchaseNatureFilter,
+  sourceTypeFilters,
+  setSourceTypeFilters,
+  purchaseNatureFilters,
+  setPurchaseNatureFilters,
   preset,
   setPreset,
   dateFrom,
@@ -735,10 +737,10 @@ function PurchaseInvoicesTabBody({
   listReturnHref: string;
   search: string;
   setSearch: (v: string) => void;
-  sourceTypeFilter: SourceTypeFilter;
-  setSourceTypeFilter: (v: SourceTypeFilter) => void;
-  purchaseNatureFilter: PurchaseNatureFilter;
-  setPurchaseNatureFilter: (v: PurchaseNatureFilter) => void;
+  sourceTypeFilters: string[];
+  setSourceTypeFilters: (v: string[]) => void;
+  purchaseNatureFilters: string[];
+  setPurchaseNatureFilters: (v: string[]) => void;
   preset: DateRangePresetId;
   setPreset: (v: DateRangePresetId) => void;
   dateFrom: string;
@@ -787,31 +789,23 @@ function PurchaseInvoicesTabBody({
               placeholder="Search invoice no., supplier, supplier invoice no…"
               className="min-w-[220px] flex-1 max-w-md"
             />
-            <ListingSelectFilter
+            <ReportMultiSelect
               label="Source Type"
-              value={sourceTypeFilter}
-              onChange={setSourceTypeFilter}
-              widthClass="w-[148px]"
-              options={[
-                { value: "all", label: "All Source Types" },
-                { value: "from_grn", label: "From GRN" },
-                { value: "direct_purchase", label: "Direct Purchase" },
-                { value: "stock_transfer", label: "Stock Transfer" },
-              ]}
+              values={sourceTypeFilters}
+              onChange={setSourceTypeFilters}
+              options={PURCHASE_SOURCE_TYPE_OPTIONS}
+              entityName="Source Type"
+              allLabel="All Source Types"
+              minWidthClass="min-w-[148px]"
             />
-            <ListingSelectFilter
+            <ReportMultiSelect
               label="Purchase Nature"
-              value={purchaseNatureFilter}
-              onChange={setPurchaseNatureFilter}
-              widthClass="w-[148px]"
-              options={[
-                { value: "all", label: "All Nature" },
-                { value: "inventory", label: "Inventory" },
-                { value: "expense", label: "Expense" },
-                { value: "service", label: "Service" },
-                { value: "fixed_asset", label: "Fixed Asset" },
-                { value: "other_non_stock", label: "Capital Goods" },
-              ]}
+              values={purchaseNatureFilters}
+              onChange={setPurchaseNatureFilters}
+              options={PURCHASE_NATURE_TOOLBAR_OPTIONS}
+              entityName="Purchase Nature"
+              allLabel="All Nature"
+              minWidthClass="min-w-[148px]"
             />
             <ReportDateRangeFilter
               preset={preset}
@@ -829,15 +823,15 @@ function PurchaseInvoicesTabBody({
                   preset,
                   dateFrom,
                   dateTo,
-                  sourceType: sourceTypeFilter,
-                  purchaseNature: purchaseNatureFilter,
+                  sourceType: sourceTypeFilters.join(","),
+                  purchaseNature: purchaseNatureFilters.join(","),
                 },
                 filterDefaults,
               )}
               onClick={() => {
                 setSearch(filterDefaults.search);
-                setSourceTypeFilter(filterDefaults.sourceType);
-                setPurchaseNatureFilter(filterDefaults.purchaseNature);
+                setSourceTypeFilters([]);
+                setPurchaseNatureFilters([]);
                 setPreset(filterDefaults.preset);
                 setDateFrom(filterDefaults.dateFrom);
                 setDateTo(filterDefaults.dateTo);
@@ -985,8 +979,8 @@ export default function PurchaseInvoiceListClient() {
   const fyReady = useIsFinancialYearReady();
   const {
     search,
-    sourceTypeFilter,
-    purchaseNatureFilter,
+    sourceTypeFilters,
+    purchaseNatureFilters,
     page,
     pageSize,
     sortKey: invoiceSortKey,
@@ -1000,16 +994,16 @@ export default function PurchaseInvoiceListClient() {
     (next: string) => setInvoicesTab((prev) => ({ ...prev, search: next })),
     [setInvoicesTab],
   );
-  const setSourceTypeFilter = useCallback(
-    (next: SourceTypeFilter) =>
-      setInvoicesTab((prev) => ({ ...prev, sourceTypeFilter: next, page: 1 })),
+  const setSourceTypeFilters = useCallback(
+    (next: string[]) =>
+      setInvoicesTab((prev) => ({ ...prev, sourceTypeFilters: next, page: 1 })),
     [setInvoicesTab],
   );
-  const setPurchaseNatureFilter = useCallback(
-    (next: PurchaseNatureFilter) =>
+  const setPurchaseNatureFilters = useCallback(
+    (next: string[]) =>
       setInvoicesTab((prev) => ({
         ...prev,
-        purchaseNatureFilter: next,
+        purchaseNatureFilters: next,
         page: 1,
       })),
     [setInvoicesTab],
@@ -1126,13 +1120,11 @@ export default function PurchaseInvoiceListClient() {
       setGrnTab((prev) => ({ ...prev, columnFilters: next, page: 1 })),
     [setGrnTab],
   );
-  /** Server-only filter payload (toolbar Purchase Nature). Excel column filters stay client-side. */
-  const invoiceServerFiltersKey = useMemo(() => {
-    if (purchaseNatureFilter === "all") return "{}";
-    return JSON.stringify({
-      purchaseNature: { selectedValues: [purchaseNatureFilter] },
-    });
-  }, [purchaseNatureFilter]);
+  /** Server-only filter payload (toolbar Source Type multi + Purchase Nature). Excel column filters stay client-side. */
+  const invoiceServerFiltersKey = useMemo(
+    () => buildPurchaseToolbarServerFilters(sourceTypeFilters, purchaseNatureFilters),
+    [sourceTypeFilters, purchaseNatureFilters],
+  );
   const filterDefaults = useMemo(
     () => listingFilterDefaults(fyDateBounds(selectedFY)),
     [selectedFY?.id, selectedFY?.startDate, selectedFY?.endDate],
@@ -1189,8 +1181,8 @@ export default function PurchaseInvoiceListClient() {
     const ac = new AbortController();
     const filtersAreDefault =
       !debouncedSearch.trim() &&
-      sourceTypeFilter === "all" &&
-      purchaseNatureFilter === "all";
+      cleanMultiFilterValues(sourceTypeFilters).length === 0 &&
+      cleanMultiFilterValues(purchaseNatureFilters).length === 0;
     const fyBounds = fyDateBounds(selectedFY);
     // Wait until "This Year" has been synced to Working FY dates before seeding the badge,
     // otherwise a transient calendar-year query can write count 0 and stick.
@@ -1206,7 +1198,7 @@ export default function PurchaseInvoiceListClient() {
         const FETCH_PAGE_SIZE = 100;
         const baseQuery = {
           search: debouncedSearch.trim() || undefined,
-          invoice_type: sourceTypeToInvoiceType(sourceTypeFilter),
+          invoice_type: sourceTypesToInvoiceType(sourceTypeFilters),
           from_date: dateFrom || undefined,
           to_date: dateTo || undefined,
           filters:
@@ -1257,8 +1249,8 @@ export default function PurchaseInvoiceListClient() {
     selectedFY?.endDate,
     sectionRefresh,
     debouncedSearch,
-    sourceTypeFilter,
-    purchaseNatureFilter,
+    sourceTypeFilters,
+    purchaseNatureFilters,
     preset,
     dateFrom,
     dateTo,
@@ -1315,7 +1307,7 @@ export default function PurchaseInvoiceListClient() {
     setInvoiceFilterOptions({});
     setInvoiceFilterLoading({});
     setInvoiceFilterReady({});
-  }, [sourceTypeFilter, purchaseNatureFilter, sectionRefresh]);
+  }, [sourceTypeFilters, purchaseNatureFilters, sectionRefresh]);
 
   useEffect(() => {
     grnFilterLoadedRef.current = new Set();
@@ -1328,8 +1320,8 @@ export default function PurchaseInvoiceListClient() {
     setPage(1);
   }, [
     debouncedSearch,
-    sourceTypeFilter,
-    purchaseNatureFilter,
+    sourceTypeFilters,
+    purchaseNatureFilters,
     dateFrom,
     dateTo,
     invoiceSortKey,
@@ -1383,13 +1375,18 @@ export default function PurchaseInvoiceListClient() {
         : invoiceSortKey
       : undefined;
     const exportFilters: Record<string, unknown> = { ...invoiceColumnFilters };
-    if (purchaseNatureFilter !== "all") {
-      exportFilters.purchaseNature = { selectedValues: [purchaseNatureFilter] };
+    const cleanNatures = cleanMultiFilterValues(purchaseNatureFilters);
+    const cleanSources = cleanMultiFilterValues(sourceTypeFilters);
+    if (cleanNatures.length > 0) {
+      exportFilters.purchaseNature = { selectedValues: cleanNatures };
+    }
+    if (cleanSources.length > 1) {
+      exportFilters.sourceType = { selectedValues: cleanSources };
     }
     const filtersJson = JSON.stringify(exportFilters);
     return {
       search: debouncedSearch.trim() || undefined,
-      invoice_type: sourceTypeToInvoiceType(sourceTypeFilter),
+      invoice_type: sourceTypesToInvoiceType(sourceTypeFilters),
       from_date: dateFrom || undefined,
       to_date: dateTo || undefined,
       ordering,
@@ -1398,8 +1395,8 @@ export default function PurchaseInvoiceListClient() {
     };
   }, [
     debouncedSearch,
-    sourceTypeFilter,
-    purchaseNatureFilter,
+    sourceTypeFilters,
+    purchaseNatureFilters,
     dateFrom,
     dateTo,
     invoiceSortKey,
@@ -1567,7 +1564,7 @@ export default function PurchaseInvoiceListClient() {
       setInvoiceFilterLoading((prev) => ({ ...prev, [field]: true }));
       try {
         const rows = await PurchaseInvoiceService.getFilterDropdown(field, {
-          invoice_type: sourceTypeToInvoiceType(sourceTypeFilter),
+          invoice_type: sourceTypesToInvoiceType(sourceTypeFilters),
           include_pending: false,
         });
         setInvoiceFilterOptions((prev) => ({
@@ -1582,7 +1579,7 @@ export default function PurchaseInvoiceListClient() {
         setInvoiceFilterReady((prev) => ({ ...prev, [field]: true }));
       }
     },
-    [markInvoiceFilterOpened, sourceTypeFilter],
+    [markInvoiceFilterOpened, sourceTypeFilters],
   );
 
   const openGrnFilter = useCallback(
@@ -1735,10 +1732,10 @@ export default function PurchaseInvoiceListClient() {
                   listReturnHref={listReturnHref}
                   search={search}
                   setSearch={setSearch}
-                  sourceTypeFilter={sourceTypeFilter}
-                  setSourceTypeFilter={setSourceTypeFilter}
-                  purchaseNatureFilter={purchaseNatureFilter}
-                  setPurchaseNatureFilter={setPurchaseNatureFilter}
+                  sourceTypeFilters={sourceTypeFilters}
+                  setSourceTypeFilters={setSourceTypeFilters}
+                  purchaseNatureFilters={purchaseNatureFilters}
+                  setPurchaseNatureFilters={setPurchaseNatureFilters}
                   preset={preset}
                   setPreset={setPreset}
                   dateFrom={dateFrom}

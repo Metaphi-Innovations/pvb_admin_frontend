@@ -212,6 +212,8 @@ function mapUiStatusToApi(status: string): string | undefined {
       return "PENDING_APPROVAL";
     case "approved":
       return "POSTED";
+    case "posted":
+      return "POSTED";
     case "cancelled":
       return "CANCELLED";
     case "reversed":
@@ -221,6 +223,14 @@ function mapUiStatusToApi(status: string): string | undefined {
     default:
       return undefined;
   }
+}
+
+function mapUiStatusesToApi(statuses: string[]): string[] {
+  return [
+    ...new Set(
+      statuses.map(mapUiStatusToApi).filter((s): s is string => Boolean(s)),
+    ),
+  ];
 }
 
 function applyCreditNoteToolbarFilters(
@@ -245,9 +255,11 @@ function applyCreditNoteToolbarFilters(
   if (filters.sources.length) {
     list = list.filter((x) => matchesMulti(filters.sources, sourceLabel(x.source_type)));
   }
-  if (filters.status !== "all") {
-    const apiStatus = mapUiStatusToApi(filters.status);
-    if (apiStatus) list = list.filter((x) => x.status === apiStatus);
+  if (filters.status.length) {
+    const apiStatuses = mapUiStatusesToApi(filters.status);
+    if (apiStatuses.length) {
+      list = list.filter((x) => apiStatuses.includes(x.status));
+    }
   }
   if (filters.voucherNo.trim()) {
     const q = filters.voucherNo.toLowerCase();
@@ -277,7 +289,7 @@ function computeTabCounts(
   records: CreditNoteListRow[],
   filters: NotesListingFilterState,
 ): Record<string, number> {
-  const base = applyCreditNoteToolbarFilters(records, "all", { ...filters, status: "all" });
+  const base = applyCreditNoteToolbarFilters(records, "all", { ...filters, status: [] });
   return {
     all: base.length,
     draft: base.filter((r) => r.status === "DRAFT").length,
@@ -647,8 +659,7 @@ export default function CreditNotesListClient() {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      // Load all statuses so secondary tab counts stay correct; status tabs filter client-side.
-      const apiStatus = mapUiStatusToApi(filters.status);
+      // Omit status from API — backend accepts a single enum only; multi OR-matches client-side.
       const sourceType =
         filters.sources.length === 1
           ? Object.entries(CN_SOURCE_LABELS).find(
@@ -658,7 +669,6 @@ export default function CreditNotesListClient() {
 
       const baseQuery = {
         search: filters.search.trim() || undefined,
-        status: apiStatus || undefined,
         source_type: sourceType,
         from_date: filters.dateFrom || undefined,
         to_date: filters.dateTo || undefined,
@@ -695,7 +705,7 @@ export default function CreditNotesListClient() {
     } finally {
       setLoading(false);
     }
-  }, [showToast, filters.search, filters.status, filters.sources, filters.dateFrom, filters.dateTo, filters.voucherNo]);
+  }, [showToast, filters.search, filters.sources, filters.dateFrom, filters.dateTo, filters.voucherNo]);
 
   useEffect(() => {
     if (!mounted) return;

@@ -65,6 +65,8 @@ export interface StockValuationSummaryApiRow {
   product_id: string;
   product_code: string | null;
   product_name: string;
+  size_label: string | null;
+  sku: string | null;
   uom: string | null;
   warehouse_id: string | null;
   warehouse_name: string | null;
@@ -109,6 +111,8 @@ export interface StockValuationDetailApiRow {
   product_id: string;
   product_code: string | null;
   product_name: string;
+  size_label: string | null;
+  sku: string | null;
   warehouse_id: string | null;
   warehouse_name: string | null;
   debit_qty: string;
@@ -159,6 +163,8 @@ export interface StockValuationFiltersConfig {
     product_id: string;
     product_code: string;
     product_name: string;
+    size_label: string | null;
+    sku: string | null;
     uom: string | null;
   }>;
   defaults: {

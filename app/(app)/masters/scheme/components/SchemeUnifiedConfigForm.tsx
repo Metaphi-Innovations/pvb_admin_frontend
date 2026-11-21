@@ -49,6 +49,8 @@ import {
   formShowsProductApplicability,
   getProductDiscountRowError,
   productIdsWithDiscountData,
+  quantityUomLabel,
+  normalizeSchemeQuantityUom,
   resolveAutomaticBenefit,
   schemeTypeDisplayLabel,
   syncProductDiscountRules,
@@ -495,19 +497,26 @@ function SpecialDiscountConditionFields({
 
   const isQty = form.specialDiscountBasedOn === "Sales Quantity";
   const hasSlabs = form.specialHasSlabs;
-  const isMultiInvoice = form.specialEvaluationScope === "Multiple Invoices";
+  const qtyUom = normalizeSchemeQuantityUom(form.specialDiscountUom);
+  const isQtyBase = isQty && qtyUom === "KG_LTR";
+  const isMultiInvoice =
+    !isQtyBase && form.specialEvaluationScope === "Multiple Invoices";
+  const qtyUnitLabel = quantityUomLabel(qtyUom);
 
   const helpText = (() => {
     const scopeBit =
-      form.specialEvaluationScope === "One Invoice"
+      isQtyBase || form.specialEvaluationScope === "One Invoice"
         ? "on a single invoice"
         : "across invoices during Valid From–Valid To";
     const runBit =
       isMultiInvoice || form.specialSettlementRunMode === "Automatic"
         ? "Entitlement is created automatically"
         : "Entitlement requires manual settlement via Credit Note";
+    if (isQty && isQtyBase) {
+      return `Combined Quantity Base (dispatch qty × product net weight as KG/LTR) of selected products ${scopeBit} determines qualification. Discount applies once on the combined eligible value. ${runBit}.`;
+    }
     if (isQty) {
-      return `Net sold quantity of selected products combined (invoice qty − returned qty) ${scopeBit} determines qualification. Discount applies once on the combined eligible value. ${runBit}.`;
+      return `Net sold unit quantity of selected products combined (invoice qty − returned qty) ${scopeBit} determines qualification. Discount applies once on the combined eligible value. ${runBit}.`;
     }
     return `Eligible Net Taxable Sales of selected products combined (Taxable Sales − Sales Returns, excluding GST) ${scopeBit} determines qualification. Discount applies once on the combined eligible value. ${runBit}.`;
   })();
@@ -516,20 +525,30 @@ function SpecialDiscountConditionFields({
     <div className="space-y-2">
       <div className="scheme-row">
         <Field className="scheme-w-select-md" label="Evaluate On" required>
-          <SchemeSearchableSelect
-            value={form.specialEvaluationScope}
-            onChange={(v) => {
-              const scope = v as SpecialEvaluationScopeUI;
-              onChange({
-                ...form,
-                specialEvaluationScope: scope,
-                ...(scope === "Multiple Invoices"
-                  ? { specialSettlementRunMode: "Automatic" as const }
-                  : {}),
-              });
-            }}
-            options={SPECIAL_EVALUATION_SCOPE_SELECT_OPTIONS}
-          />
+          <div
+            title={
+              isQtyBase
+                ? "Quantity Base (KG/LTR) is always One Invoice"
+                : undefined
+            }
+          >
+            <SchemeSearchableSelect
+              value={isQtyBase ? "One Invoice" : form.specialEvaluationScope}
+              onChange={(v) => {
+                if (isQtyBase) return;
+                const scope = v as SpecialEvaluationScopeUI;
+                onChange({
+                  ...form,
+                  specialEvaluationScope: scope,
+                  ...(scope === "Multiple Invoices"
+                    ? { specialSettlementRunMode: "Automatic" as const }
+                    : {}),
+                });
+              }}
+              options={SPECIAL_EVALUATION_SCOPE_SELECT_OPTIONS}
+              disabled={isQtyBase}
+            />
+          </div>
         </Field>
         <Field className="scheme-w-select-md" label="Entitlement Mode" required>
           <div
@@ -586,6 +605,7 @@ function SpecialDiscountConditionFields({
             options={SPECIAL_DISCOUNT_BASED_ON_SELECT_OPTIONS}
           />
         </Field>
+        {/* Quantity Measured As (KG/LTR) hidden for now — qty schemes use Unit Qty only. */}
       </div>
 
       <p className="text-[10px] text-muted-foreground leading-snug max-w-xl">
@@ -596,13 +616,19 @@ function SpecialDiscountConditionFields({
         <div className="scheme-row">
           <Field
             className="scheme-w-num-cell"
-            label={isQty ? "Min. Quantity" : "Min. Sales Value"}
+            label={
+              isQty
+                ? isQtyBase
+                  ? "Min. Quantity (KG/LTR)"
+                  : "Min. Quantity (Units)"
+                : "Min. Sales Value"
+            }
             required
           >
             <SchemeNumberField
               value={form.specialThresholdValue}
               onChange={(v) => set("specialThresholdValue", v)}
-              placeholder={isQty ? "Qty" : "₹"}
+              placeholder={isQty ? (isQtyBase ? "KG/LTR" : "Qty") : "₹"}
               min={0}
               className="scheme-ctrl"
             />
@@ -769,8 +795,12 @@ function SpecialDiscountConditionFields({
             <table className="scheme-slab-table">
               <thead>
                 <tr>
-                  <th className="scheme-w-num-cell">Quantity From</th>
-                  <th className="scheme-w-num-cell">Quantity To</th>
+                  <th className="scheme-w-num-cell">
+                    Quantity From ({qtyUnitLabel})
+                  </th>
+                  <th className="scheme-w-num-cell">
+                    Quantity To ({qtyUnitLabel})
+                  </th>
                   <th className="scheme-w-select-sm">Discount Type</th>
                   <th
                     className="scheme-w-num-cell"
@@ -973,6 +1003,8 @@ interface SchemeUnifiedConfigFormProps {
     id: string;
     name: string;
     customerTypeId?: string | null;
+    /** Main-branch billing state name (matches scheme state options). */
+    billingState?: string | null;
   }[];
   customerTypeSelectOptions?: { id: string; name: string }[];
   schemeCategoryOptions?: SchemeCategory[];
@@ -1025,34 +1057,78 @@ export function SchemeUnifiedConfigForm({
       CUSTOMER_TYPE_MULTI_OPTIONS.map((t) => ({ id: t, name: t })),
     [customerTypeSelectOptions],
   );
-  const customerTypeById = useMemo(() => {
+  const customerMetaById = useMemo(() => {
     if (!customerSelectOptions) return null;
     return new Map(
-      customerSelectOptions.map((c) => [c.id, c.customerTypeId ?? null]),
+      customerSelectOptions.map((c) => [
+        c.id,
+        {
+          customerTypeId: c.customerTypeId ?? null,
+          billingState: c.billingState?.trim() || null,
+        },
+      ]),
     );
   }, [customerSelectOptions]);
-  const customerIdsAllowedForTypes = (typeIds: string[], ids: string[]) => {
-    if (!customerTypeById) return ids;
-    const allowed = new Set(typeIds);
+
+  const normalizeStateKey = (value: string | null | undefined) =>
+    (value ?? "").trim().toLowerCase();
+
+  const customerIdsAllowedForScope = (
+    typeIds: string[],
+    stateNames: string[],
+    ids: string[],
+  ) => {
+    if (!customerMetaById) return ids;
+    const allowedTypes = new Set(typeIds);
+    const allowedStates = new Set(
+      stateNames.map(normalizeStateKey).filter(Boolean),
+    );
     return ids.filter((id) => {
-      const typeId = customerTypeById.get(id);
-      return Boolean(typeId && allowed.has(typeId));
+      const meta = customerMetaById.get(id);
+      if (!meta) return false;
+      const typeOk = Boolean(
+        meta.customerTypeId && allowedTypes.has(meta.customerTypeId),
+      );
+      const stateOk =
+        allowedStates.size === 0
+          ? false
+          : Boolean(
+              meta.billingState &&
+                allowedStates.has(normalizeStateKey(meta.billingState)),
+            );
+      return typeOk && stateOk;
     });
   };
-  /** Only customers of the selected customer type(s); already-locked picks stay visible. */
-  const typeFilteredCustomerOptions = useMemo(() => {
-    if (!customerTypeById) return customerOptions;
-    const allowed = new Set(form.customerTypes);
+
+  /**
+   * Customers matching selected customer type(s) and state(s).
+   * Locked picks stay visible when the scheme is already in use.
+   */
+  const scopeFilteredCustomerOptions = useMemo(() => {
+    if (!customerMetaById) return customerOptions;
+    const allowedTypes = new Set(form.customerTypes);
+    const allowedStates = new Set(
+      form.stateNames.map(normalizeStateKey).filter(Boolean),
+    );
     const locked = new Set(usageConstraints?.lockedCustomerIds ?? []);
     return customerOptions.filter((c) => {
       if (locked.has(c.id)) return true;
-      const typeId = customerTypeById.get(c.id);
-      return Boolean(typeId && allowed.has(typeId));
+      const meta = customerMetaById.get(c.id);
+      if (!meta) return false;
+      const typeOk = Boolean(
+        meta.customerTypeId && allowedTypes.has(meta.customerTypeId),
+      );
+      const stateOk = Boolean(
+        meta.billingState &&
+          allowedStates.has(normalizeStateKey(meta.billingState)),
+      );
+      return typeOk && stateOk;
     });
   }, [
     customerOptions,
-    customerTypeById,
+    customerMetaById,
     form.customerTypes,
+    form.stateNames,
     usageConstraints?.lockedCustomerIds,
   ]);
   const usesProducts = formShowsProductApplicability(form);
@@ -1384,7 +1460,20 @@ export function SchemeUnifiedConfigForm({
                 options={stateOptions}
                 selectedIds={form.stateNames}
                 lockedIds={usageConstraints?.lockedStateNames}
-                onChange={(ids) => set("stateNames", ids)}
+                onChange={(ids) =>
+                  onChange({
+                    ...form,
+                    stateNames: ids,
+                    // Drop customers that no longer match selected states/types.
+                    customerIds: usageConstraints?.isUsed
+                      ? form.customerIds
+                      : customerIdsAllowedForScope(
+                          form.customerTypes,
+                          ids,
+                          form.customerIds,
+                        ),
+                  })
+                }
                 error={
                   error && /state/i.test(error)
                     ? "Please select at least one state (or Select All)."
@@ -1411,7 +1500,11 @@ export function SchemeUnifiedConfigForm({
                     // Keep existing customers when scheme is in use (add-only).
                     customerIds: usageConstraints?.isUsed
                       ? form.customerIds
-                      : customerIdsAllowedForTypes(ids, form.customerIds),
+                      : customerIdsAllowedForScope(
+                          ids,
+                          form.stateNames,
+                          form.customerIds,
+                        ),
                   })
                 }
                 error={
@@ -1427,13 +1520,13 @@ export function SchemeUnifiedConfigForm({
               <SchemeMultiSelect
                 label="Customers"
                 placeholder={
-                  form.customerTypes.length === 0
-                    ? "Select customer type first"
+                  form.stateNames.length === 0 || form.customerTypes.length === 0
+                    ? "Select state and customer type first"
                     : "Select customers"
                 }
                 searchPlaceholder="Search customers…"
                 required
-                options={typeFilteredCustomerOptions}
+                options={scopeFilteredCustomerOptions}
                 selectedIds={form.customerIds}
                 lockedIds={usageConstraints?.lockedCustomerIds}
                 onChange={(ids) => set("customerIds", ids)}
@@ -2006,13 +2099,24 @@ export function SchemeUnifiedConfigForm({
                   <span className="font-semibold text-foreground">Scheme Period: </span>
                   {form.startDate || "—"} to {form.endDate || "—"}
                 </p>
+                {form.specialDiscountBasedOn === "Sales Quantity" ? (
+                  <p>
+                    <span className="font-semibold text-foreground">
+                      Quantity Measured As:{" "}
+                    </span>
+                    {normalizeSchemeQuantityUom(form.specialDiscountUom) ===
+                    "KG_LTR"
+                      ? "Quantity Base (KG/LTR)"
+                      : "Unit Qty (Pieces)"}
+                  </p>
+                ) : null}
                 {!form.specialHasSlabs ? (
                   <p>
                     <span className="font-semibold text-foreground">
                       Flat threshold:{" "}
                     </span>
                     {form.specialDiscountBasedOn === "Sales Quantity"
-                      ? `${form.specialThresholdValue || "—"} units`
+                      ? `${form.specialThresholdValue || "—"} ${quantityUomLabel(form.specialDiscountUom)}`
                       : `₹${form.specialThresholdValue || "—"}`}
                     {" → "}
                     {formatSlabDiscountLabel(
@@ -2096,16 +2200,20 @@ export function SchemeUnifiedConfigForm({
                             s.discountType,
                             s.discountValue,
                           );
+                          const unitLabel = quantityUomLabel(
+                            form.specialDiscountUom,
+                          );
                           if (!s.quantityTo.trim()) {
                             return (
                               <li key={s.id}>
-                                {s.quantityFrom}+ units → {disc}
+                                {s.quantityFrom}+ {unitLabel} → {disc}
                               </li>
                             );
                           }
                           return (
                             <li key={s.id}>
-                              {s.quantityFrom}–{s.quantityTo} units → {disc}
+                              {s.quantityFrom}–{s.quantityTo} {unitLabel} →{" "}
+                              {disc}
                             </li>
                           );
                         })}

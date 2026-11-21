@@ -173,7 +173,7 @@ export interface DayBookExportPayload extends DayBookQueryParams {
 }
 
 export interface DayBookMoreFilters {
-  ledgerId: string;
+  ledgerIds: string[];
   balanceSide: DayBookBalanceSideFilter;
   voucherNumber: string;
   reference: string;

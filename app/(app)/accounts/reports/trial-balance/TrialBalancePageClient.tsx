@@ -18,7 +18,7 @@ import {
   ReportFilterRow,
   ReportDateRangeFilter,
   ReportFinancialYearFilter,
-  ReportBranchFilter,
+  ReportBranchMultiFilter,
   ReportLedgerFilter,
   ReportShowZeroBalanceToggle,
   ReportMoreFilters,
@@ -27,6 +27,7 @@ import {
   ReportToDateFilter,
 } from "@/components/accounts/ReportFilters";
 import {
+  buildEntityFilterSummary,
   countActiveMoreFilters,
   type ReportFilterSummaryItem,
 } from "@/lib/accounts/report-multi-filter-utils";
@@ -180,7 +181,7 @@ export default function TrialBalancePageClient() {
   const [datesReady, setDatesReady] = useState(false);
   const [financialYearId, setFinancialYearId] = useState("");
 
-  const [warehouseId, setWarehouseId] = useState("all");
+  const [warehouseIds, setWarehouseIds] = useState<string[]>([]);
   const [primaryHeadId, setPrimaryHeadId] = useState("all");
   const [groupId, setGroupId] = useState("all");
   const [subGroupId, setSubGroupId] = useState("all");
@@ -344,7 +345,7 @@ export default function TrialBalancePageClient() {
       financial_year_id: financialYearId,
       from_date: dateFrom,
       to_date: dateTo,
-      warehouse_id: warehouseId !== "all" ? warehouseId : undefined,
+      warehouse_id: warehouseIds.length === 1 ? warehouseIds[0] : undefined,
       primary_head_id: primaryHeadId !== "all" ? primaryHeadId : undefined,
       group_id: groupId !== "all" ? groupId : undefined,
       sub_group_id: subGroupId !== "all" ? subGroupId : undefined,
@@ -357,7 +358,7 @@ export default function TrialBalancePageClient() {
     financialYearId,
     dateFrom,
     dateTo,
-    warehouseId,
+    warehouseIds,
     primaryHeadId,
     groupId,
     subGroupId,
@@ -427,7 +428,7 @@ export default function TrialBalancePageClient() {
     financialYearId,
     dateFrom,
     dateTo,
-    warehouseId,
+    warehouseIds,
     primaryHeadId,
     groupId,
     subGroupId,
@@ -463,11 +464,11 @@ export default function TrialBalancePageClient() {
         fromDate: dateFrom,
         toDate: dateTo,
         financialYearId,
-        warehouse: warehouseId !== "all" ? warehouseId : undefined,
+        warehouse: warehouseIds.length === 1 ? warehouseIds[0] : undefined,
         source: "trial-balance",
       });
     },
-    [dateFrom, dateTo, financialYearId, warehouseId],
+    [dateFrom, dateTo, financialYearId, warehouseIds],
   );
 
   const handleFinancialYearChange = useCallback(
@@ -532,7 +533,7 @@ export default function TrialBalancePageClient() {
       setDateFrom(selectedFY.startDate);
       setDateTo(today < selectedFY.endDate ? today : selectedFY.endDate);
     }
-    setWarehouseId("all");
+    setWarehouseIds([]);
     setPrimaryHeadId("all");
     setGroupId("all");
     setSubGroupId("all");
@@ -542,7 +543,7 @@ export default function TrialBalancePageClient() {
   }, [filtersConfig, selectedFY, financialYearId]);
 
   const hasFilters =
-    warehouseId !== "all" ||
+    warehouseIds.length > 0 ||
     primaryHeadId !== "all" ||
     groupId !== "all" ||
     subGroupId !== "all" ||
@@ -561,15 +562,13 @@ export default function TrialBalancePageClient() {
 
   const filterSummaryItems = useMemo((): ReportFilterSummaryItem[] => {
     const items: Array<ReportFilterSummaryItem | null> = [
-      warehouseId !== "all"
-        ? {
-            id: "branch",
-            label: "Branch",
-            value:
-              branchOptions.find((b) => b.id === warehouseId)?.name ?? warehouseId,
-            onRemove: () => setWarehouseId("all"),
-          }
-        : null,
+      buildEntityFilterSummary(
+        "branch",
+        "Branch",
+        warehouseIds,
+        branchOptions.map((b) => ({ value: b.id, label: b.name })),
+        () => setWarehouseIds([]),
+      ),
       primaryHeadId !== "all"
         ? {
             id: "primaryHead",
@@ -624,7 +623,7 @@ export default function TrialBalancePageClient() {
     ];
     return items.filter((i): i is ReportFilterSummaryItem => i != null);
   }, [
-    warehouseId,
+    warehouseIds,
     branchOptions,
     primaryHeadId,
     primaryHeadOptions,
@@ -738,10 +737,10 @@ export default function TrialBalancePageClient() {
           />
           <ReportFromDateFilter value={dateFrom} onChange={setDateFrom} />
           <ReportToDateFilter value={dateTo} onChange={setDateTo} />
-          <ReportBranchFilter
-            value={warehouseId}
-            onChange={setWarehouseId}
-            options={branchOptions}
+          <ReportBranchMultiFilter
+            values={warehouseIds}
+            onChange={setWarehouseIds}
+            labeledOptions={branchOptions.map((b) => ({ value: b.id, label: b.name }))}
           />
           <ReportMoreFilters activeCount={moreFiltersActiveCount}>
             <ReportLedgerFilter

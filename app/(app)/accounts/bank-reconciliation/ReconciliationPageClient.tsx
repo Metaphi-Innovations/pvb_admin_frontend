@@ -13,6 +13,7 @@ import {
   ACCOUNTS_FILTER_CONTROL_CLASS,
   ACCOUNTS_FILTER_LABEL_CLASS,
 } from "@/components/accounts/ReportFilters";
+import { ReportMultiSelect } from "@/components/accounts/ReportMultiSelect";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
@@ -53,7 +54,7 @@ export default function ReconciliationPageClient({ embedded = false }: Reconcili
   const router = useRouter();
   const [statements, setStatements] = useState(() => enrichStatementsWithStats(loadBankStatements()));
   const [search, setSearch] = useState("");
-  const [bankFilter, setBankFilter] = useState("all");
+  const [bankFilters, setBankFilters] = useState<string[]>([]);
   const [monthFilter, setMonthFilter] = useState("all");
   const [yearFilter, setYearFilter] = useState("all");
   const [uploadOpen, setUploadOpen] = useState(false);
@@ -83,11 +84,11 @@ export default function ReconciliationPageClient({ embedded = false }: Reconcili
     () =>
       filterStatements(statements, {
         search,
-        bankAccountId: bankFilter,
+        bankAccountIds: bankFilters,
         month: monthFilter,
         year: yearFilter,
       }),
-    [statements, search, bankFilter, monthFilter, yearFilter],
+    [statements, search, bankFilters, monthFilter, yearFilter],
   );
 
   const grouped = useMemo(() => {
@@ -176,22 +177,15 @@ export default function ReconciliationPageClient({ embedded = false }: Reconcili
         placeholder="Bank account, statement name…"
         className="min-w-[200px] flex-1 max-w-md"
       />
-      <div className="space-y-1 min-w-[160px]">
-        <Label className={ACCOUNTS_FILTER_LABEL_CLASS}>Bank</Label>
-        <Select value={bankFilter} onValueChange={setBankFilter}>
-          <SelectTrigger className={cn(ACCOUNTS_FILTER_CONTROL_CLASS, "mt-0 w-[160px]")}>
-            <SelectValue placeholder="All banks" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All banks</SelectItem>
-            {accounts.map((a) => (
-              <SelectItem key={a.id} value={String(a.id)}>
-                {a.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+      <ReportMultiSelect
+        label="Bank"
+        values={bankFilters}
+        onChange={setBankFilters}
+        options={accounts.map((a) => ({ value: String(a.id), label: a.name }))}
+        entityName="Bank"
+        allLabel="All banks"
+        minWidthClass="min-w-[160px]"
+      />
       <div className="space-y-1 min-w-[130px]">
         <Label className={ACCOUNTS_FILTER_LABEL_CLASS}>Month</Label>
         <Select value={monthFilter} onValueChange={setMonthFilter}>

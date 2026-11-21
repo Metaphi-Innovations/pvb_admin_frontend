@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { MasterListing } from "@/components/listing/MasterListing";
 import type { ColumnConfig, FilterState, SortState, ActionItemConfig } from "@/components/listing/types";
 import { Eye, RotateCcw } from "lucide-react";
+import { toApiFilterValue } from "@/lib/listing/filter-values";
 import { useSampleReturns, useSampleReturnFilterOptions } from "@/hooks/sales/use-return-documents";
 import { SampleReturnService } from "@/services/sample-return.service";
 import {
@@ -106,10 +107,9 @@ export function SampleReturnTab({
 
   const apiFilters = useMemo(() => {
     const f: Record<string, any> = {};
-    if (returnFilters.customer && Array.isArray(returnFilters.customer) && returnFilters.customer.length > 0) {
-      f.customer = { customer_name: returnFilters.customer[0] };
-    } else if (returnFilters.customer && typeof returnFilters.customer === "string") {
-      f.customer = { customer_name: returnFilters.customer };
+    const customerName = toApiFilterValue(returnFilters.customer);
+    if (customerName !== undefined) {
+      f.customer = { customer_name: customerName };
     }
     return f;
   }, [returnFilters]);

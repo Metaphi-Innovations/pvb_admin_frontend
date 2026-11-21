@@ -211,6 +211,8 @@ type SummaryUiRow = {
   warehouseId: string | null;
   productName: string;
   productCode: string;
+  sizeLabel: string;
+  sku: string;
   warehouse: string;
   unit: string;
   closingQty: number;
@@ -230,6 +232,7 @@ type DetailUiRow = {
   voucherNumber: string;
   productName: string;
   productCode: string;
+  sizeLabel: string;
   warehouse: string;
   debitQty: number;
   creditQty: number;
@@ -253,6 +256,8 @@ function mapSummaryRow(row: StockValuationSummaryApiRow): SummaryUiRow {
     warehouseId: row.warehouse_id,
     productName: row.product_name,
     productCode: row.product_code ?? "",
+    sizeLabel: row.size_label?.trim() || "—",
+    sku: row.sku?.trim() || "—",
     warehouse: row.warehouse_name ?? "—",
     unit: row.uom ?? "",
     closingQty: num(row.closing_qty),
@@ -274,6 +279,7 @@ function mapDetailRow(row: StockValuationDetailApiRow): DetailUiRow {
     voucherNumber: row.voucher_number,
     productName: row.product_name,
     productCode: row.product_code ?? "",
+    sizeLabel: row.size_label?.trim() || "—",
     warehouse: row.warehouse_name ?? "—",
     debitQty: num(row.debit_qty),
     creditQty: num(row.credit_qty),
@@ -475,11 +481,16 @@ export default function StockValuationPageClient() {
 
   const productOptions = useMemo(
     () =>
-      (filtersConfig?.products ?? []).map((p) => ({
-        value: p.product_id,
-        label: p.product_name,
-        searchText: p.product_code,
-      })),
+      (filtersConfig?.products ?? []).map((p) => {
+        const size = p.size_label?.trim() || p.sku?.trim() || "";
+        return {
+          value: p.product_id,
+          label: size ? `${p.product_name} (${size})` : p.product_name,
+          searchText: [p.product_code, p.sku, p.size_label]
+            .filter(Boolean)
+            .join(" "),
+        };
+      }),
     [filtersConfig],
   );
 
@@ -1193,6 +1204,12 @@ function SummaryBody({
                   onSort={onSort}
                   {...filterableColProps(filterProps, "productName")}
                 />
+                <AccountsColumnHeader
+                  label="Size"
+                  colKey="sizeLabel"
+                  sortable={false}
+                  filterable={false}
+                />
                 <ServerSortTh
                   label="Warehouse"
                   colKey="warehouse"
@@ -1254,6 +1271,7 @@ function SummaryBody({
                   <AccountsTableCell className="text-xs font-medium align-middle">
                     {row.productName}
                   </AccountsTableCell>
+                  <AccountsTableCell className="text-xs align-middle">{row.sizeLabel}</AccountsTableCell>
                   <AccountsTableCell className="text-xs align-middle">{row.warehouse}</AccountsTableCell>
                   <AccountsTableCell align="right" className="text-xs tabular-nums font-medium align-middle">
                     {formatQtyWithUnit(row.closingQty, row.unit)}
@@ -1289,7 +1307,7 @@ function SummaryBody({
             </AccountsTableBody>
             <AccountsTableFoot>
               <AccountsTableRow>
-                <AccountsTableCell colSpan={2} className="font-semibold text-xs text-foreground align-middle">
+                <AccountsTableCell colSpan={3} className="font-semibold text-xs text-foreground align-middle">
                   Totals {asOnDate ? `(as on ${formatStockValuationDate(asOnDate)})` : ""}
                 </AccountsTableCell>
                 <AccountsTableCell align="right" className="font-semibold text-xs tabular-nums align-middle">
@@ -1463,6 +1481,12 @@ function DetailsBody({
                   onSort={onSort}
                   {...filterableColProps(filterProps, "productName")}
                 />
+                <AccountsColumnHeader
+                  label="Size"
+                  colKey="sizeLabel"
+                  sortable={false}
+                  filterable={false}
+                />
                 <ServerSortTh
                   label="Warehouse"
                   colKey="warehouse"
@@ -1519,6 +1543,7 @@ function DetailsBody({
                   <AccountsTableCell className="text-xs font-medium align-middle">
                     {row.productName}
                   </AccountsTableCell>
+                  <AccountsTableCell className="text-xs align-middle">{row.sizeLabel}</AccountsTableCell>
                   <AccountsTableCell className="text-xs align-middle">{row.warehouse}</AccountsTableCell>
                   <AccountsTableCell align="right" className="text-xs tabular-nums align-middle">
                     {row.debitQty.toLocaleString("en-IN")}
@@ -1540,7 +1565,7 @@ function DetailsBody({
             </AccountsTableBody>
             <AccountsTableFoot>
               <AccountsTableRow>
-                <AccountsTableCell colSpan={5} className="font-semibold text-xs align-middle">
+                <AccountsTableCell colSpan={6} className="font-semibold text-xs align-middle">
                   Period totals
                 </AccountsTableCell>
                 <AccountsTableCell align="right" className="font-semibold text-xs tabular-nums align-middle">

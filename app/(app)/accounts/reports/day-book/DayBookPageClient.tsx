@@ -30,7 +30,7 @@ import {
   ReportFilterRow,
   ReportFilterSummary,
   ReportFinancialYearFilter,
-  ReportLedgerFilter,
+  ReportLedgerMultiFilter,
   ReportMoreFilters,
   ReportVoucherTypeMultiFilter,
 } from "@/components/accounts/ReportFilters";
@@ -39,6 +39,15 @@ import {
   type ReportFilterSummaryItem,
   type ReportMultiSelectOption,
 } from "@/lib/accounts/report-multi-filter-utils";
+import {
+  applyAccountsColumnFilters,
+  collectColumnValueCounts,
+} from "@/lib/accounts/column-filter-engine";
+import type {
+  AccountsColumnFilterState,
+  AccountsColumnFilters,
+  ColumnValueOption,
+} from "@/lib/accounts/column-filter-types";
 import {
   DAY_BOOK_DATE_RANGE_PRESET_OPTIONS,
   resolveDateRangePreset,
@@ -65,7 +74,7 @@ const COL_SPAN = 9;
 const PAGE_PATH = "/accounts/reports/day-book";
 
 const EMPTY_MORE: DayBookMoreFilters = {
-  ledgerId: "",
+  ledgerIds: [],
   balanceSide: "ALL",
   voucherNumber: "",
   reference: "",
@@ -108,6 +117,29 @@ function fullVoucherUnbalanced(voucher: DayBookVoucher): boolean {
 
 function displayParty(value: string | null): string {
   return value?.trim() || "—";
+}
+
+function selectedColumnValues(
+  filter?: AccountsColumnFilterState,
+): string[] {
+  return (filter?.selectedValues ?? [])
+    .map((v) => String(v).trim())
+    .filter(Boolean);
+}
+
+function getDayBookFilterCell(voucher: DayBookVoucher, colKey: string): string {
+  switch (colKey) {
+    case "voucherType":
+      return voucher.voucher_type_label || voucher.voucher_type || "";
+    case "voucherNo":
+      return voucher.voucher_number || "";
+    case "party":
+      return displayParty(voucher.party_or_reference);
+    case "narration":
+      return voucher.narration?.trim() || "";
+    default:
+      return "";
+  }
 }
 
 function DayBookLineTable({ voucher }: { voucher: DayBookVoucher }) {
@@ -168,6 +200,7 @@ function DayBookPageContent() {
   const [appliedMore, setAppliedMore] = useState<DayBookMoreFilters>(EMPTY_MORE);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
+  const [columnFilters, setColumnFilters] = useState<AccountsColumnFilters>({});
   const [report, setReport] = useState<DayBookReportResponse | null>(null);
   const [reportLoading, setReportLoading] = useState(false);
   const [reportError, setReportError] = useState<DayBookApiError | null>(null);
@@ -189,7 +222,7 @@ function DayBookPageContent() {
     setBranches(splitParam(searchParams.get("branch")));
     setVoucherTypes(splitParam(searchParams.get("voucherType")));
     const more: DayBookMoreFilters = {
-      ledgerId: searchParams.get("ledgerId") ?? "",
+      ledgerIds: splitParam(searchParams.get("ledgerId")),
       balanceSide: parseBalanceSide(searchParams.get("balanceSide")),
       voucherNumber: searchParams.get("voucherNumber") ?? "",
       reference: searchParams.get("reference") ?? "",
@@ -261,22 +294,75 @@ function DayBookPageContent() {
     [ledgers],
   );
 
+  const handleColumnFilterChange = useCallback(
+    (colKey: string, value: AccountsColumnFilterState | undefined) => {
+      setColumnFilters((prev) => {
+        if (!value) {
+          const next = { ...prev };
+          delete next[colKey];
+          return next;
+        }
+        return { ...prev, [colKey]: value };
+      });
+      setPage(1);
+    },
+    [],
+  );
+
   const queryParams = useMemo<DayBookQueryParams | null>(() => {
     if (!financialYearId || financialYearId === "all" || !dateFrom || !dateTo) return null;
+    const colTypeLabels = selectedColumnValues(columnFilters.voucherType);
+    const colTypeValues =
+      colTypeLabels.length > 0
+        ? (filtersConfig?.voucher_types ?? [])
+            .filter(
+              (t) =>
+                colTypeLabels.includes(t.label) ||
+                colTypeLabels.includes(t.value),
+            )
+            .map((t) => t.value)
+        : [];
+    const effectiveVoucherTypes =
+      colTypeValues.length > 0
+        ? voucherTypes.length > 0
+          ? voucherTypes.filter((t) => colTypeValues.includes(t))
+          : colTypeValues
+        : voucherTypes;
+    const colVoucherNos = selectedColumnValues(columnFilters.voucherNo);
+    // API is single voucher_number search; multi stays client-side on loaded rows.
+    const effectiveVoucherNumber =
+      colVoucherNos.length === 1
+        ? colVoucherNos[0]
+        : appliedMore.voucherNumber.trim() || undefined;
     return {
       financial_year_id: financialYearId,
       from_date: dateFrom,
       to_date: dateTo,
       branch_ids: branches,
-      voucher_types: voucherTypes,
-      ledger_id: appliedMore.ledgerId || undefined,
+      voucher_types: effectiveVoucherTypes,
+      // API accepts a single ledger_id; multi is OR-filtered on loaded vouchers.
+      ledger_id:
+        appliedMore.ledgerIds.length === 1
+          ? appliedMore.ledgerIds[0]
+          : undefined,
       balance_side: appliedMore.balanceSide,
-      voucher_number: appliedMore.voucherNumber.trim() || undefined,
+      voucher_number: effectiveVoucherNumber,
       reference: appliedMore.reference.trim() || undefined,
       page,
       page_size: pageSize,
     };
-  }, [appliedMore, branches, dateFrom, dateTo, financialYearId, page, pageSize, voucherTypes]);
+  }, [
+    appliedMore,
+    branches,
+    columnFilters,
+    dateFrom,
+    dateTo,
+    filtersConfig,
+    financialYearId,
+    page,
+    pageSize,
+    voucherTypes,
+  ]);
 
   useEffect(() => {
     if (!ready || !queryParams || queryParams.from_date > queryParams.to_date) {
@@ -314,7 +400,9 @@ function DayBookPageContent() {
     if (dateTo) params.set("toDate", dateTo);
     if (branches.length > 0) params.set("branch", branches.join(","));
     if (voucherTypes.length > 0) params.set("voucherType", voucherTypes.join(","));
-    if (appliedMore.ledgerId) params.set("ledgerId", appliedMore.ledgerId);
+    if (appliedMore.ledgerIds.length > 0) {
+      params.set("ledgerId", appliedMore.ledgerIds.join(","));
+    }
     if (appliedMore.balanceSide !== "ALL") params.set("balanceSide", appliedMore.balanceSide);
     if (appliedMore.voucherNumber.trim()) params.set("voucherNumber", appliedMore.voucherNumber.trim());
     if (appliedMore.reference.trim()) params.set("reference", appliedMore.reference.trim());
@@ -378,7 +466,7 @@ function DayBookPageContent() {
 
   const applyMoreFilters = useCallback(() => {
     setAppliedMore({
-      ledgerId: draftMore.ledgerId,
+      ledgerIds: draftMore.ledgerIds,
       balanceSide: draftMore.balanceSide,
       voucherNumber: draftMore.voucherNumber.trim(),
       reference: draftMore.reference.trim(),
@@ -396,6 +484,7 @@ function DayBookPageContent() {
     setVoucherTypes([]);
     setDraftMore(EMPTY_MORE);
     setAppliedMore(EMPTY_MORE);
+    setColumnFilters({});
     setPage(1);
     setPageSize(25);
   }, [filtersConfig]);
@@ -453,19 +542,19 @@ function DayBookPageContent() {
       },
     );
     if (voucherSummary) items.push(voucherSummary);
-    if (appliedMore.ledgerId) {
-      items.push({
-        id: "ledger",
-        label: "Ledger",
-        value: ledgerOptions.find((ledger) => ledger.id === appliedMore.ledgerId)?.name ?? "Ledger",
-        onRemove: () => {
-          const next = { ...appliedMore, ledgerId: "" };
-          setAppliedMore(next);
-          setDraftMore(next);
-          resetPage();
-        },
-      });
-    }
+    const ledgerSummary = buildEntityFilterSummary(
+      "ledger",
+      "Ledger",
+      appliedMore.ledgerIds,
+      ledgerOptions.map((ledger) => ({ value: ledger.id, label: ledger.name })),
+      () => {
+        const next = { ...appliedMore, ledgerIds: [] as string[] };
+        setAppliedMore(next);
+        setDraftMore(next);
+        resetPage();
+      },
+    );
+    if (ledgerSummary) items.push(ledgerSummary);
     if (appliedMore.balanceSide !== "ALL") {
       items.push({
         id: "balanceSide",
@@ -509,7 +598,7 @@ function DayBookPageContent() {
   }, [appliedMore, branchOptions, branches, ledgerOptions, resetPage, voucherTypeOptions, voucherTypes]);
 
   const moreFiltersActive =
-    Number(Boolean(appliedMore.ledgerId)) +
+    Number(appliedMore.ledgerIds.length > 0) +
     Number(appliedMore.balanceSide !== "ALL") +
     Number(Boolean(appliedMore.voucherNumber)) +
     Number(Boolean(appliedMore.reference));
@@ -522,7 +611,10 @@ function DayBookPageContent() {
     (filtersConfig?.defaults.financial_year_id != null &&
       financialYearId !== filtersConfig.defaults.financial_year_id) ||
     (filtersConfig?.defaults.from_date != null && dateFrom !== filtersConfig.defaults.from_date) ||
-    (filtersConfig?.defaults.to_date != null && dateTo !== filtersConfig.defaults.to_date);
+    (filtersConfig?.defaults.to_date != null && dateTo !== filtersConfig.defaults.to_date) ||
+    Object.values(columnFilters).some(
+      (f) => f?.selectedValues && f.selectedValues.length > 0,
+    );
 
   const needsFinancialYear = ready && (!financialYearId || financialYearId === "all");
   const dateInvalid = Boolean(dateFrom && dateTo && dateFrom > dateTo);
@@ -530,6 +622,58 @@ function DayBookPageContent() {
   const hasRows = (report?.pagination.total_vouchers ?? 0) > 0;
   const exportDisabled = exporting || !queryParams || !hasRows || Boolean(reportError);
   const summary = report?.summary;
+
+  const fetchedVouchers = report?.data ?? [];
+  const filterOptionsByColumn = useMemo(() => {
+    const out: Record<string, ColumnValueOption[]> = {};
+    if ((filtersConfig?.voucher_types ?? []).length > 0) {
+      out.voucherType = (filtersConfig?.voucher_types ?? []).map((t) => ({
+        value: t.label || t.value,
+        count: 0,
+      }));
+    } else {
+      out.voucherType = collectColumnValueCounts(
+        fetchedVouchers,
+        "voucherType",
+        getDayBookFilterCell,
+      );
+    }
+    for (const key of ["voucherNo", "party", "narration"] as const) {
+      out[key] = collectColumnValueCounts(
+        fetchedVouchers,
+        key,
+        getDayBookFilterCell,
+      );
+    }
+    return out;
+  }, [fetchedVouchers, filtersConfig]);
+
+  const vouchers = useMemo(() => {
+    let next = applyAccountsColumnFilters(
+      fetchedVouchers,
+      columnFilters,
+      getDayBookFilterCell,
+    );
+    if (appliedMore.ledgerIds.length > 1) {
+      const ledgerSet = new Set(appliedMore.ledgerIds);
+      next = next.filter((voucher) =>
+        voucher.lines.some((line) => ledgerSet.has(line.ledger_id)),
+      );
+    }
+    return next;
+  }, [fetchedVouchers, columnFilters, appliedMore.ledgerIds]);
+
+  const filterableProps = useCallback(
+    (colKey: string) => ({
+      filterable: true as const,
+      filterType: "text" as const,
+      filterValue: columnFilters[colKey],
+      onFilterChange: (value: AccountsColumnFilterState | undefined) =>
+        handleColumnFilterChange(colKey, value),
+      valueOptions: filterOptionsByColumn[colKey] ?? [],
+    }),
+    [columnFilters, filterOptionsByColumn, handleColumnFilterChange],
+  );
 
   return (
     <AccountsPageShell
@@ -583,10 +727,11 @@ function DayBookPageContent() {
               options={voucherTypeOptions}
             />
             <ReportMoreFilters activeCount={moreFiltersActive}>
-              <ReportLedgerFilter
-                label="Ledger"
-                value={draftMore.ledgerId}
-                onChange={(ledgerId) => setDraftMore((current) => ({ ...current, ledgerId }))}
+              <ReportLedgerMultiFilter
+                values={draftMore.ledgerIds}
+                onChange={(ledgerIds) =>
+                  setDraftMore((current) => ({ ...current, ledgerIds }))
+                }
                 ledgers={ledgerOptions}
               />
               <div className="space-y-1">
@@ -692,10 +837,30 @@ function DayBookPageContent() {
                     <AccountsTableHeadRow>
                       <AccountsColumnHeader label="" colKey="expand" sortable={false} filterable={false} className="w-8" />
                       <AccountsColumnHeader label="Date" colKey="date" sortable={false} filterable={false} />
-                      <AccountsColumnHeader label="Voucher Type" colKey="voucherType" sortable={false} filterable={false} />
-                      <AccountsColumnHeader label="Voucher No." colKey="voucherNo" sortable={false} filterable={false} />
-                      <AccountsColumnHeader label="Ledger / Party Name" colKey="party" sortable={false} filterable={false} />
-                      <AccountsColumnHeader label="Narration" colKey="narration" sortable={false} filterable={false} />
+                      <AccountsColumnHeader
+                        label="Voucher Type"
+                        colKey="voucherType"
+                        sortable={false}
+                        {...filterableProps("voucherType")}
+                      />
+                      <AccountsColumnHeader
+                        label="Voucher No."
+                        colKey="voucherNo"
+                        sortable={false}
+                        {...filterableProps("voucherNo")}
+                      />
+                      <AccountsColumnHeader
+                        label="Ledger / Party Name"
+                        colKey="party"
+                        sortable={false}
+                        {...filterableProps("party")}
+                      />
+                      <AccountsColumnHeader
+                        label="Narration"
+                        colKey="narration"
+                        sortable={false}
+                        {...filterableProps("narration")}
+                      />
                       <AccountsColumnHeader label="Debit" colKey="debit" align="right" sortable={false} filterable={false} />
                       <AccountsColumnHeader label="Credit" colKey="credit" align="right" sortable={false} filterable={false} />
                       <AccountsColumnHeader label="View" colKey="view" sortable={false} filterable={false} />
@@ -704,14 +869,14 @@ function DayBookPageContent() {
                   <AccountsTableBody>
                     {reportError ? (
                       <AccountsTableEmpty colSpan={COL_SPAN} message={reportError.message} />
-                    ) : !report || report.data.length === 0 ? (
+                    ) : !report || vouchers.length === 0 ? (
                       <AccountsTableEmpty
                         colSpan={COL_SPAN}
                         message="No posted accounting transactions found for the selected period."
                         onClear={hasFilters ? resetFilters : undefined}
                       />
                     ) : (
-                      report.data.map((voucher) => {
+                      vouchers.map((voucher) => {
                         const open = expanded.has(voucher.accounting_voucher_id);
                         const unbalanced = fullVoucherUnbalanced(voucher);
                         return (

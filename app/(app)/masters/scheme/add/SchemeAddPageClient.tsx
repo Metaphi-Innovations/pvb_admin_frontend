@@ -76,7 +76,11 @@ export default function SchemeAddPageClient() {
         id: item.customer_id,
         name: `${item.customer_code} — ${item.customer_name}`,
         customerTypeId:
-          item.customer_type_id ?? item.customer_type?.customer_type_id ?? null,
+          item.customer_type_id ??
+          item.customer_type?.customer_type_id ??
+          item.customer_type?.id ??
+          null,
+        billingState: item.billing_state ?? null,
       })),
     [customerQuery.data],
   );
@@ -113,6 +117,9 @@ export default function SchemeAddPageClient() {
       customerIds: customerSelectOptions.map((o) => o.id),
       customerTypeByCustomerId: Object.fromEntries(
         customerSelectOptions.map((o) => [o.id, o.customerTypeId]),
+      ),
+      customerStateByCustomerId: Object.fromEntries(
+        customerSelectOptions.map((o) => [o.id, o.billingState]),
       ),
       stateNames: stateSelectOptions.map((o) => o.id),
       productIds: productSelectOptions.map((o) => o.value),

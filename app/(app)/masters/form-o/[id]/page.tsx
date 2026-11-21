@@ -199,7 +199,6 @@ export default function FormOViewPage() {
                 <thead className="bg-slate-50">
                   <tr>
                     <th className="px-2 py-2 text-left">#</th>
-                    <th className="px-2 py-2 text-left">Category</th>
                     <th className="px-2 py-2 text-left">Product</th>
                     <th className="px-2 py-2 text-left">Brand</th>
                     <th className="px-2 py-2 text-left">Source</th>
@@ -209,7 +208,6 @@ export default function FormOViewPage() {
                   {(record.lines || []).map((line: any) => (
                     <tr key={line.form_o_line_id} className="border-t">
                       <td className="px-2 py-1.5">{line.line_no}</td>
-                      <td className="px-2 py-1.5">{line.category_name}</td>
                       <td className="px-2 py-1.5">{line.product_name}</td>
                       <td className="px-2 py-1.5">{line.brand_name}</td>
                       <td className="px-2 py-1.5">{line.source}</td>

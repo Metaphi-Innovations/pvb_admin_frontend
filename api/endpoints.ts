@@ -643,6 +643,7 @@ export const API_ENDPOINTS = {
       ORDERS_DROPDOWN: "/warehouse/packing-list/orders-dropdown",
       FILTER_DROPDOWN: "/warehouse/packing-list/filter-dropdown",
       LIST: "/warehouse/packing-list/list",
+      EXPORT_READY_SUMMARY: "/warehouse/packing-list/export-ready-summary",
       CREATE: "/warehouse/packing-list/create",
       BULK_UPLOAD: "/warehouse/packing-list/bulk-upload",
       DETAILS: (id: string) => `/warehouse/packing-list/details/${id}`,

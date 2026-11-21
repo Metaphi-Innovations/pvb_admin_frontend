@@ -11,7 +11,7 @@ import {
   ReportFilterRow,
   ReportFinancialYearFilter,
   ReportAsOnDateFilter,
-  ReportBranchFilter,
+  ReportBranchMultiFilter,
   ReportFilterSummary,
   ReportLedgerFilter,
   ReportMoreFilters,
@@ -66,7 +66,7 @@ export default function BalanceSheetPageClient() {
   const [asOnDate, setAsOnDate] = useState("");
   const [datesReady, setDatesReady] = useState(false);
   const [financialYearId, setFinancialYearId] = useState("");
-  const [warehouseId, setWarehouseId] = useState("all");
+  const [warehouseIds, setWarehouseIds] = useState<string[]>([]);
   const [groupId, setGroupId] = useState("all");
   const [subGroupId, setSubGroupId] = useState("all");
   const [ledgerId, setLedgerId] = useState("all");
@@ -89,7 +89,14 @@ export default function BalanceSheetPageClient() {
     const urlFy = searchParams.get("fy") ?? searchParams.get("fyId") ?? "";
     const urlBranch = searchParams.get("branch") ?? searchParams.get("warehouse") ?? "";
     if (urlFy && urlFy !== "all") setFinancialYearId(urlFy);
-    if (urlBranch && urlBranch !== "all" && !urlBranch.includes(",")) setWarehouseId(urlBranch);
+    if (urlBranch && urlBranch !== "all") {
+      setWarehouseIds(
+        urlBranch
+          .split(",")
+          .map((v) => v.trim())
+          .filter((v) => v && v.toLowerCase() !== "all"),
+      );
+    }
     const urlGroup = searchParams.get("groupId") ?? "";
     const urlSub = searchParams.get("subGroupId") ?? "";
     const urlLedger = searchParams.get("ledgerId") ?? "";
@@ -228,7 +235,7 @@ export default function BalanceSheetPageClient() {
       report_type: reportType,
       financial_year_id: financialYearId,
       as_on_date: asOnDate,
-      warehouse_id: warehouseId !== "all" ? warehouseId : undefined,
+      warehouse_id: warehouseIds.length === 1 ? warehouseIds[0] : undefined,
       group_id: groupId !== "all" ? groupId : undefined,
       sub_group_id: subGroupId !== "all" ? subGroupId : undefined,
       ledger_id: ledgerId !== "all" ? ledgerId : undefined,
@@ -238,7 +245,7 @@ export default function BalanceSheetPageClient() {
     datesReady,
     financialYearId,
     asOnDate,
-    warehouseId,
+    warehouseIds,
     reportType,
     groupId,
     subGroupId,
@@ -274,7 +281,10 @@ export default function BalanceSheetPageClient() {
       financialYearId,
       asOnDate,
       reportType,
-      warehouseId,
+      warehouseId:
+        warehouseIds.length === 0
+          ? "all"
+          : warehouseIds.join(","),
       groupId,
       subGroupId,
       ledgerId,
@@ -287,7 +297,7 @@ export default function BalanceSheetPageClient() {
     financialYearId,
     asOnDate,
     reportType,
-    warehouseId,
+    warehouseIds,
     groupId,
     subGroupId,
     ledgerId,
@@ -340,7 +350,7 @@ export default function BalanceSheetPageClient() {
         : null;
     setFinancialYearId(fyId);
     setAsOnDate(bounds ? defaultAsOnDate(bounds, todayIso()) : asOnDate);
-    setWarehouseId("all");
+    setWarehouseIds([]);
     setReportType("DETAILED");
     clearDisplayFilters();
   }, [filtersConfig, selectedFY, financialYearId, asOnDate, clearDisplayFilters]);
@@ -373,7 +383,7 @@ export default function BalanceSheetPageClient() {
     (ledgerId !== "all" ? 1 : 0) +
     (showZero !== showZeroDefault ? 1 : 0);
   const scopeChanged =
-    warehouseId !== "all" ||
+    warehouseIds.length > 0 ||
     (selectedFy && asOnDate !== defaultAsOnDate(
       { start: selectedFy.start_date, end: selectedFy.end_date },
       todayIso(),
@@ -424,9 +434,12 @@ export default function BalanceSheetPageClient() {
     report?.scope.financial_year_name ?? selectedFy?.name ?? selectedFY?.label ?? "";
   const branchLabel =
     report?.scope.warehouse_name ??
-    (warehouseId === "all"
+    (warehouseIds.length === 0
       ? "All Branches"
-      : branchOptions.find((branch) => branch.id === warehouseId)?.name ?? warehouseId);
+      : warehouseIds.length === 1
+        ? branchOptions.find((branch) => branch.id === warehouseIds[0])?.name ??
+          warehouseIds[0]
+        : `${warehouseIds.length} branches`);
   const movementFrom = report?.scope.movement_from_date ?? fyBounds?.start ?? "";
 
   return (
@@ -458,7 +471,11 @@ export default function BalanceSheetPageClient() {
             min={fyBounds?.start}
             max={fyBounds?.end}
           />
-          <ReportBranchFilter value={warehouseId} onChange={setWarehouseId} options={branchOptions} />
+          <ReportBranchMultiFilter
+            values={warehouseIds}
+            onChange={setWarehouseIds}
+            labeledOptions={branchOptions.map((b) => ({ value: b.id, label: b.name }))}
+          />
           <ReportMoreFilters activeCount={moreFiltersActiveCount}>
             <ReportLedgerFilter
               label="Group"
@@ -561,7 +578,7 @@ export default function BalanceSheetPageClient() {
               financialYearId,
               fromDate: movementFrom,
               toDate: report?.scope.as_on_date || asOnDate,
-              warehouseId: warehouseId !== "all" ? warehouseId : undefined,
+              warehouseId: warehouseIds.length === 1 ? warehouseIds[0] : undefined,
             }}
           />
         )}

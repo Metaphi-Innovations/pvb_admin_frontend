@@ -12,6 +12,7 @@ import {
   openEditablePdfPreview,
   loadNavbarLogoDataUrl,
   sanitizePdfFileName,
+  stripGstAddressFieldLabels,
 } from "@/lib/pdf/paramverse";
 
 function readRecord(value: unknown): Record<string, unknown> {
@@ -22,6 +23,14 @@ function readRecord(value: unknown): Record<string, unknown> {
 function stateCodeFromGstin(gstin: string): string {
   const digits = String(gstin || "").replace(/\s/g, "");
   if (digits.length >= 2 && /^\d{2}/.test(digits)) return digits.slice(0, 2);
+  return "";
+}
+
+function panFromGstin(gstin: string): string {
+  const digits = String(gstin || "").replace(/\s/g, "").toUpperCase();
+  if (digits.length >= 12 && /^\d{2}[A-Z]{5}\d{4}[A-Z]/.test(digits)) {
+    return digits.slice(2, 12);
+  }
   return "";
 }
 
@@ -69,16 +78,19 @@ function partyFromWarehouse(
   wh: Record<string, unknown>,
   fallbackName = "—",
 ): { name: string; lines: string[] } {
-  const contact = Array.isArray(wh.contacts)
-    ? readRecord((wh.contacts as unknown[])[0])
-    : {};
+  const contacts = Array.isArray(wh.contacts)
+    ? (wh.contacts as unknown[]).map((c) => readRecord(c))
+    : [];
+  const primaryContact =
+    contacts.find((c) => Boolean(c.is_primary)) || contacts[0] || {};
   const name = asText(
     wh.registered_legal_name || wh.warehouse_name || fallbackName,
     fallbackName,
   );
-  const address =
+  const address = stripGstAddressFieldLabels(
     asText(wh.address ?? wh.address_1 ?? wh.registered_gst_address, "") ||
-    [asText(wh.address, ""), asText(wh.address_1, "")].filter(Boolean).join(", ");
+      [asText(wh.address, ""), asText(wh.address_1, "")].filter(Boolean).join(", "),
+  );
   const cityStatePin = [
     asText(wh.city || wh.town || wh.district, ""),
     asText(wh.state, ""),
@@ -90,7 +102,17 @@ function partyFromWarehouse(
   const gstin = asText(wh.gst_number || wh.gstin, "");
   const stateCode = stateCodeFromGstin(gstin);
   const mobile = asText(
-    contact.mobile || contact.phone || wh.mobile || wh.phone,
+    primaryContact.mobile_number ||
+      primaryContact.mobile ||
+      primaryContact.phone ||
+      wh.mobile_number ||
+      wh.mobile_no ||
+      wh.mobile ||
+      wh.phone,
+    "",
+  );
+  const pan = asText(
+    wh.pan || wh.pan_no || wh.pan_number || panFromGstin(gstin),
     "",
   );
   const branchCode = warehouseBranchCode(wh);
@@ -98,8 +120,13 @@ function partyFromWarehouse(
   const lines: string[] = [];
   if (address) lines.push(address);
   if (cityStatePin) lines.push(cityStatePin);
-  if (gstin) lines.push(`GSTIN ${gstin}   State Code ${stateCode}`);
-  if (mobile) lines.push(`Mobile ${mobile}`);
+  const taxIds = [
+    gstin ? `GSTIN : ${gstin}` : "",
+    stateCode ? `State Code : ${stateCode}` : "",
+    pan ? `PAN : ${pan}` : "",
+    mobile ? `Mobile : ${mobile}` : "",
+  ].filter(Boolean);
+  if (taxIds.length) lines.push(taxIds.join("; "));
   if (branchCode) lines.push(`Branch Code: ${branchCode}`);
 
   return { name, lines };

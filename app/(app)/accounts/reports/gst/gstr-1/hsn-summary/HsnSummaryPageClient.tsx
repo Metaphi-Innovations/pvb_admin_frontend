@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
@@ -36,11 +36,15 @@ import {
   AccountsTableBody,
   AccountsTableCell,
   AccountsTableHead,
-  AccountsTableHeadCell,
   AccountsTableHeadRow,
   AccountsTableRow,
   AccountsTableScroll,
 } from "@/components/accounts/AccountsTable";
+import {
+  AccountsColumnFilterProvider,
+  SortTh,
+  useAccountsFilteredRows,
+} from "@/app/(app)/accounts/components/AccountsUI";
 import {
   ReportFilterRow,
   ReportDateRangeFilter,
@@ -50,6 +54,7 @@ import {
   ReportMoreFilters,
   ReportFilterSummary,
   ReportFilterField,
+  ReportStatusMultiFilter,
   ACCOUNTS_FILTER_LABEL_CLASS as filterLabelClass,
   ACCOUNTS_FILTER_CONTROL_CLASS as filterControlClass,
   REPORT_BRANCH_OPTIONS,
@@ -58,6 +63,7 @@ import {
   buildBranchFilterSummary,
   buildEntityFilterSummary,
   countActiveMoreFilters,
+  formatMultiSelectLabel,
   isMultiFilterActive,
   normalizeMultiFilter,
 } from "@/lib/accounts/report-multi-filter-utils";
@@ -91,10 +97,37 @@ import { exportHsnSummaryToExcel, exportHsnSummaryToPdf } from "./gstr1-hsn-summ
 import { HsnSummaryDetailSheet } from "./components/HsnSummaryDetailSheet";
 import { useDebouncedValue } from "../../../pl/pl-hooks";
 
+
+function getHsnFilterCell(row: HsnSummaryRow, colKey: string): string {
+  switch (colKey) {
+    case "hsnCode":
+      return row.hsnCode || "";
+    case "description":
+      return row.description || "";
+    case "uqc":
+      return row.uqc || "";
+    case "status":
+      return row.status || "";
+    default:
+      return "";
+  }
+}
+
+function HsnFilteredRows({
+  rows,
+  children,
+}: {
+  rows: HsnSummaryRow[];
+  children: (visible: HsnSummaryRow[]) => ReactNode;
+}) {
+  const visible = useAccountsFilteredRows(rows);
+  return <>{children(visible)}</>;
+}
+
+
 const PLACEHOLDER_DATE = "2025-04-01";
 
-const GST_RATE_OPTIONS: { value: HsnGstRateFilter; label: string }[] = [
-  { value: "all", label: "All rates" },
+const GST_RATE_OPTIONS: { value: string; label: string }[] = [
   { value: "0", label: "0%" },
   { value: "5", label: "5%" },
   { value: "12", label: "12%" },
@@ -102,8 +135,7 @@ const GST_RATE_OPTIONS: { value: HsnGstRateFilter; label: string }[] = [
   { value: "28", label: "28%" },
 ];
 
-const STATUS_OPTIONS: { value: HsnStatusFilter; label: string }[] = [
-  { value: "all", label: "All" },
+const STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: "valid", label: "Valid" },
   { value: "exception", label: "Exception" },
 ];
@@ -150,8 +182,8 @@ export default function HsnSummaryPageClient() {
   const [branch, setBranch] = useState<string[]>([]);
   const [warehouse, setWarehouse] = useState<string[]>([]);
   const [hsnCode, setHsnCode] = useState("");
-  const [gstRate, setGstRate] = useState<HsnGstRateFilter>("all");
-  const [status, setStatus] = useState<HsnStatusFilter>("all");
+  const [gstRates, setGstRates] = useState<string[]>([]);
+  const [statuses, setStatuses] = useState<string[]>([]);
   const [exporting, setExporting] = useState(false);
   const [viewRow, setViewRow] = useState<HsnSummaryRow | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -178,8 +210,8 @@ export default function HsnSummaryPageClient() {
       branch: [],
       warehouse: [],
       hsnCode: "",
-      gstRate: "all",
-      status: "all",
+      gstRate: [],
+      status: [],
     });
     setFinancialYearId(parsed.financialYearId);
     setDateFrom(parsed.dateFrom);
@@ -187,8 +219,8 @@ export default function HsnSummaryPageClient() {
     setBranch(normalizeMultiFilter(parsed.branch));
     setWarehouse(normalizeMultiFilter(parsed.warehouse));
     setHsnCode(parsed.hsnCode);
-    setGstRate(parsed.gstRate);
-    setStatus(parsed.status);
+    setGstRates(parsed.gstRate);
+    setStatuses(parsed.status);
     setPreset("custom");
   }, [searchParams, datesReady]);
 
@@ -219,8 +251,8 @@ export default function HsnSummaryPageClient() {
       branch,
       warehouse,
       hsnCode: debouncedHsn,
-      gstRate,
-      status,
+      gstRate: gstRates,
+      status: statuses,
     }),
     [
       financialYearId,
@@ -229,8 +261,8 @@ export default function HsnSummaryPageClient() {
       branch,
       warehouse,
       debouncedHsn,
-      gstRate,
-      status,
+      gstRates,
+      statuses,
       refreshKey,
     ],
   );
@@ -272,23 +304,23 @@ export default function HsnSummaryPageClient() {
   const backHref = `/accounts/reports/gst?${buildHsnSummaryFilterQuery({
     ...filters,
     hsnCode: "",
-    gstRate: "all",
-    status: "all",
+    gstRate: [],
+    status: [],
   })}`;
 
   const hasFilters =
     isMultiFilterActive(branch) ||
     isMultiFilterActive(warehouse) ||
     hsnCode.trim() !== "" ||
-    gstRate !== "all" ||
-    status !== "all";
+    gstRates.length > 0 ||
+    statuses.length > 0;
 
   const resetFilters = () => {
     setBranch([]);
     setWarehouse([]);
     setHsnCode("");
-    setGstRate("all");
-    setStatus("all");
+    setGstRates([]);
+    setStatuses([]);
   };
 
   const filterSummaryItems = useMemo(
@@ -314,10 +346,10 @@ export default function HsnSummaryPageClient() {
       branch: resolveBranchFilterLabel(branch),
       warehouse: resolveWarehouseFilterLabel(warehouse),
       hsnCode: debouncedHsn,
-      gstRate: GST_RATE_OPTIONS.find((o) => o.value === gstRate)?.label ?? gstRate,
-      status: STATUS_OPTIONS.find((o) => o.value === status)?.label ?? status,
+      gstRate: formatMultiSelectLabel(gstRates, GST_RATE_OPTIONS, "Rate", "All rates"),
+      status: formatMultiSelectLabel(statuses, STATUS_OPTIONS, "Status", "All"),
     }),
-    [financialYearId, dateFrom, dateTo, branch, warehouse, debouncedHsn, gstRate, status],
+    [financialYearId, dateFrom, dateTo, branch, warehouse, debouncedHsn, gstRates, statuses],
   );
 
   const handleExportExcel = async () => {
@@ -377,34 +409,18 @@ export default function HsnSummaryPageClient() {
             ))}
           </datalist>
         </ReportFilterField>
-        <ReportFilterField label="GST Rate" minWidthClass="min-w-[120px]">
-          <Select value={gstRate} onValueChange={(v) => setGstRate(v as HsnGstRateFilter)}>
-            <SelectTrigger className={cn(filterControlClass, "mt-0 w-full")}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {GST_RATE_OPTIONS.map((o) => (
-                <SelectItem key={o.value} value={o.value} className="text-xs">
-                  {o.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </ReportFilterField>
-        <ReportFilterField label="Status" minWidthClass="min-w-[120px]">
-          <Select value={status} onValueChange={(v) => setStatus(v as HsnStatusFilter)}>
-            <SelectTrigger className={cn(filterControlClass, "mt-0 w-full")}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {STATUS_OPTIONS.map((o) => (
-                <SelectItem key={o.value} value={o.value} className="text-xs">
-                  {o.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </ReportFilterField>
+        <ReportStatusMultiFilter
+          label="GST Rate"
+          values={gstRates}
+          onChange={setGstRates}
+          options={GST_RATE_OPTIONS}
+        />
+        <ReportStatusMultiFilter
+          label="Status"
+          values={statuses}
+          onChange={setStatuses}
+          options={STATUS_OPTIONS}
+        />
         {hasFilters && (
           <Button variant="outline" size="sm" className="h-8 text-sm px-2" onClick={resetFilters}>
             Reset
@@ -475,29 +491,35 @@ export default function HsnSummaryPageClient() {
               )}
             </div>
           ) : (
+            <AccountsColumnFilterProvider
+              rows={report.rows}
+              getCellValue={getHsnFilterCell}
+            >
             <AccountsTableScroll className="flex-1 min-h-0">
               <AccountsTable minWidth={1900}>
                 <AccountsTableHead>
                   <AccountsTableHeadRow>
-                    <AccountsTableHeadCell>HSN / SAC</AccountsTableHeadCell>
-                    <AccountsTableHeadCell>Description</AccountsTableHeadCell>
-                    <AccountsTableHeadCell>UQC / Unit</AccountsTableHeadCell>
-                    <AccountsTableHeadCell align="right">Total Qty</AccountsTableHeadCell>
-                    <AccountsTableHeadCell align="right">Gross Value</AccountsTableHeadCell>
-                    <AccountsTableHeadCell align="right">Sales Return</AccountsTableHeadCell>
-                    <AccountsTableHeadCell align="right">Net Taxable</AccountsTableHeadCell>
-                    <AccountsTableHeadCell>GST Rate</AccountsTableHeadCell>
-                    <AccountsTableHeadCell align="right">CGST</AccountsTableHeadCell>
-                    <AccountsTableHeadCell align="right">SGST</AccountsTableHeadCell>
-                    <AccountsTableHeadCell align="right">IGST</AccountsTableHeadCell>
-                    <AccountsTableHeadCell align="right">Cess</AccountsTableHeadCell>
-                    <AccountsTableHeadCell align="right">Total Tax</AccountsTableHeadCell>
-                    <AccountsTableHeadCell>Status</AccountsTableHeadCell>
-                    <AccountsTableHeadCell className="w-28">Action</AccountsTableHeadCell>
+                    <SortTh label="HSN / SAC" colKey="hsnCode" sortable={false} />
+                    <SortTh label="Description" colKey="description" sortable={false} />
+                    <SortTh label="UQC / Unit" colKey="uqc" sortable={false} />
+                    <SortTh label="Total Qty" colKey="totalQty" sortable={false} filterable={false} align="right" />
+                    <SortTh label="Gross Value" colKey="grossValue" sortable={false} filterable={false} align="right" />
+                    <SortTh label="Sales Return" colKey="salesReturn" sortable={false} filterable={false} align="right" />
+                    <SortTh label="Net Taxable" colKey="netTaxable" sortable={false} filterable={false} align="right" />
+                    <SortTh label="GST Rate" colKey="gstRate" sortable={false} filterable={false} />
+                    <SortTh label="CGST" colKey="cgst" sortable={false} filterable={false} align="right" />
+                    <SortTh label="SGST" colKey="sgst" sortable={false} filterable={false} align="right" />
+                    <SortTh label="IGST" colKey="igst" sortable={false} filterable={false} align="right" />
+                    <SortTh label="Cess" colKey="cess" sortable={false} filterable={false} align="right" />
+                    <SortTh label="Total Tax" colKey="totalTax" sortable={false} filterable={false} align="right" />
+                    <SortTh label="Status" colKey="status" sortable={false} />
+                    <SortTh label="Action" colKey="_actions" sortable={false} filterable={false} className="w-28" />
                   </AccountsTableHeadRow>
                 </AccountsTableHead>
                 <AccountsTableBody>
-                  {report.rows.map((row) => {
+                  <HsnFilteredRows rows={report.rows}>
+                    {(visibleRows) =>
+                      visibleRows.map((row) => {
                     const primaryFix =
                       row.status === "exception" && row.exceptions[0]
                         ? resolveHsnExceptionFixAction(row.exceptions[0].code, row)
@@ -583,10 +605,13 @@ export default function HsnSummaryPageClient() {
                         </AccountsTableCell>
                       </AccountsTableRow>
                     );
-                  })}
+                      })
+                    }
+                  </HsnFilteredRows>
                 </AccountsTableBody>
               </AccountsTable>
             </AccountsTableScroll>
+            </AccountsColumnFilterProvider>
           )}
         </AccountsListingTableCard>
       </AccountsReportBody>

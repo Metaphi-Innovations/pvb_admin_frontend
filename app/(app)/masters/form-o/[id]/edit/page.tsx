@@ -537,7 +537,6 @@ export default function FormOEditPage() {
             <table className="w-full text-sm">
               <thead className="bg-slate-50">
                 <tr>
-                  <th className="px-2 py-2 text-left">Category</th>
                   <th className="px-2 py-2 text-left">Product Name</th>
                   <th className="px-2 py-2 text-left">Brand</th>
                   <th className="px-2 py-2 text-left">Source</th>
@@ -547,14 +546,6 @@ export default function FormOEditPage() {
               <tbody>
                 {lines.map((line) => (
                   <tr key={line.key} className="border-t">
-                    <td className="px-2 py-1.5">
-                      <Input
-                        value={line.category_name}
-                        onChange={(e) =>
-                          updateLine(line.key, { category_name: e.target.value })
-                        }
-                      />
-                    </td>
                     <td className="px-2 py-1.5">
                       <Input
                         value={line.product_name}
