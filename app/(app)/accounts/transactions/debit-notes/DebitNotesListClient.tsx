@@ -241,6 +241,7 @@ function DebitNotesRecordsTable({
             <SortTh label="Against PI" colKey="sourceInvoiceNo" />
             */}
             <SortTh label="Supplier" colKey="vendorName" className="accounts-col-party" />
+            <SortTh label="PAN No." colKey="panNo" />
             <SortTh label="Warehouse" colKey="branch" />
             <SortTh label="Date" colKey="debitNoteDate" filterType="date" />
             <SortTh label="Taxable" colKey="taxableAmount" filterType="amount" align="right" />
@@ -266,13 +267,13 @@ function DebitNotesRecordsTable({
         </AccountsTableHead>
         <AccountsTableBody>
           {error ? (
-            <AccountsTableEmpty colSpan={12} message={error} />
+            <AccountsTableEmpty colSpan={13} message={error} />
           ) : loading && toolbarFiltered.length === 0 ? (
-            <AccountsTableLoading colSpan={12} message="Loading debit notes…" />
+            <AccountsTableLoading colSpan={13} message="Loading debit notes…" />
           ) : toolbarFiltered.length === 0 ? (
-            <AccountsTableEmpty colSpan={12} message="No debit notes found." />
+            <AccountsTableEmpty colSpan={13} message="No debit notes found." />
           ) : visible.length === 0 ? (
-            <AccountsTableEmpty colSpan={12} message="No records match the column filters." />
+            <AccountsTableEmpty colSpan={13} message="No records match the column filters." />
           ) : (
             pagedRows.map((r) => {
               const badge = noteWorkflowStatusToBadge(r.status);
@@ -304,6 +305,9 @@ function DebitNotesRecordsTable({
                   */}
                   <AccountsTableCell className="accounts-col-party font-medium truncate text-xs" title={r.vendorName}>
                     {r.vendorName}
+                  </AccountsTableCell>
+                  <AccountsTableCell mono className="text-xs whitespace-nowrap">
+                    {r.panNo || "—"}
                   </AccountsTableCell>
                   <AccountsTableCell className="truncate text-xs">
                     {r.branch || "—"}
@@ -773,6 +777,7 @@ export default function DebitNotesListClient() {
       source: { type: "text" as const },
       // sourceInvoiceNo: { type: "text" as const }, // Against PI — unused
       vendorName: { type: "text" as const },
+      panNo: { type: "text" as const },
       branch: { type: "text" as const },
       debitNoteDate: { type: "date" as const },
       taxableAmount: { type: "amount" as const },

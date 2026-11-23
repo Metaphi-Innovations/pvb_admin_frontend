@@ -26,6 +26,8 @@ import {
 } from "../../components/SalesReturnProductForm";
 import {
   enrichDispatchForReturn,
+  resolveReturnPackLabel,
+  resolveReturnProductCode,
   resolveReturnUnitRateFromDispatchItem,
 } from "../../sales-return-utils";
 import type { DispatchRecord } from "@/app/(app)/warehouse/dispatch/types";
@@ -58,9 +60,13 @@ function mapBackendDispatchToFrontend(backendDispatch: any): DispatchRecord {
     // Match SO line total (discount + GST), not list unit_price alone.
     const unitRate = resolveReturnUnitRateFromDispatchItem(item);
 
+    const productCode = resolveReturnProductCode(item);
+    const packLabel = resolveReturnPackLabel(item);
+
     return {
       product: item.product?.product_name || "Unknown Product",
-      sku: item.product?.sku || item.product?.product_code || "",
+      // Identity key must be product_code — master sku is often pack size (e.g. 500ml).
+      sku: productCode,
       packedQty: cases,
       dispatchQty: cases,
       unitRate: unitRate,
@@ -72,7 +78,11 @@ function mapBackendDispatchToFrontend(backendDispatch: any): DispatchRecord {
       uom: snap.base_unit || snap.unit || item.product?.unit || null,
       unitPackSize: snap.pack_size || snap.unit_size || null,
       netWeight: snap.net_weight || snap.netWeight || null,
-      productSnapshot: snap,
+      productSnapshot: {
+        ...snap,
+        product_code: productCode || snap.product_code,
+        pack_label: packLabel || undefined,
+      },
       batchAllocations: [
         {
           batchNumber: item.inventory_batch?.batch_no || item.batch_code || "",
@@ -276,13 +286,13 @@ export default function NewSalesReturnPage() {
 
       const items = productsToReturn.map((retItem) => {
         const matchedItem = rawDispatchDetails.items?.find((di: any) => {
-          const diSku = di.product?.sku || di.product?.product_code || "";
+          const diCode = resolveReturnProductCode(di);
           const diBatch = di.inventory_batch?.batch_no || di.batch_code || "";
-          return diSku === retItem.sku && diBatch === retItem.batchNo;
+          return diCode === retItem.sku && diBatch === retItem.batchNo;
         });
 
         if (!matchedItem) {
-          throw new Error(`Could not find dispatch item for SKU: ${retItem.sku}, Batch: ${retItem.batchNo}`);
+          throw new Error(`Could not find dispatch item for Code: ${retItem.sku}, Batch: ${retItem.batchNo}`);
         }
 
         let batchKey = "";

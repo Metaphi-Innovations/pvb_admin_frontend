@@ -371,6 +371,8 @@ export type SalesInvoiceListDto = {
   eway_bill_qr_code?: string | null;
   dispatch?: {
     dispatch_number?: string | null;
+    dispatch_date?: string | null;
+    status?: string | null;
     source_id?: string | null;
     source_type?: string | null;
     transporter?: string | null;
@@ -391,6 +393,7 @@ export type SalesInvoiceListDto = {
     customer_id: string;
     customer_code?: string | null;
     customer_name?: string | null;
+    pan_no?: string | null;
   } | null;
   warehouse?: {
     warehouse_id: string;
@@ -400,9 +403,15 @@ export type SalesInvoiceListDto = {
   warehouse_snapshot?: Record<string, unknown> | null;
   destination_warehouse_snapshot?: Record<string, unknown> | null;
   dispatch_number?: string | null;
+  /** Linked dispatch date (material left warehouse). */
+  dispatch_date?: string | null;
+  /** Linked dispatch workflow status (e.g. DISPATCHED, INVOICE_GENERATED, DELIVERED). */
+  dispatch_status?: string | null;
   sales_order?: {
     sales_order_id?: string | null;
     so_number?: string | null;
+    /** Promised / requested SO delivery date. */
+    delivery_date?: string | null;
     salesperson_name?: string | null;
   } | null;
   stock_transfer?: {

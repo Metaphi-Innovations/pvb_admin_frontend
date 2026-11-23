@@ -69,6 +69,7 @@ export interface PurchaseRegisterApiRow extends PurchaseRegisterGstr2bOverlay {
     id: string | null;
     name: string;
     gstin: string | null;
+    pan: string | null;
     state: string | null;
   };
   recipient_gstin: string | null;

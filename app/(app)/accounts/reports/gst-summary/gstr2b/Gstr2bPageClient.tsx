@@ -1016,8 +1016,10 @@ export default function Gstr2bPageClient() {
               <p className="text-sm font-medium text-foreground">
                 No GSTR-2B imported for this GSTIN/period.
               </p>
-              <p className="text-xs text-muted-foreground">
-                Upload GSTR-2B JSON to begin ITC reconciliation.
+              <p className="text-xs text-muted-foreground max-w-md">
+                Uploaded files only appear when the filter GST registration and
+                GST Period match the upload. Open History to see imports for
+                other months, or upload GSTR-2B JSON for this selection.
               </p>
               <Button
                 size="sm"

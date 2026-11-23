@@ -73,7 +73,9 @@ export type CreditNoteListApiRow = {
     customer_id?: string;
     customer_code?: string | null;
     customer_name?: string | null;
+    pan_no?: string | null;
   } | null;
+  customer_snapshot?: Record<string, unknown> | null;
   warehouse?: {
     warehouse_id?: string;
     warehouse_name?: string | null;
@@ -106,6 +108,7 @@ export type PendingCreditNoteListApiRow = {
     customer_id?: string;
     customer_code?: string | null;
     customer_name?: string | null;
+    pan_no?: string | null;
   } | null;
   warehouse?: {
     warehouse_id?: string;

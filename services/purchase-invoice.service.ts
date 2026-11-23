@@ -308,6 +308,7 @@ export type PurchaseInvoiceListDto = {
     supplier_code?: string | null;
     supplier_name?: string | null;
     gstin_number?: string | null;
+    pan_number?: string | null;
     bank_accounts?: Array<{
       payment_type?: string | null;
       credit_days?: number | string | null;
@@ -481,6 +482,8 @@ export type PurchaseInvoiceListRow = {
   invoiceDate: string;
   vendorInvoiceNo: string;
   vendorName: string;
+  /** Supplier PAN for TDS working sheet. */
+  panNo?: string;
   warehouseName: string;
   sourceType: PurchaseSourceType;
   invoiceType: PurchaseInvoiceBackendType | null;
@@ -1055,6 +1058,16 @@ export function mapPurchaseInvoiceListDto(
   const amountPaid = asNumber(dto.amount_paid);
   const purchaseNature = sourceType === "direct_purchase" ? "expense" : null;
   const snapshot = (dto.supplier_snapshot || null) as Record<string, unknown> | null;
+  const panNo =
+    sourceType === "stock_transfer"
+      ? ""
+      : (
+          dto.supplier?.pan_number ||
+          snapshotStr(snapshot, "pan_number", "pan_no", "pan") ||
+          ""
+        )
+          .trim()
+          .toUpperCase();
   return {
     id: dto.purchase_invoice_id,
     invoiceNo: dto.purchase_invoice_number,
@@ -1069,6 +1082,7 @@ export function mapPurchaseInvoiceListDto(
         : dto.supplier?.supplier_name ||
           snapshotStr(snapshot, "supplier_name", "name") ||
           "—",
+    panNo: panNo || undefined,
     warehouseName: dto.warehouse?.warehouse_name || "—",
     sourceType,
     invoiceType: dto.invoice_type,
@@ -1119,6 +1133,7 @@ export function mapEligibleGrnToListRow(dto: EligibleGrnDto): PurchaseInvoiceLis
     invoiceDate: asDateOnly(dto.supplier_invoice_date) || asDateOnly(dto.grn_date),
     vendorInvoiceNo: asString(dto.supplier_invoice_no),
     vendorName: dto.supplier_name || "—",
+    panNo: undefined,
     warehouseName: dto.warehouse_name || "—",
     sourceType: "from_grn",
     invoiceType: null,
