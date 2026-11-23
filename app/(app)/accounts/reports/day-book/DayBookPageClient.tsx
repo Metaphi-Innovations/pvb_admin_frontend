@@ -70,7 +70,7 @@ import type {
   DayBookVoucher,
 } from "@/types/day-book.types";
 
-const COL_SPAN = 9;
+const COL_SPAN = 10;
 const PAGE_PATH = "/accounts/reports/day-book";
 
 const EMPTY_MORE: DayBookMoreFilters = {
@@ -135,6 +135,8 @@ function getDayBookFilterCell(voucher: DayBookVoucher, colKey: string): string {
       return voucher.voucher_number || "";
     case "party":
       return displayParty(voucher.party_or_reference);
+    case "pan":
+      return voucher.party_pan?.trim() || "";
     case "narration":
       return voucher.narration?.trim() || "";
     default:
@@ -638,7 +640,7 @@ function DayBookPageContent() {
         getDayBookFilterCell,
       );
     }
-    for (const key of ["voucherNo", "party", "narration"] as const) {
+    for (const key of ["voucherNo", "party", "pan", "narration"] as const) {
       out[key] = collectColumnValueCounts(
         fetchedVouchers,
         key,
@@ -856,6 +858,12 @@ function DayBookPageContent() {
                         {...filterableProps("party")}
                       />
                       <AccountsColumnHeader
+                        label="PAN No."
+                        colKey="pan"
+                        sortable={false}
+                        {...filterableProps("pan")}
+                      />
+                      <AccountsColumnHeader
                         label="Narration"
                         colKey="narration"
                         sortable={false}
@@ -999,6 +1007,9 @@ function FragmentRows({
         </AccountsTableCell>
         <AccountsTableCell className="max-w-[180px] truncate py-2" title={displayParty(voucher.party_or_reference)}>
           {displayParty(voucher.party_or_reference)}
+        </AccountsTableCell>
+        <AccountsTableCell mono className="whitespace-nowrap py-2 text-xs">
+          {voucher.party_pan?.trim() || "—"}
         </AccountsTableCell>
         <AccountsTableCell
           className="max-w-[220px] truncate py-2 text-muted-foreground"

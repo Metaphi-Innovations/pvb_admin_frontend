@@ -70,7 +70,7 @@ export function GeneralLedgerTable({
   return (
     <TooltipProvider delayDuration={200}>
       <AccountsTableScroll className="flex-1 min-h-0 h-full">
-        <AccountsTable minWidth={1100} className="text-xs financial-report">
+        <AccountsTable minWidth={1200} className="text-xs financial-report">
           <AccountsTableHead>
             <AccountsTableHeadRow>
               <FinancialReportHeadCell>Date</FinancialReportHeadCell>
@@ -78,6 +78,7 @@ export function GeneralLedgerTable({
               <FinancialReportHeadCell>Transaction Type</FinancialReportHeadCell>
               <FinancialReportHeadCell>Voucher No.</FinancialReportHeadCell>
               <FinancialReportHeadCell>Warehouse</FinancialReportHeadCell>
+              <FinancialReportHeadCell>State</FinancialReportHeadCell>
               <FinancialReportHeadCell>TM</FinancialReportHeadCell>
               <FinancialReportHeadCell align="right">Debit</FinancialReportHeadCell>
               <FinancialReportHeadCell align="right">Credit</FinancialReportHeadCell>
@@ -100,7 +101,7 @@ export function GeneralLedgerTable({
           </AccountsTableBody>
           <AccountsTableFoot>
             <AccountsTableRow className="bg-muted/20 font-semibold border-t border-border/80">
-              <AccountsTableCell colSpan={6} className="text-xs py-2 font-bold">
+              <AccountsTableCell colSpan={7} className="text-xs py-2 font-bold">
                 Total
               </AccountsTableCell>
               <AccountsTableCell align="right" money className="py-2 font-bold">
@@ -115,7 +116,7 @@ export function GeneralLedgerTable({
               <AccountsTableCell />
             </AccountsTableRow>
             <AccountsTableRow className="bg-brand-50/30 font-semibold border-t-2 border-foreground/20">
-              <AccountsTableCell colSpan={6} className="text-xs py-2 font-bold">
+              <AccountsTableCell colSpan={7} className="text-xs py-2 font-bold">
                 Grand Total
               </AccountsTableCell>
               <AccountsTableCell align="right" money className="py-2 font-bold">
@@ -215,6 +216,9 @@ function GeneralLedgerTableRow({
       </AccountsTableCell>
       <AccountsTableCell className="whitespace-nowrap text-muted-foreground">
         {isBalanceRow ? "—" : textOrDash(row.warehouse_name)}
+      </AccountsTableCell>
+      <AccountsTableCell className="whitespace-nowrap text-muted-foreground">
+        {isBalanceRow ? "—" : textOrDash(row.state_name)}
       </AccountsTableCell>
       <AccountsTableCell className="whitespace-nowrap text-muted-foreground">
         {isBalanceRow ? "—" : textOrDash(row.tm_name)}

@@ -20,6 +20,7 @@ export async function exportDebitNotesToExcel(records: DebitNoteRecord[]): Promi
       "Purchase Invoice": rec.sourceInvoiceNo || "",
       "Purchase Return No.": rec.sourceReturnNo || "",
       Supplier: rec.vendorName,
+      "PAN No.": rec.panNo || "—",
       Date: formatDisplayDate(rec.debitNoteDate),
       "Taxable Value": rec.taxableAmount,
       CGST: rec.cgstAmount,

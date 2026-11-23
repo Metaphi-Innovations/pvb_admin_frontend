@@ -152,6 +152,8 @@ export interface DebitNoteRecord {
   sourceQcNo: string;
   vendorId: any;
   vendorName: string;
+  /** Supplier PAN for TDS working sheet. */
+  panNo?: string;
   originalAmount: number;
   alreadyAdjustedAmount: number;
   taxableAmount: number;

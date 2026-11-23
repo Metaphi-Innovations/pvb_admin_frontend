@@ -76,6 +76,18 @@ export function mapDebitNoteToRecord(item: any): DebitNoteRecord {
     sourceQcNo: item.qc?.qc_no || "—",
     vendorId: item.supplier_id || null,
     vendorName: item.supplier?.supplier_name || item.supplier_name || "—",
+    panNo: (() => {
+      const fromMaster = String(item.supplier?.pan_number || "").trim();
+      if (fromMaster) return fromMaster.toUpperCase();
+      const snap =
+        item.supplier_snapshot && typeof item.supplier_snapshot === "object"
+          ? (item.supplier_snapshot as Record<string, unknown>)
+          : null;
+      const fromSnap = String(
+        snap?.pan_number || snap?.pan_no || snap?.pan || "",
+      ).trim();
+      return fromSnap ? fromSnap.toUpperCase() : undefined;
+    })(),
     originalAmount: parseFloat(item.taxable_amount || "0"),
     alreadyAdjustedAmount: 0,
     taxableAmount: parseFloat(item.taxable_amount || "0"),

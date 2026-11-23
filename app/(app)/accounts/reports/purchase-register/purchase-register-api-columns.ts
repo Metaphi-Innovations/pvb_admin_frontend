@@ -10,6 +10,7 @@ export type PurchaseRegisterApiColKey =
   | "supplier_invoice_date"
   | "supplier_name"
   | "supplier_gstin"
+  | "supplier_pan"
   | "invoice_type"
   | "purchase_type"
   | "branch"
@@ -84,6 +85,7 @@ export const PURCHASE_REGISTER_API_COLUMNS: PurchaseRegisterApiColDef[] = [
     sortKey: "supplier_name",
   },
   { key: "supplier_gstin", label: "Supplier GSTIN", group: "core" },
+  { key: "supplier_pan", label: "PAN No.", group: "core" },
   { key: "invoice_type", label: "Invoice Type", group: "core" },
   { key: "purchase_type", label: "Local / Interstate", group: "core" },
   { key: "branch", label: "Branch", group: "core" },
@@ -184,6 +186,7 @@ export const DEFAULT_VISIBLE_API_COLUMNS: PurchaseRegisterApiColKey[] = [
   "supplier_invoice_number",
   "supplier_name",
   "supplier_gstin",
+  "supplier_pan",
   "invoice_type",
   "taxable_value",
   "cgst",

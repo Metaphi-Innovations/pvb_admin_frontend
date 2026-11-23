@@ -1,7 +1,79 @@
-import type { DispatchRecord } from "@/app/(app)/warehouse/dispatch/types";
+import type { DispatchProduct, DispatchRecord } from "@/app/(app)/warehouse/dispatch/types";
 import { hydrateOrderLineItems, loadOrders } from "./orders-data";
 const getDispatchRecords = (): any[] => [];
 
+/**
+ * Unique product identity for sales/sample returns.
+ * Master `sku` is often pack size (e.g. "500ml"); prefer `product_code`.
+ */
+export function resolveReturnProductCode(source: {
+  sku?: string | null;
+  product_code?: string | null;
+  product?: {
+    sku?: string | null;
+    product_code?: string | null;
+  } | null;
+  product_snapshot?: {
+    sku?: string | null;
+    product_code?: string | null;
+  } | null;
+  productSnapshot?: Record<string, unknown> | null;
+}): string {
+  const snap = (source.productSnapshot || source.product_snapshot || {}) as Record<
+    string,
+    unknown
+  >;
+  const snapCode =
+    typeof snap.product_code === "string" ? snap.product_code.trim() : "";
+  return (
+    String(source.product?.product_code || "").trim() ||
+    String(source.product_code || "").trim() ||
+    snapCode ||
+    String(source.product?.sku || "").trim() ||
+    String(source.sku || "").trim() ||
+    ""
+  );
+}
+
+/** Pack-size label for display (master sku / pack_size), not used for identity. */
+export function resolveReturnPackLabel(source: {
+  sku?: string | null;
+  product?: { sku?: string | null; pack_size?: string | number | null } | null;
+  product_snapshot?: {
+    sku?: string | null;
+    pack_size?: string | number | null;
+  } | null;
+  productSnapshot?: Record<string, unknown> | null;
+}): string {
+  const snap = (source.productSnapshot || source.product_snapshot || {}) as Record<
+    string,
+    unknown
+  >;
+  const packSku =
+    String(source.product?.sku || "").trim() ||
+    (typeof snap.sku === "string" ? snap.sku.trim() : "") ||
+    String(source.sku || "").trim();
+  const packSize =
+    source.product?.pack_size != null
+      ? String(source.product.pack_size).trim()
+      : typeof snap.pack_size === "string" || typeof snap.pack_size === "number"
+        ? String(snap.pack_size).trim()
+        : "";
+  // Avoid duplicating product_code when sku was already remapped to code.
+  if (packSku && packSku !== resolveReturnProductCode(source)) return packSku;
+  return packSize;
+}
+
+export function resolveReturnProductCodeFromDispatchProduct(
+  product: DispatchProduct & { productSnapshot?: Record<string, unknown> },
+): string {
+  return (
+    resolveReturnProductCode({
+      sku: product.sku,
+      productSnapshot: product.productSnapshot,
+    }) || product.product
+  );
+}
 
 export function isSalesOrderDispatch(d: DispatchRecord): boolean {
   const type =

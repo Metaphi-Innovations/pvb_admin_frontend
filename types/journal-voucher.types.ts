@@ -286,6 +286,9 @@ export interface JournalVoucherListItem {
   credit_ledger?: JournalLedgerRef | null;
   debit_ledger_snapshot?: Record<string, unknown> | null;
   credit_ledger_snapshot?: Record<string, unknown> | null;
+  party_ledger_id?: string | null;
+  party_ledger?: JournalLedgerRef | null;
+  party_snapshot?: Record<string, unknown> | null;
 }
 
 export interface JournalVoucherListResponse {

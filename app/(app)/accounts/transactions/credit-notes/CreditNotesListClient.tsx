@@ -115,6 +115,7 @@ type CreditNoteListRow = {
   source_type: string;
   invoiceNos: string[];
   customerName: string;
+  panNo: string;
   warehouse: string;
   creditNoteDate: string;
   taxableValue: number;
@@ -150,12 +151,26 @@ function toDate(value: unknown): string {
 }
 
 function mapCreditNoteListRow(raw: CreditNoteListApiRow): CreditNoteListRow {
+  const snap = raw.customer_snapshot;
+  const panFromSnap =
+    snap && typeof snap === "object"
+      ? String(
+          (snap as Record<string, unknown>).pan_no ||
+            (snap as Record<string, unknown>).pan_number ||
+            (snap as Record<string, unknown>).pan ||
+            "",
+        ).trim()
+      : "";
+  const panNo = String(raw.customer?.pan_no || panFromSnap || "")
+    .trim()
+    .toUpperCase();
   return {
     credit_note_id: raw.credit_note_id,
     cn_number: raw.cn_number || "—",
     source_type: raw.source_type || "",
     invoiceNos: uniqueInvoiceCodes(raw),
     customerName: raw.customer?.customer_name || "",
+    panNo,
     warehouse: raw.warehouse?.warehouse_name || "",
     creditNoteDate: toDate(raw.cn_date),
     taxableValue: toNum(raw.taxable_amount),
@@ -306,6 +321,7 @@ async function exportCreditNoteListRows(rows: CreditNoteListRow[]): Promise<void
       "Credit Note No.": r.cn_number,
       Source: sourceLabel(r.source_type),
       Customer: r.customerName,
+      "PAN No.": r.panNo || "—",
       Warehouse: r.warehouse,
       Date: formatDisplayDate(r.creditNoteDate),
       "Taxable Value": r.taxableValue,
@@ -407,6 +423,7 @@ function CreditNotesRecordsTable({
             />
             <SortTh label="Invoice" colKey="invoice" />
             <SortTh label="Customer" colKey="customerName" className="accounts-col-party" />
+            <SortTh label="PAN No." colKey="panNo" />
             <SortTh label="Warehouse" colKey="warehouse" />
             <SortTh label="Date" colKey="creditNoteDate" filterType="date" />
             <SortTh label="Taxable" colKey="taxableValue" filterType="amount" align="right" />
@@ -432,11 +449,11 @@ function CreditNotesRecordsTable({
         </AccountsTableHead>
         <AccountsTableBody>
           {loading && toolbarFiltered.length === 0 ? (
-            <AccountsTableLoading colSpan={13} message="Loading credit notes…" />
+            <AccountsTableLoading colSpan={14} message="Loading credit notes…" />
           ) : toolbarFiltered.length === 0 ? (
-            <AccountsTableEmpty colSpan={13} message="No credit notes found." />
+            <AccountsTableEmpty colSpan={14} message="No credit notes found." />
           ) : visible.length === 0 ? (
-            <AccountsTableEmpty colSpan={13} message="No records match the column filters." />
+            <AccountsTableEmpty colSpan={14} message="No records match the column filters." />
           ) : (
             pagedRows.map((r) => {
               const badge = cnStatusToBadge(r.status);
@@ -489,6 +506,9 @@ function CreditNotesRecordsTable({
                   </AccountsTableCell>
                   <AccountsTableCell className="accounts-col-party truncate text-xs font-medium" title={r.customerName}>
                     {r.customerName || "—"}
+                  </AccountsTableCell>
+                  <AccountsTableCell mono className="text-xs whitespace-nowrap">
+                    {r.panNo || "—"}
                   </AccountsTableCell>
                   <AccountsTableCell className="truncate text-xs">{r.warehouse || "—"}</AccountsTableCell>
                   <AccountsTableCell className="tabular-nums text-xs whitespace-nowrap">
@@ -792,6 +812,7 @@ export default function CreditNotesListClient() {
       source_type: { type: "text" as const },
       invoice: { type: "text" as const },
       customerName: { type: "text" as const },
+      panNo: { type: "text" as const },
       warehouse: { type: "text" as const },
       creditNoteDate: { type: "date" as const },
       taxableValue: { type: "amount" as const },
