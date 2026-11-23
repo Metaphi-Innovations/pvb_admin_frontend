@@ -21,8 +21,33 @@ import {
   type SalesInvoiceEWayDetails,
 } from "./sales-invoice-statutory";
 import type { InvoiceRecord } from "@/app/(app)/accounts/invoices/invoices-data";
+import { DELIVERY_STATUS_BADGE_CONFIG } from "@/app/(app)/warehouse/dispatch/constants";
 
 export type SalesInvoiceKind = "sales_order" | "stock_transfer" | "sample_order" | "service";
+
+/** Human label for linked dispatch workflow status. */
+export function formatSalesInvoiceDeliveryStatus(
+  status?: string | null,
+): string {
+  const raw = String(status || "").trim();
+  if (!raw) return "—";
+  const fromConfig =
+    DELIVERY_STATUS_BADGE_CONFIG[raw] ||
+    DELIVERY_STATUS_BADGE_CONFIG[raw.toUpperCase()];
+  if (fromConfig?.label) return fromConfig.label;
+  return raw
+    .replace(/_/g, " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+export const SALES_INVOICE_DELIVERY_STATUS_OPTIONS = [
+  "Dispatched",
+  "Invoice Generated",
+  "Delivered",
+  "Closed",
+  "Cancelled",
+] as const;
 
 export type SalesInvoiceTabId = "all" | SalesInvoiceKind;
 
@@ -85,9 +110,19 @@ export interface SalesInvoiceListRow {
   partyOrTransfer: string;
   orderNo: string;
   dispatchNo: string;
+  /** Linked dispatch date (YYYY-MM-DD) when material left warehouse. */
+  dispatchDate: string;
+  /** Sales order promised/requested delivery date (YYYY-MM-DD), if linked. */
+  soDeliveryDate: string;
+  /** Linked dispatch workflow status label (Delivered, Invoice Generated, …). */
+  deliveryStatus: string;
+  /** Raw dispatch status for badge styling (DELIVERED, INVOICE_GENERATED, …). */
+  deliveryStatusRaw: string;
   customerName: string;
   customerCode: string;
   gstin?: string;
+  /** Customer PAN for TDS working sheet. */
+  panNo?: string;
   fromWarehouse: string;
   toWarehouse: string;
   totalAmount: number;
@@ -145,6 +180,11 @@ export function mapApiInvoiceToListRow(
     String(snap.customer_code || snap.customerCode || "").trim() ||
     "";
   const gstin = String(snap.gstin_no || snap.gstin || "").trim();
+  const panNo = String(
+    dto.customer?.pan_no || snap.pan_no || snap.pan_number || snap.pan || "",
+  )
+    .trim()
+    .toUpperCase();
   const warehouseName =
     dto.warehouse?.warehouse_name ||
     String(whSnap.warehouse_name || whSnap.warehouseName || "").trim() ||
@@ -156,6 +196,19 @@ export function mapApiInvoiceToListRow(
   const id = dto.sales_invoice_id;
   const dispatchNo =
     dto.dispatch?.dispatch_number || dto.dispatch_number || "—";
+  const dispatchDateRaw =
+    dto.dispatch?.dispatch_date || dto.dispatch_date || "";
+  const dispatchDate = dispatchDateRaw
+    ? String(dispatchDateRaw).slice(0, 10)
+    : "—";
+  const soDeliveryDateRaw = dto.sales_order?.delivery_date || "";
+  const soDeliveryDate = soDeliveryDateRaw
+    ? String(soDeliveryDateRaw).slice(0, 10)
+    : "—";
+  const deliveryStatusRaw = String(
+    dto.dispatch?.status || dto.dispatch_status || "",
+  ).trim();
+  const deliveryStatus = formatSalesInvoiceDeliveryStatus(deliveryStatusRaw);
   const orderNo =
     dto.sales_order?.so_number ||
     dto.stock_transfer?.transfer_no ||
@@ -241,9 +294,14 @@ export function mapApiInvoiceToListRow(
         : customerName,
     orderNo,
     dispatchNo,
+    dispatchDate,
+    soDeliveryDate,
+    deliveryStatus,
+    deliveryStatusRaw,
     customerName,
     customerCode,
     gstin,
+    panNo: panNo || undefined,
     fromWarehouse: kind === "stock_transfer" ? warehouseName : "",
     toWarehouse: kind === "stock_transfer" ? destWarehouse : "",
     totalAmount: kind === "sample_order" ? 0 : totalAmount,

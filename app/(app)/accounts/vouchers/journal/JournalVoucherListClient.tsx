@@ -78,6 +78,32 @@ const STATUS_FILTER_OPTIONS = Object.keys(JOURNAL_STATUS_LABELS).map((value) => 
   count: 0,
 }));
 
+function snapStr(
+  snapshot: Record<string, unknown> | null | undefined,
+  ...keys: string[]
+): string {
+  if (!snapshot) return "";
+  for (const key of keys) {
+    const value = snapshot[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return "";
+}
+
+/** Party name + PAN from TDS JV party_snapshot / party_ledger (blank for non-TDS). */
+function journalPartyFields(row: JournalVoucherListItem): {
+  partyName: string;
+  panNo: string;
+} {
+  const snap = row.party_snapshot;
+  const partyName =
+    snapStr(snap, "customer_name", "supplier_name", "party_name", "ledger_name") ||
+    row.party_ledger?.ledger_name ||
+    "";
+  const panNo = snapStr(snap, "pan_no", "pan_number", "pan").toUpperCase();
+  return { partyName, panNo };
+}
+
 function statusKey(
   status: JournalVoucherStatus,
 ): "active" | "pending" | "approved" | "rejected" | "draft" | "inactive" | "closed" {
@@ -209,7 +235,7 @@ function JournalListTable({
   const router = useRouter();
 
   return (
-    <AccountsTable minWidth={1100}>
+    <AccountsTable minWidth={1280}>
       <AccountsTableHead>
         <AccountsTableHeadRow>
           <SortTh label="JV No." colKey="sr_no" filterable={false} />
@@ -234,6 +260,14 @@ function JournalListTable({
             optionsLoading={ledgerOptionsLoading}
             optionsReady={creditLedgerOptions.length > 0}
           />
+          <SortTh
+            label="Party"
+            colKey="party_name"
+            sortable={false}
+            filterType="text"
+            className="accounts-col-party"
+          />
+          <SortTh label="PAN No." colKey="pan_no" sortable={false} filterType="text" />
           <SortTh label="Amount" colKey="amount" filterType="amount" align="right" />
           <SortTh label="Reference" colKey="reference_number" filterType="text" />
           <SortTh
@@ -255,10 +289,10 @@ function JournalListTable({
       </AccountsTableHead>
       <AccountsTableBody>
         {loading && rows.length === 0 ? (
-          <AccountsTableLoading colSpan={8} message="Loading journals…" />
+          <AccountsTableLoading colSpan={10} message="Loading journals…" />
         ) : rows.length === 0 ? (
           <AccountsTableRow>
-            <AccountsTableCell colSpan={8} className="accounts-table-empty">
+            <AccountsTableCell colSpan={10} className="accounts-table-empty">
               No journal vouchers found.
             </AccountsTableCell>
           </AccountsTableRow>
@@ -266,6 +300,7 @@ function JournalListTable({
           rows.map((row) => {
             const id = row.journal_voucher_id;
             const canEdit = isDraftEditable(row.status);
+            const party = journalPartyFields(row);
             return (
               <AccountsTableRow key={id} className="group">
                 <AccountsTableCell mono>
@@ -290,6 +325,15 @@ function JournalListTable({
                     ledger: row.credit_ledger,
                     snapshot: row.credit_ledger_snapshot,
                   })}
+                </AccountsTableCell>
+                <AccountsTableCell
+                  className="accounts-col-party text-xs max-w-[160px] truncate"
+                  title={party.partyName || undefined}
+                >
+                  {party.partyName || "—"}
+                </AccountsTableCell>
+                <AccountsTableCell mono className="text-xs whitespace-nowrap">
+                  {party.panNo || "—"}
                 </AccountsTableCell>
                 <AccountsTableCell align="right" money>
                   <MoneyAmount amount={toMoneyNumber(row.amount)} />
@@ -509,6 +553,10 @@ export function JournalVoucherListClient() {
           ledger: row.credit_ledger,
           snapshot: row.credit_ledger_snapshot,
         });
+      case "party_name":
+        return journalPartyFields(row).partyName;
+      case "pan_no":
+        return journalPartyFields(row).panNo;
       case "amount":
         return toMoneyNumber(row.amount);
       case "reference_number":
@@ -604,6 +652,8 @@ export function JournalVoucherListClient() {
           voucher_date: { type: "date" },
           debit_ledger: { type: "select" },
           credit_ledger: { type: "select" },
+          party_name: { type: "text" },
+          pan_no: { type: "text" },
           amount: { type: "amount" },
           reference_number: { type: "text" },
         }}

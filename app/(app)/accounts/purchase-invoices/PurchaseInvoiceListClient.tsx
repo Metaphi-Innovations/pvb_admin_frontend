@@ -230,6 +230,7 @@ const PURCHASE_INVOICE_PDF_COLUMNS = [
   { label: "Invoice No" },
   { label: "Source Type" },
   { label: "Supplier" },
+  { label: "PAN No." },
   { label: "Supplier Inv. No" },
   { label: "Invoice Date" },
   { label: "Purchase Nature" },
@@ -466,12 +467,13 @@ function PurchaseInvoicesTabTable({
 
   return (
     <>
-      <AccountsTable minWidth={2040}>
+      <AccountsTable minWidth={2180}>
         <AccountsTableHead>
           <AccountsTableHeadRow>
             <SortTh label="Invoice No" colKey="invoiceNo" {...filterProps("invoiceNo")} />
             <SortTh label="Source Type" colKey="sourceType" {...filterProps("sourceType")} />
             <SortTh label="Supplier / Source" colKey="vendorName" className="accounts-col-party" {...filterProps("vendorName")} />
+            <SortTh label="PAN No." colKey="panNo" {...filterProps("panNo")} />
             <SortTh label="Supplier Inv. No" colKey="vendorInvoiceNo" {...filterProps("vendorInvoiceNo")} />
             <SortTh label="Invoice Date" colKey="invoiceDate" filterType="date" {...filterProps("invoiceDate")} />
             <SortTh label="Purchase Nature" colKey="purchaseNature" {...filterProps("purchaseNature")} />
@@ -494,11 +496,11 @@ function PurchaseInvoicesTabTable({
         </AccountsTableHead>
         <AccountsTableBody>
           {loading && toolbarRows.length === 0 ? (
-            <AccountsTableEmpty colSpan={14} message="Loading purchase invoices…" />
+            <AccountsTableEmpty colSpan={15} message="Loading purchase invoices…" />
           ) : toolbarRows.length === 0 ? (
-            <AccountsTableEmpty colSpan={14} message="No purchase invoices found." />
+            <AccountsTableEmpty colSpan={15} message="No purchase invoices found." />
           ) : visible.length === 0 ? (
-            <AccountsTableEmpty colSpan={14} message="No records match the column filters." />
+            <AccountsTableEmpty colSpan={15} message="No records match the column filters." />
           ) : (
             pagedRows.map((inv) => (
               <AccountsTableRow key={inv.id}>
@@ -521,6 +523,9 @@ function PurchaseInvoicesTabTable({
                   <SourceTypeBadge type={inv.sourceType} />
                 </AccountsTableCell>
                 <AccountsTableCell className="font-medium">{inv.vendorName}</AccountsTableCell>
+                <AccountsTableCell mono className="text-xs whitespace-nowrap">
+                  {inv.panNo || "—"}
+                </AccountsTableCell>
                 <AccountsTableCell className="text-muted-foreground">{inv.vendorInvoiceNo || "—"}</AccountsTableCell>
                 <AccountsTableCell>{formatDisplayDate(inv.invoiceDate)}</AccountsTableCell>
                 <AccountsTableCell>{inv.purchaseNatureLabel}</AccountsTableCell>
@@ -1459,6 +1464,7 @@ export default function PurchaseInvoiceListClient() {
             <td>${escapeHtml(row.invoiceNo || "—")}</td>
             <td>${escapeHtml(sourceLabel)}</td>
             <td>${escapeHtml(row.vendorName || "—")}</td>
+            <td>${escapeHtml(row.panNo || "—")}</td>
             <td>${escapeHtml(row.vendorInvoiceNo || "—")}</td>
             <td>${escapeHtml(formatDateOnly(row.invoiceDate))}</td>
             <td>${escapeHtml(natureLabel)}</td>
@@ -1629,6 +1635,7 @@ export default function PurchaseInvoiceListClient() {
       invoiceNo: { type: "text" as const },
       sourceType: { type: "text" as const },
       vendorName: { type: "text" as const },
+      panNo: { type: "text" as const },
       vendorInvoiceNo: { type: "text" as const },
       invoiceDate: { type: "date" as const },
       purchaseNature: {

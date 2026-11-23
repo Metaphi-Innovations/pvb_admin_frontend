@@ -82,11 +82,14 @@ import {
 import type { AccountsColumnFilterConfig } from "@/lib/accounts/column-filter-types";
 import {
   fetchSalesInvoicesByTab,
+  SALES_INVOICE_DELIVERY_STATUS_OPTIONS,
   SALES_INVOICE_TAB_META,
   SALES_INVOICE_VISIBLE_TABS,
   type SalesInvoiceListRow,
   type SalesInvoiceTabId,
 } from "./sales-invoice-tab-data";
+import { DELIVERY_STATUS_BADGE_CONFIG } from "@/app/(app)/warehouse/dispatch/constants";
+import { Badge } from "@/components/ui/badge";
 import {
   useSalesInvoiceListingState,
   type SalesInvoiceTabCache,
@@ -136,7 +139,8 @@ function applyToolbarFilters(
         r.invoiceTypeLabel.toLowerCase().includes(q) ||
         r.referencePrimary.toLowerCase().includes(q) ||
         r.fromWarehouse.toLowerCase().includes(q) ||
-        r.toWarehouse.toLowerCase().includes(q),
+        r.toWarehouse.toLowerCase().includes(q) ||
+        r.deliveryStatus.toLowerCase().includes(q),
     );
   }
   if (opts.dateFrom || opts.dateTo) {
@@ -182,6 +186,10 @@ async function exportSalesInvoiceTabExcel(tab: SalesInvoiceTabId, rows: SalesInv
       "Invoice Type",
       "Reference No.",
       "Party / Transfer",
+      "PAN No.",
+      "SO Delivery Date",
+      "Dispatch Date",
+      "Delivery Status",
       "Qty / Item Count",
       "Total Amount",
       "Status",
@@ -194,6 +202,10 @@ async function exportSalesInvoiceTabExcel(tab: SalesInvoiceTabId, rows: SalesInv
       r.invoiceTypeLabel,
       [r.referencePrimary, r.referenceSecondary].filter(Boolean).join(" / "),
       r.partyOrTransfer,
+      r.panNo || "—",
+      r.soDeliveryDate === "—" ? "—" : formatDisplayDate(r.soDeliveryDate),
+      r.dispatchDate === "—" ? "—" : formatDisplayDate(r.dispatchDate),
+      r.deliveryStatus,
       r.qtyOrItemCount,
       r.sourceType === "sample_order" ? 0 : r.totalAmount,
       r.invoiceStatus,
@@ -206,6 +218,9 @@ async function exportSalesInvoiceTabExcel(tab: SalesInvoiceTabId, rows: SalesInv
       "Invoice No.",
       "Stock Transfer No.",
       "Dispatch No.",
+      "SO Delivery Date",
+      "Dispatch Date",
+      "Delivery Status",
       "From Warehouse",
       "To Warehouse",
       "Total Amount",
@@ -219,6 +234,9 @@ async function exportSalesInvoiceTabExcel(tab: SalesInvoiceTabId, rows: SalesInv
       r.invoiceNo,
       r.orderNo,
       r.dispatchNo,
+      r.soDeliveryDate === "—" ? "—" : formatDisplayDate(r.soDeliveryDate),
+      r.dispatchDate === "—" ? "—" : formatDisplayDate(r.dispatchDate),
+      r.deliveryStatus,
       r.fromWarehouse || "—",
       r.toWarehouse || "—",
       r.totalAmount,
@@ -233,7 +251,11 @@ async function exportSalesInvoiceTabExcel(tab: SalesInvoiceTabId, rows: SalesInv
       "Invoice No.",
       tab === "sample_order" ? "Sample Order No." : "Sales Order No.",
       "Dispatch No.",
+      "SO Delivery Date",
+      "Dispatch Date",
+      "Delivery Status",
       "Customer",
+      "PAN No.",
       "Total Amount",
       "Qty",
       "Status",
@@ -245,7 +267,11 @@ async function exportSalesInvoiceTabExcel(tab: SalesInvoiceTabId, rows: SalesInv
       r.invoiceNo,
       r.orderNo,
       r.dispatchNo,
+      r.soDeliveryDate === "—" ? "—" : formatDisplayDate(r.soDeliveryDate),
+      r.dispatchDate === "—" ? "—" : formatDisplayDate(r.dispatchDate),
+      r.deliveryStatus,
       r.customerName,
+      r.panNo || "—",
       tab === "sample_order" ? 0 : r.totalAmount,
       r.qtyOrItemCount,
       r.invoiceStatus,
@@ -278,6 +304,10 @@ async function exportSalesInvoiceTabPdf(tab: SalesInvoiceTabId, rows: SalesInvoi
       "Invoice Type",
       "Reference No.",
       "Party / Transfer",
+      "PAN No.",
+      "SO Delivery Date",
+      "Dispatch Date",
+      "Delivery Status",
       "Qty / Item Count",
       "Total Amount",
       "Status",
@@ -290,6 +320,10 @@ async function exportSalesInvoiceTabPdf(tab: SalesInvoiceTabId, rows: SalesInvoi
       r.invoiceTypeLabel,
       [r.referencePrimary, r.referenceSecondary].filter(Boolean).join(" / "),
       r.partyOrTransfer,
+      r.panNo || "—",
+      r.soDeliveryDate === "—" ? "—" : formatDisplayDate(r.soDeliveryDate),
+      r.dispatchDate === "—" ? "—" : formatDisplayDate(r.dispatchDate),
+      r.deliveryStatus,
       r.qtyOrItemCount,
       formatMoney(r.sourceType === "sample_order" ? 0 : r.totalAmount),
       r.invoiceStatus,
@@ -302,6 +336,9 @@ async function exportSalesInvoiceTabPdf(tab: SalesInvoiceTabId, rows: SalesInvoi
       "Invoice No.",
       "Stock Transfer No.",
       "Dispatch No.",
+      "SO Delivery Date",
+      "Dispatch Date",
+      "Delivery Status",
       "From Warehouse",
       "To Warehouse",
       "Total Amount",
@@ -315,6 +352,9 @@ async function exportSalesInvoiceTabPdf(tab: SalesInvoiceTabId, rows: SalesInvoi
       r.invoiceNo,
       r.orderNo,
       r.dispatchNo,
+      r.soDeliveryDate === "—" ? "—" : formatDisplayDate(r.soDeliveryDate),
+      r.dispatchDate === "—" ? "—" : formatDisplayDate(r.dispatchDate),
+      r.deliveryStatus,
       r.fromWarehouse || "—",
       r.toWarehouse || "—",
       formatMoney(r.totalAmount),
@@ -329,7 +369,11 @@ async function exportSalesInvoiceTabPdf(tab: SalesInvoiceTabId, rows: SalesInvoi
       "Invoice No.",
       tab === "sample_order" ? "Sample Order No." : "Sales Order No.",
       "Dispatch No.",
+      "SO Delivery Date",
+      "Dispatch Date",
+      "Delivery Status",
       "Customer",
+      "PAN No.",
       "Total Amount",
       "Qty",
       "Status",
@@ -341,7 +385,11 @@ async function exportSalesInvoiceTabPdf(tab: SalesInvoiceTabId, rows: SalesInvoi
       r.invoiceNo,
       r.orderNo,
       r.dispatchNo,
+      r.soDeliveryDate === "—" ? "—" : formatDisplayDate(r.soDeliveryDate),
+      r.dispatchDate === "—" ? "—" : formatDisplayDate(r.dispatchDate),
+      r.deliveryStatus,
       r.customerName,
+      r.panNo || "—",
       formatMoney(tab === "sample_order" ? 0 : r.totalAmount),
       r.qtyOrItemCount,
       r.invoiceStatus,
@@ -655,6 +703,24 @@ function RowActions({
   );
 }
 
+function DeliveryStatusCell({ row }: { row: SalesInvoiceListRow }) {
+  if (!row.deliveryStatusRaw || row.deliveryStatus === "—") {
+    return <span className="text-muted-foreground">—</span>;
+  }
+  const cfg =
+    DELIVERY_STATUS_BADGE_CONFIG[row.deliveryStatusRaw] ||
+    DELIVERY_STATUS_BADGE_CONFIG[row.deliveryStatusRaw.toUpperCase()] ||
+    DELIVERY_STATUS_BADGE_CONFIG[row.deliveryStatus];
+  if (!cfg) {
+    return <span className="text-xs font-medium text-foreground">{row.deliveryStatus}</span>;
+  }
+  return (
+    <Badge variant="outline" className={cn("rounded-full border px-2 py-0.5 text-[10px] font-semibold", cfg.bg)}>
+      {cfg.label}
+    </Badge>
+  );
+}
+
 function ReferenceCell({ row }: { row: SalesInvoiceListRow }) {
   if (row.sourceType === "service") {
     return <span className="text-xs text-foreground">{row.referencePrimary}</span>;
@@ -750,7 +816,8 @@ function SalesInvoicesTable({
   const isStockTransfer = tab === "stock_transfer";
   const isSampleOrder = tab === "sample_order";
   // Source tabs also show Status (Sent / Cancelled) so cancelled invoices are visible.
-  const colSpan = 11;
+  // Delivery cols + PAN on customer tabs.
+  const colSpan = 15;
 
 
   const hasColumnOrSort =
@@ -786,6 +853,10 @@ function SalesInvoicesTable({
             <SortTh label="Invoice Type" colKey="invoiceTypeLabel" filterType="select" />
             <SortTh label="Reference No." colKey="referencePrimary" />
             <SortTh label="Party / Transfer" colKey="partyOrTransfer" className="accounts-col-party" />
+            <SortTh label="PAN No." colKey="panNo" />
+            <SortTh label="SO Delivery Date" colKey="soDeliveryDate" filterType="date" />
+            <SortTh label="Dispatch Date" colKey="dispatchDate" filterType="date" />
+            <SortTh label="Delivery Status" colKey="deliveryStatus" filterType="status" />
             <SortTh label="Qty / Item Count" colKey="qtyOrItemCount" filterType="amount" align="right" />
             <SortTh label="Total Amount" colKey="totalAmount" filterType="amount" align="right" />
             <SortTh label="Status" colKey="invoiceStatus" filterType="status" />
@@ -827,6 +898,18 @@ function SalesInvoicesTable({
                 <AccountsTableCell className="accounts-col-party">
                   <PartyCell row={r} />
                 </AccountsTableCell>
+                <AccountsTableCell mono className="text-xs whitespace-nowrap">
+                  {r.panNo || "—"}
+                </AccountsTableCell>
+                <AccountsTableCell className="tabular-nums">
+                  {r.soDeliveryDate === "—" ? "—" : formatDisplayDate(r.soDeliveryDate)}
+                </AccountsTableCell>
+                <AccountsTableCell className="tabular-nums">
+                  {r.dispatchDate === "—" ? "—" : formatDisplayDate(r.dispatchDate)}
+                </AccountsTableCell>
+                <AccountsTableCell>
+                  <DeliveryStatusCell row={r} />
+                </AccountsTableCell>
                 <AccountsTableCell align="right" className="tabular-nums">
                   {r.qtyOrItemCount}
                 </AccountsTableCell>
@@ -862,6 +945,9 @@ function SalesInvoicesTable({
             <SortTh label="Invoice No." colKey="invoiceNo" {...invoiceNoFilter} />
             <SortTh label="Stock Transfer No." colKey="orderNo" />
             <SortTh label="Dispatch No." colKey="dispatchNo" />
+            <SortTh label="SO Delivery Date" colKey="soDeliveryDate" filterType="date" />
+            <SortTh label="Dispatch Date" colKey="dispatchDate" filterType="date" />
+            <SortTh label="Delivery Status" colKey="deliveryStatus" filterType="status" />
             <SortTh label="From Warehouse" colKey="fromWarehouse" />
             <SortTh label="To Warehouse" colKey="toWarehouse" />
             <SortTh label="Total Amount" colKey="totalAmount" filterType="amount" align="right" />
@@ -898,6 +984,15 @@ function SalesInvoicesTable({
                 </AccountsTableCell>
                 <AccountsTableCell mono>{r.orderNo}</AccountsTableCell>
                 <AccountsTableCell mono>{r.dispatchNo}</AccountsTableCell>
+                <AccountsTableCell className="tabular-nums">
+                  {r.soDeliveryDate === "—" ? "—" : formatDisplayDate(r.soDeliveryDate)}
+                </AccountsTableCell>
+                <AccountsTableCell className="tabular-nums">
+                  {r.dispatchDate === "—" ? "—" : formatDisplayDate(r.dispatchDate)}
+                </AccountsTableCell>
+                <AccountsTableCell>
+                  <DeliveryStatusCell row={r} />
+                </AccountsTableCell>
                 <AccountsTableCell>{r.fromWarehouse || "—"}</AccountsTableCell>
                 <AccountsTableCell>{r.toWarehouse || "—"}</AccountsTableCell>
                 <AccountsTableCell align="right" money className="font-semibold">
@@ -937,7 +1032,11 @@ function SalesInvoicesTable({
             colKey="orderNo"
           />
           <SortTh label="Dispatch No." colKey="dispatchNo" />
+          <SortTh label="SO Delivery Date" colKey="soDeliveryDate" filterType="date" />
+          <SortTh label="Dispatch Date" colKey="dispatchDate" filterType="date" />
+          <SortTh label="Delivery Status" colKey="deliveryStatus" filterType="status" />
           <SortTh label="Customer" colKey="customerName" className="accounts-col-party" />
+          <SortTh label="PAN No." colKey="panNo" />
           <SortTh label="Total Amount" colKey="totalAmount" filterType="amount" align="right" />
           <SortTh label="Qty" colKey="qtyOrItemCount" filterType="amount" align="right" />
           <SortTh label="Status" colKey="invoiceStatus" filterType="status" />
@@ -972,6 +1071,15 @@ function SalesInvoicesTable({
               </AccountsTableCell>
               <AccountsTableCell mono>{r.orderNo}</AccountsTableCell>
               <AccountsTableCell mono>{r.dispatchNo}</AccountsTableCell>
+              <AccountsTableCell className="tabular-nums">
+                {r.soDeliveryDate === "—" ? "—" : formatDisplayDate(r.soDeliveryDate)}
+              </AccountsTableCell>
+              <AccountsTableCell className="tabular-nums">
+                {r.dispatchDate === "—" ? "—" : formatDisplayDate(r.dispatchDate)}
+              </AccountsTableCell>
+              <AccountsTableCell>
+                <DeliveryStatusCell row={r} />
+              </AccountsTableCell>
               <AccountsTableCell className="accounts-col-party">
                 <CustomerPartyNameCell
                   customerName={r.customerName}
@@ -979,6 +1087,9 @@ function SalesInvoicesTable({
                   branch={r.branch}
                   gstin={r.gstin}
                 />
+              </AccountsTableCell>
+              <AccountsTableCell mono className="text-xs whitespace-nowrap">
+                {r.panNo || "—"}
               </AccountsTableCell>
               <AccountsTableCell align="right" money className="font-semibold">
                 <MoneyAmount amount={isSampleOrder ? 0 : r.totalAmount} />
@@ -1455,6 +1566,15 @@ export default function SalesInvoicesPageClient() {
     },
   };
 
+  const deliveryFilterCols = {
+    soDeliveryDate: { type: "date" as const },
+    dispatchDate: { type: "date" as const },
+    deliveryStatus: {
+      type: "status" as const,
+      options: [...SALES_INVOICE_DELIVERY_STATUS_OPTIONS, "—"],
+    },
+  };
+
   const columnConfig: AccountsColumnFilterConfig =
     activeTab === "all"
       ? {
@@ -1466,6 +1586,8 @@ export default function SalesInvoicesPageClient() {
           },
           referencePrimary: { type: "text" },
           partyOrTransfer: { type: "text" },
+          panNo: { type: "text" },
+          ...deliveryFilterCols,
           qtyOrItemCount: { type: "amount" },
           totalAmount: { type: "amount" },
           invoiceStatus: {
@@ -1481,6 +1603,7 @@ export default function SalesInvoicesPageClient() {
             invoiceNo: { type: "text" },
             orderNo: { type: "text" },
             dispatchNo: { type: "text" },
+            ...deliveryFilterCols,
             fromWarehouse: { type: "text" },
             toWarehouse: { type: "text" },
             totalAmount: { type: "amount" },
@@ -1497,7 +1620,9 @@ export default function SalesInvoicesPageClient() {
             invoiceNo: { type: "text" },
             orderNo: { type: "text" },
             dispatchNo: { type: "text" },
+            ...deliveryFilterCols,
             customerName: { type: "text" },
+            panNo: { type: "text" },
             totalAmount: { type: "amount" },
             qtyOrItemCount: { type: "amount" },
             invoiceStatus: {

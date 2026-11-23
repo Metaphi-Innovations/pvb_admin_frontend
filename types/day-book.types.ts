@@ -44,6 +44,8 @@ export interface DayBookVoucher {
   source_entity_code: string | null;
   reference_number: string | null;
   party_or_reference: string | null;
+  /** Party PAN from voucher party_snapshot when present. */
+  party_pan: string | null;
   warehouse_id: string | null;
   warehouse_name: string | null;
   total_debit: string;

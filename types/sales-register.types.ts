@@ -43,6 +43,7 @@ export interface SalesRegisterApiRow {
     code: string | null;
     name: string;
     gstin: string | null;
+    pan: string | null;
   };
   state: {
     code: string | null;

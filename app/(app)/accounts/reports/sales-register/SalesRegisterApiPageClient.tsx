@@ -117,6 +117,7 @@ const CLIENT_FILTER_COLUMNS = new Set([
   "invoice_no",
   "customer_name",
   "gstin",
+  "pan",
   "state",
   "salesperson",
   "status",
@@ -144,6 +145,8 @@ function getSalesRegisterFilterCell(
       return row.customer.name || "";
     case "gstin":
       return row.customer.gstin || "";
+    case "pan":
+      return row.customer.pan || "";
     case "state":
       return row.state.name || row.state.code || "";
     case "salesperson":
@@ -1239,6 +1242,12 @@ export default function SalesRegisterApiPageClient() {
                     {...filterableProps("gstin")}
                   />
                   <AccountsColumnHeader
+                    label="PAN No."
+                    colKey="pan"
+                    sortable={false}
+                    {...filterableProps("pan")}
+                  />
+                  <AccountsColumnHeader
                     label="State"
                     colKey="state"
                     sortable={false}
@@ -1512,7 +1521,7 @@ function SummaryFooterRow({
   return (
     <AccountsTableRow className={rowClass}>
       <AccountsTableCell
-        colSpan={itemWise ? 16 : 10}
+        colSpan={itemWise ? 17 : 11}
         className="font-semibold text-xs text-foreground"
       >
         {label}
@@ -1648,6 +1657,9 @@ function SalesRegisterRowView({
       </AccountsTableCell>
       <AccountsTableCell mono className="text-xs whitespace-nowrap">
         {row.customer.gstin || "—"}
+      </AccountsTableCell>
+      <AccountsTableCell mono className="text-xs whitespace-nowrap">
+        {row.customer.pan || "—"}
       </AccountsTableCell>
       <AccountsTableCell className="text-xs whitespace-nowrap">
         {row.state.name || row.state.code || "—"}

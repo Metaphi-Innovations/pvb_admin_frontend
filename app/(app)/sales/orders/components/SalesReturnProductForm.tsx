@@ -12,7 +12,10 @@ import type { DispatchProduct, DispatchRecord } from "@/app/(app)/warehouse/disp
 import { getPackingRecords } from "@/app/(app)/warehouse/packing/mock-data";
 import type { PackedBatchAllocation, PackedProduct } from "@/app/(app)/warehouse/packing/types";
 import { formatCaseLooseQuantity, formatReturnAmount } from "../sales-return-data";
-import { calcReturnLineAmount } from "../sales-return-utils";
+import {
+  calcReturnLineAmount,
+  resolveReturnProductCodeFromDispatchProduct,
+} from "../sales-return-utils";
 import { SalesReturnStackedQty } from "./SalesReturnStackedQty";
 import {
   salesReturnDispatchedBaseQty,
@@ -51,6 +54,8 @@ export interface SalesReturnProductGroup {
   packingKey: string;
   productName: string;
   sku: string;
+  /** Pack size label (e.g. 500ml) when distinct from product code. */
+  packLabel?: string;
   dispatchedQtyCases: number;
   batches: SalesReturnBatchRow[];
 }
@@ -277,8 +282,29 @@ export function buildSalesReturnPackingGroups(dispatch: DispatchRecord): SalesRe
     const resolvedPackingNumber = packingNumber || fallbackPackingNumber;
     if (!resolvedPackingNumber) return;
     const packingKey = resolvedPackingNumber;
-    const productKey = `${packingKey}::${dispatchProduct.sku}`;
-    const batchRows = buildBatchRows(dispatchProduct, resolvedPackingNumber, packingDate, packingKey, productKey, rowIndex, packingProduct);
+    const productCode = resolveReturnProductCodeFromDispatchProduct(
+      dispatchProduct as DispatchProduct & { productSnapshot?: Record<string, unknown> },
+    );
+    const snap = (dispatchProduct as DispatchProduct & { productSnapshot?: Record<string, unknown> })
+      .productSnapshot;
+    const packLabel =
+      (typeof snap?.pack_label === "string" && snap.pack_label.trim()) ||
+      (typeof snap?.sku === "string" &&
+      snap.sku.trim() &&
+      snap.sku.trim() !== productCode
+        ? snap.sku.trim()
+        : "") ||
+      undefined;
+    const productKey = `${packingKey}::${productCode}`;
+    const batchRows = buildBatchRows(
+      { ...dispatchProduct, sku: productCode },
+      resolvedPackingNumber,
+      packingDate,
+      packingKey,
+      productKey,
+      rowIndex,
+      packingProduct,
+    );
 
     if (!packingGroups.has(packingKey)) {
       packingGroups.set(packingKey, {
@@ -301,7 +327,8 @@ export function buildSalesReturnPackingGroups(dispatch: DispatchRecord): SalesRe
       key: productKey,
       packingKey,
       productName: dispatchProduct.product,
-      sku: dispatchProduct.sku,
+      sku: productCode,
+      packLabel,
       dispatchedQtyCases: dispatchProduct.dispatchQty,
       batches: batchRows,
     });
@@ -309,7 +336,10 @@ export function buildSalesReturnPackingGroups(dispatch: DispatchRecord): SalesRe
 
   return Array.from(packingGroups.values()).map((group) => ({
     ...group,
-    products: group.products.sort((left, right) => left.productName.localeCompare(right.productName)),
+    products: group.products.sort((left, right) => {
+      const byName = left.productName.localeCompare(right.productName);
+      return byName !== 0 ? byName : left.sku.localeCompare(right.sku);
+    }),
   }));
 }
 
@@ -555,7 +585,8 @@ export function SalesReturnProductForm({
                                   )}
                                 </div>
                                 <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
-                                  <span>SKU: {product.sku}</span>
+                                  <span>Code: {product.sku || "—"}</span>
+                                  {product.packLabel ? <span>Size: {product.packLabel}</span> : null}
                                   <span>Dispatched: {product.dispatchedQtyCases} Cases</span>
                                   <span>Return: {formatCaseLooseQuantity(productReturnCaseQty, productReturnLooseQty)}</span>
                                   <span>Total Pieces: {productReturnPieces}</span>

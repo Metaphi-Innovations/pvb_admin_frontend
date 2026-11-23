@@ -147,6 +147,7 @@ const FILTERABLE_TEXT_COLS = new Set<PurchaseRegisterApiColKey>([
   "supplier_invoice_number",
   "supplier_name",
   "supplier_gstin",
+  "supplier_pan",
   "invoice_type",
   "purchase_type",
   "branch",
@@ -186,6 +187,8 @@ function getPurchaseRegisterFilterCell(
       return row.supplier.name || "";
     case "supplier_gstin":
       return row.supplier.gstin || "";
+    case "supplier_pan":
+      return row.supplier.pan || "";
     case "invoice_type":
       if (!row.invoice_type) {
         return row.source_kind === "debit_note" ? "Debit Note" : "";
@@ -1043,6 +1046,8 @@ export default function PurchaseRegisterApiPageClient() {
         return row.supplier.name || "—";
       case "supplier_gstin":
         return row.supplier.gstin || "—";
+      case "supplier_pan":
+        return row.supplier.pan || "—";
       case "invoice_type":
         if (!row.invoice_type) {
           return row.source_kind === "debit_note" ? "Debit Note" : "—";
@@ -1427,6 +1432,7 @@ export default function PurchaseRegisterApiPageClient() {
                           money={Boolean(col.money)}
                           mono={
                             col.key === "supplier_gstin" ||
+                            col.key === "supplier_pan" ||
                             col.key === "supplier_invoice_number" ||
                             col.key === "hsn_sac"
                           }
