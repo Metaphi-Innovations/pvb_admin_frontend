@@ -90,6 +90,9 @@ export interface MasterListingProps<T = any> {
   onAdd?: () => void;
   addLabel?: string;
   onExport?: () => void;
+  /** When set with onExportPdf, shows Excel/PDF export menu instead of a single Export button. */
+  onExportExcel?: () => void;
+  onExportPdf?: () => void;
   searchPlaceholder?: string;
   hideSearch?: boolean;
   // State from parent to keep track of current filters/sorting if controlled

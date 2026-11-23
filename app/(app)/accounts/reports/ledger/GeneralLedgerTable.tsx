@@ -1,6 +1,6 @@
 "use client";
 
-import { Eye } from "lucide-react";
+import { Eye, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FinancialReportHeadCell } from "@/components/accounts/FinancialReportTableHead";
 import {
@@ -14,6 +14,12 @@ import {
   AccountsTableScroll,
 } from "@/components/accounts/AccountsTable";
 import { AccountsTablePagination } from "@/components/accounts/AccountsTableListing";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { formatMoneyString } from "@/lib/accounts/money-format";
 import type {
   GeneralLedgerApiRow,
@@ -62,7 +68,7 @@ export function GeneralLedgerTable({
     : summary.period;
 
   return (
-    <>
+    <TooltipProvider delayDuration={200}>
       <AccountsTableScroll className="flex-1 min-h-0 h-full">
         <AccountsTable minWidth={1100} className="text-xs financial-report">
           <AccountsTableHead>
@@ -135,7 +141,7 @@ export function GeneralLedgerTable({
           />
         </div>
       ) : null}
-    </>
+    </TooltipProvider>
   );
 }
 
@@ -178,7 +184,33 @@ function GeneralLedgerTableRow({
         {isBalanceRow || !row.voucher_number ? (
           <span className="text-muted-foreground">—</span>
         ) : (
-          <span className="font-mono text-xs font-semibold text-brand-700">{row.voucher_number}</span>
+          <span className="inline-flex items-center gap-1">
+            <span className="font-mono text-xs font-semibold text-brand-700">
+              {row.voucher_number}
+            </span>
+            {row.settled_against && row.settled_against.length > 0 ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    className="inline-flex p-0.5 rounded text-muted-foreground hover:text-brand-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40"
+                    onClick={(e) => e.stopPropagation()}
+                    aria-label="Settled against invoices"
+                  >
+                    <Info className="h-3.5 w-3.5" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-xs">
+                  <p className="mb-1 font-medium">Settled against</p>
+                  <ul className="space-y-0.5 font-mono text-[11px]">
+                    {row.settled_against.map((doc) => (
+                      <li key={doc}>{doc}</li>
+                    ))}
+                  </ul>
+                </TooltipContent>
+              </Tooltip>
+            ) : null}
+          </span>
         )}
       </AccountsTableCell>
       <AccountsTableCell className="whitespace-nowrap text-muted-foreground">

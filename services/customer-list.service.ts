@@ -197,6 +197,7 @@ export interface CustomerExportParams {
     status: "all" | "active" | "inactive";
     ordering?: string;
     apiFilters?: Record<string, unknown>;
+    format?: "excel" | "pdf" | "csv";
 }
 
 export interface CustomerFilterOption {
@@ -223,9 +224,13 @@ export interface CustomerDropdownItem {
 
     customer_type_id?: string | null;
     customer_type?: {
-        customer_type_id: string;
+        customer_type_id?: string;
+        id?: string;
         customer_type_name: string;
     } | null;
+
+    /** Main-branch billing state (for scheme applicability filters). */
+    billing_state?: string | null;
 
     mobile_no?: string | null;
     email?: string | null;
@@ -779,17 +784,19 @@ export const CustomerListService = {
     },
 
     async export(params: CustomerExportParams): Promise<void> {
+        const format = params.format ?? "excel";
         const response = await axiosInstance.post(
             `${API_ENDPOINTS.MASTER.CUSTOMER.EXPORT}?search=${encodeURIComponent(params.search)}&ordering=${encodeURIComponent(params.ordering ?? "")}`,
-            { filters: mapFilters(params.apiFilters) },
+            { filters: mapFilters(params.apiFilters), format },
             { responseType: "blob" },
         );
 
+        const ext = format === "pdf" ? "pdf" : format === "csv" ? "csv" : "xlsx";
         const blob = response.data as Blob;
         const url = window.URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.href = url;
-        link.download = `customers_${new Date().toISOString().slice(0, 10)}.csv`;
+        link.download = `customers_${new Date().toISOString().slice(0, 10)}.${ext}`;
         document.body.appendChild(link);
         link.click();
         link.remove();

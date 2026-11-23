@@ -235,7 +235,17 @@ function partyFromRaw(
     "",
   );
   const stateCode = stateCodeFromGstin(gstin);
-  const mobile = asText(raw.mobile ?? raw.mobile_no ?? fallbacks.mobile, "");
+  const mobile = asText(
+    raw.mobile ??
+      raw.mobile_no ??
+      raw.mobile_number ??
+      raw.phone ??
+      fallbacks.mobile ??
+      fallbacks.mobile_no ??
+      fallbacks.mobile_number ??
+      fallbacks.phone,
+    "",
+  );
   const email = asText(raw.email ?? fallbacks.email, "");
 
   const lines: string[] = [];
@@ -693,15 +703,32 @@ export function mapDispatchToTaxInvoice(
     email: warehouse.email,
   });
 
+  const partyMobile = asText(
+    billTo.mobile ??
+      billTo.mobile_no ??
+      billTo.mobile_number ??
+      shipTo.mobile ??
+      shipTo.mobile_no ??
+      shipTo.mobile_number ??
+      customer.mobile_no ??
+      customer.mobile ??
+      customer.mobile_number ??
+      snapshot.mobile_no ??
+      snapshot.mobile ??
+      snapshot.mobile_number,
+    "",
+  );
   const billing = partyFromRaw(customerName, billTo, {
     ...snapshot,
     ...customer,
     gstin: customerGstin,
+    mobile: partyMobile,
   });
   const shipping = partyFromRaw(customerName, shipTo, {
     ...snapshot,
     ...customer,
     gstin: shipTo.gstin || customerGstin,
+    mobile: partyMobile,
   });
 
   const derivedSiNo = deriveSiFallbackFromDispatch(dispatch);
@@ -870,12 +897,30 @@ function metaFieldHtml(
   </div>`;
 }
 
+function partyLineHtml(line: string): string {
+  // Keep "Label : value" pairs together; allow wrap only between "; " fields.
+  if (/:\s*\S/.test(line) && line.includes(";")) {
+    const parts = line.split(/\s*;\s*/).map((p) => p.trim()).filter(Boolean);
+    if (parts.length > 1) {
+      return `<p class="ti-party-meta">${parts
+        .map(
+          (part, i) =>
+            `<span class="ti-nowrap">${escapeHtml(part)}</span>${
+              i < parts.length - 1 ? "; " : ""
+            }`,
+        )
+        .join("")}</p>`;
+    }
+  }
+  return `<p>${escapeHtml(line)}</p>`;
+}
+
 function partyBoxHtml(title: string, party: { name: string; lines: string[] }): string {
   return `<div class="ti-party">
     <div class="ti-party-h">${escapeHtml(title)}</div>
     <div class="ti-party-b">
       <p class="name">${escapeHtml(party.name)}</p>
-      ${(party.lines || []).map((l) => `<p>${escapeHtml(l)}</p>`).join("")}
+      ${(party.lines || []).map((l) => partyLineHtml(l)).join("")}
     </div>
   </div>`;
 }
@@ -1534,6 +1579,12 @@ export function buildTaxInvoiceHtml(
         font-size: 9px !important;
         line-height: 1.35;
         color: #2a2a2a;
+      }
+      .ti-party .ti-party-meta {
+        overflow-wrap: break-word;
+      }
+      .ti-party .ti-nowrap {
+        white-space: nowrap;
       }
 
       .ti-items table.pv-table {

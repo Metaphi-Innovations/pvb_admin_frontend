@@ -39,6 +39,7 @@ import {
   type PackingListListItem,
   type PackingListFilterField,
 } from "@/services/packing-list.service";
+import { exportReadyPackingBatchSummaryExcel } from "./packing-excel-export";
 
 interface ReadyPackingListingProps {
   sourceFilter: PackingSourceTab;
@@ -106,6 +107,7 @@ export function ReadyPackingListing({ sourceFilter }: ReadyPackingListingProps) 
   const [items, setItems] = useState<PackingListListItem[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
   const [revertTarget, setRevertTarget] = useState<PackingListListItem | null>(null);
 
   // Track which filter columns have already been loaded
@@ -408,6 +410,28 @@ export function ReadyPackingListing({ sourceFilter }: ReadyPackingListingProps) 
     },
   ];
 
+  const handleExport = useCallback(async () => {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      await exportReadyPackingBatchSummaryExcel({
+        sourceFilter,
+        filters,
+        sort,
+        selectedWarehouse,
+      });
+    } catch (err: unknown) {
+      showToast(
+        err instanceof Error
+          ? err.message
+          : "Failed to export ready for packing summary.",
+        "error",
+      );
+    } finally {
+      setExporting(false);
+    }
+  }, [exporting, sourceFilter, filters, sort, selectedWarehouse]);
+
   const handleRevertConfirm = async () => {
     if (!revertTarget) return;
     try {
@@ -449,6 +473,7 @@ export function ReadyPackingListing({ sourceFilter }: ReadyPackingListingProps) 
         emptyMessage="packing lists"
         searchPlaceholder={sourceFilter === "purchase_return" ? "Search returns..." : "Search orders..."}
         onOpenFilter={handleOpenFilter}
+        onExport={() => void handleExport()}
       />
 
       <Dialog open={!!revertTarget} onOpenChange={() => setRevertTarget(null)}>

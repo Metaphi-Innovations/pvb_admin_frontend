@@ -2,6 +2,7 @@ import type { GstReportFilters } from "@/lib/accounts/gst-report-filters";
 
 export type Gstr1ReportSectionId =
   | "b2b"
+  | "b2c"
   | "b2c-large"
   | "export-sez"
   | "cn-dn-registered"
@@ -165,6 +166,7 @@ export interface Gstr1ExportMeta {
 
 export const GSTR1_TRANSACTIONAL_SECTIONS: Gstr1ReportSectionId[] = [
   "b2b",
+  "b2c",
   "b2c-large",
   "export-sez",
   "cn-dn-registered",
@@ -175,6 +177,7 @@ export const GSTR1_TRANSACTIONAL_SECTIONS: Gstr1ReportSectionId[] = [
 
 export const GSTR1_SECTION_LABELS: Record<Gstr1ReportSectionId, string> = {
   b2b: "B2B Invoices",
+  b2c: "B2C Invoices",
   "b2c-large": "B2C Large Invoices",
   "export-sez": "Export / SEZ Supplies",
   "cn-dn-registered": "Credit Notes – Registered",
@@ -188,6 +191,8 @@ export const GSTR1_SECTION_LABELS: Record<Gstr1ReportSectionId, string> = {
 
 export const GSTR1_DRILL_ROUTES: Partial<Record<Gstr1ReportSectionId, string>> = {
   b2b: "b2b",
+  /** Hub returns generic `b2c`; drill into the existing B2C section page. */
+  b2c: "b2c-small",
   "b2c-large": "b2c-large",
   "export-sez": "export-sez",
   "cn-dn-registered": "cn-dn-registered",

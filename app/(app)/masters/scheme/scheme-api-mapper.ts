@@ -89,9 +89,15 @@ export type SchemeScopeOptionLists = {
   customerIds?: string[];
   /** customer_id → customer_type_id; limits customers to the selected types. */
   customerTypeByCustomerId?: Record<string, string | null | undefined>;
+  /** customer_id → main-branch billing state name; limits customers to selected states. */
+  customerStateByCustomerId?: Record<string, string | null | undefined>;
   stateNames?: string[];
   productIds?: string[];
 };
+
+function normalizeStateKey(value: string | null | undefined): string {
+  return (value ?? "").trim().toLowerCase();
+}
 
 /** Customers whose type is among `typeIds` (all customers when no type map is known). */
 export function customerIdsForTypes(
@@ -105,6 +111,25 @@ export function customerIdsForTypes(
   return all.filter((id) => {
     const typeId = typeMap[id];
     return Boolean(typeId && allowed.has(typeId));
+  });
+}
+
+/** Customers matching selected types and states (both filters required when maps exist). */
+export function customerIdsForTypesAndStates(
+  lists: SchemeScopeOptionLists,
+  typeIds: string[],
+  stateNames: string[],
+): string[] {
+  const byType = customerIdsForTypes(lists, typeIds);
+  const stateMap = lists.customerStateByCustomerId;
+  if (!stateMap) return byType;
+  const allowedStates = new Set(
+    stateNames.map(normalizeStateKey).filter(Boolean),
+  );
+  if (!allowedStates.size) return [];
+  return byType.filter((id) => {
+    const state = stateMap[id];
+    return Boolean(state && allowedStates.has(normalizeStateKey(state)));
   });
 }
 
@@ -140,15 +165,19 @@ function buildScopes(
     form.customerTypes,
     optionLists?.customerTypeIds,
   );
-  // "Select All" customers = every customer of the selected types → scope ALL.
+  // "Select All" customers = every customer of the selected types + states → scope ALL.
   const availableCustomers = optionLists
-    ? customerIdsForTypes(optionLists, form.customerTypes)
+    ? customerIdsForTypesAndStates(
+        optionLists,
+        form.customerTypes,
+        form.stateNames,
+      )
     : undefined;
   const availableCustomerSet = availableCustomers
     ? new Set(availableCustomers)
     : null;
   const customers = resolveScope(
-    availableCustomerSet && optionLists?.customerTypeByCustomerId
+    availableCustomerSet
       ? form.customerIds.filter((id) => availableCustomerSet.has(id))
       : form.customerIds,
     availableCustomers,
@@ -230,8 +259,8 @@ function mapTurnoverSlabs(form: SchemeUnifiedForm) {
 
 function mapSpecialSlabs(form: SchemeUnifiedForm) {
   if (form.specialDiscountBasedOn === "Sales Quantity") {
-    const qtyUom =
-      form.specialDiscountUom === "KG_LTR" ? "KG_LTR" : "Piece";
+    // KG_LTR temporarily hidden — always persist Unit Qty (Pieces).
+    const qtyUom = "Piece" as const;
     return form.specialDiscountQuantitySlabs.map((slab, index) => ({
       from_value: parseNum(slab.quantityFrom),
       to_value: openEndedTo(slab.quantityTo),
@@ -352,19 +381,12 @@ export function unifiedFormToCreatePayload(
             ? null
             : parseNum(form.discountValue),
           uom:
-            form.specialDiscountBasedOn === "Sales Quantity"
-              ? form.specialDiscountUom === "KG_LTR"
-                ? "KG_LTR"
-                : "Piece"
-              : null,
+            form.specialDiscountBasedOn === "Sales Quantity" ? "Piece" : null,
           product_evaluation_mode: "COMBINED",
           evaluation_scope:
-            form.specialDiscountBasedOn === "Sales Quantity" &&
-            form.specialDiscountUom === "KG_LTR"
+            form.specialEvaluationScope === "One Invoice"
               ? "PER_INVOICE"
-              : form.specialEvaluationScope === "One Invoice"
-                ? "PER_INVOICE"
-                : "SCHEME_PERIOD",
+              : "SCHEME_PERIOD",
           settlement_run_mode:
             form.specialEvaluationScope !== "One Invoice" ||
             form.specialSettlementRunMode === "Automatic"
@@ -405,17 +427,21 @@ export function expandAllScopesForUi(
   }
 
   if (
-    asString(detail.customer_scope) === "ALL" &&
-    optionLists.customerIds?.length
-  ) {
-    next.customerIds = customerIdsForTypes(optionLists, next.customerTypes);
-  }
-
-  if (
     asString(detail.state_scope) === "ALL" &&
     optionLists.stateNames?.length
   ) {
     next.stateNames = [...optionLists.stateNames];
+  }
+
+  if (
+    asString(detail.customer_scope) === "ALL" &&
+    optionLists.customerIds?.length
+  ) {
+    next.customerIds = customerIdsForTypesAndStates(
+      optionLists,
+      next.customerTypes,
+      next.stateNames,
+    );
   }
 
   if (
@@ -599,16 +625,9 @@ export function detailToUnifiedForm(
     form.specialCombineProducts = true;
 
     if (form.specialDiscountBasedOn === "Sales Quantity") {
-      const rawUom =
-        asString(specialConfig?.uom) ||
-        asString((slabs[0] as Record<string, unknown> | undefined)?.uom) ||
-        "Piece";
-      const qtyUom =
-        rawUom === "KG_LTR" || rawUom === "KG/LTR" ? "KG_LTR" : "Piece";
+      // KG_LTR temporarily hidden in UI — load/edit as Unit Qty (Pieces).
+      const qtyUom = "Piece" as const;
       form.specialDiscountUom = qtyUom;
-      if (qtyUom === "KG_LTR") {
-        form.specialEvaluationScope = "One Invoice";
-      }
 
       form.specialDiscountQuantitySlabs =
         slabs.length > 0

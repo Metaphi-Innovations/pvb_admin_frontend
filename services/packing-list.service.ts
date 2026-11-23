@@ -43,6 +43,17 @@ export interface PackingListResult {
   total: number;
 }
 
+export interface ReadyExportSummaryRow {
+  product: string;
+  sku: string;
+  batch: string;
+  cases_to_pack: number;
+}
+
+export interface ReadyExportSummaryResult {
+  rows: ReadyExportSummaryRow[];
+}
+
 export interface PackingListFilterOption {
   label: string;
   value: string;
@@ -256,6 +267,44 @@ export const PackingListService = {
       : items.length;
 
     return { items, total: totalRecords };
+  },
+
+  /** Aggregated Product + SKU + Batch pending cases for Ready For Packing export. */
+  async exportReadySummary(params: {
+    search?: string;
+    ordering?: string;
+    apiFilters?: Record<string, unknown>;
+    signal?: AbortSignal;
+  }): Promise<ReadyExportSummaryResult> {
+    const query = new URLSearchParams();
+    if (params.ordering) query.set("ordering", params.ordering);
+    if (params.search) query.set("search", params.search);
+    const qs = query.toString();
+
+    const response = await axiosInstance.post(
+      `${API_ENDPOINTS.WAREHOUSE.PACKING_LIST.EXPORT_READY_SUMMARY}${qs ? `?${qs}` : ""}`,
+      {
+        filters: params.apiFilters ?? {},
+        ...(params.search ? { search: params.search } : {}),
+      },
+      { signal: params.signal },
+    );
+
+    const payload = response.data as Record<string, unknown>;
+    const data = (payload.data ?? {}) as Record<string, unknown>;
+    const rawRows = Array.isArray(data.rows) ? data.rows : [];
+
+    const rows: ReadyExportSummaryRow[] = rawRows.map((row) => {
+      const record = (row ?? {}) as Record<string, unknown>;
+      return {
+        product: asString(record.product) || "—",
+        sku: asString(record.sku) || "—",
+        batch: asString(record.batch) || "—",
+        cases_to_pack: asNumber(record.cases_to_pack),
+      };
+    });
+
+    return { rows };
   },
 
   async getFilterDropdown(
