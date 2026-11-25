@@ -583,7 +583,6 @@ export function mapSampleOrderToProforma(
     acknowledgementNo: "—",
     acknowledgementDate: "—",
     ewayBillNo: "—",
-    ewayBillExpiry: "—",
     irn: "—",
     billFrom,
     billTo: billing,

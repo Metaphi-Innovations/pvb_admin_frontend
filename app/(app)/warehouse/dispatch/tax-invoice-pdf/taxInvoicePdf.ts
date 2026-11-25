@@ -29,7 +29,7 @@ interface PdfPartyBlock {
 }
 
 const DEFAULT_TI_DECLARATION =
-  "Goods once sold will not be taken back or exchanged. All disputes subject to Aurangabad jurisdiction only. We declare that this invoice shows the actual price of the goods described and that all particulars are true and correct.";
+  "Goods once sold will not be taken back or exchanged. All disputes subject to Maharashtra Jurisdiction only. We declare that this invoice shows the actual price of the goods described and that all particulars are true and correct.";
 
 export interface TaxInvoiceBankDetails {
   accountName: string;
@@ -109,7 +109,6 @@ export interface TaxInvoiceViewModel {
   acknowledgementNo: string;
   acknowledgementDate: string;
   ewayBillNo: string;
-  ewayBillExpiry: string;
   irn: string;
   qrDataUrl?: string;
   billFrom: PdfPartyBlock;
@@ -797,12 +796,6 @@ export function mapDispatchToTaxInvoice(
       dispatch?.sales_invoice?.eway_bill_number || dispatch?.eway_bill_number,
       "—",
     ),
-    ewayBillExpiry: asText(
-      dispatch?.sales_invoice?.eway_bill_valid_upto ||
-        dispatch?.eway_bill_expiry ||
-        dispatch?.eway_bill_date,
-      "—",
-    ),
     irn: asText(
       dispatch?.sales_invoice?.irn_number || dispatch?.irn,
       "—",
@@ -1252,12 +1245,11 @@ export function buildTaxInvoiceHtml(
     <div class="ti-einvoice">
       <div class="ti-einvoice-main">
         <div class="ti-einvoice-top">
-          <div class="ti-meta-row cols-5">${[
+          <div class="ti-meta-row cols-4">${[
             metaFieldHtml("E-Invoice No.", data.eInvoiceNo, { dotted: true }),
             metaFieldHtml("Acknowledgement No.", data.acknowledgementNo, { dotted: true }),
             metaFieldHtml("Acknowledgement Date", data.acknowledgementDate, { dotted: true }),
             metaFieldHtml("E-Way Bill No.", data.ewayBillNo, { dotted: true }),
-            metaFieldHtml("E-Way Bill Expiry Date", data.ewayBillExpiry, { dotted: true }),
           ].join("")}</div>
         </div>
         <div class="ti-irn">
