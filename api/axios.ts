@@ -5,7 +5,7 @@ import { getStoredFYId } from "@/lib/fy-storage";
 
 declare module "axios" {
   export interface AxiosRequestConfig {
-    /** When true, response interceptor will not toast 403 messages. */
+    /** When true, response interceptor will not toast 403 messages.. */
     skipPermissionToast?: boolean;
     /** When true, do not attach x-financial-year-id (FY bootstrap APIs). */
     skipFinancialYearHeader?: boolean;
