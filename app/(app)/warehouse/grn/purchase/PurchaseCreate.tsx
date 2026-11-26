@@ -22,7 +22,6 @@ import {
   usePurchaseOrder,
   usePurchaseOrderDropdown,
   usePurchaseOrderSupplierDropdown,
-  usePurchaseOrderWarehouseDropdown,
 } from "@/hooks/procurement/use-purchase-orders";
 import type { POLineItem } from "@/app/(app)/procurement/purchase-orders/po-data";
 import { round2 } from "@/lib/procurement/utils";
@@ -541,10 +540,6 @@ export function PurchaseCreate({
     { supplier_id: supplierId || undefined },
     Boolean(supplierId),
   );
-  const { data: warehouseOptions = [] } = usePurchaseOrderWarehouseDropdown(
-    supplierId || undefined,
-    Boolean(supplierId),
-  );
   const {
     data: selectedPo,
     isLoading: poDetailsLoading,
@@ -667,36 +662,11 @@ export function PurchaseCreate({
     [poLines],
   );
 
-  const warehouseSelectOptions = useMemo(() => {
-    const fromPo =
-      selectedPo?.warehouseId && selectedPo.warehouseName
-        ? [
-          {
-            value: String(selectedPo.warehouseId),
-            label: selectedPo.warehouseName,
-          },
-        ]
-        : [];
-    const fromApi = warehouseOptions.map((w) => ({
-      value: w.value,
-      label: w.label,
-    }));
-    const merged = [...fromPo];
-    for (const opt of fromApi) {
-      if (!merged.some((m) => m.value === opt.value)) merged.push(opt);
-    }
-    if (
-      warehouseId &&
-      !merged.some((m) => m.value === warehouseId) &&
-      existingGrn?.warehouse
-    ) {
-      merged.unshift({
-        value: warehouseId,
-        label: existingGrn.warehouse,
-      });
-    }
-    return merged;
-  }, [selectedPo, warehouseOptions, warehouseId, existingGrn?.warehouse]);
+  const warehouseName = useMemo(() => {
+    if (selectedPo?.warehouseName) return selectedPo.warehouseName;
+    if (existingGrn?.warehouse) return existingGrn.warehouse;
+    return "";
+  }, [selectedPo?.warehouseName, existingGrn?.warehouse]);
 
   const getReceivedQtyForProduct = useCallback(
     (sourceItemId: string) => {
@@ -1681,21 +1651,24 @@ export function PurchaseCreate({
             />
           </Field>
 
-          <Field label="Warehouse Destination" required>
-            <AutocompleteSelect
-              options={warehouseSelectOptions}
-              value={warehouseId}
-              onChange={setWarehouseId}
-              placeholder={
-                !supplierId ? "Select supplier first…" : "Select warehouse…"
-              }
-              searchPlaceholder="Search warehouse…"
-              disabled={!supplierId}
-              showLabelTooltip
-              className="h-9 text-xs py-1.5 px-3 rounded-lg border-border focus:ring-1 focus:ring-brand-500 bg-white shadow-none focus:outline-none"
-              popoverClassName="w-[min(300px,calc(100vw-2rem))] min-w-[var(--radix-popover-trigger-width)]"
-            />
-          </Field>
+          <TextField
+            label="Warehouse Destination"
+            value={
+              warehouseName ||
+              (selectedPoId && poDetailsLoading ? "Loading…" : "")
+            }
+            placeholder={
+              !supplierId
+                ? "Select supplier first…"
+                : !selectedPoId
+                  ? "Select PO first…"
+                  : "From purchase order…"
+            }
+            readOnly
+            required
+            title={warehouseName || undefined}
+            className="h-9 text-xs bg-muted"
+          />
 
           <TextField
             label="GRN Date"
