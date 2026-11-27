@@ -4,7 +4,7 @@ import React, { memo, useState } from "react";
 import { cn } from "@/lib/utils";
 import {
   Bell, ChevronDown, Calendar,
-  AlertTriangle, Check, LogOut, User, Settings, Shield,
+  AlertTriangle, Check, LogOut, Shield,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -25,6 +25,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Separator } from "@/components/ui/separator";
 import { useFY, FY_STATUS_CONFIG, type FinancialYear } from "@/lib/fy-store";
 import { useAuth } from "@/lib/auth/auth-context";
+import { ChangePasswordDialog } from "@/components/layout/ChangePasswordDialog";
 
 const NOTIFICATIONS = [
   { id: 1, type: "approval", title: "PO #2340 awaiting approval",     time: "2 min ago",  read: false },
@@ -225,6 +226,7 @@ function FYSelector() {
 
 function AppHeaderInner() {
   const { user, logout } = useAuth();
+  const [changePasswordOpen, setChangePasswordOpen] = useState(false);
 
   const username = user?.username || "User";
   const email = user?.email || "";
@@ -313,13 +315,10 @@ function AppHeaderInner() {
             </span>
           </div>
           <DropdownMenuSeparator />
-          <DropdownMenuItem className="text-xs gap-2 cursor-pointer">
-            <User className="w-3.5 h-3.5" /> My Profile
-          </DropdownMenuItem>
-          <DropdownMenuItem className="text-xs gap-2 cursor-pointer">
-            <Settings className="w-3.5 h-3.5" /> Account Settings
-          </DropdownMenuItem>
-          <DropdownMenuItem className="text-xs gap-2 cursor-pointer">
+          <DropdownMenuItem
+            className="text-xs gap-2 cursor-pointer"
+            onSelect={() => setChangePasswordOpen(true)}
+          >
             <Shield className="w-3.5 h-3.5" /> Change Password
           </DropdownMenuItem>
           <DropdownMenuSeparator />
@@ -333,6 +332,16 @@ function AppHeaderInner() {
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+
+      <ChangePasswordDialog
+        open={changePasswordOpen}
+        onOpenChange={setChangePasswordOpen}
+        email={email}
+        onCompleteLogout={async () => {
+          // Backend already invalidated sessions on reset; clear local auth and force re-login.
+          await logout();
+        }}
+      />
     </header>
   );
 }
