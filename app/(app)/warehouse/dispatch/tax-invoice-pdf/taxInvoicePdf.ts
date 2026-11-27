@@ -124,6 +124,8 @@ export interface TaxInvoiceViewModel {
     grossAmount: number;
     discount: number;
     additionalCharges: number;
+    /** Invoice-level additional discount (DEDUCT charges). Display-only in summary. */
+    additionalDiscount: number;
     taxableValue: number;
     cgst: number;
     sgst: number;
@@ -555,65 +557,57 @@ export function mapDispatchToTaxInvoice(
   const invoiceCharges = Array.isArray(salesInvoice.additional_charges)
     ? (salesInvoice.additional_charges as unknown[])
     : [];
+  // Additional discount is shown in Invoice Summary only (not as a product row).
+  let additionalDiscountTotal = 0;
+  let additionalChargesAddTotal = 0;
   for (const rawCharge of invoiceCharges) {
     const charge = readRecord(rawCharge);
     const isAdditionalDiscount = resolveChargeEffect(charge) === "DEDUCT";
     const amount = round2(
       toNumber(charge.amount) || toNumber(charge.taxable_amount),
     );
-    const gstPct = isAdditionalDiscount
-      ? 0
-      : toNumber(charge.gst_rate) ||
-        toNumber(charge.igst_rate) ||
-        toNumber(charge.cgst_rate) + toNumber(charge.sgst_rate);
+    if (isAdditionalDiscount) {
+      additionalDiscountTotal = round2(additionalDiscountTotal + amount);
+      continue;
+    }
+    additionalChargesAddTotal = round2(additionalChargesAddTotal + amount);
+    const gstPct =
+      toNumber(charge.gst_rate) ||
+      toNumber(charge.igst_rate) ||
+      toNumber(charge.cgst_rate) + toNumber(charge.sgst_rate);
     lines.push({
       sr: lines.length + 1,
       productCode: "—",
-      productName: asText(
-        charge.charge_name,
-        isAdditionalDiscount ? "Additional Disc" : "Additional Charge",
-      ),
+      productName: asText(charge.charge_name, "Additional Charge"),
       batchLine: "",
       sku: "—",
-      hsnCode: isAdditionalDiscount
-        ? ""
-        : asText(
-            pick(readRecord(charge.hsn_snapshot), ["hsn_code"]) ||
-              pick(readRecord(charge.additional_charge_snapshot), [
-                "hsn_sac_code",
-              ]),
-            "",
-          ),
+      hsnCode: asText(
+        pick(readRecord(charge.hsn_snapshot), ["hsn_code"]) ||
+          pick(readRecord(charge.additional_charge_snapshot), [
+            "hsn_sac_code",
+          ]),
+        "",
+      ),
       qtyInCase: 0,
-      totalUnits: isAdditionalDiscount ? 0 : 1,
-      totalQty: isAdditionalDiscount ? 0 : 1,
+      totalUnits: 1,
+      totalQty: 1,
       uom: "—",
-      rate: isAdditionalDiscount ? 0 : amount,
-      grossAmt: isAdditionalDiscount ? 0 : amount,
+      rate: amount,
+      grossAmt: amount,
       discPct: 0,
-      discAmt: isAdditionalDiscount ? amount : 0,
-      taxableValue: isAdditionalDiscount
-        ? 0
-        : toNumber(charge.taxable_amount),
+      discAmt: 0,
+      taxableValue: toNumber(charge.taxable_amount),
       gstPct,
-      cgst: isAdditionalDiscount ? 0 : toNumber(charge.cgst_amount),
-      sgst: isAdditionalDiscount ? 0 : toNumber(charge.sgst_amount),
-      igst: isAdditionalDiscount ? 0 : toNumber(charge.igst_amount),
-      total: isAdditionalDiscount ? 0 : toNumber(charge.total_amount),
+      cgst: toNumber(charge.cgst_amount),
+      sgst: toNumber(charge.sgst_amount),
+      igst: toNumber(charge.igst_amount),
+      total: toNumber(charge.total_amount),
       interstate: interstate || toNumber(charge.igst_amount) > 0,
-      isAdditionalDiscount,
     });
   }
 
   const productLinesForHsn = lines.filter(isProductPdfLine);
-  const addChargeLines = lines.filter(
-    (line) => !isProductPdfLine(line) && !line.isAdditionalDiscount,
-  );
-  const additionalDiscountTotal = round2(
-    lines
-      .filter((line) => line.isAdditionalDiscount)
-      .reduce((sum, line) => sum + line.discAmt, 0),
-  );
+  const addChargeLines = lines.filter((line) => !isProductPdfLine(line));
 
   const hsnMap = new Map<string, TaxInvoiceHsnSummaryRow>();
   const upsertHsn = (line: TaxInvoiceLineItem) => {
@@ -653,25 +647,24 @@ export function mapDispatchToTaxInvoice(
   const linesSgst = round2(lines.reduce((s, l) => s + l.sgst, 0));
   const linesIgst = round2(lines.reduce((s, l) => s + l.igst, 0));
   const linesTax = round2(linesCgst + linesSgst + linesIgst);
-  const additionalChargesFromRows = round2(
-    invoiceCharges.reduce((sum: number, rawCharge) => {
-      const charge = readRecord(rawCharge);
-      const amount = toNumber(charge.amount);
-      return (
-        sum + (resolveChargeEffect(charge) === "DEDUCT" ? -amount : amount)
-      );
-    }, 0),
-  );
 
   // Prefer posted sales-invoice totals when present so PDF matches Accounts.
+  // Split ADD vs DEDUCT for summary display only — taxable/GST/grand stay posted.
   const grossAmount =
     toNumber(salesInvoice.gross_amount) || linesGross;
   const discount =
     toNumber(salesInvoice.product_discount_amount) || linesDiscount;
-  const additionalCharges =
-    toNumber(salesInvoice.additional_charge_amount) || additionalChargesFromRows;
+  const hasChargeRows = invoiceCharges.length > 0;
+  const netAdditionalCharges = toNumber(salesInvoice.additional_charge_amount);
+  const additionalCharges = hasChargeRows
+    ? additionalChargesAddTotal
+    : Math.max(0, netAdditionalCharges);
+  const additionalDiscount = hasChargeRows
+    ? additionalDiscountTotal
+    : Math.max(0, -netAdditionalCharges);
   const taxableValue =
-    toNumber(salesInvoice.taxable_amount) || linesTaxable;
+    toNumber(salesInvoice.taxable_amount) ||
+    round2(Math.max(0, linesTaxable - additionalDiscount));
   const cgst = toNumber(salesInvoice.cgst_amount) || linesCgst;
   const sgst = toNumber(salesInvoice.sgst_amount) || linesSgst;
   const igst = toNumber(salesInvoice.igst_amount) || linesIgst;
@@ -854,6 +847,7 @@ export function mapDispatchToTaxInvoice(
       grossAmount,
       discount,
       additionalCharges,
+      additionalDiscount,
       taxableValue,
       cgst,
       sgst,
@@ -1171,6 +1165,14 @@ export function buildTaxInvoiceHtml(
           {
             label: "Additional Charges",
             value: formatCurrency(data.summary.additionalCharges),
+          },
+        ]
+      : []),
+    ...(Number(data.summary.additionalDiscount || 0) > 0
+      ? [
+          {
+            label: "(-) Additional Discount",
+            value: formatCurrency(data.summary.additionalDiscount),
           },
         ]
       : []),

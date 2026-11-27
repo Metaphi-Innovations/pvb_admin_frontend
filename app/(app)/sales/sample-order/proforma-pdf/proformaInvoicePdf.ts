@@ -606,6 +606,7 @@ export function mapSampleOrderToProforma(
       grossAmount,
       discount,
       additionalCharges: 0,
+      additionalDiscount: 0,
       taxableValue,
       cgst,
       sgst,
